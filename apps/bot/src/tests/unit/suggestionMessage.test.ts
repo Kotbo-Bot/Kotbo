@@ -18,12 +18,14 @@ const LABELS: SuggestionMessageLabels = {
   votesValue: 'Pour : `{up}` | Contre : `{down}`',
   responseField: 'Réponse de la modération',
   noResponse: 'Aucun commentaire.',
+  categoryField: 'Catégorie',
   voteUp: 'Pour',
   voteDown: 'Contre',
   footer: 'ID de la suggestion : {id}',
   status: {
     PENDING: 'En cours d\'évaluation',
     APPROVED: 'Approuvée par le staff',
+    IN_PROGRESS: 'En cours de réalisation',
     REJECTED: 'Refusée par le staff',
     IMPLEMENTED: 'Mise en place',
   },
@@ -32,6 +34,7 @@ const LABELS: SuggestionMessageLabels = {
 const PENDING: SuggestionMessageView = {
   id: 'cmsugg1',
   title: null,
+  category: null,
   authorName: 'Alice',
   authorAvatarUrl: 'https://cdn/a.png',
   content: 'Un salon pour les memes',
@@ -90,6 +93,19 @@ describe('message d\'une suggestion', () => {
     expect(render({ ...PENDING, title: 'Salon memes' }).embed.title).toBe('Salon memes');
   });
 
+  test('une catégorie s\'affiche avant le statut', () => {
+    const { embed } = render({ ...PENDING, category: 'Événements' });
+    expect(embed.fields?.[0]).toEqual({ name: 'Catégorie', value: 'Événements', inline: true });
+    expect(embed.fields?.[1].name).toBe('Statut');
+  });
+
+  test('en cours avec votes ouverts : réponse affichée, boutons actifs', () => {
+    const { embed, buttons } = render({ ...PENDING, status: 'IN_PROGRESS', responseText: 'On s\'y met', votingOpen: true });
+    expect(embed.fields?.[0].value).toBe('En cours de réalisation');
+    expect(embed.fields?.[2].value).toBe('On s\'y met');
+    expect(buttons.every((b) => !b.disabled)).toBe(true);
+  });
+
   test('sans photo : auteur sans icône', () => {
     const { embed } = render({ ...PENDING, authorAvatarUrl: null });
     expect(embed.author).toEqual({ name: 'Alice' });
@@ -103,6 +119,7 @@ describe('avis de décision envoyé à l\'auteur', () => {
     responseField: 'Réponse du staff',
     decided: {
       APPROVED: 'Le staff a approuvé ta suggestion.',
+      IN_PROGRESS: 'Ta suggestion est en cours de réalisation.',
       REJECTED: 'Le staff a refusé ta suggestion.',
       IMPLEMENTED: 'Ta suggestion a été mise en place.',
     },

@@ -15,12 +15,14 @@ export function suggestionMessageLabels(locale: BotLocale): SuggestionMessageLab
     votesValue: m.b5_suggestion_msg_votes_value({ up: '{up}', down: '{down}' }, o),
     responseField: m.b5_suggestion_msg_response({}, o),
     noResponse: m.b5_suggestion_msg_no_response({}, o),
+    categoryField: m.b5_suggestion_msg_category({}, o),
     voteUp: m.b5_suggestion_btn_up({}, o),
     voteDown: m.b5_suggestion_btn_down({}, o),
     footer: m.b5_suggestion_msg_footer({ id: '{id}' }, o),
     status: {
       PENDING: m.b5_suggestion_status_pending({}, o),
       APPROVED: m.b5_suggestion_status_approved({}, o),
+      IN_PROGRESS: m.b5_suggestion_status_in_progress({}, o),
       REJECTED: m.b5_suggestion_status_rejected({}, o),
       IMPLEMENTED: m.b5_suggestion_status_implemented({}, o),
     },
@@ -36,6 +38,7 @@ export function suggestionNoticeLabels(locale: BotLocale): SuggestionNoticeLabel
     responseField: m.b5_suggestion_notice_response({}, o),
     decided: {
       APPROVED: m.b5_suggestion_notice_approved({}, o),
+      IN_PROGRESS: m.b5_suggestion_notice_in_progress({}, o),
       REJECTED: m.b5_suggestion_notice_rejected({}, o),
       IMPLEMENTED: m.b5_suggestion_notice_implemented({}, o),
     },

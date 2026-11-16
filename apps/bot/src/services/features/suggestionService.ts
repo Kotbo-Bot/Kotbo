@@ -4,6 +4,8 @@ import type { Suggestion } from '@prisma/client';
 import {
   SUGGESTION_TITLE_MAX,
   crossedSuggestionThreshold,
+  matchSuggestionCategory,
+  suggestionRewardMove,
   isSuggestionStatus,
   isSuggestionVotingOpen,
   suggestionSubmitBlocker,
@@ -21,6 +23,9 @@ import * as m from '../../lib/paraglide/messages.js';
 import { buildSuggestionMessage, buildSuggestionNotice, isSuggestionMessageFor } from './suggestionMessage.js';
 import { suggestionMessageLabels, suggestionNoticeLabels, suggestionRefusalMessage } from './suggestionMessageLabels.js';
 import { getSuggestionSettings, SUGGESTIONS_REALTIME_REASON, type SuggestionSettings } from './suggestionSettings.js';
+import { grantMemberGains, reclaimMemberGains } from '../progression/memberRewards.js';
+
+const GAINS_CONTEXT = { scope: 'Suggestions', reason: 'de suggestion acceptée' };
 
 /** Membre que les réglages du serveur n'autorisent pas à proposer maintenant. */
 export class SuggestionRefusedError extends UserFacingError {
@@ -39,7 +44,7 @@ type FetchedChannel = NonNullable<Awaited<ReturnType<Client['channels']['fetch']
 
 type RenderableSuggestion = Pick<
   Suggestion,
-  'id' | 'guildId' | 'userId' | 'username' | 'title' | 'content' | 'status' | 'responseText' | 'upvoters' | 'downvoters' | 'channelId' | 'messageId'
+  'id' | 'guildId' | 'userId' | 'username' | 'title' | 'category' | 'content' | 'status' | 'responseText' | 'upvoters' | 'downvoters' | 'channelId' | 'messageId'
 >;
 
 function isSuggestionFeatureConfig(value: unknown): value is SuggestionFeatureConfig {
@@ -79,6 +84,7 @@ async function renderSuggestion(guild: Guild, suggestion: RenderableSuggestion, 
   return buildSuggestionMessage({
     id: suggestion.id,
     title: suggestion.title,
+    category: suggestion.category,
     authorName: member?.displayName || suggestion.username,
     authorAvatarUrl: member?.user.displayAvatarURL({ size: 128 }) ?? null,
     content: suggestion.content,
@@ -254,7 +260,7 @@ export async function createSuggestion(
   username: string,
   content: string,
   client: Client,
-  options: { title?: string | null } = {},
+  options: { title?: string | null; category?: string | null } = {},
 ) {
   const title = options.title?.trim().slice(0, SUGGESTION_TITLE_MAX) || null;
   // 1. Déterminer le salon de suggestions
@@ -316,6 +322,8 @@ export async function createSuggestion(
       userId,
       username,
       title,
+      // Une catégorie retirée entre l'ouverture de la fenêtre et l'envoi est ignorée.
+      category: matchSuggestionCategory(settings.categories, options.category),
       content,
       status: 'PENDING',
       channelId: targetChannelId,
@@ -351,6 +359,8 @@ export async function createSuggestion(
     suggestionId: suggestion.id,
     userId,
     username,
+    title: suggestion.title,
+    category: suggestion.category,
     content,
     channelId: targetChannelId,
     messageId: message?.id ?? null,
@@ -410,7 +420,12 @@ export async function applySuggestionVote(guildId: string, suggestionId: string,
     return { ok: true as const, suggestion: { ...suggestion, upvoters, downvoters, thresholdReachedAt }, settings, thresholdReached };
   });
 
-  if (result.ok) notifySuggestionsChanged(guildId);
+  if (result.ok) {
+    notifySuggestionsChanged(guildId);
+    // Ici et non à la publication du message : l'événement part même quand
+    // le message public est introuvable.
+    if (result.thresholdReached) publishThresholdReached(result.suggestion, settings.voteThreshold);
+  }
   return result;
 }
 
@@ -474,8 +489,27 @@ export async function handleSuggestionVote(interaction: ButtonInteraction, type:
   });
 }
 
+/** Seuil de votes franchi : annoncé une fois, pour les workflows et les webhooks sortants. */
+function publishThresholdReached(suggestion: Suggestion, threshold: number | null): void {
+  kotboEventBus.publish('suggestion:threshold-reached', {
+    guildId: suggestion.guildId,
+    suggestionId: suggestion.id,
+    userId: suggestion.userId,
+    username: suggestion.username,
+    title: suggestion.title,
+    category: suggestion.category,
+    content: suggestion.content,
+    upvotes: suggestion.upvoters.length,
+    downvotes: suggestion.downvoters.length,
+    threshold: threshold ?? suggestion.upvoters.length,
+    channelId: suggestion.channelId,
+    messageId: suggestion.messageId,
+    timestamp: Date.now(),
+  });
+}
+
 /** Annonce une décision du staff sur le bus (workflows, webhooks sortants). */
-function publishSuggestionResolved(suggestion: Suggestion): void {
+function publishSuggestionResolved(suggestion: Suggestion, previousStatus: SuggestionStatus): void {
   const status = statusOf(suggestion);
   if (status === 'PENDING') return;
 
@@ -484,8 +518,11 @@ function publishSuggestionResolved(suggestion: Suggestion): void {
     suggestionId: suggestion.id,
     userId: suggestion.userId,
     username: suggestion.username,
+    title: suggestion.title,
+    category: suggestion.category,
     content: suggestion.content,
     status,
+    previousStatus,
     responseText: suggestion.responseText ?? '',
     respondedById: suggestion.respondedById === 'mcp_agent' ? null : suggestion.respondedById,
     upvotes: suggestion.upvoters.length,
@@ -520,21 +557,69 @@ export async function resolveSuggestion(
   });
   if (!current) return null;
 
-  const updated = await prisma.suggestion.update({
+  const decided = await prisma.suggestion.update({
     where: { id: suggestionId },
     data: status === 'PENDING'
       ? { status, responseText: null, respondedById: null, respondedAt: null }
       : { status, responseText: responseText?.trim() || null, respondedById, respondedAt: new Date() },
   });
 
-  notifySuggestionsChanged(guildId);
-  if (updated.status !== current.status) publishSuggestionResolved(updated);
-
   const settings = await getSuggestionSettings(guildId);
+  const updated = await settleAuthorGains(client, current, decided, settings);
+
+  notifySuggestionsChanged(guildId);
+  if (updated.status !== current.status) publishSuggestionResolved(updated, statusOf(current));
+
   await refreshSuggestionMessage(client, updated, settings.voteWhileApproved);
   if (updated.status !== current.status) await announceDecision(client, updated, settings);
 
   return { suggestion: updated, previousStatus: statusOf(current) };
+}
+
+/**
+ * Verse ou reprend la récompense de l'auteur selon le changement de statut
+ * (voir `suggestionRewardMove`) et rend la suggestion avec ce qui est versé.
+ *
+ * Deux décisions simultanées (dashboard et assistant, double clic) lisent le
+ * même statut de départ : chacune réserve d'abord la récompense par une
+ * écriture conditionnelle, et seule celle qui l'obtient verse ou reprend.
+ * Seule la somme réellement versée est reprise, même si le réglage a changé.
+ */
+async function settleAuthorGains(client: Client, before: Suggestion, after: Suggestion, settings: SuggestionSettings): Promise<Suggestion> {
+  const move = suggestionRewardMove(statusOf(before), statusOf(after));
+
+  if (move === 'grant' && (settings.rewardXp > 0 || settings.rewardCoins > 0)) {
+    const claimed = await prisma.suggestion.updateMany({
+      where: { id: after.id, xpGranted: 0, coinsGranted: 0 },
+      data: { xpGranted: settings.rewardXp, coinsGranted: settings.rewardCoins },
+    });
+    if (claimed.count === 0) return refetch(after);
+    const gains = await grantMemberGains(client, after.guildId, after.userId, { xp: settings.rewardXp, coins: settings.rewardCoins }, {
+      ...GAINS_CONTEXT,
+      channelId: after.channelId ?? undefined,
+    });
+    // Un module éteint ou un échec : la réservation est ramenée à ce qui a été versé.
+    return prisma.suggestion.update({ where: { id: after.id }, data: { xpGranted: gains.xp, coinsGranted: gains.coins } });
+  }
+
+  if (move === 'reclaim') {
+    const granted = { xp: after.xpGranted, coins: after.coinsGranted };
+    if (granted.xp === 0 && granted.coins === 0) return after;
+    const claimed = await prisma.suggestion.updateMany({
+      where: { id: after.id, xpGranted: granted.xp, coinsGranted: granted.coins },
+      data: { xpGranted: 0, coinsGranted: 0 },
+    });
+    if (claimed.count === 0) return refetch(after);
+    await reclaimMemberGains(client, after.guildId, after.userId, granted, GAINS_CONTEXT);
+    return { ...after, xpGranted: 0, coinsGranted: 0 };
+  }
+
+  return after;
+}
+
+/** Ligne relue après une écriture concurrente ; l'ancienne si elle a disparu entre-temps. */
+async function refetch(suggestion: Suggestion): Promise<Suggestion> {
+  return (await prisma.suggestion.findUnique({ where: { id: suggestion.id } })) ?? suggestion;
 }
 
 /**
@@ -579,8 +664,8 @@ async function announceDecision(client: Client, suggestion: Suggestion, settings
 
 /**
  * Supprime une suggestion (doublon, abus) et ce qu'elle a publié : le message
- * et son fil. Les épingles des listes de suivi gardent leur copie. `null`
- * quand elle n'existe pas sur ce serveur.
+ * et son fil ; la récompense versée est reprise. Les épingles des listes de
+ * suivi gardent leur copie. `null` quand elle n'existe pas sur ce serveur.
  */
 export async function deleteSuggestion(client: Client, guildId: string, suggestionId: string): Promise<Suggestion | null> {
   const suggestion = await prisma.suggestion.findFirst({ where: { id: suggestionId, guildId } });
@@ -595,6 +680,10 @@ export async function deleteSuggestion(client: Client, guildId: string, suggesti
     }
   }
 
+  // Une suggestion supprimée (doublon, abus) ne laisse pas sa récompense derrière elle.
+  if (suggestion.xpGranted > 0 || suggestion.coinsGranted > 0) {
+    await reclaimMemberGains(client, guildId, suggestion.userId, { xp: suggestion.xpGranted, coins: suggestion.coinsGranted }, GAINS_CONTEXT);
+  }
   await prisma.suggestion.delete({ where: { id: suggestion.id } });
   notifySuggestionsChanged(guildId);
   return suggestion;

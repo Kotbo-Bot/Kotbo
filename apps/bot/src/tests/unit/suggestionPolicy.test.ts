@@ -1,7 +1,14 @@
 import { describe, expect, test } from 'bun:test';
 import {
+  SUGGESTION_CATEGORIES_MAX,
+  SUGGESTION_CATEGORY_NAME_MAX,
   SUGGESTION_STALE_DAYS,
   crossedSuggestionThreshold,
+  isSuggestionAccepted,
+  matchSuggestionCategory,
+  normalizeSuggestionCategories,
+  suggestionRewardMove,
+  summarizeSuggestionCategories,
   decodeTimeCursor,
   encodeTimeCursor,
   isSuggestionStale,
@@ -16,8 +23,8 @@ import {
 const DAY_MS = 86_400_000;
 
 describe('statuts des suggestions', () => {
-  test('reconnaît les quatre statuts et rien d\'autre', () => {
-    for (const status of ['PENDING', 'APPROVED', 'REJECTED', 'IMPLEMENTED']) expect(isSuggestionStatus(status)).toBe(true);
+  test('reconnaît les cinq statuts et rien d\'autre', () => {
+    for (const status of ['PENDING', 'APPROVED', 'IN_PROGRESS', 'REJECTED', 'IMPLEMENTED']) expect(isSuggestionStatus(status)).toBe(true);
     expect(isSuggestionStatus('CLOSED')).toBe(false);
     expect(isSuggestionStatus(undefined)).toBe(false);
   });
@@ -50,8 +57,10 @@ describe('ouverture des votes', () => {
     expect(isSuggestionVotingOpen('IMPLEMENTED', false)).toBe(false);
   });
 
-  test('restent ouverts sur une approuvée quand le serveur le veut', () => {
+  test('restent ouverts sur une approuvée ou en cours quand le serveur le veut', () => {
     expect(isSuggestionVotingOpen('APPROVED', true)).toBe(true);
+    expect(isSuggestionVotingOpen('IN_PROGRESS', true)).toBe(true);
+    expect(isSuggestionVotingOpen('IN_PROGRESS', false)).toBe(false);
     expect(isSuggestionVotingOpen('REJECTED', true)).toBe(false);
     expect(isSuggestionVotingOpen('IMPLEMENTED', true)).toBe(false);
   });
@@ -136,6 +145,66 @@ describe('nom du fil d\'une suggestion', () => {
   });
 });
 
+describe('décision favorable et gains', () => {
+  test('approuvée, en cours et mise en place sont favorables', () => {
+    expect(isSuggestionAccepted('APPROVED')).toBe(true);
+    expect(isSuggestionAccepted('IN_PROGRESS')).toBe(true);
+    expect(isSuggestionAccepted('IMPLEMENTED')).toBe(true);
+    expect(isSuggestionAccepted('REJECTED')).toBe(false);
+    expect(isSuggestionAccepted('PENDING')).toBe(false);
+  });
+
+  test('gains versés en entrant dans une décision favorable', () => {
+    expect(suggestionRewardMove('PENDING', 'APPROVED')).toBe('grant');
+    expect(suggestionRewardMove('REJECTED', 'IMPLEMENTED')).toBe('grant');
+  });
+
+  test('gains repris en en sortant', () => {
+    expect(suggestionRewardMove('APPROVED', 'REJECTED')).toBe('reclaim');
+    expect(suggestionRewardMove('IMPLEMENTED', 'PENDING')).toBe('reclaim');
+  });
+
+  test('rien entre deux décisions favorables ou deux défavorables', () => {
+    expect(suggestionRewardMove('APPROVED', 'IN_PROGRESS')).toBeNull();
+    expect(suggestionRewardMove('IN_PROGRESS', 'IMPLEMENTED')).toBeNull();
+    expect(suggestionRewardMove('PENDING', 'REJECTED')).toBeNull();
+  });
+});
+
+describe('catégories', () => {
+  test('nettoyées : espaces, doublons sans tenir compte de la casse, vides retirées', () => {
+    expect(normalizeSuggestionCategories(['  Événements ', 'salons', 'Salons', '', 'Bot'])).toEqual({ categories: ['Événements', 'salons', 'Bot'] });
+  });
+
+  test('refusées au-delà du nombre ou de la longueur permis', () => {
+    expect(normalizeSuggestionCategories(Array.from({ length: SUGGESTION_CATEGORIES_MAX + 1 }, (_, i) => `c${i}`))).toEqual({ error: 'TOO_MANY' });
+    expect(normalizeSuggestionCategories(['x'.repeat(SUGGESTION_CATEGORY_NAME_MAX + 1)])).toEqual({ error: 'TOO_LONG' });
+    expect(normalizeSuggestionCategories('Bot')).toEqual({ error: 'NOT_ARRAY' });
+  });
+
+  test('une catégorie choisie doit exister, à la casse près', () => {
+    expect(matchSuggestionCategory(['Événements', 'Bot'], 'bot')).toBe('Bot');
+    expect(matchSuggestionCategory(['Bot'], 'Salons')).toBeNull();
+    expect(matchSuggestionCategory(['Bot'], null)).toBeNull();
+  });
+});
+
+describe('bilan par catégorie', () => {
+  test('totaux, en attente et acceptées par catégorie, la plus fournie d\'abord', () => {
+    expect(summarizeSuggestionCategories([
+      { category: 'Bot', status: 'PENDING', count: 2 },
+      { category: 'Salons', status: 'APPROVED', count: 1 },
+      { category: 'Bot', status: 'IMPLEMENTED', count: 3 },
+      { category: null, status: 'REJECTED', count: 4 },
+      { category: 'Salons', status: 'IN_PROGRESS', count: 1 },
+    ])).toEqual([
+      { category: 'Bot', total: 5, pending: 2, accepted: 3 },
+      { category: null, total: 4, pending: 0, accepted: 0 },
+      { category: 'Salons', total: 2, pending: 0, accepted: 2 },
+    ]);
+  });
+});
+
 describe('suggestion en souffrance', () => {
   const now = new Date('2026-11-16T12:00:00Z');
 
@@ -167,6 +236,14 @@ describe('bilan des décisions', () => {
 
   test('rien de tranché : ni taux ni délai', () => {
     expect(summarizeSuggestionResolutions([])).toEqual({ resolved: 0, acceptanceRate: null, avgResponseHours: null });
+  });
+
+  test('une suggestion en cours compte comme acceptée', () => {
+    const summary = summarizeSuggestionResolutions([
+      { status: 'IN_PROGRESS', count: 1, avgSeconds: 3_600 },
+      { status: 'REJECTED', count: 1, avgSeconds: 3_600 },
+    ]);
+    expect(summary.acceptanceRate).toBe(0.5);
   });
 
   test('ignore une ligne en attente glissée dans le relevé', () => {

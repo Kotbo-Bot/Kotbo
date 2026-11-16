@@ -26,6 +26,13 @@ export interface SuggestionConfig {
   voteThreshold: number | null;
   /** Épingler le message au seuil ; la décision le désépingle. */
   pinAtThreshold: boolean;
+  /** Récompense de l'auteur d'une suggestion acceptée. `0` = rien. */
+  rewardXp: number;
+  rewardCoins: number;
+  /** Catégories proposées à qui suggère. Vide = pas de catégorie. */
+  categories: string[];
+  /** Le staff voit qui a voté. */
+  showVoters: boolean;
 }
 
 export interface SuggestionItem {
@@ -35,6 +42,8 @@ export interface SuggestionItem {
   avatarUrl: string | null;
   /** Titre saisi par l'auteur, absent d'une suggestion proposée sans fenêtre. */
   title: string | null;
+  /** Catégorie choisie à la proposition. */
+  category: string | null;
   content: string;
   status: SuggestionStatus;
   responseText: string | null;
@@ -49,6 +58,22 @@ export interface SuggestionItem {
   threadUrl: string | null;
   /** Premier passage du seuil de votes. */
   thresholdReachedAt: string | null;
+  /** Récompense réellement versée à l'auteur ; absente d'un bot plus ancien. */
+  rewarded?: { xp: number; coins: number };
+}
+
+export interface SuggestionCategoryStat {
+  /** `null` : suggestions sans catégorie. */
+  category: string | null;
+  total: number;
+  pending: number;
+  accepted: number;
+}
+
+export interface SuggestionVoter {
+  userId: string;
+  name: string | null;
+  avatarUrl: string | null;
 }
 
 export interface SuggestionStats {
@@ -72,6 +97,7 @@ export interface SuggestionMessageLabels {
   votesValue: string;
   responseField: string;
   noResponse: string;
+  categoryField?: string;
   voteUp: string;
   voteDown: string;
   footer: string;
@@ -87,6 +113,7 @@ export interface SuggestionsOverview {
   queueTruncated: boolean;
   /** Absent d'un bot plus ancien : l'aperçu du message est alors masqué. */
   messageLabels: SuggestionMessageLabels | null;
+  categoryStats: SuggestionCategoryStat[];
 }
 
 export interface SuggestionPage {
@@ -106,11 +133,13 @@ export async function fetchSuggestionsOverview(guildId = authStore.selectedGuild
 
 /** Page de l'historique, reprise sous la dernière suggestion affichée. */
 export async function fetchSuggestionList(
-  filter: { status?: SuggestionStatus; userId?: string; cursor?: string },
+  filter: { status?: SuggestionStatus; userId?: string; cursor?: string; category?: string | null },
   guildId = authStore.selectedGuildId,
 ): Promise<SuggestionPage | null> {
   const query = new URLSearchParams();
   if (filter.status) query.set('status', filter.status);
+  // `null` : les suggestions sans catégorie.
+  if (filter.category !== undefined) query.set('category', filter.category ?? 'none');
   if (filter.userId) query.set('userId', filter.userId);
   if (filter.cursor) query.set('cursor', filter.cursor);
   const suffix = query.size > 0 ? `?${query}` : '';
@@ -167,5 +196,17 @@ export async function refreshSuggestionMessages(guildId = authStore.selectedGuil
     method: 'POST',
     guildId,
     errorContext: 'API Error (Refresh Suggestion Messages):',
+  });
+}
+
+/** Votants d'une suggestion, quand le serveur les montre au staff. */
+export async function fetchSuggestionVoters(
+  suggestionId: string,
+  guildId = authStore.selectedGuildId,
+): Promise<{ up: SuggestionVoter[]; down: SuggestionVoter[] } | null> {
+  return dashboardRequest(`/suggestions/${encodeURIComponent(suggestionId)}/voters`, {
+    method: 'GET',
+    guildId,
+    errorContext: 'API Error (Suggestion Voters):',
   });
 }

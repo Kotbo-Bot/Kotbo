@@ -293,7 +293,7 @@ model Suggestion {
   userId         String
   username       String
   content        String
-  status         String   @default("PENDING") // PENDING, APPROVED, REJECTED, IMPLEMENTED
+  status         String   @default("PENDING") // PENDING, APPROVED, IN_PROGRESS, REJECTED, IMPLEMENTED
   channelId      String?
   messageId      String?
   responseText   String?
@@ -310,6 +310,12 @@ model Suggestion {
   /// Premier passage du seuil de votes : la suggestion reste signalée même si
   /// des votes partent ensuite.
   thresholdReachedAt DateTime?
+  /// Catégorie choisie parmi celles du serveur, figée à la proposition.
+  category       String?
+  /// Récompense réellement versée à l'auteur, reprise si la décision favorable
+  /// est annulée ou la suggestion supprimée.
+  xpGranted      Int @default(0)
+  coinsGranted   Int @default(0)
 
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
 
@@ -354,6 +360,15 @@ model SuggestionConfig {
   voteThreshold  Int?
   /// Épingler le message quand le seuil est atteint ; il est désépinglé à la décision.
   pinAtThreshold Boolean @default(false)
+
+  /// Récompense de l'auteur quand sa suggestion est acceptée. `0` = rien ; versée
+  /// seulement si le module concerné (Niveaux, Économie) est actif.
+  rewardXp    Int @default(0)
+  rewardCoins Int @default(0)
+  /// Catégories proposées à qui suggère. Vide = pas de catégorie.
+  categories String[] @default([])
+  /// Le staff voit qui a voté pour et contre sur le dashboard.
+  showVoters Boolean @default(false)
 
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
 

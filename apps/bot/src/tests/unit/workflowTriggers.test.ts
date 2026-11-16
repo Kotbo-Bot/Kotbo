@@ -13,6 +13,7 @@ import {
   parseMessageFilter,
   readTriggerChannelFilter,
   RECIPE_TEMPLATES,
+  SUGGESTION_STATUS_LABELS,
   TRIGGER_GROUP_LABELS,
   TRIGGER_LIBRARY,
   type Recipe,
@@ -659,6 +660,18 @@ describe('déclencheurs de formulaire et de suggestion', () => {
       'suggestion.isApproved', 'suggestion.isRejected', 'suggestion.isImplemented',
     ]));
     expect(keys('OnSuggestionCreated')).not.toContain('suggestion.isApproved');
+  });
+
+  test('la suggestion traitée expose aussi le statut précédent, « en cours », le titre et la catégorie', () => {
+    expect(paths('OnSuggestionResolved')).toEqual(expect.arrayContaining(['previousStatusLabel', 'title', 'category']));
+    expect(keys('OnSuggestionResolved')).toContain('suggestion.isInProgress');
+    expect(SUGGESTION_STATUS_LABELS.IN_PROGRESS).toBeDefined();
+  });
+
+  test('le seuil de votes atteint expose la suggestion, ses votes et son message', () => {
+    expect(paths('OnSuggestionThresholdReached')).toEqual(expect.arrayContaining([
+      'member', 'content', 'title', 'category', 'upvotes', 'downvotes', 'threshold', 'message',
+    ]));
   });
 
   test('« la suggestion est approuvée » survit à la réouverture et filtre à l\'exécution', async () => {

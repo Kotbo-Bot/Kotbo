@@ -3,7 +3,8 @@
  * le formulaire et la page annoncent est ce que l'API applique.
  */
 
-export const SUGGESTION_STATUSES = ['PENDING', 'APPROVED', 'REJECTED', 'IMPLEMENTED'] as const;
+/** `IN_PROGRESS` : acceptée et en cours de réalisation, entre l'approbation et la mise en place. */
+export const SUGGESTION_STATUSES = ['PENDING', 'APPROVED', 'IN_PROGRESS', 'REJECTED', 'IMPLEMENTED'] as const;
 export type SuggestionStatus = (typeof SUGGESTION_STATUSES)[number];
 export type SuggestionDecision = Exclude<SuggestionStatus, 'PENDING'>;
 
@@ -26,6 +27,7 @@ export const SUGGESTION_QUEUE_MAX = 200;
 export const SUGGESTION_STATUS_COLORS: Record<SuggestionStatus, string> = {
   PENDING: '#FE75C2',
   APPROVED: '#57F287',
+  IN_PROGRESS: '#FEE75C',
   REJECTED: '#ED4245',
   IMPLEMENTED: '#5865F2',
 };
@@ -42,11 +44,57 @@ export function suggestionNeedsComment(status: SuggestionStatus, requireComment:
 }
 
 /**
- * Votes ouverts : en attente toujours ; sur une suggestion approuvée quand le
- * serveur veut mesurer l'envie jusqu'à la mise en place.
+ * Votes ouverts : en attente toujours ; sur une suggestion approuvée ou en
+ * cours quand le serveur veut mesurer l'envie jusqu'à la mise en place.
  */
 export function isSuggestionVotingOpen(status: SuggestionStatus, voteWhileApproved: boolean): boolean {
-  return status === 'PENDING' || (voteWhileApproved && status === 'APPROVED');
+  return status === 'PENDING' || (voteWhileApproved && (status === 'APPROVED' || status === 'IN_PROGRESS'));
+}
+
+/** Décision favorable : approuvée, en cours ou mise en place. */
+export function isSuggestionAccepted(status: SuggestionStatus): boolean {
+  return status === 'APPROVED' || status === 'IN_PROGRESS' || status === 'IMPLEMENTED';
+}
+
+/**
+ * Ce que devient la récompense de l'auteur quand le statut change : versée en
+ * entrant dans une décision favorable, reprise en en sortant (refus,
+ * réouverture). Passer d'« approuvée » à « mise en place » ne la verse pas deux fois.
+ */
+export function suggestionRewardMove(before: SuggestionStatus, after: SuggestionStatus): 'grant' | 'reclaim' | null {
+  const was = isSuggestionAccepted(before);
+  const is = isSuggestionAccepted(after);
+  if (!was && is) return 'grant';
+  if (was && !is) return 'reclaim';
+  return null;
+}
+
+/** Récompense de l'auteur d'une suggestion acceptée. `0` = rien. */
+export const SUGGESTION_REWARD_XP = { min: 0, max: 5_000 } as const;
+export const SUGGESTION_REWARD_COINS = { min: 0, max: 100_000 } as const;
+
+/** Catégories proposées dans la fenêtre : une liste déroulante en tient 25, on en garde moins. */
+export const SUGGESTION_CATEGORIES_MAX = 10;
+export const SUGGESTION_CATEGORY_NAME_MAX = 32;
+
+export type SuggestionCategoryError = 'NOT_ARRAY' | 'TOO_MANY' | 'TOO_LONG';
+
+/** Liste nettoyée : espaces retirés, vides et doublons (sans tenir compte de la casse) écartés. */
+export function normalizeSuggestionCategories(raw: unknown): { categories: string[] } | { error: SuggestionCategoryError } {
+  if (!Array.isArray(raw) || raw.some((name) => typeof name !== 'string')) return { error: 'NOT_ARRAY' };
+  const categories: string[] = [];
+  for (const name of (raw as string[]).map((value) => value.trim()).filter(Boolean)) {
+    if (name.length > SUGGESTION_CATEGORY_NAME_MAX) return { error: 'TOO_LONG' };
+    if (!categories.some((kept) => kept.toLowerCase() === name.toLowerCase())) categories.push(name);
+  }
+  if (categories.length > SUGGESTION_CATEGORIES_MAX) return { error: 'TOO_MANY' };
+  return { categories };
+}
+
+/** Catégorie du serveur qui correspond au choix, à la casse près ; `null` sinon. */
+export function matchSuggestionCategory(categories: readonly string[], choice: string | null | undefined): string | null {
+  const wanted = choice?.trim().toLowerCase();
+  return (wanted && categories.find((name) => name.toLowerCase() === wanted)) || null;
 }
 
 /** Titre facultatif d'une suggestion : un nom de fil Discord, plafonné à 100 caractères. */
@@ -136,7 +184,7 @@ export interface SuggestionResolutionRow {
 
 export interface SuggestionResolutionSummary {
   resolved: number;
-  /** Part des décisions favorables (approuvée ou mise en place), entre 0 et 1. */
+  /** Part des décisions favorables (approuvée, en cours ou mise en place), entre 0 et 1. */
   acceptanceRate: number | null;
   avgResponseHours: number | null;
 }
@@ -147,7 +195,7 @@ export function summarizeSuggestionResolutions(rows: readonly SuggestionResoluti
   if (resolved === 0) return { resolved: 0, acceptanceRate: null, avgResponseHours: null };
 
   const accepted = decided
-    .filter((row) => row.status === 'APPROVED' || row.status === 'IMPLEMENTED')
+    .filter((row) => isSuggestionStatus(row.status) && isSuggestionAccepted(row.status))
     .reduce((sum, row) => sum + row.count, 0);
   const totalSeconds = decided.reduce((sum, row) => sum + (row.avgSeconds ?? 0) * row.count, 0);
   return {
@@ -155,4 +203,31 @@ export function summarizeSuggestionResolutions(rows: readonly SuggestionResoluti
     acceptanceRate: accepted / resolved,
     avgResponseHours: totalSeconds / resolved / 3600,
   };
+}
+
+/** Une ligne du relevé par catégorie et statut. `category: null` = sans catégorie. */
+export interface SuggestionCategoryRow {
+  category: string | null;
+  status: string;
+  count: number;
+}
+
+export interface SuggestionCategorySummary {
+  category: string | null;
+  total: number;
+  pending: number;
+  accepted: number;
+}
+
+/** Bilan par catégorie, la plus fournie d'abord. */
+export function summarizeSuggestionCategories(rows: readonly SuggestionCategoryRow[]): SuggestionCategorySummary[] {
+  const byCategory = new Map<string | null, SuggestionCategorySummary>();
+  for (const row of rows) {
+    const entry = byCategory.get(row.category) ?? { category: row.category, total: 0, pending: 0, accepted: 0 };
+    entry.total += row.count;
+    if (row.status === 'PENDING') entry.pending += row.count;
+    else if (isSuggestionStatus(row.status) && isSuggestionAccepted(row.status)) entry.accepted += row.count;
+    byCategory.set(row.category, entry);
+  }
+  return [...byCategory.values()].sort((a, b) => b.total - a.total);
 }

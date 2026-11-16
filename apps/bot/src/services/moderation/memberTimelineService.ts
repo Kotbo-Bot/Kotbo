@@ -9,6 +9,7 @@
  * avant ce curseur, la fusion garde les `limit` premiers, et le dernier gardé
  * devient le curseur suivant. Aucun événement ne peut donc être sauté.
  */
+import { isSuggestionAccepted, isSuggestionStatus } from '@kotbo/shared';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 
@@ -373,7 +374,7 @@ const SOURCES: Source[] = [
         description: truncate(s.content),
         actor: null,
         link: '/suggestions',
-        tone: s.status === 'APPROVED' || s.status === 'IMPLEMENTED' ? 'success' as const : 'neutral' as const,
+        tone: isSuggestionStatus(s.status) && isSuggestionAccepted(s.status) ? 'success' as const : 'neutral' as const,
       }));
     },
   },

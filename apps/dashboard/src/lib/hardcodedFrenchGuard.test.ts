@@ -70,6 +70,7 @@ const TRANSLATED = [
   'lib/components/security/VisionPanel.svelte',
   'lib/components/suggestions/SuggestionDecisionModal.svelte',
   'lib/components/suggestions/SuggestionMessagePreview.svelte',
+  'lib/components/suggestions/SuggestionVotersModal.svelte',
   'lib/components/ServerTemplatePanel.svelte',
   'lib/components/Sidebar.svelte',
   'lib/components/tickets/TicketTranscripts.svelte',

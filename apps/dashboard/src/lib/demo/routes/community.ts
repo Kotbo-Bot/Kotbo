@@ -249,16 +249,21 @@ export function registerCommunityRoutes(): void {
     createThread: true,
     voteThreshold: 10 as number | null,
     pinAtThreshold: false,
+    rewardXp: 200,
+    rewardCoins: 500,
+    categories: ['Événements', 'Salons', 'Bot'],
+    showVoters: true,
   };
-  const suggestionSeed: Array<[string | null, string, string, number, number, string, string | null]> = [
-    ['Soirée film mensuelle', 'Une soirée film par mois dans le salon vocal.', 'PENDING', 14, 2, ago(3 * 60), null],
-    [null, 'Un salon dédié aux memes, pour aérer le général.', 'PENDING', 9, 4, ago(10 * DAY), null],
-    ['Bot musique', 'Ajouter un bot musique pour les soirées.', 'PENDING', 3, 6, ago(26 * 60), null],
-    ['Rôles de couleur', 'Des rôles de couleur à débloquer avec les niveaux.', 'IMPLEMENTED', 22, 1, ago(18 * DAY), 'C’est en place : rendez-vous dans le salon des rôles.'],
-    [null, 'Un tournoi mensuel avec des récompenses.', 'APPROVED', 17, 3, ago(9 * DAY), 'Bonne idée, on prépare le premier pour la fin du mois.'],
-    [null, 'Supprimer le mode lent du salon général.', 'REJECTED', 5, 11, ago(6 * DAY), 'Le mode lent reste : il limite le spam aux heures de pointe.'],
+  const suggestionSeed: Array<[string | null, string | null, string, string, number, number, string, string | null]> = [
+    ['Soirée film mensuelle', 'Événements', 'Une soirée film par mois dans le salon vocal.', 'PENDING', 14, 2, ago(3 * 60), null],
+    [null, 'Salons', 'Un salon dédié aux memes, pour aérer le général.', 'PENDING', 9, 4, ago(10 * DAY), null],
+    ['Bot musique', 'Bot', 'Ajouter un bot musique pour les soirées.', 'PENDING', 3, 6, ago(26 * 60), null],
+    ['Rôles de couleur', null, 'Des rôles de couleur à débloquer avec les niveaux.', 'IMPLEMENTED', 22, 1, ago(18 * DAY), 'C’est en place : rendez-vous dans le salon des rôles.'],
+    [null, 'Événements', 'Un tournoi mensuel avec des récompenses.', 'IN_PROGRESS', 17, 3, ago(9 * DAY), 'Bonne idée, on prépare le premier pour la fin du mois.'],
+    [null, 'Salons', 'Supprimer le mode lent du salon général.', 'REJECTED', 5, 11, ago(6 * DAY), 'Le mode lent reste : il limite le spam aux heures de pointe.'],
   ];
-  let suggestions = suggestionSeed.map(([title, content, status, upvotes, downvotes, createdAt, responseText], i) => {
+  const acceptedStatuses = ['APPROVED', 'IN_PROGRESS', 'IMPLEMENTED'];
+  let suggestions = suggestionSeed.map(([title, category, content, status, upvotes, downvotes, createdAt, responseText], i) => {
     const author = members()[(i * 3 + 1) % members().length];
     const decided = status !== 'PENDING';
     return {
@@ -267,6 +272,7 @@ export function registerCommunityRoutes(): void {
       username: author.displayName,
       avatarUrl: null,
       title,
+      category,
       content,
       status,
       responseText,
@@ -279,16 +285,30 @@ export function registerCommunityRoutes(): void {
       messageUrl: null,
       threadUrl: null,
       thresholdReachedAt: upvotes >= 10 ? createdAt : null,
+      rewarded: acceptedStatuses.includes(status) ? { xp: 200, coins: 500 } : { xp: 0, coins: 0 },
     };
   });
+
+  const categoryStats = () => {
+    const byCategory = new Map<string | null, { category: string | null; total: number; pending: number; accepted: number }>();
+    for (const s of suggestions) {
+      const entry = byCategory.get(s.category) ?? { category: s.category, total: 0, pending: 0, accepted: 0 };
+      entry.total += 1;
+      if (s.status === 'PENDING') entry.pending += 1;
+      else if (acceptedStatuses.includes(s.status)) entry.accepted += 1;
+      byCategory.set(s.category, entry);
+    }
+    return [...byCategory.values()].sort((a, b) => b.total - a.total);
+  };
 
   route('GET', '/api/dashboard/guilds/:guildId/suggestions', () => {
     const pending = suggestions.filter((s) => s.status === 'PENDING');
     return {
-      config: { ...suggestionConfig, allowedRoleIds: [...suggestionConfig.allowedRoleIds] },
+      config: { ...suggestionConfig, allowedRoleIds: [...suggestionConfig.allowedRoleIds], categories: [...suggestionConfig.categories] },
       stats: { pending: pending.length, stalePending: 1, createdRecent: 11, resolvedRecent: 8, acceptanceRate: 0.63, avgResponseHours: 31, lastCreatedAt: ago(3 * 60) },
       queue: [...pending].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt)),
       queueTruncated: false,
+      categoryStats: categoryStats(),
       messageLabels: {
         locale: 'fr',
         title: 'Nouvelle suggestion',
@@ -298,10 +318,11 @@ export function registerCommunityRoutes(): void {
         votesValue: 'Pour : `{up}` | Contre : `{down}`',
         responseField: 'Réponse de la modération',
         noResponse: 'Aucun commentaire.',
+        categoryField: 'Catégorie',
         voteUp: 'Pour',
         voteDown: 'Contre',
         footer: 'ID de la suggestion : {id}',
-        status: { PENDING: 'En cours d’évaluation', APPROVED: 'Approuvée par le staff', REJECTED: 'Refusée par le staff', IMPLEMENTED: 'Mise en place' },
+        status: { PENDING: 'En cours d’évaluation', APPROVED: 'Approuvée par le staff', IN_PROGRESS: 'En cours de réalisation', REJECTED: 'Refusée par le staff', IMPLEMENTED: 'Mise en place' },
       },
     };
   });
@@ -309,23 +330,26 @@ export function registerCommunityRoutes(): void {
   route('GET', '/api/dashboard/guilds/:guildId/suggestions/list', ({ query }) => {
     const status = query.get('status');
     const userId = query.get('userId');
+    const category = query.get('category');
     const list = suggestions
       .filter((s) => (!status || s.status === status) && (!userId || s.userId === userId))
+      .filter((s) => !category || (category === 'none' ? s.category === null : s.category === category))
       .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
     return { suggestions: list, nextCursor: null };
   });
 
   route('PATCH', '/api/dashboard/guilds/:guildId/suggestions/config', ({ body }) => {
     if (body && 'channelId' in body) suggestionConfig.channelId = body.channelId;
-    for (const key of ['requireComment', 'voteWhileApproved', 'notifyAuthor', 'createThread', 'pinAtThreshold'] as const) {
+    for (const key of ['requireComment', 'voteWhileApproved', 'notifyAuthor', 'createThread', 'pinAtThreshold', 'showVoters'] as const) {
       if (typeof body?.[key] === 'boolean') suggestionConfig[key] = body[key];
     }
-    for (const key of ['cooldownMinutes', 'minAccountAgeDays', 'minMemberDays'] as const) {
+    if (Array.isArray(body?.categories)) suggestionConfig.categories = [...body.categories];
+    for (const key of ['cooldownMinutes', 'minAccountAgeDays', 'minMemberDays', 'rewardXp', 'rewardCoins'] as const) {
       if (typeof body?.[key] === 'number') suggestionConfig[key] = body[key];
     }
     if (body && 'voteThreshold' in body) suggestionConfig.voteThreshold = body.voteThreshold;
     if (Array.isArray(body?.allowedRoleIds)) suggestionConfig.allowedRoleIds = [...body.allowedRoleIds];
-    return { config: { ...suggestionConfig, allowedRoleIds: [...suggestionConfig.allowedRoleIds] } };
+    return { config: { ...suggestionConfig, allowedRoleIds: [...suggestionConfig.allowedRoleIds], categories: [...suggestionConfig.categories] } };
   });
 
   route('POST', '/api/dashboard/guilds/:guildId/suggestions/:suggestionId/resolve', ({ params, body }) => {
@@ -345,6 +369,17 @@ export function registerCommunityRoutes(): void {
   route('DELETE', '/api/dashboard/guilds/:guildId/suggestions/:suggestionId', ({ params }) => {
     suggestions = suggestions.filter((s) => s.id !== params.suggestionId);
     return { deleted: true };
+  });
+
+  route('GET', '/api/dashboard/guilds/:guildId/suggestions/:suggestionId/voters', ({ params }) => {
+    const suggestion = suggestions.find((s) => s.id === params.suggestionId);
+    const pool = members();
+    const voter = (p: (typeof pool)[number]) => ({ userId: p.id, name: p.displayName, avatarUrl: null });
+    return {
+      up: pool.slice(0, suggestion?.upvotes ?? 0).map(voter),
+      // Les derniers membres de la liste, pour ne pas recroiser les votes pour.
+      down: pool.slice(pool.length - Math.min(suggestion?.downvotes ?? 0, pool.length)).map(voter),
+    };
   });
 
   route('POST', '/api/dashboard/guilds/:guildId/suggestions/refresh', () => ({

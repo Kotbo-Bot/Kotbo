@@ -8,6 +8,7 @@ import {
   SUGGESTION_STATS_DAYS,
   decodeTimeCursor,
   encodeTimeCursor,
+  summarizeSuggestionCategories,
   summarizeSuggestionResolutions,
   type SuggestionResolutionRow,
   type SuggestionStatus,
@@ -36,7 +37,7 @@ export async function getSuggestionsOverview(guildId: string, now: Date = new Da
   const since = new Date(now.getTime() - SUGGESTION_STATS_DAYS * DAY_MS);
   const staleBefore = new Date(now.getTime() - SUGGESTION_STALE_DAYS * DAY_MS);
 
-  const [config, queue, pending, stalePending, createdRecent, resolutions, last] = await Promise.all([
+  const [config, queue, pending, stalePending, createdRecent, resolutions, last, byCategory] = await Promise.all([
     getSuggestionSettings(guildId),
     // La plus ancienne d'abord : c'est elle qui attend le plus.
     prismaRead.suggestion.findMany({
@@ -57,6 +58,7 @@ export async function getSuggestionsOverview(guildId: string, now: Date = new Da
          AND "respondedAt" >= ${since}
        GROUP BY "status"`,
     prismaRead.suggestion.findFirst({ where: { guildId }, orderBy: { createdAt: 'desc' }, select: { createdAt: true } }),
+    prismaRead.suggestion.groupBy({ by: ['category', 'status'], where: { guildId }, _count: { _all: true } }),
   ]);
 
   const summary = summarizeSuggestionResolutions(resolutions);
@@ -69,12 +71,17 @@ export async function getSuggestionsOverview(guildId: string, now: Date = new Da
     avgResponseHours: summary.avgResponseHours,
     lastCreatedAt: last?.createdAt ?? null,
   };
-  return { config, stats, queue, queueTruncated: pending > queue.length };
+  const categoryStats = summarizeSuggestionCategories(
+    byCategory.map((row) => ({ category: row.category, status: row.status, count: row._count._all })),
+  );
+  return { config, stats, queue, queueTruncated: pending > queue.length, categoryStats };
 }
 
 export interface SuggestionListFilter {
   status?: SuggestionStatus;
   userId?: string;
+  /** `null` : sans catégorie ; absent : toutes. */
+  category?: string | null;
   cursor?: string;
   limit?: number;
 }
@@ -92,6 +99,7 @@ export async function listSuggestions(guildId: string, filter: SuggestionListFil
       guildId,
       ...(filter.status ? { status: filter.status } : {}),
       ...(filter.userId ? { userId: filter.userId } : {}),
+      ...(filter.category !== undefined ? { category: filter.category } : {}),
       ...(after
         ? { OR: [{ createdAt: { lt: after.createdAt } }, { createdAt: after.createdAt, id: { lt: after.id } }] }
         : {}),
@@ -103,4 +111,9 @@ export async function listSuggestions(guildId: string, filter: SuggestionListFil
   const suggestions = rows.slice(0, limit);
   const last = suggestions[suggestions.length - 1];
   return { suggestions, nextCursor: rows.length > limit && last ? encodeTimeCursor(last.createdAt, last.id) : null };
+}
+
+/** Votants d'une suggestion de ce serveur, pour le staff ; `null` si elle n'y est pas. */
+export async function getSuggestionVoters(guildId: string, suggestionId: string) {
+  return prismaRead.suggestion.findFirst({ where: { id: suggestionId, guildId }, select: { upvoters: true, downvoters: true } });
 }

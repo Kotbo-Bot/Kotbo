@@ -290,6 +290,10 @@ export interface SuggestionCreatedEvent {
   suggestionId: string;
   userId: string;
   username: string;
+  /** Titre saisi dans la fenêtre de proposition, sinon null. */
+  title: string | null;
+  /** Catégorie choisie parmi celles du serveur, sinon null. */
+  category: string | null;
   content: string;
   channelId: string;
   /** Null quand le bot n'a pas pu poster la suggestion. */
@@ -297,18 +301,41 @@ export interface SuggestionCreatedEvent {
   timestamp: number;
 }
 
+/** Décision du staff : publiée à chaque changement de statut, jamais pour une remise en attente. */
 export interface SuggestionResolvedEvent {
   guildId: string;
   suggestionId: string;
   userId: string;
   username: string;
+  title: string | null;
+  category: string | null;
   content: string;
-  status: 'APPROVED' | 'REJECTED' | 'IMPLEMENTED';
+  status: 'APPROVED' | 'IN_PROGRESS' | 'REJECTED' | 'IMPLEMENTED';
+  /** Statut avant cette décision : `PENDING` pour une première décision. */
+  previousStatus: 'PENDING' | 'APPROVED' | 'IN_PROGRESS' | 'REJECTED' | 'IMPLEMENTED';
   responseText: string;
   /** Null pour une réponse de l'assistant MCP. */
   respondedById: string | null;
   upvotes: number;
   downvotes: number;
+  timestamp: number;
+}
+
+/** Une suggestion vient d'atteindre le seuil de votes « pour » du serveur, une seule fois. */
+export interface SuggestionThresholdReachedEvent {
+  guildId: string;
+  suggestionId: string;
+  userId: string;
+  username: string;
+  title: string | null;
+  category: string | null;
+  content: string;
+  upvotes: number;
+  downvotes: number;
+  threshold: number;
+  /** Message public de la suggestion, `null` si l'envoi a échoué. */
+  channelId: string | null;
+  messageId: string | null;
   timestamp: number;
 }
 
@@ -575,6 +602,7 @@ export interface KotboEventMap {
   'form:submitted': FormSubmittedEvent;
   'suggestion:created': SuggestionCreatedEvent;
   'suggestion:resolved': SuggestionResolvedEvent;
+  'suggestion:threshold-reached': SuggestionThresholdReachedEvent;
   'ticket:created': TicketCreatedEvent;
   'ticket:closed': TicketClosedEvent;
   'ticket:rated': TicketRatedEvent;

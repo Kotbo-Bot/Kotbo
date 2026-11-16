@@ -27,6 +27,13 @@ export interface SuggestionSettings {
   /** Votes « pour » qui signalent la suggestion. `null` = pas de seuil. */
   voteThreshold: number | null;
   pinAtThreshold: boolean;
+  /** Récompense de l'auteur d'une suggestion acceptée. `0` = rien. */
+  rewardXp: number;
+  rewardCoins: number;
+  /** Catégories proposées à qui suggère. Vide = pas de catégorie. */
+  categories: string[];
+  /** Le staff voit qui a voté sur le dashboard. */
+  showVoters: boolean;
 }
 
 export const DEFAULT_SUGGESTION_SETTINGS: SuggestionSettings = {
@@ -41,6 +48,10 @@ export const DEFAULT_SUGGESTION_SETTINGS: SuggestionSettings = {
   createThread: false,
   voteThreshold: null,
   pinAtThreshold: false,
+  rewardXp: 0,
+  rewardCoins: 0,
+  categories: [],
+  showVoters: false,
 };
 
 /** Motif temps réel : la page Suggestions se recharge dès qu'une suggestion ou un réglage bouge. */
@@ -51,7 +62,7 @@ export async function getSuggestionSettings(guildId: string): Promise<Suggestion
     prisma.dashboardFeatureConfig.findFirst({ where: { guildId, featureKey: 'suggestions' }, select: { channelId: true } }),
     prisma.suggestionConfig.findUnique({ where: { guildId } }),
   ]);
-  if (!row) return { ...DEFAULT_SUGGESTION_SETTINGS, allowedRoleIds: [], channelId: feature?.channelId ?? null };
+  if (!row) return { ...DEFAULT_SUGGESTION_SETTINGS, allowedRoleIds: [], categories: [], channelId: feature?.channelId ?? null };
   return {
     channelId: feature?.channelId ?? null,
     requireComment: row.requireComment,
@@ -64,6 +75,10 @@ export async function getSuggestionSettings(guildId: string): Promise<Suggestion
     createThread: row.createThread,
     voteThreshold: row.voteThreshold,
     pinAtThreshold: row.pinAtThreshold,
+    rewardXp: row.rewardXp,
+    rewardCoins: row.rewardCoins,
+    categories: row.categories,
+    showVoters: row.showVoters,
   };
 }
 

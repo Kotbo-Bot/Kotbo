@@ -354,13 +354,15 @@ async function renderTicket(ctx: BlockContext, _config: Record<string, unknown>,
 
 // ─── Suggestions ────────────────────────────────────────────────────────────
 
-const SUGGESTION_STATUS = ['PENDING', 'APPROVED', 'REJECTED', 'IMPLEMENTED'] as const;
+const SUGGESTION_STATUS = ['PENDING', 'APPROVED', 'IN_PROGRESS', 'REJECTED', 'IMPLEMENTED'] as const;
 
 function suggestionStatusLabel(status: string, locale: SiteLocale): string {
   const o = { locale };
   switch (status) {
     case 'APPROVED':
       return m.site_suggestion_status_APPROVED({}, o);
+    case 'IN_PROGRESS':
+      return m.site_suggestion_status_IN_PROGRESS({}, o);
     case 'REJECTED':
       return m.site_suggestion_status_REJECTED({}, o);
     case 'IMPLEMENTED':
@@ -372,7 +374,7 @@ function suggestionStatusLabel(status: string, locale: SiteLocale): string {
 
 async function renderSuggestions(ctx: BlockContext, config: Record<string, unknown>): Promise<string> {
   const filter = config.filter === 'accepted' || config.filter === 'all' ? config.filter : 'open';
-  const status = filter === 'open' ? ['PENDING'] : filter === 'accepted' ? ['APPROVED', 'IMPLEMENTED'] : [...SUGGESTION_STATUS];
+  const status = filter === 'open' ? ['PENDING'] : filter === 'accepted' ? ['APPROVED', 'IN_PROGRESS', 'IMPLEMENTED'] : [...SUGGESTION_STATUS];
   const [suggestions, { voteWhileApproved }] = await Promise.all([
     prisma.suggestion.findMany({
       where: { guildId: ctx.site.guildId, status: { in: status } },

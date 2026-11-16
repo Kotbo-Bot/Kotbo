@@ -20,6 +20,7 @@ export interface SuggestionMessageLabels {
   votesValue: string;
   responseField: string;
   noResponse: string;
+  categoryField: string;
   voteUp: string;
   voteDown: string;
   footer: string;
@@ -30,6 +31,8 @@ export interface SuggestionMessageView {
   id: string;
   /** Titre saisi par l'auteur ; sans lui, le titre générique. */
   title: string | null;
+  /** Catégorie choisie à la proposition, en tête des champs. */
+  category: string | null;
   authorName: string;
   authorAvatarUrl: string | null;
   content: string;
@@ -61,6 +64,7 @@ export function buildSuggestionMessage(view: SuggestionMessageView, labels: Sugg
     .setColor(SUGGESTION_STATUS_COLORS[view.status] as ColorResolvable)
     .setFooter({ text: fillSuggestionTemplate(labels.footer, { id: view.id }) })
     .setFields(
+      ...(view.category ? [{ name: labels.categoryField, value: view.category, inline: true }] : []),
       { name: labels.statusField, value: labels.status[view.status], inline: true },
       { name: view.votingOpen ? labels.votesField : labels.finalVotesField, value: votes, inline: true },
       ...(view.status === 'PENDING'

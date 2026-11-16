@@ -17,6 +17,7 @@ function item(id: string, upvotes: number, downvotes: number, createdAt: string)
     username: 'Alice',
     avatarUrl: null,
     title: null,
+    category: null,
     content: 'Idée',
     status: 'PENDING',
     responseText: null,
@@ -44,6 +45,7 @@ describe('toSuggestionsOverview', () => {
     expect(data?.queue).toEqual([]);
     expect(data?.queueTruncated).toBe(false);
     expect(data?.messageLabels).toBeNull();
+    expect(data?.categoryStats).toEqual([]);
   });
 
   test('une réponse complète passe telle quelle', () => {
@@ -53,6 +55,7 @@ describe('toSuggestionsOverview', () => {
       queue: [item('a', 1, 0, '2026-11-10T00:00:00Z')],
       queueTruncated: true,
       messageLabels: { locale: 'fr', title: 'T' },
+      categoryStats: [{ category: 'Bot', total: 2, pending: 1, accepted: 1 }],
     };
     expect(toSuggestionsOverview(raw)).toEqual(raw as never);
   });
@@ -61,6 +64,11 @@ describe('toSuggestionsOverview', () => {
 describe('toSuggestionConfig', () => {
   test('une liste de rôles invalide redevient vide', () => {
     expect(toSuggestionConfig({ allowedRoleIds: 'x' })?.allowedRoleIds).toEqual([]);
+  });
+
+  test('des catégories absentes ou invalides deviennent une liste vide', () => {
+    expect(toSuggestionConfig({})?.categories).toEqual([]);
+    expect(toSuggestionConfig({ categories: 'Bot' })?.categories).toEqual([]);
   });
 });
 

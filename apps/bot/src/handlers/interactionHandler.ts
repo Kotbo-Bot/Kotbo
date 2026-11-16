@@ -535,8 +535,15 @@ export async function handleButton(interaction: Interaction, client: Client): Pr
 
   // ── Suggestion form button ───────────────────────────────────────────
   if (customId === 'suggest_form_open') {
-    const { buildSuggestionModal } = await import('../services/features/suggestionModal.js');
-    await interaction.showModal(buildSuggestionModal(await getEffectiveLocale(interaction)));
+    const [{ buildSuggestionModal }, { getSuggestionSettings }] = await Promise.all([
+      import('../services/features/suggestionModal.js'),
+      import('../services/features/suggestionSettings.js'),
+    ]);
+    const [locale, settings] = await Promise.all([
+      getEffectiveLocale(interaction),
+      guildId ? getSuggestionSettings(guildId) : null,
+    ]);
+    await interaction.showModal(buildSuggestionModal(locale, settings?.categories));
     return;
   }
 
@@ -1805,11 +1812,11 @@ export async function handleModalSubmit(interaction: ModalSubmitInteraction, cli
       import('../services/features/suggestionService.js'),
       getEffectiveLocale(interaction),
     ]);
-    const { title, content } = readSuggestionModal(interaction);
+    const { title, category, content } = readSuggestionModal(interaction);
     await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
 
     try {
-      const suggestion = await createSuggestion(guildId, interaction.user.id, interaction.user.username, content, client, { title });
+      const suggestion = await createSuggestion(guildId, interaction.user.id, interaction.user.username, content, client, { title, category });
       await interaction.editReply({ content: gvwMessages.b5_suggest_success({ id: suggestion.id }, { locale }) });
     } catch (err: unknown) {
       await interaction.editReply({
