@@ -4,7 +4,12 @@
  * signal temps réel à la page.
  */
 import type { StarboardConfig } from '@prisma/client';
-import { defaultStarboardSettings, readStarboardChannelThresholds, type StarboardSettings } from '@kotbo/shared';
+import {
+  defaultStarboardSettings,
+  readStarboardChannelThresholds,
+  readStarboardTiers,
+  type StarboardSettings,
+} from '@kotbo/shared';
 import prisma from '../../utils/db.js';
 import { invalidateStarboardCache, notifyStarboardChange } from './starboardService.js';
 
@@ -27,6 +32,10 @@ export function toStarboardSettings(row: StarboardConfig | null): StarboardSetti
     maxMessageAgeDays: row.maxMessageAgeDays,
     channelThresholds: readStarboardChannelThresholds(row.channelThresholds),
     blockedUserIds: row.blockedUserIds,
+    rewardXp: row.rewardXp,
+    rewardCoins: row.rewardCoins,
+    tiers: readStarboardTiers(row.tiers),
+    notifyAuthor: row.notifyAuthor,
   };
 }
 
@@ -41,10 +50,16 @@ export async function getStarboardSettings(guildId: string): Promise<StarboardSe
  * serveur dont la bascule aurait échoué à mi-chemin.
  */
 export async function saveStarboardSettings(guildId: string, patch: Partial<StarboardSettings>): Promise<StarboardSettings> {
+  // Colonne JSON : des objets littéraux, que Prisma accepte comme valeur JSON.
+  const data = {
+    ...patch,
+    ...(patch.tiers ? { tiers: patch.tiers.map((tier) => ({ threshold: tier.threshold, roleId: tier.roleId })) } : {}),
+  };
+  const defaults = defaultStarboardSettings();
   const row = await prisma.starboardConfig.upsert({
     where: { guildId },
-    create: { guildId, enabled: true, ...defaultStarboardSettings(), ...patch },
-    update: patch,
+    create: { guildId, enabled: true, ...defaults, tiers: [], ...data },
+    update: data,
   });
   await invalidateStarboardCache(guildId);
   notifyStarboardChange(guildId);

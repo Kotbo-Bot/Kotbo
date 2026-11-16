@@ -1,5 +1,5 @@
 import { isModulePaused } from '@kotbo/contracts';
-import { MEMBER_DAYS_TRIGGERS, isMemberDaysTrigger, readMemberDays, cronMatches, hasBlockingIssue, pausedModuleIssues, readTriggerChannelFilter, readTriggerRoleFilter, validateGraph, getNodeDef, wallClockMinuteKey, FUN_GAME_LABELS, SANCTION_TYPE_LABELS, SUGGESTION_STATUS_LABELS, type WorkflowGraph } from '@kotbo/shared';
+import { MEMBER_DAYS_TRIGGERS, isMemberDaysTrigger, readMemberDays, cronMatches, hasBlockingIssue, pausedModuleIssues, readTriggerChannelFilter, readTriggerRoleFilter, validateGraph, getNodeDef, wallClockMinuteKey, FUN_GAME_LABELS, SANCTION_TYPE_LABELS, STARBOARD_REMOVAL_LABELS, SUGGESTION_STATUS_LABELS, type WorkflowGraph } from '@kotbo/shared';
 import { currentCascadeDepth, runWithCascadeDepth } from '@kotbo/core';
 import type { Client, Guild } from 'discord.js';
 import type { Prisma } from '@prisma/client';
@@ -628,6 +628,32 @@ export async function buildTriggerOutputs(
             authorId: guild.client.user?.id ?? '',
           })
           : null,
+      };
+    }
+
+    // L'auteur a pu quitter le serveur entre-temps : il reste nommé, le
+    // workflow part quand même (un retrait se signale même pour un absent).
+    case 'OnStarboardFeatured':
+    case 'OnStarboardRemoved': {
+      const member = await memberOrDeparted(payload.authorId, payload.authorId);
+      const shared = {
+        member,
+        channel: channelOf(payload.channelId),
+        score: Number(payload.score ?? 0),
+      };
+      if (triggerType === 'OnStarboardFeatured') {
+        return {
+          ...shared,
+          featuredCount: Number(payload.featuredCount ?? 0),
+          messageUrl: `https://discord.com/channels/${guild.id}/${String(payload.channelId ?? '')}/${String(payload.messageId ?? '')}`,
+          starMessageUrl: `https://discord.com/channels/${guild.id}/${String(payload.starChannelId ?? '')}/${String(payload.starMessageId ?? '')}`,
+        };
+      }
+      const reason = String(payload.reason ?? '');
+      return {
+        ...shared,
+        reason: Object.hasOwn(STARBOARD_REMOVAL_LABELS, reason) ? STARBOARD_REMOVAL_LABELS[reason] : reason,
+        isStaffRemoval: reason === 'STAFF',
       };
     }
 

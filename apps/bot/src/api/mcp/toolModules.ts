@@ -36,6 +36,7 @@ const RULES: ReadonlyArray<readonly [RegExp, string]> = [
   [/reputation/, 'reputation'],
   [/leveling|level_role|_xp$|^get_member_level$|^get_leaderboard$/, 'leveling'],
   [/suggestion/, 'suggestions'],
+  [/starboard/, 'starboard'],
   [/custom_form/, 'custom_forms'],
   [/custom_event|^get_events$|^delete_event$|^update_event_status$/, 'events'],
   [/channel_health|overloaded_channel|inactive_channel/, 'channel_health'],

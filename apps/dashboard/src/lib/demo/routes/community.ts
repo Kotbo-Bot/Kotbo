@@ -448,6 +448,9 @@ export function registerCommunityRoutes(): void {
     upvoteEmojis: ['⭐', '🔥'],
     maxMessageAgeDays: 14,
     channelThresholds: { [channelByName('général').id]: 10 },
+    rewardXp: 50,
+    rewardCoins: 100,
+    notifyAuthor: true,
   };
   const starSeed: Array<[string, string, number, number, number, number, boolean]> = [
     ['général', 'Petit rappel : la soirée jeux commence à 21 h, venez nombreux !', 14, 1, 16, 2 * 60, true],
@@ -499,6 +502,17 @@ export function registerCommunityRoutes(): void {
       channelStats: [...byChannel].map(([channelId, count]) => ({ channelId, count })).sort((a, b) => b.count - a.count),
       health: { channelFound: true, missingPermissions: [] },
       messageLabels: { locale: 'fr', jumpButton: 'Aller au message', footerVotes: '{up} pour · {down} contre', attachmentsField: 'Pièces jointes' },
+      topAuthors: (() => {
+        const byAuthor = new Map<string, { authorId: string; name: string; avatarUrl: null; count: number; bestScore: number }>();
+        for (const e of recent.filter((entry) => !entry.blocked)) {
+          const row = byAuthor.get(e.authorId) ?? { authorId: e.authorId, name: e.authorName, avatarUrl: null, count: 0, bestScore: 0 };
+          row.count += 1;
+          row.bestScore = Math.max(row.bestScore, e.peakScore);
+          byAuthor.set(e.authorId, row);
+        }
+        return [...byAuthor.values()].sort((a, b) => b.count - a.count || b.bestScore - a.bestScore);
+      })(),
+      unmanageableTierRoleIds: [],
       blockedMembers: starboardConfig.blockedUserIds.map((userId) => {
         const person = members().find((p) => p.id === userId);
         return { userId, name: person?.displayName ?? null, avatarUrl: null };

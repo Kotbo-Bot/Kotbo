@@ -808,3 +808,34 @@ describe('déclencheurs de saison', () => {
     expect(decompileGraph(graph)).toEqual(recipe);
   });
 });
+
+describe('déclencheurs de Starlight', () => {
+  test('mise à la une et retrait, rattachés au module Starlight, filtrables par salon', () => {
+    for (const [type, event] of [['OnStarboardFeatured', 'starboard:featured'], ['OnStarboardRemoved', 'starboard:removed']]) {
+      const def = getNodeDef(type);
+      expect(def?.category).toBe('trigger');
+      expect(def?.event).toBe(event);
+      expect(def?.module).toBe('starboard');
+      expect(def?.config?.some((field) => field.key === 'channelIds')).toBe(true);
+    }
+  });
+
+  test('« membre » est l’auteur ; score, compte et motif exposés', () => {
+    const paths = (type: string) => contextTokens(type).map((token) => token.path);
+    expect(paths('OnStarboardFeatured')).toEqual(expect.arrayContaining(['member.displayName', 'channel.name', 'score', 'featuredCount', 'messageUrl', 'starMessageUrl']));
+    expect(paths('OnStarboardRemoved')).toEqual(expect.arrayContaining(['member.displayName', 'channel.name', 'score', 'reason']));
+  });
+
+  test('une recette « message à la une » se compile et se relit à l\'identique', () => {
+    const recipe: Recipe = {
+      trigger: { type: 'OnStarboardFeatured' },
+      steps: [{
+        id: 'log', kind: 'action', action: 'SendLogMessage',
+        values: { text: { from: 'text', template: '{member.displayName} passe à la une ({score} points, {featuredCount} au total) : {messageUrl}' } },
+      }],
+    };
+    const graph = compileRecipe(recipe);
+    expect(hasBlockingIssue(validateGraph(graph))).toBe(false);
+    expect(decompileGraph(graph)).toEqual(recipe);
+  });
+});

@@ -179,6 +179,22 @@ export const TRIGGER_LIBRARY: TriggerPresentation[] = [
     example: 'Féliciter publiquement et débloquer un rôle de palier.',
   },
   {
+    type: 'OnStarboardFeatured',
+    sentence: 'Quand un message passe à la une',
+    short: 'Message à la une',
+    group: 'members',
+    icon: 'Star',
+    example: 'Féliciter l\'auteur dans le salon général, ou lui donner un rôle au dixième message à la une.',
+  },
+  {
+    type: 'OnStarboardRemoved',
+    sentence: 'Quand un message quitte la une',
+    short: 'Retiré de la une',
+    group: 'members',
+    icon: 'Star',
+    example: 'Prévenir le staff dans les journaux quand un message est retiré, avec le motif.',
+  },
+  {
     type: 'OnReputationGiven',
     sentence: 'Quand un membre en remercie un autre',
     short: 'Remerciement donné',

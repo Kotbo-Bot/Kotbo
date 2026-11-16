@@ -10,16 +10,22 @@
   import { onDestroy, onMount, untrack } from 'svelte';
   import { MediaQuery } from 'svelte/reactivity';
   import {
+    REPUTATION_TIERS_MAX,
+    REPUTATION_TIER_THRESHOLD,
     STARBOARD_BLOCKED_USERS_MAX,
     STARBOARD_BUSY_PER_DAY,
     STARBOARD_CHANNEL_THRESHOLDS_MAX,
     STARBOARD_MAX_AGE_DAYS,
+    STARBOARD_REWARD_COINS,
+    STARBOARD_REWARD_XP,
     STARBOARD_STATS_DAYS,
     STARBOARD_THRESHOLD,
     defaultStarboardSettings,
     isDiscordMediaUrl,
     normalizeStarboardChannelThresholds,
     starboardAdvice,
+    validateReputationTiers,
+    type ReputationTierError,
     type StarboardAdvice,
     type StarboardPeriod,
     type StarboardSettings,
@@ -33,6 +39,7 @@
   import { subscribeRealtime } from '../lib/stores/realtime.svelte';
   import { memberCaseModal } from '../lib/stores/memberCaseModal.svelte';
   import { confirmDialog } from '../lib/stores/confirmDialog.svelte';
+  import { authStore } from '../lib/stores/auth.svelte';
   import ModulePage from '../lib/components/ModulePage.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
   import EmptyState from '../lib/components/EmptyState.svelte';
@@ -136,7 +143,68 @@
   );
   const channelThresholdsValid = $derived(!('error' in normalizeStarboardChannelThresholds(config.channelThresholds)));
   const blockedValid = $derived(config.blockedUserIds.length <= STARBOARD_BLOCKED_USERS_MAX);
-  const settingsValid = $derived(thresholdValid && upvotesValid && maxAgeValid && channelThresholdsValid && blockedValid);
+
+  function inRange(value: number, range: { min: number; max: number }): boolean {
+    return Number.isInteger(value) && value >= range.min && value <= range.max;
+  }
+  const rewardXpValid = $derived(inRange(config.rewardXp, STARBOARD_REWARD_XP));
+  const rewardCoinsValid = $derived(inRange(config.rewardCoins, STARBOARD_REWARD_COINS));
+
+  // ── Paliers (mêmes règles que ceux de la réputation) ──
+  const tiersCheck = $derived(validateReputationTiers(config.tiers));
+  const TIER_ERROR_TEXT: Record<ReputationTierError, () => string> = {
+    NOT_ARRAY: () => m.starboard_tiers_error_role(),
+    TOO_MANY: () => m.starboard_tiers_error_too_many({ max: REPUTATION_TIERS_MAX }),
+    BAD_THRESHOLD: () => m.starboard_tiers_error_threshold({ min: REPUTATION_TIER_THRESHOLD.min, max: REPUTATION_TIER_THRESHOLD.max }),
+    BAD_ROLE: () => m.starboard_tiers_error_role(),
+    DUPLICATE_THRESHOLD: () => m.starboard_tiers_error_duplicate_threshold(),
+    DUPLICATE_ROLE: () => m.starboard_tiers_error_duplicate_role(),
+  };
+  const tiersError = $derived('error' in tiersCheck ? TIER_ERROR_TEXT[tiersCheck.error]() : null);
+
+  /** @everyone porte l'id du serveur : il ne se donne pas. */
+  const assignableRoles = $derived(
+    (dashboardStore.state.discordRoles || [])
+      .filter((role: { id: string }) => role.id !== authStore.selectedGuildId)
+      .map((role: { id: string; name: string }) => ({ id: role.id, name: `@${role.name}` }))
+  );
+
+  function roleName(roleId: string): string {
+    return assignableRoles.find((role) => role.id === roleId)?.name ?? roleId;
+  }
+
+  const unmanageableRoleNames = $derived((data?.unmanageableTierRoleIds ?? []).map(roleName));
+
+  function addTier() {
+    const highest = config.tiers.reduce((max, tier) => Math.max(max, tier.threshold), 0);
+    config.tiers = [...config.tiers, { threshold: Math.min(highest + 5, REPUTATION_TIER_THRESHOLD.max), roleId: '' }];
+  }
+
+  function removeTier(index: number) {
+    config.tiers = config.tiers.filter((_, i) => i !== index);
+  }
+
+  /** Récompense du panneau d'état : seules les parts versées sont nommées. */
+  function rewardSummary(source: StarboardSettings): string | null {
+    const parts = [
+      ...(source.rewardXp > 0 ? [m.starboard_status_reward_xp({ xp: source.rewardXp })] : []),
+      ...(source.rewardCoins > 0 ? [m.starboard_status_reward_coins({ coins: source.rewardCoins })] : []),
+    ];
+    return parts.length > 0 ? parts.join(', ') : null;
+  }
+
+  /** Module absent de la liste = actif, même lecture que ModulePage. */
+  function isModuleActive(key: string): boolean {
+    const entry = ((dashboardStore.state.modules as unknown as Array<{ id: string; status?: string }> | undefined) ?? []).find((mod) => mod.id === key);
+    return !entry || entry.status === 'active';
+  }
+  const levelingActive = $derived(isModuleActive('leveling'));
+  const economyActive = $derived(isModuleActive('economy'));
+
+  const settingsValid = $derived(
+    thresholdValid && upvotesValid && maxAgeValid && channelThresholdsValid && blockedValid
+      && rewardXpValid && rewardCoinsValid && !tiersError
+  );
 
   /** Garde-fous en place, pour le panneau d'état. */
   function activeGuards(source: StarboardSettings): number {
@@ -437,6 +505,16 @@
         </dd>
       </div>
       <div class="flex items-center justify-between gap-3">
+        <dt class="text-on-surface-variant">{m.starboard_status_reward()}</dt>
+        <dd class="font-semibold text-right">
+          {rewardSummary(data.config) ?? m.starboard_status_none()}
+        </dd>
+      </div>
+      <div class="flex items-center justify-between gap-3">
+        <dt class="text-on-surface-variant">{m.starboard_status_tiers()}</dt>
+        <dd class="font-semibold">{data.config.tiers.length}</dd>
+      </div>
+      <div class="flex items-center justify-between gap-3">
         <dt class="text-on-surface-variant">{m.starboard_status_guards()}</dt>
         <dd class="font-semibold">{activeGuards(data.config) > 0 ? m.starboard_guards_summary({ count: activeGuards(data.config) }) : m.starboard_status_none()}</dd>
       </div>
@@ -652,6 +730,32 @@
               </ul>
             {/if}
           </section>
+
+          {#if data.topAuthors.length > 0}
+            <section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl space-y-4">
+              <h3 class="text-base font-semibold flex items-center gap-2.5">
+                <Papicon icon="Award" size={16} />
+                {m.starboard_authors_title({ days: STARBOARD_STATS_DAYS })}
+              </h3>
+              <ol class="space-y-2">
+                {#each data.topAuthors as author, index (author.authorId)}
+                  {@const name = author.name ?? m.starboard_member_left()}
+                  <li class="grid grid-cols-[2rem_minmax(0,1fr)_auto_auto] items-center gap-3 text-sm">
+                    <span class="font-bold text-on-surface-variant text-right">{index + 1}</span>
+                    <UserDisplay userId={author.authorId} {name} avatarUrl={author.avatarUrl} size="sm" class="min-w-0" onClick={openMemberOnClick(author.name)} />
+                    <span class="text-xs text-on-surface-variant shrink-0">{m.starboard_authors_line({ count: author.count, best: author.bestScore })}</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      icon="List"
+                      aria-label={m.starboard_member_history({ name })}
+                      onclick={() => showEntries({ member: { id: author.authorId, name } })}
+                    />
+                  </li>
+                {/each}
+              </ol>
+            </section>
+          {/if}
 
           {#if data.channelStats.length > 0}
             <section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl space-y-4">
@@ -915,6 +1019,106 @@
                 disabled={!canConfigure}
                 ariaLabel={m.starboard_allow_bots_title()}
               />
+            </div>
+          </section>
+
+          <section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl space-y-5">
+            <div class="border-b border-outline-variant/15 pb-3">
+              <h3 class="text-lg font-semibold flex items-center gap-2"><Papicon icon="Gift" size={18} /> {m.starboard_reward_heading()}</h3>
+              <p class="text-xs text-on-surface-variant mt-1">{m.starboard_reward_desc()}</p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Field
+                id="starboard-reward-xp"
+                label={m.starboard_reward_xp_label()}
+                hint={levelingActive ? m.starboard_range_hint({ min: STARBOARD_REWARD_XP.min, max: STARBOARD_REWARD_XP.max }) : m.starboard_reward_xp_module_off()}
+                error={rewardXpValid ? undefined : m.starboard_range_error({ min: STARBOARD_REWARD_XP.min, max: STARBOARD_REWARD_XP.max })}
+              >
+                {#snippet children(id, describedBy)}
+                  <input {id} type="number" class="input max-w-40" min={STARBOARD_REWARD_XP.min} max={STARBOARD_REWARD_XP.max} bind:value={config.rewardXp} aria-describedby={describedBy} disabled={!canConfigure} />
+                {/snippet}
+              </Field>
+              <Field
+                id="starboard-reward-coins"
+                label={m.starboard_reward_coins_label()}
+                hint={economyActive ? m.starboard_range_hint({ min: STARBOARD_REWARD_COINS.min, max: STARBOARD_REWARD_COINS.max }) : m.starboard_reward_coins_module_off()}
+                error={rewardCoinsValid ? undefined : m.starboard_range_error({ min: STARBOARD_REWARD_COINS.min, max: STARBOARD_REWARD_COINS.max })}
+              >
+                {#snippet children(id, describedBy)}
+                  <input {id} type="number" class="input max-w-40" min={STARBOARD_REWARD_COINS.min} max={STARBOARD_REWARD_COINS.max} bind:value={config.rewardCoins} aria-describedby={describedBy} disabled={!canConfigure} />
+                {/snippet}
+              </Field>
+            </div>
+
+            <div class="flex items-start justify-between gap-4 border-t border-outline-variant/15 pt-5">
+              <div>
+                <p class="text-sm font-semibold">{m.starboard_notify_label()}</p>
+                <p class="text-xs text-on-surface-variant">{m.starboard_notify_hint()}</p>
+              </div>
+              <ToggleSwitch
+                checked={config.notifyAuthor}
+                onToggle={(value) => config.notifyAuthor = value}
+                disabled={!canConfigure}
+                ariaLabel={m.starboard_notify_label()}
+              />
+            </div>
+
+            <div class="space-y-3 border-t border-outline-variant/15 pt-5">
+              <div>
+                <p class="text-sm font-semibold">{m.starboard_tiers_label()}</p>
+                <p class="text-xs text-on-surface-variant">{m.starboard_tiers_hint()}</p>
+              </div>
+
+              {#if unmanageableRoleNames.length > 0}
+                <Callout variant="warning" title={m.starboard_tiers_unmanageable_title()}>
+                  <p>{m.starboard_tiers_unmanageable_desc({ roles: unmanageableRoleNames.join(', ') })}</p>
+                </Callout>
+              {/if}
+
+              {#if config.tiers.length > 0}
+                <ul class="space-y-3">
+                  {#each config.tiers as tier, index (index)}
+                    <li class="grid grid-cols-1 sm:grid-cols-[10rem_minmax(0,1fr)_auto] items-end gap-3">
+                      <Field id="starboard-tier-threshold-{index}" label={m.starboard_tiers_threshold_label()}>
+                        {#snippet children(id)}
+                          <input
+                            {id}
+                            type="number"
+                            class="input"
+                            min={REPUTATION_TIER_THRESHOLD.min}
+                            max={REPUTATION_TIER_THRESHOLD.max}
+                            bind:value={tier.threshold}
+                            disabled={!canConfigure}
+                          />
+                        {/snippet}
+                      </Field>
+                      <Field id="starboard-tier-role-{index}" label={m.starboard_tiers_role_label()}>
+                        {#snippet children(id)}
+                          <SearchableSelect
+                            {id}
+                            bind:value={tier.roleId}
+                            options={assignableRoles}
+                            placeholder={m.starboard_tiers_role_placeholder()}
+                            disabled={!canConfigure}
+                          />
+                        {/snippet}
+                      </Field>
+                      {#if canConfigure}
+                        <Button variant="ghost" icon="Trash" aria-label={m.starboard_tiers_remove({ threshold: tier.threshold })} onclick={() => removeTier(index)} />
+                      {/if}
+                    </li>
+                  {/each}
+                </ul>
+              {/if}
+
+              {#if tiersError}
+                <p class="text-xs text-error" role="alert">{tiersError}</p>
+              {/if}
+
+              {#if canConfigure && config.tiers.length < REPUTATION_TIERS_MAX}
+                <Button size="sm" icon="Plus" onclick={addTier}>{m.starboard_tiers_add()}</Button>
+              {/if}
             </div>
           </section>
 

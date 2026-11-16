@@ -47,6 +47,17 @@ export const SUGGESTION_STATUS_LABELS: Record<string, string> = {
   IMPLEMENTED: 'Implémentée',
 };
 
+/**
+ * Libellé affiché du motif de retrait d'un message à la une, exposé par le port
+ * « Motif ». Les clés sont celles de l'événement `starboard:removed`.
+ */
+export const STARBOARD_REMOVAL_LABELS: Record<string, string> = {
+  BELOW_THRESHOLD: 'Score repassé sous le seuil',
+  STAFF: 'Retiré par le staff',
+  GUARD: 'Garde-fou (auteur exclu, salon NSFW)',
+  SOURCE_DELETED: "Message d'origine supprimé",
+};
+
 const EXEC_IN: PortDef = { id: 'exec', label: '', type: 'Exec' };
 const EXEC_OUT: PortDef = { id: 'next', label: '', type: 'Exec' };
 
@@ -622,6 +633,45 @@ const TRIGGERS: NodeDef[] = [
       { id: 'channel', label: 'Salon', type: 'Channel' },
       { id: 'reason', label: 'Motif', type: 'String' },
       { id: 'reputation', label: 'Réputation après ce vote', type: 'Number' },
+    ],
+    config: [CHANNEL_FILTER_FIELD],
+  },
+  {
+    type: 'OnStarboardFeatured',
+    label: 'Message mis à la une',
+    category: 'trigger',
+    description:
+      "Se déclenche quand un message passe à la une pour la première fois (ou de nouveau après un retrait du staff annulé), une fois ses gains et ses paliers appliqués. Une republication après une suppression à la main ne compte pas. Le filtre de salons porte sur le salon du message d'origine.",
+    event: 'starboard:featured',
+    module: 'starboard',
+    inputs: [],
+    outputs: [
+      EXEC_OUT,
+      { id: 'member', label: 'Auteur', type: 'Member' },
+      { id: 'channel', label: "Salon d'origine", type: 'Channel' },
+      { id: 'score', label: 'Score', type: 'Number' },
+      { id: 'featuredCount', label: "Messages de l'auteur à la une", type: 'Number' },
+      { id: 'messageUrl', label: "Lien du message d'origine", type: 'String' },
+      { id: 'starMessageUrl', label: 'Lien de la republication', type: 'String' },
+    ],
+    config: [CHANNEL_FILTER_FIELD],
+  },
+  {
+    type: 'OnStarboardRemoved',
+    label: 'Message retiré de la une',
+    category: 'trigger',
+    description:
+      "Se déclenche quand un message affiché à la une en est retiré : score repassé sous le seuil, retrait par le staff, garde-fou (auteur exclu, salon NSFW) ou message d'origine supprimé. Le filtre de salons porte sur le salon du message d'origine.",
+    event: 'starboard:removed',
+    module: 'starboard',
+    inputs: [],
+    outputs: [
+      EXEC_OUT,
+      { id: 'member', label: 'Auteur', type: 'Member' },
+      { id: 'channel', label: "Salon d'origine", type: 'Channel' },
+      { id: 'score', label: 'Score', type: 'Number' },
+      { id: 'reason', label: 'Motif', type: 'String' },
+      { id: 'isStaffRemoval', label: 'Retiré par le staff', type: 'Boolean' },
     ],
     config: [CHANNEL_FILTER_FIELD],
   },
