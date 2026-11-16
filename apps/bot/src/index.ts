@@ -27,6 +27,8 @@ import { logger } from './utils/logger.js';
 import { ensureDashboardSchemaPatches } from './utils/schemaPatches.js';
 import { parseInstanceIdFromArgs, setCurrentInstance, getCurrentInstance, isWhiteLabelInstance } from './utils/instanceContext.js';
 import { loadAllInstances, getInstanceById, getDefaultInstance } from './utils/instanceResolver.js';
+import { servesGuild, startGuildOwnershipSync } from './utils/guildOwnership.js';
+import { presenceFrom } from './services/system/customBotProfile.js';
 import { queueAuditLog } from './utils/auditLogger.js';
 import { replyOrFollowUp } from './utils/interactionResponses.js';
 import { interactionFailureMessage } from './utils/failureKind.js';
@@ -198,6 +200,9 @@ const OWNER_ID = process.env.DISCORD_CLIENT_OWNER_ID;
 // elle-même ses propres restrictions dans ce cas.
 const GATE_EXEMPT_COMMANDS = new Set(['activate', 'link']);
 
+// Avant la connexion : aucun événement ne doit passer avant de savoir qui sert quoi.
+await startGuildOwnershipSync();
+
 const originalEmit = client.emit;
 client.emit = function (eventName: string | symbol, ...args: unknown[]) {
   if (PASSTHROUGH_EVENTS.has(eventName)) {
@@ -243,6 +248,9 @@ client.emit = function (eventName: string | symbol, ...args: unknown[]) {
       if (userId === OWNER_ID) isOwnerInteraction = true;
     }
   }
+
+  // Un serveur rattaché à une autre instance (bot perso, marque blanche) est servi par elle seule.
+  if (guildId && !servesGuild(guildId, getCurrentInstance())) return false;
 
   // Intercept and block unactivated guilds silently
   if (guildId && !isExemptCommand && !isOwnerInteraction) {
@@ -417,8 +425,17 @@ async function enforceProgressionBlacklist(interaction: Interaction): Promise<bo
 
 client.once(Events.ClientReady, async (c) => {
   logger.success('Bot', `Connecté en tant que ${c.user.tag}`);
-  const activityPrefix = isWhiteLabelInstance() ? `${getCurrentInstance().brandName} | ` : '';
-  c.user.setActivity(`${activityPrefix}/help | v${botPackageJson.version}`, { type: ActivityType.Playing });
+  const currentInstance = getCurrentInstance();
+  // Le bot perso d'un serveur (instance `cb-<serveur>`) prend le statut choisi sur sa page Identité.
+  const customBotConfig = currentInstance.slug.startsWith('cb-')
+    ? await prisma.customBotConfig.findUnique({ where: { guildId: currentInstance.slug.slice(3) } }).catch(() => null)
+    : null;
+  if (customBotConfig) {
+    c.user.setPresence(presenceFrom(customBotConfig));
+  } else {
+    const activityPrefix = isWhiteLabelInstance() ? `${currentInstance.brandName} | ` : '';
+    c.user.setActivity(`${activityPrefix}/help | v${botPackageJson.version}`, { type: ActivityType.Playing });
+  }
 
   // S'assure que les colonnes/tables ajoutees recemment existent en base
   await ensureDashboardSchemaPatches();

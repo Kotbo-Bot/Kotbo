@@ -1,6 +1,7 @@
 import prisma from './db.js';
 import { logger } from './logger.js';
 import crypto from 'node:crypto';
+import { openSecret } from './secretBox.js';
 
 export interface ResolvedInstance {
   id: string;
@@ -131,9 +132,10 @@ export async function loadAllInstances(): Promise<ResolvedInstance[]> {
         id: inst.id,
         slug: inst.slug,
         name: inst.name,
-        discordToken: inst.discordToken,
+        // Les instances des bots perso sont scellées ; openSecret rend tel quel un secret en clair.
+        discordToken: openSecret(inst.discordToken) ?? '',
         discordClientId: inst.discordClientId,
-        discordClientSecret: inst.discordClientSecret,
+        discordClientSecret: openSecret(inst.discordClientSecret) ?? '',
         discordRedirectUri: inst.discordRedirectUri,
         dashboardUrl,
         dashboardOrigin,
@@ -143,7 +145,7 @@ export async function loadAllInstances(): Promise<ResolvedInstance[]> {
         brandLogoUrl: inst.brandLogoUrl,
         brandFaviconUrl: inst.brandFaviconUrl,
         brandFooterText: inst.brandFooterText,
-        jwtSecret: inst.jwtSecret || crypto.randomBytes(32).toString('hex'),
+        jwtSecret: (inst.jwtSecret && openSecret(inst.jwtSecret)) || crypto.randomBytes(32).toString('hex'),
         ownerId: inst.ownerId,
         maxGuilds: inst.maxGuilds,
         isDefault: false,
@@ -151,7 +153,7 @@ export async function loadAllInstances(): Promise<ResolvedInstance[]> {
 
       instanceCache.set(inst.id, resolved);
       instanceByOrigin.set(dashboardOrigin, resolved);
-      instanceByToken.set(inst.discordToken, resolved);
+      instanceByToken.set(resolved.discordToken, resolved);
 
       logger.info('WhiteLabel', `Instance "${inst.name}" (${inst.slug}) chargée - port ${apiPort}`);
     }
