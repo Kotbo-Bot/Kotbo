@@ -8,6 +8,9 @@ import prisma from '../../../utils/db.js';
 import { z } from 'zod';
 import { type McpToolContext, err, ok, resolveChannel, resolveMember, toolError } from '../toolkit.js';
 
+type SeasonRewardArg = { rank: number; role_id?: string; coins?: number; rotate?: boolean };
+type SeasonTierArg = { min_xp: number; role_id?: string; coins?: number; rotate?: boolean };
+
 export function registerWriteCommunityTools(ctx: McpToolContext) {
   const { server, guildId, client, shouldRegister, guard, audit, toolMeta, ownerId } = ctx;
 
@@ -173,8 +176,8 @@ export function registerWriteCommunityTools(ctx: McpToolContext) {
             endDate: end_date,
             topRoleId: top_role_id,
             announceChannelId: announce_channel_id,
-            rewards: rewards?.map((reward) => ({ rank: reward.rank, roleId: reward.role_id, coins: reward.coins, rotate: reward.rotate })),
-            tiers: tiers?.map((tier) => ({ minXp: tier.min_xp, roleId: tier.role_id, coins: tier.coins, rotate: tier.rotate })),
+            rewards: rewards?.map((reward: SeasonRewardArg) => ({ rank: reward.rank, roleId: reward.role_id, coins: reward.coins, rotate: reward.rotate })),
+            tiers: tiers?.map((tier: SeasonTierArg) => ({ minXp: tier.min_xp, roleId: tier.role_id, coins: tier.coins, rotate: tier.rotate })),
             autoRenew: auto_renew,
             remindBeforeEnd: remind_before_end,
           });
@@ -225,8 +228,8 @@ export function registerWriteCommunityTools(ctx: McpToolContext) {
           if (end_date !== undefined) patch.endDate = end_date;
           if (top_role_id !== undefined) patch.topRoleId = top_role_id;
           if (announce_channel_id !== undefined) patch.announceChannelId = announce_channel_id;
-          if (rewards !== undefined) patch.rewards = rewards.map((reward) => ({ rank: reward.rank, roleId: reward.role_id, coins: reward.coins, rotate: reward.rotate }));
-          if (tiers !== undefined) patch.tiers = tiers.map((tier) => ({ minXp: tier.min_xp, roleId: tier.role_id, coins: tier.coins, rotate: tier.rotate }));
+          if (rewards !== undefined) patch.rewards = rewards.map((reward: SeasonRewardArg) => ({ rank: reward.rank, roleId: reward.role_id, coins: reward.coins, rotate: reward.rotate }));
+          if (tiers !== undefined) patch.tiers = tiers.map((tier: SeasonTierArg) => ({ minXp: tier.min_xp, roleId: tier.role_id, coins: tier.coins, rotate: tier.rotate }));
           if (auto_renew !== undefined) patch.autoRenew = auto_renew;
           if (remind_before_end !== undefined) patch.remindBeforeEnd = remind_before_end;
 
