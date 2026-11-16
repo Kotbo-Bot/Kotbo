@@ -287,15 +287,16 @@
       description: m.cbd_switch_confirm_desc(),
       confirmLabel: m.cbd_switch_action(),
       variant: 'danger',
-      impacts: [m.cbd_switch_impact_kotbo(), m.cbd_switch_impact_dashboard({ host: savedHost }), m.cbd_switch_impact_back()],
+      impacts: [m.cbd_switch_impact_kotbo(), domainState === 'active' ? m.cbd_switch_impact_dashboard({ host: savedHost }) : m.cbd_switch_impact_nodash(), m.cbd_switch_impact_back()],
     });
     if (!ok) return;
     await run(async () => {
       const result = await switchToCustomBot();
       toast.success(m.cbd_switched());
-      // Ce dashboard ne voit plus le serveur : on part sur le sien.
+      // Ce dashboard ne voit plus le serveur : on part sur le sien (s'il a un domaine).
       await sleep(1500);
-      window.location.href = `${result.dashboardUrl}/?guild=${authStore.selectedGuildId}`;
+      if (result.dashboardUrl) window.location.href = `${result.dashboardUrl}/?guild=${authStore.selectedGuildId}`;
+      else window.location.reload();
     });
   }
 
@@ -380,7 +381,7 @@
   const steps = $derived([
     { key: 'token', title: m.cbd_s_token(), done: hasToken },
     { key: 'start', title: m.cbd_s_start(), done: isRunning },
-    { key: 'domain', title: m.cbd_s_domain(), done: domainState === 'active' },
+    { key: 'domain', title: `${m.cbd_s_domain()} (${m.cbd_optional()})`, done: domainState === 'active' },
     { key: 'invite', title: m.cbd_s_invite(), done: Boolean(ownBot?.botInGuild) },
     { key: 'switch', title: m.cbd_s_switch(), done: Boolean(ownBot?.switched) },
   ]);
@@ -655,7 +656,7 @@
                 variant="danger"
                 onclick={switchBot}
                 loading={busy}
-                disabled={!steps.slice(0, 4).every((s) => s.done)}
+                disabled={!steps.slice(0, 4).filter((s) => s.key !== 'domain').every((s) => s.done)}
                 disabledReason={m.cbd_switch_needs_steps()}
               >{m.cbd_switch_action()}</Button>
             {/snippet}
