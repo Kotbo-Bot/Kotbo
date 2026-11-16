@@ -7,7 +7,10 @@ import { resolveViewTimezone } from '../../../utils/timezone.js';
 import * as altAccountService from '../../../services/moderation/altAccountService.js';
 import { scanGuildMembersForYoungAccounts, getDetectionEvidence } from '../../../services/moderation/dcDetectionService.js';
 import { recordDecision, undoFalsePositive } from '../../../services/moderation/dc/learning.js';
-import { memberProfileIdentity, resolveMemberAvatarUrl, resolveMissingMemberIdentities } from '../../../services/moderation/memberIdentityService.js';
+import { getMemberIdentities, memberProfileIdentity, resolveMemberAvatarUrl, resolveMissingMemberIdentities } from '../../../services/moderation/memberIdentityService.js';
+
+/** Assez pour une page de liste ; au-delà le dashboard découpe ses demandes. */
+const MAX_IDENTITY_LOOKUP = 100;
 import { findPresenceOptOuts } from '../../../services/core/presencePrivacyService.js';
 import { LinkedAccountType, LinkedAccountStatus } from '@prisma/client';
 import {
@@ -453,6 +456,25 @@ export async function handleMembersRoutes(
     } catch (err) {
       logger.error('MembersAPI', 'Error scanning suspected detections:', err);
       jsonFailure(res, err, 'Erreur lors du scan des détections', 'MembersAPI');
+    }
+    return true;
+  }
+
+  // GET /api/dashboard/guilds/:guildId/members/identities?ids=1,2,3
+  // Identité affichable (pseudo, @, photo, tag de serveur) d'une liste de
+  // membres, pour que chaque écran du dashboard rende un membre de la même
+  // façon sans que chaque route ait à joindre ces champs. Ouverte à tout accès
+  // au dashboard du serveur : ce sont les infos publiques que Discord montre
+  // déjà à côté de chaque message.
+  if (parts.length === 6 && parts[4] === 'members' && parts[5] === 'identities' && method === 'GET') {
+    const ids = [...new Set((url.searchParams.get('ids') ?? '').split(','))]
+      .filter((id) => /^\d{15,21}$/.test(id))
+      .slice(0, MAX_IDENTITY_LOOKUP);
+    try {
+      const identities = await getMemberIdentities(client, guildId, ids);
+      json(res, 200, { identities: Object.fromEntries(identities) });
+    } catch (err) {
+      jsonFailure(res, err, 'Erreur lors de la lecture des membres', 'MembersAPI');
     }
     return true;
   }
