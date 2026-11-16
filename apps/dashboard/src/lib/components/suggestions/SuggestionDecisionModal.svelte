@@ -30,7 +30,7 @@
 
   /** Rouvrir n'a de sens que pour une suggestion déjà tranchée. */
   const statusOptions = $derived(
-    (['APPROVED', 'IMPLEMENTED', 'REJECTED', ...(suggestion && suggestion.status !== 'PENDING' ? ['PENDING'] : [])] as SuggestionStatus[])
+    (['APPROVED', 'IN_PROGRESS', 'IMPLEMENTED', 'REJECTED', ...(suggestion && suggestion.status !== 'PENDING' ? ['PENDING'] : [])] as SuggestionStatus[])
       .map((value) => ({ value, label: value === 'PENDING' ? m.suggestions_decision_reopen() : suggestionStatusLabel(value) })),
   );
 

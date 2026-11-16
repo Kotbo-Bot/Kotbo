@@ -62,7 +62,7 @@ export function registerWriteCommunityTools(ctx: McpToolContext) {
           "Répond à une suggestion communautaire et met à jour son statut. Requiert la permission WRITE_COMMUNITY.",
         inputSchema: {
           suggestion_id: z.string().describe('ID de la suggestion (issu de get_suggestions)'),
-          status: z.enum(['APPROVED', 'REJECTED', 'IMPLEMENTED']).describe('Nouveau statut'),
+          status: z.enum(['APPROVED', 'IN_PROGRESS', 'REJECTED', 'IMPLEMENTED']).describe('Nouveau statut ; IN_PROGRESS = acceptée et en cours de réalisation'),
           response: z.string().min(1).max(SUGGESTION_RESPONSE_MAX).describe('Texte de réponse, publié sous la suggestion'),
           key_name: z.string().optional().describe("Nom de la clé MCP (pour l'audit)"),
         },

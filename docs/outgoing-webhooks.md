@@ -73,7 +73,8 @@ Le journal du dashboard garde chaque tentative 30 jours, avec le corps envoyé e
 | `ticket.rated` | Un membre note le support reçu |
 | `form.submitted` | Une réponse est envoyée à un formulaire |
 | `suggestion.created` | Une suggestion est proposée |
-| `suggestion.resolved` | Une suggestion est acceptée, refusée ou mise en place |
+| `suggestion.resolved` | Une suggestion change de statut : acceptée, en cours, refusée ou mise en place |
+| `suggestion.threshold_reached` | Une suggestion atteint le seuil de votes du serveur |
 | `giveaway.winner` | Un membre gagne un concours |
 | `giveaway.ended` | Un concours est clôturé |
 | `partnership.stage_changed` | Un partenariat change d'étape |

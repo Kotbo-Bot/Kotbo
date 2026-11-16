@@ -157,6 +157,11 @@ export function registerWorkflowBusSubscribers(client: Client): void {
     await dispatchEvent(client, payload.guildId, 'suggestion:resolved', payload as never);
   }, MODULE_NAME);
 
+  // Publié une seule fois par suggestion, au vote qui franchit le seuil.
+  subscribeForModule('workflows', 'suggestion:threshold-reached', async (payload) => {
+    await dispatchEvent(client, payload.guildId, 'suggestion:threshold-reached', payload as never);
+  }, MODULE_NAME);
+
   subscribeForModule('workflows', 'sanction:applied', async (payload) => {
     await dispatchEvent(client, payload.guildId, 'sanction:applied', payload as never);
   }, MODULE_NAME);

@@ -13,6 +13,17 @@ export const DEFAULT_SUGGESTION_CONFIG: SuggestionConfig = {
   requireComment: true,
   voteWhileApproved: false,
   allowedRoleIds: [],
+  cooldownMinutes: 0,
+  minAccountAgeDays: 0,
+  minMemberDays: 0,
+  notifyAuthor: true,
+  createThread: false,
+  voteThreshold: null,
+  pinAtThreshold: false,
+  rewardXp: 0,
+  rewardCoins: 0,
+  categories: [],
+  showVoters: false,
 };
 
 export type SuggestionQueueSort = 'score' | 'oldest' | 'recent';
@@ -27,6 +38,7 @@ export function toSuggestionConfig(raw: unknown): SuggestionConfig | null {
     ...DEFAULT_SUGGESTION_CONFIG,
     ...(raw as Partial<SuggestionConfig>),
     allowedRoleIds: Array.isArray(raw.allowedRoleIds) ? (raw.allowedRoleIds as string[]) : [],
+    categories: Array.isArray(raw.categories) ? (raw.categories as string[]) : [],
   };
 }
 
@@ -40,6 +52,7 @@ export function toSuggestionsOverview(raw: unknown): SuggestionsOverview | null 
     queue: Array.isArray(raw.queue) ? (raw.queue as SuggestionItem[]) : [],
     queueTruncated: raw.queueTruncated === true,
     messageLabels: isObject(raw.messageLabels) ? (raw.messageLabels as unknown as SuggestionsOverview['messageLabels']) : null,
+    categoryStats: Array.isArray(raw.categoryStats) ? (raw.categoryStats as SuggestionsOverview['categoryStats']) : [],
   };
 }
 

@@ -25,6 +25,7 @@ export type {
   FormSubmittedEvent,
   SuggestionCreatedEvent,
   SuggestionResolvedEvent,
+  SuggestionThresholdReachedEvent,
   TicketCreatedEvent,
   LevelUpEvent,
   ThreadCreateEvent,

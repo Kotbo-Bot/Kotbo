@@ -40,7 +40,9 @@ export const SANCTION_TYPE_LABELS: Record<string, string> = {
  * « Décision ». Les clés sont celles de l'événement `suggestion:resolved`.
  */
 export const SUGGESTION_STATUS_LABELS: Record<string, string> = {
+  PENDING: 'En attente',
   APPROVED: 'Approuvée',
+  IN_PROGRESS: 'En cours',
   REJECTED: 'Refusée',
   IMPLEMENTED: 'Implémentée',
 };
@@ -370,7 +372,30 @@ const TRIGGERS: NodeDef[] = [
       EXEC_OUT,
       { id: 'member', label: 'Auteur', type: 'Member' },
       { id: 'content', label: 'Suggestion', type: 'String' },
+      { id: 'title', label: 'Titre', type: 'String' },
+      { id: 'category', label: 'Catégorie', type: 'String' },
       { id: 'channel', label: 'Salon des suggestions', type: 'Channel' },
+      { id: 'message', label: 'Message de la suggestion', type: 'Message' },
+    ],
+  },
+  {
+    type: 'OnSuggestionThresholdReached',
+    label: 'Seuil de votes atteint',
+    category: 'trigger',
+    description:
+      "Se déclenche quand une suggestion atteint le nombre de votes « pour » réglé dans le module Suggestions, une seule fois par suggestion. Sans seuil réglé, il ne se déclenche jamais.",
+    event: 'suggestion:threshold-reached',
+    module: 'suggestions',
+    inputs: [],
+    outputs: [
+      EXEC_OUT,
+      { id: 'member', label: 'Auteur', type: 'Member' },
+      { id: 'content', label: 'Suggestion', type: 'String' },
+      { id: 'title', label: 'Titre', type: 'String' },
+      { id: 'category', label: 'Catégorie', type: 'String' },
+      { id: 'upvotes', label: 'Votes pour', type: 'Number' },
+      { id: 'downvotes', label: 'Votes contre', type: 'Number' },
+      { id: 'threshold', label: 'Seuil', type: 'Number' },
       { id: 'message', label: 'Message de la suggestion', type: 'Message' },
     ],
   },
@@ -379,7 +404,7 @@ const TRIGGERS: NodeDef[] = [
     label: 'Suggestion traitée',
     category: 'trigger',
     description:
-      "Se déclenche quand le staff approuve, refuse ou marque comme implémentée une suggestion, depuis le dashboard ou l'assistant. L'auteur est réduit à son pseudo s'il a quitté le serveur ; le staff est vide pour une réponse de l'assistant.",
+      "Se déclenche quand le staff change le statut d'une suggestion (approuvée, en cours, refusée, implémentée), depuis le dashboard ou l'assistant, y compris en révisant une décision. Une remise en attente ne déclenche rien. L'auteur est réduit à son pseudo s'il a quitté le serveur ; le staff est vide pour une réponse de l'assistant.",
     event: 'suggestion:resolved',
     inputs: [],
     outputs: [
@@ -388,10 +413,14 @@ const TRIGGERS: NodeDef[] = [
       { id: 'staff', label: 'Traitée par', type: 'Member' },
       { id: 'content', label: 'Suggestion', type: 'String' },
       { id: 'response', label: 'Réponse du staff', type: 'String' },
+      { id: 'title', label: 'Titre', type: 'String' },
+      { id: 'category', label: 'Catégorie', type: 'String' },
       { id: 'statusLabel', label: 'Décision', type: 'String' },
+      { id: 'previousStatusLabel', label: 'Statut précédent', type: 'String' },
       { id: 'upvotes', label: 'Votes pour', type: 'Number' },
       { id: 'downvotes', label: 'Votes contre', type: 'Number' },
       { id: 'isApproved', label: 'Approuvée', type: 'Boolean' },
+      { id: 'isInProgress', label: 'En cours', type: 'Boolean' },
       { id: 'isRejected', label: 'Refusée', type: 'Boolean' },
       { id: 'isImplemented', label: 'Implémentée', type: 'Boolean' },
     ],

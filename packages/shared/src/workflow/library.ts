@@ -371,6 +371,14 @@ export const TRIGGER_LIBRARY: TriggerPresentation[] = [
     example: "Prévenir l'auteur en MP et lui donner un rôle de contributeur si elle est approuvée.",
   },
   {
+    type: 'OnSuggestionThresholdReached',
+    sentence: 'Quand une suggestion atteint le seuil de votes',
+    short: 'Seuil de votes',
+    group: 'feedback',
+    icon: 'Paper',
+    example: 'Prévenir le staff dans son salon pour qu\'il tranche les idées les plus soutenues.',
+  },
+  {
     type: 'OnPartnershipStage',
     sentence: "Quand un partenariat change d'étape",
     short: 'Partenariat',
@@ -1185,6 +1193,14 @@ export const CONDITION_LIBRARY: ConditionPresentation[] = [
     group: 'context',
     requires: ['isApproved'],
     build: () => ({ direct: ctx('isApproved') }),
+  },
+  {
+    key: 'suggestion.isInProgress',
+    sentence: 'la suggestion est en cours',
+    negativeSentence: 'la suggestion n\'est pas en cours',
+    group: 'context',
+    requires: ['isInProgress'],
+    build: () => ({ direct: ctx('isInProgress') }),
   },
   {
     key: 'suggestion.isRejected',
