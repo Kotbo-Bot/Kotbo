@@ -157,7 +157,7 @@
   ]);
 </script>
 
-<div class="admin-wash min-h-screen w-full bg-background text-on-surface font-body lg:grid lg:grid-cols-[1.05fr_1fr]">
+<div class="admin-wash min-h-screen w-full bg-background text-on-surface font-body lg:grid lg:grid-cols-[1.05fr_1fr] lg:min-h-0 lg:h-screen lg:max-h-screen lg:overflow-hidden">
 
   <!--
     Panneau vitrine, en carte flottante comme la barre laterale de la console.
@@ -171,10 +171,6 @@
     </div>
 
     <div class="relative max-w-xl">
-      <p class="inline-flex items-center h-7 px-3 rounded-full bg-surface text-xs font-semibold text-on-surface-variant border border-on-surface/8 mb-5">
-        {m.login_pitch_eyebrow()}
-      </p>
-
       <!--
         Accroche stylee comme un titre, mais ecrite en `<p>` : ce panneau
         precede le formulaire dans le DOM, un `<h2>` aurait annonce un niveau 2
@@ -204,7 +200,7 @@
   </aside>
 
   <!-- Panneau de connexion -->
-  <main class="flex flex-col min-h-screen lg:min-h-0 px-4 sm:px-8 py-6 lg:py-10">
+  <main class="flex flex-col min-h-screen lg:min-h-0 lg:overflow-y-auto px-4 sm:px-8 py-6 lg:py-10">
 
     <!-- Le panneau de gauche porte deja la marque : ce rappel ne sert qu'au mobile. -->
     <div class="flex items-center gap-2.5 lg:hidden">
@@ -296,7 +292,8 @@
     border: 1px solid var(--admin-line);
     border-radius: 31px;
     box-shadow: var(--admin-sidebar-shadow);
-    min-height: calc(100vh - 1.5rem);
+    max-height: calc(100vh - 1.5rem);
+    overflow: hidden;
   }
 
   .sketch-frame {
