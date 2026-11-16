@@ -145,6 +145,16 @@ export function registerWorkflowBusSubscribers(client: Client): void {
     await dispatchEvent(client, payload.guildId, 'season:ended', payload as never);
   }, MODULE_NAME);
 
+  // Starlight : premier passage à la une et retrait. Module éteint : rien
+  // n'est publié, donc rien ne part.
+  subscribeForModule('workflows', 'starboard:featured', async (payload) => {
+    await dispatchEvent(client, payload.guildId, 'starboard:featured', payload as never);
+  }, MODULE_NAME);
+
+  subscribeForModule('workflows', 'starboard:removed', async (payload) => {
+    await dispatchEvent(client, payload.guildId, 'starboard:removed', payload as never);
+  }, MODULE_NAME);
+
   subscribeForModule('workflows', 'form:submitted', async (payload) => {
     await dispatchEvent(client, payload.guildId, 'form:submitted', payload as never);
   }, MODULE_NAME);

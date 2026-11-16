@@ -3,6 +3,7 @@ import { archiveChannel, createSplitChannel, resolveHealthAlert, upsertChannelHe
 import { createSeason, deleteSeason, endSeason, parseSeasonInput, retrySeasonRewards, startSeason, updateSeason } from '../../../services/progression/seasonService.js';
 import { resolveSuggestion } from '../../../services/features/suggestionService.js';
 import { adjustRep } from '../../../services/community/reputationActions.js';
+import { blockStarboardEntry, unblockStarboardEntry } from '../../../services/features/starboardService.js';
 import { REPUTATION_ADJUSTMENT, SUGGESTION_RESPONSE_MAX } from '@kotbo/shared';
 import prisma from '../../../utils/db.js';
 import { z } from 'zod';
@@ -83,6 +84,40 @@ export function registerWriteCommunityTools(ctx: McpToolContext) {
         return ok({ ok: true, suggestionId: suggestion.id, status });
       })
     );
+
+    for (const [name, block] of [['remove_starboard_message', true], ['restore_starboard_message', false]] as const) {
+      server.registerTool(
+        name,
+        {
+          description: block
+            ? "Retire un message de la une (Starlight), comme le bouton « Retirer » du dashboard : la republication est supprimée, les gains de l'auteur sont repris et le message n'y revient plus, quels que soient ses votes. Requiert la permission WRITE_COMMUNITY."
+            : "Annule le retrait d'un message de la une : il est recompté aussitôt et republié s'il atteint toujours le seuil. Requiert la permission WRITE_COMMUNITY.",
+          inputSchema: {
+            entry_id: z.string().regex(/^[a-z0-9]{20,40}$/i).describe('Identifiant du message à la une (issu de get_starboard)'),
+            key_name: z.string().optional().describe("Nom de la clé MCP (pour l'audit)"),
+          },
+          _meta: toolMeta,
+        },
+        guard('WRITE_COMMUNITY', async ({ entry_id, key_name }) => {
+          try {
+            const actorId = ownerId ?? client.user?.id ?? 'mcp_agent';
+            const entry = block
+              ? await blockStarboardEntry(client, guildId, entry_id, actorId)
+              : await unblockStarboardEntry(client, guildId, entry_id);
+            if (!entry) return err('Message à la une introuvable');
+            await audit(
+              key_name,
+              block ? 'Retrait d\'un message à la une MCP' : 'Retour d\'un message à la une MCP',
+              `Message: ${entry.messageId}`,
+              block ? 'Retiré de la une, sans retour possible.' : 'De nouveau admis à la une.',
+            );
+            return ok({ ok: true, entryId: entry.id, blocked: entry.blockedAt !== null, onBoard: entry.starMessageId !== null });
+          } catch (e) {
+            return toolError(e);
+          }
+        })
+      );
+    }
 
     server.registerTool(
       'update_event_status',

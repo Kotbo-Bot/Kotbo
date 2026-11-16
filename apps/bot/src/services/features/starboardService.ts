@@ -45,9 +45,11 @@ import {
   starboardExcerpt,
   starboardSkipReason,
   starboardThresholdFor,
+  type StarboardRemovalReason,
 } from '@kotbo/shared';
 import { broadcastDashboardStateChange } from '../../api/shared/sharding.js';
 import { normalizeEmojiKey, tallyVotes } from './starboardTally.js';
+import { onEntryBlocked, onEntryFeatured, publishEntryRemoved } from './starboardFeatureEffects.js';
 
 export { normalizeEmojiKey } from './starboardTally.js';
 
@@ -469,7 +471,7 @@ export async function refreshEntry(
 
     // Message source disparu : on retire le highlight, il ne mène plus nulle part.
     if (!message) {
-      if (entry) await removeEntry(client, entry);
+      if (entry) await removeEntry(client, entry, { reason: 'SOURCE_DELETED' });
       return;
     }
     if (message.author.bot && !config.allowBots) return;
@@ -487,7 +489,9 @@ export async function refreshEntry(
       alreadyEntered: entry !== null,
     });
     if (skip) {
-      if (entry?.starMessageId) await removeEntry(client, entry, { keepRow: true });
+      if (entry?.starMessageId) {
+        await removeEntry(client, entry, { keepRow: true, reason: skip === 'BLOCKED_MESSAGE' ? 'STAFF' : 'GUARD' });
+      }
       return;
     }
 
@@ -530,7 +534,7 @@ export async function refreshEntry(
         data: { upvotes: up, downvotes: down, score, peakScore: Math.max(entry.peakScore, score), ...messageSnapshot(message) },
       }).catch(() => null);
       if (entry.starMessageId && config.removeBelowThreshold) {
-        await removeEntry(client, entry, { keepRow: true });
+        await removeEntry(client, { ...entry, score }, { keepRow: true, reason: 'BELOW_THRESHOLD' });
         return;
       }
       // Le highlight publié reste affiché : son compteur doit suivre.
@@ -611,6 +615,11 @@ async function postHighlight(
   }).catch(() => null);
   notifyStarboardChange(entry.guildId);
 
+  // Premier passage à la une : gains, paliers, message privé, workflows.
+  // Sans attendre : la publication ne dépend d'aucune de ces suites.
+  void onEntryFeatured(client, config, { ...entry, starMessageId: sent.id, starChannelId: channel.id, score: tally.score })
+    .catch((err) => logger.warn('Starlight', `Suites du passage à la une de ${entry.messageId} incomplètes`, err));
+
   if (config.autoReactEmbed && perms.has(PermissionFlagsBits.AddReactions)) {
     await seedReactions(client, sent, config);
   }
@@ -654,8 +663,10 @@ async function editHighlight(
 async function removeEntry(
   client: Client,
   entry: StarboardEntry,
-  options: { keepRow?: boolean } = {},
+  options: { keepRow?: boolean; reason: StarboardRemovalReason },
 ): Promise<void> {
+  // Seul un message affiché quitte la une : une entrée détachée ne prévient personne.
+  if (entry.starMessageId) publishEntryRemoved(entry, options.reason);
   if (entry.starMessageId) {
     const channel = resolveTextChannel(client, entry.starChannelId ?? '');
     const starMessage = channel
@@ -707,7 +718,7 @@ export async function handleStarboardMessageDelete(
   }).catch(() => null);
   if (!entry) return;
 
-  await removeEntry(client, entry);
+  await removeEntry(client, entry, { reason: 'SOURCE_DELETED' });
 }
 
 // ── Gestes du staff (dashboard) ──────────────────────────────────────────────
@@ -728,8 +739,14 @@ export async function blockStarboardEntry(
     where: { id: entry.id },
     data: { blockedAt: new Date(), blockedById: userId },
   });
-  if (blocked.starMessageId) await removeEntry(client, blocked, { keepRow: true });
+  if (blocked.starMessageId) await removeEntry(client, blocked, { keepRow: true, reason: 'STAFF' });
   else notifyStarboardChange(guildId);
+  const config = await getStarboardConfig(guildId);
+  if (config) {
+    await onEntryBlocked(client, config, blocked).catch((err) =>
+      logger.warn('Starlight', `Reprise des suites du message ${blocked.messageId} incomplète`, err),
+    );
+  }
   return prisma.starboardEntry.findUnique({ where: { id: entry.id } });
 }
 
@@ -759,6 +776,6 @@ export async function removeHighlightsOfAuthors(client: Client, guildId: string,
   const entries = await prisma.starboardEntry.findMany({
     where: { guildId, authorId: { in: authorIds }, starMessageId: { not: null } },
   });
-  for (const entry of entries) await removeEntry(client, entry, { keepRow: true });
+  for (const entry of entries) await removeEntry(client, entry, { keepRow: true, reason: 'GUARD' });
   return entries.length;
 }

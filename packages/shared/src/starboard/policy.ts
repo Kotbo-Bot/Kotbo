@@ -2,6 +2,13 @@
  * Règles de Starlight (messages à la une) partagées entre le bot et le
  * dashboard : ce que la page annonce est ce que l'API applique.
  */
+import { validateReputationTiers, type ReputationTier } from '../reputation/tiers.js';
+
+/**
+ * Palier : à un nombre de messages passés à la une, l'auteur reçoit un rôle.
+ * Même forme et mêmes règles que les paliers de réputation.
+ */
+export type StarboardTier = ReputationTier;
 
 export interface StarboardSettings {
   /** Salon de publication. Sans lui, le module reste inerte. */
@@ -24,6 +31,13 @@ export interface StarboardSettings {
   channelThresholds: Record<string, number>;
   /** Membres dont les messages ne passent jamais à la une. */
   blockedUserIds: string[];
+  /** Gains de l'auteur au premier passage à la une d'un message. `0` = rien. */
+  rewardXp: number;
+  rewardCoins: number;
+  /** Rôles donnés à un nombre de messages passés à la une. */
+  tiers: StarboardTier[];
+  /** Prévenir l'auteur en message privé au premier passage à la une. */
+  notifyAuthor: boolean;
 }
 
 /** Valeurs du schéma, rendues tant que le serveur n'a rien enregistré. */
@@ -44,6 +58,10 @@ export const DEFAULT_STARBOARD_CONFIG: Readonly<StarboardSettings> = Object.free
   maxMessageAgeDays: 0,
   channelThresholds: {},
   blockedUserIds: [],
+  rewardXp: 0,
+  rewardCoins: 0,
+  tiers: [],
+  notifyAuthor: false,
 });
 
 /** Copie modifiable des valeurs par défaut : les tableaux ne sont pas partagés. */
@@ -57,6 +75,8 @@ export const STARBOARD_CHANNELS_MAX = 100;
 export const STARBOARD_MAX_AGE_DAYS = { min: 0, max: 365 } as const;
 export const STARBOARD_CHANNEL_THRESHOLDS_MAX = 25;
 export const STARBOARD_BLOCKED_USERS_MAX = 100;
+export const STARBOARD_REWARD_XP = { min: 0, max: 5_000 } as const;
+export const STARBOARD_REWARD_COINS = { min: 0, max: 100_000 } as const;
 
 /** Fenêtre des statistiques de la page, en jours. */
 export const STARBOARD_STATS_DAYS = 30;
@@ -237,3 +257,17 @@ export function isDiscordMediaUrl(raw: string): boolean {
     return false;
   }
 }
+
+/** Paliers lus en base : une valeur abîmée vaut « aucun » plutôt qu'une erreur. */
+export function readStarboardTiers(raw: unknown): StarboardTier[] {
+  const parsed = validateReputationTiers(raw);
+  return 'error' in parsed ? [] : parsed.tiers;
+}
+
+/**
+ * Pourquoi un message quitte la une, transmis aux workflows : score retombé,
+ * retrait par le staff, garde-fou (auteur exclu, salon NSFW), ou message
+ * d'origine supprimé.
+ */
+export const STARBOARD_REMOVAL_REASONS = ['BELOW_THRESHOLD', 'STAFF', 'GUARD', 'SOURCE_DELETED'] as const;
+export type StarboardRemovalReason = (typeof STARBOARD_REMOVAL_REASONS)[number];

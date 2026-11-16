@@ -34,19 +34,21 @@ export function manageableRole(guild: Pick<Guild, 'roles'>, roleId: string): Rol
  * Donne les rôles de tous les paliers atteints que le membre n'a pas encore.
  * Pas seulement celui franchi par ce vote : un palier créé après coup, ou un
  * rôle retiré à la main, est rattrapé au remerciement suivant. Rend les
- * paliers réellement donnés.
+ * paliers réellement donnés. Servi aussi par Starlight : `scope` nomme le
+ * module dans les journaux.
  */
 export async function grantReachedTiers(
   member: GuildMember,
   tiers: readonly ReputationTier[],
   total: number,
   reason: string,
+  scope = 'Reputation',
 ): Promise<ReputationTier[]> {
   const granted: ReputationTier[] = [];
   for (const tier of reachedTiers(total, tiers)) {
     const role = manageableRole(member.guild, tier.roleId);
     if (!role) {
-      logger.warn('Reputation', `Palier ${tier.threshold} : rôle ${tier.roleId} impossible à donner sur ${member.guild.id ?? '?'}`);
+      logger.warn(scope, `Palier ${tier.threshold} : rôle ${tier.roleId} impossible à donner sur ${member.guild.id ?? '?'}`);
       continue;
     }
     if (member.roles.cache.has(role.id)) continue;
@@ -54,7 +56,7 @@ export async function grantReachedTiers(
       await member.roles.add(role, reason);
       granted.push(tier);
     } catch (err) {
-      logger.warn('Reputation', `Palier ${tier.threshold} : ajout du rôle ${role.id} refusé`, err);
+      logger.warn(scope, `Palier ${tier.threshold} : ajout du rôle ${role.id} refusé`, err);
     }
   }
   return granted;
@@ -66,13 +68,14 @@ export async function revokeLostTiers(
   tiers: readonly ReputationTier[],
   total: number,
   reason: string,
+  scope = 'Reputation',
 ): Promise<void> {
   for (const tier of tiersAbove(total, tiers)) {
     if (!member.roles.cache.has(tier.roleId)) continue;
     const role = manageableRole(member.guild, tier.roleId);
     if (!role) continue;
     await member.roles.remove(role, reason).catch((err) => {
-      logger.warn('Reputation', `Palier ${tier.threshold} : retrait du rôle ${role.id} refusé`, err);
+      logger.warn(scope, `Palier ${tier.threshold} : retrait du rôle ${role.id} refusé`, err);
     });
   }
 }

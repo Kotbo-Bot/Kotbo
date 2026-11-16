@@ -24,6 +24,13 @@ describe('toStarboardConfig', () => {
     expect(config && 'guildId' in config).toBe(false);
   });
 
+  test('paliers copiés, sans partager la liste reçue', () => {
+    const tiers = [{ threshold: 5, roleId: '111111111111111111' }];
+    const config = toStarboardConfig({ tiers });
+    expect(config?.tiers).toEqual(tiers);
+    expect(config?.tiers).not.toBe(tiers);
+  });
+
   test('un tableau mal formé retombe sur la valeur par défaut', () => {
     expect(toStarboardConfig({ watchedChannels: 'abc' })?.watchedChannels).toEqual([]);
   });
@@ -66,5 +73,7 @@ describe('toStarboardOverview', () => {
     expect(overview?.health).toEqual({ channelFound: null, missingPermissions: [] });
     expect(overview?.messageLabels).toBeNull();
     expect(overview?.blockedMembers).toEqual([]);
+    expect(overview?.topAuthors).toEqual([]);
+    expect(overview?.unmanageableTierRoleIds).toEqual([]);
   });
 });

@@ -25,6 +25,8 @@ export const STARBOARD_PAGE = 24;
 export const STARBOARD_TOP_MAX = 5;
 /** Salons les plus mis à la une montrés en vue d'ensemble. */
 export const STARBOARD_CHANNELS_TOP = 5;
+/** Auteurs du classement, en vue d'ensemble comme dans `/starlight top`. */
+export const STARBOARD_AUTHORS_TOP = 10;
 
 export interface StarboardStats {
   /** Messages passés à la une sur les `STARBOARD_STATS_DAYS` derniers jours. */
@@ -70,7 +72,58 @@ export async function getStarboardOverview(guildId: string, now: Date = new Date
     lastPostedAt: last?.createdAt ?? null,
   };
   const channelStats = byChannel.map((row) => ({ channelId: row.channelId, count: row._count._all }));
-  return { stats, topEntries, channelStats };
+  const topAuthors = await getStarboardAuthorLeaderboard(guildId, 'month', STARBOARD_AUTHORS_TOP, now);
+  return { stats, topEntries, channelStats, topAuthors };
+}
+
+export interface StarboardAuthorRank {
+  authorId: string;
+  /** Messages passés à la une sur la période. */
+  count: number;
+  bestScore: number;
+}
+
+/**
+ * Auteurs les plus souvent à la une sur la période, hors messages retirés par
+ * le staff. À nombre égal, le meilleur score départage.
+ */
+export async function getStarboardAuthorLeaderboard(
+  guildId: string,
+  period: StarboardPeriod,
+  limit: number = STARBOARD_AUTHORS_TOP,
+  now: Date = new Date(),
+): Promise<StarboardAuthorRank[]> {
+  const since = starboardPeriodStart(period, now);
+  const rows = await prismaRead.starboardEntry.groupBy({
+    by: ['authorId'],
+    where: { guildId, blockedAt: null, ...(since ? { createdAt: { gte: since } } : {}) },
+    _count: { _all: true },
+    _max: { peakScore: true },
+    orderBy: [{ _count: { authorId: 'desc' } }, { _max: { peakScore: 'desc' } }],
+    take: limit,
+  });
+  return rows.map((row) => ({ authorId: row.authorId, count: row._count._all, bestScore: row._max.peakScore ?? 0 }));
+}
+
+/** Bilan d'un membre, depuis toujours : messages à la une, record, dernier passage. */
+export async function getStarboardAuthorSummary(guildId: string, authorId: string) {
+  const [aggregate, last] = await Promise.all([
+    prismaRead.starboardEntry.aggregate({
+      where: { guildId, authorId, blockedAt: null },
+      _count: { _all: true },
+      _max: { peakScore: true },
+    }),
+    prismaRead.starboardEntry.findFirst({
+      where: { guildId, authorId, blockedAt: null },
+      orderBy: { createdAt: 'desc' },
+      select: { createdAt: true, channelId: true, messageId: true },
+    }),
+  ]);
+  return {
+    count: aggregate._count._all,
+    bestScore: aggregate._max.peakScore ?? null,
+    last: last ? { at: last.createdAt, url: `https://discord.com/channels/${guildId}/${last.channelId}/${last.messageId}` } : null,
+  };
 }
 
 export interface StarboardListFilter {

@@ -10,6 +10,7 @@ import {
   isDiscordMediaUrl,
   isStarboardPeriod,
   isStarboardSort,
+  readStarboardTiers,
   normalizeStarboardChannelThresholds,
   starboardAdvice,
   starboardExcerpt,
@@ -30,6 +31,10 @@ describe('valeurs par défaut', () => {
     expect(DEFAULT_STARBOARD_CONFIG.maxMessageAgeDays).toBe(0);
     expect(DEFAULT_STARBOARD_CONFIG.channelThresholds).toEqual({});
     expect(DEFAULT_STARBOARD_CONFIG.blockedUserIds).toEqual([]);
+    expect(DEFAULT_STARBOARD_CONFIG.rewardXp).toBe(0);
+    expect(DEFAULT_STARBOARD_CONFIG.rewardCoins).toBe(0);
+    expect(DEFAULT_STARBOARD_CONFIG.tiers).toEqual([]);
+    expect(DEFAULT_STARBOARD_CONFIG.notifyAuthor).toBe(false);
   });
 });
 
@@ -197,5 +202,22 @@ describe('isDiscordMediaUrl', () => {
     'pas une url',
   ])('refusée : %s', (url) => {
     expect(isDiscordMediaUrl(url)).toBe(false);
+  });
+});
+
+describe('readStarboardTiers', () => {
+  test('paliers valides relus triés par seuil', () => {
+    expect(readStarboardTiers([
+      { threshold: 25, roleId: '222222222222222222' },
+      { threshold: 5, roleId: '111111111111111111' },
+    ])).toEqual([
+      { threshold: 5, roleId: '111111111111111111' },
+      { threshold: 25, roleId: '222222222222222222' },
+    ]);
+  });
+
+  test('valeur abîmée en base : aucun palier plutôt qu’une erreur', () => {
+    expect(readStarboardTiers(null)).toEqual([]);
+    expect(readStarboardTiers([{ threshold: 0, roleId: 'abc' }])).toEqual([]);
   });
 });

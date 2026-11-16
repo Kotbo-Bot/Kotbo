@@ -61,6 +61,16 @@ model StarboardConfig {
   /// Membres dont les messages ne passent jamais à la une.
   blockedUserIds String[] @default([])
 
+  // ── Récompenses ────────────────────────────────────────────────────────────
+  /// Gains de l'auteur au premier passage à la une d'un message. 0 = rien.
+  rewardXp    Int @default(0)
+  rewardCoins Int @default(0)
+  /// Paliers : [{ "threshold": n, "roleId": "..." }], rôle donné à n messages
+  /// passés à la une (hors messages retirés par le staff).
+  tiers        Json    @default("[]")
+  /// Prévenir l'auteur en message privé au premier passage à la une.
+  notifyAuthor Boolean @default(false)
+
   guild   Guild            @relation(fields: [guildId], references: [id], onDelete: Cascade)
   entries StarboardEntry[]
 
@@ -110,6 +120,12 @@ model StarboardEntry {
   blockedAt   DateTime?
   blockedById String?
 
+  /// Premier passage à la une payé à l'auteur (gains, message privé). Remis à
+  /// null quand le staff retire le message : les gains sont alors repris.
+  rewardedAt   DateTime?
+  xpGranted    Int       @default(0)
+  coinsGranted Int       @default(0)
+
   config StarboardConfig @relation(fields: [guildId], references: [guildId], onDelete: Cascade)
 
   createdAt DateTime @default(now())
@@ -121,5 +137,6 @@ model StarboardEntry {
   @@index([guildId, peakScore])
   @@index([starMessageId])
   @@index([authorId])
+  @@index([guildId, authorId])
   @@map("starboard_entries")
 }

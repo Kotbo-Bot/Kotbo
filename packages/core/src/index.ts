@@ -36,6 +36,8 @@ export type {
   FunGameKey,
   FunGameWonEvent,
   ReputationGivenEvent,
+  StarboardFeaturedEvent,
+  StarboardRemovedEvent,
   SeasonStartedEvent,
   SeasonEndedEvent,
 } from './eventBus.types.js';
