@@ -6,7 +6,7 @@
  * statistiques. Une telle réponse est refusée, la page affiche alors son état
  * d'erreur ; un champ ajouté plus tard prend sa valeur par défaut.
  */
-import type { SuggestionConfig, SuggestionItem, SuggestionsOverview } from './api/suggestions';
+import type { SuggestionConfig, SuggestionItem, SuggestionsOverview } from './api/suggestionTypes';
 
 export const DEFAULT_SUGGESTION_CONFIG: SuggestionConfig = {
   channelId: null,

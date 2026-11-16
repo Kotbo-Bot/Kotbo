@@ -6,7 +6,7 @@ import {
   toSuggestionConfig,
   toSuggestionsOverview,
 } from './suggestionData';
-import type { SuggestionItem } from './api/suggestions';
+import type { SuggestionItem } from './api/suggestionTypes';
 
 const STATS = { pending: 0, stalePending: 0, createdRecent: 0, resolvedRecent: 0, acceptanceRate: null, avgResponseHours: null, lastCreatedAt: null };
 
