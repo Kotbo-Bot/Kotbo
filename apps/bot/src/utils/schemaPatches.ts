@@ -21,6 +21,14 @@ export async function ensureDashboardSchemaPatches(): Promise<void> {
     logger.warn('SchemaPatches', `Dashboard schema patch failed: ${String(error)}`);
   }
 
+  // Colonne de la migration 20261227090000 (domaine perso) : sans elle, toute lecture de
+  // custom_bot_configs échoue (liste admin des instances, désactivation du bot perso).
+  try {
+    await prisma.$executeRawUnsafe(`ALTER TABLE "custom_bot_configs" ADD COLUMN IF NOT EXISTS "customDomainVerifiedAt" TIMESTAMP(3);`);
+  } catch (error) {
+    logger.warn('SchemaPatches', `Custom domain schema patch failed: ${String(error)}`);
+  }
+
   await ensureServerTagSchemaPatches();
 }
 

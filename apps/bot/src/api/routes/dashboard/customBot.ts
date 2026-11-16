@@ -324,7 +324,7 @@ export async function handleCustomBotRoutes(
 
       // Un serveur servi par son bot ne peut pas le désactiver d'ici : il faut
       // d'abord revenir à Kotbo, sinon plus aucun bot ne le servirait.
-      if (updateData.enabled === false && before?.enabled) {
+      if (updateData.enabled === false) {
         const instance = await findCustomInstance(guildId);
         const guild = await prisma.guild.findUnique({ where: { id: guildId }, select: { instanceId: true } });
         if (instance && guild?.instanceId === instance.id) {
@@ -359,8 +359,8 @@ export async function handleCustomBotRoutes(
         await removeCloudflareHostname(before.customDashboardUrl).catch((err) => logger.warn('CustomBot', `[${guildId}] Nom d'hôte Cloudflare non retiré :`, err));
       }
 
-      // Désactiver le bot du serveur arrête son instance.
-      if (updateData.enabled === false && before?.enabled) {
+      // Désactiver le bot du serveur arrête son instance, même si la base le disait déjà désactivé.
+      if (updateData.enabled === false) {
         const instance = await findCustomInstance(guildId);
         if (instance) {
           await prisma.whiteLabelInstance.update({ where: { id: instance.id }, data: { enabled: false } });
