@@ -8,6 +8,7 @@ import jwt from 'jsonwebtoken';
 import prisma from '../../utils/db.js';
 import { upsertRetryingRace } from '../../utils/upsertRetry.js';
 import { cache } from '../../utils/cache.js';
+import { scopedGuildId } from '../../services/system/customDomain.js';
 import { logger } from '../../utils/logger.js';
 import { fetchExternal } from '../../utils/http.js';
 import { guildNameCache } from '../../services/core/serverTagService.js';
@@ -1236,6 +1237,12 @@ export const resolveDashboardAccess = async (
   userId: string,
   knownPermissions?: bigint | null,
 ): Promise<DashboardAccess> => {
+  // Requete arrivee par le domaine perso d'un serveur : aucun autre serveur, meme pour un admin global.
+  const scoped = scopedGuildId();
+  if (scoped && scoped !== guildId) {
+    return { level: 'none', canViewDashboard: false, canModerateContent: false, canModerateDailyAlgo: false, canManageSettings: false, canManageTutoring: false };
+  }
+
   // Le cache n'est utilise que sur le chemin nominal. Quand des permissions
   // sont fournies par l'appelant, le resultat depend d'un parametre supplementaire :
   // on recalcule plutot que de risquer de servir une reponse calculee avec

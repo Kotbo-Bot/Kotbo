@@ -9,6 +9,7 @@
  * passe par l'application Discord du serveur (botClientId / botClientSecret),
  * la seule où il peut déclarer l'URL de retour de son domaine.
  */
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { resolve4, resolveTxt } from 'node:dns/promises';
 import { comparePlans, normalizePlanKey } from '@kotbo/contracts';
 import prisma from '../../utils/db.js';
@@ -136,6 +137,48 @@ export function startCustomDomainSync(): void {
   void refreshCustomDomains();
   timer = setInterval(() => void refreshCustomDomains(), REFRESH_MS);
   timer.unref?.();
+}
+
+/**
+ * Serveur auquel la requête en cours est cantonnée (requête arrivée par le
+ * domaine perso d'un serveur). Lu par les contrôles d'accès : même si une route
+ * oubliait de vérifier le chemin, aucun autre serveur n'est jamais accessible.
+ */
+export const customDomainScope = new AsyncLocalStorage<string>();
+export const scopedGuildId = (): string | null => customDomainScope.getStore() ?? null;
+
+/** Seules ces routes servent le dashboard d'un serveur ; tout le reste (admin, facturation, MCP, interne…) est fermé. */
+const SCOPED_PATH_PREFIXES = [
+  '/api/auth/',
+  '/api/branding',
+  '/api/dashboard/',
+  '/api/site-admin/',
+  '/api/shop-admin/',
+  '/api/site/collab/',
+];
+const SNOWFLAKE_SEGMENT = /\d{17,20}/g;
+
+/**
+ * Filtre d'une requête reçue sur un domaine perso. Renvoie la réponse de refus,
+ * ou null si elle peut passer (alors exécutée dans `customDomainScope`).
+ */
+export function customDomainGate(entry: Pick<CustomDomainEntry, 'guildId'>, rawPathname: string): Response | null {
+  let pathname: string;
+  try {
+    pathname = decodeURIComponent(rawPathname);
+  } catch {
+    return Response.json({ error: 'Chemin invalide' }, { status: 400 });
+  }
+  // Pas de remontée de dossier ni de chemin ambigu : on refuse plutôt que de normaliser.
+  if (pathname.includes('..') || pathname.includes('//') || pathname.includes('\\')) {
+    return Response.json({ error: 'Chemin invalide' }, { status: 400 });
+  }
+  const allowed = pathname === '/api/branding' || SCOPED_PATH_PREFIXES.some((prefix) => pathname.startsWith(prefix));
+  if (!allowed) return Response.json({ error: 'Non disponible sur ce domaine' }, { status: 404 });
+  for (const id of pathname.match(SNOWFLAKE_SEGMENT) ?? []) {
+    if (id !== entry.guildId) return Response.json({ error: 'Serveur non accessible depuis ce domaine' }, { status: 403 });
+  }
+  return null;
 }
 
 function hostOnly(value: string | null | undefined): string {

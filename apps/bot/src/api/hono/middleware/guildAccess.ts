@@ -2,6 +2,7 @@ import { createMiddleware } from 'hono/factory';
 import { HTTPException } from 'hono/http-exception';
 import type { Client, GuildMember, Guild } from 'discord.js';
 import { getCachedGuild } from '../../../utils/cache.js';
+import { scopedGuildId } from '../../../services/system/customDomain.js';
 
 export type AccessLevel = 'admin' | 'moderator' | 'viewer';
 
@@ -43,6 +44,11 @@ export const requireGuildAccess = (client: Client, minimumLevel: AccessLevel = '
 
     if (!guildId) {
       throw new HTTPException(400, { message: 'guildId manquant' });
+    }
+
+    const scoped = scopedGuildId();
+    if (scoped && scoped !== guildId) {
+      throw new HTTPException(403, { message: 'Serveur non accessible depuis ce domaine' });
     }
 
     const guild = client.guilds.cache.get(guildId)

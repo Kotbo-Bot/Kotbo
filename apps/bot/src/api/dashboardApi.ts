@@ -5,7 +5,15 @@ import { Client } from 'discord.js';
 
 import prisma from '../utils/db.js';
 import { mayBeTicketChannel } from '../services/features/ticketChannelLookup.js';
-import { isCustomDomainOrigin, startCustomDomainSync } from '../services/system/customDomain.js';
+import type { Server } from 'bun';
+import {
+  customDomainForHost,
+  customDomainGate,
+  customDomainScope,
+  isCustomDomainOrigin,
+  scopedGuildId,
+  startCustomDomainSync,
+} from '../services/system/customDomain.js';
 import { logger } from '../utils/logger.js';
 import {
   json,
@@ -97,6 +105,8 @@ export async function notifyDashboardSanctionReportRequired(params: {
 interface WebSocketData {
   isAuthenticated: boolean;
   userId?: string;
+  /** Socket ouvert depuis le domaine perso d'un serveur : il ne voit que lui. */
+  scopedGuildId?: string;
   /** Socket d'édition à plusieurs d'une page de site (protocole y-websocket). */
   collab?: { pageId: string; guildId: string };
   /** Serveurs dont ce socket suit le temps réel d'Analytics. */
@@ -141,10 +151,10 @@ export const startDashboardApi = async (client: Client) => {
   }
 
   const broadcastDashboardEventLocal = (event: DashboardEvent) => {
-    server.publish(
-      'authenticated-dashboard',
-      JSON.stringify({ at: new Date().toISOString(), ...event }),
-    );
+    const payload = JSON.stringify({ at: new Date().toISOString(), ...event });
+    server.publish('authenticated-dashboard', payload);
+    // Les sockets des domaines perso n'écoutent que le sujet de leur serveur.
+    if (typeof event.guildId === 'string') server.publish(`guild-events:${event.guildId}`, payload);
   };
 
   const broadcastDashboardStateChangeLocal = (guildId: string, reason: string) => {
@@ -188,10 +198,7 @@ export const startDashboardApi = async (client: Client) => {
   // base. L'etat etant persiste, un redemarrage ne perd aucune annonce.
   startBroadcastScheduler(client, collectShardGuilds);
 
-  const startServer = (listenPort: number) => Bun.serve<WebSocketData>({
-    port: listenPort,
-    reusePort: true,
-    async fetch(request, serverInstance) {
+  const handleRequest = async (request: Request, serverInstance: Server<WebSocketData>): Promise<Response | undefined> => {
       const url = new URL(request.url);
 
       function isAllowedWsOrigin(candidate: string | null): boolean {
@@ -256,7 +263,7 @@ export const startDashboardApi = async (client: Client) => {
         const session = await getDashboardSession(sessionIdFromCookieHeader(request.headers.get('cookie') ?? undefined));
         if (!session) return new Response('Session WebSocket absente ou expirée', { status: 401 });
         const success = serverInstance.upgrade(request, {
-          data: { isAuthenticated: true, userId: session.userId },
+          data: { isAuthenticated: true, userId: session.userId, scopedGuildId: scopedGuildId() ?? undefined },
         });
         if (success) return undefined;
       }
@@ -414,6 +421,19 @@ export const startDashboardApi = async (client: Client) => {
           }
         })();
       });
+  };
+
+  const startServer = (listenPort: number) => Bun.serve<WebSocketData>({
+    port: listenPort,
+    reusePort: true,
+    fetch(request, serverInstance) {
+      // Domaine perso d'un serveur : liste blanche de routes, un seul serveur
+      // accessible, et la portée suit la requête jusqu'aux contrôles d'accès.
+      const scoped = customDomainForHost(request.headers.get('host'));
+      if (!scoped) return handleRequest(request, serverInstance);
+      const refused = customDomainGate(scoped, new URL(request.url).pathname);
+      if (refused) return refused;
+      return customDomainScope.run(scoped.guildId, () => handleRequest(request, serverInstance));
     },
     websocket: {
       open(ws) {
@@ -425,7 +445,7 @@ export const startDashboardApi = async (client: Client) => {
           void openCollabConnection(ws, ws.data.collab.pageId, ws.data.collab.guildId, ws.data.userId ?? '');
           return;
         }
-        ws.subscribe('authenticated-dashboard');
+        ws.subscribe(ws.data.scopedGuildId ? `guild-events:${ws.data.scopedGuildId}` : 'authenticated-dashboard');
         ws.send(JSON.stringify({ type: 'dashboard_ws_connected', at: new Date().toISOString() }));
       },
       async message(ws, messageData) {
@@ -470,6 +490,7 @@ export const startDashboardApi = async (client: Client) => {
         // la section revérifié ici (le sujet commun ne porte que des signaux).
         const guildId = typeof data.guildId === 'string' && SNOWFLAKE_RE.test(data.guildId) ? data.guildId : null;
         if (!guildId || !ws.data.userId) return;
+        if (ws.data.scopedGuildId && ws.data.scopedGuildId !== guildId) return;
         const live = (ws.data.liveGuilds ??= new Set());
         if (data.type === 'analytics_live_unsubscribe') {
           if (live.delete(guildId)) {
@@ -503,7 +524,7 @@ export const startDashboardApi = async (client: Client) => {
           void closeCollabConnection(ws);
           return;
         }
-        ws.unsubscribe('authenticated-dashboard');
+        ws.unsubscribe(ws.data.scopedGuildId ? `guild-events:${ws.data.scopedGuildId}` : 'authenticated-dashboard');
         for (const guildId of ws.data.liveGuilds ?? []) removeLiveSubscriber(guildId);
         ws.data.liveGuilds?.clear();
       }
