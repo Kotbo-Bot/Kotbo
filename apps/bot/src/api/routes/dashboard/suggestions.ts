@@ -34,7 +34,7 @@ import {
 import { getCachedFeatureAccess } from './featureGate.js';
 import { getSuggestionsOverview, listSuggestions } from '../../../services/features/suggestionDashboard.js';
 import { getSuggestionSettings, saveSuggestionSettings, type SuggestionSettings } from '../../../services/features/suggestionSettings.js';
-import { resolveSuggestion } from '../../../services/features/suggestionService.js';
+import { refreshApprovedSuggestionMessages, resolveSuggestion } from '../../../services/features/suggestionService.js';
 import { suggestionMessageLabels } from '../../../services/features/suggestionMessageLabels.js';
 import { getMemberIdentities } from '../../../services/moderation/memberIdentityService.js';
 import { jsonFailure } from '../../shared/failure.js';
@@ -210,7 +210,14 @@ export async function handleSuggestionRoutes(
         return true;
       }
 
+      const before = parsed.patch.voteWhileApproved === undefined ? null : await getSuggestionSettings(guildId);
       const config = await saveSuggestionSettings(guildId, parsed.patch);
+      // Les messages déjà publiés suivent le réglage, sans faire attendre la réponse.
+      if (before && before.voteWhileApproved !== config.voteWhileApproved) {
+        void refreshApprovedSuggestionMessages(client, guildId, config.voteWhileApproved).catch((err: unknown) => {
+          logger.error('SuggestionsAPI', `Rafraîchissement des suggestions approuvées de ${guildId} impossible:`, err);
+        });
+      }
       await pushAudit(guildId, {
         user: auditUser,
         action: 'Mise à jour configuration suggestions',

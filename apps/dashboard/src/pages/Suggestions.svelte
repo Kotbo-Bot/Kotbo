@@ -90,9 +90,11 @@
   let statusOpen = $state(false);
   const wide = new MediaQuery('min-width: 64rem');
 
+  /** Même règle que la route de décision : le droit « Modérer », ou la modération de contenu qu'il ne retire pas. */
   const canModerate = $derived(
-    !!dashboardStore.state.featureAccess?.suggestions?.canModerate
+    dashboardStore.state.featureAccess?.suggestions?.canModerate === true
       || !!dashboardStore.state.access?.canManageSettings
+      || (!!dashboardStore.state.access?.canModerateContent && dashboardStore.state.featureAccess?.suggestions?.canModerate !== false)
   );
 
   const canConfigure = $derived(
@@ -111,7 +113,9 @@
   function channelName(channelId: string | null): string {
     if (!channelId) return m.suggestions_channel_fallback();
     const channel = textChannels.find((candidate) => candidate.id === channelId);
-    return channel ? `#${channel.name}` : m.suggestions_channel_unknown();
+    if (channel) return `#${channel.name}`;
+    // Les salons arrivent après les suggestions : rien à dire tant qu'ils ne sont pas là.
+    return textChannels.length === 0 ? '-' : m.suggestions_channel_unknown();
   }
 
   const queue = $derived(data ? sortSuggestionQueue(data.queue, queueSort) : []);

@@ -10,11 +10,12 @@
  */
 
 import prisma from '../../../utils/db.js';
-import { siteIconSvg } from '@kotbo/shared';
+import { isSuggestionStatus, isSuggestionVotingOpen, siteIconSvg } from '@kotbo/shared';
 import * as m from '../../../lib/paraglide/messages.js';
 import { parseDiscordMarkdown } from '../../../api/shared/markdown.js';
 import { attrs, cls, esc, truncate } from '../siteHtml.js';
 import { emptyState, formatDateTime, formatNumber, timeTag, type BlockContext, type BlockRef, type BlockRegistry, type SiteLocale } from './blockContext.js';
+import { getSuggestionSettings } from '../../features/suggestionSettings.js';
 import { isTicketActive, listSiteTicketTypes, listViewerTickets, readTicketThread } from '../siteTicketService.js';
 
 // ─── Formulaires ────────────────────────────────────────────────────────────
@@ -372,12 +373,15 @@ function suggestionStatusLabel(status: string, locale: SiteLocale): string {
 async function renderSuggestions(ctx: BlockContext, config: Record<string, unknown>): Promise<string> {
   const filter = config.filter === 'accepted' || config.filter === 'all' ? config.filter : 'open';
   const status = filter === 'open' ? ['PENDING'] : filter === 'accepted' ? ['APPROVED', 'IMPLEMENTED'] : [...SUGGESTION_STATUS];
-  const suggestions = await prisma.suggestion.findMany({
-    where: { guildId: ctx.site.guildId, status: { in: status } },
-    orderBy: { createdAt: 'desc' },
-    take: Number(config.limit) || 10,
-    select: { id: true, username: true, content: true, status: true, responseText: true, upvoters: true, downvoters: true, createdAt: true },
-  });
+  const [suggestions, { voteWhileApproved }] = await Promise.all([
+    prisma.suggestion.findMany({
+      where: { guildId: ctx.site.guildId, status: { in: status } },
+      orderBy: { createdAt: 'desc' },
+      take: Number(config.limit) || 10,
+      select: { id: true, username: true, content: true, status: true, responseText: true, upvoters: true, downvoters: true, createdAt: true },
+    }),
+    getSuggestionSettings(ctx.site.guildId),
+  ]);
   const o = { locale: ctx.locale };
   const viewerId = ctx.viewer?.userId;
   const form =
@@ -396,7 +400,8 @@ async function renderSuggestions(ctx: BlockContext, config: Record<string, unkno
       const up = s.upvoters.length;
       const down = s.downvoters.length;
       const mine = viewerId ? (s.upvoters.includes(viewerId) ? 'up' : s.downvoters.includes(viewerId) ? 'down' : '') : '';
-      const votable = s.status === 'PENDING';
+      // Même règle que les boutons Discord : un vote refusé par l'API n'a pas à s'afficher.
+      const votable = isSuggestionStatus(s.status) && isSuggestionVotingOpen(s.status, voteWhileApproved);
       const vote = (dir: 'up' | 'down', count: number, label: string) =>
         votable
           ? `<button type="button" class="${cls('vote', `vote-${dir}`, mine === dir && 'is-active')}"${attrs({ 'data-action': 'suggestion-vote', 'data-id': s.id, 'data-dir': dir, 'data-requires-login': '1', 'aria-pressed': mine === dir ? 'true' : 'false', 'aria-label': label })}>${siteIconSvg(dir === 'up' ? 'chevron-up' : 'chevron-down', 16)} <span>${formatNumber(count, ctx.locale)}</span></button>`

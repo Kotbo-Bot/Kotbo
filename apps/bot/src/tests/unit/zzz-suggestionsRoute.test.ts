@@ -75,6 +75,7 @@ mockModule('../../services/features/suggestionSettings', settings);
 let resolveResult: unknown = null;
 const service = {
   resolveSuggestion: mock(async (..._args: unknown[]) => resolveResult),
+  refreshApprovedSuggestionMessages: mock(async (..._args: unknown[]) => {}),
 };
 mockModule('../../services/features/suggestionService', service);
 
@@ -194,6 +195,17 @@ describe('PATCH /suggestions/config', () => {
     expect(settings.saveSuggestionSettings).toHaveBeenCalledWith(GUILD, { requireComment: false, allowedRoleIds: [ROLE] });
     expect(json.config.requireComment).toBe(false);
     expect(mockDb.dashboardAuditLog.create).toHaveBeenCalledTimes(1);
+  });
+
+  test('changer l\'ouverture des votes redessine les suggestions approuvées', async () => {
+    await call('PATCH', '/config', { voteWhileApproved: true });
+    expect(service.refreshApprovedSuggestionMessages).toHaveBeenCalledWith(client, GUILD, true);
+  });
+
+  test('sans changement de cette option, aucun message n\'est redessiné', async () => {
+    await call('PATCH', '/config', { voteWhileApproved: false });
+    await call('PATCH', '/config', { requireComment: false });
+    expect(service.refreshApprovedSuggestionMessages).not.toHaveBeenCalled();
   });
 
   test('réservé à qui configure', async () => {

@@ -191,6 +191,26 @@ async function refreshSuggestionMessage(
   }
 }
 
+/** Suggestions approuvées redessinées d'un coup : de quoi couvrir les récentes sans saturer l'API Discord. */
+const APPROVED_REFRESH_MAX = 50;
+
+/**
+ * Rouvre ou referme les boutons des suggestions approuvées quand le réglage
+ * « votes ouverts après approbation » change : sans cela, les messages déjà
+ * publiés gardaient l'ancien état. Une à une, pour rester sous la limite
+ * d'édition de Discord.
+ */
+export async function refreshApprovedSuggestionMessages(client: Client, guildId: string, voteWhileApproved: boolean): Promise<void> {
+  const approved = await prisma.suggestion.findMany({
+    where: { guildId, status: 'APPROVED', messageId: { not: null } },
+    orderBy: { createdAt: 'desc' },
+    take: APPROVED_REFRESH_MAX,
+  });
+  for (const suggestion of approved) {
+    await refreshSuggestionMessage(client, suggestion, voteWhileApproved);
+  }
+}
+
 /**
  * Crée et publie une nouvelle suggestion dans le salon dédié
  */
