@@ -4,6 +4,7 @@ import {
   planSeasonRewards,
   sampleSeasonStandings,
   seasonEndAnnouncement,
+  seasonReminderAnnouncement,
   seasonStartAnnouncement,
   type SeasonAnnouncementLabels,
 } from '@kotbo/shared';
@@ -19,6 +20,8 @@ const LABELS: SeasonAnnouncementLabels = {
   endLine: '#{rank} {user} +{xp}',
   endEmpty: 'Personne.',
   rewardsGivenHeading: 'Données',
+  reminderTitle: 'Dernier jour #{number} · {name}',
+  reminderBody: 'Clôture le {date}.',
 };
 
 describe('fillSeasonTemplate', () => {
@@ -67,5 +70,18 @@ describe('sampleSeasonStandings', () => {
   test('chaque récompense trouve son gagnant fictif', () => {
     const rewards = [{ rank: 2, roleId: null, coins: 10 }, { rank: 10, roleId: null, coins: 5 }];
     expect(planSeasonRewards(rewards, sampleSeasonStandings(rewards)).map((entry) => entry.rank)).toEqual([2, 10]);
+  });
+});
+
+describe('seasonReminderAnnouncement', () => {
+  test('titre, date de clôture puis classement provisoire limité au podium', () => {
+    const standings = [1, 2, 3, 4].map((rank) => ({ rank, user: `u${rank}`, xp: String(100 - rank) }));
+    const text = seasonReminderAnnouncement(LABELS, { number: 2, name: 'Hiver', date: '1 déc.' }, standings);
+    expect(text.title).toBe('Dernier jour #2 · Hiver');
+    expect(text.description.split('\n')).toEqual(['Clôture le 1 déc..', '', '#1 u1 +99', '#2 u2 +98', '#3 u3 +97']);
+  });
+
+  test('sans classé, la date seule', () => {
+    expect(seasonReminderAnnouncement(LABELS, { number: 2, name: 'Hiver', date: 'x' }, []).description).toBe('Clôture le x.');
   });
 });

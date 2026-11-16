@@ -6,7 +6,6 @@ enum SeasonStatus {
   UPCOMING
   ACTIVE
   ENDED
-  ARCHIVED
 }
 
 model LevelingSeason {
@@ -31,8 +30,21 @@ model LevelingSeason {
   /// Salon où annoncer l'ouverture et la clôture. Vide = aucune annonce.
   announceChannelId String?
 
+  /// À la clôture, une saison de même durée prend la suite, sauf si une autre
+  /// est déjà prévue.
+  autoRenew Boolean @default(false)
+
+  /// Rappel dans le salon d'annonce pendant les dernières 24 h.
+  remindBeforeEnd Boolean @default(false)
+  /// Rappel déjà envoyé ; remis à vide quand la date de fin change.
+  reminderSentAt DateTime?
+
   // Leaderboard final archivé (JSON: [{ userId, xp, level, rank }])
   finalLeaderboard Json?
+
+  /// Ce qui a réellement été donné à la clôture : `SeasonRewardOutcome[]`
+  /// (@kotbo/shared), relu par `readSeasonRewardOutcomes`.
+  grantedRewards Json?
 
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
   snapshots SeasonSnapshot[]

@@ -1,13 +1,14 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
   import { MediaQuery } from 'svelte/reactivity';
-  import { seasonProgress } from '@kotbo/shared';
+  import { isRewardOutcomeComplete, seasonProgress, type SeasonRewardOutcome } from '@kotbo/shared';
   import {
     deleteSeason,
     endSeason,
     fetchDiscordChannels,
     fetchSeasonLeaderboard,
     fetchSeasonsData,
+    retrySeasonRewards,
     startSeason,
     type RankedStanding,
     type Season,
@@ -26,6 +27,7 @@
   import Skeleton from '../lib/components/Skeleton.svelte';
   import Modal from '../lib/components/Modal.svelte';
   import SeasonEditorModal from '../lib/components/seasons/SeasonEditorModal.svelte';
+  import { blockedSeasonRoles } from '../lib/components/seasons/seasonRoleBlockers';
   import Button from '../lib/components/ui/Button.svelte';
   import Callout from '../lib/components/ui/Callout.svelte';
   import Tabs, { type TabItem } from '../lib/components/ui/Tabs.svelte';
@@ -48,6 +50,9 @@
   let boardRanked = $state<RankedStanding[]>([]);
 
   let statusOpen = $state(false);
+  let recap = $state<SeasonStanding[] | null>(null);
+  let recapFailed = $state(false);
+  let retrying = $state<string | null>(null);
   const wide = new MediaQuery('min-width: 64rem');
 
   const canManage = $derived(
@@ -61,8 +66,9 @@
   });
   /** @everyone porte l'id du serveur : il n'a rien à faire dans une récompense. */
   const roles = $derived(
-    ((dashboardStore.state.discordRoles || []) as Array<{ id: string; name: string }>).filter((role) => role.id !== authStore.selectedGuildId)
+    ((dashboardStore.state.discordRoles || []) as Array<{ id: string; name: string; position?: number }>).filter((role) => role.id !== authStore.selectedGuildId)
   );
+  const botRoleAccess = $derived(data?.botRoleAccess ?? null);
 
   const active = $derived(data?.activeSeason ?? null);
   const nextUpcoming = $derived(
@@ -72,7 +78,7 @@
   const topXp = $derived(Math.max(1, data?.activeLeaderboard[0]?.xp ?? 1));
   const nextNumber = $derived((data?.seasons ?? []).reduce((max, season) => Math.max(max, season.number), 0) + 1);
   const lastEnded = $derived(
-    [...(data?.seasons ?? [])].filter((season) => season.status === 'ENDED' || season.status === 'ARCHIVED').sort((a, b) => b.endDate.localeCompare(a.endDate))[0] ?? null
+    [...(data?.seasons ?? [])].filter((season) => season.status === 'ENDED').sort((a, b) => b.endDate.localeCompare(a.endDate))[0] ?? null
   );
 
   function channelName(channelId: string): string {
@@ -82,11 +88,22 @@
   /** Conseils sur la saison en cours, du plus utile au moins utile. */
   const advice = $derived.by(() => {
     if (!active) return [];
-    const list: Array<{ id: string; variant: 'info' | 'warning'; title: string; text: string; action?: string }> = [];
+    const list: Array<{ id: string; variant: 'info' | 'warning'; title: string; text: string; lines?: string[]; action?: string }> = [];
     // Une seule saison tourne à la fois : celle dont le début est passé attend
     // la clôture de l'actuelle, sans quoi rien ne dirait pourquoi elle reste « à venir ».
     if (nextUpcoming && new Date(nextUpcoming.startDate).getTime() <= Date.now()) {
       list.push({ id: 'queued', variant: 'info', title: m.sea_advice_queued_title({ name: nextUpcoming.name }), text: m.sea_advice_queued_desc() });
+    }
+    const blocked = blockedSeasonRoles([active.topRoleId, ...(active.rewards ?? []).map((reward) => reward.roleId)], roles, botRoleAccess);
+    if (blocked.length > 0) {
+      list.push({
+        id: 'blocked',
+        variant: 'warning',
+        title: m.sea_advice_blocked_title(),
+        text: m.sea_advice_blocked_desc(),
+        lines: blocked.map((entry) => m.sea_blocked_line({ role: entry.name, reason: entry.reason })),
+        action: m.sea_btn_edit(),
+      });
     }
     const hasRewards = (active.rewards?.length ?? 0) > 0 || !!active.topRoleId;
     if (!hasRewards) list.push({ id: 'rewards', variant: 'info', title: m.sea_advice_no_rewards_title(), text: m.sea_advice_no_rewards_desc(), action: m.sea_advice_no_rewards_action() });
@@ -109,7 +126,6 @@
     UPCOMING: { label: () => m.sea_status_upcoming(), cls: 'bg-primary/10 text-primary border-primary/20' },
     ACTIVE: { label: () => m.sea_status_active(), cls: 'bg-success/10 text-success border-success/20' },
     ENDED: { label: () => m.sea_status_ended(), cls: 'bg-surface-container-high/40 text-on-surface-variant border-outline-variant/20' },
-    ARCHIVED: { label: () => m.sea_status_archived(), cls: 'bg-surface-container-high/40 text-on-surface-variant border-outline-variant/20' },
   };
   const PODIUM = ['bg-warning/15 text-warning', 'bg-surface-container-highest text-on-surface', 'bg-primary/10 text-primary'];
 
@@ -125,7 +141,27 @@
     return roles.find((role) => role.id === roleId)?.name ?? roleId;
   }
 
-  function rewardLabel(reward: Season['rewards'][number]): string {
+  const OUTCOME_TEXT: Record<NonNullable<SeasonRewardOutcome['roleStatus'] | SeasonRewardOutcome['coinsStatus']>, () => string> = {
+    given: () => m.sea_outcome_given(),
+    blocked: () => m.sea_outcome_blocked(),
+    member_left: () => m.sea_outcome_member_left(),
+    failed: () => m.sea_outcome_failed(),
+    economy_off: () => m.sea_outcome_economy_off(),
+  };
+
+  /** Ce qui manque à une récompense, lisible : « Rôle refusé par Discord », etc. */
+  function outcomeProblems(outcome: SeasonRewardOutcome): string {
+    return [outcome.roleStatus, outcome.coinsStatus]
+      .filter((status): status is NonNullable<typeof status> => !!status && status !== 'given')
+      .map((status) => OUTCOME_TEXT[status]())
+      .join(' · ');
+  }
+
+  function pendingOutcomes(season: Season): number {
+    return (season.grantedRewards ?? []).filter((outcome) => !isRewardOutcomeComplete(outcome)).length;
+  }
+
+  function rewardLabel(reward: { roleId: string | null; coins: number }): string {
     const parts = [
       reward.roleId ? `@${roleName(reward.roleId)}` : null,
       reward.coins > 0 ? m.sea_reward_coins_value({ coins: reward.coins.toLocaleString(dateLocale()) }) : null,
@@ -141,6 +177,34 @@
       data = null;
     } finally {
       loading = false;
+    }
+    await loadRecap();
+  }
+
+  /** Sans saison en cours, le podium de la dernière tient lieu de bilan. */
+  let recapSeasonId: string | null = null;
+  async function loadRecap() {
+    if (!data || data.activeSeason || !lastEnded) {
+      recap = null;
+      recapSeasonId = null;
+      recapFailed = false;
+      return;
+    }
+    if (recapSeasonId === lastEnded.id && recap) return;
+    recapSeasonId = lastEnded.id;
+    recapFailed = false;
+    const result = await fetchSeasonLeaderboard(lastEnded.id).catch(() => null);
+    // Un échec ne doit pas se lire comme une saison sans classé.
+    recapFailed = !result;
+    recap = result ? result.leaderboard.slice(0, 3) : null;
+  }
+
+  async function handleRetry(season: Season) {
+    retrying = season.id;
+    try {
+      if (await retrySeasonRewards(season.id)) await load(true);
+    } finally {
+      retrying = null;
     }
   }
 
@@ -169,6 +233,7 @@
         m.sea_end_impact_frozen(),
         rewardCount > 0 ? m.sea_end_impact_rewards({ count: rewardCount }) : m.sea_end_impact_no_rewards(),
         m.sea_end_impact_xp_kept(),
+        ...(season.autoRenew ? [m.sea_end_impact_renew()] : []),
       ],
     });
     if (confirmed && await endSeason(season.id)) await load(true);
@@ -239,6 +304,10 @@
           <dt class="text-on-surface-variant">{m.sea_announce_channel_label()}</dt>
           <dd class="font-semibold text-right truncate">{active.announceChannelId ? `#${channelName(active.announceChannelId)}` : m.sea_status_none()}</dd>
         </div>
+        <div class="flex items-center justify-between gap-3">
+          <dt class="text-on-surface-variant">{m.sea_status_auto_renew()}</dt>
+          <dd class="font-semibold">{active.autoRenew ? m.sea_status_on() : m.sea_status_off()}</dd>
+        </div>
       {/if}
       <div class="flex items-center justify-between gap-3">
         <dt class="text-on-surface-variant">{m.sea_status_next()}</dt>
@@ -249,6 +318,14 @@
         <dd class="font-semibold text-right">{lastEnded ? formatDate(lastEnded.endDate) : m.sea_status_never()}</dd>
       </div>
     </dl>
+  {/if}
+{/snippet}
+
+{#snippet adviceLines(lines: string[] | undefined)}
+  {#if lines && lines.length > 0}
+    <ul class="mt-1 list-disc pl-4 space-y-0.5">
+      {#each lines as line (line)}<li>{line}</li>{/each}
+    </ul>
   {/if}
 {/snippet}
 
@@ -303,8 +380,36 @@
   </ol>
 {/snippet}
 
+{#snippet outcomesSummary(season: Season)}
+  {@const pending = pendingOutcomes(season)}
+  <div class="space-y-2">
+    <ul class="flex flex-wrap gap-2">
+      {#each season.grantedRewards ?? [] as outcome (`${outcome.rank}-${outcome.userId}-${outcome.roleId}`)}
+        {@const complete = isRewardOutcomeComplete(outcome)}
+        <li
+          class="text-xs px-2.5 py-1 rounded-full border flex items-center gap-1.5 {complete ? 'bg-success/10 text-success border-success/20' : 'bg-warning/10 text-warning border-warning/30'}"
+          title={complete ? m.sea_outcome_given() : outcomeProblems(outcome)}
+        >
+          <Papicon icon={complete ? 'Check' : 'AlertTriangle'} size={12} />
+          <span class="font-semibold">#{outcome.rank}</span> {rewardLabel(outcome)}
+        </li>
+      {/each}
+    </ul>
+    {#if pending > 0}
+      <div class="flex flex-wrap items-center gap-3">
+        <p class="text-xs text-warning">{m.sea_outcomes_pending({ count: pending })}</p>
+        {#if canManage}
+          <Button size="sm" icon="RefreshCw" loading={retrying === season.id} onclick={() => handleRetry(season)}>{m.sea_btn_retry_rewards()}</Button>
+        {/if}
+      </div>
+    {/if}
+  </div>
+{/snippet}
+
 {#snippet rewardsSummary(season: Season)}
-  {#if (season.rewards?.length ?? 0) > 0 || season.topRoleId}
+  {#if season.status === 'ENDED' && (season.grantedRewards?.length ?? 0) > 0}
+    {@render outcomesSummary(season)}
+  {:else if (season.rewards?.length ?? 0) > 0 || season.topRoleId}
     <ul class="flex flex-wrap gap-2">
       {#if season.topRoleId}
         <li class="text-xs px-2.5 py-1 rounded-full bg-warning/10 text-warning border border-warning/20 flex items-center gap-1.5">
@@ -362,6 +467,7 @@
               {#if item.action && canManage}
                 <Callout variant={item.variant} title={item.title}>
                   <p>{item.text}</p>
+                  {@render adviceLines(item.lines)}
                   {#snippet actions()}
                     <Button size="sm" icon="Pencil" onclick={() => openEditor(active)}>{item.action}</Button>
                   {/snippet}
@@ -369,6 +475,7 @@
               {:else}
                 <Callout variant={item.variant} title={item.title}>
                   <p>{item.text}</p>
+                  {@render adviceLines(item.lines)}
                 </Callout>
               {/if}
             {/each}
@@ -454,14 +561,55 @@
                 </Callout>
               {/if}
             {/if}
-            <EmptyState
-              icon="flag"
-              title={m.sea_no_active_title()}
-              description={m.sea_empty_desc()}
-              actionLabel={canManage && !nextUpcoming ? m.sea_empty_cta() : ''}
-              onAction={canManage && !nextUpcoming ? () => openEditor(null) : undefined}
-              reason={canManage ? (nextUpcoming ? 'instruction' : undefined) : 'read-only'}
-            />
+            {#if lastEnded}
+              <section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl space-y-5">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                  <div class="min-w-0">
+                    <div class="flex flex-wrap items-center gap-2">
+                      <h2 class="text-lg font-semibold text-on-surface">{m.sea_recap_title({ name: lastEnded.name })}</h2>
+                      <span class="text-xs text-on-surface-variant">#{lastEnded.number}</span>
+                      {@render statusPill(lastEnded.status)}
+                    </div>
+                    <p class="flex items-center gap-1.5 text-xs text-on-surface-variant mt-1">
+                      <Papicon icon="Calendar" size={13} /> {m.sea_recap_desc({ date: formatDate(lastEnded.endDate) })}
+                    </p>
+                  </div>
+                  <div class="flex flex-wrap gap-2">
+                    <Button size="sm" icon="List" onclick={() => openBoard(lastEnded)}>{m.sea_btn_view_ranking()}</Button>
+                    {#if canManage && !nextUpcoming}
+                      <Button size="sm" variant="primary" icon="Plus" onclick={() => openEditor(null)}>{m.sea_recap_cta()}</Button>
+                    {/if}
+                  </div>
+                </div>
+
+                {#if recapFailed}
+                  <div class="flex flex-wrap items-center gap-3">
+                    <p class="text-sm text-on-surface-variant">{m.sea_load_error()}</p>
+                    <Button size="sm" icon="RefreshCw" onclick={() => loadRecap()}>{m.sea_retry()}</Button>
+                  </div>
+                {:else if recap === null}
+                  <Skeleton height="120px" />
+                {:else if recap.length === 0}
+                  <p class="text-sm text-on-surface-variant">{m.sea_recap_empty()}</p>
+                {:else}
+                  {@render standingsList(recap, Math.max(1, recap[0]?.xp ?? 1))}
+                {/if}
+
+                <div class="space-y-2">
+                  <h3 class="text-sm font-semibold flex items-center gap-2"><Papicon icon="Award" size={15} /> {m.sea_recap_rewards()}</h3>
+                  {@render rewardsSummary(lastEnded)}
+                </div>
+              </section>
+            {:else}
+              <EmptyState
+                icon="flag"
+                title={m.sea_no_active_title()}
+                description={m.sea_empty_desc()}
+                actionLabel={canManage && !nextUpcoming ? m.sea_empty_cta() : ''}
+                onAction={canManage && !nextUpcoming ? () => openEditor(null) : undefined}
+                reason={canManage ? (nextUpcoming ? 'instruction' : undefined) : 'read-only'}
+              />
+            {/if}
           </div>
         {/if}
       {:else if data.seasons.length === 0}
@@ -486,7 +634,7 @@
                   </div>
                   <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-on-surface-variant">
                     <span class="flex items-center gap-1"><Papicon icon="Calendar" size={13} /> {m.sea_period({ start: formatDate(season.startDate), end: formatDate(season.endDate) })}</span>
-                    {#if season.status === 'ENDED' || season.status === 'ARCHIVED'}
+                    {#if season.status === 'ENDED'}
                       <span class="flex items-center gap-1"><Papicon icon="Users" size={13} /> {m.sea_participants_count({ count: season._count?.snapshots ?? 0 })}</span>
                     {/if}
                   </div>
@@ -530,6 +678,7 @@
   channels={textChannels}
   {economyActive}
   activeName={active?.name ?? null}
+  {botRoleAccess}
   labels={data?.announcement ?? null}
   {nextNumber}
   onDone={() => load(true)}

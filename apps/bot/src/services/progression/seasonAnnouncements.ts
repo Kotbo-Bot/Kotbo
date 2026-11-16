@@ -1,11 +1,12 @@
 /**
- * Annonces d'ouverture et de clôture d'une saison, dans le salon réglé sur
- * elle. Une annonce qui échoue est journalisée et n'empêche rien. Le texte est
+ * Annonces d'ouverture, de rappel et de clôture d'une saison, dans le salon
+ * réglé sur elle. Une annonce qui échoue est journalisée et n'empêche rien. Le texte est
  * construit par `@kotbo/shared`, comme l'aperçu du dashboard.
  */
 import { EmbedBuilder, type Client } from 'discord.js';
 import {
   seasonEndAnnouncement,
+  seasonReminderAnnouncement,
   seasonStartAnnouncement,
   type PlannedSeasonReward,
   type SeasonAnnouncementLabels,
@@ -39,12 +40,20 @@ export function seasonAnnouncementLabels(locale: BotLocale): SeasonAnnouncementL
     endLine: m.b2_season_end_line({ rank: '{rank}', user: '{user}', xp: '{xp}' }, o),
     endEmpty: m.b2_season_end_empty({}, o),
     rewardsGivenHeading: m.b2_season_rewards_given_heading({}, o),
+    reminderTitle: m.b2_season_reminder_title({ number: '{number}', name: '{name}' }, o),
+    reminderBody: m.b2_season_reminder_body({ date: '{date}' }, o),
   };
 }
 
-/** Horodatage Discord : affiché dans la langue et le fuseau de chaque lecteur. */
-function discordDate(date: Date): string {
-  return `<t:${Math.floor(date.getTime() / 1000)}:D>`;
+/** Horodatage Discord : affiché dans la langue et le fuseau de chaque lecteur (`R` : « dans 12 heures »). */
+function discordDate(date: Date, style: 'D' | 'R' = 'D'): string {
+  return `<t:${Math.floor(date.getTime() / 1000)}:${style}>`;
+}
+
+type Standings = ReadonlyArray<{ userId: string; rank: number; xp: number }>;
+
+function mentionStandings(standings: Standings, locale: BotLocale) {
+  return standings.map((entry) => ({ rank: entry.rank, user: `<@${entry.userId}>`, xp: entry.xp.toLocaleString(locale) }));
 }
 
 function mentionReward(reward: { roleId: string | null; coins: number }, locale: BotLocale) {
@@ -63,16 +72,24 @@ export function seasonStartText(season: AnnouncedSeason, rewards: readonly Seaso
   );
 }
 
+export function seasonReminderText(season: AnnouncedSeason, standings: Standings, locale: BotLocale): SeasonAnnouncementText {
+  return seasonReminderAnnouncement(
+    seasonAnnouncementLabels(locale),
+    { number: season.number, name: season.name, date: discordDate(season.endDate, 'R') },
+    mentionStandings(standings, locale),
+  );
+}
+
 export function seasonEndText(
   season: Pick<AnnouncedSeason, 'number' | 'name'>,
-  standings: ReadonlyArray<{ userId: string; rank: number; xp: number }>,
+  standings: Standings,
   plan: readonly PlannedSeasonReward[],
   locale: BotLocale,
 ): SeasonAnnouncementText {
   return seasonEndAnnouncement(
     seasonAnnouncementLabels(locale),
     season,
-    standings.map((entry) => ({ rank: entry.rank, user: `<@${entry.userId}>`, xp: entry.xp.toLocaleString(locale) })),
+    mentionStandings(standings, locale),
     plan.map((entry) => ({ user: `<@${entry.userId}>`, ...mentionReward(entry, locale) })),
   );
 }
@@ -105,10 +122,15 @@ export async function announceSeasonStart(client: Client, season: AnnouncedSeaso
   await send(client, season, seasonStartText(season, rewards, topRoleId, await guildLocale(client, season.guildId)));
 }
 
+export async function announceSeasonReminder(client: Client, season: AnnouncedSeason, standings: Standings): Promise<void> {
+  if (!season.announceChannelId) return;
+  await send(client, season, seasonReminderText(season, standings, await guildLocale(client, season.guildId)));
+}
+
 export async function announceSeasonEnd(
   client: Client,
   season: AnnouncedSeason,
-  standings: ReadonlyArray<{ userId: string; rank: number; xp: number }>,
+  standings: Standings,
   plan: readonly PlannedSeasonReward[],
 ): Promise<void> {
   if (!season.announceChannelId) return;

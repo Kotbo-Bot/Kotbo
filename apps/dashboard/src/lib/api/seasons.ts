@@ -1,10 +1,11 @@
 /** Saisons de leveling : classement de l'XP gagnée sur une période. */
-import type { SeasonAnnouncementLabels, SeasonReward } from '@kotbo/shared';
+import type { SeasonAnnouncementLabels, SeasonReward, SeasonRewardOutcome } from '@kotbo/shared';
+import type { BotRoleAccess } from '@kotbo/contracts';
 import { authStore } from '../stores/auth.svelte';
 import { dashboardMutation, dashboardRequest } from './client';
 import { m } from '../i18n';
 
-export type SeasonStatus = 'UPCOMING' | 'ACTIVE' | 'ENDED' | 'ARCHIVED';
+export type SeasonStatus = 'UPCOMING' | 'ACTIVE' | 'ENDED';
 
 export interface Season {
   id: string;
@@ -17,6 +18,12 @@ export interface Season {
   topRoleId: string | null;
   /** Salon des annonces d'ouverture et de clôture. Absent d'un bot plus ancien. */
   announceChannelId?: string | null;
+  /** À la clôture, une saison de même durée prend la suite. Absent d'un bot plus ancien. */
+  autoRenew?: boolean;
+  /** Rappel dans le salon d'annonce pendant les dernières 24 h. Absent d'un bot plus ancien. */
+  remindBeforeEnd?: boolean;
+  /** Ce qui a réellement été remis à la clôture ; vide avant la clôture ou d'un bot plus ancien. */
+  grantedRewards?: SeasonRewardOutcome[];
   _count?: { snapshots: number };
 }
 
@@ -51,6 +58,8 @@ export interface SeasonsData {
   activeRankedLeaderboard?: RankedStanding[];
   /** Gabarits des annonces dans la langue du serveur. Absent d'un bot plus ancien. */
   announcement?: SeasonAnnouncementLabels;
+  /** Ce que le bot peut attribuer ; `null` serveur hors cache, absent d'un bot plus ancien. */
+  botRoleAccess?: BotRoleAccess | null;
 }
 
 export interface SeasonPayload {
@@ -60,6 +69,8 @@ export interface SeasonPayload {
   rewards: SeasonReward[];
   topRoleId: string | null;
   announceChannelId: string | null;
+  autoRenew: boolean;
+  remindBeforeEnd: boolean;
 }
 
 export async function fetchSeasonsData(guildId = authStore.selectedGuildId): Promise<SeasonsData | null> {
@@ -92,4 +103,9 @@ export async function startSeason(seasonId: string, guildId = authStore.selected
 
 export async function endSeason(seasonId: string, guildId = authStore.selectedGuildId): Promise<boolean> {
   return dashboardMutation(`/seasons/${seasonId}/end`, { method: 'POST', successMessage: m.api_ok_end_season(), guildId, errorContext: 'API Error (End Season):' });
+}
+
+/** Redonne ce qui n'a pas été remis à la clôture (rôle refusé, membre parti, Économie éteinte). */
+export async function retrySeasonRewards(seasonId: string, guildId = authStore.selectedGuildId): Promise<boolean> {
+  return dashboardMutation(`/seasons/${seasonId}/rewards/retry`, { method: 'POST', successMessage: m.api_ok_retry_season_rewards(), guildId, errorContext: 'API Error (Retry Season Rewards):' });
 }

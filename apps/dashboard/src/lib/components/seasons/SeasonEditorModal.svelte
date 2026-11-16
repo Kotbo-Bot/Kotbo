@@ -11,6 +11,7 @@
     type SeasonRewardError,
     type SeasonScheduleError,
   } from '@kotbo/shared';
+  import type { BotRoleAccess } from '@kotbo/contracts';
   import { createSeason, updateSeason, type Season, type SeasonPayload } from '../../api/seasons';
   import { m } from '../../i18n';
   import Modal from '../Modal.svelte';
@@ -19,7 +20,9 @@
   import Button from '../ui/Button.svelte';
   import Callout from '../ui/Callout.svelte';
   import Field from '../ui/Field.svelte';
+  import ToggleSwitch from '../ToggleSwitch.svelte';
   import SeasonAnnouncementPreview from './SeasonAnnouncementPreview.svelte';
+  import { seasonRoleRefusal } from './seasonRoleBlockers';
 
   let {
     open = $bindable(false),
@@ -28,6 +31,7 @@
     channels,
     economyActive,
     activeName = null,
+    botRoleAccess = null,
     labels = null,
     nextNumber,
     onDone,
@@ -35,11 +39,13 @@
     open?: boolean;
     /** Saison à modifier ; `null` pour en créer une. */
     season?: Season | null;
-    roles: Array<{ id: string; name: string }>;
+    roles: Array<{ id: string; name: string; position?: number }>;
     channels: Array<{ id: string; name: string }>;
     economyActive: boolean;
     /** Nom de la saison en cours, `null` sans saison en cours. */
     activeName?: string | null;
+    /** Ce que le bot peut attribuer : un rôle qu'il ne pourra pas donner est signalé. */
+    botRoleAccess?: BotRoleAccess | null;
     /** Gabarits des annonces ; absents d'un bot plus ancien, l'aperçu est alors masqué. */
     labels?: SeasonAnnouncementLabels | null;
     /** Numéro que prendra une nouvelle saison. */
@@ -47,7 +53,9 @@
     onDone?: () => void;
   } = $props();
 
-  type RewardRow = { rank: number; roleId: string | null; coins: number };
+  /** `key` : repère stable de la ligne, pour que supprimer une ligne ne décale pas les sélecteurs des suivantes. */
+  type RewardRow = { key: number; rank: number; roleId: string | null; coins: number };
+  let nextRowKey = 0;
 
   let name = $state('');
   let startDay = $state('');
@@ -55,6 +63,8 @@
   let topRoleId = $state<string | null>(null);
   let announceChannelId = $state<string | null>(null);
   let rewards = $state<RewardRow[]>([]);
+  let autoRenew = $state(false);
+  let remindBeforeEnd = $state(false);
   let saving = $state(false);
 
   /** Une saison en cours garde sa date de début : l'XP de chacun y a été relevée. */
@@ -89,14 +99,21 @@
     endDay = season ? toDay(season.endDate) : addDays(today, 30);
     topRoleId = season?.topRoleId ?? null;
     announceChannelId = season?.announceChannelId ?? null;
-    rewards = (season?.rewards ?? []).map((reward) => ({ ...reward }));
+    rewards = (season?.rewards ?? []).map((reward) => ({ ...reward, key: nextRowKey++ }));
+    autoRenew = season?.autoRenew ?? false;
+    remindBeforeEnd = season?.remindBeforeEnd ?? false;
   });
+
+  /** Le rappel part dans le salon d'annonce : sans salon, il n'a nulle part où aller. */
+  const reminderOn = $derived(remindBeforeEnd && !!announceChannelId);
+
+  const refusal = (roleId: string | null) => seasonRoleRefusal(roleId, roles, botRoleAccess) ?? undefined;
 
   /** Un début passé ouvre la saison, sauf si une autre tourne : elle attend alors sa clôture. */
   const queued = $derived(!startLocked && !!activeName && !!startDay && new Date(startIso()).getTime() <= Date.now());
 
   const scheduleCheck = $derived(validateSeasonSchedule({ name, startDate: startIso(), endDate: endIso() }));
-  const rewardsCheck = $derived(validateSeasonRewards(rewards.map((reward) => ({ ...reward, roleId: reward.roleId ?? '' }))));
+  const rewardsCheck = $derived(validateSeasonRewards(rewards.map(({ rank, roleId, coins }) => ({ rank, coins, roleId: roleId ?? '' }))));
 
   const SCHEDULE_ERRORS: Record<SeasonScheduleError, () => string> = {
     BAD_NAME: () => m.sea_error_name({ max: SEASON_NAME_MAX }),
@@ -123,11 +140,11 @@
 
   function addReward() {
     const next = rewards.reduce((max, reward) => Math.max(max, reward.rank), 0) + 1;
-    rewards = [...rewards, { rank: Math.min(next, SEASON_REWARD_RANK.max), roleId: null, coins: 0 }];
+    rewards = [...rewards, { key: nextRowKey++, rank: Math.min(next, SEASON_REWARD_RANK.max), roleId: null, coins: 0 }];
   }
 
-  function removeReward(index: number) {
-    rewards = rewards.filter((_, i) => i !== index);
+  function removeReward(key: number) {
+    rewards = rewards.filter((reward) => reward.key !== key);
   }
 
   async function submit() {
@@ -141,6 +158,8 @@
         rewards: rewardsCheck.rewards,
         topRoleId,
         announceChannelId,
+        autoRenew,
+        remindBeforeEnd: reminderOn,
       };
       const ok = season ? await updateSeason(season.id, payload) : await createSeason(payload);
       if (ok) {
@@ -152,6 +171,16 @@
     }
   }
 </script>
+
+{#snippet toggleRow(id: string, icon: string, label: string, description: string, checked: boolean, onToggle: (value: boolean) => void, disabled: boolean)}
+  <div class="flex items-start justify-between gap-4 rounded-xl border border-outline-variant/20 bg-surface-container-high/10 p-3">
+    <div class="min-w-0">
+      <p class="text-sm font-semibold flex items-center gap-2"><Papicon {icon} size={15} /> {label}</p>
+      <p class="text-xs text-on-surface-variant mt-1">{description}</p>
+    </div>
+    <ToggleSwitch {id} {checked} {onToggle} {disabled} ariaLabel={label} />
+  </div>
+{/snippet}
 
 <Modal
   bind:open
@@ -201,13 +230,18 @@
       {/snippet}
     </Field>
 
+    <div class="space-y-3">
+      {@render toggleRow('season-auto-renew', 'RefreshCw', m.sea_auto_renew_label(), m.sea_auto_renew_desc(), autoRenew, (value) => autoRenew = value, false)}
+      {@render toggleRow('season-reminder', 'Bell', m.sea_reminder_label(), announceChannelId ? m.sea_reminder_desc() : m.sea_reminder_needs_channel(), reminderOn, (value) => remindBeforeEnd = value, !announceChannelId)}
+    </div>
+
     <section class="space-y-3">
       <div>
         <h3 class="text-sm font-semibold flex items-center gap-2"><Papicon icon="Award" size={15} /> {m.sea_rewards_heading()}</h3>
         <p class="text-xs text-on-surface-variant mt-1">{m.sea_rewards_desc()}</p>
       </div>
 
-      <Field id="season-top-role" label={m.sea_top_role_label()} hint={m.sea_top_role_hint()}>
+      <Field id="season-top-role" label={m.sea_top_role_label()} hint={m.sea_top_role_hint()} error={refusal(topRoleId)}>
         {#snippet children(id)}
           <SearchableSelect
             {id}
@@ -220,14 +254,14 @@
 
       {#if rewards.length > 0}
         <ul class="space-y-3">
-          {#each rewards as reward, index (index)}
+          {#each rewards as reward, index (reward.key)}
             <li class="season-reward-row grid items-end gap-3">
               <Field id="season-reward-rank-{index}" label={m.sea_reward_rank_label()}>
                 {#snippet children(id)}
                   <input {id} type="number" class="input" min={SEASON_REWARD_RANK.min} max={SEASON_REWARD_RANK.max} bind:value={reward.rank} />
                 {/snippet}
               </Field>
-              <Field id="season-reward-role-{index}" label={m.sea_reward_role_label()}>
+              <Field id="season-reward-role-{index}" label={m.sea_reward_role_label()} error={refusal(reward.roleId)}>
                 {#snippet children(id)}
                   <SearchableSelect
                     {id}
@@ -242,7 +276,7 @@
                   <input {id} type="number" class="input" min={SEASON_REWARD_COINS.min} max={SEASON_REWARD_COINS.max} bind:value={reward.coins} />
                 {/snippet}
               </Field>
-              <Button variant="ghost" icon="Trash" aria-label={m.sea_reward_remove({ rank: reward.rank })} onclick={() => removeReward(index)} />
+              <Button variant="ghost" icon="Trash" aria-label={m.sea_reward_remove({ rank: reward.rank })} onclick={() => removeReward(reward.key)} />
             </li>
           {/each}
         </ul>
@@ -272,6 +306,7 @@
         season={{ number: season?.number ?? nextNumber, name: name.trim(), endDate: endIso() }}
         rewards={'rewards' in rewardsCheck ? rewardsCheck.rewards : []}
         {topRoleId}
+        reminder={reminderOn}
         roleName={(roleId) => roles.find((role) => role.id === roleId)?.name ?? roleId}
       />
     {/if}

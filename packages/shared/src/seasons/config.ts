@@ -123,6 +123,77 @@ export function planSeasonRewards(
   return plan;
 }
 
+/** Sort d'un rôle de récompense à la clôture. `blocked` : Discord le refusera (hiérarchie, intégration, permission). */
+export type SeasonRoleOutcome = 'given' | 'blocked' | 'member_left' | 'failed';
+/** Sort des pièces d'une récompense. */
+export type SeasonCoinsOutcome = 'given' | 'economy_off' | 'failed';
+
+/** Ce qu'un membre a réellement reçu ; un statut `null` : rien de tel n'était prévu. */
+export interface SeasonRewardOutcome {
+  userId: string;
+  rank: number;
+  roleId: string | null;
+  coins: number;
+  roleStatus: SeasonRoleOutcome | null;
+  coinsStatus: SeasonCoinsOutcome | null;
+}
+
+const ROLE_OUTCOMES: ReadonlySet<unknown> = new Set<SeasonRoleOutcome>(['given', 'blocked', 'member_left', 'failed']);
+const COINS_OUTCOMES: ReadonlySet<unknown> = new Set<SeasonCoinsOutcome>(['given', 'economy_off', 'failed']);
+
+/** Relit la trace enregistrée à la clôture ; une entrée illisible est écartée plutôt que devinée. */
+export function readSeasonRewardOutcomes(value: unknown): SeasonRewardOutcome[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is SeasonRewardOutcome => {
+    const entry = item as Record<string, unknown> | null;
+    return !!entry
+      && typeof entry.userId === 'string'
+      && typeof entry.rank === 'number'
+      && (entry.roleId === null || typeof entry.roleId === 'string')
+      && typeof entry.coins === 'number'
+      && (entry.roleStatus === null || ROLE_OUTCOMES.has(entry.roleStatus))
+      && (entry.coinsStatus === null || COINS_OUTCOMES.has(entry.coinsStatus));
+  });
+}
+
+/** Tout ce qui était prévu pour ce membre lui a été donné. */
+export function isRewardOutcomeComplete(outcome: SeasonRewardOutcome): boolean {
+  return (outcome.roleStatus ?? 'given') === 'given' && (outcome.coinsStatus ?? 'given') === 'given';
+}
+
+/**
+ * Dates de la saison qui prend la suite : même durée que celle prévue pour la
+ * saison close (pas celle écourtée par une clôture anticipée), à partir de maintenant.
+ */
+export function renewedSeasonSchedule(planned: { startDate: Date; endDate: Date }, now: Date = new Date()): { startDate: Date; endDate: Date } {
+  const days = Math.round((planned.endDate.getTime() - planned.startDate.getTime()) / DAY_MS);
+  const bounded = Math.min(SEASON_DURATION_DAYS.max, Math.max(SEASON_DURATION_DAYS.min, days));
+  return { startDate: now, endDate: new Date(now.getTime() + bounded * DAY_MS) };
+}
+
+/** Le rappel part dans les dernières heures d'une saison. */
+export const SEASON_REMINDER_HOURS = 24;
+
+/**
+ * Le rappel est dû dans les dernières 24 h. Une saison de deux jours ou moins
+ * n'en a pas : il tomberait sur son ouverture.
+ */
+export function seasonReminderDue(startDate: Date, endDate: Date, now: Date = new Date()): boolean {
+  const windowMs = SEASON_REMINDER_HOURS * 60 * 60 * 1000;
+  if (endDate.getTime() - startDate.getTime() <= 2 * DAY_MS) return false;
+  return now < endDate && endDate.getTime() - now.getTime() <= windowMs;
+}
+
+/** Palmarès d'un membre à partir de ses rangs de saison. */
+export function summarizeSeasonHistory(entries: ReadonlyArray<{ rank: number }>): { seasons: number; wins: number; podiums: number; bestRank: number | null } {
+  return {
+    seasons: entries.length,
+    wins: entries.filter((entry) => entry.rank === 1).length,
+    podiums: entries.filter((entry) => entry.rank <= 3).length,
+    bestRank: entries.length > 0 ? Math.min(...entries.map((entry) => entry.rank)) : null,
+  };
+}
+
 /** Avancement en pourcentage entier et jours restants, un jour entamé compté. */
 export function seasonProgress(startDate: Date, endDate: Date, now: Date = new Date()): { percent: number; daysLeft: number } {
   const total = endDate.getTime() - startDate.getTime();
