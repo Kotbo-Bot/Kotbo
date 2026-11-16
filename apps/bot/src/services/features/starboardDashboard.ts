@@ -39,12 +39,14 @@ export interface StarboardStats {
 
 export async function getStarboardOverview(guildId: string, now: Date = new Date()) {
   const since = new Date(now.getTime() - STARBOARD_STATS_DAYS * DAY_MS);
-  const recent = { guildId, createdAt: { gte: since } };
+  // Un message retiré par le staff n'a pas sa place dans les chiffres ni le
+  // palmarès ; la galerie le garde, avec son badge.
+  const recent = { guildId, createdAt: { gte: since }, blockedAt: null };
 
   const [postedRecent, aggregate, last, onBoard, byChannel, topEntries] = await Promise.all([
     prismaRead.starboardEntry.count({ where: recent }),
     prismaRead.starboardEntry.aggregate({ where: recent, _avg: { peakScore: true }, _max: { peakScore: true } }),
-    prismaRead.starboardEntry.findFirst({ where: { guildId }, orderBy: { createdAt: 'desc' }, select: { createdAt: true } }),
+    prismaRead.starboardEntry.findFirst({ where: { guildId, blockedAt: null }, orderBy: { createdAt: 'desc' }, select: { createdAt: true } }),
     prismaRead.starboardEntry.count({ where: { guildId, starMessageId: { not: null } } }),
     prismaRead.starboardEntry.groupBy({
       by: ['channelId'],

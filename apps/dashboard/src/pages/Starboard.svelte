@@ -10,10 +10,15 @@
   import { onDestroy, onMount, untrack } from 'svelte';
   import { MediaQuery } from 'svelte/reactivity';
   import {
+    STARBOARD_BLOCKED_USERS_MAX,
     STARBOARD_BUSY_PER_DAY,
+    STARBOARD_CHANNEL_THRESHOLDS_MAX,
+    STARBOARD_MAX_AGE_DAYS,
     STARBOARD_STATS_DAYS,
     STARBOARD_THRESHOLD,
     defaultStarboardSettings,
+    isDiscordMediaUrl,
+    normalizeStarboardChannelThresholds,
     starboardAdvice,
     type StarboardAdvice,
     type StarboardPeriod,
@@ -27,6 +32,7 @@
   import { dashboardStore } from '../lib/stores/dashboard.svelte';
   import { subscribeRealtime } from '../lib/stores/realtime.svelte';
   import { memberCaseModal } from '../lib/stores/memberCaseModal.svelte';
+  import { confirmDialog } from '../lib/stores/confirmDialog.svelte';
   import ModulePage from '../lib/components/ModulePage.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
   import EmptyState from '../lib/components/EmptyState.svelte';
@@ -37,6 +43,7 @@
   import MultiSelect from '../lib/components/MultiSelect.svelte';
   import ToggleSwitch from '../lib/components/ToggleSwitch.svelte';
   import EmojiListInput from '../lib/components/EmojiListInput.svelte';
+  import MemberSearchSelect from '../lib/components/MemberSearchSelect.svelte';
   import FormColorPicker from '../lib/components/FormColorPicker.svelte';
   import StarboardMessagePreview from '../lib/components/starboard/StarboardMessagePreview.svelte';
   import Callout from '../lib/components/ui/Callout.svelte';
@@ -45,8 +52,10 @@
   import Tabs, { type TabItem } from '../lib/components/ui/Tabs.svelte';
   import FilterPills from '../lib/components/ui/FilterPills.svelte';
   import {
+    blockStarboardEntry,
     fetchStarboardEntries,
     fetchStarboardOverview,
+    unblockStarboardEntry,
     updateStarboardConfig,
     type StarboardEntryItem,
     type StarboardOverview,
@@ -61,9 +70,16 @@
   let savedConfig = $state<StarboardSettings>(defaultStarboardSettings());
   let config = $state<StarboardSettings>(defaultStarboardSettings());
 
-  /** Forme comparable : « aucun salon » s'écrit `''` dans le sélecteur et `null` en base. */
+  /**
+   * Forme comparable : « aucun salon » s'écrit `''` dans le sélecteur et `null`
+   * en base, et l'ordre des seuils par salon ne compte pas.
+   */
   function comparable(source: StarboardSettings): string {
-    return JSON.stringify({ ...source, channelId: source.channelId || null });
+    return JSON.stringify({
+      ...source,
+      channelId: source.channelId || null,
+      channelThresholds: Object.fromEntries(Object.entries(source.channelThresholds).sort(([a], [b]) => a.localeCompare(b))),
+    });
   }
 
   let entries = $state<StarboardEntryItem[]>([]);
@@ -87,6 +103,13 @@
       || !!dashboardStore.state.access?.canManageSettings
   );
 
+  /** Même règle que la route de retrait : le droit « Modérer », ou la modération de contenu qu'il ne retire pas. */
+  const canModerate = $derived(
+    dashboardStore.state.featureAccess?.starboard?.canModerate === true
+      || !!dashboardStore.state.access?.canManageSettings
+      || (!!dashboardStore.state.access?.canModerateContent && dashboardStore.state.featureAccess?.starboard?.canModerate !== false)
+  );
+
   const channels = $derived(
     (dashboardStore.state.discordChannels || []).map((channel: any) => ({
       id: channel.id as string,
@@ -107,7 +130,62 @@
     Number.isInteger(config.threshold) && config.threshold >= STARBOARD_THRESHOLD.min && config.threshold <= STARBOARD_THRESHOLD.max
   );
   const upvotesValid = $derived(config.upvoteEmojis.length > 0);
-  const settingsValid = $derived(thresholdValid && upvotesValid);
+  const maxAgeValid = $derived(
+    Number.isInteger(config.maxMessageAgeDays)
+      && config.maxMessageAgeDays >= STARBOARD_MAX_AGE_DAYS.min && config.maxMessageAgeDays <= STARBOARD_MAX_AGE_DAYS.max
+  );
+  const channelThresholdsValid = $derived(!('error' in normalizeStarboardChannelThresholds(config.channelThresholds)));
+  const blockedValid = $derived(config.blockedUserIds.length <= STARBOARD_BLOCKED_USERS_MAX);
+  const settingsValid = $derived(thresholdValid && upvotesValid && maxAgeValid && channelThresholdsValid && blockedValid);
+
+  /** Garde-fous en place, pour le panneau d'état. */
+  function activeGuards(source: StarboardSettings): number {
+    return [
+      source.maxMessageAgeDays > 0,
+      Object.keys(source.channelThresholds).length > 0,
+      source.blockedUserIds.length > 0,
+    ].filter(Boolean).length;
+  }
+
+  // ── Seuils par salon ──
+  let newThresholdChannel = $state('');
+  const thresholdRows = $derived(Object.entries(config.channelThresholds));
+  const thresholdChannelOptions = $derived(channels.filter((channel) => !(channel.id in config.channelThresholds)));
+
+  function addChannelThreshold() {
+    if (!newThresholdChannel) return;
+    config.channelThresholds = { ...config.channelThresholds, [newThresholdChannel]: config.threshold };
+    newThresholdChannel = '';
+  }
+
+  function setChannelThreshold(channelId: string, value: number) {
+    config.channelThresholds = { ...config.channelThresholds, [channelId]: value };
+  }
+
+  function removeChannelThreshold(channelId: string) {
+    const { [channelId]: _removed, ...rest } = config.channelThresholds;
+    config.channelThresholds = rest;
+  }
+
+  // ── Membres exclus ──
+  let newBlockedMember = $state('');
+
+  $effect(() => {
+    const picked = newBlockedMember;
+    if (!picked) return;
+    untrack(() => {
+      if (!config.blockedUserIds.includes(picked)) config.blockedUserIds = [...config.blockedUserIds, picked];
+      newBlockedMember = '';
+    });
+  });
+
+  function blockedMemberName(userId: string): string | null {
+    return data?.blockedMembers.find((member) => member.userId === userId)?.name ?? null;
+  }
+
+  function blockedMemberAvatar(userId: string): string | null {
+    return data?.blockedMembers.find((member) => member.userId === userId)?.avatarUrl ?? null;
+  }
 
   const advice = $derived<StarboardAdvice[]>(data
     ? starboardAdvice({
@@ -237,6 +315,53 @@
     brokenImages = new Set([...brokenImages, entryId]);
   }
 
+  /** La réponse de la route met la carte à jour tout de suite ; le temps réel recale les compteurs. */
+  function applyEntry(updated: StarboardEntryItem) {
+    entries = entries.map((entry) => entry.id === updated.id ? updated : entry);
+    if (data) data = { ...data, topEntries: data.topEntries.map((entry) => entry.id === updated.id ? updated : entry) };
+    void loadOverview(true);
+  }
+
+  async function blockEntry(entry: StarboardEntryItem) {
+    const confirmed = await confirmDialog.ask({
+      title: m.starboard_block_title(),
+      description: m.starboard_block_desc({ name: entry.authorName ?? m.starboard_member_left() }),
+      confirmLabel: m.starboard_block_confirm(),
+      variant: 'danger',
+      impacts: [m.starboard_block_impact_discord(), m.starboard_block_impact_votes()],
+    });
+    if (!confirmed) return;
+    const result = await blockStarboardEntry(entry.id);
+    if (result?.entry) applyEntry(result.entry);
+  }
+
+  async function unblockEntry(entry: StarboardEntryItem) {
+    const result = await unblockStarboardEntry(entry.id);
+    if (result?.entry) applyEntry(result.entry);
+  }
+
+  /**
+   * Geste immédiat depuis une carte : seule la liste des exclus part, sans
+   * emporter une saisie en cours dans les réglages.
+   */
+  async function excludeMember(entry: StarboardEntryItem) {
+    const name = entry.authorName ?? m.starboard_member_left();
+    const confirmed = await confirmDialog.ask({
+      title: m.starboard_exclude_title(),
+      description: m.starboard_exclude_desc({ name }),
+      confirmLabel: m.starboard_exclude_confirm(),
+      variant: 'danger',
+      impacts: [m.starboard_exclude_impact_discord(), m.starboard_exclude_impact_undo()],
+    });
+    if (!confirmed) return;
+    const blockedUserIds = [...new Set([...savedConfig.blockedUserIds, entry.authorId])];
+    const result = await updateStarboardConfig({ blockedUserIds });
+    if (!result) return;
+    savedConfig = { ...savedConfig, blockedUserIds: [...result.config.blockedUserIds] };
+    config.blockedUserIds = [...new Set([...config.blockedUserIds, ...result.config.blockedUserIds])];
+    void loadOverview(true);
+  }
+
   /** Appelé par la barre « Modifications non enregistrées » du layout. */
   async function saveConfig(): Promise<boolean> {
     if (!settingsValid) {
@@ -312,6 +437,10 @@
         </dd>
       </div>
       <div class="flex items-center justify-between gap-3">
+        <dt class="text-on-surface-variant">{m.starboard_status_guards()}</dt>
+        <dd class="font-semibold">{activeGuards(data.config) > 0 ? m.starboard_guards_summary({ count: activeGuards(data.config) }) : m.starboard_status_none()}</dd>
+      </div>
+      <div class="flex items-center justify-between gap-3">
         <dt class="text-on-surface-variant">{m.starboard_status_on_board()}</dt>
         <dd class="font-semibold">{data.stats.onBoard}</dd>
       </div>
@@ -348,7 +477,11 @@
         class="min-w-0"
         onClick={openMemberOnClick(entry.authorName)}
       />
-      {#if !entry.onBoard}
+      {#if entry.blocked}
+        <span class="text-2xs font-semibold px-2 py-0.5 rounded-full bg-error/10 text-error border border-error/20" title={m.starboard_entry_blocked_title()}>
+          {m.starboard_entry_blocked()}
+        </span>
+      {:else if !entry.onBoard}
         <span class="text-2xs font-semibold px-2 py-0.5 rounded-full bg-surface-container-high/60 text-on-surface-variant" title={m.starboard_entry_removed_title()}>
           {m.starboard_entry_removed()}
         </span>
@@ -356,7 +489,8 @@
     </div>
 
     <div class="flex gap-3">
-      {#if entry.imageUrl && !brokenImages.has(entry.id)}
+      <!-- Une image hors de Discord n'est jamais chargée : elle exposerait l'adresse du lecteur au site d'origine. -->
+      {#if entry.imageUrl && isDiscordMediaUrl(entry.imageUrl) && !brokenImages.has(entry.id)}
         <img
           src={entry.imageUrl}
           alt=""
@@ -393,13 +527,25 @@
           </a>
         {/if}
       </div>
-      <Button
-        variant="ghost"
-        size="sm"
-        icon="User"
-        aria-label={m.starboard_member_history({ name })}
-        onclick={() => showEntries({ member: { id: entry.authorId, name } })}
-      />
+      <div class="flex items-center gap-1">
+        <Button
+          variant="ghost"
+          size="sm"
+          icon="User"
+          aria-label={m.starboard_member_history({ name })}
+          onclick={() => showEntries({ member: { id: entry.authorId, name } })}
+        />
+        {#if canConfigure && !savedConfig.blockedUserIds.includes(entry.authorId)}
+          <Button variant="ghost" size="sm" icon="UserX" aria-label={m.starboard_exclude_title()} onclick={() => excludeMember(entry)} />
+        {/if}
+        {#if canModerate}
+          {#if entry.blocked}
+            <Button size="sm" variant="secondary" icon="RotateCcw" onclick={() => unblockEntry(entry)}>{m.starboard_unblock_action()}</Button>
+          {:else}
+            <Button size="sm" variant="secondary" icon="EyeOff" onclick={() => blockEntry(entry)}>{m.starboard_block_action()}</Button>
+          {/if}
+        {/if}
+      </div>
     </div>
   </li>
 {/snippet}
@@ -769,6 +915,114 @@
                 disabled={!canConfigure}
                 ariaLabel={m.starboard_allow_bots_title()}
               />
+            </div>
+          </section>
+
+          <section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl space-y-5">
+            <div class="border-b border-outline-variant/15 pb-3">
+              <h3 class="text-lg font-semibold flex items-center gap-2"><Papicon icon="ShieldCheck" size={18} /> {m.starboard_guards_heading()}</h3>
+              <p class="text-xs text-on-surface-variant mt-1">{m.starboard_guards_desc()}</p>
+            </div>
+
+            <Callout variant="info" title={m.starboard_nsfw_title()}>
+              <p>{m.starboard_nsfw_desc()}</p>
+            </Callout>
+
+            <Field
+              id="starboard-max-age"
+              label={m.starboard_max_age_label()}
+              hint={m.starboard_max_age_hint()}
+              error={maxAgeValid ? undefined : m.starboard_range_error({ min: STARBOARD_MAX_AGE_DAYS.min, max: STARBOARD_MAX_AGE_DAYS.max })}
+            >
+              {#snippet children(id, describedBy)}
+                <input
+                  {id}
+                  type="number"
+                  class="input max-w-32"
+                  min={STARBOARD_MAX_AGE_DAYS.min}
+                  max={STARBOARD_MAX_AGE_DAYS.max}
+                  bind:value={config.maxMessageAgeDays}
+                  aria-describedby={describedBy}
+                  disabled={!canConfigure}
+                />
+              {/snippet}
+            </Field>
+
+            <div class="space-y-3 border-t border-outline-variant/15 pt-5">
+              <div>
+                <p class="text-sm font-semibold">{m.starboard_channel_thresholds_label()}</p>
+                <p class="text-xs text-on-surface-variant">{m.starboard_channel_thresholds_hint({ max: STARBOARD_CHANNEL_THRESHOLDS_MAX })}</p>
+              </div>
+              {#if thresholdRows.length > 0}
+                <ul class="space-y-2">
+                  {#each thresholdRows as [channelId, value] (channelId)}
+                    {@const valid = Number.isInteger(value) && value >= STARBOARD_THRESHOLD.min && value <= STARBOARD_THRESHOLD.max}
+                    <li class="flex flex-wrap items-center gap-3">
+                      <span class="text-sm font-medium min-w-0 flex-1 truncate">{channelName(channelId)}</span>
+                      <input
+                        type="number"
+                        class="input max-w-28 {valid ? '' : 'border-error'}"
+                        min={STARBOARD_THRESHOLD.min}
+                        max={STARBOARD_THRESHOLD.max}
+                        value={value}
+                        aria-label={m.starboard_channel_threshold_input({ name: channelName(channelId) })}
+                        aria-invalid={!valid}
+                        oninput={(event) => setChannelThreshold(channelId, event.currentTarget.valueAsNumber)}
+                        disabled={!canConfigure}
+                      />
+                      {#if canConfigure}
+                        <Button variant="ghost" size="sm" icon="X" aria-label={m.starboard_channel_threshold_remove({ name: channelName(channelId) })} onclick={() => removeChannelThreshold(channelId)} />
+                      {/if}
+                    </li>
+                  {/each}
+                </ul>
+              {/if}
+              {#if !channelThresholdsValid}
+                <p class="text-xs text-error">{m.starboard_channel_thresholds_invalid({ min: STARBOARD_THRESHOLD.min, max: STARBOARD_THRESHOLD.max, count: STARBOARD_CHANNEL_THRESHOLDS_MAX })}</p>
+              {/if}
+              {#if canConfigure && thresholdRows.length < STARBOARD_CHANNEL_THRESHOLDS_MAX}
+                <div class="flex flex-wrap items-center gap-2">
+                  <label class="sr-only" for="starboard-threshold-channel">{m.starboard_channel_threshold_add_label()}</label>
+                  <select id="starboard-threshold-channel" class="input w-auto" bind:value={newThresholdChannel}>
+                    <option value="">{m.starboard_channel_threshold_pick()}</option>
+                    {#each thresholdChannelOptions as channel (channel.id)}
+                      <option value={channel.id}>{channel.name}</option>
+                    {/each}
+                  </select>
+                  <Button size="sm" icon="Plus" disabled={!newThresholdChannel} onclick={addChannelThreshold}>{m.starboard_channel_threshold_add()}</Button>
+                </div>
+              {/if}
+            </div>
+
+            <div class="space-y-3 border-t border-outline-variant/15 pt-5">
+              <div>
+                <p class="text-sm font-semibold">{m.starboard_blocked_label()}</p>
+                <p class="text-xs text-on-surface-variant">{m.starboard_blocked_hint()}</p>
+              </div>
+              {#if config.blockedUserIds.length > 0}
+                <ul class="flex flex-wrap gap-2">
+                  {#each config.blockedUserIds as userId (userId)}
+                    <li class="inline-flex items-center gap-1 rounded-full bg-surface-container-high/60 pl-2 pr-1 py-0.5">
+                      <UserDisplay {userId} name={blockedMemberName(userId)} avatarUrl={blockedMemberAvatar(userId)} size="sm" />
+                      {#if canConfigure}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          icon="X"
+                          aria-label={m.starboard_blocked_remove({ name: blockedMemberName(userId) ?? userId })}
+                          onclick={() => config.blockedUserIds = config.blockedUserIds.filter((id) => id !== userId)}
+                        />
+                      {/if}
+                    </li>
+                  {/each}
+                </ul>
+              {/if}
+              {#if !blockedValid}
+                <p class="text-xs text-error">{m.starboard_blocked_too_many({ max: STARBOARD_BLOCKED_USERS_MAX })}</p>
+              {/if}
+              {#if canConfigure}
+                <MemberSearchSelect id="starboard-blocked-member" bind:value={newBlockedMember} placeholder={m.starboard_blocked_placeholder()} />
+              {/if}
             </div>
           </section>
 

@@ -51,6 +51,16 @@ model StarboardConfig {
   /// réactions retirées). Sinon le highlight reste publié une fois atteint.
   removeBelowThreshold Boolean @default(true)
 
+  // ── Garde-fous ─────────────────────────────────────────────────────────────
+  /// Âge maximum d'un message pour entrer à la une, en jours. 0 = aucune limite.
+  /// Un message déjà à la une continue de suivre ses votes.
+  maxMessageAgeDays Int @default(0)
+  /// Seuils propres à certains salons : { "<id du salon>": score }. Un fil prend
+  /// celui de son salon parent.
+  channelThresholds Json @default("{}")
+  /// Membres dont les messages ne passent jamais à la une.
+  blockedUserIds String[] @default([])
+
   guild   Guild            @relation(fields: [guildId], references: [id], onDelete: Cascade)
   entries StarboardEntry[]
 
@@ -94,6 +104,11 @@ model StarboardEntry {
   imageUrl String?
 
   postedAt DateTime?
+
+  /// Retiré de la une par le staff : le message n'y revient plus, quels que
+  /// soient ses votes, tant que la décision n'est pas annulée.
+  blockedAt   DateTime?
+  blockedById String?
 
   config StarboardConfig @relation(fields: [guildId], references: [guildId], onDelete: Cascade)
 

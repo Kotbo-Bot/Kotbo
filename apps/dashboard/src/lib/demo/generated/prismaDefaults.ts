@@ -4945,6 +4945,9 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "ignoreAuthorVotes": true,
     "embedColor": "#F5C518",
     "removeBelowThreshold": true,
+    "maxMessageAgeDays": 0,
+    "channelThresholds": {},
+    "blockedUserIds": [],
     "createdAt": "__NOW__",
     "updatedAt": "__NOW__"
   },
@@ -4963,6 +4966,8 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "excerpt": null,
     "imageUrl": null,
     "postedAt": null,
+    "blockedAt": null,
+    "blockedById": null,
     "createdAt": "__NOW__",
     "updatedAt": "__NOW__"
   },

@@ -1,8 +1,8 @@
 /**
  * Routes dashboard de Starlight (messages à la une).
  *
- * Préfixe `zzz-` : ce fichier remplace les services de Starlight et
- * `memberIdentityService` pour tout le process (`mock.module` est global). Il
+ * Préfixe `zzz-` : ce fichier remplace les services de Starlight,
+ * `memberIdentityService` et `featureGate` pour tout le process (`mock.module` est global). Il
  * doit charger après les tests de ces modules.
  */
 import { describe, expect, test, mock, beforeEach } from 'bun:test';
@@ -49,6 +49,8 @@ const ENTRY = {
   excerpt: 'Un très bon message' as string | null,
   imageUrl: null as string | null,
   postedAt: new Date('2026-11-10T10:05:00Z') as Date | null,
+  blockedAt: null as Date | null,
+  blockedById: null as string | null,
   createdAt: new Date('2026-11-10T10:00:00Z'),
   updatedAt: new Date('2026-11-10T10:05:00Z'),
 };
@@ -79,6 +81,19 @@ mockModule('../../services/features/starboardHealth', {
 
 mockModule('../../services/features/starboardMessageLabels', {
   starboardMessageLabels: mock((locale: string) => ({ locale, jumpButton: 'Aller au message' })),
+});
+
+let serviceEntry: typeof ENTRY | null = ENTRY;
+const service = {
+  blockStarboardEntry: mock(async (..._args: unknown[]) => serviceEntry),
+  unblockStarboardEntry: mock(async (..._args: unknown[]) => serviceEntry),
+  removeHighlightsOfAuthors: mock(async (..._args: unknown[]) => 0),
+};
+mockModule('../../services/features/starboardService', service);
+
+let featureRights: Record<string, unknown> = {};
+mockModule('../../api/routes/dashboard/featureGate', {
+  getCachedFeatureAccess: mock(async () => featureRights),
 });
 
 mockModule('../../services/moderation/memberIdentityService', {
@@ -124,7 +139,9 @@ async function call(method: string, suffix: string, body?: unknown, access: Dash
 beforeEach(() => {
   currentSettings = structuredClone(SETTINGS);
   health = { channelFound: true, missingPermissions: [] };
-  for (const fn of [...Object.values(dashboard), ...Object.values(settings)]) {
+  serviceEntry = ENTRY;
+  featureRights = {};
+  for (const fn of [...Object.values(dashboard), ...Object.values(settings), ...Object.values(service)]) {
     (fn as { mockClear: () => void }).mockClear();
   }
   mockDb.dashboardAuditLog.create.mockClear();
@@ -150,6 +167,13 @@ describe('GET /starboard', () => {
     expect(entry.messageUrl).toBe(`https://discord.com/channels/${GUILD}/${CHANNEL}/${ENTRY.messageId}`);
     expect(entry.starUrl).toBe(`https://discord.com/channels/${GUILD}/${STAR_CHANNEL}/${ENTRY.starMessageId}`);
     expect(entry.guildId).toBeUndefined();
+    expect(entry.blocked).toBe(false);
+  });
+
+  test('membres exclus présentés avec leur identité', async () => {
+    currentSettings = { ...currentSettings, blockedUserIds: [ALICE] };
+    const { json } = await call('GET', '');
+    expect(json.blockedMembers).toEqual([{ userId: ALICE, name: 'Alice', avatarUrl: 'a.png' }]);
   });
 
   test('message retiré de la une : pas de lien vers le salon des messages à la une', async () => {
@@ -241,5 +265,73 @@ describe('parseStarboardConfigPatch', () => {
 
   test('vider le salon de publication est permis', () => {
     expect(parseStarboardConfigPatch({ channelId: null })).toEqual({ patch: { channelId: null } });
+  });
+});
+
+describe('POST /starboard/entries/:id/block et /unblock', () => {
+  test.each(['block', 'unblock'])('%s : rend le message à jour, journalisé', async (action) => {
+    const { status, json } = await call('POST', `/entries/${ENTRY.id}/${action}`);
+    expect(status).toBe(200);
+    expect(json.entry.id).toBe(ENTRY.id);
+    expect(mockDb.dashboardAuditLog.create).toHaveBeenCalled();
+  });
+
+  test('retirer : passe qui agit au service', async () => {
+    await call('POST', `/entries/${ENTRY.id}/block`);
+    expect(service.blockStarboardEntry.mock.calls[0]?.slice(1)).toEqual([GUILD, ENTRY.id, ALICE]);
+  });
+
+  test('message d’un autre serveur : 404', async () => {
+    serviceEntry = null;
+    const { status } = await call('POST', `/entries/${ENTRY.id}/block`);
+    expect(status).toBe(404);
+  });
+
+  test('identifiant mal formé : 400 sans appel', async () => {
+    const { status } = await call('POST', '/entries/abc;drop/block');
+    expect(status).toBe(400);
+    expect(service.blockStarboardEntry).not.toHaveBeenCalled();
+  });
+
+  test('modérateur sans droit retiré : permis ; droit « Modérer » retiré : refusé', async () => {
+    expect((await call('POST', `/entries/${ENTRY.id}/block`, undefined, DASHBOARD_ACCESS_MODERATOR)).status).toBe(200);
+    featureRights = { starboard: { canModerate: false } };
+    expect((await call('POST', `/entries/${ENTRY.id}/block`, undefined, DASHBOARD_ACCESS_MODERATOR)).status).toBe(403);
+  });
+});
+
+describe('PATCH /starboard : membres exclus', () => {
+  test('seuls les membres nouvellement exclus perdent leurs messages à la une', async () => {
+    currentSettings = { ...currentSettings, blockedUserIds: ['222222222222222222'] };
+    await call('PATCH', '', { blockedUserIds: ['222222222222222222', ALICE] });
+    expect(service.removeHighlightsOfAuthors.mock.calls[0]?.[2]).toEqual([ALICE]);
+    // L'exclusion est une décision de modération : le journal nomme qui est exclu.
+    expect(JSON.stringify(mockDb.dashboardAuditLog.create.mock.calls[0]?.[0])).toContain(ALICE);
+  });
+
+  test('aucun nouvel exclu : rien à retirer', async () => {
+    await call('PATCH', '', { threshold: 6 });
+    expect(service.removeHighlightsOfAuthors).not.toHaveBeenCalled();
+  });
+});
+
+describe('parseStarboardConfigPatch : garde-fous', () => {
+  test('âge maximum, seuils par salon et membres exclus valides', () => {
+    expect(parseStarboardConfigPatch({
+      maxMessageAgeDays: 14,
+      channelThresholds: { [CHANNEL]: 9 },
+      blockedUserIds: [ALICE, ALICE],
+    })).toEqual({ patch: { maxMessageAgeDays: 14, channelThresholds: { [CHANNEL]: 9 }, blockedUserIds: [ALICE] } });
+  });
+
+  test.each([
+    [{ maxMessageAgeDays: -1 }, 'âge négatif'],
+    [{ maxMessageAgeDays: 366 }, 'âge hors bornes'],
+    [{ channelThresholds: { abc: 3 } }, 'salon invalide'],
+    [{ channelThresholds: { [CHANNEL]: 0 } }, 'seuil de salon hors bornes'],
+    [{ blockedUserIds: ['abc'] }, 'membre invalide'],
+    [{ blockedUserIds: 'abc' }, 'pas une liste'],
+  ])('refuse %j (%s)', (body) => {
+    expect('error' in parseStarboardConfigPatch(body)).toBe(true);
   });
 });

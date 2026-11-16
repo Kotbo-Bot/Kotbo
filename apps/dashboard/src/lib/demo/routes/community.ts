@@ -441,7 +441,14 @@ export function registerCommunityRoutes(): void {
   });
 
   // ── Starlight (messages à la une) ─────────────────────────────────────────
-  const starboardConfig = { ...defaultStarboardSettings(), channelId: channelByName('annonces').id, threshold: 6, upvoteEmojis: ['⭐', '🔥'] };
+  const starboardConfig = {
+    ...defaultStarboardSettings(),
+    channelId: channelByName('annonces').id,
+    threshold: 6,
+    upvoteEmojis: ['⭐', '🔥'],
+    maxMessageAgeDays: 14,
+    channelThresholds: { [channelByName('général').id]: 10 },
+  };
   const starSeed: Array<[string, string, number, number, number, number, boolean]> = [
     ['général', 'Petit rappel : la soirée jeux commence à 21 h, venez nombreux !', 14, 1, 16, 2 * 60, true],
     ['recherche-de-groupe', 'Qui pour un raid ce soir ? On cherche encore un soigneur.', 9, 0, 11, 26 * 60, true],
@@ -466,6 +473,7 @@ export function registerCommunityRoutes(): void {
       score: upvotes - downvotes,
       peakScore,
       onBoard,
+      blocked: false,
       createdAt,
       postedAt: onBoard ? createdAt : null,
       messageUrl: 'https://discord.com',
@@ -491,6 +499,10 @@ export function registerCommunityRoutes(): void {
       channelStats: [...byChannel].map(([channelId, count]) => ({ channelId, count })).sort((a, b) => b.count - a.count),
       health: { channelFound: true, missingPermissions: [] },
       messageLabels: { locale: 'fr', jumpButton: 'Aller au message', footerVotes: '{up} pour · {down} contre', attachmentsField: 'Pièces jointes' },
+      blockedMembers: starboardConfig.blockedUserIds.map((userId) => {
+        const person = members().find((p) => p.id === userId);
+        return { userId, name: person?.displayName ?? null, avatarUrl: null };
+      }),
     };
   });
 
@@ -507,6 +519,15 @@ export function registerCommunityRoutes(): void {
         : Date.parse(b.createdAt) - Date.parse(a.createdAt));
     return { entries, nextCursor: null };
   });
+
+  for (const action of ['block', 'unblock'] as const) {
+    route('POST', `/api/dashboard/guilds/:guildId/starboard/entries/:entryId/${action}`, ({ params }) => {
+      const entry = starEntries.find((e) => e.id === params.entryId);
+      if (!entry) return { error: 'Message introuvable' };
+      Object.assign(entry, { blocked: action === 'block', onBoard: action === 'unblock', starUrl: action === 'unblock' ? 'https://discord.com' : null });
+      return { entry };
+    });
+  }
 
   route('PATCH', '/api/dashboard/guilds/:guildId/starboard', ({ body }) => {
     for (const key of Object.keys(starboardConfig) as Array<keyof typeof starboardConfig>) {

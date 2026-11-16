@@ -4,11 +4,11 @@
  * signal temps réel à la page.
  */
 import type { StarboardConfig } from '@prisma/client';
-import { defaultStarboardSettings, type StarboardSettings } from '@kotbo/shared';
+import { defaultStarboardSettings, readStarboardChannelThresholds, type StarboardSettings } from '@kotbo/shared';
 import prisma from '../../utils/db.js';
 import { invalidateStarboardCache, notifyStarboardChange } from './starboardService.js';
 
-function toSettings(row: StarboardConfig | null): StarboardSettings {
+export function toStarboardSettings(row: StarboardConfig | null): StarboardSettings {
   if (!row) return defaultStarboardSettings();
   return {
     channelId: row.channelId,
@@ -24,12 +24,15 @@ function toSettings(row: StarboardConfig | null): StarboardSettings {
     ignoreAuthorVotes: row.ignoreAuthorVotes,
     embedColor: row.embedColor,
     removeBelowThreshold: row.removeBelowThreshold,
+    maxMessageAgeDays: row.maxMessageAgeDays,
+    channelThresholds: readStarboardChannelThresholds(row.channelThresholds),
+    blockedUserIds: row.blockedUserIds,
   };
 }
 
 /** Sans ligne en base, les valeurs par défaut du schéma : le formulaire s'affiche rempli. */
 export async function getStarboardSettings(guildId: string): Promise<StarboardSettings> {
-  return toSettings(await prisma.starboardConfig.findUnique({ where: { guildId } }));
+  return toStarboardSettings(await prisma.starboardConfig.findUnique({ where: { guildId } }));
 }
 
 /**
@@ -45,5 +48,5 @@ export async function saveStarboardSettings(guildId: string, patch: Partial<Star
   });
   await invalidateStarboardCache(guildId);
   notifyStarboardChange(guildId);
-  return toSettings(row);
+  return toStarboardSettings(row);
 }

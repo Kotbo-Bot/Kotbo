@@ -23,6 +23,8 @@ export interface StarboardEntryItem {
   peakScore: number;
   /** La republication est affichée dans le salon des messages à la une. */
   onBoard: boolean;
+  /** Retiré par le staff : n'y revient plus, quels que soient ses votes. Absent d'un bot plus ancien. */
+  blocked?: boolean;
   /** Passage à la une. */
   createdAt: string;
   postedAt: string | null;
@@ -55,6 +57,8 @@ export interface StarboardOverview {
   health: { channelFound: boolean | null; missingPermissions: string[] };
   /** Absent d'un bot plus ancien : l'aperçu du message est alors masqué. */
   messageLabels: StarboardMessageLabels | null;
+  /** Membres exclus, avec leur identité actuelle. */
+  blockedMembers: Array<{ userId: string; name: string | null; avatarUrl: string | null }>;
 }
 
 export interface StarboardEntryPage {
@@ -101,4 +105,24 @@ export async function updateStarboardConfig(
   });
   const config = toStarboardConfig(raw?.config);
   return config ? { config } : null;
+}
+
+/** Retire un message de la une ; il n'y revient plus tant que le retrait n'est pas annulé. */
+export async function blockStarboardEntry(entryId: string, guildId = authStore.selectedGuildId): Promise<{ entry: StarboardEntryItem } | null> {
+  return dashboardRequest(`/starboard/entries/${encodeURIComponent(entryId)}/block`, {
+    method: 'POST',
+    successMessage: m.starboard_block_success(),
+    guildId,
+    errorContext: 'API Error (Block Starboard Entry):',
+  });
+}
+
+/** Annule le retrait : le message revient à la une s'il est toujours au-dessus du seuil. */
+export async function unblockStarboardEntry(entryId: string, guildId = authStore.selectedGuildId): Promise<{ entry: StarboardEntryItem } | null> {
+  return dashboardRequest(`/starboard/entries/${encodeURIComponent(entryId)}/unblock`, {
+    method: 'POST',
+    successMessage: m.starboard_unblock_success(),
+    guildId,
+    errorContext: 'API Error (Unblock Starboard Entry):',
+  });
 }

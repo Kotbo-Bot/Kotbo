@@ -3,7 +3,13 @@
  *
  * - GET   /starboard          réglages, statistiques, meilleurs messages, état du salon
  * - GET   /starboard/entries  galerie paginée (period, sort, channelId, authorId, cursor)
- * - PATCH /starboard          réglages
+ * - PATCH /starboard          réglages ; un membre tout juste exclu perd ses messages à la une
+ * - POST  /starboard/entries/:id/block    retirer un message de la une, sans retour possible
+ * - POST  /starboard/entries/:id/unblock  annuler ce retrait
+ *
+ * Retirer ou rétablir demande le droit « Modérer » de la fonctionnalité, ou la
+ * modération de contenu quand le centre de gestion ne l'a pas retiré au rôle,
+ * comme pour les suggestions.
  *
  * `enabled` n'est pas modifiable ici. Le segment est fermé par la garde des
  * modules tant que Starlight est éteint : une route qu'on ne peut atteindre
@@ -14,13 +20,18 @@
 import type { Client } from 'discord.js';
 import type { StarboardEntry } from '@prisma/client';
 import {
+  STARBOARD_BLOCKED_USERS_MAX,
+  STARBOARD_CHANNEL_THRESHOLDS_MAX,
   STARBOARD_CHANNELS_MAX,
+  STARBOARD_MAX_AGE_DAYS,
   STARBOARD_EMOJIS_MAX,
   STARBOARD_THRESHOLD,
   decodeScoreCursor,
   decodeTimeCursor,
   isStarboardPeriod,
   isStarboardSort,
+  normalizeStarboardChannelThresholds,
+  type StarboardChannelThresholdError,
   type StarboardSettings,
 } from '@kotbo/shared';
 import { logger } from '../../../../utils/logger.js';
@@ -30,14 +41,24 @@ import { getStarboardOverview, listStarboardEntries } from '../../../../services
 import { getStarboardSettings, saveStarboardSettings } from '../../../../services/features/starboardSettings.js';
 import { starboardChannelHealth } from '../../../../services/features/starboardHealth.js';
 import { starboardMessageLabels } from '../../../../services/features/starboardMessageLabels.js';
+import { blockStarboardEntry, removeHighlightsOfAuthors, unblockStarboardEntry } from '../../../../services/features/starboardService.js';
 import { getMemberIdentities } from '../../../../services/moderation/memberIdentityService.js';
-import { getGuildName, json, pushAudit, readJsonBody } from '../../../shared.js';
+import { getGuildName, json, pushAudit, readJsonBody, type DashboardAccess } from '../../../shared.js';
+import { getCachedFeatureAccess } from '../featureGate.js';
 import { jsonFailure } from '../../../shared/failure.js';
 import { type ModuleRouteContext } from './_shared.js';
 
 /** Identifiant Discord : salon, rôle, membre ou emoji custom. */
 const SNOWFLAKE_RE = /^\d{17,20}$/;
 const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
+const CUID_RE = /^[a-z0-9]{20,40}$/i;
+
+const CHANNEL_THRESHOLD_ERRORS: Record<StarboardChannelThresholdError, string> = {
+  NOT_OBJECT: 'Les seuils par salon doivent être un objet { salon: seuil }',
+  TOO_MANY: `Pas plus de ${STARBOARD_CHANNEL_THRESHOLDS_MAX} seuils par salon`,
+  BAD_CHANNEL: 'Un seuil par salon porte un identifiant de salon invalide',
+  BAD_THRESHOLD: `Un seuil par salon doit être un entier entre ${STARBOARD_THRESHOLD.min} et ${STARBOARD_THRESHOLD.max}`,
+};
 
 const BOOLEAN_KEYS = ['countEmbedReactions', 'autoReactEmbed', 'allowBots', 'ignoreAuthorVotes', 'removeBelowThreshold'] as const;
 const CHANNEL_LIST_KEYS = ['autoReactChannels', 'watchedChannels', 'ignoredChannels'] as const;
@@ -139,8 +160,41 @@ export function parseStarboardConfigPatch(body: unknown): { patch: Partial<Starb
     patch[key] = parsed.ids;
   }
 
+  if (has(input, 'maxMessageAgeDays')) {
+    const value = input.maxMessageAgeDays;
+    const { min, max } = STARBOARD_MAX_AGE_DAYS;
+    if (typeof value !== 'number' || !Number.isInteger(value) || value < min || value > max) {
+      return { error: `L'âge maximum doit être un entier entre ${min} et ${max} jours` };
+    }
+    patch.maxMessageAgeDays = value;
+  }
+
+  if (has(input, 'channelThresholds')) {
+    const parsed = normalizeStarboardChannelThresholds(input.channelThresholds);
+    if ('error' in parsed) return { error: CHANNEL_THRESHOLD_ERRORS[parsed.error] };
+    patch.channelThresholds = parsed.thresholds;
+  }
+
+  if (has(input, 'blockedUserIds')) {
+    const value = input.blockedUserIds;
+    if (!Array.isArray(value) || value.some((id) => typeof id !== 'string' || !SNOWFLAKE_RE.test(id))) {
+      return { error: 'Les membres exclus doivent être une liste d\'identifiants' };
+    }
+    const unique = [...new Set(value as string[])];
+    if (unique.length > STARBOARD_BLOCKED_USERS_MAX) {
+      return { error: `Pas plus de ${STARBOARD_BLOCKED_USERS_MAX} membres exclus` };
+    }
+    patch.blockedUserIds = unique;
+  }
+
   if (Object.keys(patch).length === 0) return { error: 'Aucun champ à mettre à jour' };
   return { patch };
+}
+
+async function canModerate(client: Client, guildId: string, access: DashboardAccess, userId: string): Promise<boolean> {
+  if (access.canManageSettings) return true;
+  const rights = (await getCachedFeatureAccess(client, guildId, access, userId)).starboard;
+  return rights?.canModerate === true || (access.canModerateContent && rights?.canModerate !== false);
 }
 
 /**
@@ -162,6 +216,7 @@ async function presentEntries(client: Client, guildId: string, rows: StarboardEn
     score: row.score,
     peakScore: row.peakScore,
     onBoard: row.starMessageId !== null,
+    blocked: row.blockedAt !== null,
     createdAt: row.createdAt,
     postedAt: row.postedAt,
     messageUrl: `https://discord.com/channels/${guildId}/${row.channelId}/${row.messageId}`,
@@ -172,7 +227,7 @@ async function presentEntries(client: Client, guildId: string, rows: StarboardEn
 }
 
 export async function handleStarboardRoutes(ctx: ModuleRouteContext): Promise<boolean> {
-  const { req, res, parts, url, client, guildId, method, auditUser, access } = ctx;
+  const { req, res, parts, url, client, user, guildId, method, auditUser, access } = ctx;
 
   // GET /starboard
   if (parts.length === 5 && method === 'GET') {
@@ -180,6 +235,7 @@ export async function handleStarboardRoutes(ctx: ModuleRouteContext): Promise<bo
       const [config, overview] = await Promise.all([getStarboardSettings(guildId), getStarboardOverview(guildId)]);
       const guild = client.guilds.cache.get(guildId);
       const locale = await resolveGuildLocale(guildId, guild?.preferredLocale);
+      const blocked = await getMemberIdentities(client, guildId, config.blockedUserIds);
       json(res, 200, {
         config,
         stats: overview.stats,
@@ -188,6 +244,11 @@ export async function handleStarboardRoutes(ctx: ModuleRouteContext): Promise<bo
         health: starboardChannelHealth(client, guildId, config.channelId, config.autoReactEmbed),
         // Textes du message publié, pour l'aperçu des réglages.
         messageLabels: starboardMessageLabels(locale),
+        blockedMembers: config.blockedUserIds.map((userId) => ({
+          userId,
+          name: blocked.get(userId)?.displayName || null,
+          avatarUrl: blocked.get(userId)?.avatarUrl || null,
+        })),
       });
     } catch (err) {
       logger.error('StarboardAPI', 'GET starboard error:', err);
@@ -250,20 +311,71 @@ export async function handleStarboardRoutes(ctx: ModuleRouteContext): Promise<bo
         return true;
       }
 
+      const before = parsed.patch.blockedUserIds ? await getStarboardSettings(guildId) : null;
       const config = await saveStarboardSettings(guildId, parsed.patch);
+      // Un membre tout juste exclu quitte la une, sans faire attendre la réponse.
+      const newlyBlocked = before ? config.blockedUserIds.filter((id) => !before.blockedUserIds.includes(id)) : [];
+      if (newlyBlocked.length > 0) {
+        void removeHighlightsOfAuthors(client, guildId, newlyBlocked).catch((err: unknown) => {
+          logger.error('StarboardAPI', `Retrait des messages des membres exclus de ${guildId} impossible:`, err);
+        });
+      }
       await pushAudit(guildId, {
         user: auditUser,
         action: 'Sauvegarde configuration Starlight',
         context: getGuildName(client, guildId),
         module: 'Starlight',
         eventType: 'Manuel',
-        details: `Configuration Starlight mise à jour (seuil: ${config.threshold}).`,
+        details: newlyBlocked.length > 0
+          ? `Configuration Starlight mise à jour (seuil: ${config.threshold}). Membres exclus : ${newlyBlocked.join(', ')}.`
+          : `Configuration Starlight mise à jour (seuil: ${config.threshold}).`,
         channelId: config.channelId,
       });
       json(res, 200, { config });
     } catch (err) {
       logger.error('StarboardAPI', 'PATCH starboard error:', err);
       jsonFailure(res, err, 'Erreur lors de la mise à jour', 'StarboardAPI');
+    }
+    return true;
+  }
+
+  // POST /starboard/entries/:id/block | /unblock
+  if (parts.length === 8 && parts[5] === 'entries' && (parts[7] === 'block' || parts[7] === 'unblock') && method === 'POST') {
+    const entryId = parts[6];
+    const block = parts[7] === 'block';
+    if (!CUID_RE.test(entryId)) {
+      json(res, 400, { error: 'Identifiant de message invalide' });
+      return true;
+    }
+    if (!(await canModerate(client, guildId, access, user.userId))) {
+      json(res, 403, { error: 'Accès modérateur requis' });
+      return true;
+    }
+
+    try {
+      const entry = block
+        ? await blockStarboardEntry(client, guildId, entryId, user.userId)
+        : await unblockStarboardEntry(client, guildId, entryId);
+      if (!entry) {
+        json(res, 404, { error: 'Message introuvable' });
+        return true;
+      }
+      await pushAudit(guildId, {
+        user: auditUser,
+        action: block ? 'Retrait d\'un message à la une' : 'Retour d\'un message à la une',
+        context: getGuildName(client, guildId),
+        module: 'Starlight',
+        eventType: 'Manuel',
+        details: block
+          ? `Message ${entry.messageId} retiré de la une, sans retour possible.`
+          : `Message ${entry.messageId} de nouveau admis à la une.`,
+        channelId: entry.channelId,
+      });
+      const [presented] = await presentEntries(client, guildId, [entry]);
+      json(res, 200, { entry: presented });
+    } catch (err) {
+      logger.error('StarboardAPI', `POST starboard entry ${block ? 'block' : 'unblock'} error:`, err);
+      jsonFailure(res, err, 'Erreur lors de la mise à jour du message', 'StarboardAPI');
     }
     return true;
   }

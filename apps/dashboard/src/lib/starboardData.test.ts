@@ -27,6 +27,15 @@ describe('toStarboardConfig', () => {
   test('un tableau mal formé retombe sur la valeur par défaut', () => {
     expect(toStarboardConfig({ watchedChannels: 'abc' })?.watchedChannels).toEqual([]);
   });
+
+  test('seuils par salon : objet copié, forme inattendue ignorée', () => {
+    const raw = { '111111111111111111': 8 };
+    const config = toStarboardConfig({ channelThresholds: raw });
+    expect(config?.channelThresholds).toEqual(raw);
+    expect(config?.channelThresholds).not.toBe(raw);
+    expect(toStarboardConfig({ channelThresholds: ['111111111111111111'] })?.channelThresholds).toEqual({});
+    expect(toStarboardConfig({ channelThresholds: null })?.channelThresholds).toEqual({});
+  });
 });
 
 describe('toStarboardOverview', () => {
@@ -56,5 +65,6 @@ describe('toStarboardOverview', () => {
     expect(overview?.channelStats).toEqual([]);
     expect(overview?.health).toEqual({ channelFound: null, missingPermissions: [] });
     expect(overview?.messageLabels).toBeNull();
+    expect(overview?.blockedMembers).toEqual([]);
   });
 });

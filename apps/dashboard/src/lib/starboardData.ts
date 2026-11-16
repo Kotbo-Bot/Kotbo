@@ -20,8 +20,14 @@ export function toStarboardConfig(raw: unknown): StarboardSettings | null {
   for (const key of Object.keys(config) as Array<keyof StarboardSettings>) {
     const value = raw[key];
     if (value === undefined) continue;
-    if (Array.isArray(config[key]) && !Array.isArray(value)) continue;
-    (config as unknown as Record<string, unknown>)[key] = Array.isArray(value) ? [...value] : value;
+    const fallback = config[key];
+    if (Array.isArray(fallback)) {
+      if (Array.isArray(value)) (config as unknown as Record<string, unknown>)[key] = [...value];
+    } else if (fallback !== null && typeof fallback === 'object') {
+      if (isObject(value) && !Array.isArray(value)) (config as unknown as Record<string, unknown>)[key] = { ...value };
+    } else {
+      (config as unknown as Record<string, unknown>)[key] = value;
+    }
   }
   return config;
 }
@@ -41,5 +47,6 @@ export function toStarboardOverview(raw: unknown): StarboardOverview | null {
       missingPermissions: Array.isArray(health.missingPermissions) ? (health.missingPermissions as string[]) : [],
     },
     messageLabels: isObject(raw.messageLabels) ? (raw.messageLabels as unknown as StarboardOverview['messageLabels']) : null,
+    blockedMembers: Array.isArray(raw.blockedMembers) ? (raw.blockedMembers as StarboardOverview['blockedMembers']) : [],
   };
 }

@@ -2,15 +2,20 @@ import { describe, expect, test } from 'bun:test';
 import {
   DEFAULT_STARBOARD_CONFIG,
   STARBOARD_BUSY_PER_DAY,
+  STARBOARD_CHANNEL_THRESHOLDS_MAX,
   STARBOARD_EXCERPT_MAX,
   STARBOARD_STATS_DAYS,
   decodeScoreCursor,
   encodeScoreCursor,
+  isDiscordMediaUrl,
   isStarboardPeriod,
   isStarboardSort,
+  normalizeStarboardChannelThresholds,
   starboardAdvice,
   starboardExcerpt,
   starboardPeriodStart,
+  starboardSkipReason,
+  starboardThresholdFor,
 } from '@kotbo/shared';
 
 const NOW = new Date('2026-11-16T12:00:00Z');
@@ -22,6 +27,9 @@ describe('valeurs par défaut', () => {
     expect(DEFAULT_STARBOARD_CONFIG.upvoteEmojis).toEqual(['👍']);
     expect(DEFAULT_STARBOARD_CONFIG.embedColor).toBe('#F5C518');
     expect(DEFAULT_STARBOARD_CONFIG.channelId).toBeNull();
+    expect(DEFAULT_STARBOARD_CONFIG.maxMessageAgeDays).toBe(0);
+    expect(DEFAULT_STARBOARD_CONFIG.channelThresholds).toEqual({});
+    expect(DEFAULT_STARBOARD_CONFIG.blockedUserIds).toEqual([]);
   });
 });
 
@@ -103,5 +111,91 @@ describe('conseils', () => {
     const postedRecent = STARBOARD_BUSY_PER_DAY * STARBOARD_STATS_DAYS;
     expect(starboardAdvice({ ...base, postedRecent })).toEqual(['BUSY']);
     expect(starboardAdvice({ ...base, postedRecent: postedRecent - 1 })).toEqual([]);
+  });
+});
+
+describe('seuil par salon', () => {
+  const settings = { threshold: 5, channelThresholds: { '111111111111111111': 10, '222222222222222222': 2 } };
+
+  test('le salon a le sien, sinon le seuil du serveur', () => {
+    expect(starboardThresholdFor(settings, '111111111111111111', null)).toBe(10);
+    expect(starboardThresholdFor(settings, '333333333333333333', null)).toBe(5);
+  });
+
+  test('un fil prend le sien, sinon celui de son salon parent', () => {
+    expect(starboardThresholdFor(settings, '444444444444444444', '222222222222222222')).toBe(2);
+    expect(starboardThresholdFor({ ...settings, channelThresholds: { ...settings.channelThresholds, '444444444444444444': 7 } }, '444444444444444444', '222222222222222222')).toBe(7);
+  });
+});
+
+describe('normalizeStarboardChannelThresholds', () => {
+  test('garde les paires valides', () => {
+    expect(normalizeStarboardChannelThresholds({ '111111111111111111': 8 })).toEqual({ thresholds: { '111111111111111111': 8 } });
+  });
+
+  test.each([
+    [null, 'NOT_OBJECT'],
+    [['111111111111111111'], 'NOT_OBJECT'],
+    [{ abc: 3 }, 'BAD_CHANNEL'],
+    [{ '111111111111111111': 0 }, 'BAD_THRESHOLD'],
+    [{ '111111111111111111': 2.5 }, 'BAD_THRESHOLD'],
+    [Object.fromEntries(Array.from({ length: STARBOARD_CHANNEL_THRESHOLDS_MAX + 1 }, (_, i) => [`1${String(i).padStart(17, '0')}`, 3])), 'TOO_MANY'],
+  ])('refuse %j (%s)', (raw, error) => {
+    expect(normalizeStarboardChannelThresholds(raw)).toEqual({ error });
+  });
+});
+
+describe('starboardSkipReason', () => {
+  const settings = { blockedUserIds: ['999'], maxMessageAgeDays: 7 };
+  const candidate = {
+    authorId: '111',
+    blocked: false,
+    sourceNsfw: false,
+    boardNsfw: false,
+    messageCreatedAt: new Date(NOW.getTime() - DAY_MS),
+    alreadyEntered: false,
+  };
+
+  test('rien n’empêche : null', () => {
+    expect(starboardSkipReason(settings, candidate, NOW)).toBeNull();
+  });
+
+  test('message exclu par le staff, puis auteur exclu', () => {
+    expect(starboardSkipReason(settings, { ...candidate, blocked: true, authorId: '999' }, NOW)).toBe('BLOCKED_MESSAGE');
+    expect(starboardSkipReason(settings, { ...candidate, authorId: '999' }, NOW)).toBe('BLOCKED_AUTHOR');
+  });
+
+  test('NSFW vers un salon tout public : jamais ; vers un salon NSFW : permis', () => {
+    expect(starboardSkipReason(settings, { ...candidate, sourceNsfw: true }, NOW)).toBe('NSFW');
+    expect(starboardSkipReason(settings, { ...candidate, sourceNsfw: true, boardNsfw: true }, NOW)).toBeNull();
+  });
+
+  test('trop ancien pour entrer, mais un message déjà à la une continue de vivre', () => {
+    const old = { ...candidate, messageCreatedAt: new Date(NOW.getTime() - 8 * DAY_MS) };
+    expect(starboardSkipReason(settings, old, NOW)).toBe('TOO_OLD');
+    expect(starboardSkipReason(settings, { ...old, alreadyEntered: true }, NOW)).toBeNull();
+    expect(starboardSkipReason({ ...settings, maxMessageAgeDays: 0 }, old, NOW)).toBeNull();
+  });
+});
+
+describe('isDiscordMediaUrl', () => {
+  test.each([
+    'https://cdn.discordapp.com/attachments/1/2/chat.png?ex=1',
+    'https://media.discordapp.net/attachments/1/2/chat.png',
+    'https://images-ext-1.discordapp.net/external/abc/https/example.com/a.png',
+    'https://media.discordapp.net/stickers/123.png',
+  ])('hébergée par Discord : %s', (url) => {
+    expect(isDiscordMediaUrl(url)).toBe(true);
+  });
+
+  test.each([
+    'https://example.com/a.png',
+    'http://cdn.discordapp.com/a.png',
+    'https://cdn.discordapp.com.evil.com/a.png',
+    'https://evil.com/?cdn.discordapp.com',
+    'javascript:alert(1)',
+    'pas une url',
+  ])('refusée : %s', (url) => {
+    expect(isDiscordMediaUrl(url)).toBe(false);
   });
 });
