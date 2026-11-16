@@ -661,6 +661,23 @@ export async function buildTriggerOutputs(
         winners: Number(payload.winnerCount ?? 0),
       };
 
+    case 'OnSeasonStarted':
+      return { season: String(payload.name ?? ''), number: Number(payload.number ?? 0) };
+
+    // Le premier est le membre du déclencheur : sans lui, les actions n'ont
+    // personne à nommer, rien ne part.
+    case 'OnSeasonEnded': {
+      const member = await memberOf(payload.winnerId);
+      if (!member) return null;
+      return {
+        member,
+        season: String(payload.name ?? ''),
+        number: Number(payload.number ?? 0),
+        participants: Number(payload.participants ?? 0),
+        winnerXp: Number(payload.winnerXp ?? 0),
+      };
+    }
+
     case 'OnLevelUp': {
       const member = await memberOf(payload.userId);
       return member ? { member, level: Number(payload.level ?? 0) } : null;

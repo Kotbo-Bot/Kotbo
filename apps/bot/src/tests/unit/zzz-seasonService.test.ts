@@ -8,6 +8,7 @@
 import { describe, expect, test, mock, beforeEach } from 'bun:test';
 import path from 'node:path';
 import type { Client, Guild } from 'discord.js';
+import { kotboEventBus, type SeasonEndedEvent, type SeasonStartedEvent } from '@kotbo/core';
 import { completeModuleMock } from '../helpers/moduleMock.js';
 
 const ROLE = '123456789012345678';
@@ -22,6 +23,7 @@ type Season = {
   id: string; guildId: string; number: number; name: string; status: string; startDate: Date; endDate: Date;
   rewards: unknown; topRoleId: string | null; announceChannelId: string | null;
   autoRenew: boolean; remindBeforeEnd: boolean; reminderSentAt: Date | null; grantedRewards: unknown; updatedAt: Date;
+  tiers: unknown; stats: unknown;
 };
 
 let seasons: Season[] = [];
@@ -38,6 +40,11 @@ const queryRaw = mock(async (strings: TemplateStringsArray, ..._values: unknown[
   const sql = strings.join('?');
   if (sql.includes('COUNT(*)')) return [{ participants: standingsRows.length, totalXp: BigInt(standingsRows.reduce((sum, row) => sum + row.seasonXp, 0)) }];
   if (sql.includes('ROW_NUMBER')) return memberRankRows;
+  // Membres au-dessus d'un seuil de palier : la seule requête à `) >=`.
+  if (sql.includes(') >=')) {
+    const minXp = _values.find((value) => typeof value === 'number') as number;
+    return standingsRows.filter((row) => row.seasonXp >= minXp).map(({ userId, seasonXp }) => ({ userId, seasonXp }));
+  }
   return standingsRows;
 });
 const snapshotCreateMany = mock(async (..._args: unknown[]) => ({ count: 0 }));
@@ -50,10 +57,11 @@ function matches(season: Season, where: Record<string, unknown>): boolean {
     const field = (season as Record<string, unknown>)[key];
     if (value instanceof Date) return field instanceof Date && field.getTime() === value.getTime();
     if (value && typeof value === 'object') {
-      const { not, lte, gt } = value as { not?: unknown; lte?: Date; gt?: Date };
+      const { not, lte, gt, lt } = value as { not?: unknown; lte?: Date; gt?: Date; lt?: number };
       return (not === undefined || field !== not)
         && (lte === undefined || (field as Date) <= lte)
-        && (gt === undefined || (field as Date) > gt);
+        && (gt === undefined || (field as Date) > gt)
+        && (lt === undefined || (field as number) < lt);
     }
     return field === value;
   });
@@ -212,6 +220,8 @@ function season(overrides: Partial<Season> = {}): Season {
     reminderSentAt: null,
     grantedRewards: null,
     updatedAt: new Date('2026-11-01T00:00:00Z'),
+    tiers: null,
+    stats: null,
     ...overrides,
   };
 }
@@ -246,7 +256,7 @@ describe('startSeason', () => {
     const { client } = fakeClient();
     await startSeason('g', 's1', client);
     expect(announceStart).toHaveBeenCalledTimes(1);
-    expect(announceStart.mock.calls[0].slice(2)).toEqual([[{ rank: 1, roleId: null, coins: 10 }], TOP_ROLE]);
+    expect(announceStart.mock.calls[0].slice(2)).toEqual([[{ rank: 1, roleId: null, coins: 10 }], TOP_ROLE, []]);
   });
 
   test('prévient la page Saisons en direct', async () => {
@@ -505,6 +515,72 @@ describe('getMemberSeasonHistory', () => {
     const endDate = new Date('2026-10-01T00:00:00Z');
     historyRows = [{ rank: 2, xp: 900, season: { number: 3, name: 'Automne', endDate } }];
     expect(await getMemberSeasonHistory('g', 'a')).toEqual([{ number: 3, name: 'Automne', endDate, rank: 2, xp: 900 }]);
+  });
+});
+
+const started: SeasonStartedEvent[] = [];
+const ended: SeasonEndedEvent[] = [];
+kotboEventBus.subscribe('season:started', async (payload) => { started.push(payload); }, 'test-seasons');
+kotboEventBus.subscribe('season:ended', async (payload) => { ended.push(payload); }, 'test-seasons');
+
+/** Données figées par la transaction de clôture (classement final, bilan). */
+function frozenData(): Record<string, unknown> | undefined {
+  const call = seasonUpdate.mock.calls.find((args) => (args[0] as { data: Record<string, unknown> }).data.finalLeaderboard !== undefined);
+  return (call?.[0] as { data: Record<string, unknown> } | undefined)?.data;
+}
+
+describe('endSeason : paliers, rotation et bilan', () => {
+  test('chaque membre au-dessus d\'un seuil reçoit le palier, tracé avec son seuil', async () => {
+    seasons = [season({ tiers: [{ minXp: 500, coins: 7 }] })];
+    await endSeason(fakeClient().client, 'g', 's1');
+    expect(recordedOutcomes()).toEqual([{ userId: 'a', rank: 1, roleId: null, coins: 7, roleStatus: null, coinsStatus: 'given', tierXp: 500 }]);
+  });
+
+  test('fige le bilan chiffré de la saison', async () => {
+    seasons = [season()];
+    await endSeason(fakeClient().client, 'g', 's1');
+    expect(frozenData()?.stats).toEqual({ participants: 2, totalXp: 1300, topXp: 900 });
+  });
+
+  test('reprend les rôles « repris » de la saison d\'avant, sauf à qui les regagne', async () => {
+    const given = (userId: string) => ({ userId, rank: 1, roleId: ROLE, coins: 0, roleStatus: 'given', coinsStatus: null, rotate: true });
+    seasons = [
+      season({ id: 'avant', number: 1, status: 'ENDED', grantedRewards: [given('ancien'), given('a')] }),
+      season({ id: 's1', number: 2, rewards: [{ rank: 1, roleId: ROLE, coins: 0, rotate: true }] }),
+    ];
+    const { client, removed, added } = fakeClient();
+    await endSeason(client, 'g', 's1');
+    expect(removed).toEqual([['ancien', ROLE]]);
+    expect(added).toEqual([['a', ROLE]]);
+  });
+});
+
+describe('événements pour les workflows', () => {
+  beforeEach(() => {
+    started.length = 0;
+    ended.length = 0;
+  });
+
+  test('l\'ouverture publie la saison', async () => {
+    seasons = [season({ status: 'UPCOMING' })];
+    await startSeason('g', 's1');
+    expect(started).toHaveLength(1);
+    expect(started[0]).toMatchObject({ guildId: 'g', seasonId: 's1', number: 1, name: 'Hiver' });
+  });
+
+  test('la clôture publie le premier et le nombre de participants', async () => {
+    seasons = [season()];
+    await endSeason(fakeClient().client, 'g', 's1');
+    expect(ended).toHaveLength(1);
+    expect(ended[0]).toMatchObject({ guildId: 'g', seasonId: 's1', number: 1, name: 'Hiver', participants: 2, winnerId: 'a', winnerXp: 900 });
+  });
+
+  test('une clôture déjà faite ne republie rien', async () => {
+    seasons = [season()];
+    const { client } = fakeClient();
+    await endSeason(client, 'g', 's1');
+    await endSeason(client, 'g', 's1');
+    expect(ended).toHaveLength(1);
   });
 });
 

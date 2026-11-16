@@ -9,15 +9,21 @@
  */
 import type { Client, Guild, GuildMember } from 'discord.js';
 import type { Prisma } from '@prisma/client';
+import { kotboEventBus } from '@kotbo/core';
 import {
   isRewardOutcomeComplete,
   planSeasonRewards,
+  planSeasonTiers,
   readSeasonRewardOutcomes,
+  readSeasonStats,
   readStoredSeasonRewards,
+  readStoredSeasonTiers,
   renewedSeasonSchedule,
+  rolesToTakeBack,
   seasonReminderDue,
   validateSeasonRewards,
   validateSeasonSchedule,
+  validateSeasonTiers,
   SEASON_REMINDER_HOURS,
   type PlannedSeasonReward,
   type SeasonCoinsOutcome,
@@ -26,6 +32,9 @@ import {
   type SeasonRewardOutcome,
   type SeasonRoleOutcome,
   type SeasonScheduleError,
+  type SeasonStats,
+  type SeasonTierError,
+  type SeasonTierReward,
 } from '@kotbo/shared';
 import prisma, { prismaRead } from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
@@ -60,7 +69,7 @@ export interface SeasonStanding {
   voiceMinutes: number;
 }
 
-export type SeasonInputError = SeasonScheduleError | SeasonRewardError | 'BAD_TOP_ROLE' | 'BAD_ANNOUNCE_CHANNEL';
+export type SeasonInputError = SeasonScheduleError | SeasonRewardError | SeasonTierError | 'BAD_TOP_ROLE' | 'BAD_ANNOUNCE_CHANNEL';
 export type StartSeasonResult = 'started' | 'not_found' | 'another_active';
 
 interface SeasonInput {
@@ -68,6 +77,7 @@ interface SeasonInput {
   startDate: Date;
   endDate: Date;
   rewards: SeasonReward[];
+  tiers: SeasonTierReward[];
   topRoleId: string | null;
   announceChannelId: string | null;
   autoRenew: boolean;
@@ -86,6 +96,8 @@ export function parseSeasonInput(raw: Record<string, unknown>, now: Date = new D
   if ('error' in schedule) return schedule;
   const rewards = validateSeasonRewards(raw.rewards ?? []);
   if ('error' in rewards) return rewards;
+  const tiers = validateSeasonTiers(raw.tiers ?? []);
+  if ('error' in tiers) return tiers;
   const topRoleId = optionalSnowflake(raw.topRoleId);
   if (topRoleId === false) return { error: 'BAD_TOP_ROLE' };
   const announceChannelId = optionalSnowflake(raw.announceChannelId);
@@ -94,6 +106,7 @@ export function parseSeasonInput(raw: Record<string, unknown>, now: Date = new D
     input: {
       ...schedule.schedule,
       rewards: rewards.rewards,
+      tiers: tiers.tiers,
       topRoleId,
       announceChannelId,
       autoRenew: raw.autoRenew === true,
@@ -137,6 +150,7 @@ export async function createSeason(guildId: string, input: SeasonInput, client: 
       startDate: input.startDate,
       endDate: input.endDate,
       rewards: input.rewards as unknown as Prisma.InputJsonValue,
+      tiers: input.tiers as unknown as Prisma.InputJsonValue,
       topRoleId: input.topRoleId,
       announceChannelId: input.announceChannelId,
       autoRenew: input.autoRenew,
@@ -174,6 +188,7 @@ export async function updateSeason(
     startDate: active ? season.startDate : kept('startDate', season.startDate),
     endDate: kept('endDate', season.endDate),
     rewards: kept('rewards', readStoredSeasonRewards(season.rewards)),
+    tiers: kept('tiers', readStoredSeasonTiers(season.tiers)),
     topRoleId: kept('topRoleId', season.topRoleId),
     announceChannelId: kept('announceChannelId', season.announceChannelId),
     autoRenew: kept('autoRenew', season.autoRenew),
@@ -188,6 +203,7 @@ export async function updateSeason(
       name: parsed.input.name,
       endDate: parsed.input.endDate,
       rewards: parsed.input.rewards as unknown as Prisma.InputJsonValue,
+      tiers: parsed.input.tiers as unknown as Prisma.InputJsonValue,
       topRoleId: parsed.input.topRoleId,
       announceChannelId: parsed.input.announceChannelId,
       autoRenew: parsed.input.autoRenew,
@@ -241,9 +257,17 @@ export async function startSeason(guildId: string, seasonId: string, client: Cli
   }, { timeout: 30_000 });
   if (typeof started === 'string') return started;
   broadcastDashboardStateChange(guildId, SEASONS_REALTIME_REASON);
+  kotboEventBus.publish('season:started', {
+    guildId,
+    seasonId,
+    number: started.number,
+    name: started.name,
+    endDate: started.endDate.toISOString(),
+    timestamp: now.getTime(),
+  });
 
   if (client) {
-    await announceSeasonStart(client, started, readStoredSeasonRewards(started.rewards), started.topRoleId).catch((err) => {
+    await announceSeasonStart(client, started, readStoredSeasonRewards(started.rewards), started.topRoleId, readStoredSeasonTiers(started.tiers)).catch((err) => {
       logger.warn(LOG_TAG, `Annonce d'ouverture de la saison ${seasonId} impossible`, err);
     });
   }
@@ -325,9 +349,12 @@ export async function endSeason(client: Client, guildId: string, seasonId: strin
   const guild = client.guilds.cache.get(guildId) ?? await client.guilds.fetch(guildId).catch(() => null);
   const excluded = await excludedFromSeason(guildId, guild, true);
 
+  const tiers = readStoredSeasonTiers(season.tiers);
+
   // Le passage à ENDED sert de verrou : deux clôtures simultanées (cron, bouton,
-  // MCP) ne figent et ne récompensent qu'une fois.
-  const standings = await prisma.$transaction(async (tx) => {
+  // MCP) ne figent et ne récompensent qu'une fois. Tout ce qui lit le relevé
+  // d'XP se fait avant sa suppression, dans la même transaction.
+  const frozen = await prisma.$transaction(async (tx) => {
     const claim = await tx.levelingSeason.updateMany({
       where: { id: seasonId, guildId, status: 'ACTIVE' },
       data: { status: 'ENDED', endDate },
@@ -335,6 +362,10 @@ export async function endSeason(client: Client, guildId: string, seasonId: strin
     if (claim.count === 0) return null;
 
     const ranked = await liveStandings(tx, guildId, seasonId, ARCHIVE_LIMIT, { start: season.startDate, end: endDate }, excluded);
+    // Les paliers vont à tous ceux qui les atteignent, pas aux seuls 100 figés.
+    const tierMembers = tiers.length > 0 ? await membersAbove(tx, guildId, seasonId, tiers[0].minXp, excluded) : [];
+    const totals = await liveSeasonTotals(tx, guildId, seasonId, excluded);
+    const stats: SeasonStats = { ...totals, topXp: ranked[0]?.xp ?? 0 };
     if (ranked.length > 0) {
       await tx.seasonSnapshot.createMany({
         data: ranked.map((entry) => ({ guildId, seasonId, ...entry })),
@@ -345,19 +376,24 @@ export async function endSeason(client: Client, guildId: string, seasonId: strin
       where: { id: seasonId },
       data: {
         finalLeaderboard: ranked.slice(0, FINAL_LEADERBOARD_SIZE).map(({ userId, xp, level, rank }) => ({ userId, xp, level, rank })) as Prisma.InputJsonValue,
+        stats: stats as unknown as Prisma.InputJsonValue,
       },
     });
     await tx.seasonBaseline.deleteMany({ where: { seasonId } });
-    return ranked;
+    return { standings: ranked, tierMembers, stats };
   }, { timeout: 30_000 });
-  if (!standings) return false;
+  if (!frozen) return false;
+  const { standings, stats } = frozen;
   broadcastDashboardStateChange(guildId, SEASONS_REALTIME_REASON);
 
-  const plan = planSeasonRewards(readStoredSeasonRewards(season.rewards), standings, season.topRoleId);
+  const rankPlan = planSeasonRewards(readStoredSeasonRewards(season.rewards), standings, season.topRoleId);
+  const tierPlan = planSeasonTiers(tiers, frozen.tierMembers);
+  const plan = [...rankPlan, ...tierPlan];
   if (guild && season.topRoleId) {
-    const winner = plan.find((entry) => entry.rank === 1)?.userId;
+    const winner = rankPlan.find((entry) => entry.rank === 1)?.userId;
     if (winner) await releaseTopRole(guild, season.topRoleId, winner, seasonId);
   }
+  if (guild) await takeBackRotatingRoles(guild, season.number, plan);
   const outcomes = await grantRewards(guild, guildId, plan);
   if (outcomes.length > 0) {
     await prisma.levelingSeason.update({ where: { id: seasonId }, data: { grantedRewards: outcomes as unknown as Prisma.InputJsonValue } });
@@ -370,7 +406,21 @@ export async function endSeason(client: Client, guildId: string, seasonId: strin
   const { closeRankedSeasonForLevelingSeason } = await import('./ranked/rankedSeasonService.js');
   await closeRankedSeasonForLevelingSeason(client, guildId, seasonId).catch(() => null);
 
-  await announceSeasonEnd(client, season, standings, plan).catch((err) => {
+  kotboEventBus.publish('season:ended', {
+    guildId,
+    seasonId,
+    number: season.number,
+    name: season.name,
+    participants: stats.participants,
+    winnerId: standings[0]?.userId ?? null,
+    winnerXp: standings[0]?.xp ?? 0,
+    timestamp: Date.now(),
+  });
+
+  // L'annonce nomme les récompenses de rang ; les paliers, souvent nombreux,
+  // y sont comptés plutôt que listés.
+  const tiersReached = tiers.map((tier) => ({ minXp: tier.minXp, count: tierPlan.filter((entry) => entry.tierXp === tier.minXp).length }));
+  await announceSeasonEnd(client, season, standings, rankPlan, tiersReached).catch((err) => {
     logger.warn(LOG_TAG, `Annonce de clôture de la saison ${seasonId} impossible`, err);
   });
 
@@ -390,7 +440,7 @@ export async function endSeason(client: Client, guildId: string, seasonId: strin
  */
 async function renewSeason(
   client: Client,
-  season: { guildId: string; name: string; startDate: Date; endDate: Date; rewards: unknown; topRoleId: string | null; announceChannelId: string | null; remindBeforeEnd: boolean },
+  season: { guildId: string; name: string; startDate: Date; endDate: Date; rewards: unknown; tiers: unknown; topRoleId: string | null; announceChannelId: string | null; remindBeforeEnd: boolean },
 ): Promise<void> {
   const planned = await prisma.levelingSeason.findFirst({ where: { guildId: season.guildId, status: 'UPCOMING' }, select: { id: true } });
   if (planned) return;
@@ -398,6 +448,7 @@ async function renewSeason(
     name: season.name,
     ...renewedSeasonSchedule(season),
     rewards: readStoredSeasonRewards(season.rewards),
+    tiers: readStoredSeasonTiers(season.tiers),
     topRoleId: season.topRoleId,
     announceChannelId: season.announceChannelId,
     autoRenew: true,
@@ -421,6 +472,8 @@ async function grantRewards(guild: Guild | null, guildId: string, plan: Readonly
       coins: entry.coins,
       coinsStatus: entry.coins > 0 ? await grantCoins(guildId, entry.userId, entry.coins, economyEnabled) : null,
       roleStatus: entry.roleId ? await grantRole(guild, me, entry.userId, entry.roleId) : null,
+      ...(entry.rotate ? { rotate: true } : {}),
+      ...(entry.tierXp !== undefined ? { tierXp: entry.tierXp } : {}),
     });
   }
   return outcomes;
@@ -475,6 +528,25 @@ async function releaseTopRole(guild: Guild, roleId: string, winnerId: string, se
   }
 }
 
+/**
+ * Rôles « repris » : ceux remis à la saison d'avant le sont à la clôture de
+ * celle-ci, sauf à qui les regagne. La trace de la saison d'avant les dit.
+ */
+async function takeBackRotatingRoles(guild: Guild, number: number, plan: ReadonlyArray<PlannedSeasonReward>): Promise<void> {
+  const previous = await prisma.levelingSeason.findFirst({
+    where: { guildId: guild.id, status: 'ENDED', number: { lt: number } },
+    orderBy: { number: 'desc' },
+    select: { grantedRewards: true },
+  });
+  for (const { userId, roleId } of rolesToTakeBack(readSeasonRewardOutcomes(previous?.grantedRewards), plan)) {
+    const member = await guild.members.fetch(userId).catch(() => null);
+    if (!member?.roles.cache.has(roleId)) continue;
+    await member.roles.remove(roleId, 'Rôle de saison repris à la clôture suivante').catch((err: unknown) => {
+      logger.warn(LOG_TAG, `Rôle de saison ${roleId} non repris à ${userId} sur ${guild.id}`, err);
+    });
+  }
+}
+
 export type RetrySeasonRewardsResult = { retried: number; remaining: number } | 'not_found' | 'busy';
 
 /**
@@ -499,6 +571,8 @@ export async function retrySeasonRewards(client: Client, guildId: string, season
   const retried = await grantRewards(guild, guildId, pending.map((outcome) => ({
     userId: outcome.userId,
     rank: outcome.rank,
+    rotate: outcome.rotate,
+    tierXp: outcome.tierXp,
     // Seules les parts manquantes sont redonnées : un rôle déjà remis n'est pas retenté.
     roleId: outcome.roleStatus === 'given' ? null : outcome.roleId,
     coins: outcome.coinsStatus === 'given' ? 0 : outcome.coins,
@@ -595,10 +669,21 @@ export async function getMemberSeasonHistory(guildId: string, userId: string, li
   return rows.map((row) => ({ number: row.season.number, name: row.season.name, endDate: row.season.endDate, rank: row.rank, xp: row.xp }));
 }
 
+/** Membres ayant gagné au moins `minXp` pendant la saison, dans l'ordre du classement. */
+async function membersAbove(db: Db, guildId: string, seasonId: string, minXp: number, excluded: string[]): Promise<Array<{ userId: string; rank: number; xp: number }>> {
+  const rows = await db.$queryRaw<Array<{ userId: string; seasonXp: number }>>`
+    SELECT ml."userId", (ml."xp" - COALESCE(b."xp", 0))::int AS "seasonXp"
+    FROM "member_levels" ml
+    LEFT JOIN "season_baselines" b ON b."seasonId" = ${seasonId} AND b."userId" = ml."userId"
+    WHERE ml."guildId" = ${guildId} AND (ml."xp" - COALESCE(b."xp", 0)) >= ${minXp}
+      AND NOT (ml."userId" = ANY(${excluded}::text[]))
+    ORDER BY "seasonXp" DESC, ml."userId" ASC`;
+  return rows.map((row, index) => ({ userId: row.userId, rank: index + 1, xp: row.seasonXp }));
+}
+
 /** Participants (au moins 1 XP gagnée) et XP gagnée au total depuis l'ouverture. */
-async function liveSeasonTotals(guildId: string, seasonId: string, guild: Guild | null): Promise<{ participants: number; totalXp: number }> {
-  const excluded = await excludedFromSeason(guildId, guild);
-  const [row] = await prismaRead.$queryRaw<Array<{ participants: number; totalXp: bigint | null }>>`
+async function liveSeasonTotals(db: Db, guildId: string, seasonId: string, excluded: string[]): Promise<{ participants: number; totalXp: number }> {
+  const [row] = await db.$queryRaw<Array<{ participants: number; totalXp: bigint | null }>>`
     SELECT COUNT(*)::int AS "participants", SUM(ml."xp" - COALESCE(b."xp", 0))::bigint AS "totalXp"
     FROM "member_levels" ml
     LEFT JOIN "season_baselines" b ON b."seasonId" = ${seasonId} AND b."userId" = ml."userId"
@@ -673,13 +758,18 @@ export async function getSeasonsDashboardData(guildId: string, guild: Guild | nu
   ]);
 
   const [activeLeaderboard, activeTotals] = activeSeason
-    ? await Promise.all([getSeasonLeaderboard(guildId, activeSeason.id, 20, guild), liveSeasonTotals(guildId, activeSeason.id, guild)])
+    ? await Promise.all([
+      getSeasonLeaderboard(guildId, activeSeason.id, 20, guild),
+      excludedFromSeason(guildId, guild).then((excluded) => liveSeasonTotals(prismaRead, guildId, activeSeason.id, excluded)),
+    ])
     : [[], null];
 
-  const readable = <T extends { rewards: unknown; grantedRewards: unknown }>(season: T) => ({
+  const readable = <T extends { rewards: unknown; tiers: unknown; grantedRewards: unknown; stats: unknown }>(season: T) => ({
     ...season,
     rewards: readStoredSeasonRewards(season.rewards),
+    tiers: readStoredSeasonTiers(season.tiers),
     grantedRewards: readSeasonRewardOutcomes(season.grantedRewards),
+    stats: readSeasonStats(season.stats),
   });
 
   return {

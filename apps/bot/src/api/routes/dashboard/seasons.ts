@@ -57,6 +57,13 @@ const INPUT_ERRORS: Record<SeasonInputError, { code: string; message: string }> 
   BAD_COINS: { code: 'sea_bad_reward_coins', message: 'Montant de pièces invalide' },
   EMPTY_REWARD: { code: 'sea_empty_reward', message: 'Chaque récompense donne un rôle, des pièces ou les deux' },
   DUPLICATE_RANK: { code: 'sea_duplicate_rank', message: 'Deux récompenses pour le même rang' },
+  TIERS_NOT_ARRAY: { code: 'sea_bad_tier_xp', message: 'Paliers invalides' },
+  TOO_MANY_TIERS: { code: 'sea_too_many_tiers', message: 'Trop de paliers' },
+  BAD_TIER_XP: { code: 'sea_bad_tier_xp', message: 'Seuil de palier invalide' },
+  BAD_TIER_ROLE: { code: 'sea_bad_reward_role', message: 'Rôle de palier invalide' },
+  BAD_TIER_COINS: { code: 'sea_bad_reward_coins', message: 'Montant de pièces de palier invalide' },
+  EMPTY_TIER: { code: 'sea_empty_reward', message: 'Chaque palier donne un rôle, des pièces ou les deux' },
+  DUPLICATE_TIER: { code: 'sea_duplicate_tier', message: 'Deux paliers au même seuil' },
   BAD_TOP_ROLE: { code: 'sea_bad_top_role', message: 'Rôle du premier invalide' },
   BAD_ANNOUNCE_CHANNEL: { code: 'sea_bad_announce_channel', message: 'Salon d\'annonce invalide' },
 };

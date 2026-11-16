@@ -12,6 +12,7 @@
     seasonStartAnnouncement,
     type SeasonAnnouncementLabels,
     type SeasonReward,
+    type SeasonTierReward,
   } from '@kotbo/shared';
   import { m } from '../../i18n';
   import Papicon from '../Papicon.svelte';
@@ -21,6 +22,7 @@
     labels,
     season,
     rewards,
+    tiers = [],
     topRoleId,
     reminder = false,
     roleName,
@@ -28,6 +30,7 @@
     labels: SeasonAnnouncementLabels;
     season: { number: number; name: string; endDate: string };
     rewards: readonly SeasonReward[];
+    tiers?: readonly SeasonTierReward[];
     topRoleId: string | null;
     /** Montrer aussi le rappel des dernières 24 h. */
     reminder?: boolean;
@@ -54,6 +57,7 @@
     },
     rewards.map((reward) => ({ rank: reward.rank, ...named(reward) })),
     topRoleId ? `@${roleName(topRoleId)}` : null,
+    tiers.map((tier) => ({ xp: format(tier.minXp), ...named(tier) })),
   ));
 
   const podium = $derived(sample.map((entry) => ({ rank: entry.rank, user: member(entry.rank), xp: format(entry.xp) })));

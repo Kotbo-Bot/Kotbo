@@ -18,6 +18,8 @@ import {
   SEASON_REWARDS_MAX,
   SEASON_REWARD_COINS,
   SEASON_REWARD_RANK,
+  SEASON_TIERS_MAX,
+  SEASON_TIER_XP,
 } from '@kotbo/shared';
 import { m, dateLocale } from '../i18n';
 
@@ -151,6 +153,9 @@ const CODE_MESSAGES = new Map<string, (p: CodeParams) => string>([
   ['sea_bad_reward_coins', () => m.sea_error_reward_coins({ max: SEASON_REWARD_COINS.max.toLocaleString(dateLocale()) })],
   ['sea_empty_reward', () => m.sea_error_reward_empty()],
   ['sea_duplicate_rank', () => m.sea_error_reward_duplicate()],
+  ['sea_too_many_tiers', () => m.sea_error_tier_too_many({ max: SEASON_TIERS_MAX })],
+  ['sea_bad_tier_xp', () => m.sea_error_tier_xp({ max: SEASON_TIER_XP.max.toLocaleString(dateLocale()) })],
+  ['sea_duplicate_tier', () => m.sea_error_tier_duplicate()],
   ['sea_bad_top_role', () => m.api_err_sea_bad_top_role()],
   ['sea_bad_announce_channel', () => m.api_err_sea_bad_announce_channel()],
   ['sea_forbidden', () => m.api_err_forbidden()],

@@ -90,6 +90,9 @@ export function registerCommunityRoutes(): void {
         rewardsGivenHeading: 'Récompenses distribuées',
         reminderTitle: 'Saison #{number} · {name} : dernières 24 h',
         reminderBody: 'La saison se termine {date} : chaque XP compte encore.',
+        tiersHeading: 'Paliers',
+        tierLine: 'Dès {xp} XP · {reward}',
+        tierReachedLine: '{xp} XP · {count} membre(s)',
       },
       botRoleAccess: { canManageRoles: true, topPosition: 100 },
       activeRankedLeaderboard: ranked.slice(0, 8).map((p, i) => ({
@@ -102,8 +105,8 @@ export function registerCommunityRoutes(): void {
       })),
       seasons: [
         active,
-        { id: 'season-2', number: 2, name: 'Saison d’été', status: 'ENDED', startDate: ago(120 * 24 * 60), endDate: ago(31 * 24 * 60), rewards: [{ rank: 1, roleId: null, coins: 3_000 }], topRoleId: null, grantedRewards: [{ userId: byXp()[0]?.id ?? '1', rank: 1, roleId: null, coins: 3_000, roleStatus: null, coinsStatus: 'given' }], _count: { snapshots: members().length - 1 } },
-        { id: 'season-1', number: 1, name: 'Lancement', status: 'ENDED', startDate: ago(210 * 24 * 60), endDate: ago(121 * 24 * 60), rewards: [], topRoleId: null, grantedRewards: [], _count: { snapshots: Math.max(1, members().length - 3) } },
+        { id: 'season-2', number: 2, name: 'Saison d’été', status: 'ENDED', startDate: ago(120 * 24 * 60), endDate: ago(31 * 24 * 60), rewards: [{ rank: 1, roleId: null, coins: 3_000 }], topRoleId: null, grantedRewards: [{ userId: byXp()[0]?.id ?? '1', rank: 1, roleId: null, coins: 3_000, roleStatus: null, coinsStatus: 'given' }], stats: { participants: Math.max(1, members().length - 1), totalXp: 41_200, topXp: 3_850 }, _count: { snapshots: members().length - 1 } },
+        { id: 'season-1', number: 1, name: 'Lancement', status: 'ENDED', startDate: ago(210 * 24 * 60), endDate: ago(121 * 24 * 60), rewards: [], topRoleId: null, grantedRewards: [], stats: { participants: Math.max(1, members().length - 3), totalXp: 28_900, topXp: 2_640 }, _count: { snapshots: Math.max(1, members().length - 3) } },
       ],
     };
   });

@@ -597,6 +597,44 @@ const TRIGGERS: NodeDef[] = [
     config: [CHANNEL_FILTER_FIELD],
   },
   {
+    type: 'OnSeasonStarted',
+    label: 'Saison ouverte',
+    category: 'trigger',
+    description:
+      "Se déclenche à l'ouverture d'une saison de leveling : à la main, à sa date de début ou par enchaînement automatique.",
+    event: 'season:started',
+    module: 'seasons',
+    inputs: [],
+    outputs: [
+      EXEC_OUT,
+      { id: 'season', label: 'Nom de la saison', type: 'String' },
+      { id: 'number', label: 'Numéro de la saison', type: 'Number' },
+    ],
+  },
+  {
+    /**
+     * `member` porte le premier du classement : les actions du catalogue
+     * s'adressent à un membre. Personne de classé, ou un premier parti du
+     * serveur : rien ne part, aucune action n'aurait qui nommer.
+     */
+    type: 'OnSeasonEnded',
+    label: 'Saison clôturée',
+    category: 'trigger',
+    description:
+      "Se déclenche à la clôture d'une saison, une fois le classement figé et les récompenses données. « Premier » est le gagnant ; sans membre classé, rien ne part.",
+    event: 'season:ended',
+    module: 'seasons',
+    inputs: [],
+    outputs: [
+      EXEC_OUT,
+      { id: 'member', label: 'Premier', type: 'Member' },
+      { id: 'season', label: 'Nom de la saison', type: 'String' },
+      { id: 'number', label: 'Numéro de la saison', type: 'Number' },
+      { id: 'participants', label: 'Participants', type: 'Number' },
+      { id: 'winnerXp', label: 'XP gagnée par le premier', type: 'Number' },
+    ],
+  },
+  {
     type: 'OnLevelUp',
     label: 'Passage de niveau',
     category: 'trigger',

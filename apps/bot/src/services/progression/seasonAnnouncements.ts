@@ -12,6 +12,7 @@ import {
   type SeasonAnnouncementLabels,
   type SeasonAnnouncementText,
   type SeasonReward,
+  type SeasonTierReward,
 } from '@kotbo/shared';
 import { COLORS } from '../../utils/embeds.js';
 import { logger } from '../../utils/logger.js';
@@ -42,6 +43,9 @@ export function seasonAnnouncementLabels(locale: BotLocale): SeasonAnnouncementL
     rewardsGivenHeading: m.b2_season_rewards_given_heading({}, o),
     reminderTitle: m.b2_season_reminder_title({ number: '{number}', name: '{name}' }, o),
     reminderBody: m.b2_season_reminder_body({ date: '{date}' }, o),
+    tiersHeading: m.b2_season_tiers_heading({}, o),
+    tierLine: m.b2_season_tier_line({ xp: '{xp}', reward: '{reward}' }, o),
+    tierReachedLine: m.b2_season_tier_reached_line({ xp: '{xp}', count: '{count}' }, o),
   };
 }
 
@@ -63,12 +67,19 @@ function mentionReward(reward: { roleId: string | null; coins: number }, locale:
   };
 }
 
-export function seasonStartText(season: AnnouncedSeason, rewards: readonly SeasonReward[], topRoleId: string | null, locale: BotLocale): SeasonAnnouncementText {
+export function seasonStartText(
+  season: AnnouncedSeason,
+  rewards: readonly SeasonReward[],
+  topRoleId: string | null,
+  locale: BotLocale,
+  tiers: readonly SeasonTierReward[] = [],
+): SeasonAnnouncementText {
   return seasonStartAnnouncement(
     seasonAnnouncementLabels(locale),
     { number: season.number, name: season.name, date: discordDate(season.endDate) },
     rewards.map((reward) => ({ rank: reward.rank, ...mentionReward(reward, locale) })),
     topRoleId ? `<@&${topRoleId}>` : null,
+    tiers.map((tier) => ({ xp: tier.minXp.toLocaleString(locale), ...mentionReward(tier, locale) })),
   );
 }
 
@@ -85,12 +96,14 @@ export function seasonEndText(
   standings: Standings,
   plan: readonly PlannedSeasonReward[],
   locale: BotLocale,
+  tiersReached: ReadonlyArray<{ minXp: number; count: number }> = [],
 ): SeasonAnnouncementText {
   return seasonEndAnnouncement(
     seasonAnnouncementLabels(locale),
     season,
     mentionStandings(standings, locale),
     plan.map((entry) => ({ user: `<@${entry.userId}>`, ...mentionReward(entry, locale) })),
+    tiersReached.map((tier) => ({ xp: tier.minXp.toLocaleString(locale), count: tier.count })),
   );
 }
 
@@ -117,9 +130,15 @@ function guildLocale(client: Client, guildId: string): Promise<BotLocale> {
   return resolveGuildLocale(guildId, client.guilds.cache.get(guildId)?.preferredLocale);
 }
 
-export async function announceSeasonStart(client: Client, season: AnnouncedSeason, rewards: readonly SeasonReward[], topRoleId: string | null): Promise<void> {
+export async function announceSeasonStart(
+  client: Client,
+  season: AnnouncedSeason,
+  rewards: readonly SeasonReward[],
+  topRoleId: string | null,
+  tiers: readonly SeasonTierReward[] = [],
+): Promise<void> {
   if (!season.announceChannelId) return;
-  await send(client, season, seasonStartText(season, rewards, topRoleId, await guildLocale(client, season.guildId)));
+  await send(client, season, seasonStartText(season, rewards, topRoleId, await guildLocale(client, season.guildId), tiers));
 }
 
 export async function announceSeasonReminder(client: Client, season: AnnouncedSeason, standings: Standings): Promise<void> {
@@ -132,7 +151,8 @@ export async function announceSeasonEnd(
   season: AnnouncedSeason,
   standings: Standings,
   plan: readonly PlannedSeasonReward[],
+  tiersReached: ReadonlyArray<{ minXp: number; count: number }> = [],
 ): Promise<void> {
   if (!season.announceChannelId) return;
-  await send(client, season, seasonEndText(season, standings, plan, await guildLocale(client, season.guildId)));
+  await send(client, season, seasonEndText(season, standings, plan, await guildLocale(client, season.guildId), tiersReached));
 }
