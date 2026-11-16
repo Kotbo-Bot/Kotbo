@@ -1,4 +1,5 @@
 <script lang="ts">
+  import MemberTag from '../lib/components/MemberTag.svelte';
   import { explainDisabled } from '../lib/actions/explainDisabled';
   import { onMount } from 'svelte';
   import { memberAvatarSrc } from '../lib/discordMedia';
@@ -494,16 +495,19 @@
 
 <!-- Pseudo qui ouvre la fiche membre, pour qui a accès à « Membres » ; du texte sinon. -->
 {#snippet memberName(userId: string | null | undefined, label: string, cls: string)}
-  {#if userId && memberCaseModal.canOpen}
-    <button
-      type="button"
-      class="{cls} text-left hover:text-primary transition-colors"
-      title={m.sx_open_member({ name: label })}
-      onclick={() => memberCaseModal.show(userId, label)}
-    >{label}</button>
-  {:else}
-    <span class={cls}>{label}</span>
-  {/if}
+  <span class="inline-flex max-w-full min-w-0 items-center gap-1.5">
+    {#if userId && memberCaseModal.canOpen}
+      <button
+        type="button"
+        class="{cls} truncate text-left hover:text-primary transition-colors"
+        title={m.sx_open_member({ name: label })}
+        onclick={() => memberCaseModal.show(userId, label)}
+      >{label}</button>
+    {:else}
+      <span class="{cls} truncate">{label}</span>
+    {/if}
+    <MemberTag {userId} />
+  </span>
 {/snippet}
 
 <ModulePage

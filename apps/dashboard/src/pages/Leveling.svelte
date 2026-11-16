@@ -1,4 +1,5 @@
 <script lang="ts">
+  import MemberTag from '../lib/components/MemberTag.svelte';
   import { explainDisabled } from '../lib/actions/explainDisabled';
   import { channelDisplayName } from '../lib/channelUtils';
   import { isMissingReference } from '../lib/discordReferences';
@@ -2428,6 +2429,7 @@
                     <p class="font-bold text-on-surface truncate group-hover:text-primary transition-colors" title={podium[1].displayName}>
                       {podium[1].displayName || podium[1].username || m.lv_unknown_member()}
                     </p>
+                    <MemberTag userId={podium[1].userId} />
                     {#if podium[1].username && podium[1].displayName !== podium[1].username}
                       <p class="text-xs text-on-surface-variant font-medium truncate">@{podium[1].username}</p>
                     {/if}
@@ -2470,6 +2472,7 @@
                     <p class="font-semibold text-on-surface text-lg truncate group-hover:text-tertiary transition-colors" title={podium[0].displayName}>
                       {podium[0].displayName || podium[0].username || m.lv_unknown_member()}
                     </p>
+                    <MemberTag userId={podium[0].userId} />
                     {#if podium[0].username && podium[0].displayName !== podium[0].username}
                       <p class="text-xs text-tertiary/70 font-medium truncate">@{podium[0].username}</p>
                     {/if}
@@ -2509,6 +2512,7 @@
                     <p class="font-bold text-on-surface truncate group-hover:text-primary transition-colors" title={podium[2].displayName}>
                       {podium[2].displayName || podium[2].username || m.lv_unknown_member()}
                     </p>
+                    <MemberTag userId={podium[2].userId} />
                     {#if podium[2].username && podium[2].displayName !== podium[2].username}
                       <p class="text-xs text-on-surface-variant font-medium truncate">@{podium[2].username}</p>
                     {/if}
@@ -2559,6 +2563,7 @@
               <div class="flex-1 min-w-0">
                 <div class="flex items-baseline gap-2 mb-1.5">
                   <button type="button" class="min-w-0 text-left text-sm font-semibold text-on-surface truncate enabled:hover:text-primary transition-colors" disabled={!memberCaseModal.canOpen} onclick={() => openMember(userLvl)}>{userLvl.displayName || userLvl.username || m.lv_unknown_member()}</button>
+                  <MemberTag userId={userLvl.userId} />
                   {#if userLvl.username && userLvl.displayName !== userLvl.username}
                     <span class="text-2xs text-on-surface-variant/40 truncate font-semibold font-mono">@{userLvl.username}</span>
                   {/if}

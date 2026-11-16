@@ -1,4 +1,5 @@
 <script lang="ts">
+  import MemberTag from '../MemberTag.svelte';
   /**
    * Vue détaillée d'un code d'invitation, présentée comme la fiche membre :
    * tuiles qui pilotent la courbe (période précédente en pointillé), sections
@@ -688,7 +689,10 @@
                   <button type="button" class="sheet-row" disabled={!memberCaseModal.canOpen} onclick={() => openMember(join.userId, join.userTag)}>
                     <img src={memberAvatarSrc(join.avatarUrl, join.userTag, join.userId)} alt="" class="h-9 w-9 shrink-0 rounded-lg object-cover" />
                     <span class="min-w-0 flex-1">
-                      <span class="block truncate text-sm font-medium text-on-surface">{join.userTag}</span>
+                      <span class="flex min-w-0 items-center gap-1.5">
+                        <span class="truncate text-sm font-medium text-on-surface">{join.userTag}</span>
+                        <MemberTag userId={join.userId} />
+                      </span>
                       <span class="block truncate text-xs text-on-surface-variant">{formatDateTime(join.joinedAt)}</span>
                     </span>
                     <span class="shrink-0 text-right text-xs text-on-surface-variant">

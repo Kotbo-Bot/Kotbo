@@ -1,4 +1,5 @@
 <script lang="ts">
+  import MemberTag from '../MemberTag.svelte';
   /**
    * Vue détaillée d'un salon, ouverte par `channelDetailsModal.show(id, name)`.
    * Montée une seule fois dans App.svelte : les listes de salons n'ont qu'à
@@ -202,7 +203,10 @@
           <img src={memberAvatarSrc(person.avatarUrl, person.userTag, person.userId)} alt="" class="h-8 w-8 shrink-0 rounded-lg object-cover" />
           <span class="min-w-0 flex-1">
             <span class="flex items-center justify-between gap-3 text-sm">
-              <span class="truncate font-medium text-on-surface">{person.userTag}</span>
+              <span class="flex min-w-0 items-center gap-1.5">
+                <span class="truncate font-medium text-on-surface">{person.userTag}</span>
+                <MemberTag userId={person.userId} />
+              </span>
               <span class="shrink-0 tabular-nums text-on-surface-variant">{fmtNumber(person.messages)} · {person.sharePct} %</span>
             </span>
             <span class="sheet-bar"><span style="width: {Math.min(100, person.sharePct)}%"></span></span>
@@ -494,6 +498,7 @@
                   <div class="flex flex-wrap items-center gap-2 text-xs text-on-surface-variant">
                     <img src={memberAvatarSrc(msg.authorAvatar, msg.authorName, msg.authorId)} alt="" class="h-5 w-5 rounded-md object-cover" />
                     <span class="font-medium text-on-surface">{msg.authorName}</span>
+                    <MemberTag userId={msg.authorId} />
                     {#if msg.isBot}<span class="badge badge-info">BOT</span>{/if}
                     <span>{formatDateTime(msg.createdAt)}</span>
                     {#if msg.editedAt}<span class="text-warning">{m.chd_edited()}</span>{/if}
@@ -564,6 +569,7 @@
                       <div class="flex flex-wrap items-center gap-2 text-xs text-on-surface-variant">
                         <img src={memberAvatarSrc(msg.authorAvatar, msg.authorName, msg.authorId)} alt="" class="h-5 w-5 rounded-md object-cover" />
                         <span class="font-medium text-on-surface">{msg.authorName}</span>
+                        <MemberTag userId={msg.authorId} />
                         <span>{m.chd_deleted_at({ date: formatDateTime(msg.deletedAt) })}</span>
                       </div>
                       <p class="mt-1 text-sm text-on-surface wrap-break-word">{truncate(msg.content, 240) || m.chd_empty_message()}</p>
