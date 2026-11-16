@@ -1,5 +1,5 @@
 import type { Prisma } from '@prisma/client';
-import { Client, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, MessageFlags, GuildMember, PermissionFlagsBits, RESTJSONErrorCodes, type ButtonInteraction, type HexColorString, type Guild, type Role } from 'discord.js';
+import { Client, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, MessageFlags, GuildMember, RESTJSONErrorCodes, type ButtonInteraction, type HexColorString, type Guild, type Role } from 'discord.js';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { resolveEmojiShortcodes } from '../../utils/emojis.js';
@@ -10,11 +10,11 @@ import {
   normalizeMenuMode,
   parseButtonMode,
   resolveButtonMode,
-  type BotRoleAccess,
   type ReactionRoleButtonMode,
   type ReactionRoleMenuMode,
 } from '@kotbo/contracts';
-import { roleBlocker, shouldAlertStaff, type RoleBlocker } from './reactionRoleAccess.js';
+import { shouldAlertStaff, type RoleBlocker } from './reactionRoleAccess.js';
+import { botMember, getBotRoleAccess, roleBlockerOf } from '../../utils/botRoleAccess.js';
 import { rolesToSwapOut } from './reactionRoleExclusive.js';
 import { recordReactionRoleChange } from '../analytics/reactionRoleStatsService.js';
 
@@ -598,9 +598,9 @@ export async function handleRoleToggleInteraction(interaction: ButtonInteraction
 
     // Sans ce contrôle, Discord refuse l'ajout et le membre ne lit qu'« erreur ».
     const guild = member.guild;
-    const me = guild.members.me ?? await guild.members.fetchMe().catch(() => null);
+    const me = await botMember(guild);
     const clickedRole = guild.roles.cache.get(roleId) ?? await guild.roles.fetch(roleId).catch(() => null);
-    const blocked = blockerOf(clickedRole, me);
+    const blocked = roleBlockerOf(clickedRole, me);
     if (blocked) {
       void alertStaffRoleBlocked(guild, activeMenu.title, roleId, { reason: blocked, roleName: clickedRole?.name ?? null });
       return answer(m.reactionroles_role_unavailable({}, { locale }));
@@ -622,7 +622,7 @@ export async function handleRoleToggleInteraction(interaction: ButtonInteraction
     // bot ne peut pas retirer (un seul refus ferait échouer tout le retrait).
     const swapOut = menuMode === 'exclusive'
       ? rolesToSwapOut(configuredRoles.map((option) => option.roleId), member.roles.cache.keys(), roleId)
-        .filter((id) => !blockerOf(guild.roles.cache.get(id), me))
+        .filter((id) => !roleBlockerOf(guild.roles.cache.get(id), me))
       : [];
 
     // Ajout d'abord : si le retrait échoue ensuite, le membre a deux rôles
@@ -648,28 +648,8 @@ export async function handleRoleToggleInteraction(interaction: ButtonInteraction
   }
 }
 
-function botRoleAccessOf(me: GuildMember | null): BotRoleAccess {
-  return {
-    canManageRoles: me?.permissions.has(PermissionFlagsBits.ManageRoles) ?? false,
-    topPosition: me?.roles.highest.position ?? 0,
-  };
-}
-
-/** Ce que le bot peut attribuer sur ce serveur : le dashboard en déduit les rôles bloqués. */
-export async function getBotRoleAccess(guild: Guild): Promise<BotRoleAccess> {
-  return botRoleAccessOf(guild.members.me ?? await guild.members.fetchMe().catch(() => null));
-}
-
-function blockerOf(role: Role | null | undefined, me: GuildMember | null): RoleBlocker | null {
-  const access = botRoleAccessOf(me);
-  return roleBlocker({
-    exists: !!role,
-    managed: role?.managed ?? false,
-    botCanManageRoles: access.canManageRoles,
-    rolePosition: role?.position ?? 0,
-    botTopPosition: access.topPosition,
-  });
-}
+/** Ce que le bot peut attribuer : vit dans `utils/botRoleAccess`, la clôture des saisons s'en sert aussi. */
+export { getBotRoleAccess };
 
 /**
  * Prévient le propriétaire du serveur, au plus une fois par heure pour une même

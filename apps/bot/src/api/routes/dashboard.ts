@@ -52,6 +52,7 @@ import { handlePulseRoutes } from './dashboard/pulse.js';
 import { handleHomeWidgetsRoutes } from './dashboard/homeWidgets.js';
 import { handleHomeTasksRoutes } from './dashboard/homeTasks.js';
 import { handleReputationRoutes } from './dashboard/reputation.js';
+import { handleSuggestionRoutes } from './dashboard/suggestions.js';
 import { handleSatisfactionRoutes } from './dashboard/satisfaction.js';
 import { handleSeasonRoutes } from './dashboard/seasons.js';
 import { handleRankedRoutes } from './dashboard/ranked.js';
@@ -345,6 +346,13 @@ export async function handleDashboardRoutes(
     // exact sur chaque tutorat est revérifié dans handleTutoringRoutes.
     const isTutoringAction = parts[4] === 'tutoring' && method !== 'GET';
 
+    // Trancher une suggestion est un geste de modération : le droit « Modérer »
+    // de la fonctionnalité, revérifié dans handleSuggestionRoutes, suffit.
+    const isSuggestionDecisionAction = parts[4] === 'suggestions'
+      && parts.length === 7
+      && parts[6] === 'resolve'
+      && method === 'POST';
+
     const isMemberModerationAction = parts.length === 7
       && parts[4] === 'members'
       && ((parts[6] === 'note' && method === 'PATCH') || (parts[6] === 'actions' && method === 'POST'));
@@ -411,7 +419,7 @@ export async function handleDashboardRoutes(
       ? { ...access, canManageSettings: true }
       : access;
 
-    if (!access.canManageSettings && method !== 'GET' && !hasFeatureWriteRight && !isSanctionAction && !isDailyAlgoReviewAction && !isStaffAbsenceAction && !isStaffResignationAction && !isNotificationAction && !isMeetingAction && !isNewsAction && !isMemberModerationAction && !isGiveawayManagerAction && !isAnalyticsAnnotationAction && !isAegisReviewAction && !isDoingListAction && !isTutoringAction) {
+    if (!access.canManageSettings && method !== 'GET' && !hasFeatureWriteRight && !isSanctionAction && !isDailyAlgoReviewAction && !isStaffAbsenceAction && !isStaffResignationAction && !isNotificationAction && !isMeetingAction && !isNewsAction && !isMemberModerationAction && !isGiveawayManagerAction && !isAnalyticsAnnotationAction && !isAegisReviewAction && !isDoingListAction && !isTutoringAction && !isSuggestionDecisionAction) {
       json(res, 403, { error: 'Action réservée aux administrateurs du dashboard.' });
       return true;
     }
@@ -615,6 +623,10 @@ export async function handleDashboardRoutes(
       return true;
     }
     if (await handleReputationRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
+      if (method !== 'GET') await cache.invalidateGuild(guildId);
+      return true;
+    }
+    if (await handleSuggestionRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
       if (method !== 'GET') await cache.invalidateGuild(guildId);
       return true;
     }

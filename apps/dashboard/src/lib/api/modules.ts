@@ -523,25 +523,6 @@ export async function decideAdminLockRequest(requestId: string, payload: { decis
   return dashboardRequest(`/admin-lock/${requestId}/decide`, { method: 'POST', successMessage: m.api_ok_decide_admin_lock_request(), payload, guildId, errorContext: 'API Error (Decide Admin Lock Request):' });
 }
 
-export async function fetchSuggestions(guildId = authStore.selectedGuildId) {
-  return dashboardRequest('/suggestions', { method: 'GET', guildId, errorContext: 'API Error (Fetch Suggestions):' });
-}
-
-export async function fetchSuggestionsConfig(guildId = authStore.selectedGuildId) {
-  return dashboardRequest('/suggestions/config', { method: 'GET', guildId, errorContext: 'API Error (Fetch Suggestions Config):' });
-}
-
-export async function updateSuggestionsConfig(
-  config: { enabled?: boolean; channelId?: string | null },
-  guildId = authStore.selectedGuildId
-) {
-  return dashboardRequest('/suggestions/config', { method: 'PATCH', successMessage: m.api_ok_update_suggestions_config(), payload: config, guildId, errorContext: 'API Error (Update Suggestions Config):' });
-}
-
-export async function resolveSuggestion(suggestionId: string, payload: { status: 'APPROVED' | 'REJECTED' | 'IMPLEMENTED'; responseText: string }, guildId = authStore.selectedGuildId) {
-  return dashboardRequest(`/suggestions/${suggestionId}/resolve`, { method: 'POST', successMessage: m.api_ok_resolve_suggestion(), payload, guildId, errorContext: 'API Error (Resolve Suggestion):' });
-}
-
 export async function sendOrUpdateEmbed(payload: { channelId: string; messageId?: string | null; embed: Record<string, unknown> }, guildId = authStore.selectedGuildId) {
   return dashboardRequest('/embed-builder', { method: 'POST', successMessage: m.api_ok_send_or_update_embed(), payload, guildId, errorContext: 'API Error (Send Embed):' });
 }

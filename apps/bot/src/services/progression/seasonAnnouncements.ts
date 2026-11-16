@@ -1,16 +1,18 @@
 /**
- * Annonces d'ouverture et de clôture d'une saison, dans le salon réglé sur
- * elle. Une annonce qui échoue est journalisée et n'empêche rien. Le texte est
+ * Annonces d'ouverture, de rappel et de clôture d'une saison, dans le salon
+ * réglé sur elle. Une annonce qui échoue est journalisée et n'empêche rien. Le texte est
  * construit par `@kotbo/shared`, comme l'aperçu du dashboard.
  */
 import { EmbedBuilder, type Client } from 'discord.js';
 import {
   seasonEndAnnouncement,
+  seasonReminderAnnouncement,
   seasonStartAnnouncement,
   type PlannedSeasonReward,
   type SeasonAnnouncementLabels,
   type SeasonAnnouncementText,
   type SeasonReward,
+  type SeasonTierReward,
 } from '@kotbo/shared';
 import { COLORS } from '../../utils/embeds.js';
 import { logger } from '../../utils/logger.js';
@@ -39,12 +41,23 @@ export function seasonAnnouncementLabels(locale: BotLocale): SeasonAnnouncementL
     endLine: m.b2_season_end_line({ rank: '{rank}', user: '{user}', xp: '{xp}' }, o),
     endEmpty: m.b2_season_end_empty({}, o),
     rewardsGivenHeading: m.b2_season_rewards_given_heading({}, o),
+    reminderTitle: m.b2_season_reminder_title({ number: '{number}', name: '{name}' }, o),
+    reminderBody: m.b2_season_reminder_body({ date: '{date}' }, o),
+    tiersHeading: m.b2_season_tiers_heading({}, o),
+    tierLine: m.b2_season_tier_line({ xp: '{xp}', reward: '{reward}' }, o),
+    tierReachedLine: m.b2_season_tier_reached_line({ xp: '{xp}', count: '{count}' }, o),
   };
 }
 
-/** Horodatage Discord : affiché dans la langue et le fuseau de chaque lecteur. */
-function discordDate(date: Date): string {
-  return `<t:${Math.floor(date.getTime() / 1000)}:D>`;
+/** Horodatage Discord : affiché dans la langue et le fuseau de chaque lecteur (`R` : « dans 12 heures »). */
+function discordDate(date: Date, style: 'D' | 'R' = 'D'): string {
+  return `<t:${Math.floor(date.getTime() / 1000)}:${style}>`;
+}
+
+type Standings = ReadonlyArray<{ userId: string; rank: number; xp: number }>;
+
+function mentionStandings(standings: Standings, locale: BotLocale) {
+  return standings.map((entry) => ({ rank: entry.rank, user: `<@${entry.userId}>`, xp: entry.xp.toLocaleString(locale) }));
 }
 
 function mentionReward(reward: { roleId: string | null; coins: number }, locale: BotLocale) {
@@ -54,26 +67,43 @@ function mentionReward(reward: { roleId: string | null; coins: number }, locale:
   };
 }
 
-export function seasonStartText(season: AnnouncedSeason, rewards: readonly SeasonReward[], topRoleId: string | null, locale: BotLocale): SeasonAnnouncementText {
+export function seasonStartText(
+  season: AnnouncedSeason,
+  rewards: readonly SeasonReward[],
+  topRoleId: string | null,
+  locale: BotLocale,
+  tiers: readonly SeasonTierReward[] = [],
+): SeasonAnnouncementText {
   return seasonStartAnnouncement(
     seasonAnnouncementLabels(locale),
     { number: season.number, name: season.name, date: discordDate(season.endDate) },
     rewards.map((reward) => ({ rank: reward.rank, ...mentionReward(reward, locale) })),
     topRoleId ? `<@&${topRoleId}>` : null,
+    tiers.map((tier) => ({ xp: tier.minXp.toLocaleString(locale), ...mentionReward(tier, locale) })),
+  );
+}
+
+export function seasonReminderText(season: AnnouncedSeason, standings: Standings, locale: BotLocale): SeasonAnnouncementText {
+  return seasonReminderAnnouncement(
+    seasonAnnouncementLabels(locale),
+    { number: season.number, name: season.name, date: discordDate(season.endDate, 'R') },
+    mentionStandings(standings, locale),
   );
 }
 
 export function seasonEndText(
   season: Pick<AnnouncedSeason, 'number' | 'name'>,
-  standings: ReadonlyArray<{ userId: string; rank: number; xp: number }>,
+  standings: Standings,
   plan: readonly PlannedSeasonReward[],
   locale: BotLocale,
+  tiersReached: ReadonlyArray<{ minXp: number; count: number }> = [],
 ): SeasonAnnouncementText {
   return seasonEndAnnouncement(
     seasonAnnouncementLabels(locale),
     season,
-    standings.map((entry) => ({ rank: entry.rank, user: `<@${entry.userId}>`, xp: entry.xp.toLocaleString(locale) })),
+    mentionStandings(standings, locale),
     plan.map((entry) => ({ user: `<@${entry.userId}>`, ...mentionReward(entry, locale) })),
+    tiersReached.map((tier) => ({ xp: tier.minXp.toLocaleString(locale), count: tier.count })),
   );
 }
 
@@ -100,17 +130,29 @@ function guildLocale(client: Client, guildId: string): Promise<BotLocale> {
   return resolveGuildLocale(guildId, client.guilds.cache.get(guildId)?.preferredLocale);
 }
 
-export async function announceSeasonStart(client: Client, season: AnnouncedSeason, rewards: readonly SeasonReward[], topRoleId: string | null): Promise<void> {
+export async function announceSeasonStart(
+  client: Client,
+  season: AnnouncedSeason,
+  rewards: readonly SeasonReward[],
+  topRoleId: string | null,
+  tiers: readonly SeasonTierReward[] = [],
+): Promise<void> {
   if (!season.announceChannelId) return;
-  await send(client, season, seasonStartText(season, rewards, topRoleId, await guildLocale(client, season.guildId)));
+  await send(client, season, seasonStartText(season, rewards, topRoleId, await guildLocale(client, season.guildId), tiers));
+}
+
+export async function announceSeasonReminder(client: Client, season: AnnouncedSeason, standings: Standings): Promise<void> {
+  if (!season.announceChannelId) return;
+  await send(client, season, seasonReminderText(season, standings, await guildLocale(client, season.guildId)));
 }
 
 export async function announceSeasonEnd(
   client: Client,
   season: AnnouncedSeason,
-  standings: ReadonlyArray<{ userId: string; rank: number; xp: number }>,
+  standings: Standings,
   plan: readonly PlannedSeasonReward[],
+  tiersReached: ReadonlyArray<{ minXp: number; count: number }> = [],
 ): Promise<void> {
   if (!season.announceChannelId) return;
-  await send(client, season, seasonEndText(season, standings, plan, await guildLocale(client, season.guildId)));
+  await send(client, season, seasonEndText(season, standings, plan, await guildLocale(client, season.guildId), tiersReached));
 }

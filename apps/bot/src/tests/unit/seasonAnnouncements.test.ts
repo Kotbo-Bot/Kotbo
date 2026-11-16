@@ -7,7 +7,7 @@ for (const dbPath of ['../../utils/db.ts', '../../utils/db.js']) {
   mock.module(path.resolve(__dirname, dbPath), () => ({ default: mockDb, prisma: mockDb, prismaRead: mockDb }));
 }
 
-const { seasonStartText, seasonEndText, announceSeasonEnd, seasonAnnouncementLabels } = await import('../../services/progression/seasonAnnouncements.js');
+const { seasonStartText, seasonEndText, seasonReminderText, announceSeasonEnd, seasonAnnouncementLabels } = await import('../../services/progression/seasonAnnouncements.js');
 
 const ROLE = '123456789012345678';
 const season = { guildId: 'g', number: 2, name: 'Hiver', endDate: new Date('2026-12-01T00:00:00Z'), announceChannelId: 'c' };
@@ -54,12 +54,37 @@ describe('seasonEndText', () => {
   });
 });
 
+describe('paliers', () => {
+  test('l\'ouverture mentionne le rôle du palier', () => {
+    const text = seasonStartText(season, [], null, 'fr', [{ minXp: 1000, roleId: ROLE, coins: 0 }]).description;
+    expect(text).toContain(`<@&${ROLE}>`);
+  });
+
+  test('la clôture compte les membres de chaque palier', () => {
+    const text = seasonEndText(season, [{ userId: 'a', rank: 1, xp: 9 }], [], 'en', [{ minXp: 1000, count: 12 }]).description;
+    expect(text).toContain('12');
+  });
+});
+
+describe('seasonReminderText', () => {
+  test('date de fin relative et podium provisoire en mentions', () => {
+    const text = seasonReminderText(season, [{ userId: 'a', rank: 1, xp: 900 }], 'fr');
+    expect(text.title).toContain('Hiver');
+    expect(text.description).toContain('<t:1796083200:R>');
+    expect(text.description).toContain('<@a>');
+  });
+});
+
 describe('seasonAnnouncementLabels', () => {
   test('rend des gabarits à trous, sans valeur réelle', () => {
     const labels = seasonAnnouncementLabels('fr');
     expect(labels.startTitle).toContain('{number}');
     expect(labels.startTitle).toContain('{name}');
     expect(labels.endLine).toContain('{user}');
+    expect(labels.reminderTitle).toContain('{name}');
+    expect(labels.reminderBody).toContain('{date}');
+    expect(labels.tierLine).toContain('{reward}');
+    expect(labels.tierReachedLine).toContain('{count}');
   });
 });
 

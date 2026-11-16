@@ -1,7 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import {
   fillSeasonTemplate,
+  planSeasonRewards,
+  sampleSeasonStandings,
   seasonEndAnnouncement,
+  seasonReminderAnnouncement,
   seasonStartAnnouncement,
   type SeasonAnnouncementLabels,
 } from '@kotbo/shared';
@@ -17,6 +20,11 @@ const LABELS: SeasonAnnouncementLabels = {
   endLine: '#{rank} {user} +{xp}',
   endEmpty: 'Personne.',
   rewardsGivenHeading: 'Données',
+  reminderTitle: 'Dernier jour #{number} · {name}',
+  reminderBody: 'Clôture le {date}.',
+  tiersHeading: 'Paliers',
+  tierLine: 'Dès {xp} XP · {reward}',
+  tierReachedLine: '{xp} XP · {count} membres',
 };
 
 describe('fillSeasonTemplate', () => {
@@ -47,5 +55,48 @@ describe('seasonEndAnnouncement', () => {
 
   test('saison sans classé : message dédié', () => {
     expect(seasonEndAnnouncement(LABELS, { number: 2, name: 'Hiver' }, [], []).description).toBe('Personne.');
+  });
+});
+
+describe('sampleSeasonStandings', () => {
+  test('sans récompense, le podium seul', () => {
+    expect(sampleSeasonStandings([]).map((entry) => entry.rank)).toEqual([1, 2, 3]);
+  });
+
+  test('prolongé jusqu\'au dernier rang récompensé, XP décroissante', () => {
+    const sample = sampleSeasonStandings([{ rank: 1 }, { rank: 7 }]);
+    expect(sample.map((entry) => entry.rank)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    expect(sample.every((entry, i) => i === 0 || entry.xp < sample[i - 1].xp)).toBe(true);
+    expect(sample.every((entry) => entry.xp > 0)).toBe(true);
+  });
+
+  test('chaque récompense trouve son gagnant fictif', () => {
+    const rewards = [{ rank: 2, roleId: null, coins: 10 }, { rank: 10, roleId: null, coins: 5 }];
+    expect(planSeasonRewards(rewards, sampleSeasonStandings(rewards)).map((entry) => entry.rank)).toEqual([2, 10]);
+  });
+});
+
+describe('seasonReminderAnnouncement', () => {
+  test('titre, date de clôture puis classement provisoire limité au podium', () => {
+    const standings = [1, 2, 3, 4].map((rank) => ({ rank, user: `u${rank}`, xp: String(100 - rank) }));
+    const text = seasonReminderAnnouncement(LABELS, { number: 2, name: 'Hiver', date: '1 déc.' }, standings);
+    expect(text.title).toBe('Dernier jour #2 · Hiver');
+    expect(text.description.split('\n')).toEqual(['Clôture le 1 déc..', '', '#1 u1 +99', '#2 u2 +98', '#3 u3 +97']);
+  });
+
+  test('sans classé, la date seule', () => {
+    expect(seasonReminderAnnouncement(LABELS, { number: 2, name: 'Hiver', date: 'x' }, []).description).toBe('Clôture le x.');
+  });
+});
+
+describe('paliers dans les annonces', () => {
+  test('l\'ouverture liste les paliers après les récompenses de rang', () => {
+    const text = seasonStartAnnouncement(LABELS, { number: 1, name: 'A', date: 'x' }, [], null, [{ xp: '1 000', role: '@Actif', coins: '50' }]);
+    expect(text.description.split('\n')).toEqual(['Jusqu’au x.', '', '**Paliers**', 'Dès 1 000 XP · @Actif + 50 pièces']);
+  });
+
+  test('la clôture compte les membres de chaque palier', () => {
+    const text = seasonEndAnnouncement(LABELS, { number: 1, name: 'A' }, [{ rank: 1, user: 'u1', xp: '9' }], [], [{ xp: '1 000', count: 12 }]);
+    expect(text.description.split('\n')).toEqual(['#1 u1 +9', '', '**Paliers**', '1 000 XP · 12 membres']);
   });
 });

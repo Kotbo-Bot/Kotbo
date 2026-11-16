@@ -34,6 +34,7 @@ export * from './channelLinks';
 export * from './channelHealth';
 export * from './insights';
 export * from './reputation';
+export * from './suggestions';
 export * from './seasons';
 export * from './quests';
 export * from './widgets';

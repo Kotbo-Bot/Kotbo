@@ -23,7 +23,7 @@ import { normalizeSiteDocument, type SiteDocument } from '@kotbo/shared';
 import { moderateMemberText } from '../../../../services/site/siteModeration.js';
 import { isTicketActive, openTicketFromSite, postTicketMessageFromSite, relayMemberMessage } from '../../../../services/site/siteTicketService.js';
 import { toggleGiveawayParticipation } from '../../../../services/features/giveawayService.js';
-import { createSuggestion, voteOnSuggestion } from '../../../../services/features/suggestionService.js';
+import { SuggestionNotAllowedError, createSuggestion, voteOnSuggestion } from '../../../../services/features/suggestionService.js';
 import { buyListing } from '../../../../services/economy/marketplaceService.js';
 import { getAgentLockStatus, interruptAgent } from '../../../../services/site/siteAgentLock.js';
 import { LEGACY_PAGE_KINDS, resolveFormRedirect, resolveLegacyRedirect, type LegacyPageKind } from '../../../../services/site/siteRedirects.js';
@@ -304,8 +304,12 @@ export function createSiteApiRouter(client: Client): OpenAPIHono {
             logger.info('Site', `Suggestion refusée sur ${guildId} (${verdict.reason}) pour ${viewer.userId}`);
             return c.json({ error: m.site_err_refused({}, o) }, 422);
           }
-          const suggestion = await createSuggestion(guildId, viewer.userId, viewer.username, content, client);
-          if (suggestion) rewardParticipation(guildId, viewer.userId, `suggestion:${suggestion.id}`);
+          const suggestion = await createSuggestion(guildId, viewer.userId, viewer.username, content, client).catch((error: unknown) => {
+            if (error instanceof SuggestionNotAllowedError) return null;
+            throw error;
+          });
+          if (!suggestion) return c.json({ error: m.b5_suggestion_err_role({}, o) }, 403);
+          rewardParticipation(guildId, viewer.userId, `suggestion:${suggestion.id}`);
           return c.json({ ok: true, message: m.site_suggestion_sent({}, o) });
         }
         case 'event-register': {

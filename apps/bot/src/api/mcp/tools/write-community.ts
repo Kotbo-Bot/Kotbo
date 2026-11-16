@@ -1,11 +1,10 @@
 /** Outils MCP - write community (permission WRITE_COMMUNITY). */
 import { archiveChannel, createSplitChannel, resolveHealthAlert, upsertChannelHealthConfig } from '../../../services/analytics/channelHealthService.js';
-import { createSeason, deleteSeason, endSeason, parseSeasonInput, startSeason, updateSeason } from '../../../services/progression/seasonService.js';
-import { publishSuggestionResolved } from '../../../services/features/suggestionService.js';
+import { createSeason, deleteSeason, endSeason, parseSeasonInput, retrySeasonRewards, startSeason, updateSeason } from '../../../services/progression/seasonService.js';
+import { resolveSuggestion } from '../../../services/features/suggestionService.js';
 import { adjustRep } from '../../../services/community/reputationActions.js';
-import { REPUTATION_ADJUSTMENT } from '@kotbo/shared';
+import { REPUTATION_ADJUSTMENT, SUGGESTION_RESPONSE_MAX } from '@kotbo/shared';
 import prisma from '../../../utils/db.js';
-import { type NewsChannel, TextChannel } from 'discord.js';
 import { z } from 'zod';
 import { type McpToolContext, err, ok, resolveChannel, resolveMember, toolError } from '../toolkit.js';
 
@@ -64,35 +63,17 @@ export function registerWriteCommunityTools(ctx: McpToolContext) {
         inputSchema: {
           suggestion_id: z.string().describe('ID de la suggestion (issu de get_suggestions)'),
           status: z.enum(['APPROVED', 'REJECTED', 'IMPLEMENTED']).describe('Nouveau statut'),
-          response: z.string().min(1).max(1000).describe('Texte de réponse'),
+          response: z.string().min(1).max(SUGGESTION_RESPONSE_MAX).describe('Texte de réponse, publié sous la suggestion'),
           key_name: z.string().optional().describe("Nom de la clé MCP (pour l'audit)"),
         },
         _meta: toolMeta,
       },
       guard('WRITE_COMMUNITY', async ({ suggestion_id, status, response, key_name }) => {
-        const suggestion = await prisma.suggestion.findFirst({ where: { id: suggestion_id, guildId } });
-        if (!suggestion) return err('Suggestion introuvable');
-
-        const updated = await prisma.suggestion.update({
-          where: { id: suggestion.id },
-          data: {
-            status,
-            responseText: response,
-            respondedById: 'mcp_agent',
-            respondedAt: new Date(),
-          },
-        });
-        publishSuggestionResolved(updated);
-
-        if (suggestion.channelId && suggestion.messageId) {
-          const channel = client.guilds.cache.get(guildId)?.channels.cache.get(suggestion.channelId);
-          if (channel?.isTextBased()) {
-            const statusEmoji = status === 'APPROVED' ? '✅' : status === 'REJECTED' ? '❌' : '🚀';
-            await (channel as TextChannel | NewsChannel)
-              .send({ content: `${statusEmoji} **Réponse à la suggestion de ${suggestion.username} :**\n${response}` })
-              .catch(() => null);
-          }
-        }
+        // Même chemin que le dashboard : statut, message public et événement,
+        // au lieu d'un second message posté sous la suggestion restée « en attente ».
+        const result = await resolveSuggestion(guildId, suggestion_id, status, response, 'mcp_agent', client);
+        if (!result) return err('Suggestion introuvable');
+        const { suggestion } = result;
 
         await audit(key_name, 'Réponse suggestion MCP', `Suggestion: ${suggestion.id}`, `${status} - ${response.slice(0, 200)}`);
 
@@ -169,13 +150,22 @@ export function registerWriteCommunityTools(ctx: McpToolContext) {
             rank: z.number().int().min(1).max(100),
             role_id: z.string().optional(),
             coins: z.number().int().min(0).optional(),
+            rotate: z.boolean().optional().describe('Rôle repris à la clôture de la saison suivante, sauf à qui le regagne'),
           })).max(10).optional().describe('Récompenses par rang, données à la clôture'),
+          tiers: z.array(z.object({
+            min_xp: z.number().int().min(1),
+            role_id: z.string().optional(),
+            coins: z.number().int().min(0).optional(),
+            rotate: z.boolean().optional(),
+          })).max(5).optional().describe('Paliers d\'XP : chaque membre qui gagne au moins min_xp pendant la saison reçoit la récompense'),
           announce_channel_id: z.string().optional().describe('Salon où annoncer l\'ouverture et la clôture'),
+          auto_renew: z.boolean().optional().describe('À la clôture, ouvrir une saison de même durée et mêmes réglages, sauf si une autre est déjà prévue'),
+          remind_before_end: z.boolean().optional().describe('Rappel dans le salon d\'annonce pendant les dernières 24 h'),
           key_name: z.string().optional(),
         },
         _meta: toolMeta,
       },
-      guard('WRITE_COMMUNITY', async ({ name, start_date, end_date, top_role_id, rewards, announce_channel_id, key_name }) => {
+      guard('WRITE_COMMUNITY', async ({ name, start_date, end_date, top_role_id, rewards, tiers, announce_channel_id, auto_renew, remind_before_end, key_name }) => {
         try {
           const parsed = parseSeasonInput({
             name,
@@ -183,7 +173,10 @@ export function registerWriteCommunityTools(ctx: McpToolContext) {
             endDate: end_date,
             topRoleId: top_role_id,
             announceChannelId: announce_channel_id,
-            rewards: rewards?.map((reward) => ({ rank: reward.rank, roleId: reward.role_id, coins: reward.coins })),
+            rewards: rewards?.map((reward) => ({ rank: reward.rank, roleId: reward.role_id, coins: reward.coins, rotate: reward.rotate })),
+            tiers: tiers?.map((tier) => ({ minXp: tier.min_xp, roleId: tier.role_id, coins: tier.coins, rotate: tier.rotate })),
+            autoRenew: auto_renew,
+            remindBeforeEnd: remind_before_end,
           });
           if ('error' in parsed) return err(`Saison invalide : ${parsed.error}`);
           const season = await createSeason(guildId, parsed.input, client);
@@ -209,13 +202,22 @@ export function registerWriteCommunityTools(ctx: McpToolContext) {
             rank: z.number().int().min(1).max(100),
             role_id: z.string().optional(),
             coins: z.number().int().min(0).optional(),
+            rotate: z.boolean().optional().describe('Rôle repris à la clôture de la saison suivante, sauf à qui le regagne'),
           })).max(10).optional().describe('Récompenses par rang, données à la clôture'),
+          tiers: z.array(z.object({
+            min_xp: z.number().int().min(1),
+            role_id: z.string().optional(),
+            coins: z.number().int().min(0).optional(),
+            rotate: z.boolean().optional(),
+          })).max(5).optional().describe('Paliers d\'XP : chaque membre qui gagne au moins min_xp pendant la saison reçoit la récompense'),
           announce_channel_id: z.string().optional(),
+          auto_renew: z.boolean().optional(),
+          remind_before_end: z.boolean().optional(),
           key_name: z.string().optional(),
         },
         _meta: toolMeta,
       },
-      guard('WRITE_COMMUNITY', async ({ season_id, name, start_date, end_date, top_role_id, rewards, announce_channel_id, key_name }) => {
+      guard('WRITE_COMMUNITY', async ({ season_id, name, start_date, end_date, top_role_id, rewards, tiers, announce_channel_id, auto_renew, remind_before_end, key_name }) => {
         try {
           const patch: Record<string, unknown> = {};
           if (name !== undefined) patch.name = name;
@@ -223,7 +225,10 @@ export function registerWriteCommunityTools(ctx: McpToolContext) {
           if (end_date !== undefined) patch.endDate = end_date;
           if (top_role_id !== undefined) patch.topRoleId = top_role_id;
           if (announce_channel_id !== undefined) patch.announceChannelId = announce_channel_id;
-          if (rewards !== undefined) patch.rewards = rewards.map((reward) => ({ rank: reward.rank, roleId: reward.role_id, coins: reward.coins }));
+          if (rewards !== undefined) patch.rewards = rewards.map((reward) => ({ rank: reward.rank, roleId: reward.role_id, coins: reward.coins, rotate: reward.rotate }));
+          if (tiers !== undefined) patch.tiers = tiers.map((tier) => ({ minXp: tier.min_xp, roleId: tier.role_id, coins: tier.coins, rotate: tier.rotate }));
+          if (auto_renew !== undefined) patch.autoRenew = auto_renew;
+          if (remind_before_end !== undefined) patch.remindBeforeEnd = remind_before_end;
 
           const result = await updateSeason(guildId, season_id, patch, client);
           if (result === 'not_found') return err('Saison introuvable ou déjà terminée');
@@ -296,6 +301,29 @@ export function registerWriteCommunityTools(ctx: McpToolContext) {
           if (!success) return err('Impossible de terminer la saison');
           await audit(key_name, 'Fin de saison MCP', season_id, '');
           return ok({ ok: true, seasonId: season_id });
+        } catch (e) {
+          return toolError(e);
+        }
+      })
+    );
+
+    server.registerTool(
+      'retry_season_rewards',
+      {
+        description: 'Redonne les récompenses d\'une saison terminée qui n\'ont pas été remises (rôle refusé, membre parti, Économie éteinte). Requiert WRITE_COMMUNITY.',
+        inputSchema: {
+          season_id: z.string().describe('ID de la saison terminée'),
+          key_name: z.string().optional(),
+        },
+        _meta: toolMeta,
+      },
+      guard('WRITE_COMMUNITY', async ({ season_id, key_name }) => {
+        try {
+          const result = await retrySeasonRewards(client, guildId, season_id);
+          if (result === 'not_found') return err('Saison introuvable ou pas encore terminée');
+          if (result === 'busy') return err('Les récompenses de cette saison sont déjà en cours de reprise');
+          await audit(key_name, 'Reprise récompenses saison MCP', season_id, `${result.retried} repris, ${result.remaining} restant(s)`);
+          return ok({ ok: true, seasonId: season_id, ...result });
         } catch (e) {
           return toolError(e);
         }

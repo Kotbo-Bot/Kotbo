@@ -12,7 +12,16 @@
  * qu'on montre : le message du serveur quand il en donne un d'utile, le texte
  * de la categorie sinon.
  */
-import { m } from '../i18n';
+import {
+  SEASON_DURATION_DAYS,
+  SEASON_NAME_MAX,
+  SEASON_REWARDS_MAX,
+  SEASON_REWARD_COINS,
+  SEASON_REWARD_RANK,
+  SEASON_TIERS_MAX,
+  SEASON_TIER_XP,
+} from '@kotbo/shared';
+import { m, dateLocale } from '../i18n';
 
 export type ApiErrorKind =
   /** Aucune connexion : hors ligne, DNS, ou serveur qui n'accepte pas la connexion. */
@@ -131,6 +140,32 @@ const CODE_MESSAGES = new Map<string, (p: CodeParams) => string>([
     (p) => m.api_err_tv_setting_invalid_range({ field: String(p.field ?? ''), value: String(p.value ?? ''), min: String(p.min ?? ''), max: String(p.max ?? '') }),
   ],
   ['tv_snowflake_invalid', (p) => m.api_err_tv_snowflake_invalid({ field: String(p.field ?? ''), value: String(p.value ?? '') })],
+  // Saisons : les refus de validation reprennent les textes du formulaire,
+  // qui applique les mêmes règles avant envoi.
+  ['sea_bad_name', () => m.sea_error_name({ max: SEASON_NAME_MAX })],
+  ['sea_bad_date', () => m.sea_error_date()],
+  ['sea_end_before_start', () => m.sea_error_end_before_start()],
+  ['sea_end_in_past', () => m.sea_error_end_in_past()],
+  ['sea_bad_duration', () => m.sea_error_duration({ min: SEASON_DURATION_DAYS.min, max: SEASON_DURATION_DAYS.max })],
+  ['sea_too_many_rewards', () => m.sea_error_reward_too_many({ max: SEASON_REWARDS_MAX })],
+  ['sea_bad_reward_rank', () => m.sea_error_reward_rank({ max: SEASON_REWARD_RANK.max })],
+  ['sea_bad_reward_role', () => m.sea_error_reward_role()],
+  ['sea_bad_reward_coins', () => m.sea_error_reward_coins({ max: SEASON_REWARD_COINS.max.toLocaleString(dateLocale()) })],
+  ['sea_empty_reward', () => m.sea_error_reward_empty()],
+  ['sea_duplicate_rank', () => m.sea_error_reward_duplicate()],
+  ['sea_too_many_tiers', () => m.sea_error_tier_too_many({ max: SEASON_TIERS_MAX })],
+  ['sea_bad_tier_xp', () => m.sea_error_tier_xp({ max: SEASON_TIER_XP.max.toLocaleString(dateLocale()) })],
+  ['sea_duplicate_tier', () => m.sea_error_tier_duplicate()],
+  ['sea_bad_top_role', () => m.api_err_sea_bad_top_role()],
+  ['sea_bad_announce_channel', () => m.api_err_sea_bad_announce_channel()],
+  ['sea_forbidden', () => m.api_err_forbidden()],
+  ['sea_not_editable', () => m.api_err_sea_not_editable()],
+  ['sea_not_deletable', () => m.api_err_sea_not_deletable()],
+  ['sea_another_active', () => m.api_err_sea_another_active()],
+  ['sea_not_startable', () => m.api_err_sea_not_startable()],
+  ['sea_end_failed', () => m.api_err_sea_end_failed()],
+  ['sea_rewards_not_found', () => m.api_err_sea_rewards_not_found()],
+  ['sea_rewards_busy', () => m.api_err_sea_rewards_busy()],
 ]);
 
 /** Codes que ce dashboard sait traduire (pour les tests et la détection d'oubli). */

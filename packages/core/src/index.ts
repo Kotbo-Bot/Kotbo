@@ -35,6 +35,8 @@ export type {
   FunGameKey,
   FunGameWonEvent,
   ReputationGivenEvent,
+  SeasonStartedEvent,
+  SeasonEndedEvent,
 } from './eventBus.types.js';
 
 export { VerificationService } from './services/verification.service.js';
