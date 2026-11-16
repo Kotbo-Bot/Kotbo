@@ -189,7 +189,7 @@ describe('seasonProgress', () => {
 
 describe('readSeasonRewardOutcomes', () => {
   test('garde les entrées valides, écarte le reste', () => {
-    const valid = { userId: 'a', rank: 1, roleId: ROLE, coins: 10, roleStatus: 'blocked', coinsStatus: 'given' };
+    const valid = { userId: 'a', rank: 1, roleId: ROLE, coins: 10, roleStatus: 'blocked', coinsStatus: 'given' } as const;
     expect(readSeasonRewardOutcomes([valid, { userId: 'b' }, null, { ...valid, roleStatus: 'inventé' }])).toEqual([valid]);
   });
 
@@ -278,7 +278,7 @@ describe('rotation des rôles de rang', () => {
   });
 
   test('ne reprend pas un rôle que le membre regagne cette saison', () => {
-    expect(rolesToTakeBack([given('a', ROLE, true)], [{ userId: 'a', rank: 2, roleId: ROLE, coins: 0 }])).toEqual([]);
+    expect(rolesToTakeBack([given('a', ROLE, true)], [{ userId: 'a', roleId: ROLE }])).toEqual([]);
   });
 
   test('ne reprend pas un rôle qui n\'avait pas été remis', () => {

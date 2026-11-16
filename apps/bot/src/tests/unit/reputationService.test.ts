@@ -127,7 +127,7 @@ describe('giveRep', () => {
   test('un vote accepté renvoie le nouveau total', async () => {
     receivedTotal = 7;
     const result = await giveRep('g', 'u1', 'u2', 'merci');
-    expect(result).toEqual({ success: true, newTotal: 7 });
+    expect(result).toEqual({ success: true, newTotal: 7, voteId: 'vote-1' });
   });
 
   test('le message remercié est enregistré avec le vote', async () => {
@@ -317,7 +317,7 @@ describe('deleteReputationVote', () => {
 
   test('supprime et rend le vote trouvé', async () => {
     foundVote = { id: 'v1', guildId: 'g', receiverId: 'u2', giverId: 'u1' };
-    expect(await deleteReputationVote('g', 'v1')).toEqual(foundVote);
+    expect(await deleteReputationVote('g', 'v1')).toEqual(foundVote as never);
     expect(mockDb.reputationVote.delete).toHaveBeenCalledTimes(1);
   });
 });

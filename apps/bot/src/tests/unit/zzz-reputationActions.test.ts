@@ -225,7 +225,7 @@ describe('recordRep, garde-fous', () => {
 describe('revokeRep', () => {
   test('retire le vote puis les paliers que le receveur ne remplit plus', async () => {
     deleted = { id: 'v1', guildId: 'g', kind: 'VOTE', giverId: 'a', receiverId: 'b', xpGranted: 0, coinsGranted: 0 };
-    expect(await revokeRep(client, 'g', 'v1')).toEqual(deleted);
+    expect(await revokeRep(client, 'g', 'v1')).toEqual(deleted as never);
     expect(service.receivedTotal.mock.calls[0]).toEqual(['g', 'b', mockDb]);
     expect(tiers.applyReputationLoss.mock.calls[0]).toEqual([client, 'g', 'b', 4]);
   });
@@ -246,7 +246,7 @@ describe('revokeRep', () => {
   test('un échec de la reprise ne fait pas échouer le retrait', async () => {
     deleted = { id: 'v1', guildId: 'g', kind: 'VOTE', giverId: 'a', receiverId: 'b', xpGranted: 20, coinsGranted: 0 };
     rewards.reclaimRepRewards.mockImplementationOnce(async () => { throw new Error('leveling'); });
-    expect(await revokeRep(client, 'g', 'v1')).toEqual(deleted);
+    expect(await revokeRep(client, 'g', 'v1')).toEqual(deleted as never);
     expect(tiers.applyReputationLoss).toHaveBeenCalledTimes(1);
   });
 
@@ -259,7 +259,7 @@ describe('revokeRep', () => {
 describe('adjustRep', () => {
   test('un ajout applique les paliers du membre, de l\'ancien au nouveau total, sans annonce', async () => {
     const result = await adjustRep(client, { guildId: 'g', staffId: 's', userId: 'b', amount: 5, reason: 'aide' });
-    expect(result).toEqual(adjustResult);
+    expect(result).toEqual(adjustResult as never);
     expect(service.adjustReputation.mock.calls[0]).toEqual(['g', 's', 'b', 5, 'aide']);
     expect(tiers.applyReputationGain.mock.calls[0]).toEqual([client, 'g', 'b', 4, 9, { announce: false }]);
     expect(rewards.grantRepRewards).not.toHaveBeenCalled();
@@ -274,7 +274,7 @@ describe('adjustRep', () => {
 
   test('un retrait refusé ne touche pas aux paliers', async () => {
     adjustResult = { success: false, code: 'BELOW_ZERO', total: 2 };
-    expect(await adjustRep(client, { guildId: 'g', staffId: 's', userId: 'b', amount: -5, reason: null })).toEqual(adjustResult);
+    expect(await adjustRep(client, { guildId: 'g', staffId: 's', userId: 'b', amount: -5, reason: null })).toEqual(adjustResult as never);
     expect(tiers.applyReputationLoss).not.toHaveBeenCalled();
   });
 });

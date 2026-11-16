@@ -759,7 +759,12 @@ describe('déclencheurs de réputation', () => {
       expect(template).toBeDefined();
       const recipe = template!.build();
       expect(recipe.trigger.type).toBe('OnReputationReceived');
-      expect(decompileGraph(compileRecipe(recipe))).toEqual(recipe);
+      // L'id d'un test de condition est tiré au hasard, et un salon laissé vide à choisir n'est pas relu.
+      const normalize = (value: Recipe | null) => JSON.parse(JSON.stringify(value), (key, node) => {
+        if (node && typeof node === 'object' && 'condition' in node) return { ...node, id: 'ID' };
+        return key === 'channel' && node?.channelId === '' ? undefined : node;
+      });
+      expect(normalize(decompileGraph(compileRecipe(recipe)))).toEqual(normalize(recipe));
     }
   });
 

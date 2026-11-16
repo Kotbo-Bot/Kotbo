@@ -118,7 +118,7 @@ describe('reclaimRepRewards', () => {
     await reclaimRepRewards(client, 'g', 'u', { xp: 0, coins: 40 });
     expect(rpgUpdateMany).toHaveBeenCalledTimes(1);
     expect(rpgUpdateMany.mock.calls[0][0]).toEqual({
-      where: { guildId: 'g', userId: 'u', balance: { gte: 40 } },
+      where: { guildId: 'g', userId: 'u', balance: { gte: 40 } } as never,
       data: { balance: { decrement: 40 } },
     });
   });
@@ -127,7 +127,7 @@ describe('reclaimRepRewards', () => {
     balance = 10;
     await reclaimRepRewards(client, 'g', 'u', { xp: 0, coins: 40 });
     expect(rpgUpdateMany).toHaveBeenCalledTimes(2);
-    expect(rpgUpdateMany.mock.calls[1][0]).toEqual({
+    expect(rpgUpdateMany.mock.calls[1][0] as unknown).toEqual({
       where: { guildId: 'g', userId: 'u', balance: { lt: 40 } },
       data: { balance: 0 },
     });
