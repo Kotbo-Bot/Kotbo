@@ -25,7 +25,17 @@
   import { normalizeEvidenceLinks, sanitizeEvidenceLinks } from '../sanctions/evidenceLinks';
   import InteractionTree from './charts/InteractionTree.svelte';
   import Modal from './Modal.svelte';
-  import { m, dateLocale } from '../i18n';
+  import { m, dateLocale, getLocale } from '../i18n';
+
+  // « en-US » → « anglais (États-Unis) » dans la langue du dashboard.
+  function languageName(locale: string | null | undefined): string {
+    if (!locale) return m.mcm_unknown_f();
+    try {
+      return new Intl.DisplayNames([getLocale()], { type: 'language' }).of(locale) ?? locale;
+    } catch {
+      return locale;
+    }
+  }
   import LogDetails from './logs/LogDetails.svelte';
   import MemberReputationCard from './members/MemberReputationCard.svelte';
 
@@ -1254,7 +1264,7 @@
                     { label: m.mcm_username(), value: `@${caseData?.profile?.username ?? m.mcm_unknown()}` },
                     { label: m.mcm_global_name(), value: caseData?.profile?.globalName ?? m.mcm_unknown() },
                     { label: m.mcm_server_display(), value: caseData?.profile?.displayName ?? m.mcm_unknown() },
-                    { label: m.mcm_language(), value: caseData?.profile?.locale ?? m.mcm_unknown_f() },
+                    { label: m.mcm_language(), value: languageName(caseData?.profile?.locale) },
                     { label: m.mcm_pronouns(), value: caseData?.profile?.pronouns ?? m.mcm_not_specified_plural() },
                   ])}
                   {#if caseData?.profile?.bannerUrl || caseData?.profile?.accentColor}
@@ -1283,7 +1293,7 @@
                     { label: m.mcm_global_name_cap(), value: caseData?.profile?.globalName ?? m.mcm_unknown() },
                     { label: m.mcm_server_nickname(), value: caseData?.profile?.displayName ?? m.mcm_unknown() },
                     { label: m.mcm_pronouns(), value: caseData?.profile?.pronouns ?? m.mcm_not_specified_plural() },
-                    { label: m.mcm_language_locale(), value: caseData?.profile?.locale ?? m.mcm_unknown_f() },
+                    { label: m.mcm_language_locale(), value: languageName(caseData?.profile?.locale) },
                   ])}
                   {#if caseData?.serverTag}
                     <div class="mt-3 flex items-center justify-between gap-2 border-t border-outline-variant pt-3 text-sm">

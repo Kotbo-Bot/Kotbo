@@ -33,6 +33,7 @@ import { extractPrimaryGuildTag, guildTagBadgeUrl, resolveExternalGuild } from '
 import { extractMessageId, extractMessagePreview, fetchMemberConnections, mapGuildRolePermissions, parseInviteFromDetails, safeIsoDate } from './core.js';
 import type { AuthClaims } from './core.js';
 import { formatChannelName, renderMentionsAsText } from './markdown.js';
+import { pronounsFromRoles } from './pronouns.js';
 
 function resolveMemberCaseRoles(
   discordGuild: NonNullable<ReturnType<Client['guilds']['cache']['get']>>,
@@ -599,7 +600,7 @@ export async function buildMemberCaseData(client: Client, guildId: string, userI
         voiceLastLeftAt: safeIsoDate(profile?.voiceLastLeftAt),
         rolesSnapshot: profile?.rolesSnapshot ?? [],
         presenceStatus: livePresenceStatus ?? (!isOnServer || profile?.guildLeftAt ? 'left' : null),
-        pronouns: null,
+        pronouns: pronounsFromRoles(roles),
         isTutor: staffMember?.isTutor ?? false,
         staffGrade: staffMember?.grade ?? null,
         isSuspectedDC: profile?.isSuspectedDC ?? false,
