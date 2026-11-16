@@ -444,6 +444,13 @@
         <Callout variant="danger" title={m.cbx_last_error()}>
           <span class="font-mono text-xs break-words">{config.lastError}</span>
           {#snippet actions()}
+            <Button
+              href={`https://discord.com/developers/applications${config?.botClientId ? `/${config.botClientId}/bot` : ''}`}
+              target="_blank"
+              variant="ghost"
+              size="sm"
+              iconRight="external-link"
+            >{m.cbd_open_portal()}</Button>
             {#if ownBotOn && hasToken}
               <Button size="sm" icon="refresh-cw" onclick={start} loading={busy}>{m.common_retry()}</Button>
             {/if}
