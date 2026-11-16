@@ -4,6 +4,7 @@ import prisma, { prismaRead } from '../../../utils/db.js';
 import { logger } from '../../../utils/logger.js';
 import { cache } from '../../../utils/cache.js';
 import { memberDisplaysGuildTag } from '../../../services/moderation/tagRoleService.js';
+import { guildTagBadgeUrl } from '../../../services/core/serverTagService.js';
 import {
   json,
   readJsonBody,
@@ -1334,11 +1335,13 @@ export async function handleAnalyticsRoutes(
         // nom du serveur dans leur pseudo, et ratait ceux qui portent le vrai
         // tag sans le mentionner.
         (async () => {
-          if (!discordGuild) return { clanTag: null as string | null, clanTaggedMembersCount: 0, taggedMembersList: [] as any[] };
+          if (!discordGuild) return { clanTag: null as string | null, clanTagBadgeUrl: null as string | null, clanTaggedMembersCount: 0, taggedMembersList: [] as any[] };
           let clanTag: string | null = null;
+          let clanTagBadgeUrl: string | null = null;
           try {
             const rawGuild = await client.rest.get(Routes.guild(guildId)) as any;
             if (rawGuild.clan?.tag) clanTag = rawGuild.clan.tag;
+            clanTagBadgeUrl = guildTagBadgeUrl(guildId, rawGuild.clan?.badge);
           } catch (err) {
             logger.debug('AnalyticsAPI', 'Error fetching raw guild clan info (non-critical): ' + String(err));
           }
@@ -1365,7 +1368,7 @@ export async function handleAnalyticsRoutes(
           } catch (fetchErr) {
             logger.error('AnalyticsAPI', 'Error fetching guild members for tag analytics:', fetchErr);
           }
-          return { clanTag, clanTaggedMembersCount, taggedMembersList };
+          return { clanTag, clanTagBadgeUrl, clanTaggedMembersCount, taggedMembersList };
         })(),
       ]);
 
@@ -1626,7 +1629,7 @@ export async function handleAnalyticsRoutes(
       const olderMessages = olderStats.reduce((s: number, d: any) => s + d.messagesCount, 0);
       const messagesTrend = olderMessages > 0 ? Math.round((recentMessages - olderMessages) / olderMessages * 100) : 0;
 
-      const { clanTag, clanTaggedMembersCount, taggedMembersList } = clanData;
+      const { clanTag, clanTagBadgeUrl, clanTaggedMembersCount, taggedMembersList } = clanData;
 
       const analyticsPayload = {
         period: periodDays,
@@ -1635,6 +1638,7 @@ export async function handleAnalyticsRoutes(
         // doute sur l'horloge qui le mesure.
         timezone: viewTimezone,
         clanTag,
+        clanTagBadgeUrl,
         clanTaggedMembersCount,
         live: {
           totalMembers,
