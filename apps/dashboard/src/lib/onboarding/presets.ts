@@ -110,11 +110,10 @@ export const MODERATION_LEVELS: {
 export const COMMON_TIMEZONES: { value: string; label: string }[] = [
   { value: 'Europe/Paris', label: m.obp_tz_paris() },
   { value: 'Europe/London', label: m.obp_tz_london() },
-  { value: 'Europe/Zurich', label: m.obp_tz_zurich() },
-  { value: 'America/Montreal', label: m.obp_tz_montreal() },
   { value: 'Africa/Casablanca', label: 'Casablanca, Rabat' },
   { value: 'Indian/Reunion', label: m.obp_tz_reunion() },
-  { value: 'America/New_York', label: 'New York, Toronto' },
+  // Montréal, Québec, Toronto et New York partagent le même fuseau : une seule entrée.
+  { value: 'America/Montreal', label: m.obp_tz_montreal() },
   { value: 'UTC', label: m.obp_tz_utc() },
 ];
 
