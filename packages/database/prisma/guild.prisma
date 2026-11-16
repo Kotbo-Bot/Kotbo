@@ -425,6 +425,7 @@ model Guild {
   autoResponses AutoResponse[]
   autoModConfig AutoModConfig?
   suggestions Suggestion[]
+  suggestionConfig SuggestionConfig?
 
   newsArticles NewsArticle[]
   newsCategoryConfigs NewsCategoryConfig[]

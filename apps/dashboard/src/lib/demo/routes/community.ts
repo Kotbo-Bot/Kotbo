@@ -1,8 +1,8 @@
 /**
- * Les pages communautaires : saisons, réputation, marketplace, quêtes.
+ * Les pages communautaires : saisons, réputation, suggestions, marketplace, quêtes.
  *
- * Formes reprises des routes `/seasons`, `/reputation`, `/marketplace` et
- * `/quests` du bot. Les classements viennent des membres de démo : le même
+ * Formes reprises des routes `/seasons`, `/reputation`, `/suggestions`,
+ * `/marketplace` et `/quests` du bot. Les classements viennent des membres de démo : le même
  * Arka, la même Lena que dans le reste du dashboard.
  */
 import { route } from '../backend';
@@ -234,6 +234,94 @@ export function registerCommunityRoutes(): void {
   route('POST', '/api/dashboard/guilds/:guildId/reputation/reset', ({ body }) => (
     body?.scope === 'guild' ? { removed: 412, members: 37 } : { removed: 12 }
   ));
+
+  // ── Suggestions ────────────────────────────────────────────────────────────
+  // Une file avec une suggestion en souffrance, pour que le conseil se voie.
+  const suggestionConfig = { channelId: '900000000000000320', requireComment: true, voteWhileApproved: false, allowedRoleIds: [] as string[] };
+  const suggestionSeed: Array<[string, string, number, number, string, string | null]> = [
+    ['Une soirée film par mois dans le salon vocal.', 'PENDING', 14, 2, ago(3 * 60), null],
+    ['Un salon dédié aux memes, pour aérer le général.', 'PENDING', 9, 4, ago(10 * DAY), null],
+    ['Ajouter un bot musique pour les soirées.', 'PENDING', 3, 6, ago(26 * 60), null],
+    ['Des rôles de couleur à débloquer avec les niveaux.', 'IMPLEMENTED', 22, 1, ago(18 * DAY), 'C’est en place : rendez-vous dans le salon des rôles.'],
+    ['Un tournoi mensuel avec des récompenses.', 'APPROVED', 17, 3, ago(9 * DAY), 'Bonne idée, on prépare le premier pour la fin du mois.'],
+    ['Supprimer le mode lent du salon général.', 'REJECTED', 5, 11, ago(6 * DAY), 'Le mode lent reste : il limite le spam aux heures de pointe.'],
+  ];
+  const suggestions = suggestionSeed.map(([content, status, upvotes, downvotes, createdAt, responseText], i) => {
+    const author = members()[(i * 3 + 1) % members().length];
+    const decided = status !== 'PENDING';
+    return {
+      id: `demo-suggestion-${i + 1}`,
+      userId: author.id,
+      username: author.displayName,
+      avatarUrl: null,
+      content,
+      status,
+      responseText,
+      respondedById: decided ? members()[1].id : null,
+      respondedByName: decided ? members()[1].displayName : null,
+      respondedAt: decided ? new Date(Date.parse(createdAt) + 2 * DAY * 60_000).toISOString() : null,
+      upvotes,
+      downvotes,
+      createdAt,
+      messageUrl: null,
+    };
+  });
+
+  route('GET', '/api/dashboard/guilds/:guildId/suggestions', () => {
+    const pending = suggestions.filter((s) => s.status === 'PENDING');
+    return {
+      config: { ...suggestionConfig, allowedRoleIds: [...suggestionConfig.allowedRoleIds] },
+      stats: { pending: pending.length, stalePending: 1, createdRecent: 11, resolvedRecent: 8, acceptanceRate: 0.63, avgResponseHours: 31, lastCreatedAt: ago(3 * 60) },
+      queue: [...pending].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt)),
+      queueTruncated: false,
+      messageLabels: {
+        locale: 'fr',
+        title: 'Nouvelle suggestion',
+        statusField: 'Statut',
+        votesField: 'Votes',
+        finalVotesField: 'Votes finaux',
+        votesValue: 'Pour : `{up}` | Contre : `{down}`',
+        responseField: 'Réponse de la modération',
+        noResponse: 'Aucun commentaire.',
+        voteUp: 'Pour',
+        voteDown: 'Contre',
+        footer: 'ID de la suggestion : {id}',
+        status: { PENDING: 'En cours d’évaluation', APPROVED: 'Approuvée par le staff', REJECTED: 'Refusée par le staff', IMPLEMENTED: 'Mise en place' },
+      },
+    };
+  });
+
+  route('GET', '/api/dashboard/guilds/:guildId/suggestions/list', ({ query }) => {
+    const status = query.get('status');
+    const userId = query.get('userId');
+    const list = suggestions
+      .filter((s) => (!status || s.status === status) && (!userId || s.userId === userId))
+      .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+    return { suggestions: list, nextCursor: null };
+  });
+
+  route('PATCH', '/api/dashboard/guilds/:guildId/suggestions/config', ({ body }) => {
+    if (body && 'channelId' in body) suggestionConfig.channelId = body.channelId;
+    for (const key of ['requireComment', 'voteWhileApproved'] as const) {
+      if (typeof body?.[key] === 'boolean') suggestionConfig[key] = body[key];
+    }
+    if (Array.isArray(body?.allowedRoleIds)) suggestionConfig.allowedRoleIds = [...body.allowedRoleIds];
+    return { config: { ...suggestionConfig, allowedRoleIds: [...suggestionConfig.allowedRoleIds] } };
+  });
+
+  route('POST', '/api/dashboard/guilds/:guildId/suggestions/:suggestionId/resolve', ({ params, body }) => {
+    const suggestion = suggestions.find((s) => s.id === params.suggestionId);
+    if (!suggestion) return { error: 'Suggestion introuvable' };
+    const reopen = body?.status === 'PENDING';
+    Object.assign(suggestion, {
+      status: body?.status ?? suggestion.status,
+      responseText: reopen ? null : body?.responseText ?? null,
+      respondedById: reopen ? null : PEOPLE[0].id,
+      respondedByName: reopen ? null : PEOPLE[0].displayName,
+      respondedAt: reopen ? null : new Date().toISOString(),
+    });
+    return { suggestion: { ...suggestion } };
+  });
 
   route('GET', '/api/dashboard/guilds/:guildId/marketplace', () => {
     const sellers = members().slice(0, 5);

@@ -1,11 +1,10 @@
 /** Outils MCP - write community (permission WRITE_COMMUNITY). */
 import { archiveChannel, createSplitChannel, resolveHealthAlert, upsertChannelHealthConfig } from '../../../services/analytics/channelHealthService.js';
 import { createSeason, deleteSeason, endSeason, parseSeasonInput, retrySeasonRewards, startSeason, updateSeason } from '../../../services/progression/seasonService.js';
-import { publishSuggestionResolved } from '../../../services/features/suggestionService.js';
+import { resolveSuggestion } from '../../../services/features/suggestionService.js';
 import { adjustRep } from '../../../services/community/reputationActions.js';
-import { REPUTATION_ADJUSTMENT } from '@kotbo/shared';
+import { REPUTATION_ADJUSTMENT, SUGGESTION_RESPONSE_MAX } from '@kotbo/shared';
 import prisma from '../../../utils/db.js';
-import { type NewsChannel, TextChannel } from 'discord.js';
 import { z } from 'zod';
 import { type McpToolContext, err, ok, resolveChannel, resolveMember, toolError } from '../toolkit.js';
 
@@ -64,35 +63,17 @@ export function registerWriteCommunityTools(ctx: McpToolContext) {
         inputSchema: {
           suggestion_id: z.string().describe('ID de la suggestion (issu de get_suggestions)'),
           status: z.enum(['APPROVED', 'REJECTED', 'IMPLEMENTED']).describe('Nouveau statut'),
-          response: z.string().min(1).max(1000).describe('Texte de réponse'),
+          response: z.string().min(1).max(SUGGESTION_RESPONSE_MAX).describe('Texte de réponse, publié sous la suggestion'),
           key_name: z.string().optional().describe("Nom de la clé MCP (pour l'audit)"),
         },
         _meta: toolMeta,
       },
       guard('WRITE_COMMUNITY', async ({ suggestion_id, status, response, key_name }) => {
-        const suggestion = await prisma.suggestion.findFirst({ where: { id: suggestion_id, guildId } });
-        if (!suggestion) return err('Suggestion introuvable');
-
-        const updated = await prisma.suggestion.update({
-          where: { id: suggestion.id },
-          data: {
-            status,
-            responseText: response,
-            respondedById: 'mcp_agent',
-            respondedAt: new Date(),
-          },
-        });
-        publishSuggestionResolved(updated);
-
-        if (suggestion.channelId && suggestion.messageId) {
-          const channel = client.guilds.cache.get(guildId)?.channels.cache.get(suggestion.channelId);
-          if (channel?.isTextBased()) {
-            const statusEmoji = status === 'APPROVED' ? '✅' : status === 'REJECTED' ? '❌' : '🚀';
-            await (channel as TextChannel | NewsChannel)
-              .send({ content: `${statusEmoji} **Réponse à la suggestion de ${suggestion.username} :**\n${response}` })
-              .catch(() => null);
-          }
-        }
+        // Même chemin que le dashboard : statut, message public et événement,
+        // au lieu d'un second message posté sous la suggestion restée « en attente ».
+        const result = await resolveSuggestion(guildId, suggestion_id, status, response, 'mcp_agent', client);
+        if (!result) return err('Suggestion introuvable');
+        const { suggestion } = result;
 
         await audit(key_name, 'Réponse suggestion MCP', `Suggestion: ${suggestion.id}`, `${status} - ${response.slice(0, 200)}`);
 

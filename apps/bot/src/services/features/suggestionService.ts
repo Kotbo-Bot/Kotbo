@@ -1,12 +1,25 @@
-import { Client, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, MessageFlags, type ButtonInteraction, type ColorResolvable, type Message } from 'discord.js';
+import { Client, MessageFlags, PermissionFlagsBits, type ButtonInteraction, type Guild, type Message } from 'discord.js';
 import { kotboEventBus } from '@kotbo/core';
 import type { Suggestion } from '@prisma/client';
+import {
+  canSubmitSuggestion,
+  isSuggestionStatus,
+  isSuggestionVotingOpen,
+  type SuggestionStatus,
+} from '@kotbo/shared';
 import prisma from '../../utils/db.js';
 import { publishGuildSignal } from '../site/siteLive.js';
 import { logger } from '../../utils/logger.js';
+import { UserFacingError } from '../../utils/userFacingError.js';
 import { broadcastDashboardStateChange } from '../../api/shared/sharding.js';
+import { getEffectiveLocale, resolveGuildLocale } from '../../utils/i18n.js';
+import * as m from '../../lib/paraglide/messages.js';
+import { buildSuggestionMessage, isSuggestionMessageFor } from './suggestionMessage.js';
+import { suggestionMessageLabels } from './suggestionMessageLabels.js';
+import { getSuggestionSettings, SUGGESTIONS_REALTIME_REASON } from './suggestionSettings.js';
 
-import { resolveEmojiShortcodes } from '../../utils/emojis.js';
+/** Membre que les réglages du serveur n'autorisent pas à proposer. */
+export class SuggestionNotAllowedError extends UserFacingError {}
 
 type SuggestionFeatureConfig = {
   featureKey?: string;
@@ -14,45 +27,56 @@ type SuggestionFeatureConfig = {
   channelId?: string | null;
 };
 
+type FetchedChannel = NonNullable<Awaited<ReturnType<Client['channels']['fetch']>>>;
+
+type RenderableSuggestion = Pick<
+  Suggestion,
+  'id' | 'guildId' | 'userId' | 'username' | 'content' | 'status' | 'responseText' | 'upvoters' | 'downvoters' | 'channelId' | 'messageId'
+>;
+
 function isSuggestionFeatureConfig(value: unknown): value is SuggestionFeatureConfig {
   return typeof value === 'object'
     && value !== null
     && (value as SuggestionFeatureConfig).featureKey === 'suggestions';
 }
 
-function hasSuggestionEmbed(message: Message, suggestionId: string): boolean {
-  return message.embeds.some(embed => embed.footer?.text?.includes(suggestionId));
+/** Une ancienne ligne au statut inconnu s'affiche comme en attente plutôt que de casser le message. */
+function statusOf(suggestion: Pick<Suggestion, 'status'>): SuggestionStatus {
+  return isSuggestionStatus(suggestion.status) ? suggestion.status : 'PENDING';
 }
 
-function hasSuggestionComponents(message: Message, suggestionId: string): boolean {
-  return JSON.stringify(message.components).includes(`suggest_vote:${suggestionId}:`)
-    || JSON.stringify(message.components).includes(`ID de la suggestion : ${suggestionId}`);
+/** Prévient le dashboard et le site communautaire qu'une suggestion a bougé. */
+function notifySuggestionsChanged(guildId: string): void {
+  broadcastDashboardStateChange(guildId, SUGGESTIONS_REALTIME_REASON);
+  publishGuildSignal(guildId, 'module:suggestions');
 }
 
-function isSuggestionMessage(message: Message, suggestionId: string): boolean {
-  return hasSuggestionEmbed(message, suggestionId) || hasSuggestionComponents(message, suggestionId);
+async function fetchGuild(client: Client, guildId: string): Promise<Guild | null> {
+  return client.guilds.cache.get(guildId) ?? await client.guilds.fetch(guildId).catch(() => null);
 }
 
-function buildSuggestionEmbed(
-  suggestion: { id: string; username: string; content: string },
-  upvoteCount: number,
-  downvoteCount: number
-): EmbedBuilder {
-  return new EmbedBuilder()
-    .setTitle('💡 Nouvelle Suggestion')
-    .setDescription(resolveEmojiShortcodes(suggestion.content))
-    .setAuthor({ name: suggestion.username })
-    .addFields(
-      { name: 'Statut', value: "⏳ En cours d'évaluation", inline: true },
-      { name: 'Votes', value: `👍 Upvotes : \`${upvoteCount}\` | 👎 Downvotes : \`${downvoteCount}\``, inline: true }
-    )
-    .setColor('#FE75C2')
-    .setFooter({ text: `ID de la suggestion : ${suggestion.id}` })
-    .setTimestamp();
+/** Message public d'une suggestion, dans la langue du serveur, avec la photo actuelle de l'auteur. */
+async function renderSuggestion(guild: Guild, suggestion: RenderableSuggestion, voteWhileApproved: boolean) {
+  const [member, locale] = await Promise.all([
+    guild.members.fetch(suggestion.userId).catch(() => null),
+    resolveGuildLocale(guild.id, guild.preferredLocale),
+  ]);
+  const status = statusOf(suggestion);
+  return buildSuggestionMessage({
+    id: suggestion.id,
+    authorName: member?.displayName || suggestion.username,
+    authorAvatarUrl: member?.user.displayAvatarURL({ size: 128 }) ?? null,
+    content: suggestion.content,
+    status,
+    upvotes: suggestion.upvoters.length,
+    downvotes: suggestion.downvoters.length,
+    responseText: suggestion.responseText,
+    votingOpen: isSuggestionVotingOpen(status, voteWhileApproved),
+  }, suggestionMessageLabels(locale));
 }
 
 async function findSuggestionMessageInChannel(
-  channel: NonNullable<Awaited<ReturnType<Client['channels']['fetch']>>>,
+  channel: FetchedChannel,
   suggestionId: string,
   messageId: string | null
 ): Promise<Message | null> {
@@ -62,7 +86,7 @@ async function findSuggestionMessageInChannel(
       return null;
     });
 
-    if (starterMessage && isSuggestionMessage(starterMessage, suggestionId)) {
+    if (starterMessage && isSuggestionMessageFor(starterMessage, suggestionId)) {
       return starterMessage;
     }
   }
@@ -73,7 +97,7 @@ async function findSuggestionMessageInChannel(
 
   if (messageId) {
     const storedMessage = await channel.messages.fetch(messageId).catch(() => null);
-    if (storedMessage && isSuggestionMessage(storedMessage, suggestionId)) {
+    if (storedMessage && isSuggestionMessageFor(storedMessage, suggestionId)) {
       return storedMessage;
     }
   }
@@ -83,14 +107,21 @@ async function findSuggestionMessageInChannel(
     return null;
   });
 
-  return recentMessages?.find(message => isSuggestionMessage(message, suggestionId)) ?? null;
+  return recentMessages?.find(message => isSuggestionMessageFor(message, suggestionId)) ?? null;
+}
+
+/** Message public retrouvé par le salon enregistré, hors de toute interaction. */
+async function findStoredSuggestionMessage(client: Client, suggestion: RenderableSuggestion): Promise<Message | null> {
+  if (!suggestion.channelId) return null;
+  const channel = await client.channels.fetch(suggestion.channelId).catch(() => null);
+  return channel ? findSuggestionMessageInChannel(channel, suggestion.id, suggestion.messageId) : null;
 }
 
 async function findSuggestionMessage(
   interaction: ButtonInteraction,
   suggestion: { id: string; channelId: string | null; messageId: string | null }
 ): Promise<Message | null> {
-  if (isSuggestionMessage(interaction.message, suggestion.id)) {
+  if (isSuggestionMessageFor(interaction.message, suggestion.id)) {
     return interaction.message;
   }
 
@@ -101,7 +132,7 @@ async function findSuggestionMessage(
   const interactionChannel = interaction.channel;
   if (interactionChannel?.isThread()) {
     const starterMessage = await interactionChannel.fetchStarterMessage().catch(() => null);
-    if (starterMessage && isSuggestionMessage(starterMessage, suggestion.id)) {
+    if (starterMessage && isSuggestionMessageFor(starterMessage, suggestion.id)) {
       return starterMessage;
     }
     if (interactionChannel.parentId) candidateChannelIds.add(interactionChannel.parentId);
@@ -127,15 +158,51 @@ async function findSuggestionMessage(
   return null;
 }
 
+type RefreshOutcome = 'edited' | 'failed' | 'missing';
+
+/**
+ * Redessine le message public à partir de la base : statut, compteurs, réponse
+ * et état des boutons. `known` évite la recherche quand l'appelant tient déjà
+ * le message.
+ */
+async function refreshSuggestionMessage(
+  client: Client,
+  suggestion: RenderableSuggestion,
+  voteWhileApproved: boolean,
+  known: Message | null = null,
+): Promise<RefreshOutcome> {
+  const message = known ?? await findStoredSuggestionMessage(client, suggestion);
+  if (!message) return 'missing';
+  const guild = message.guild ?? await fetchGuild(client, suggestion.guildId);
+  if (!guild) return 'failed';
+
+  try {
+    await message.edit(await renderSuggestion(guild, suggestion, voteWhileApproved));
+    if (suggestion.channelId !== message.channelId || suggestion.messageId !== message.id) {
+      await prisma.suggestion.update({
+        where: { id: suggestion.id },
+        data: { channelId: message.channelId, messageId: message.id },
+      });
+    }
+    return 'edited';
+  } catch (e: unknown) {
+    logger.error('Suggestions', `Impossible de mettre à jour le message de la suggestion ${suggestion.id}:`, e);
+    return 'failed';
+  }
+}
+
 /**
  * Crée et publie une nouvelle suggestion dans le salon dédié
  */
 export async function createSuggestion(guildId: string, userId: string, username: string, content: string, client: Client) {
   // 1. Déterminer le salon de suggestions
-  const guildConfig = await prisma.guild.findUnique({
-    where: { id: guildId },
-    select: { publicChannelId: true, dashboardFeatureConfigs: true }
-  });
+  const [guildConfig, settings] = await Promise.all([
+    prisma.guild.findUnique({
+      where: { id: guildId },
+      select: { publicChannelId: true, dashboardFeatureConfigs: true }
+    }),
+    getSuggestionSettings(guildId),
+  ]);
 
   const featureConfigs = Array.isArray(guildConfig?.dashboardFeatureConfigs) ? guildConfig.dashboardFeatureConfigs : [];
   const featureConfig = featureConfigs.find(isSuggestionFeatureConfig);
@@ -144,8 +211,19 @@ export async function createSuggestion(guildId: string, userId: string, username
   }
   let targetChannelId = featureConfig?.channelId || guildConfig?.publicChannelId;
 
-  const discordGuild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
+  const discordGuild = await fetchGuild(client, guildId);
   if (!discordGuild) throw new Error("Serveur introuvable");
+
+  // 2. Droit de proposer, avant toute écriture
+  const member = await discordGuild.members.fetch(userId).catch(() => null);
+  const allowed = canSubmitSuggestion(settings.allowedRoleIds, member && {
+    roleIds: [...member.roles.cache.keys()],
+    canManageGuild: member.permissions.has(PermissionFlagsBits.ManageGuild),
+  });
+  if (!allowed) {
+    const locale = await resolveGuildLocale(guildId, discordGuild.preferredLocale);
+    throw new SuggestionNotAllowedError(m.b5_suggestion_err_role({}, { locale }));
+  }
 
   // Fallback si aucun canal configuré: chercher un canal textuel nommé "suggestions"
   if (!targetChannelId) {
@@ -162,7 +240,7 @@ export async function createSuggestion(guildId: string, userId: string, username
     throw new Error("Le salon de suggestions configuré est invalide ou introuvable.");
   }
 
-  // 2. Créer l'entrée dans la base de données
+  // 3. Créer l'entrée dans la base de données
   const suggestion = await prisma.suggestion.create({
     data: {
       guildId,
@@ -174,41 +252,12 @@ export async function createSuggestion(guildId: string, userId: string, username
     },
   });
 
-  broadcastDashboardStateChange(guildId, 'suggestions_updated');
+  broadcastDashboardStateChange(guildId, SUGGESTIONS_REALTIME_REASON);
 
-  // 3. Envoyer l'embed sur Discord
-  const member = await discordGuild.members.fetch(userId).catch(() => null);
-  const avatarUrl = member?.user.displayAvatarURL({ size: 128 }) || null;
+  // 4. Publier le message sur Discord
+  const payload = await renderSuggestion(discordGuild, suggestion, settings.voteWhileApproved);
+  const message = await channel.send({ ...payload, allowedMentions: { parse: [] } }).catch(() => null);
 
-  const embed = new EmbedBuilder()
-    .setTitle(`💡 Nouvelle Suggestion`)
-    .setDescription(resolveEmojiShortcodes(content))
-    .setAuthor({ name: member?.displayName || username, iconURL: avatarUrl || undefined })
-    .addFields(
-      { name: 'Statut', value: "⏳ En cours d'évaluation", inline: true },
-      { name: 'Votes', value: '👍 Upvotes : `0` | 👎 Downvotes : `0`', inline: true }
-    )
-    .setColor('#FE75C2')
-    .setFooter({ text: `ID de la suggestion : ${suggestion.id}` })
-    .setTimestamp();
-
-  // Boutons de vote
-  const upvoteBtn = new ButtonBuilder()
-    .setCustomId(`suggest_vote:${suggestion.id}:up`)
-    .setEmoji('👍')
-    .setLabel('0')
-    .setStyle(ButtonStyle.Secondary);
-
-  const downvoteBtn = new ButtonBuilder()
-    .setCustomId(`suggest_vote:${suggestion.id}:down`)
-    .setEmoji('👎')
-    .setLabel('0')
-    .setStyle(ButtonStyle.Secondary);
-
-  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(upvoteBtn, downvoteBtn);
-
-  const message = await channel.send({ embeds: [embed], components: [row], allowedMentions: { parse: [] } }).catch(() => null);
-  
   if (message) {
     await prisma.suggestion.update({
       where: { id: suggestion.id },
@@ -232,7 +281,7 @@ export async function createSuggestion(guildId: string, userId: string, username
 }
 
 type SuggestionVoteResult =
-  | { ok: true; suggestion: Suggestion; upvoters: string[]; downvoters: string[] }
+  | { ok: true; suggestion: Suggestion; voteWhileApproved: boolean }
   | { ok: false; reason: 'not_found' | 'closed' };
 
 /**
@@ -241,11 +290,12 @@ type SuggestionVoteResult =
  * pour que deux votes simultanés (Discord et site) ne s'écrasent pas.
  */
 export async function applySuggestionVote(guildId: string, suggestionId: string, userId: string, type: 'up' | 'down'): Promise<SuggestionVoteResult> {
+  const { voteWhileApproved } = await getSuggestionSettings(guildId);
   const result = await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT 1 FROM suggestions WHERE id = ${suggestionId} FOR UPDATE`;
     const suggestion = await tx.suggestion.findUnique({ where: { id: suggestionId } });
     if (!suggestion || suggestion.guildId !== guildId) return { ok: false as const, reason: 'not_found' as const };
-    if (suggestion.status !== 'PENDING') return { ok: false as const, reason: 'closed' as const };
+    if (!isSuggestionVotingOpen(statusOf(suggestion), voteWhileApproved)) return { ok: false as const, reason: 'closed' as const };
 
     let upvoters = [...suggestion.upvoters];
     let downvoters = [...suggestion.downvoters];
@@ -269,55 +319,11 @@ export async function applySuggestionVote(guildId: string, suggestionId: string,
     }
 
     await tx.suggestion.update({ where: { id: suggestionId }, data: { upvoters, downvoters } });
-    return { ok: true as const, suggestion, upvoters, downvoters };
+    return { ok: true as const, suggestion: { ...suggestion, upvoters, downvoters }, voteWhileApproved };
   });
 
-  if (result.ok) {
-    broadcastDashboardStateChange(guildId, 'suggestions_updated');
-    publishGuildSignal(guildId, 'module:suggestions');
-  }
+  if (result.ok) notifySuggestionsChanged(guildId);
   return result;
-}
-
-/** Redessine compteurs et boutons du message public après un vote. Vrai si l'édition a réussi. */
-async function editSuggestionVoteMessage(message: Message, suggestion: Suggestion, upvoters: string[], downvoters: string[]): Promise<boolean> {
-  const originalEmbed = message.embeds.find(embed => embed.footer?.text?.includes(suggestion.id));
-  const updatedEmbed = originalEmbed
-    ? EmbedBuilder.from(originalEmbed)
-      .setFields(
-        { name: 'Statut', value: "⏳ En cours d'évaluation", inline: true },
-        { name: 'Votes', value: `👍 Upvotes : \`${upvoters.length}\` | 👎 Downvotes : \`${downvoters.length}\``, inline: true }
-      )
-    : buildSuggestionEmbed(suggestion, upvoters.length, downvoters.length);
-
-  const upBtn = new ButtonBuilder()
-    .setCustomId(`suggest_vote:${suggestion.id}:up`)
-    .setEmoji('👍')
-    .setLabel(String(upvoters.length))
-    .setStyle(ButtonStyle.Secondary);
-
-  const downBtn = new ButtonBuilder()
-    .setCustomId(`suggest_vote:${suggestion.id}:down`)
-    .setEmoji('👎')
-    .setLabel(String(downvoters.length))
-    .setStyle(ButtonStyle.Secondary);
-
-  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(upBtn, downBtn);
-
-  try {
-    await message.edit({ embeds: [updatedEmbed], components: [row] });
-
-    if (suggestion.channelId !== message.channelId || suggestion.messageId !== message.id) {
-      await prisma.suggestion.update({
-        where: { id: suggestion.id },
-        data: { channelId: message.channelId, messageId: message.id },
-      });
-    }
-    return true;
-  } catch (e: unknown) {
-    logger.error('Suggestions', `Impossible de mettre à jour l'embed de la suggestion ${suggestion.id}:`, e);
-    return false;
-  }
 }
 
 /**
@@ -327,10 +333,7 @@ async function editSuggestionVoteMessage(message: Message, suggestion: Suggestio
  */
 export async function voteOnSuggestion(client: Client, guildId: string, suggestionId: string, userId: string, type: 'up' | 'down'): Promise<SuggestionVoteResult> {
   const vote = await applySuggestionVote(guildId, suggestionId, userId, type);
-  if (!vote.ok || !vote.suggestion.channelId) return vote;
-  const channel = await client.channels.fetch(vote.suggestion.channelId).catch(() => null);
-  const message = channel ? await findSuggestionMessageInChannel(channel, vote.suggestion.id, vote.suggestion.messageId) : null;
-  if (message) await editSuggestionVoteMessage(message, vote.suggestion, vote.upvoters, vote.downvoters);
+  if (vote.ok) await refreshSuggestionMessage(client, vote.suggestion, vote.voteWhileApproved);
   return vote;
 }
 
@@ -339,67 +342,35 @@ export async function voteOnSuggestion(client: Client, guildId: string, suggesti
  */
 export async function handleSuggestionVote(interaction: ButtonInteraction, type: 'up' | 'down') {
   const suggestionId = interaction.customId.split(':')[1];
-  const userId = interaction.user.id;
-
-  const suggestion = await prisma.suggestion.findUnique({
-    where: { id: suggestionId },
-  });
-
-  if (!suggestion) {
-    return interaction.reply({ content: '❌ Suggestion introuvable.', flags: [MessageFlags.Ephemeral] });
-  }
-
-  if (suggestion.status !== 'PENDING') {
-    return interaction.reply({ content: '❌ Cette suggestion a déjà été tranchée par le staff.', flags: [MessageFlags.Ephemeral] });
-  }
-
   await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
+  const locale = await getEffectiveLocale(interaction);
+  const o = { locale };
 
-  const vote = await applySuggestionVote(suggestion.guildId, suggestionId, userId, type);
+  const vote = interaction.guildId
+    ? await applySuggestionVote(interaction.guildId, suggestionId, interaction.user.id, type)
+    : { ok: false as const, reason: 'not_found' as const };
   if (!vote.ok) {
     return interaction.editReply({
-      content: vote.reason === 'closed' ? '❌ Cette suggestion a déjà été tranchée par le staff.' : '❌ Suggestion introuvable.',
+      content: vote.reason === 'closed' ? m.b5_suggestion_vote_closed({}, o) : m.b5_suggestion_vote_not_found({}, o),
     });
   }
 
-  const message = await findSuggestionMessage(interaction, suggestion);
-  if (message) {
-    const edited = await editSuggestionVoteMessage(message, vote.suggestion, vote.upvoters, vote.downvoters);
-    return interaction.editReply({
-      content: edited
-        ? '✅ Votre vote a été pris en compte !'
-        : "✅ Votre vote a été enregistré, mais l'affichage du compteur n'a pas pu être rafraîchi.",
-    });
+  const message = await findSuggestionMessage(interaction, vote.suggestion);
+  if (!message) {
+    logger.warn('Suggestions', `Message public introuvable pour la suggestion ${suggestionId} (interaction message: ${interaction.message.id})`);
+    return interaction.editReply({ content: m.b5_suggestion_vote_ok_no_message({}, o) });
   }
 
-  logger.warn('Suggestions', `Message public introuvable pour la suggestion ${suggestion.id} (interaction message: ${interaction.message.id})`);
+  const outcome = await refreshSuggestionMessage(interaction.client, vote.suggestion, vote.voteWhileApproved, message);
   return interaction.editReply({
-    content: "✅ Votre vote a été enregistré, mais le message public de la suggestion est introuvable.",
+    content: outcome === 'edited' ? m.b5_suggestion_vote_ok({}, o) : m.b5_suggestion_vote_ok_not_refreshed({}, o),
   });
 }
 
-function isResolvedStatus(status: string): status is 'APPROVED' | 'REJECTED' | 'IMPLEMENTED' {
-  return status === 'APPROVED' || status === 'REJECTED' || status === 'IMPLEMENTED';
-}
-
-/**
- * Annonce une décision du staff sur le bus. Exportée pour l'outil MCP, qui
- * enregistre la décision sans passer par `resolveSuggestion`.
- */
-export function publishSuggestionResolved(suggestion: {
-  id: string;
-  guildId: string;
-  userId: string;
-  username: string;
-  content: string;
-  status: string;
-  responseText: string | null;
-  respondedById: string | null;
-  upvoters: string[];
-  downvoters: string[];
-}): void {
-  const status = suggestion.status;
-  if (!isResolvedStatus(status)) return;
+/** Annonce une décision du staff sur le bus (workflows, webhooks sortants). */
+function publishSuggestionResolved(suggestion: Suggestion): void {
+  const status = statusOf(suggestion);
+  if (status === 'PENDING') return;
 
   kotboEventBus.publish('suggestion:resolved', {
     guildId: suggestion.guildId,
@@ -417,97 +388,43 @@ export function publishSuggestionResolved(suggestion: {
 }
 
 /**
- * Met à jour le statut d'une suggestion et son affichage sur Discord (décision du staff)
+ * Pose ou change la décision du staff, et redessine le message public.
+ *
+ * Une décision n'est pas définitive : une suggestion approuvée peut passer
+ * « mise en place », une refusée être reconsidérée. `PENDING` la rouvre : la
+ * réponse et son auteur sont effacés, les votes rouverts. L'événement
+ * `suggestion:resolved` ne part qu'à un vrai changement de statut, pour qu'une
+ * réponse reformulée ne relance pas les workflows.
+ *
+ * `null` quand la suggestion n'existe pas sur ce serveur.
  */
 export async function resolveSuggestion(
   guildId: string,
   suggestionId: string,
-  status: 'APPROVED' | 'REJECTED' | 'IMPLEMENTED',
-  responseText: string,
+  status: SuggestionStatus,
+  responseText: string | null,
   respondedById: string,
   client: Client
-) {
+): Promise<{ suggestion: Suggestion; previousStatus: SuggestionStatus } | null> {
   // Le serveur fait partie de la recherche : un admin d'un serveur ne doit pas
   // pouvoir trancher la suggestion d'un autre en changeant l'identifiant.
-  const suggestion = await prisma.suggestion.findFirst({
+  const current = await prisma.suggestion.findFirst({
     where: { id: suggestionId, guildId },
   });
+  if (!current) return null;
 
-  if (!suggestion) return null;
-
-  // Enregistrer dans la base de données
   const updated = await prisma.suggestion.update({
     where: { id: suggestionId },
-    data: {
-      status,
-      responseText,
-      respondedById,
-      respondedAt: new Date(),
-    },
+    data: status === 'PENDING'
+      ? { status, responseText: null, respondedById: null, respondedAt: null }
+      : { status, responseText: responseText?.trim() || null, respondedById, respondedAt: new Date() },
   });
 
-  broadcastDashboardStateChange(suggestion.guildId, 'suggestions_updated');
-  publishSuggestionResolved(updated);
+  notifySuggestionsChanged(guildId);
+  if (updated.status !== current.status) publishSuggestionResolved(updated);
 
-  // Mettre à jour l'affichage sur Discord
-  if (suggestion.channelId && suggestion.messageId) {
-    const discordGuild = client.guilds.cache.get(suggestion.guildId) || await client.guilds.fetch(suggestion.guildId).catch(() => null);
-    if (discordGuild) {
-      const channel = discordGuild.channels.cache.get(suggestion.channelId);
-      if (channel?.isTextBased()) {
-        const message = await channel.messages.fetch(suggestion.messageId).catch(() => null);
-        if (message) {
-          let statusText = "⏳ En cours d'évaluation";
-          let color: ColorResolvable = '#FE75C2';
+  const { voteWhileApproved } = await getSuggestionSettings(guildId);
+  await refreshSuggestionMessage(client, updated, voteWhileApproved);
 
-          if (status === 'APPROVED') {
-            statusText = '✅ **Approuvée par le Staff**';
-            color = '#57F287';
-          } else if (status === 'REJECTED') {
-            statusText = '❌ **Refusée par le Staff**';
-            color = '#ED4245';
-          } else if (status === 'IMPLEMENTED') {
-            statusText = '🚀 **Implémentée dans la communauté**';
-            color = '#5865F2';
-          }
-
-          // Le message est en Components V2 (voir utils/patchV2.ts) : `message.embeds`
-          // est vide, on reconstruit donc l'embed à partir des données de la BDD.
-          const updatedEmbed = new EmbedBuilder()
-            .setTitle('💡 Nouvelle Suggestion')
-            .setDescription(resolveEmojiShortcodes(suggestion.content))
-            .setAuthor({ name: suggestion.username })
-            .setColor(color)
-            .setFooter({ text: `ID de la suggestion : ${suggestion.id}` })
-            .setTimestamp()
-            .setFields(
-              { name: 'Statut', value: statusText, inline: true },
-              { name: 'Votes finaux', value: `👍 Upvotes : \`${updated.upvoters.length}\` | 👎 Downvotes : \`${updated.downvoters.length}\``, inline: true },
-              { name: `Réponse de la modération`, value: responseText || 'Aucun commentaire.', inline: false }
-            );
-
-          // Désactiver les boutons de vote pour sceller le scrutin
-          const upBtn = new ButtonBuilder()
-            .setCustomId(`suggest_vote_disabled_up:${suggestion.id}`)
-            .setEmoji('👍')
-            .setLabel(String(updated.upvoters.length))
-            .setStyle(ButtonStyle.Secondary)
-            .setDisabled(true);
-
-          const downBtn = new ButtonBuilder()
-            .setCustomId(`suggest_vote_disabled_down:${suggestion.id}`)
-            .setEmoji('👎')
-            .setLabel(String(updated.downvoters.length))
-            .setStyle(ButtonStyle.Secondary)
-            .setDisabled(true);
-
-          const row = new ActionRowBuilder<ButtonBuilder>().addComponents(upBtn, downBtn);
-
-          await message.edit({ embeds: [updatedEmbed], components: [row] }).catch(() => null);
-        }
-      }
-    }
-  }
-
-  return updated;
+  return { suggestion: updated, previousStatus: statusOf(current) };
 }
