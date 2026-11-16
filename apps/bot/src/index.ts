@@ -28,7 +28,7 @@ import { explainLoginError } from './utils/discordLoginError.js';
 import { ensureDashboardSchemaPatches } from './utils/schemaPatches.js';
 import { parseInstanceIdFromArgs, setCurrentInstance, getCurrentInstance, isWhiteLabelInstance } from './utils/instanceContext.js';
 import { loadAllInstances, getInstanceById, getDefaultInstance } from './utils/instanceResolver.js';
-import { servesGuild, startGuildOwnershipSync } from './utils/guildOwnership.js';
+import { customBotOnlyGuild, servesGuild, startGuildOwnershipSync } from './utils/guildOwnership.js';
 import { presenceFrom } from './services/system/customBotProfile.js';
 import { queueAuditLog } from './utils/auditLogger.js';
 import { replyOrFollowUp } from './utils/interactionResponses.js';
@@ -427,6 +427,14 @@ async function enforceProgressionBlacklist(interaction: Interaction): Promise<bo
 client.once(Events.ClientReady, async (c) => {
   logger.success('Bot', `Connecté en tant que ${c.user.tag}`);
   const currentInstance = getCurrentInstance();
+  // Un bot perso ne reste que sur son serveur : il quitte tout autre où on l'aurait ajouté.
+  const onlyGuild = customBotOnlyGuild(currentInstance);
+  if (onlyGuild) {
+    for (const foreign of c.guilds.cache.filter((g) => g.id !== onlyGuild).values()) {
+      logger.warn('CustomBot', `Serveur étranger quitté au démarrage : ${foreign.name} (${foreign.id})`);
+      await foreign.leave().catch((err) => logger.warn('CustomBot', `Départ de ${foreign.id} impossible :`, err));
+    }
+  }
   // Le bot perso d'un serveur (instance `cb-<serveur>`) prend le statut choisi sur sa page Identité.
   const customBotConfig = currentInstance.slug.startsWith('cb-')
     ? await prisma.customBotConfig.findUnique({ where: { guildId: currentInstance.slug.slice(3) } }).catch(() => null)
@@ -704,6 +712,13 @@ client.once(Events.ClientReady, async (c) => {
 });
 
 client.on(Events.GuildCreate, async (guild) => {
+  // Bot perso ajouté ailleurs que sur son serveur (lien d'invitation public, appli Discord « Public Bot ») : il repart aussitôt, sans rien enregistrer.
+  const onlyGuild = customBotOnlyGuild(getCurrentInstance());
+  if (onlyGuild && guild.id !== onlyGuild) {
+    logger.warn('CustomBot', `Ajout refusé sur ${guild.name} (${guild.id}) : ce bot est réservé au serveur ${onlyGuild}`);
+    await guild.leave().catch((err) => logger.warn('CustomBot', `Départ de ${guild.id} impossible :`, err));
+    return;
+  }
   logger.info('System', `Le bot a rejoint le serveur : ${guild.name} (${guild.id})`);
   void recordBotGuildSnapshot(guild, true);
 

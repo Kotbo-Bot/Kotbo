@@ -36,6 +36,14 @@ export async function startGuildOwnershipSync(): Promise<void> {
   timer.unref?.();
 }
 
+/**
+ * Le bot perso d'un serveur (instance `cb-<serveur>`) n'a le droit d'être que
+ * là : renvoie ce serveur, ou null pour toute autre instance.
+ */
+export function customBotOnlyGuild(instance: { slug: string }): string | null {
+  return /^cb-(\d{17,20})$/.exec(instance.slug)?.[1] ?? null;
+}
+
 export function servesGuild(guildId: string, instance: { id: string; isDefault: boolean }): boolean {
   const owner = owners.get(guildId);
   return instance.isDefault ? !owner : owner === instance.id;
