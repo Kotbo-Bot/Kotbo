@@ -164,6 +164,7 @@
       const data = await fetchSetupJourney();
       steps = data?.steps ?? [];
       progress = data?.progress ?? { done: 0, total: 0 };
+      void navigationStore.refreshSetupStatus();
     } catch (err) {
       toast.error(errorMessage(err) || m.setup_err_load());
       steps = [];
