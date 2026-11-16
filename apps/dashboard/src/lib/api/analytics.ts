@@ -562,6 +562,8 @@ export interface LifecycleMember {
   recentDays: number;
   previousDays: number;
   joinedAt: string | null;
+  /** Tag de serveur affiché par le membre, comme sur Discord. */
+  serverTag?: { tag: string; badgeUrl: string | null } | null;
 }
 
 export interface LifecycleAnalytics {

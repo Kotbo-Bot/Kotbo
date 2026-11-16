@@ -9,6 +9,7 @@
   import { untrack } from 'svelte';
   import { Callout, FilterPills, SectionCard } from '../ui';
   import AnalyticsSkeleton from './AnalyticsSkeleton.svelte';
+  import ServerTagPill from './ServerTagPill.svelte';
   import { fetchLifecycle, type LifecycleAnalytics, type LifecycleMember, type LifecycleSegment } from '../../api';
   import { memberAvatarSrc } from '../../discordMedia';
   import { m } from '../../i18n';
@@ -132,6 +133,9 @@
                   <button type="button" disabled={!onOpenMember} class="seg-member" onclick={() => onOpenMember?.(member.userId, member.name ?? '')}>
                     <img class="seg-member__avatar" src={memberAvatarSrc(member.avatarUrl, member.name, member.userId)} alt="" width="28" height="28" loading="lazy" />
                     <span class="seg-member__name">{member.name ?? m.an_member_fallback()}</span>
+                    {#if member.serverTag}
+                      <ServerTagPill tag={member.serverTag.tag} badgeUrl={member.serverTag.badgeUrl} />
+                    {/if}
                     <span class="seg-member__meta">
                       {#if list === 'new' && member.joinedAt}
                         {m.anx_seg_joined({ date: shortDate(member.joinedAt.slice(0, 10)) })}
@@ -274,7 +278,7 @@
 
   .seg-member__name {
     min-width: 0;
-    flex: 1;
+    flex: 0 1 auto;
     font-size: 0.875rem;
     color: var(--color-on-surface);
     white-space: nowrap;
@@ -284,6 +288,7 @@
 
   .seg-member__meta {
     flex-shrink: 0;
+    margin-left: auto;
     font-size: 0.75rem;
     color: var(--color-on-surface-variant);
   }
