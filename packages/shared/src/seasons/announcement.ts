@@ -19,6 +19,8 @@ export interface SeasonAnnouncementLabels {
   endLine: string;
   endEmpty: string;
   rewardsGivenHeading: string;
+  reminderTitle: string;
+  reminderBody: string;
 }
 
 export interface SeasonAnnouncementText {
@@ -61,6 +63,24 @@ export function seasonStartAnnouncement(
   };
 }
 
+function podiumLines(labels: SeasonAnnouncementLabels, standings: ReadonlyArray<{ rank: number; user: string; xp: string }>): string[] {
+  return standings.slice(0, SEASON_PODIUM_SIZE).map((entry) => fillSeasonTemplate(labels.endLine, entry));
+}
+
+/** Rappel des dernières 24 h : la date de clôture, puis le podium provisoire. */
+export function seasonReminderAnnouncement(
+  labels: SeasonAnnouncementLabels,
+  season: { number: number; name: string; date: string },
+  standings: ReadonlyArray<{ rank: number; user: string; xp: string }>,
+): SeasonAnnouncementText {
+  const lines = [fillSeasonTemplate(labels.reminderBody, { date: season.date })];
+  if (standings.length > 0) lines.push('', ...podiumLines(labels, standings));
+  return {
+    title: fillSeasonTemplate(labels.reminderTitle, { number: season.number, name: season.name }),
+    description: lines.join('\n'),
+  };
+}
+
 export function seasonEndAnnouncement(
   labels: SeasonAnnouncementLabels,
   season: { number: number; name: string },
@@ -70,7 +90,7 @@ export function seasonEndAnnouncement(
   const title = fillSeasonTemplate(labels.endTitle, { number: season.number, name: season.name });
   if (standings.length === 0) return { title, description: labels.endEmpty };
 
-  const lines = standings.slice(0, SEASON_PODIUM_SIZE).map((entry) => fillSeasonTemplate(labels.endLine, entry));
+  const lines = podiumLines(labels, standings);
   if (given.length > 0) {
     lines.push('', `**${labels.rewardsGivenHeading}**`);
     for (const entry of given) lines.push(`${entry.user} · ${rewardText(labels, entry)}`);

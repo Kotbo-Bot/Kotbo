@@ -1,6 +1,7 @@
 /**
- * Rôles qu'un menu à boutons ne pourra pas donner, montrés au staff avant
- * qu'un membre ne clique. Même règle que le bot (`roleBlocker` des contrats).
+ * Rôles que le bot ne pourra pas donner, montrés au staff avant que Discord ne
+ * refuse : un menu à boutons avant qu'un membre ne clique, une saison avant sa
+ * clôture. Même règle que le bot (`roleBlocker` des contrats).
  */
 import { roleBlocker, type BotRoleAccess, type RoleBlocker } from '@kotbo/contracts';
 
@@ -14,7 +15,7 @@ export function dashboardRoleBlocker(
   const role = roles.find((entry) => entry.id === roleId);
   return roleBlocker({
     // La liste du dashboard écarte les rôles d'intégration : un tel rôle s'y
-    // lit comme absent, et le conseil est le même (le retirer du menu).
+    // lit comme absent, et le conseil est le même (en choisir un autre).
     exists: !!role,
     managed: false,
     botCanManageRoles: access.canManageRoles,

@@ -4,9 +4,14 @@ import {
   SEASON_NAME_MAX,
   SEASON_REWARDS_MAX,
   SEASON_REWARD_COINS,
+  isRewardOutcomeComplete,
   planSeasonRewards,
+  readSeasonRewardOutcomes,
   readStoredSeasonRewards,
+  renewedSeasonSchedule,
   seasonProgress,
+  seasonReminderDue,
+  summarizeSeasonHistory,
   validateSeasonRewards,
   validateSeasonSchedule,
 } from '@kotbo/shared';
@@ -174,5 +179,76 @@ describe('seasonProgress', () => {
 
   test('compte un jour entamé comme un jour restant', () => {
     expect(seasonProgress(start, end, new Date('2026-11-10T20:00:00Z')).daysLeft).toBe(1);
+  });
+});
+
+describe('readSeasonRewardOutcomes', () => {
+  test('garde les entrées valides, écarte le reste', () => {
+    const valid = { userId: 'a', rank: 1, roleId: ROLE, coins: 10, roleStatus: 'blocked', coinsStatus: 'given' };
+    expect(readSeasonRewardOutcomes([valid, { userId: 'b' }, null, { ...valid, roleStatus: 'inventé' }])).toEqual([valid]);
+  });
+
+  test('absent ou d\'une ancienne forme : aucune trace', () => {
+    expect(readSeasonRewardOutcomes(null)).toEqual([]);
+    expect(readSeasonRewardOutcomes({})).toEqual([]);
+  });
+});
+
+describe('isRewardOutcomeComplete', () => {
+  const base = { userId: 'a', rank: 1, roleId: ROLE, coins: 10 };
+
+  test('complète quand chaque partie prévue est donnée', () => {
+    expect(isRewardOutcomeComplete({ ...base, roleStatus: 'given', coinsStatus: 'given' })).toBe(true);
+    expect(isRewardOutcomeComplete({ ...base, roleId: null, roleStatus: null, coinsStatus: 'given' })).toBe(true);
+  });
+
+  test('à reprendre dès qu\'une partie manque', () => {
+    expect(isRewardOutcomeComplete({ ...base, roleStatus: 'blocked', coinsStatus: 'given' })).toBe(false);
+    expect(isRewardOutcomeComplete({ ...base, roleStatus: 'given', coinsStatus: 'economy_off' })).toBe(false);
+  });
+});
+
+describe('renewedSeasonSchedule', () => {
+  const now = new Date('2026-12-01T10:00:00Z');
+
+  test('reprend la durée prévue de la saison close, à partir de maintenant', () => {
+    const planned = { startDate: new Date('2026-11-01T00:00:00Z'), endDate: new Date('2026-11-30T23:59:59Z') };
+    const next = renewedSeasonSchedule(planned, now);
+    expect(next.startDate).toEqual(now);
+    expect(next.endDate.getTime() - now.getTime()).toBe(30 * DAY_MS);
+    expect('schedule' in validateSeasonSchedule({ name: 'Suite', ...next }, now)).toBe(true);
+  });
+
+  test('borne la durée entre 1 et 366 jours', () => {
+    const short = renewedSeasonSchedule({ startDate: now, endDate: new Date(now.getTime() + 3_600_000) }, now);
+    expect(short.endDate.getTime() - now.getTime()).toBe(DAY_MS);
+  });
+});
+
+describe('seasonReminderDue', () => {
+  const start = new Date('2026-11-01T00:00:00Z');
+  const end = new Date('2026-11-11T00:00:00Z');
+
+  test('dû dans les dernières 24 h', () => {
+    expect(seasonReminderDue(start, end, new Date('2026-11-10T01:00:00Z'))).toBe(true);
+    expect(seasonReminderDue(start, end, new Date('2026-11-09T23:00:00Z'))).toBe(false);
+  });
+
+  test('jamais après la fin', () => {
+    expect(seasonReminderDue(start, end, new Date('2026-11-11T00:00:01Z'))).toBe(false);
+  });
+
+  test('pas pour une saison de deux jours ou moins : il tomberait à l\'ouverture', () => {
+    expect(seasonReminderDue(start, new Date(start.getTime() + 2 * DAY_MS), new Date(start.getTime() + DAY_MS + 1))).toBe(false);
+  });
+});
+
+describe('summarizeSeasonHistory', () => {
+  test('saisons jouées, victoires, podiums et meilleur rang', () => {
+    expect(summarizeSeasonHistory([{ rank: 4 }, { rank: 1 }, { rank: 3 }, { rank: 1 }])).toEqual({ seasons: 4, wins: 2, podiums: 3, bestRank: 1 });
+  });
+
+  test('sans saison classée', () => {
+    expect(summarizeSeasonHistory([])).toEqual({ seasons: 0, wins: 0, podiums: 0, bestRank: null });
   });
 });

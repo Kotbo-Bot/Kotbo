@@ -59,6 +59,9 @@ export function registerCommunityRoutes(): void {
       status: 'ACTIVE',
       rewards: [{ rank: 1, roleId: null, coins: 5_000 }, { rank: 2, roleId: null, coins: 2_500 }, { rank: 3, roleId: null, coins: 1_000 }],
       topRoleId: null,
+      autoRenew: true,
+      remindBeforeEnd: false,
+      grantedRewards: [],
       _count: { snapshots: 0 },
     };
     return {
@@ -85,7 +88,10 @@ export function registerCommunityRoutes(): void {
         endLine: '**#{rank}** {user} · +{xp} XP',
         endEmpty: 'Personne n’a gagné d’XP pendant cette saison.',
         rewardsGivenHeading: 'Récompenses distribuées',
+        reminderTitle: 'Saison #{number} · {name} : dernières 24 h',
+        reminderBody: 'La saison se termine {date} : chaque XP compte encore.',
       },
+      botRoleAccess: { canManageRoles: true, topPosition: 100 },
       activeRankedLeaderboard: ranked.slice(0, 8).map((p, i) => ({
         rank: i + 1,
         userId: p.id,
@@ -96,8 +102,8 @@ export function registerCommunityRoutes(): void {
       })),
       seasons: [
         active,
-        { id: 'season-2', number: 2, name: 'Saison d’été', status: 'ENDED', startDate: ago(120 * 24 * 60), endDate: ago(31 * 24 * 60), rewards: [{ rank: 1, roleId: null, coins: 3_000 }], topRoleId: null, _count: { snapshots: members().length - 1 } },
-        { id: 'season-1', number: 1, name: 'Lancement', status: 'ARCHIVED', startDate: ago(210 * 24 * 60), endDate: ago(121 * 24 * 60), rewards: [], topRoleId: null, _count: { snapshots: Math.max(1, members().length - 3) } },
+        { id: 'season-2', number: 2, name: 'Saison d’été', status: 'ENDED', startDate: ago(120 * 24 * 60), endDate: ago(31 * 24 * 60), rewards: [{ rank: 1, roleId: null, coins: 3_000 }], topRoleId: null, grantedRewards: [{ userId: byXp()[0]?.id ?? '1', rank: 1, roleId: null, coins: 3_000, roleStatus: null, coinsStatus: 'given' }], _count: { snapshots: members().length - 1 } },
+        { id: 'season-1', number: 1, name: 'Lancement', status: 'ENDED', startDate: ago(210 * 24 * 60), endDate: ago(121 * 24 * 60), rewards: [], topRoleId: null, grantedRewards: [], _count: { snapshots: Math.max(1, members().length - 3) } },
       ],
     };
   });
