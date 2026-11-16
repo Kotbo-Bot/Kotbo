@@ -54,6 +54,18 @@ describe('seasonEndText', () => {
   });
 });
 
+describe('paliers', () => {
+  test('l\'ouverture mentionne le rôle du palier', () => {
+    const text = seasonStartText(season, [], null, 'fr', [{ minXp: 1000, roleId: ROLE, coins: 0 }]).description;
+    expect(text).toContain(`<@&${ROLE}>`);
+  });
+
+  test('la clôture compte les membres de chaque palier', () => {
+    const text = seasonEndText(season, [{ userId: 'a', rank: 1, xp: 9 }], [], 'en', [{ minXp: 1000, count: 12 }]).description;
+    expect(text).toContain('12');
+  });
+});
+
 describe('seasonReminderText', () => {
   test('date de fin relative et podium provisoire en mentions', () => {
     const text = seasonReminderText(season, [{ userId: 'a', rank: 1, xp: 900 }], 'fr');
@@ -71,6 +83,8 @@ describe('seasonAnnouncementLabels', () => {
     expect(labels.endLine).toContain('{user}');
     expect(labels.reminderTitle).toContain('{name}');
     expect(labels.reminderBody).toContain('{date}');
+    expect(labels.tierLine).toContain('{reward}');
+    expect(labels.tierReachedLine).toContain('{count}');
   });
 });
 

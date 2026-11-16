@@ -24,6 +24,10 @@ model LevelingSeason {
   /// `validateSeasonRewards` (@kotbo/shared).
   rewards Json?
 
+  /// Paliers d'XP : `[{ minXp, roleId, coins, rotate? }]`, validés par
+  /// `validateSeasonTiers` (@kotbo/shared).
+  tiers Json?
+
   // Rôle exclusif attribué au top 1
   topRoleId String?
 
@@ -45,6 +49,10 @@ model LevelingSeason {
   /// Ce qui a réellement été donné à la clôture : `SeasonRewardOutcome[]`
   /// (@kotbo/shared), relu par `readSeasonRewardOutcomes`.
   grantedRewards Json?
+
+  /// Bilan chiffré figé à la clôture : `SeasonStats` (@kotbo/shared), pour
+  /// comparer les saisons au-delà des 100 membres figés au classement.
+  stats Json?
 
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
   snapshots SeasonSnapshot[]

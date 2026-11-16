@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
   import { MediaQuery } from 'svelte/reactivity';
-  import { isRewardOutcomeComplete, seasonProgress, type SeasonRewardOutcome } from '@kotbo/shared';
+  import { isRewardOutcomeComplete, seasonProgress, type SeasonRewardOutcome, type SeasonStats } from '@kotbo/shared';
   import {
     deleteSeason,
     endSeason,
@@ -27,6 +27,7 @@
   import Skeleton from '../lib/components/Skeleton.svelte';
   import Modal from '../lib/components/Modal.svelte';
   import SeasonEditorModal from '../lib/components/seasons/SeasonEditorModal.svelte';
+  import SeasonStatsChart from '../lib/components/seasons/SeasonStatsChart.svelte';
   import { blockedSeasonRoles } from '../lib/components/seasons/seasonRoleBlockers';
   import Button from '../lib/components/ui/Button.svelte';
   import Callout from '../lib/components/ui/Callout.svelte';
@@ -81,6 +82,32 @@
     [...(data?.seasons ?? [])].filter((season) => season.status === 'ENDED').sort((a, b) => b.endDate.localeCompare(a.endDate))[0] ?? null
   );
 
+  /** Saisons closes avec leur bilan chiffré, de la plus ancienne à la plus récente. */
+  const comparable = $derived(
+    (data?.seasons ?? [])
+      .filter((season): season is Season & { stats: SeasonStats } => season.status === 'ENDED' && !!season.stats)
+      .sort((a, b) => a.number - b.number)
+  );
+
+  /** Récompenses de palier remises, regroupées par seuil : une puce par palier, pas par membre. */
+  function tierGroups(season: Season): Array<{ tierXp: number; first: SeasonRewardOutcome; members: number; pending: number; problems: string }> {
+    const groups = new Map<number, SeasonRewardOutcome[]>();
+    for (const outcome of season.grantedRewards ?? []) {
+      if (outcome.tierXp === undefined) continue;
+      groups.set(outcome.tierXp, [...(groups.get(outcome.tierXp) ?? []), outcome]);
+    }
+    return [...groups.entries()].sort(([a], [b]) => a - b).map(([tierXp, outcomes]) => {
+      const missing = outcomes.filter((outcome) => !isRewardOutcomeComplete(outcome));
+      return {
+        tierXp,
+        first: outcomes[0],
+        members: outcomes.length,
+        pending: missing.length,
+        problems: [...new Set(missing.map(outcomeProblems))].join(' · '),
+      };
+    });
+  }
+
   function channelName(channelId: string): string {
     return textChannels.find((channel) => channel.id === channelId)?.name ?? channelId;
   }
@@ -94,7 +121,8 @@
     if (nextUpcoming && new Date(nextUpcoming.startDate).getTime() <= Date.now()) {
       list.push({ id: 'queued', variant: 'info', title: m.sea_advice_queued_title({ name: nextUpcoming.name }), text: m.sea_advice_queued_desc() });
     }
-    const blocked = blockedSeasonRoles([active.topRoleId, ...(active.rewards ?? []).map((reward) => reward.roleId)], roles, botRoleAccess);
+    const prizes = [...(active.rewards ?? []), ...(active.tiers ?? [])];
+    const blocked = blockedSeasonRoles([active.topRoleId, ...prizes.map((prize) => prize.roleId)], roles, botRoleAccess);
     if (blocked.length > 0) {
       list.push({
         id: 'blocked',
@@ -105,9 +133,9 @@
         action: m.sea_btn_edit(),
       });
     }
-    const hasRewards = (active.rewards?.length ?? 0) > 0 || !!active.topRoleId;
+    const hasRewards = prizes.length > 0 || !!active.topRoleId;
     if (!hasRewards) list.push({ id: 'rewards', variant: 'info', title: m.sea_advice_no_rewards_title(), text: m.sea_advice_no_rewards_desc(), action: m.sea_advice_no_rewards_action() });
-    if (hasRewards && !economyActive && (active.rewards ?? []).some((reward) => reward.coins > 0)) {
+    if (hasRewards && !economyActive && prizes.some((prize) => prize.coins > 0)) {
       list.push({ id: 'economy', variant: 'warning', title: m.sea_advice_economy_off_title(), text: m.sea_rewards_economy_off() });
     }
     if (active.announceChannelId === null) list.push({ id: 'announce', variant: 'info', title: m.sea_advice_no_announce_title(), text: m.sea_advice_no_announce_desc(), action: m.sea_advice_no_announce_action() });
@@ -223,7 +251,7 @@
   }
 
   async function handleEnd(season: Season) {
-    const rewardCount = (season.rewards?.length ?? 0) + (season.topRoleId ? 1 : 0);
+    const rewardCount = (season.rewards?.length ?? 0) + (season.tiers?.length ?? 0) + (season.topRoleId ? 1 : 0);
     const confirmed = await confirmDialog.ask({
       title: m.sea_end_confirm_title({ name: season.name }),
       description: m.sea_end_confirm_desc(),
@@ -298,7 +326,7 @@
         </div>
         <div class="flex items-center justify-between gap-3">
           <dt class="text-on-surface-variant">{m.sea_status_rewards()}</dt>
-          <dd class="font-semibold">{(active.rewards?.length ?? 0) + (active.topRoleId ? 1 : 0)}</dd>
+          <dd class="font-semibold">{(active.rewards?.length ?? 0) + (active.tiers?.length ?? 0) + (active.topRoleId ? 1 : 0)}</dd>
         </div>
         <div class="flex items-center justify-between gap-3">
           <dt class="text-on-surface-variant">{m.sea_announce_channel_label()}</dt>
@@ -384,7 +412,7 @@
   {@const pending = pendingOutcomes(season)}
   <div class="space-y-2">
     <ul class="flex flex-wrap gap-2">
-      {#each season.grantedRewards ?? [] as outcome (`${outcome.rank}-${outcome.userId}-${outcome.roleId}`)}
+      {#each (season.grantedRewards ?? []).filter((outcome) => outcome.tierXp === undefined) as outcome (`${outcome.rank}-${outcome.userId}-${outcome.roleId}`)}
         {@const complete = isRewardOutcomeComplete(outcome)}
         <li
           class="text-xs px-2.5 py-1 rounded-full border flex items-center gap-1.5 {complete ? 'bg-success/10 text-success border-success/20' : 'bg-warning/10 text-warning border-warning/30'}"
@@ -392,6 +420,16 @@
         >
           <Papicon icon={complete ? 'Check' : 'AlertTriangle'} size={12} />
           <span class="font-semibold">#{outcome.rank}</span> {rewardLabel(outcome)}
+        </li>
+      {/each}
+      {#each tierGroups(season) as group (group.tierXp)}
+        <li
+          class="text-xs px-2.5 py-1 rounded-full border flex items-center gap-1.5 {group.pending === 0 ? 'bg-success/10 text-success border-success/20' : 'bg-warning/10 text-warning border-warning/30'}"
+          title={group.pending === 0 ? m.sea_outcome_given() : group.problems}
+        >
+          <Papicon icon={group.pending === 0 ? 'Check' : 'AlertTriangle'} size={12} />
+          <span class="font-semibold">{m.sea_tier_chip({ xp: group.tierXp.toLocaleString(dateLocale()) })}</span>
+          {rewardLabel(group.first)} · {m.sea_tier_members({ count: group.members })}
         </li>
       {/each}
     </ul>
@@ -406,10 +444,19 @@
   </div>
 {/snippet}
 
+{#snippet rotateMark(rotate: boolean | undefined)}
+  {#if rotate}
+    <span class="inline-flex" title={m.sea_rotate_hint()}>
+      <Papicon icon="RefreshCw" size={11} />
+      <span class="sr-only">{m.sea_rotate_label()}</span>
+    </span>
+  {/if}
+{/snippet}
+
 {#snippet rewardsSummary(season: Season)}
   {#if season.status === 'ENDED' && (season.grantedRewards?.length ?? 0) > 0}
     {@render outcomesSummary(season)}
-  {:else if (season.rewards?.length ?? 0) > 0 || season.topRoleId}
+  {:else if (season.rewards?.length ?? 0) > 0 || (season.tiers?.length ?? 0) > 0 || season.topRoleId}
     <ul class="flex flex-wrap gap-2">
       {#if season.topRoleId}
         <li class="text-xs px-2.5 py-1 rounded-full bg-warning/10 text-warning border border-warning/20 flex items-center gap-1.5">
@@ -417,8 +464,16 @@
         </li>
       {/if}
       {#each season.rewards ?? [] as reward (reward.rank)}
-        <li class="text-xs px-2.5 py-1 rounded-full bg-surface-container-high/40 border border-outline-variant/20">
+        <li class="text-xs px-2.5 py-1 rounded-full bg-surface-container-high/40 border border-outline-variant/20 flex items-center gap-1.5">
           <span class="font-semibold">#{reward.rank}</span> {rewardLabel(reward)}
+          {@render rotateMark(reward.rotate)}
+        </li>
+      {/each}
+      {#each season.tiers ?? [] as tier (tier.minXp)}
+        <li class="text-xs px-2.5 py-1 rounded-full bg-primary/10 text-primary border border-primary/20 flex items-center gap-1.5">
+          <Papicon icon="Zap" size={12} />
+          <span class="font-semibold">{m.sea_tier_chip({ xp: tier.minXp.toLocaleString(dateLocale()) })}</span> {rewardLabel(tier)}
+          {@render rotateMark(tier.rotate)}
         </li>
       {/each}
     </ul>
@@ -622,6 +677,15 @@
           reason={canManage ? undefined : 'read-only'}
         />
       {:else}
+        {#if comparable.length >= 2}
+          <section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl space-y-4 mb-6">
+            <div>
+              <h3 class="text-base font-semibold flex items-center gap-2.5"><Papicon icon="BarChart3" size={16} /> {m.sea_stats_heading()}</h3>
+              <p class="text-xs text-on-surface-variant mt-1">{m.sea_stats_desc()}</p>
+            </div>
+            <SeasonStatsChart seasons={comparable} />
+          </section>
+        {/if}
         <ul class="space-y-3">
           {#each data.seasons as season (season.id)}
             <li class="bg-surface-container-low/40 border border-outline-variant/30 rounded-xl p-4 space-y-3">

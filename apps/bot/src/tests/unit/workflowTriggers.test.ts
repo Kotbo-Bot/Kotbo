@@ -768,3 +768,30 @@ describe('déclencheurs de réputation', () => {
     expect(hasBlockingIssue(validateGraph(compileRecipe(recipe)))).toBe(false);
   });
 });
+
+describe('déclencheurs de saison', () => {
+  test('ouverture et clôture sont rattachées au module Saisons', () => {
+    expect(getNodeDef('OnSeasonStarted')).toMatchObject({ category: 'trigger', event: 'season:started', module: 'seasons' });
+    expect(getNodeDef('OnSeasonEnded')).toMatchObject({ category: 'trigger', event: 'season:ended', module: 'seasons' });
+  });
+
+  test('la clôture expose le premier comme membre, avec la saison et ses chiffres', () => {
+    const paths = (type: string) => contextTokens(type).map((token) => token.path);
+    expect(paths('OnSeasonStarted')).toEqual(expect.arrayContaining(['season', 'number']));
+    expect(paths('OnSeasonStarted')).not.toContain('member.displayName');
+    expect(paths('OnSeasonEnded')).toEqual(expect.arrayContaining(['member.displayName', 'season', 'number', 'participants', 'winnerXp']));
+  });
+
+  test('une recette « fin de saison » se compile et se relit à l\'identique', () => {
+    const recipe: Recipe = {
+      trigger: { type: 'OnSeasonEnded' },
+      steps: [{
+        id: 'log', kind: 'action', action: 'SendLogMessage',
+        values: { text: { from: 'text', template: '{season} terminée : {member.displayName} gagne avec {winnerXp} XP ({participants} participants)' } },
+      }],
+    };
+    const graph = compileRecipe(recipe);
+    expect(hasBlockingIssue(validateGraph(graph))).toBe(false);
+    expect(decompileGraph(graph)).toEqual(recipe);
+  });
+});

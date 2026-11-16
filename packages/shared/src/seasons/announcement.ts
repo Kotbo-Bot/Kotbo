@@ -7,7 +7,7 @@
 
 export const SEASON_PODIUM_SIZE = 3;
 
-/** Gabarits à trous : `{number}`, `{name}`, `{date}`, `{role}`, `{coins}`, `{rank}`, `{user}`, `{xp}`. */
+/** Gabarits à trous : `{number}`, `{name}`, `{date}`, `{role}`, `{coins}`, `{rank}`, `{user}`, `{xp}`, `{reward}`, `{count}`. */
 export interface SeasonAnnouncementLabels {
   locale: string;
   startTitle: string;
@@ -21,6 +21,11 @@ export interface SeasonAnnouncementLabels {
   rewardsGivenHeading: string;
   reminderTitle: string;
   reminderBody: string;
+  tiersHeading: string;
+  /** `{xp}` : seuil du palier, `{reward}` : ce qu'il donne. */
+  tierLine: string;
+  /** `{xp}` : seuil, `{count}` : membres qui l'ont atteint. */
+  tierReachedLine: string;
 }
 
 export interface SeasonAnnouncementText {
@@ -50,12 +55,17 @@ export function seasonStartAnnouncement(
   season: { number: number; name: string; date: string },
   rewards: ReadonlyArray<NamedSeasonReward & { rank: number }>,
   topRole: string | null,
+  tiers: ReadonlyArray<NamedSeasonReward & { xp: string }> = [],
 ): SeasonAnnouncementText {
   const lines = [fillSeasonTemplate(labels.startBody, { date: season.date })];
   if (rewards.length > 0 || topRole) {
     lines.push('', `**${labels.rewardsHeading}**`);
     if (topRole) lines.push(fillSeasonTemplate(labels.topRoleLine, { role: topRole }));
     for (const reward of rewards) lines.push(`#${reward.rank} · ${rewardText(labels, reward)}`);
+  }
+  if (tiers.length > 0) {
+    lines.push('', `**${labels.tiersHeading}**`);
+    for (const tier of tiers) lines.push(fillSeasonTemplate(labels.tierLine, { xp: tier.xp, reward: rewardText(labels, tier) }));
   }
   return {
     title: fillSeasonTemplate(labels.startTitle, { number: season.number, name: season.name }),
@@ -86,6 +96,7 @@ export function seasonEndAnnouncement(
   season: { number: number; name: string },
   standings: ReadonlyArray<{ rank: number; user: string; xp: string }>,
   given: ReadonlyArray<NamedSeasonReward & { user: string }>,
+  tiersReached: ReadonlyArray<{ xp: string; count: number }> = [],
 ): SeasonAnnouncementText {
   const title = fillSeasonTemplate(labels.endTitle, { number: season.number, name: season.name });
   if (standings.length === 0) return { title, description: labels.endEmpty };
@@ -94,6 +105,10 @@ export function seasonEndAnnouncement(
   if (given.length > 0) {
     lines.push('', `**${labels.rewardsGivenHeading}**`);
     for (const entry of given) lines.push(`${entry.user} · ${rewardText(labels, entry)}`);
+  }
+  if (tiersReached.length > 0) {
+    lines.push('', `**${labels.tiersHeading}**`);
+    for (const tier of tiersReached) lines.push(fillSeasonTemplate(labels.tierReachedLine, tier));
   }
   return { title, description: lines.join('\n') };
 }

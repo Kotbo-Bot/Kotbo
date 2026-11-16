@@ -469,6 +469,31 @@ export interface ReputationGivenEvent {
   timestamp: number;
 }
 
+/** Une saison de leveling vient de s'ouvrir (à la main, par le planning ou par enchaînement). */
+export interface SeasonStartedEvent {
+  guildId: string;
+  seasonId: string;
+  number: number;
+  name: string;
+  /** Fin prévue, ISO 8601. */
+  endDate: string;
+  timestamp: number;
+}
+
+/** Une saison de leveling vient d'être clôturée : classement figé, récompenses données. */
+export interface SeasonEndedEvent {
+  guildId: string;
+  seasonId: string;
+  number: number;
+  name: string;
+  /** Membres ayant gagné au moins 1 XP pendant la saison. */
+  participants: number;
+  /** Premier du classement, `null` si personne n'a gagné d'XP. */
+  winnerId: string | null;
+  winnerXp: number;
+  timestamp: number;
+}
+
 /** Un concours vient d'être clôturé, avec ou sans gagnant. */
 export interface GiveawayEndedEvent {
   guildId: string;
@@ -568,6 +593,8 @@ export interface KotboEventMap {
   'giveaway:ended': GiveawayEndedEvent;
   'fun:game-won': FunGameWonEvent;
   'reputation:given': ReputationGivenEvent;
+  'season:started': SeasonStartedEvent;
+  'season:ended': SeasonEndedEvent;
 }
 
 export type KotboEventName = keyof KotboEventMap;

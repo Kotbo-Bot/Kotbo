@@ -451,6 +451,22 @@ export const TRIGGER_LIBRARY: TriggerPresentation[] = [
     example: 'Annoncer le nombre de participants dans le salon général.',
   },
   {
+    type: 'OnSeasonStarted',
+    sentence: 'Quand une saison s\'ouvre',
+    short: 'Saison ouverte',
+    group: 'community',
+    icon: 'Flag',
+    example: 'Prévenir les membres dans le salon général et épingler le règlement de la saison.',
+  },
+  {
+    type: 'OnSeasonEnded',
+    sentence: 'Quand une saison se termine',
+    short: 'Saison clôturée',
+    group: 'community',
+    icon: 'Trophy',
+    example: 'Féliciter le premier en privé et ouvrir un ticket pour lui remettre un lot.',
+  },
+  {
     type: 'OnFunGameWon',
     sentence: 'Quand un membre gagne un mini-jeu',
     short: 'Mini-jeu gagné',

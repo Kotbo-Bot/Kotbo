@@ -169,7 +169,14 @@ export function registerWriteCommunityTools(ctx: McpToolContext) {
             rank: z.number().int().min(1).max(100),
             role_id: z.string().optional(),
             coins: z.number().int().min(0).optional(),
+            rotate: z.boolean().optional().describe('Rôle repris à la clôture de la saison suivante, sauf à qui le regagne'),
           })).max(10).optional().describe('Récompenses par rang, données à la clôture'),
+          tiers: z.array(z.object({
+            min_xp: z.number().int().min(1),
+            role_id: z.string().optional(),
+            coins: z.number().int().min(0).optional(),
+            rotate: z.boolean().optional(),
+          })).max(5).optional().describe('Paliers d\'XP : chaque membre qui gagne au moins min_xp pendant la saison reçoit la récompense'),
           announce_channel_id: z.string().optional().describe('Salon où annoncer l\'ouverture et la clôture'),
           auto_renew: z.boolean().optional().describe('À la clôture, ouvrir une saison de même durée et mêmes réglages, sauf si une autre est déjà prévue'),
           remind_before_end: z.boolean().optional().describe('Rappel dans le salon d\'annonce pendant les dernières 24 h'),
@@ -177,7 +184,7 @@ export function registerWriteCommunityTools(ctx: McpToolContext) {
         },
         _meta: toolMeta,
       },
-      guard('WRITE_COMMUNITY', async ({ name, start_date, end_date, top_role_id, rewards, announce_channel_id, auto_renew, remind_before_end, key_name }) => {
+      guard('WRITE_COMMUNITY', async ({ name, start_date, end_date, top_role_id, rewards, tiers, announce_channel_id, auto_renew, remind_before_end, key_name }) => {
         try {
           const parsed = parseSeasonInput({
             name,
@@ -185,7 +192,8 @@ export function registerWriteCommunityTools(ctx: McpToolContext) {
             endDate: end_date,
             topRoleId: top_role_id,
             announceChannelId: announce_channel_id,
-            rewards: rewards?.map((reward) => ({ rank: reward.rank, roleId: reward.role_id, coins: reward.coins })),
+            rewards: rewards?.map((reward) => ({ rank: reward.rank, roleId: reward.role_id, coins: reward.coins, rotate: reward.rotate })),
+            tiers: tiers?.map((tier) => ({ minXp: tier.min_xp, roleId: tier.role_id, coins: tier.coins, rotate: tier.rotate })),
             autoRenew: auto_renew,
             remindBeforeEnd: remind_before_end,
           });
@@ -213,7 +221,14 @@ export function registerWriteCommunityTools(ctx: McpToolContext) {
             rank: z.number().int().min(1).max(100),
             role_id: z.string().optional(),
             coins: z.number().int().min(0).optional(),
+            rotate: z.boolean().optional().describe('Rôle repris à la clôture de la saison suivante, sauf à qui le regagne'),
           })).max(10).optional().describe('Récompenses par rang, données à la clôture'),
+          tiers: z.array(z.object({
+            min_xp: z.number().int().min(1),
+            role_id: z.string().optional(),
+            coins: z.number().int().min(0).optional(),
+            rotate: z.boolean().optional(),
+          })).max(5).optional().describe('Paliers d\'XP : chaque membre qui gagne au moins min_xp pendant la saison reçoit la récompense'),
           announce_channel_id: z.string().optional(),
           auto_renew: z.boolean().optional(),
           remind_before_end: z.boolean().optional(),
@@ -221,7 +236,7 @@ export function registerWriteCommunityTools(ctx: McpToolContext) {
         },
         _meta: toolMeta,
       },
-      guard('WRITE_COMMUNITY', async ({ season_id, name, start_date, end_date, top_role_id, rewards, announce_channel_id, auto_renew, remind_before_end, key_name }) => {
+      guard('WRITE_COMMUNITY', async ({ season_id, name, start_date, end_date, top_role_id, rewards, tiers, announce_channel_id, auto_renew, remind_before_end, key_name }) => {
         try {
           const patch: Record<string, unknown> = {};
           if (name !== undefined) patch.name = name;
@@ -229,7 +244,8 @@ export function registerWriteCommunityTools(ctx: McpToolContext) {
           if (end_date !== undefined) patch.endDate = end_date;
           if (top_role_id !== undefined) patch.topRoleId = top_role_id;
           if (announce_channel_id !== undefined) patch.announceChannelId = announce_channel_id;
-          if (rewards !== undefined) patch.rewards = rewards.map((reward) => ({ rank: reward.rank, roleId: reward.role_id, coins: reward.coins }));
+          if (rewards !== undefined) patch.rewards = rewards.map((reward) => ({ rank: reward.rank, roleId: reward.role_id, coins: reward.coins, rotate: reward.rotate }));
+          if (tiers !== undefined) patch.tiers = tiers.map((tier) => ({ minXp: tier.min_xp, roleId: tier.role_id, coins: tier.coins, rotate: tier.rotate }));
           if (auto_renew !== undefined) patch.autoRenew = auto_renew;
           if (remind_before_end !== undefined) patch.remindBeforeEnd = remind_before_end;
 

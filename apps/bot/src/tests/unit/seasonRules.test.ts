@@ -6,7 +6,12 @@ import {
   SEASON_REWARD_COINS,
   isRewardOutcomeComplete,
   planSeasonRewards,
+  planSeasonTiers,
   readSeasonRewardOutcomes,
+  readSeasonStats,
+  readStoredSeasonTiers,
+  rolesToTakeBack,
+  validateSeasonTiers,
   readStoredSeasonRewards,
   renewedSeasonSchedule,
   seasonProgress,
@@ -250,5 +255,75 @@ describe('summarizeSeasonHistory', () => {
 
   test('sans saison classée', () => {
     expect(summarizeSeasonHistory([])).toEqual({ seasons: 0, wins: 0, podiums: 0, bestRank: null });
+  });
+});
+
+describe('rotation des rôles de rang', () => {
+  test('une récompense « reprise » garde son drapeau, les autres n\'en portent pas', () => {
+    expect(validateSeasonRewards([{ rank: 1, roleId: ROLE, coins: 0, rotate: true }, { rank: 2, coins: 5, rotate: false }])).toEqual({
+      rewards: [{ rank: 1, roleId: ROLE, coins: 0, rotate: true }, { rank: 2, roleId: null, coins: 5 }],
+    });
+  });
+
+  test('le plan transmet le drapeau', () => {
+    expect(planSeasonRewards([{ rank: 1, roleId: ROLE, coins: 0, rotate: true }], [{ userId: 'a', rank: 1 }])).toEqual([
+      { userId: 'a', rank: 1, roleId: ROLE, coins: 0, rotate: true },
+    ]);
+  });
+
+  const given = (userId: string, roleId: string, rotate?: boolean) => ({ userId, rank: 1, roleId, coins: 0, roleStatus: 'given' as const, coinsStatus: null, ...(rotate ? { rotate } : {}) });
+
+  test('reprend les rôles « repris » remis la saison d\'avant', () => {
+    expect(rolesToTakeBack([given('a', ROLE, true), given('b', OTHER_ROLE)], [])).toEqual([{ userId: 'a', roleId: ROLE }]);
+  });
+
+  test('ne reprend pas un rôle que le membre regagne cette saison', () => {
+    expect(rolesToTakeBack([given('a', ROLE, true)], [{ userId: 'a', rank: 2, roleId: ROLE, coins: 0 }])).toEqual([]);
+  });
+
+  test('ne reprend pas un rôle qui n\'avait pas été remis', () => {
+    expect(rolesToTakeBack([{ ...given('a', ROLE, true), roleStatus: 'blocked' as const }], [])).toEqual([]);
+  });
+});
+
+describe('validateSeasonTiers', () => {
+  test('rend les paliers triés par XP, rôle absent normalisé à null', () => {
+    expect(validateSeasonTiers([{ minXp: 5000, coins: 100 }, { minXp: 1000, roleId: ROLE, coins: 0, rotate: true }])).toEqual({
+      tiers: [{ minXp: 1000, roleId: ROLE, coins: 0, rotate: true }, { minXp: 5000, roleId: null, coins: 100 }],
+    });
+  });
+
+  test('refuse un seuil invalide, un palier vide, un doublon ou trop de paliers', () => {
+    expect(validateSeasonTiers([{ minXp: 0, coins: 5 }])).toEqual({ error: 'BAD_TIER_XP' });
+    expect(validateSeasonTiers([{ minXp: 10 }])).toEqual({ error: 'EMPTY_TIER' });
+    expect(validateSeasonTiers([{ minXp: 10, coins: 1 }, { minXp: 10, coins: 2 }])).toEqual({ error: 'DUPLICATE_TIER' });
+    expect(validateSeasonTiers([{ minXp: 10, roleId: 'abc' }])).toEqual({ error: 'BAD_TIER_ROLE' });
+    expect(validateSeasonTiers([{ minXp: 10, coins: -1 }])).toEqual({ error: 'BAD_TIER_COINS' });
+    expect(validateSeasonTiers(Array.from({ length: 6 }, (_, i) => ({ minXp: i + 1, coins: 1 })))).toEqual({ error: 'TOO_MANY_TIERS' });
+    expect(validateSeasonTiers('x')).toEqual({ error: 'TIERS_NOT_ARRAY' });
+  });
+
+  test('une valeur enregistrée illisible ne donne aucun palier', () => {
+    expect(readStoredSeasonTiers([{ minXp: 0 }])).toEqual([]);
+    expect(readStoredSeasonTiers(null)).toEqual([]);
+  });
+});
+
+describe('planSeasonTiers', () => {
+  test('chaque palier atteint donne sa récompense, en plus de celles du rang', () => {
+    const tiers = [{ minXp: 100, roleId: null, coins: 10 }, { minXp: 500, roleId: ROLE, coins: 0, rotate: true }];
+    expect(planSeasonTiers(tiers, [{ userId: 'a', rank: 1, xp: 600 }, { userId: 'b', rank: 2, xp: 150 }, { userId: 'c', rank: 3, xp: 50 }])).toEqual([
+      { userId: 'a', rank: 1, roleId: null, coins: 10, tierXp: 100 },
+      { userId: 'b', rank: 2, roleId: null, coins: 10, tierXp: 100 },
+      { userId: 'a', rank: 1, roleId: ROLE, coins: 0, tierXp: 500, rotate: true },
+    ]);
+  });
+});
+
+describe('readSeasonStats', () => {
+  test('relit le bilan chiffré, rien si illisible', () => {
+    expect(readSeasonStats({ participants: 3, totalXp: 900, topXp: 500 })).toEqual({ participants: 3, totalXp: 900, topXp: 500 });
+    expect(readSeasonStats({ participants: '3' })).toBeNull();
+    expect(readSeasonStats(null)).toBeNull();
   });
 });

@@ -1,5 +1,5 @@
 /** Saisons de leveling : classement de l'XP gagnée sur une période. */
-import type { SeasonAnnouncementLabels, SeasonReward, SeasonRewardOutcome } from '@kotbo/shared';
+import type { SeasonAnnouncementLabels, SeasonReward, SeasonRewardOutcome, SeasonStats, SeasonTierReward } from '@kotbo/shared';
 import type { BotRoleAccess } from '@kotbo/contracts';
 import { authStore } from '../stores/auth.svelte';
 import { dashboardMutation, dashboardRequest } from './client';
@@ -15,6 +15,8 @@ export interface Season {
   startDate: string;
   endDate: string;
   rewards: SeasonReward[];
+  /** Paliers d'XP. Absents d'un bot plus ancien. */
+  tiers?: SeasonTierReward[];
   topRoleId: string | null;
   /** Salon des annonces d'ouverture et de clôture. Absent d'un bot plus ancien. */
   announceChannelId?: string | null;
@@ -24,6 +26,8 @@ export interface Season {
   remindBeforeEnd?: boolean;
   /** Ce qui a réellement été remis à la clôture ; vide avant la clôture ou d'un bot plus ancien. */
   grantedRewards?: SeasonRewardOutcome[];
+  /** Bilan chiffré figé à la clôture ; `null` avant, ou pour une saison close par un bot plus ancien. */
+  stats?: SeasonStats | null;
   _count?: { snapshots: number };
 }
 
@@ -67,6 +71,7 @@ export interface SeasonPayload {
   startDate: string;
   endDate: string;
   rewards: SeasonReward[];
+  tiers: SeasonTierReward[];
   topRoleId: string | null;
   announceChannelId: string | null;
   autoRenew: boolean;

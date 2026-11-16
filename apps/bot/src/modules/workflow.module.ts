@@ -136,6 +136,15 @@ export function registerWorkflowBusSubscribers(client: Client): void {
     await dispatchEvent(client, payload.guildId, 'reputation:given', payload as never);
   }, MODULE_NAME);
 
+  // Saisons : module éteint, ni ouverture ni clôture, donc rien de publié.
+  subscribeForModule('workflows', 'season:started', async (payload) => {
+    await dispatchEvent(client, payload.guildId, 'season:started', payload as never);
+  }, MODULE_NAME);
+
+  subscribeForModule('workflows', 'season:ended', async (payload) => {
+    await dispatchEvent(client, payload.guildId, 'season:ended', payload as never);
+  }, MODULE_NAME);
+
   subscribeForModule('workflows', 'form:submitted', async (payload) => {
     await dispatchEvent(client, payload.guildId, 'form:submitted', payload as never);
   }, MODULE_NAME);
