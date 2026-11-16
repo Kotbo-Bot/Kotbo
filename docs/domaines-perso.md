@@ -49,6 +49,25 @@ application Discord. Tout se règle depuis la page **Identité** du dashboard.
    résolveur `letsencrypt` sont ceux de Dokploy par défaut.
 4. Appliquer la migration `20261227090000_custom_bot_domaine`.
 
+### Variante : tout derrière le proxy Cloudflare (Cloudflare for SaaS)
+
+Si `CLOUDFLARE_API_TOKEN` et `CLOUDFLARE_ZONE_ID` sont définis, Kotbo bascule
+dans ce mode (comme GitHub Pages : le client crée un CNAME, Cloudflare sert et
+chiffre). Le TXT `_kotbo.<domaine>` reste exigé comme preuve de propriété.
+
+1. Cloudflare → zone `kotbo.fr` → **SSL/TLS → Noms d'hôte personnalisés** :
+   activer la fonction (carte bancaire requise), origine de secours =
+   `custom.kotbo.fr`.
+2. `custom.kotbo.fr` repasse en **Proxied** (nuage orange). Mode SSL de la zone :
+   **Full** (le certificat par défaut de Traefik suffit ; pas de Let's Encrypt).
+3. Jeton API limité à la zone, permission « SSL and Certificates : Edit », et
+   l'ID de zone, dans les variables du bot.
+4. « Vérifier » crée le nom d'hôte chez Cloudflare au premier passage, puis lit
+   son statut : le domaine est servi quand Cloudflare l'a vu et a émis le
+   certificat (quelques minutes). Changer de domaine retire l'ancien nom d'hôte.
+
+Sans ces deux variables, le mode direct ci-dessus reste actif.
+
 ## Limites connues
 
 - Un domaine derrière le proxy Cloudflare (nuage orange) échoue à la
