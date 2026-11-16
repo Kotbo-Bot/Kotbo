@@ -5,6 +5,7 @@ import { Client } from 'discord.js';
 
 import prisma from '../utils/db.js';
 import { mayBeTicketChannel } from '../services/features/ticketChannelLookup.js';
+import { isCustomDomainOrigin, startCustomDomainSync } from '../services/system/customDomain.js';
 import { logger } from '../utils/logger.js';
 import {
   json,
@@ -118,6 +119,7 @@ export const startDashboardApi = async (client: Client) => {
 
   // Instancie l'app Hono (nouveau routeur typé)
   const honoApp = createHonoApp(client);
+  startCustomDomainSync();
 
   const clientId = getDiscordClientId();
   const missingOAuthAtStartup = (() => {
@@ -196,7 +198,7 @@ export const startDashboardApi = async (client: Client) => {
         if (!candidate) return false;
         if (candidate === getDashboardOrigin()) return true;
         if (getAllInstances().some((i) => i.dashboardOrigin === candidate)) return true;
-        if (isKotboPublicOrigin(candidate)) return true;
+        if (isKotboPublicOrigin(candidate) || isCustomDomainOrigin(candidate)) return true;
         try {
           const parsed = new URL(candidate);
           if (CORS_EXTRA_ORIGINS.includes(parsed.origin)) return true;
@@ -355,7 +357,7 @@ export const startDashboardApi = async (client: Client) => {
             if (originStr) {
               let normalizedOrigin: string;
               try { normalizedOrigin = new URL(originStr).origin; } catch { normalizedOrigin = originStr.replace(/\/$/, ''); }
-              if (allowedOrigins.has(normalizedOrigin) || isAllowedDevOrigin(originStr) || isKotboPublicOrigin(originStr)) {
+              if (allowedOrigins.has(normalizedOrigin) || isAllowedDevOrigin(originStr) || isKotboPublicOrigin(originStr) || isCustomDomainOrigin(originStr)) {
                 res.setHeader('Access-Control-Allow-Origin', originStr);
                 res.setHeader('Access-Control-Allow-Credentials', 'true');
               } else {

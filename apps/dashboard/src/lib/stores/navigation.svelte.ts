@@ -1,5 +1,5 @@
 import { canonicalModuleKey, getModuleDefinition, getModuleForPath } from '@kotbo/contracts';
-import { updateSidebarFavorites } from '../api';
+import { fetchSetupJourney, updateSidebarFavorites } from '../api';
 import {
   allPages,
   generalItems,
@@ -70,6 +70,8 @@ class NavigationStore {
   #favorites = $state<string[]>([]);
   #recents = $state<string[]>(readStored(RECENTS_KEY, MAX_RECENTS));
   #hydratedGuildId = $state<string | null>(null);
+  /** Serveur dont « Bien démarrer » est entièrement réglé : l'entrée quitte le menu. */
+  #setupDoneGuildId = $state<string | null>(null);
   #persistTimer: ReturnType<typeof setTimeout> | null = null;
 
   readonly #guild = $derived(
@@ -165,7 +167,26 @@ class NavigationStore {
    * peut configurer le serveur, et c'est la page qui masque desormais le bloc
    * aux non-admins - le reste du parcours leur restant utile.
    */
-  readonly #visibleGeneral = $derived(generalItems.filter(this.#isReachable));
+  readonly #visibleGeneral = $derived(
+    generalItems.filter(
+      (item) =>
+        this.#isReachable(item)
+        && !(item.href === '/setup' && this.#setupDoneGuildId === authStore.selectedGuildId),
+    ),
+  );
+
+  /** Relit l'avancement ; en cas d'échec l'entrée reste affichée. */
+  async refreshSetupStatus(): Promise<void> {
+    const guildId = authStore.selectedGuildId;
+    if (!guildId) return;
+    try {
+      const data = await fetchSetupJourney(guildId);
+      const done = !!data && data.progress.total > 0 && data.progress.done >= data.progress.total;
+      this.#setupDoneGuildId = done ? guildId : this.#setupDoneGuildId === guildId ? null : this.#setupDoneGuildId;
+    } catch {
+      /* menu inchangé */
+    }
+  }
 
   readonly #visibleModeration = $derived(
     this.isStaff || this.isModerator || this.isAdmin
@@ -309,6 +330,7 @@ class NavigationStore {
     if (this.#hydratedGuildId !== guildId) {
       const legacy = readStored(FAVORITES_KEY, MAX_FAVORITES);
       this.#hydratedGuildId = guildId;
+      void this.refreshSetupStatus();
       this.#favorites = serverFavorites.length > 0 ? serverFavorites : legacy;
       if (legacy.length > 0 && serverFavorites.length === 0 && guildId) {
         void this.#persist(legacy);
@@ -358,6 +380,7 @@ class NavigationStore {
     this.#favorites = [];
     this.#recents = [];
     this.#hydratedGuildId = null;
+    this.#setupDoneGuildId = null;
   }
 
   async #persist(next: string[]): Promise<void> {

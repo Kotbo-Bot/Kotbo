@@ -225,6 +225,44 @@ export async function getKnownGuildNames(
   return result;
 }
 
+const assetSyncAt = new Map<string, number>();
+
+/**
+ * Enregistre les emojis/stickers publics d'un serveur dans DiscordAssetSource
+ * (table partagee), au plus une fois par TTL et par serveur : la fiche serveur
+ * les relit ensuite en base sans rappeler Discord.
+ */
+async function saveGuildAssets(
+  guildId: string,
+  guildName: string,
+  guildIcon: string | null,
+  emojis: Iterable<{ id: string; name: string | null; animated?: boolean | null }>,
+  stickers: Iterable<{ id: string; name: string | null }>,
+): Promise<void> {
+  if (Date.now() - (assetSyncAt.get(guildId) ?? 0) < EXTERNAL_GUILD_TTL_MS) return;
+  assetSyncAt.set(guildId, Date.now());
+  const source = {
+    sourceGuildId: guildId,
+    sourceGuildName: guildName,
+    sourceGuildIcon: guildIcon,
+    status: 'resolved',
+    checkedAt: new Date(),
+  };
+  const data = [
+    ...[...emojis].map((e) => ({ id: e.id, kind: 'emoji', name: e.name, animated: Boolean(e.animated), ...source })),
+    ...[...stickers].map((s) => ({ id: s.id, kind: 'sticker', name: s.name, animated: false, ...source })),
+  ];
+  if (data.length === 0) return;
+  await prisma.$transaction([
+    prisma.discordAssetSource.createMany({ data, skipDuplicates: true }),
+    // Les ids deja vus mais pas encore resolus recuperent leur serveur d'origine
+    prisma.discordAssetSource.updateMany({
+      where: { id: { in: data.map((d) => d.id) }, status: { not: 'resolved' } },
+      data: source,
+    }),
+  ]).catch((err) => logger.warn('ServerTag', `Sauvegarde des emojis/stickers de ${guildId} impossible`, err));
+}
+
 /**
  * Resout et met en cache les informations d'un serveur Discord (present ou externe).
  */
@@ -269,6 +307,7 @@ export async function resolveExternalGuild(
         resolvedAt: now,
       },
     }).catch(() => null);
+    await saveGuildAssets(live.id, live.name, live.icon ?? null, live.emojis.cache.values(), live.stickers.cache.values());
 
     const bannerUrl = live.bannerURL({ size: 1024 })
       ?? live.discoverySplashURL({ size: 1024 })
@@ -350,6 +389,7 @@ export async function resolveExternalGuild(
       onlineCount = preview.approximatePresenceCount ?? onlineCount;
       source = 'preview';
       remoteResolved = true;
+      await saveGuildAssets(targetGuildId, preview.name, preview.icon ?? null, preview.emojis.values(), preview.stickers.values());
     } catch {
       // Serveur non decouvrable : tenter le widget public s'il est active
       try {

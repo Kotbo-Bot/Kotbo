@@ -8,7 +8,9 @@
   import DetailSheet from "../DetailSheet.svelte";
   import { Button, Callout, EmptyState, SectionCard } from "../ui";
   import KpiTile from "../analytics/KpiTile.svelte";
-  import { fmtNumber } from "../analytics/analyticsFormat";
+  import BarList from "../analytics/BarList.svelte";
+  import TimeSeriesChart from "../analytics/TimeSeriesChart.svelte";
+  import { SERIES, fmtNumber, shortDate } from "../analytics/analyticsFormat";
   import { memberAvatarSrc } from "../../discordMedia";
   import { serverDetailsModal } from "../../stores/serverDetailsModal.svelte";
   import { memberCaseModal } from "../../stores/memberCaseModal.svelte";
@@ -18,6 +20,7 @@
   import { errorMessage } from "@kotbo/shared";
 
   type ServerTab = "overview" | "members" | "assets";
+  type Holder = ServerDetails["tagHolders"]["members"][number];
 
   let details = $state<ServerDetails | null>(null);
   let loading = $state(false);
@@ -93,6 +96,21 @@
     },
   ]);
 
+  const topAssets = $derived(
+    details
+      ? [...details.assets.emojis, ...details.assets.stickers]
+          .filter((a) => a.uses > 0)
+          .sort((a, b) => b.uses - a.uses)
+          .slice(0, 5)
+          .map((a) => ({
+            id: a.id,
+            label: a.kind === "emoji" ? `:${a.name ?? "emoji"}:` : (a.name ?? "Sticker"),
+            value: a.uses,
+            imageUrl: a.imageUrl,
+          }))
+      : [],
+  );
+
   function initials(label: string): string {
     const words = label.trim().split(/\s+/).filter(Boolean);
     if (words.length >= 2) return `${words[0][0]}${words[1][0]}`.toUpperCase();
@@ -100,17 +118,62 @@
   }
 </script>
 
+  {#snippet holderBody(holder: Holder, showDate: boolean)}
+    <img
+      src={memberAvatarSrc(holder.avatarUrl, holder.name, holder.userId)}
+      alt=""
+      class="h-8 w-8 rounded-full object-cover"
+    />
+    <div class="min-w-0 flex-1 text-left">
+      <p class="truncate text-sm font-medium text-on-surface">{holder.name}</p>
+      {#if holder.username}
+        <p class="truncate text-xs text-on-surface-variant">@{holder.username}</p>
+      {/if}
+    </div>
+    {#if showDate && holder.updatedAt}
+      <span class="hidden text-xs text-on-surface-variant sm:inline">
+        {new Date(holder.updatedAt).toLocaleDateString(dateLocale(), {
+          day: "2-digit",
+          month: "short",
+        })}
+      </span>
+    {/if}
+    <span class="svd-tag-pill">
+      {#if holder.badgeUrl}
+        <img src={holder.badgeUrl} alt="" class="h-3.5 w-3.5 object-contain" />
+      {/if}
+      <span>{holder.tag}</span>
+    </span>
+  {/snippet}
+
+  {#snippet holderList(list: Holder[], showDate: boolean)}
+    <ul class="divide-y divide-outline-variant">
+      {#each list as holder (holder.userId)}
+        <li>
+          {#if canOpenMembers}
+            <button
+              type="button"
+              class="svd-member-row"
+              onclick={() => openMember(holder.userId, holder.name)}
+            >
+              {@render holderBody(holder, showDate)}
+            </button>
+          {:else}
+            <div class="svd-member-row">{@render holderBody(holder, showDate)}</div>
+          {/if}
+        </li>
+      {/each}
+    </ul>
+  {/snippet}
+
 <DetailSheet
   open={isOpen}
   onClose={closeModal}
   title={displayName}
-  ariaLabel={displayName}
-  closeLabel={m.svd_close()}
   tabs={tabs}
   active={activeTab}
   onchange={(id) => (activeTab = id as ServerTab)}
   bannerUrl={details?.server.bannerUrl}
-  loading={loading && !details}
 >
   {#snippet leading()}
     <div class="svd-icon">
@@ -157,7 +220,14 @@
     {#if details?.server.memberCount}
       <span aria-hidden="true">·</span>
       <span class="text-xs text-on-surface-variant">
-        {fmtNumber(details.server.memberCount)} membres
+        {m.svd_members_count({ count: fmtNumber(details.server.memberCount) })}
+      </span>
+    {/if}
+    {#if details?.server.onlineCount}
+      <span aria-hidden="true">·</span>
+      <span class="inline-flex items-center gap-1 text-xs text-on-surface-variant">
+        <span class="h-1.5 w-1.5 rounded-full bg-success" aria-hidden="true"></span>
+        {m.svd_online_count({ count: fmtNumber(details.server.onlineCount) })}
       </span>
     {/if}
   {/snippet}
@@ -174,119 +244,109 @@
 
   {#if error}
     <Callout variant="danger" title={m.an_error_generic()}>{error}</Callout>
+  {:else if loading && !details}
+    <div class="svd-kpis" aria-busy="true">
+      {#each [0, 1, 2, 3] as i (i)}
+        <div class="h-24 animate-pulse rounded-xl bg-surface-container-low"></div>
+      {/each}
+    </div>
   {:else if details}
     {#if activeTab === "overview"}
+      {@const activity = details.activity}
+      {@const usage = details.assets.usageByDay ?? []}
       <div class="space-y-4">
-        <div class="kpi-grid kpi-grid--4">
+        <div class="svd-kpis">
           <KpiTile
             label={m.svd_kpi_holders()}
             value={fmtNumber(details.tagHolders.count)}
+            hint={activity?.shareOfGuild != null
+              ? m.svd_kpi_holders_hint({ share: String(activity.shareOfGuild) })
+              : ""}
           />
           <KpiTile
-            label={m.svd_kpi_emojis()}
-            value={fmtNumber(details.assets.emojis.length)}
+            label={m.svd_kpi_active7d()}
+            value={activity ? fmtNumber(activity.active7d) : "-"}
           />
           <KpiTile
-            label={m.svd_kpi_stickers()}
-            value={fmtNumber(details.assets.stickers.length)}
+            label={m.svd_kpi_messages()}
+            value={activity ? fmtNumber(activity.messages) : "-"}
+            hint={activity
+              ? m.svd_kpi_messages_hint({ hours: String(activity.voiceHours) })
+              : ""}
           />
           <KpiTile
-            label={m.svd_kpi_members()}
-            value={details.server.memberCount !== null
-              ? fmtNumber(details.server.memberCount)
-              : "-"}
+            label={m.svd_kpi_uses()}
+            value={fmtNumber(details.assets.totalUses)}
+            hint={m.svd_kpi_uses_hint({
+              emojis: String(details.assets.emojis.length),
+              stickers: String(details.assets.stickers.length),
+            })}
           />
         </div>
 
-        <SectionCard title={m.svd_about_title()}>
-          {#if details.server.description}
-            <p class="text-sm leading-relaxed text-on-surface">
-              {details.server.description}
-            </p>
-          {:else}
-            <p class="text-sm text-on-surface-variant">{m.svd_about_empty()}</p>
-          {/if}
-        </SectionCard>
-
-        {#if details.tagHolders.members.length > 0}
-          <SectionCard title={m.svd_kpi_holders()} flush>
-            <ul class="divide-y divide-outline-variant">
-              {#each details.tagHolders.members.slice(0, 6) as holder (holder.userId)}
-                <li>
-                  {#if canOpenMembers}
-                    <button
-                      type="button"
-                      class="svd-member-row"
-                      onclick={() => openMember(holder.userId, holder.name)}
-                    >
-                      <img
-                        src={memberAvatarSrc(
-                          holder.avatarUrl,
-                          holder.name,
-                          holder.userId,
-                        )}
-                        alt=""
-                        class="h-8 w-8 rounded-full object-cover"
-                      />
-                      <div class="min-w-0 flex-1 text-left">
-                        <p class="truncate text-sm font-medium text-on-surface">
-                          {holder.name}
-                        </p>
-                        {#if holder.username}
-                          <p class="truncate text-xs text-on-surface-variant">
-                            @{holder.username}
-                          </p>
-                        {/if}
-                      </div>
-                      <span class="svd-tag-pill">
-                        {#if holder.badgeUrl}
-                          <img
-                            src={holder.badgeUrl}
-                            alt=""
-                            class="h-3.5 w-3.5 object-contain"
-                          />
-                        {/if}
-                        <span>{holder.tag}</span>
-                      </span>
-                    </button>
-                  {:else}
-                    <div class="svd-member-row">
-                      <img
-                        src={memberAvatarSrc(
-                          holder.avatarUrl,
-                          holder.name,
-                          holder.userId,
-                        )}
-                        alt=""
-                        class="h-8 w-8 rounded-full object-cover"
-                      />
-                      <div class="min-w-0 flex-1 text-left">
-                        <p class="truncate text-sm font-medium text-on-surface">
-                          {holder.name}
-                        </p>
-                        {#if holder.username}
-                          <p class="truncate text-xs text-on-surface-variant">
-                            @{holder.username}
-                          </p>
-                        {/if}
-                      </div>
-                      <span class="svd-tag-pill">
-                        {#if holder.badgeUrl}
-                          <img
-                            src={holder.badgeUrl}
-                            alt=""
-                            class="h-3.5 w-3.5 object-contain"
-                          />
-                        {/if}
-                        <span>{holder.tag}</span>
-                      </span>
-                    </div>
-                  {/if}
-                </li>
-              {/each}
-            </ul>
+        <div class="svd-split">
+          <SectionCard title={m.svd_usage_title()}>
+            {#if details.assets.totalUses > 0 && usage.length > 1}
+              <TimeSeriesChart
+                labels={usage.map((d) => shortDate(d.date))}
+                mode="bar"
+                main={{
+                  label: m.svd_usage_series(),
+                  values: usage.map((d) => d.count),
+                  color: SERIES[0],
+                }}
+                format={(v) => fmtNumber(v)}
+                height={200}
+              />
+            {:else}
+              <EmptyState icon="smile" title={m.svd_usage_empty()} />
+            {/if}
           </SectionCard>
-        {/if}
+
+          <SectionCard title={m.svd_top_assets()}>
+            {#snippet actions()}
+              {#if topAssets.length > 0}
+                <Button size="sm" variant="ghost" onclick={() => (activeTab = "assets")}>
+                  {m.svd_see_all()}
+                </Button>
+              {/if}
+            {/snippet}
+            <BarList items={topAssets} empty={m.svd_usage_empty()}>
+              {#snippet leading(item)}
+                <img src={item.imageUrl} alt="" class="h-5 w-5 shrink-0 object-contain" loading="lazy" />
+              {/snippet}
+            </BarList>
+          </SectionCard>
+        </div>
+
+        <div class="svd-split">
+          <SectionCard title={m.svd_kpi_holders()} flush>
+            {#snippet actions()}
+              {#if details && details.tagHolders.members.length > 5}
+                <Button size="sm" variant="ghost" onclick={() => (activeTab = "members")}>
+                  {m.svd_see_all()}
+                </Button>
+              {/if}
+            {/snippet}
+            {#if details.tagHolders.members.length > 0}
+              {@render holderList(details.tagHolders.members.slice(0, 5), false)}
+            {:else}
+              <div class="p-5">
+                <EmptyState icon="users" title={m.svd_holders_empty()} />
+              </div>
+            {/if}
+          </SectionCard>
+
+          <SectionCard title={m.svd_about_title()}>
+            {#if details.server.description}
+              <p class="text-sm leading-relaxed text-on-surface">
+                {details.server.description}
+              </p>
+            {:else}
+              <p class="text-sm text-on-surface-variant">{m.svd_about_empty()}</p>
+            {/if}
+          </SectionCard>
+        </div>
       </div>
     {:else if activeTab === "members"}
       {#if details.tagHolders.members.length === 0}
@@ -295,91 +355,7 @@
         </SectionCard>
       {:else}
         <SectionCard flush>
-          <ul class="divide-y divide-outline-variant">
-            {#each details.tagHolders.members as holder (holder.userId)}
-              <li>
-                {#if canOpenMembers}
-                  <button
-                    type="button"
-                    class="svd-member-row"
-                    onclick={() => openMember(holder.userId, holder.name)}
-                  >
-                    <img
-                      src={memberAvatarSrc(
-                        holder.avatarUrl,
-                        holder.name,
-                        holder.userId,
-                      )}
-                      alt=""
-                      class="h-8 w-8 rounded-full object-cover"
-                    />
-                    <div class="min-w-0 flex-1 text-left">
-                      <p class="truncate text-sm font-medium text-on-surface">
-                        {holder.name}
-                      </p>
-                      {#if holder.username}
-                        <p class="truncate text-xs text-on-surface-variant">
-                          @{holder.username}
-                        </p>
-                      {/if}
-                    </div>
-                    {#if holder.updatedAt}
-                      <span
-                        class="hidden text-xs text-on-surface-variant sm:inline"
-                      >
-                        {new Date(holder.updatedAt).toLocaleDateString(
-                          dateLocale(),
-                          { day: "2-digit", month: "short" },
-                        )}
-                      </span>
-                    {/if}
-                    <span class="svd-tag-pill">
-                      {#if holder.badgeUrl}
-                        <img
-                          src={holder.badgeUrl}
-                          alt=""
-                          class="h-3.5 w-3.5 object-contain"
-                        />
-                      {/if}
-                      <span>{holder.tag}</span>
-                    </span>
-                  </button>
-                {:else}
-                  <div class="svd-member-row">
-                    <img
-                      src={memberAvatarSrc(
-                        holder.avatarUrl,
-                        holder.name,
-                        holder.userId,
-                      )}
-                      alt=""
-                      class="h-8 w-8 rounded-full object-cover"
-                    />
-                    <div class="min-w-0 flex-1 text-left">
-                      <p class="truncate text-sm font-medium text-on-surface">
-                        {holder.name}
-                      </p>
-                      {#if holder.username}
-                        <p class="truncate text-xs text-on-surface-variant">
-                          @{holder.username}
-                        </p>
-                      {/if}
-                    </div>
-                    <span class="svd-tag-pill">
-                      {#if holder.badgeUrl}
-                        <img
-                          src={holder.badgeUrl}
-                          alt=""
-                          class="h-3.5 w-3.5 object-contain"
-                        />
-                      {/if}
-                      <span>{holder.tag}</span>
-                    </span>
-                  </div>
-                {/if}
-              </li>
-            {/each}
-          </ul>
+          {@render holderList(details.tagHolders.members, true)}
         </SectionCard>
       {/if}
     {:else if activeTab === "assets"}
@@ -412,7 +388,7 @@
                       <p class="truncate text-xs font-medium text-on-surface">
                         :{emoji.name ?? "emoji"}:
                       </p>
-                      <p class="text-[11px] text-on-surface-variant">
+                      <p class="text-2xs text-on-surface-variant">
                         {m.svd_assets_uses({ count: fmtNumber(emoji.uses) })}
                       </p>
                     </div>
@@ -443,7 +419,7 @@
                       <p class="truncate text-xs font-medium text-on-surface">
                         {sticker.name ?? "Sticker"}
                       </p>
-                      <p class="text-[11px] text-on-surface-variant">
+                      <p class="text-2xs text-on-surface-variant">
                         {m.svd_assets_uses({ count: fmtNumber(sticker.uses) })}
                       </p>
                     </div>
@@ -459,6 +435,32 @@
 </DetailSheet>
 
 <style>
+  /* Grille locale : la .kpi-grid d'Analytics n'est stylée que dans sa page. */
+  .svd-kpis {
+    display: grid;
+    gap: 0.75rem;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .svd-split {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    align-items: start;
+  }
+
+  @media (max-width: 1023px) {
+    .svd-split {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  @media (max-width: 639px) {
+    .svd-kpis {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
   .svd-icon {
     display: flex;
     align-items: center;

@@ -96,6 +96,16 @@ export interface ServerDetailsResult {
     emojis: ServerDetailsAsset[];
     stickers: ServerDetailsAsset[];
     totalUses: number;
+    /** Utilisations par jour des emojis/stickers du serveur, 30 derniers jours (jours vides inclus). */
+    usageByDay: Array<{ date: string; count: number }>;
+  };
+  /** Activité des porteurs du tag sur le serveur actif (profils en base). */
+  activity: {
+    messages: number;
+    voiceHours: number;
+    active7d: number;
+    /** Part des membres du serveur actif qui portent le tag, en %. null si effectif inconnu. */
+    shareOfGuild: number | null;
   };
 }
 
@@ -374,15 +384,18 @@ export async function getServerDetails(
   targetGuildId: string,
 ): Promise<ServerDetailsResult> {
   await ensureServerTagSchemaPatches();
-  const [resolved, holders, assetRows] = await Promise.all([
-    resolveExternalGuild(client, targetGuildId),
+  const holderWhere = {
+    guildId: currentGuildId,
+    primaryGuildId: targetGuildId,
+    guildLeftAt: null,
+    isBot: false,
+  };
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  // D'abord : la resolution enregistre les emojis/stickers publics lus ci-dessous
+  const resolved = await resolveExternalGuild(client, targetGuildId);
+  const [holders, assetRows, holderTotals, active7d] = await Promise.all([
     prisma.memberProfile.findMany({
-      where: {
-        guildId: currentGuildId,
-        primaryGuildId: targetGuildId,
-        guildLeftAt: null,
-        isBot: false,
-      },
+      where: holderWhere,
       select: {
         userId: true,
         displayName: true,
@@ -399,8 +412,15 @@ export async function getServerDetails(
     prisma.discordAssetSource.findMany({
       where: { sourceGuildId: targetGuildId },
       select: { id: true, kind: true, name: true, animated: true },
-      take: 120,
+      take: 320, // plafond Discord : 250 emojis + 60 stickers
     }).catch(() => []),
+    prisma.memberProfile.aggregate({
+      where: holderWhere,
+      _sum: { messageCount: true, voiceTimeSeconds: true },
+    }).catch(() => null),
+    prisma.memberProfile.count({
+      where: { ...holderWhere, lastMessageAt: { gte: sevenDaysAgo } },
+    }).catch(() => 0),
   ]);
 
   const liveGuild = client.guilds.cache.get(targetGuildId);
@@ -425,6 +445,24 @@ export async function getServerDetails(
     }).catch(() => [])
     : [];
   const usageMap = new Map(usageRows.map((r) => [r.key, r._sum?.count ?? 0]));
+
+  const dailyRows = assetIds.length > 0
+    ? await prisma.contentItemDailyStat.groupBy({
+      by: ['dateKey'],
+      where: {
+        guildId: currentGuildId,
+        dateKey: { gte: thirtyDaysAgo },
+        key: { in: assetIds },
+      },
+      _sum: { count: true },
+    }).catch(() => [])
+    : [];
+  const dailyMap = new Map(dailyRows.map((r) => [r.dateKey, r._sum?.count ?? 0]));
+  const usageByDay: Array<{ date: string; count: number }> = [];
+  for (let i = 29; i >= 0; i--) {
+    const date = new Date(Date.now() - i * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    usageByDay.push({ date, count: dailyMap.get(date) ?? 0 });
+  }
 
   const emojis: ServerDetailsAsset[] = [];
   const stickers: ServerDetailsAsset[] = [];
@@ -539,9 +577,18 @@ export async function getServerDetails(
       })),
     },
     assets: {
-      emojis: emojis.slice(0, 60),
-      stickers: stickers.slice(0, 40),
+      emojis,
+      stickers,
       totalUses,
+      usageByDay,
+    },
+    activity: {
+      messages: holderTotals?._sum.messageCount ?? 0,
+      voiceHours: Math.round((holderTotals?._sum.voiceTimeSeconds ?? 0) / 360) / 10,
+      active7d,
+      shareOfGuild: currentGuild?.memberCount
+        ? Math.round((mergedHolders.size / currentGuild.memberCount) * 1000) / 10
+        : null,
     },
   };
 }

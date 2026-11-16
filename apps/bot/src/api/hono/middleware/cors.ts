@@ -1,6 +1,7 @@
 import type { MiddlewareHandler } from 'hono';
 import { getDashboardOrigin, CORS_EXTRA_ORIGINS, isKotboPublicOrigin } from '../../shared.js';
 import { getAllInstances } from '../../../utils/instanceResolver.js';
+import { isCustomDomainOrigin } from '../../../services/system/customDomain.js';
 
 /** Vérifie si un origin est en localhost (développement) */
 function isAllowedDevOrigin(candidate: string): boolean {
@@ -53,7 +54,7 @@ export function dashboardCors(): MiddlewareHandler {
         } catch {
           normalizedOrigin = origin.replace(/\/$/, '');
         }
-        if (allowedOrigins.has(normalizedOrigin) || isAllowedDevOrigin(origin) || isKotboPublicOrigin(origin)) {
+        if (allowedOrigins.has(normalizedOrigin) || isAllowedDevOrigin(origin) || isKotboPublicOrigin(origin) || isCustomDomainOrigin(origin)) {
           c.header('Access-Control-Allow-Origin', origin);
           c.header('Access-Control-Allow-Credentials', 'true');
         } else {

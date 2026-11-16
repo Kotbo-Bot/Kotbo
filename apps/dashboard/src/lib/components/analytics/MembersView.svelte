@@ -122,7 +122,8 @@
       const tagged = s.map((d) => tagByDay.get(d.dateKey) ?? 0);
       list.push({
         id: 'tag',
-        label: m.anx_mem_tagged({ tag: legacy.clanTag }),
+        label: m.mcm_server_tag(),
+        tag: { text: legacy.clanTag, badgeUrl: legacy.clanTagBadgeUrl },
         color: SERIES[4]!,
         format: fmtNumber,
         value: fmtNumber(legacy.clanTaggedMembersCount ?? tagged[tagged.length - 1] ?? 0),
