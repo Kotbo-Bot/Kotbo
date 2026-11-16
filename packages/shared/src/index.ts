@@ -26,6 +26,7 @@ export * from './reputation/config.js';
 export * from './reputation/tiers.js';
 export * from './seasons/config.js';
 export * from './suggestions/policy.js';
+export * from './starboard/policy.js';
 export * from './seasons/announcement.js';
 export * from './leveling/dailyCap.js';
 export * from './ranked/ladder.js';
