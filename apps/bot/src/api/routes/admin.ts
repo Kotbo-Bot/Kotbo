@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BannedWord } from '@prisma/client';
 import prisma from '../../utils/db.js';
+import { refreshGuildOwnership } from '../../utils/guildOwnership.js';
 import { upsertRetryingRace } from '../../utils/upsertRetry.js';
 import { getQueryStats, isReadReplicaConfigured, resetQueryStats } from '../../observability/queryMetrics.js';
 import { cache } from '../../utils/cache.js';
@@ -2493,34 +2494,96 @@ export async function handleAdminRoutes(
   if (parts[2] === 'whitelabel' && parts.length === 3 && method === 'GET') {
     try {
       const instances = await prisma.whiteLabelInstance.findMany({
-        include: { _count: { select: { guilds: true } } },
+        include: { _count: { select: { guilds: true } }, guilds: { select: { id: true }, take: 1 } },
         orderBy: { createdAt: 'desc' },
       });
 
-      const safe = instances.map(inst => ({
-        id: inst.id,
-        slug: inst.slug,
-        name: inst.name,
-        enabled: inst.enabled,
-        discordClientId: inst.discordClientId,
-        dashboardUrl: inst.dashboardUrl,
-        apiPort: inst.apiPort,
-        brandName: inst.brandName,
-        brandColor: inst.brandColor,
-        brandLogoUrl: inst.brandLogoUrl,
-        brandFaviconUrl: inst.brandFaviconUrl,
-        brandFooterText: inst.brandFooterText,
-        ownerId: inst.ownerId,
-        maxGuilds: inst.maxGuilds,
-        guildCount: inst._count.guilds,
-        createdAt: inst.createdAt,
-        updatedAt: inst.updatedAt,
-      }));
+      // Les bots perso des serveurs (`cb-<serveur>`) se gèrent depuis la page
+      // Identité du serveur : on joint leur serveur et leur état pour les reconnaître.
+      const customGuildIds = instances.filter((i) => i.slug.startsWith('cb-')).map((i) => i.slug.slice(3));
+      const [customConfigs, customGuilds] = await Promise.all([
+        prisma.customBotConfig.findMany({
+          where: { guildId: { in: customGuildIds } },
+          select: { guildId: true, isRunning: true, lastError: true, customDashboardUrl: true, customDomainVerifiedAt: true },
+        }),
+        prisma.guild.findMany({ where: { id: { in: customGuildIds } }, select: { id: true, name: true, plan: true } }),
+      ]);
+      const configByGuild = new Map(customConfigs.map((c) => [c.guildId, c]));
+      const guildById = new Map(customGuilds.map((g) => [g.id, g]));
+
+      const safe = instances.map(inst => {
+        const customGuildId = inst.slug.startsWith('cb-') ? inst.slug.slice(3) : null;
+        const config = customGuildId ? configByGuild.get(customGuildId) : undefined;
+        const guild = customGuildId ? guildById.get(customGuildId) : undefined;
+        return {
+          id: inst.id,
+          slug: inst.slug,
+          name: inst.name,
+          enabled: inst.enabled,
+          discordClientId: inst.discordClientId,
+          dashboardUrl: inst.dashboardUrl,
+          apiPort: inst.apiPort,
+          brandName: inst.brandName,
+          brandColor: inst.brandColor,
+          brandLogoUrl: inst.brandLogoUrl,
+          brandFaviconUrl: inst.brandFaviconUrl,
+          brandFooterText: inst.brandFooterText,
+          ownerId: inst.ownerId,
+          maxGuilds: inst.maxGuilds,
+          guildCount: inst._count.guilds,
+          createdAt: inst.createdAt,
+          updatedAt: inst.updatedAt,
+          kind: customGuildId ? 'custom-bot' : 'whitelabel',
+          customBot: customGuildId ? {
+            guildId: customGuildId,
+            guildName: guild?.name ?? null,
+            plan: guild?.plan ?? null,
+            isRunning: config?.isRunning ?? false,
+            lastError: config?.lastError ?? null,
+            domain: config?.customDomainVerifiedAt ? config.customDashboardUrl : null,
+            /** Le serveur est servi par ce bot (Kotbo l'a quitté). */
+            switched: inst.guilds.some((g) => g.id === customGuildId),
+          } : null,
+        };
+      });
 
       json(res, 200, { instances: safe });
     } catch (err) {
       logger.error('AdminAPI', 'GET whitelabel error:', err);
       jsonFailure(res, err, 'Erreur lors de la récupération des instances', 'AdminAPI');
+    }
+    return true;
+  }
+
+  // POST /api/admin/whitelabel/:id/(start|stop) - Lance ou arrête une instance à chaud
+  if (parts[2] === 'whitelabel' && parts[3] && (parts[4] === 'start' || parts[4] === 'stop') && parts.length === 5 && method === 'POST') {
+    try {
+      const instance = await prisma.whiteLabelInstance.findUnique({ where: { id: parts[3] } });
+      if (!instance) {
+        json(res, 404, { error: 'Instance introuvable' });
+        return true;
+      }
+      if (!client.shard) {
+        json(res, 503, { error: 'Le bot ne tourne pas sous le gestionnaire de shards.' });
+        return true;
+      }
+      const start = parts[4] === 'start';
+      await prisma.whiteLabelInstance.update({ where: { id: instance.id }, data: { enabled: start } });
+      if (!start && instance.slug.startsWith('cb-')) {
+        await prisma.customBotConfig.updateMany({ where: { guildId: instance.slug.slice(3) }, data: { isRunning: false } });
+      }
+      await client.shard.send({ type: start ? 'custom-instance-start' : 'custom-instance-stop', instanceId: instance.id });
+      await audit({
+        action: start ? 'whitelabel.start' : 'whitelabel.stop',
+        targetType: 'whitelabel',
+        targetId: instance.id,
+        summary: `Instance ${instance.slug} ${start ? 'lancée' : 'arrêtée'} depuis la console`,
+        metadata: { slug: instance.slug },
+      });
+      json(res, 200, { ok: true });
+    } catch (err) {
+      logger.error('AdminAPI', 'POST whitelabel start/stop error:', err);
+      jsonFailure(res, err, "Erreur lors du lancement ou de l'arrêt de l'instance", 'AdminAPI');
     }
     return true;
   }
@@ -2757,6 +2820,7 @@ export async function handleAdminRoutes(
         summary: `Serveur rattaché à l'instance marque blanche ${instance.slug}`,
         metadata: { instanceId: instance.id },
       });
+      await refreshGuildOwnership();
 
       json(res, 200, { ok: true });
     } catch (err) {
@@ -2780,6 +2844,7 @@ export async function handleAdminRoutes(
         summary: "Serveur détaché de son instance marque blanche",
         metadata: { instanceId: parts[3] },
       });
+      await refreshGuildOwnership();
 
       json(res, 200, { ok: true });
     } catch (err) {
