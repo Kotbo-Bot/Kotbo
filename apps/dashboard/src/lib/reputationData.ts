@@ -7,7 +7,7 @@
  * alors son état d'erreur ; un champ ajouté plus tard prend sa valeur par défaut.
  */
 import { REPUTATION_DAILY_LIMIT } from '@kotbo/shared';
-import type { ReputationConfig, ReputationData } from './api/reputation';
+import type { ReputationConfig, ReputationData } from './api/reputationTypes';
 
 export const DEFAULT_REPUTATION_CONFIG: ReputationConfig = {
   dailyLimit: REPUTATION_DAILY_LIMIT.default,
@@ -46,8 +46,8 @@ export function toReputationData(raw: unknown): ReputationData | null {
   return {
     config,
     leaderboard: raw.leaderboard as ReputationData['leaderboard'],
-    stats: raw.stats as ReputationData['stats'],
-    announcement: isObject(raw.announcement) ? (raw.announcement as ReputationData['announcement']) : null,
+    stats: raw.stats as unknown as ReputationData['stats'],
+    announcement: isObject(raw.announcement) ? (raw.announcement as unknown as ReputationData['announcement']) : null,
     unmanageableTierRoleIds: Array.isArray(raw.unmanageableTierRoleIds) ? (raw.unmanageableTierRoleIds as string[]) : [],
   };
 }
