@@ -16,6 +16,28 @@
 
   type GuildGroup = { main: any; staffChild: any | null };
 
+  // shortcut: favoris stockés par navigateur (localStorage), pas synchronisés entre appareils.
+  const FAV_KEY = 'kotbo:favoriteGuilds';
+  function readFavs(): string[] {
+    try {
+      const raw = JSON.parse(localStorage.getItem(FAV_KEY) ?? '[]');
+      return Array.isArray(raw) ? raw.filter((id) => typeof id === 'string') : [];
+    } catch {
+      return [];
+    }
+  }
+  let favorites = $state<string[]>(readFavs());
+
+  function toggleFavorite(guildId: string, e: Event) {
+    e.stopPropagation();
+    favorites = favorites.includes(guildId)
+      ? favorites.filter((id) => id !== guildId)
+      : [...favorites, guildId];
+    try {
+      localStorage.setItem(FAV_KEY, JSON.stringify(favorites));
+    } catch {}
+  }
+
   // Un serveur staff est imbriqué sous son serveur principal plutôt que listé à plat.
   const guildGroups = $derived.by((): GuildGroup[] => {
     const staffChildByMainId = new Map(
@@ -25,9 +47,12 @@
     );
 
     // Un serveur staff n'a sa propre ligne top-level que si son principal n'est pas accessible.
-    return authStore.guilds
+    const groups = authStore.guilds
       .filter((g) => !g.isStaffServer || !authStore.guilds.some((m) => m.id === g.pairedGuildId))
       .map((main) => ({ main, staffChild: staffChildByMainId.get(main.id) ?? null }));
+    // Les favoris passent en premier (tri stable : l'ordre d'origine est conservé dans chaque moitié).
+    const isFav = (g: GuildGroup) => favorites.includes(g.main.id);
+    return [...groups.filter(isFav), ...groups.filter((g) => !isFav(g))];
   });
 
   const filteredGroups = $derived.by(() => {
@@ -223,6 +248,20 @@
                 <kbd class="text-2xs text-primary/50 leading-none">↵</kbd>
               {/if}
             </button>
+
+            {#if !row.nested}
+              {@const isFav = favorites.includes(guild.id)}
+              <button
+                type="button"
+                onclick={(e) => toggleFavorite(guild.id, e)}
+                aria-label={isFav ? m.nav_unfavorite() : m.nav_favorite()}
+                aria-pressed={isFav}
+                class="w-6 h-6 shrink-0 flex items-center justify-center rounded-md transition-opacity duration-150
+                  {isFav ? 'opacity-100 text-warning' : 'opacity-40 hover:opacity-100 focus-visible:opacity-100 text-on-surface-variant hover:text-warning'}"
+              >
+                <Papicon icon="star" size={12} class={isFav ? 'fill-current' : ''} />
+              </button>
+            {/if}
           </div>
         {:else}
           <div class="flex flex-col items-center py-8 gap-1.5 text-center">
