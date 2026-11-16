@@ -144,7 +144,7 @@
     {:else if siteState.rights.manage}
       <SiteCreateWizard {siteState} {guildId} onCreated={load} />
     {:else}
-      <EmptyState icon="globe" title={m.ste_no_site()} description={m.ste_no_site_desc()} />
+      <EmptyState icon="globe" title={m.ste_no_site()} description={m.ste_no_site_desc()} reason="all-clear" />
     {/if}
   {:else}
     <AgentLockBanner {guildId} siteId={siteState.site.id} canManage={siteState.rights.manage} onChange={(locked) => (agentLocked = locked)} />

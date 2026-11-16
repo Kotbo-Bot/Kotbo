@@ -440,7 +440,7 @@
             {:else}
               <div class="w-full h-28 bg-surface-container flex flex-col items-center justify-center text-xs text-on-surface-variant gap-1">
                 <span class="font-mono text-2xs opacity-70">Sans aperçu</span>
-                <span class="text-3xs text-on-surface-variant/70">(Empreinte)</span>
+                <span class="text-3xs text-on-surface-variant">(Empreinte)</span>
               </div>
             {/if}
 

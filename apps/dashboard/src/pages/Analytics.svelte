@@ -1002,7 +1002,7 @@
         {:else if activeTab === "social"}
           <AdvancedAnalyticsPanel section="social" onOpenMember={openMember} />
         {:else if activeTab === "server-tags"}
-          <ServerTagsSection onOpenMember={openMember} />
+          <ServerTagsSection />
         {:else if activeTab === "ghosts"}
           <GhostMembersPanel onOpenMember={openMember} />
         {:else if activeTab === "growth"}

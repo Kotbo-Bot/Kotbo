@@ -18872,5 +18872,6 @@
   "cbd_dns_cloudflare": "Sur Cloudflare, laisse le proxy désactivé (nuage gris) : le certificat HTTPS ne peut pas être émis derrière.",
   "cbd_domain_verified_short": "Vérifié",
   "cbd_domain_step_oauth": "3. Relie ton application Discord",
-  "cbd_redirect_uri": "URL de retour à déclarer :"
+  "cbd_redirect_uri": "URL de retour à déclarer :",
+  "bcast_draft_reset": "Brouillon réinitialisé"
 }

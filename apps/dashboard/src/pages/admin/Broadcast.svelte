@@ -450,7 +450,7 @@
     pollOptions = ['', ''];
     pollClosesAt = '';
     lastResult = null;
-    toast.success('Brouillon réinitialisé');
+    toast.success(m.bcast_draft_reset());
   }
 
   function openMediaPicker(targetType: 'image' | 'thumbnail') {
@@ -973,7 +973,7 @@
                   rows="9"
                   placeholder="Rédigez l’annonce ici. Le Markdown Discord et les mentions sont prévisualisés en temps réel sur la droite."
                   class="w-full px-3 py-2.5 rounded-b-xl rounded-t-none bg-surface-container-low/70 border text-sm text-on-surface leading-relaxed resize-y
-                    placeholder:text-on-surface-variant/70 focus:outline-none focus:ring-2 focus:ring-primary/15 transition
+                    placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary/15 transition
                     {messageOver ? 'border-error/50' : 'border-outline-variant/25 focus:border-primary/60'}"
                 ></textarea>
               </div>

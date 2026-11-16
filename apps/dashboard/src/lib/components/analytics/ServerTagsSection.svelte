@@ -186,7 +186,7 @@
 
           {#if filteredMembers.length === 0}
             <div class="p-6">
-              <EmptyState icon="tag" title={m.anx_tags_members_empty()} />
+              <EmptyState icon="tag" title={m.anx_tags_members_empty()} reason="nothing-matches" />
             </div>
           {:else}
             <ul class="max-h-[30rem] divide-y divide-outline-variant overflow-y-auto">

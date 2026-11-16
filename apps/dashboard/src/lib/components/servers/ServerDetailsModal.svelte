@@ -299,7 +299,7 @@
                 height={200}
               />
             {:else}
-              <EmptyState icon="smile" title={m.svd_usage_empty()} />
+              <EmptyState icon="smile" title={m.svd_usage_empty()} reason="accumulating" />
             {/if}
           </SectionCard>
 
@@ -332,7 +332,7 @@
               {@render holderList(details.tagHolders.members.slice(0, 5), false)}
             {:else}
               <div class="p-5">
-                <EmptyState icon="users" title={m.svd_holders_empty()} />
+                <EmptyState icon="users" title={m.svd_holders_empty()} reason="all-clear" />
               </div>
             {/if}
           </SectionCard>
@@ -351,7 +351,7 @@
     {:else if activeTab === "members"}
       {#if details.tagHolders.members.length === 0}
         <SectionCard>
-          <EmptyState icon="users" title={m.svd_holders_empty()} />
+          <EmptyState icon="users" title={m.svd_holders_empty()} reason="all-clear" />
         </SectionCard>
       {:else}
         <SectionCard flush>
@@ -361,7 +361,7 @@
     {:else if activeTab === "assets"}
       {#if details.assets.emojis.length === 0 && details.assets.stickers.length === 0}
         <SectionCard>
-          <EmptyState icon="smile" title={m.svd_assets_empty()} />
+          <EmptyState icon="smile" title={m.svd_assets_empty()} reason="all-clear" />
         </SectionCard>
       {:else}
         <div class="space-y-4">

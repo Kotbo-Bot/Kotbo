@@ -18868,5 +18868,6 @@
   "cbd_dns_cloudflare": "On Cloudflare, keep the proxy off (grey cloud): the HTTPS certificate cannot be issued behind it.",
   "cbd_domain_verified_short": "Verified",
   "cbd_domain_step_oauth": "3. Link your Discord application",
-  "cbd_redirect_uri": "Redirect URL to declare:"
+  "cbd_redirect_uri": "Redirect URL to declare:",
+  "bcast_draft_reset": "Draft reset"
 }
