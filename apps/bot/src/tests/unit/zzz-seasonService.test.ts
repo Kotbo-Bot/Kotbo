@@ -7,7 +7,7 @@
  */
 import { describe, expect, test, mock, beforeEach } from 'bun:test';
 import path from 'node:path';
-import type { Client } from 'discord.js';
+import type { Client, Guild } from 'discord.js';
 import { completeModuleMock } from '../helpers/moduleMock.js';
 
 const ROLE = '123456789012345678';
@@ -87,11 +87,11 @@ mockerModule('../../services/progression/seasonAnnouncements', { announceSeasonS
 const broadcast = mock((..._args: unknown[]) => {});
 mockerModule('../../api/shared/sharding', { broadcastDashboardStateChange: broadcast });
 
-const { startSeason, endSeason, updateSeason, checkAndProgressSeasons, getSeasonLeaderboard } = await import('../../services/progression/seasonService.js');
+const { startSeason, endSeason, updateSeason, checkAndProgressSeasons, getSeasonLeaderboard, getSeasonsDashboardData } = await import('../../services/progression/seasonService.js');
 
-/** Liste d'exclusion passée à la requête de classement : son seul paramètre tableau. */
-function excludedInQuery(): unknown {
-  const call = queryRaw.mock.calls.find((args) => !(args[0] as unknown as string[]).join('?').includes('COUNT(*)'));
+/** Liste d'exclusion passée à la requête de classement (ou des totaux) : son seul paramètre tableau. */
+function excludedInQuery(totals = false): unknown {
+  const call = queryRaw.mock.calls.find((args) => (args[0] as unknown as string[]).join('?').includes('COUNT(*)') === totals);
   return call?.slice(1).find(Array.isArray);
 }
 
@@ -120,6 +120,11 @@ function fakeClient(holders: string[] = [], blacklisted: string[] = []) {
   };
   const client = { guilds: { cache: new Map([['g', guild]]), fetch: mock(async () => guild) } } as unknown as Client;
   return { client, added, removed };
+}
+
+/** Serveur seul, tel que le reçoivent les lectures du classement en cours. */
+function fakeGuild(blacklisted: string[] = []): Guild {
+  return fakeClient([], blacklisted).client.guilds.cache.get('g') as unknown as Guild;
 }
 
 function season(overrides: Partial<Season> = {}): Season {
@@ -303,20 +308,37 @@ describe('checkAndProgressSeasons', () => {
 });
 
 describe('getSeasonLeaderboard', () => {
-  test('saison en cours : les membres listés sur la liste noire sont écartés', async () => {
+  test('saison en cours sans serveur sous la main : seuls les membres listés un à un sont écartés', async () => {
     blacklist = { progressionBlacklistUserIds: ['listé'], progressionBlacklistRoleIds: [BLACKLIST_ROLE] };
     seasons = [season()];
-    await getSeasonLeaderboard('g', 's1', 10);
+    await getSeasonLeaderboard('g', 's1', 10, null);
     expect(excludedInQuery()).toEqual(['listé']);
+  });
+
+  test('saison en cours : les porteurs de rôle de la liste noire sont écartés, comme à la clôture', async () => {
+    blacklist = { progressionBlacklistUserIds: ['listé'], progressionBlacklistRoleIds: [BLACKLIST_ROLE] };
+    seasons = [season()];
+    await getSeasonLeaderboard('g', 's1', 10, fakeGuild(['porteur']));
+    expect(excludedInQuery()).toEqual(['listé', 'porteur']);
   });
 
   test('saison en cours : classement calculé sur l\'XP gagnée depuis l\'ouverture', async () => {
     seasons = [season()];
-    const board = await getSeasonLeaderboard('g', 's1', 10);
+    const board = await getSeasonLeaderboard('g', 's1', 10, null);
     expect(board.map((row) => [row.rank, row.userId, row.xp])).toEqual([[1, 'a', 900], [2, 'b', 400]]);
   });
 
   test('saison inconnue : classement vide', async () => {
-    expect(await getSeasonLeaderboard('g', 'nope', 10)).toEqual([]);
+    expect(await getSeasonLeaderboard('g', 'nope', 10, null)).toEqual([]);
+  });
+});
+
+describe('getSeasonsDashboardData', () => {
+  test('classement et totaux écartent les porteurs de rôle de la liste noire', async () => {
+    blacklist = { progressionBlacklistUserIds: [], progressionBlacklistRoleIds: [BLACKLIST_ROLE] };
+    seasons = [season()];
+    await getSeasonsDashboardData('g', fakeGuild(['porteur']));
+    expect(excludedInQuery()).toEqual(['porteur']);
+    expect(excludedInQuery(true)).toEqual(['porteur']);
   });
 });

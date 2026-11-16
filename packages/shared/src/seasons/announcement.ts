@@ -77,3 +77,12 @@ export function seasonEndAnnouncement(
   }
   return { title, description: lines.join('\n') };
 }
+
+/**
+ * Classement fictif de l'aperçu de clôture : le podium, prolongé jusqu'au
+ * dernier rang récompensé pour que chaque récompense y trouve un gagnant.
+ */
+export function sampleSeasonStandings(rewards: ReadonlyArray<{ rank: number }>): Array<{ userId: string; rank: number; xp: number }> {
+  const size = Math.max(SEASON_PODIUM_SIZE, ...rewards.map((reward) => reward.rank));
+  return Array.from({ length: size }, (_, index) => ({ userId: String(index + 1), rank: index + 1, xp: (size - index) * 120 }));
+}

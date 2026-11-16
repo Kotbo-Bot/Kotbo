@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { type McpToolContext, err, ok, resolveMember, toolError } from '../toolkit.js';
 
 export function registerReadCommunityTools(ctx: McpToolContext) {
-  const { server, guildId, shouldRegister, guard, toolMeta } = ctx;
+  const { server, guildId, client, shouldRegister, guard, toolMeta } = ctx;
 
   if (shouldRegister('READ_COMMUNITY')) {
     // Lecture pure, rangée avec le classement : elle demandait WRITE_MEMBERS.
@@ -461,7 +461,7 @@ export function registerReadCommunityTools(ctx: McpToolContext) {
       },
       guard('READ_COMMUNITY', async () => {
         try {
-          const data = await getSeasonsDashboardData(guildId);
+          const data = await getSeasonsDashboardData(guildId, client.guilds.cache.get(guildId) ?? null);
           return ok(data);
         } catch (e) {
           return toolError(e);
@@ -481,7 +481,7 @@ export function registerReadCommunityTools(ctx: McpToolContext) {
       },
       guard('READ_COMMUNITY', async ({ season_id, limit }) => {
         try {
-          const leaderboard = await getSeasonLeaderboard(guildId, season_id, limit);
+          const leaderboard = await getSeasonLeaderboard(guildId, season_id, limit, client.guilds.cache.get(guildId) ?? null);
           return ok({ seasonId: season_id, leaderboard });
         } catch (e) {
           return toolError(e);

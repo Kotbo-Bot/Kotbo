@@ -377,8 +377,13 @@ async function releaseTopRole(guild: Guild, roleId: string, winnerId: string): P
   }
 }
 
-/** Saison en cours : calculé à la volée. Terminée : le classement figé. */
-export async function getSeasonLeaderboard(guildId: string, seasonId: string, limit = 20): Promise<SeasonStanding[]> {
+/**
+ * Saison en cours : calculé à la volée. Terminée : le classement figé.
+ * Le serveur sert à écarter les porteurs des rôles de la liste noire, comme le
+ * fera la clôture ; sans lui, un membre écarté par son rôle paraîtrait classé
+ * jusqu'à la fin puis disparaîtrait au moment des récompenses.
+ */
+export async function getSeasonLeaderboard(guildId: string, seasonId: string, limit: number, guild: Guild | null): Promise<SeasonStanding[]> {
   const season = await prismaRead.levelingSeason.findFirst({
     where: { id: seasonId, guildId },
     select: { status: true, startDate: true, endDate: true },
@@ -386,7 +391,7 @@ export async function getSeasonLeaderboard(guildId: string, seasonId: string, li
   if (!season) return [];
 
   if (season.status === 'ACTIVE') {
-    return liveStandings(prismaRead, guildId, seasonId, limit, { start: season.startDate, end: new Date() }, await excludedFromSeason(guildId, null));
+    return liveStandings(prismaRead, guildId, seasonId, limit, { start: season.startDate, end: new Date() }, await excludedFromSeason(guildId, guild));
   }
 
   const snapshots = await prismaRead.seasonSnapshot.findMany({
@@ -398,8 +403,8 @@ export async function getSeasonLeaderboard(guildId: string, seasonId: string, li
 }
 
 /** Participants (au moins 1 XP gagnée) et XP gagnée au total depuis l'ouverture. */
-async function liveSeasonTotals(guildId: string, seasonId: string): Promise<{ participants: number; totalXp: number }> {
-  const excluded = await excludedFromSeason(guildId, null);
+async function liveSeasonTotals(guildId: string, seasonId: string, guild: Guild | null): Promise<{ participants: number; totalXp: number }> {
+  const excluded = await excludedFromSeason(guildId, guild);
   const [row] = await prismaRead.$queryRaw<Array<{ participants: number; totalXp: bigint | null }>>`
     SELECT COUNT(*)::int AS "participants", SUM(ml."xp" - COALESCE(b."xp", 0))::bigint AS "totalXp"
     FROM "member_levels" ml
@@ -438,14 +443,14 @@ export async function checkAndProgressSeasons(client: Client): Promise<void> {
   }
 }
 
-export async function getSeasonsDashboardData(guildId: string) {
+export async function getSeasonsDashboardData(guildId: string, guild: Guild | null) {
   const [seasons, activeSeason] = await Promise.all([
     getAllSeasons(guildId),
     prismaRead.levelingSeason.findFirst({ where: { guildId, status: 'ACTIVE' } }),
   ]);
 
   const [activeLeaderboard, activeTotals] = activeSeason
-    ? await Promise.all([getSeasonLeaderboard(guildId, activeSeason.id, 20), liveSeasonTotals(guildId, activeSeason.id)])
+    ? await Promise.all([getSeasonLeaderboard(guildId, activeSeason.id, 20, guild), liveSeasonTotals(guildId, activeSeason.id, guild)])
     : [[], null];
 
   return {

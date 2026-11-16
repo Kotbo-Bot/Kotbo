@@ -110,7 +110,7 @@ async function execute(interaction: ChatInputCommandInteraction) {
 
     const { percent: progressPct, daysLeft } = seasonProgress(new Date(active.startDate), new Date(active.endDate));
 
-    const lb = await getSeasonLeaderboard(guildId, active.id, 10);
+    const lb = await getSeasonLeaderboard(guildId, active.id, 10, interaction.guild);
 
     const fields: ContainerChild[] = [
       separator({ divider: true, spacing: 'small' }),
@@ -150,7 +150,7 @@ async function execute(interaction: ChatInputCommandInteraction) {
     const seasonId = interaction.options.getString('saison', true);
     await interaction.deferReply();
 
-    const lb = await getSeasonLeaderboard(guildId, seasonId, 20);
+    const lb = await getSeasonLeaderboard(guildId, seasonId, 20, interaction.guild);
 
     if (lb.length === 0) {
       await interaction.editReply(v2Message(

@@ -27,6 +27,7 @@
     roles,
     channels,
     economyActive,
+    activeName = null,
     labels = null,
     nextNumber,
     onDone,
@@ -37,6 +38,8 @@
     roles: Array<{ id: string; name: string }>;
     channels: Array<{ id: string; name: string }>;
     economyActive: boolean;
+    /** Nom de la saison en cours, `null` sans saison en cours. */
+    activeName?: string | null;
     /** Gabarits des annonces ; absents d'un bot plus ancien, l'aperçu est alors masqué. */
     labels?: SeasonAnnouncementLabels | null;
     /** Numéro que prendra une nouvelle saison. */
@@ -88,6 +91,9 @@
     announceChannelId = season?.announceChannelId ?? null;
     rewards = (season?.rewards ?? []).map((reward) => ({ ...reward }));
   });
+
+  /** Un début passé ouvre la saison, sauf si une autre tourne : elle attend alors sa clôture. */
+  const queued = $derived(!startLocked && !!activeName && !!startDay && new Date(startIso()).getTime() <= Date.now());
 
   const scheduleCheck = $derived(validateSeasonSchedule({ name, startDate: startIso(), endDate: endIso() }));
   const rewardsCheck = $derived(validateSeasonRewards(rewards.map((reward) => ({ ...reward, roleId: reward.roleId ?? '' }))));
@@ -173,6 +179,12 @@
         {/snippet}
       </Field>
     </div>
+
+    {#if queued && activeName}
+      <Callout variant="warning">
+        <p>{m.sea_editor_queued({ name: activeName })}</p>
+      </Callout>
+    {/if}
 
     <Callout variant="info">
       <p>{m.sea_editor_explainer()}</p>

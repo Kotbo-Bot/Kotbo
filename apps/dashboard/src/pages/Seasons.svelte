@@ -83,6 +83,11 @@
   const advice = $derived.by(() => {
     if (!active) return [];
     const list: Array<{ id: string; variant: 'info' | 'warning'; title: string; text: string; action?: string }> = [];
+    // Une seule saison tourne à la fois : celle dont le début est passé attend
+    // la clôture de l'actuelle, sans quoi rien ne dirait pourquoi elle reste « à venir ».
+    if (nextUpcoming && new Date(nextUpcoming.startDate).getTime() <= Date.now()) {
+      list.push({ id: 'queued', variant: 'info', title: m.sea_advice_queued_title({ name: nextUpcoming.name }), text: m.sea_advice_queued_desc() });
+    }
     const hasRewards = (active.rewards?.length ?? 0) > 0 || !!active.topRoleId;
     if (!hasRewards) list.push({ id: 'rewards', variant: 'info', title: m.sea_advice_no_rewards_title(), text: m.sea_advice_no_rewards_desc(), action: m.sea_advice_no_rewards_action() });
     if (hasRewards && !economyActive && (active.rewards ?? []).some((reward) => reward.coins > 0)) {
@@ -524,6 +529,7 @@
   {roles}
   channels={textChannels}
   {economyActive}
+  activeName={active?.name ?? null}
   labels={data?.announcement ?? null}
   {nextNumber}
   onDone={() => load(true)}
