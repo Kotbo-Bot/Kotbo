@@ -26,7 +26,7 @@
 <script lang="ts">
   import Papicon from '../Papicon.svelte';
   import Sparkline from './Sparkline.svelte';
-  import ServerTagPill from './ServerTagPill.svelte';
+  import ServerTagPill from '../ServerTagPill.svelte';
   import { m } from '../../i18n';
   import { fmtDelta } from './analyticsFormat';
 

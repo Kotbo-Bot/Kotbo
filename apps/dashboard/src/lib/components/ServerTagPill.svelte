@@ -1,6 +1,6 @@
 <!-- Tag de serveur en pastille, comme Discord l'affiche à côté du pseudo. -->
 <script lang="ts">
-  import Papicon from '../Papicon.svelte';
+  import Papicon from './Papicon.svelte';
 
   const { tag, badgeUrl = null }: { tag: string; badgeUrl?: string | null } = $props();
 </script>

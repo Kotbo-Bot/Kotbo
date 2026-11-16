@@ -193,6 +193,21 @@ export function registerMembersRoutes(): void {
     };
   });
 
+  // GET /api/dashboard/guilds/:id/members/identities?ids=
+  // Un membre sur trois porte le tag du serveur de démo, comme dans les stats.
+  route('GET', '/api/dashboard/guilds/:id/members/identities', ({ params, query }) => {
+    const ids = new Set((query.get('ids') ?? '').split(','));
+    const identities = Object.fromEntries(
+      MEMBERS.flatMap((p, index) => (ids.has(p.id) ? [[p.id, {
+        username: p.username,
+        displayName: p.displayName,
+        avatarUrl: null,
+        serverTag: index % 3 === 0 ? { guildId: params.id, tag: 'NOVA', badgeUrl: null } : null,
+      }]] : [])),
+    );
+    return { identities };
+  });
+
   // GET /api/dashboard/guilds/:id/members/:userId
   route('GET', '/api/dashboard/guilds/:id/members/:userId', ({ params }) => {
     const userId = params.userId;

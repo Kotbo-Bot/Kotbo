@@ -9,7 +9,7 @@
   import { untrack } from 'svelte';
   import { Callout, FilterPills, SectionCard } from '../ui';
   import AnalyticsSkeleton from './AnalyticsSkeleton.svelte';
-  import ServerTagPill from './ServerTagPill.svelte';
+  import ServerTagPill from '../ServerTagPill.svelte';
   import { fetchLifecycle, type LifecycleAnalytics, type LifecycleMember, type LifecycleSegment } from '../../api';
   import { memberAvatarSrc } from '../../discordMedia';
   import { m } from '../../i18n';
