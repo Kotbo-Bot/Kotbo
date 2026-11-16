@@ -175,6 +175,9 @@ export async function getDashboardSession(sessionId: string | null): Promise<Das
     }
     if (stored.discordTokenExpiresAt <= Date.now() + 60_000 && stored.discordRefreshToken) {
       const refreshToken = decrypt(stored.discordRefreshToken);
+      // shortcut: une session ouverte sur un domaine perso vient de l'appli Discord du serveur ;
+      // ce rafraîchissement échoue alors et la session se ferme (le jeton vit autant qu'elle).
+      // À stocker avec la session si l'on allonge sa durée.
       const instance = getCurrentInstance();
       const response = await fetchExternal('https://discord.com/api/oauth2/token', {
         method: 'POST',

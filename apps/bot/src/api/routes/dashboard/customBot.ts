@@ -9,6 +9,14 @@ import { fetchExternal } from '../../../utils/http.js';
 import { SecretBoxUnavailableError, openSecret, sealSecret } from '../../../utils/secretBox.js';
 import { jsonFailure } from '../../shared/failure.js';
 import {
+  checkCustomDomainDns,
+  customDomainForHost,
+  customDomainTarget,
+  normalizeCustomDomain,
+  refreshCustomDomains,
+  verificationRecord,
+} from '../../../services/system/customDomain.js';
+import {
   json,
   readJsonBody,
   resolveDashboardAccess,
@@ -58,11 +66,20 @@ function maskSecret(stored: string | null, visible: number): { masked: string | 
 function serializeConfig(config: CustomBotConfig) {
   const token = maskSecret(config.botToken, 6);
   const secret = maskSecret(config.botClientSecret, 4);
+  const host = config.customDashboardUrl;
   return {
     ...config,
     botToken: token.masked,
     botClientSecret: secret.masked,
     secretsUnreadable: token.unreadable || secret.unreadable,
+    domain: {
+      /** Null : l'instance ne propose pas les domaines perso. */
+      target: customDomainTarget(),
+      verification: host ? verificationRecord(host, config.guildId) : null,
+      redirectUri: host ? `https://${host}/api/auth/discord/callback` : null,
+      /** Servi en ce moment (vérifié, OAuth renseigné, offre active). */
+      active: host ? customDomainForHost(host)?.guildId === config.guildId : false,
+    },
   };
 }
 
@@ -169,6 +186,20 @@ export async function handleCustomBotRoutes(
         // ignorée (Prisma refuserait `null` et l'enregistrement tomberait en 500).
         if ((field === 'botStatus' || field === 'activityType') && !text) continue;
 
+        if (field === 'customDashboardUrl') {
+          if (!text) {
+            updateData[field] = null;
+            continue;
+          }
+          const host = normalizeCustomDomain(text);
+          if (!host) {
+            json(res, 400, { error: 'Domaine invalide : saisis un nom de domaine comme panel.monserveur.fr.' });
+            return true;
+          }
+          updateData[field] = host;
+          continue;
+        }
+
         if (secretFields.has(field)) {
           // Le dashboard reçoit les secrets masqués : les lui renvoyer tels quels
           // écrasait le vrai secret par sa version masquée.
@@ -210,11 +241,27 @@ export async function handleCustomBotRoutes(
         return true;
       }
 
-      const config = await prisma.customBotConfig.upsert({
-        where: { guildId },
-        update: updateData,
-        create: { guildId, ...updateData },
-      });
+      // Un domaine changé doit être revérifié : le TXT prouve la propriété d'un hôte précis.
+      if ('customDashboardUrl' in updateData) {
+        const current = await prisma.customBotConfig.findUnique({ where: { guildId }, select: { customDashboardUrl: true } });
+        if (current?.customDashboardUrl !== updateData.customDashboardUrl) updateData.customDomainVerifiedAt = null;
+      }
+
+      let config: CustomBotConfig;
+      try {
+        config = await prisma.customBotConfig.upsert({
+          where: { guildId },
+          update: updateData,
+          create: { guildId, ...updateData },
+        });
+      } catch (err) {
+        if ((err as { code?: string })?.code === 'P2002') {
+          json(res, 409, { error: 'Ce domaine est déjà utilisé par un autre serveur.' });
+          return true;
+        }
+        throw err;
+      }
+      await refreshCustomDomains();
 
       pushAudit(guildId, {
         user: user.username || user.userId,
@@ -235,6 +282,44 @@ export async function handleCustomBotRoutes(
       }
       logger.error('CustomBot', 'PATCH config error:', err);
       jsonFailure(res, err, 'Erreur lors de la mise à jour', 'CustomBot');
+    }
+    return true;
+  }
+
+  // POST /api/dashboard/guilds/:guildId/custom-bot/domain/verify - Contrôle DNS du domaine perso
+  if (parts.length === 7 && parts[5] === 'domain' && parts[6] === 'verify' && method === 'POST') {
+    try {
+      const current = await prisma.customBotConfig.findUnique({ where: { guildId } });
+      if (!current?.customDashboardUrl) {
+        json(res, 400, { error: "Enregistre d'abord un domaine." });
+        return true;
+      }
+      if (!customDomainTarget()) {
+        json(res, 503, { error: 'Les domaines perso ne sont pas encore ouverts sur cette instance Kotbo.' });
+        return true;
+      }
+      const checks = await checkCustomDomainDns(current.customDashboardUrl, guildId);
+      const verified = checks.txt && checks.pointing;
+      const config = await prisma.customBotConfig.update({
+        where: { guildId },
+        data: { customDomainVerifiedAt: verified ? (current.customDomainVerifiedAt ?? new Date()) : null },
+      });
+      await refreshCustomDomains();
+      if (verified && !current.customDomainVerifiedAt) {
+        pushAudit(guildId, {
+          user: user.username || user.userId,
+          action: 'Domaine perso vérifié',
+          context: 'Custom Bot',
+          module: 'Custom Bot',
+          eventType: 'Configuration',
+          details: `Domaine ${current.customDashboardUrl} vérifié.`,
+          channelId: null,
+        });
+      }
+      json(res, 200, { checks, verified, config: serializeConfig(config) });
+    } catch (err) {
+      logger.error('CustomBot', 'Domain verify error:', err);
+      jsonFailure(res, err, 'Erreur lors de la vérification du domaine', 'CustomBot');
     }
     return true;
   }
