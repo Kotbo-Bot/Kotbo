@@ -16,14 +16,23 @@ describe('domaine du dashboard perso', () => {
 
   test('Traefik reçoit un routeur API, un routeur SPA et une redirection https par domaine', () => {
     const env = { CUSTOM_DOMAIN_API_UPSTREAM: 'http://bot:8787', CUSTOM_DOMAIN_DASHBOARD_UPSTREAM: 'http://dash:80' };
-    const config = traefikDynamicConfig(['panel.monserveur.fr'], env) as { http: { routers: Record<string, { rule: string; tls?: unknown }> } };
+    const config = traefikDynamicConfig([{ host: 'panel.monserveur.fr' }], env) as { http: { routers: Record<string, { rule: string; tls?: unknown }> } };
     const routers = config.http.routers;
     expect(Object.keys(routers)).toHaveLength(3);
     expect(routers['kotbo-cd-panel-monserveur-fr-api'].rule).toBe('Host(`panel.monserveur.fr`) && PathPrefix(`/api`)');
     expect(routers['kotbo-cd-panel-monserveur-fr'].tls).toEqual({ certResolver: 'letsencrypt' });
   });
 
+  test("un serveur servi par son bot envoie /api vers le port de son instance", () => {
+    const env = { CUSTOM_DOMAIN_API_UPSTREAM: 'http://bot:8787', CUSTOM_DOMAIN_DASHBOARD_UPSTREAM: 'http://dash:80' };
+    const config = traefikDynamicConfig([{ host: 'panel.monserveur.fr', apiPort: 8790 }], env) as {
+      http: { routers: Record<string, { service: string }>; services: Record<string, { loadBalancer: { servers: Array<{ url: string }> } }> };
+    };
+    expect(config.http.routers['kotbo-cd-panel-monserveur-fr-api'].service).toBe('kotbo-cd-api-8790');
+    expect(config.http.services['kotbo-cd-api-8790'].loadBalancer.servers[0].url).toBe('http://bot:8790');
+  });
+
   test('sans amont configuré, Traefik ne reçoit aucun routeur', () => {
-    expect(traefikDynamicConfig(['panel.monserveur.fr'], {})).toEqual({ http: {} });
+    expect(traefikDynamicConfig([{ host: 'panel.monserveur.fr' }], {})).toEqual({ http: {} });
   });
 });

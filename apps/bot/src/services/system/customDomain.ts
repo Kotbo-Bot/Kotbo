@@ -22,6 +22,8 @@ export interface CustomDomainEntry {
   sealedClientSecret: string;
   botName: string | null;
   botAvatarUrl: string | null;
+  /** Port de l'API de l'instance qui sert ce serveur, ou null : l'API de Kotbo. */
+  apiPort: number | null;
 }
 
 const HOST_RE = /^(?=.{4,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
@@ -94,7 +96,7 @@ export async function refreshCustomDomains(): Promise<CustomDomainEntry[]> {
         botClientSecret: true,
         botName: true,
         botAvatarUrl: true,
-        guild: { select: { plan: true } },
+        guild: { select: { plan: true, instance: { select: { apiPort: true, enabled: true } } } },
       },
     });
     const next = new Map<string, CustomDomainEntry>();
@@ -107,6 +109,7 @@ export async function refreshCustomDomains(): Promise<CustomDomainEntry[]> {
         sealedClientSecret: row.botClientSecret!,
         botName: row.botName,
         botAvatarUrl: row.botAvatarUrl,
+        apiPort: row.guild.instance?.enabled ? row.guild.instance.apiPort : null,
       });
     }
     byHost = next;
@@ -151,28 +154,40 @@ export function isCustomDomainOrigin(origin: string | null | undefined): boolean
  * Configuration dynamique lue par le fournisseur HTTP de Traefik. Les hôtes
  * sortent de normalizeCustomDomain : aucun accent grave ne peut s'y glisser.
  */
-export function traefikDynamicConfig(hosts: string[], env: Record<string, string | undefined> = process.env) {
+export function traefikDynamicConfig(
+  domains: Array<{ host: string; apiPort?: number | null }>,
+  env: Record<string, string | undefined> = process.env,
+) {
   const apiUpstream = env.CUSTOM_DOMAIN_API_UPSTREAM;
   const dashboardUpstream = env.CUSTOM_DOMAIN_DASHBOARD_UPSTREAM;
-  if (!apiUpstream || !dashboardUpstream || hosts.length === 0) return { http: {} };
+  if (!apiUpstream || !dashboardUpstream || domains.length === 0) return { http: {} };
 
   const tls = { certResolver: env.CUSTOM_DOMAIN_CERT_RESOLVER || 'letsencrypt' };
   const routers: Record<string, unknown> = {};
-  for (const host of hosts) {
+  const services: Record<string, unknown> = {
+    'kotbo-cd-api': { loadBalancer: { servers: [{ url: apiUpstream }] } },
+    'kotbo-cd-dashboard': { loadBalancer: { servers: [{ url: dashboardUpstream }] } },
+  };
+  for (const { host, apiPort } of domains) {
     if (!HOST_RE.test(host)) continue;
+    // Un serveur servi par son propre bot : son API est celle de son instance, même hôte, autre port.
+    let apiService = 'kotbo-cd-api';
+    if (apiPort) {
+      apiService = `kotbo-cd-api-${apiPort}`;
+      const upstream = new URL(apiUpstream);
+      upstream.port = String(apiPort);
+      services[apiService] = { loadBalancer: { servers: [{ url: upstream.origin }] } };
+    }
     const key = `kotbo-cd-${host.replace(/[^a-z0-9]/g, '-')}`;
     const rule = `Host(\`${host}\`)`;
-    routers[`${key}-api`] = { rule: `${rule} && PathPrefix(\`/api\`)`, service: 'kotbo-cd-api', entryPoints: ['websecure'], tls, priority: 200 };
+    routers[`${key}-api`] = { rule: `${rule} && PathPrefix(\`/api\`)`, service: apiService, entryPoints: ['websecure'], tls, priority: 200 };
     routers[key] = { rule, service: 'kotbo-cd-dashboard', entryPoints: ['websecure'], tls, priority: 100 };
     routers[`${key}-http`] = { rule, service: 'kotbo-cd-dashboard', entryPoints: ['web'], middlewares: ['kotbo-cd-https'] };
   }
   return {
     http: {
       routers,
-      services: {
-        'kotbo-cd-api': { loadBalancer: { servers: [{ url: apiUpstream }] } },
-        'kotbo-cd-dashboard': { loadBalancer: { servers: [{ url: dashboardUpstream }] } },
-      },
+      services,
       middlewares: { 'kotbo-cd-https': { redirectScheme: { scheme: 'https', permanent: true } } },
     },
   };

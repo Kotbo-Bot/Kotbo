@@ -128,5 +128,5 @@ configRouter.get('/api/internal/custom-domains/traefik', async (c) => {
   const expected = process.env.CUSTOM_DOMAIN_PROVIDER_TOKEN;
   if (!expected || !sameSecret(c.req.query('token') ?? '', expected)) return c.json({ error: 'Not found' }, 404);
   const domains = await refreshCustomDomains();
-  return c.json(traefikDynamicConfig(domains.map((d) => d.host)));
+  return c.json(traefikDynamicConfig(domains));
 });
