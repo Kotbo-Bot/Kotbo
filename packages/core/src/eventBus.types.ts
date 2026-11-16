@@ -339,6 +339,40 @@ export interface SuggestionThresholdReachedEvent {
   timestamp: number;
 }
 
+/**
+ * Un message vient de passer à la une pour la première fois (ou de nouveau
+ * après un retrait du staff annulé). Ses suites pour l'auteur (gains, paliers)
+ * sont déjà appliquées.
+ */
+export interface StarboardFeaturedEvent {
+  guildId: string;
+  entryId: string;
+  authorId: string;
+  /** Salon (ou fil) du message d'origine. */
+  channelId: string;
+  messageId: string;
+  /** Republication dans le salon des messages à la une. */
+  starChannelId: string;
+  starMessageId: string;
+  score: number;
+  /** Messages de l'auteur passés à la une, celui-ci compris. */
+  featuredCount: number;
+  timestamp: number;
+}
+
+/** Un message affiché à la une vient d'en être retiré. */
+export interface StarboardRemovedEvent {
+  guildId: string;
+  entryId: string;
+  authorId: string;
+  channelId: string;
+  messageId: string;
+  /** `BELOW_THRESHOLD`, `STAFF`, `GUARD` (auteur exclu, salon NSFW) ou `SOURCE_DELETED`. */
+  reason: string;
+  score: number;
+  timestamp: number;
+}
+
 // ── Progression Events ──────────────────────────────────────────
 export interface LevelUpEvent {
   guildId: string;
@@ -621,6 +655,8 @@ export interface KotboEventMap {
   'giveaway:ended': GiveawayEndedEvent;
   'fun:game-won': FunGameWonEvent;
   'reputation:given': ReputationGivenEvent;
+  'starboard:featured': StarboardFeaturedEvent;
+  'starboard:removed': StarboardRemovedEvent;
   'season:started': SeasonStartedEvent;
   'season:ended': SeasonEndedEvent;
 }

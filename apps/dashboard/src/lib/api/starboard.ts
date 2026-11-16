@@ -59,6 +59,10 @@ export interface StarboardOverview {
   messageLabels: StarboardMessageLabels | null;
   /** Membres exclus, avec leur identité actuelle. */
   blockedMembers: Array<{ userId: string; name: string | null; avatarUrl: string | null }>;
+  /** Auteurs les plus souvent à la une sur la fenêtre des statistiques. */
+  topAuthors: Array<{ authorId: string; name: string | null; avatarUrl: string | null; count: number; bestScore: number }>;
+  /** Rôles de palier que le bot ne peut pas donner. */
+  unmanageableTierRoleIds: string[];
 }
 
 export interface StarboardEntryPage {

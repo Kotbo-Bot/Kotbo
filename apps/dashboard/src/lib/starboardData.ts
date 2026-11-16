@@ -48,5 +48,7 @@ export function toStarboardOverview(raw: unknown): StarboardOverview | null {
     },
     messageLabels: isObject(raw.messageLabels) ? (raw.messageLabels as unknown as StarboardOverview['messageLabels']) : null,
     blockedMembers: Array.isArray(raw.blockedMembers) ? (raw.blockedMembers as StarboardOverview['blockedMembers']) : [],
+    topAuthors: Array.isArray(raw.topAuthors) ? (raw.topAuthors as StarboardOverview['topAuthors']) : [],
+    unmanageableTierRoleIds: Array.isArray(raw.unmanageableTierRoleIds) ? (raw.unmanageableTierRoleIds as string[]) : [],
   };
 }

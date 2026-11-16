@@ -63,6 +63,7 @@ const dashboard = {
     stats: { postedRecent: 3, avgPeakRecent: 8.5, bestPeakRecent: 11, onBoard: 2, lastPostedAt: ENTRY.createdAt },
     topEntries: [ENTRY],
     channelStats: [{ channelId: CHANNEL, count: 3 }],
+    topAuthors: [{ authorId: ALICE, count: 3, bestScore: 11 }],
   })),
   listStarboardEntries: mock(async (_guildId: string, _filter: unknown) => ({ entries: [ENTRY], nextCursor: null })),
 };
@@ -94,6 +95,10 @@ mockModule('../../services/features/starboardService', service);
 let featureRights: Record<string, unknown> = {};
 mockModule('../../api/routes/dashboard/featureGate', {
   getCachedFeatureAccess: mock(async () => featureRights),
+});
+
+mockModule('../../services/community/reputationTierService', {
+  manageableRole: mock((_guild: unknown, roleId: string) => (roleId === '555555555555555555' ? { id: roleId } : null)),
 });
 
 mockModule('../../services/moderation/memberIdentityService', {
@@ -168,6 +173,17 @@ describe('GET /starboard', () => {
     expect(entry.starUrl).toBe(`https://discord.com/channels/${GUILD}/${STAR_CHANNEL}/${ENTRY.starMessageId}`);
     expect(entry.guildId).toBeUndefined();
     expect(entry.blocked).toBe(false);
+  });
+
+  test('rôles de palier que le bot ne peut pas donner signalés', async () => {
+    currentSettings = { ...currentSettings, tiers: [{ threshold: 5, roleId: '555555555555555555' }, { threshold: 10, roleId: '888888888888888888' }] };
+    const { json } = await call('GET', '');
+    expect(json.unmanageableTierRoleIds).toEqual(['888888888888888888']);
+  });
+
+  test('auteurs du classement présentés avec leur identité', async () => {
+    const { json } = await call('GET', '');
+    expect(json.topAuthors).toEqual([{ authorId: ALICE, name: 'Alice', avatarUrl: 'a.png', count: 3, bestScore: 11 }]);
   });
 
   test('membres exclus présentés avec leur identité', async () => {
@@ -331,6 +347,38 @@ describe('parseStarboardConfigPatch : garde-fous', () => {
     [{ channelThresholds: { [CHANNEL]: 0 } }, 'seuil de salon hors bornes'],
     [{ blockedUserIds: ['abc'] }, 'membre invalide'],
     [{ blockedUserIds: 'abc' }, 'pas une liste'],
+  ])('refuse %j (%s)', (body) => {
+    expect('error' in parseStarboardConfigPatch(body)).toBe(true);
+  });
+});
+
+describe('parseStarboardConfigPatch : récompenses et paliers', () => {
+  const ROLE_A = '555555555555555555';
+  const ROLE_B = '666666666666666666';
+
+  test('gains, message privé et paliers triés par seuil', () => {
+    expect(parseStarboardConfigPatch({
+      rewardXp: 100,
+      rewardCoins: 0,
+      notifyAuthor: true,
+      tiers: [{ threshold: 25, roleId: ROLE_B }, { threshold: 5, roleId: ROLE_A }],
+    })).toEqual({ patch: {
+      rewardXp: 100,
+      rewardCoins: 0,
+      notifyAuthor: true,
+      tiers: [{ threshold: 5, roleId: ROLE_A }, { threshold: 25, roleId: ROLE_B }],
+    } });
+  });
+
+  test.each([
+    [{ rewardXp: -1 }, 'XP négative'],
+    [{ rewardXp: 5001 }, 'XP hors bornes'],
+    [{ rewardCoins: 1.5 }, 'pièces non entières'],
+    [{ notifyAuthor: 'oui' }, 'booléen attendu'],
+    [{ tiers: 'abc' }, 'paliers hors liste'],
+    [{ tiers: [{ threshold: 0, roleId: '555555555555555555' }] }, 'seuil de palier nul'],
+    [{ tiers: [{ threshold: 5, roleId: 'abc' }] }, 'rôle invalide'],
+    [{ tiers: [{ threshold: 5, roleId: '555555555555555555' }, { threshold: 5, roleId: '666666666666666666' }] }, 'seuil en double'],
   ])('refuse %j (%s)', (body) => {
     expect('error' in parseStarboardConfigPatch(body)).toBe(true);
   });

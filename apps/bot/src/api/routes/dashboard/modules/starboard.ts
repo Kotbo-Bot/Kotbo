@@ -24,6 +24,10 @@ import {
   STARBOARD_CHANNEL_THRESHOLDS_MAX,
   STARBOARD_CHANNELS_MAX,
   STARBOARD_MAX_AGE_DAYS,
+  STARBOARD_REWARD_COINS,
+  STARBOARD_REWARD_XP,
+  REPUTATION_TIERS_MAX,
+  REPUTATION_TIER_THRESHOLD,
   STARBOARD_EMOJIS_MAX,
   STARBOARD_THRESHOLD,
   decodeScoreCursor,
@@ -31,6 +35,8 @@ import {
   isStarboardPeriod,
   isStarboardSort,
   normalizeStarboardChannelThresholds,
+  validateReputationTiers,
+  type ReputationTierError,
   type StarboardChannelThresholdError,
   type StarboardSettings,
 } from '@kotbo/shared';
@@ -43,6 +49,7 @@ import { starboardChannelHealth } from '../../../../services/features/starboardH
 import { starboardMessageLabels } from '../../../../services/features/starboardMessageLabels.js';
 import { blockStarboardEntry, removeHighlightsOfAuthors, unblockStarboardEntry } from '../../../../services/features/starboardService.js';
 import { getMemberIdentities } from '../../../../services/moderation/memberIdentityService.js';
+import { manageableRole } from '../../../../services/community/reputationTierService.js';
 import { getGuildName, json, pushAudit, readJsonBody, type DashboardAccess } from '../../../shared.js';
 import { getCachedFeatureAccess } from '../featureGate.js';
 import { jsonFailure } from '../../../shared/failure.js';
@@ -53,6 +60,15 @@ const SNOWFLAKE_RE = /^\d{17,20}$/;
 const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
 const CUID_RE = /^[a-z0-9]{20,40}$/i;
 
+const TIER_ERRORS: Record<ReputationTierError, string> = {
+  NOT_ARRAY: 'Les paliers doivent être une liste',
+  TOO_MANY: `Pas plus de ${REPUTATION_TIERS_MAX} paliers`,
+  BAD_THRESHOLD: `Le seuil d'un palier est un entier entre ${REPUTATION_TIER_THRESHOLD.min} et ${REPUTATION_TIER_THRESHOLD.max}`,
+  BAD_ROLE: 'Un palier porte un rôle invalide',
+  DUPLICATE_THRESHOLD: 'Deux paliers ont le même seuil',
+  DUPLICATE_ROLE: 'Deux paliers donnent le même rôle',
+};
+
 const CHANNEL_THRESHOLD_ERRORS: Record<StarboardChannelThresholdError, string> = {
   NOT_OBJECT: 'Les seuils par salon doivent être un objet { salon: seuil }',
   TOO_MANY: `Pas plus de ${STARBOARD_CHANNEL_THRESHOLDS_MAX} seuils par salon`,
@@ -60,7 +76,7 @@ const CHANNEL_THRESHOLD_ERRORS: Record<StarboardChannelThresholdError, string> =
   BAD_THRESHOLD: `Un seuil par salon doit être un entier entre ${STARBOARD_THRESHOLD.min} et ${STARBOARD_THRESHOLD.max}`,
 };
 
-const BOOLEAN_KEYS = ['countEmbedReactions', 'autoReactEmbed', 'allowBots', 'ignoreAuthorVotes', 'removeBelowThreshold'] as const;
+const BOOLEAN_KEYS = ['countEmbedReactions', 'autoReactEmbed', 'allowBots', 'ignoreAuthorVotes', 'removeBelowThreshold', 'notifyAuthor'] as const;
 const CHANNEL_LIST_KEYS = ['autoReactChannels', 'watchedChannels', 'ignoredChannels'] as const;
 const EMOJI_LIST_KEYS = ['upvoteEmojis', 'downvoteEmojis'] as const;
 
@@ -169,6 +185,25 @@ export function parseStarboardConfigPatch(body: unknown): { patch: Partial<Starb
     patch.maxMessageAgeDays = value;
   }
 
+  const rewards = [
+    ['rewardXp', STARBOARD_REWARD_XP, "L'XP de récompense"],
+    ['rewardCoins', STARBOARD_REWARD_COINS, 'Les pièces de récompense'],
+  ] as const;
+  for (const [key, { min, max }, label] of rewards) {
+    if (!has(input, key)) continue;
+    const value = input[key];
+    if (typeof value !== 'number' || !Number.isInteger(value) || value < min || value > max) {
+      return { error: `${label} doit être un entier entre ${min} et ${max}` };
+    }
+    patch[key] = value;
+  }
+
+  if (has(input, 'tiers')) {
+    const parsed = validateReputationTiers(input.tiers);
+    if ('error' in parsed) return { error: TIER_ERRORS[parsed.error] };
+    patch.tiers = parsed.tiers;
+  }
+
   if (has(input, 'channelThresholds')) {
     const parsed = normalizeStarboardChannelThresholds(input.channelThresholds);
     if ('error' in parsed) return { error: CHANNEL_THRESHOLD_ERRORS[parsed.error] };
@@ -235,15 +270,31 @@ export async function handleStarboardRoutes(ctx: ModuleRouteContext): Promise<bo
       const [config, overview] = await Promise.all([getStarboardSettings(guildId), getStarboardOverview(guildId)]);
       const guild = client.guilds.cache.get(guildId);
       const locale = await resolveGuildLocale(guildId, guild?.preferredLocale);
-      const blocked = await getMemberIdentities(client, guildId, config.blockedUserIds);
+      const [blocked, authors] = await Promise.all([
+        getMemberIdentities(client, guildId, config.blockedUserIds),
+        getMemberIdentities(client, guildId, overview.topAuthors.map((row) => row.authorId)),
+      ]);
       json(res, 200, {
         config,
         stats: overview.stats,
         topEntries: await presentEntries(client, guildId, overview.topEntries),
         channelStats: overview.channelStats,
+        topAuthors: overview.topAuthors.map((row) => ({
+          authorId: row.authorId,
+          name: authors.get(row.authorId)?.displayName || null,
+          avatarUrl: authors.get(row.authorId)?.avatarUrl || null,
+          count: row.count,
+          bestScore: row.bestScore,
+        })),
         health: starboardChannelHealth(client, guildId, config.channelId, config.autoReactEmbed),
         // Textes du message publié, pour l'aperçu des réglages.
         messageLabels: starboardMessageLabels(locale),
+        // Rôles de palier que le bot ne peut pas donner (supprimé, géré par une
+        // intégration, au-dessus du sien) ; `[]` quand le serveur n'est pas
+        // dans le cache de ce shard, faute de pouvoir le dire.
+        unmanageableTierRoleIds: guild
+          ? config.tiers.filter((tier) => !manageableRole(guild, tier.roleId)).map((tier) => tier.roleId)
+          : [],
         blockedMembers: config.blockedUserIds.map((userId) => ({
           userId,
           name: blocked.get(userId)?.displayName || null,

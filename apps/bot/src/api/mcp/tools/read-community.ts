@@ -2,6 +2,9 @@
 import { getModuleActivationStats, getModulePerformanceStats, getModuleStatsSummary, getModuleUsageStats, KOTBO_MODULES } from '../../../services/analytics/moduleStatsService.js';
 import { getSeasonLeaderboard, getSeasonsDashboardData } from '../../../services/progression/seasonService.js';
 import { getMemberReputationSummary } from '../../../services/community/reputationService.js';
+import { getStarboardAuthorLeaderboard, getStarboardOverview } from '../../../services/features/starboardDashboard.js';
+import { getMemberIdentities } from '../../../services/moderation/memberIdentityService.js';
+import { STARBOARD_PERIODS, STARBOARD_STATS_DAYS } from '@kotbo/shared';
 import prisma from '../../../utils/db.js';
 import { z } from 'zod';
 import { type McpToolContext, err, ok, resolveMember, toolError } from '../toolkit.js';
@@ -294,6 +297,44 @@ export function registerReadCommunityTools(ctx: McpToolContext) {
               reason: entry.reason,
               at: entry.createdAt.toISOString(),
             })),
+          });
+        } catch (e) {
+          return toolError(e);
+        }
+      })
+    );
+
+    server.registerTool(
+      'get_starboard',
+      {
+        description:
+          `Messages à la une (Starlight) : chiffres des ${STARBOARD_STATS_DAYS} derniers jours, meilleurs messages de cette fenêtre et auteurs les plus souvent à la une sur la période choisie. Les messages retirés par le staff ne comptent pas. L'identifiant d'un message sert à remove_starboard_message.`,
+        inputSchema: {
+          period: z.enum(STARBOARD_PERIODS).optional().describe('Période du classement des auteurs : week, month (défaut) ou all'),
+        },
+        _meta: toolMeta,
+      },
+      guard('READ_COMMUNITY', async ({ period }) => {
+        try {
+          const [overview, authors] = await Promise.all([
+            getStarboardOverview(guildId),
+            getStarboardAuthorLeaderboard(guildId, period ?? 'month'),
+          ]);
+          const userIds = [...new Set([...overview.topEntries.map((entry) => entry.authorId), ...authors.map((row) => row.authorId)])];
+          const identities = await getMemberIdentities(client, guildId, userIds);
+          const nameOf = (userId: string) => identities.get(userId)?.displayName ?? userId;
+          return ok({
+            stats: overview.stats,
+            topMessages: overview.topEntries.map((entry) => ({
+              id: entry.id,
+              author: nameOf(entry.authorId),
+              score: entry.score,
+              bestScore: entry.peakScore,
+              excerpt: entry.excerpt,
+              onBoard: entry.starMessageId !== null,
+              url: `https://discord.com/channels/${guildId}/${entry.channelId}/${entry.messageId}`,
+            })),
+            topAuthors: authors.map((row, index) => ({ rank: index + 1, author: nameOf(row.authorId), userId: row.authorId, featured: row.count, bestScore: row.bestScore })),
           });
         } catch (e) {
           return toolError(e);

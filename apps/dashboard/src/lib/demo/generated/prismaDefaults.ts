@@ -4948,6 +4948,10 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "maxMessageAgeDays": 0,
     "channelThresholds": {},
     "blockedUserIds": [],
+    "rewardXp": 0,
+    "rewardCoins": 0,
+    "tiers": [],
+    "notifyAuthor": false,
     "createdAt": "__NOW__",
     "updatedAt": "__NOW__"
   },
@@ -4968,6 +4972,9 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "postedAt": null,
     "blockedAt": null,
     "blockedById": null,
+    "rewardedAt": null,
+    "xpGranted": 0,
+    "coinsGranted": 0,
     "createdAt": "__NOW__",
     "updatedAt": "__NOW__"
   },
