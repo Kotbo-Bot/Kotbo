@@ -68,6 +68,8 @@ const TRANSLATED = [
   'lib/components/security/SecurityPage.svelte',
   'lib/components/security/ShieldCard.svelte',
   'lib/components/security/VisionPanel.svelte',
+  'lib/components/suggestions/SuggestionDecisionModal.svelte',
+  'lib/components/suggestions/SuggestionMessagePreview.svelte',
   'lib/components/ServerTemplatePanel.svelte',
   'lib/components/Sidebar.svelte',
   'lib/components/tickets/TicketTranscripts.svelte',
@@ -113,6 +115,7 @@ const TRANSLATED = [
   'pages/security/QuickSetup.svelte',
   'pages/ServerFileFilters.svelte',
   'pages/Servers.svelte',
+  'pages/Suggestions.svelte',
   'pages/Tickets.svelte',
   'pages/Verify.svelte',
 ];

@@ -2,18 +2,18 @@
   /**
    * Embed Discord tel qu'il tombera dans le salon : titre et corps en Markdown
    * Discord, une ligne par paragraphe. Les textes viennent du bot, dans la
-   * langue du serveur.
+   * langue du serveur. `children` se place sous l'embed, dans le même fond :
+   * les boutons du message, par exemple.
    */
+  import type { Snippet } from 'svelte';
   import DiscordMarkdownText from './sanctions/DiscordMarkdownText.svelte';
 
-  const { title, body }: { title: string; body: string } = $props();
-
-  /** Couleur de l'embed côté bot (`COLORS.primary`). */
-  const EMBED_COLOR = '#5865f2';
+  /** Couleur de l'embed côté bot (`COLORS.primary`), sauf message qui a la sienne. */
+  const { title, body, color = '#5865f2', children }: { title: string; body: string; color?: string; children?: Snippet } = $props();
 </script>
 
 <div class="discord">
-  <div class="embed" style="border-left-color: {EMBED_COLOR}">
+  <div class="embed" style="border-left-color: {color}">
     <p class="embed-title">{title}</p>
     {#each body.split('\n') as line, index (index)}
       {#if line}
@@ -23,6 +23,7 @@
       {/if}
     {/each}
   </div>
+  {@render children?.()}
 </div>
 
 <style>

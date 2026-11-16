@@ -311,7 +311,34 @@ model Suggestion {
   // La liste du tableau de bord filtre sur le serveur et trie par date : sans
   // index, elle parcourait les suggestions de tous les serveurs a chaque appel.
   @@index([guildId, createdAt])
+  /// File d'attente et filtre par statut du dashboard.
+  @@index([guildId, status, createdAt])
   @@map("suggestions")
+}
+
+/// Réglages du module Suggestions, une ligne par serveur, créée à la première
+/// sauvegarde.
+///
+/// Le salon reste dans la configuration de fonctionnalité (`dashboardFeatureConfigs`),
+/// que `/suggestion-config` écrit aussi. Pas de champ `enabled` : l'activation
+/// passe par la page Modules.
+model SuggestionConfig {
+  guildId String @id
+
+  /// Une décision du staff doit porter un commentaire public.
+  requireComment Boolean @default(true)
+  /// Les votes restent ouverts sur une suggestion approuvée, jusqu'à sa mise
+  /// en place ou son refus.
+  voteWhileApproved Boolean @default(false)
+  /// Rôles autorisés à proposer. Vide = tout le monde.
+  allowedRoleIds String[] @default([])
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("suggestion_configs")
 }
 
 model ReactionRoleMenu {
