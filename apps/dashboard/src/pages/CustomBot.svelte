@@ -1,8 +1,10 @@
 <script lang="ts">
   import { m } from '../lib/i18n';
-  import { onDestroy, onMount, untrack } from 'svelte';
+  import { onDestroy, onMount, untrack, type Snippet } from 'svelte';
   import { toast } from '../lib/stores/toast.svelte';
   import { unsavedChanges } from '../lib/stores/unsavedChanges.svelte';
+  import { confirmDialog } from '../lib/stores/confirmDialog.svelte';
+  import { authStore } from '../lib/stores/auth.svelte';
   import {
     fetchCustomBotConfig,
     updateCustomBotConfig,
@@ -10,6 +12,8 @@
     startCustomBot,
     stopCustomBot,
     verifyCustomBotDomain,
+    switchToCustomBot,
+    revertToKotbo,
   } from '../lib/api';
   import Papicon from '../lib/components/Papicon.svelte';
   import Button from '../lib/components/ui/Button.svelte';
@@ -17,6 +21,8 @@
   import Field from '../lib/components/ui/Field.svelte';
   import ModulePage from '../lib/components/ModulePage.svelte';
   import LoadingHint from '../lib/components/LoadingHint.svelte';
+  import ToggleSwitch from '../lib/components/ToggleSwitch.svelte';
+  import ImagePicker from '../lib/components/ImagePicker.svelte';
   import { errorMessage } from '@kotbo/shared';
 
   type DomainInfo = {
@@ -24,6 +30,14 @@
     verification: { name: string; value: string } | null;
     redirectUri: string | null;
     active: boolean;
+  };
+  type OwnBotState = {
+    instanceId: string | null;
+    switched: boolean;
+    botInGuild: boolean;
+    kotboInGuild: boolean;
+    invitePermissions: string;
+    kotboClientId: string;
   };
   type Config = Record<string, any> & { domain?: DomainInfo };
   type Draft = {
@@ -40,12 +54,11 @@
     botClientSecret: string;
   };
 
-  // Champs que Discord ne voit qu'au (re)demarrage du bot.
-  const PRESENCE_KEYS = ['botName', 'botAvatarUrl', 'botBannerUrl', 'botBio', 'botStatus', 'activityType', 'activityText', 'activityUrl'] as const;
   const BIO_MAX = 190;
   const SAVE_OWNER = 'custom-bot';
 
   let config = $state<Config | null>(null);
+  let ownBot = $state<OwnBotState | null>(null);
   let allowed = $state(true);
   let runningWithoutPlan = $state(false);
   let loading = $state(true);
@@ -60,6 +73,7 @@
 
   let verifying = $state(false);
   let dnsChecks = $state<{ txt: boolean; pointing: boolean } | null>(null);
+  let checkingInvite = $state(false);
 
   function draftFrom(c: Config | null): Draft {
     return {
@@ -93,6 +107,7 @@
       const data = await fetchCustomBotConfig();
       allowed = data?.allowed !== false;
       runningWithoutPlan = !allowed && data?.isRunning === true;
+      ownBot = data?.ownBot ?? null;
       applyConfig(data?.config ?? null);
     } catch (err) {
       toast.error(errorMessage(err));
@@ -101,10 +116,11 @@
     }
   }
 
-  /** Recharge l'etat du bot sans toucher aux modifications en cours. */
+  /** Recharge l'etat sans toucher aux modifications en cours. */
   async function refreshStatus() {
     const data = await fetchCustomBotConfig();
     if (data?.config) config = data.config;
+    if (data?.ownBot) ownBot = data.ownBot;
   }
 
   onMount(loadConfig);
@@ -115,25 +131,21 @@
 
   const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-  // Le launcher connecte le bot en quelques secondes et n'ecrit l'erreur qu'ensuite :
-  // sans ce suivi, un token refuse laissait la page afficher « en ligne ».
+  // L'instance met quelques secondes a se connecter et n'ecrit l'erreur qu'ensuite :
+  // sans ce suivi, un token refuse laissait la page afficher « demarrage en cours ».
   async function followStart() {
-    for (const wait of [2500, 5000]) {
+    for (const wait of [3000, 5000, 8000]) {
       await sleep(wait);
       if (destroyed) return;
       await refreshStatus().catch(() => {});
-      if (config?.lastError || !config?.isRunning) break;
+      if (config?.lastError || config?.isRunning) break;
     }
   }
 
-  async function start() {
+  async function run(action: () => Promise<unknown>) {
     busy = true;
     try {
-      if (!config?.enabled) await updateCustomBotConfig({ enabled: true });
-      await startCustomBot();
-      toast.success(m.cb_bot_starting());
-      await refreshStatus();
-      await followStart();
+      await action();
     } catch (err) {
       toast.error(errorMessage(err));
     } finally {
@@ -141,17 +153,26 @@
     }
   }
 
-  async function stop() {
-    busy = true;
-    try {
-      await stopCustomBot();
-      toast.success(m.cb_bot_stopped());
+  const start = () => run(async () => {
+    await startCustomBot();
+    toast.success(m.cb_bot_starting());
+    await followStart();
+  });
+
+  const stop = () => run(async () => {
+    await stopCustomBot();
+    toast.success(m.cb_bot_stopped());
+    await refreshStatus();
+  });
+
+  async function toggleOwnBot(next: boolean) {
+    if (!next && isRunning && !(await confirmDialog.ask({ title: m.cbd_own_off_confirm(), description: m.cbd_own_off_desc(), confirmLabel: m.cbd_own_off_action(), variant: 'warning' }))) return;
+    await run(async () => {
+      const data = await updateCustomBotConfig({ enabled: next });
+      config = data.config;
+      reportProfile(data.profileErrors);
       await refreshStatus();
-    } catch (err) {
-      toast.error(errorMessage(err));
-    } finally {
-      busy = false;
-    }
+    });
   }
 
   // Un seul bouton : le token est teste aupres de Discord avant d'etre enregistre.
@@ -165,16 +186,18 @@
         toast.error(result.error || m.cb_token_invalid());
         return;
       }
-      const data = await updateCustomBotConfig({ botToken: token, enabled: true });
+      const data = await updateCustomBotConfig({
+        botToken: token,
+        // L'identifiant de l'application est celui de son bot.
+        ...(config?.botClientId ? {} : { botClientId: result.bot.id }),
+      });
       config = data.config;
+      saved.botClientId = draft.botClientId = data.config.botClientId ?? '';
       connectedBot = result.bot;
       tokenInput = '';
       replacingToken = false;
       toast.success(m.cb_token_valid({ name: result.bot.username, id: result.bot.id }));
-      if (config?.isRunning) {
-        await startCustomBot();
-        await followStart();
-      }
+      if (config?.isRunning) await start();
     } catch (err) {
       toast.error(errorMessage(err));
     } finally {
@@ -182,8 +205,11 @@
     }
   }
 
+  function reportProfile(errors: string[] | undefined) {
+    if (errors?.length) toast.error(m.cbd_profile_partial({ details: errors.join(' · ') }));
+  }
+
   async function save(): Promise<boolean> {
-    const restart = Boolean(config?.isRunning) && PRESENCE_KEYS.some((key) => draft[key] !== saved[key]);
     try {
       const data = await updateCustomBotConfig({
         botName: draft.botName || null,
@@ -201,13 +227,8 @@
       });
       applyConfig(data.config);
       dnsChecks = null;
-      if (restart) {
-        await startCustomBot();
-        toast.success(m.cbd_saved_restarted());
-        void followStart();
-      } else {
-        toast.success(m.cb_config_saved());
-      }
+      if (data.profileErrors?.length) reportProfile(data.profileErrors);
+      else toast.success(m.cb_config_saved());
       return true;
     } catch (err) {
       toast.error(errorMessage(err));
@@ -243,6 +264,56 @@
     }
   }
 
+  async function checkInvite() {
+    checkingInvite = true;
+    try {
+      await refreshStatus();
+      if (!ownBot?.botInGuild) toast.error(m.cbd_invite_not_yet());
+    } catch (err) {
+      toast.error(errorMessage(err));
+    } finally {
+      checkingInvite = false;
+    }
+  }
+
+  // Revenu de l'onglet d'invitation Discord : on regarde tout de suite si le bot est arrive.
+  function onWindowFocus() {
+    if (config?.enabled && !ownBot?.switched && !destroyed) void refreshStatus().catch(() => {});
+  }
+
+  async function switchBot() {
+    const ok = await confirmDialog.ask({
+      title: m.cbd_switch_confirm(),
+      description: m.cbd_switch_confirm_desc(),
+      confirmLabel: m.cbd_switch_action(),
+      variant: 'danger',
+      impacts: [m.cbd_switch_impact_kotbo(), m.cbd_switch_impact_dashboard({ host: savedHost }), m.cbd_switch_impact_back()],
+    });
+    if (!ok) return;
+    await run(async () => {
+      const result = await switchToCustomBot();
+      toast.success(m.cbd_switched());
+      // Ce dashboard ne voit plus le serveur : on part sur le sien.
+      await sleep(1500);
+      window.location.href = `${result.dashboardUrl}/?guild=${authStore.selectedGuildId}`;
+    });
+  }
+
+  async function revert() {
+    const ok = await confirmDialog.ask({
+      title: m.cbd_revert_confirm(),
+      description: m.cbd_revert_confirm_desc(),
+      confirmLabel: m.cbd_revert_action(),
+      variant: 'warning',
+    });
+    if (!ok) return;
+    await run(async () => {
+      await revertToKotbo();
+      toast.success(m.cbd_reverted());
+      await refreshStatus();
+    });
+  }
+
   async function copy(text: string) {
     try {
       await navigator.clipboard.writeText(text);
@@ -250,6 +321,18 @@
     } catch (err) {
       toast.error(errorMessage(err));
     }
+  }
+
+  function inviteUrl(clientId: string | null | undefined): string {
+    if (!clientId || !ownBot) return '';
+    const params = new URLSearchParams({
+      client_id: clientId,
+      scope: 'bot applications.commands',
+      permissions: ownBot.invitePermissions,
+      guild_id: authStore.selectedGuildId ?? '',
+      disable_guild_select: 'true',
+    });
+    return `https://discord.com/oauth2/authorize?${params}`;
   }
 
   const statusOptions = [
@@ -268,13 +351,14 @@
     { value: 'COMPETING', label: m.cbx_activity_competing() },
   ];
 
+  const ownBotOn = $derived(Boolean(config?.enabled));
   const hasToken = $derived(Boolean(config?.botToken));
   const isRunning = $derived(Boolean(config?.isRunning));
-  const previewName = $derived(draft.botName || connectedBot?.username || m.cbx_name_ph());
+  const previewName = $derived(draft.botName || connectedBot?.username || (ownBotOn ? m.cbx_name_ph() : 'Kotbo'));
   const previewAvatar = $derived(draft.botAvatarUrl || connectedBot?.avatar || '');
   const statusDot = $derived(statusOptions.find((o) => o.value === draft.botStatus)?.dot ?? 'bg-emerald-500');
   const activityLabel = $derived(
-    draft.activityType !== 'NONE' && draft.activityText
+    ownBotOn && draft.activityType !== 'NONE' && draft.activityText
       ? `${activityOptions.find((o) => o.value === draft.activityType)?.label ?? ''} ${draft.activityText}`
       : '',
   );
@@ -290,11 +374,40 @@
       : domain?.active ? 'active'
       : 'syncing',
   );
+  const ownInviteUrl = $derived(inviteUrl(config?.botClientId || connectedBot?.id));
+  const kotboInviteUrl = $derived(inviteUrl(ownBot?.kotboClientId));
+
+  const steps = $derived([
+    { key: 'token', title: m.cbd_s_token(), done: hasToken },
+    { key: 'start', title: m.cbd_s_start(), done: isRunning },
+    { key: 'domain', title: m.cbd_s_domain(), done: domainState === 'active' },
+    { key: 'invite', title: m.cbd_s_invite(), done: Boolean(ownBot?.botInGuild) },
+    { key: 'switch', title: m.cbd_s_switch(), done: Boolean(ownBot?.switched) },
+  ]);
+  // L'etape ouverte est la premiere qui reste a faire.
+  const currentStep = $derived(steps.find((s) => !s.done)?.key ?? 'switch');
 </script>
+
+<svelte:window onfocus={onWindowFocus} />
+
+{#snippet stepCard(index: number, key: string, title: string, done: boolean, body: Snippet)}
+  <li class="rounded-lg border {currentStep === key ? 'border-primary/40 bg-primary/5' : 'border-outline-variant'} p-4">
+    <div class="flex items-center gap-3">
+      <span class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold shrink-0 {done ? 'bg-success text-on-primary' : 'bg-surface-container-high text-on-surface'}">
+        {#if done}<Papicon icon="check" size={12} />{:else}{index}{/if}
+      </span>
+      <span class="text-sm font-medium text-on-surface">{title}</span>
+      {#if done}<span class="sr-only">{m.cbd_step_done()}</span>{/if}
+    </div>
+    {#if currentStep === key || !done}
+      <div class="mt-3 pl-9 space-y-3">{@render body()}</div>
+    {/if}
+  </li>
+{/snippet}
 
 <ModulePage title={m.cbx_title()} description={m.cbx_desc()} icon="bot">
   {#snippet actions()}
-    {#if config && allowed}
+    {#if config && allowed && ownBotOn && hasToken}
       <div class="flex items-center flex-wrap md:justify-end gap-3">
         <span class="flex items-center gap-2 text-sm {isRunning ? 'text-success' : 'text-on-surface-variant'}" role="status">
           <span class="w-2 h-2 rounded-full {isRunning ? 'bg-success' : 'bg-on-surface-variant'}"></span>
@@ -302,16 +415,11 @@
         </span>
         {#if isRunning}
           <Button icon="refresh-cw" onclick={start} loading={busy}>{m.cbd_restart()}</Button>
-          <Button variant="danger" onclick={stop} disabled={busy}>{m.cbx_stop()}</Button>
+          {#if !ownBot?.switched}
+            <Button variant="danger" onclick={stop} disabled={busy}>{m.cbx_stop()}</Button>
+          {/if}
         {:else}
-          <Button
-            variant="primary"
-            icon="play"
-            onclick={start}
-            loading={busy}
-            disabled={!hasToken}
-            disabledReason={m.cbd_start_needs_token()}
-          >{m.cbx_start()}</Button>
+          <Button variant="primary" icon="play" onclick={start} loading={busy}>{m.cbx_start()}</Button>
         {/if}
       </div>
     {/if}
@@ -335,7 +443,7 @@
         <Callout variant="danger" title={m.cbx_last_error()}>
           <span class="font-mono text-xs break-words">{config.lastError}</span>
           {#snippet actions()}
-            {#if hasToken}
+            {#if ownBotOn && hasToken}
               <Button size="sm" icon="refresh-cw" onclick={start} loading={busy}>{m.common_retry()}</Button>
             {/if}
           {/snippet}
@@ -345,88 +453,24 @@
         <Callout variant="warning">{m.cbx_secrets_unreadable()}</Callout>
       {/if}
 
-      <!-- 1. Le bot -->
-      <section class="section-card p-5 space-y-4" aria-labelledby="cb-token-title">
-        <div class="flex items-start justify-between gap-3">
-          <div>
-            <h2 id="cb-token-title" class="text-sm font-semibold text-on-surface flex items-center gap-2">
-              <Papicon icon="key" size={14} class="text-primary" />
-              {m.cbd_step_bot()}
-            </h2>
-            <p class="text-xs text-on-surface-variant mt-1">{m.cbd_step_bot_desc()}</p>
-          </div>
-          <Button href="https://discord.com/developers/applications" target="_blank" variant="ghost" size="sm" iconRight="external-link">
-            {m.cbd_open_portal()}
-          </Button>
-        </div>
-
-        {#if hasToken && !replacingToken}
-          <div class="flex flex-wrap items-center gap-3 px-4 py-3 bg-success/5 border border-success/20 rounded-lg">
-            <span class="w-2 h-2 rounded-full bg-success"></span>
-            <span class="text-sm text-on-surface">{m.cbx_configured()}</span>
-            <span class="text-xs text-on-surface-variant font-mono">{config?.botToken}</span>
-            <Button variant="ghost" size="sm" class="ml-auto" onclick={() => (replacingToken = true)}>{m.cbd_replace_token()}</Button>
-          </div>
-        {:else}
-          <form class="flex flex-col sm:flex-row gap-2" onsubmit={(e) => { e.preventDefault(); void connectToken(); }}>
-            <div class="relative flex-1">
-              <input
-                bind:value={tokenInput}
-                type={showToken ? 'text' : 'password'}
-                autocomplete="off"
-                aria-label={m.cbx_token_title()}
-                placeholder={m.cbx_token_ph()}
-                class="input font-mono pr-10"
-              />
-              <button
-                type="button"
-                onclick={() => (showToken = !showToken)}
-                aria-label={showToken ? m.cbx_hide_token() : m.cbx_show_token()}
-                class="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface"
-              >
-                <Papicon icon={showToken ? 'eye-off' : 'eye'} size={14} />
-              </button>
-            </div>
-            <Button
-              type="submit"
-              variant="primary"
-              loading={connecting}
-              disabled={!tokenInput.trim()}
-              disabledReason={m.common_reason_fill_field()}
-            >{m.cbd_connect()}</Button>
-            {#if replacingToken}
-              <Button variant="ghost" onclick={() => { replacingToken = false; tokenInput = ''; }}>{m.cbd_cancel()}</Button>
-            {/if}
-          </form>
-        {/if}
-      </section>
-
-      <!-- 2. Profil et statut, avec apercu -->
+      <!-- 1. Profil : sur Kotbo pour ce serveur, ou sur le bot du serveur -->
       <section class="section-card p-5" aria-labelledby="cb-profile-title">
         <h2 id="cb-profile-title" class="text-sm font-semibold text-on-surface flex items-center gap-2">
           <Papicon icon="user" size={14} class="text-primary" />
           {m.cbx_profile()}
         </h2>
-        <p class="text-xs text-on-surface-variant mt-1 mb-4">{m.cbd_profile_desc()}</p>
+        <p class="text-xs text-on-surface-variant mt-1 mb-4">{ownBotOn ? m.cbd_profile_desc_own() : m.cbd_profile_desc_kotbo()}</p>
 
         <div class="grid gap-6 lg:grid-cols-[1fr_300px]">
           <div class="space-y-4">
-            <Field label={m.cbx_name()}>
+            <Field label={m.cbx_name()} hint={ownBotOn ? '' : m.cbd_name_hint_kotbo()}>
               {#snippet children(id, describedBy)}
                 <input {id} aria-describedby={describedBy} bind:value={draft.botName} placeholder={m.cbx_name_ph()} maxlength={32} class="input" />
               {/snippet}
             </Field>
             <div class="grid gap-4 sm:grid-cols-2">
-              <Field label={m.cbx_avatar()} hint={m.cbd_image_hint()}>
-                {#snippet children(id, describedBy)}
-                  <input {id} aria-describedby={describedBy} bind:value={draft.botAvatarUrl} type="url" placeholder="https://" class="input" />
-                {/snippet}
-              </Field>
-              <Field label={m.cbx_banner()} hint={m.cbd_image_hint()}>
-                {#snippet children(id, describedBy)}
-                  <input {id} aria-describedby={describedBy} bind:value={draft.botBannerUrl} type="url" placeholder="https://" class="input" />
-                {/snippet}
-              </Field>
+              <ImagePicker label={m.cbx_avatar()} shape="avatar" bind:value={draft.botAvatarUrl} />
+              <ImagePicker label={m.cbx_banner()} shape="banner" bind:value={draft.botBannerUrl} />
             </div>
             <Field label={m.cbx_bio()} hint={m.cbx_bio_count({ count: draft.botBio.length, max: BIO_MAX })}>
               {#snippet children(id, describedBy)}
@@ -434,48 +478,50 @@
               {/snippet}
             </Field>
 
-            <fieldset>
-              <legend class="text-xs font-medium text-on-surface-variant mb-1.5">{m.cbx_status()}</legend>
-              <div class="flex flex-wrap gap-2">
-                {#each statusOptions as opt}
-                  <button
-                    type="button"
-                    aria-pressed={draft.botStatus === opt.value}
-                    onclick={() => (draft.botStatus = opt.value)}
-                    class="flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm transition-colors
-                      {draft.botStatus === opt.value ? 'border-primary bg-primary/10 text-on-surface' : 'border-outline-variant text-on-surface-variant hover:text-on-surface'}"
-                  >
-                    <span class="w-2.5 h-2.5 rounded-full {opt.dot}"></span>
-                    {opt.label}
-                  </button>
-                {/each}
-              </div>
-            </fieldset>
+            {#if ownBotOn}
+              <fieldset>
+                <legend class="text-xs font-medium text-on-surface-variant mb-1.5">{m.cbx_status()}</legend>
+                <div class="flex flex-wrap gap-2">
+                  {#each statusOptions as opt}
+                    <button
+                      type="button"
+                      aria-pressed={draft.botStatus === opt.value}
+                      onclick={() => (draft.botStatus = opt.value)}
+                      class="flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm transition-colors
+                        {draft.botStatus === opt.value ? 'border-primary bg-primary/10 text-on-surface' : 'border-outline-variant text-on-surface-variant hover:text-on-surface'}"
+                    >
+                      <span class="w-2.5 h-2.5 rounded-full {opt.dot}"></span>
+                      {opt.label}
+                    </button>
+                  {/each}
+                </div>
+              </fieldset>
 
-            <div class="grid gap-4 sm:grid-cols-[180px_1fr]">
-              <Field label={m.cbx_activity_type()}>
-                {#snippet children(id, describedBy)}
-                  <select {id} aria-describedby={describedBy} bind:value={draft.activityType} class="input">
-                    {#each activityOptions as opt}
-                      <option value={opt.value}>{opt.label}</option>
-                    {/each}
-                  </select>
-                {/snippet}
-              </Field>
-              {#if draft.activityType !== 'NONE'}
-                <Field label={m.cbx_activity_text()}>
+              <div class="grid gap-4 sm:grid-cols-[180px_1fr]">
+                <Field label={m.cbx_activity_type()}>
                   {#snippet children(id, describedBy)}
-                    <input {id} aria-describedby={describedBy} bind:value={draft.activityText} placeholder="/help" maxlength={128} class="input" />
+                    <select {id} aria-describedby={describedBy} bind:value={draft.activityType} class="input">
+                      {#each activityOptions as opt}
+                        <option value={opt.value}>{opt.label}</option>
+                      {/each}
+                    </select>
+                  {/snippet}
+                </Field>
+                {#if draft.activityType !== 'NONE'}
+                  <Field label={m.cbx_activity_text()}>
+                    {#snippet children(id, describedBy)}
+                      <input {id} aria-describedby={describedBy} bind:value={draft.activityText} placeholder="/help" maxlength={128} class="input" />
+                    {/snippet}
+                  </Field>
+                {/if}
+              </div>
+              {#if draft.activityType === 'STREAMING'}
+                <Field label={m.cbx_stream_url()}>
+                  {#snippet children(id, describedBy)}
+                    <input {id} aria-describedby={describedBy} bind:value={draft.activityUrl} type="url" placeholder="https://twitch.tv/..." class="input" />
                   {/snippet}
                 </Field>
               {/if}
-            </div>
-            {#if draft.activityType === 'STREAMING'}
-              <Field label={m.cbx_stream_url()}>
-                {#snippet children(id, describedBy)}
-                  <input {id} aria-describedby={describedBy} bind:value={draft.activityUrl} type="url" placeholder="https://twitch.tv/..." class="input" />
-                {/snippet}
-              </Field>
             {/if}
           </div>
 
@@ -497,11 +543,11 @@
                       <Papicon icon="bot" size={28} class="text-on-surface-variant" />
                     {/if}
                   </div>
-                  <span class="absolute bottom-1 right-1 w-4 h-4 rounded-full border-2 border-surface-container {statusDot}"></span>
+                  <span class="absolute bottom-1 right-1 w-4 h-4 rounded-full border-2 border-surface-container {ownBotOn ? statusDot : 'bg-emerald-500'}"></span>
                 </div>
                 <div class="flex items-center gap-1.5">
                   <span class="font-semibold text-on-surface truncate">{previewName}</span>
-                  <span class="text-2xs font-semibold px-1 rounded bg-primary text-on-primary">BOT</span>
+                  <span class="text-2xs font-semibold px-1 rounded bg-primary text-on-primary">APP</span>
                 </div>
                 {#if activityLabel}
                   <p class="text-xs text-on-surface-variant mt-1 truncate">{activityLabel}</p>
@@ -511,18 +557,118 @@
                 {/if}
               </div>
             </div>
-            {#if isRunning}
-              <p class="text-2xs text-on-surface-variant mt-2">{m.cbd_restart_hint()}</p>
-            {/if}
           </div>
         </div>
+      </section>
+
+      <!-- 2. Ton propre bot : option, puis parcours guide -->
+      <section class="section-card p-5 space-y-4" aria-labelledby="cb-own-title">
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <h2 id="cb-own-title" class="text-sm font-semibold text-on-surface flex items-center gap-2">
+              <Papicon icon="bot" size={14} class="text-primary" />
+              {m.cbd_own_title()}
+            </h2>
+            <p class="text-xs text-on-surface-variant mt-1 max-w-prose">{m.cbd_own_desc()}</p>
+          </div>
+          <ToggleSwitch size="lg" checked={ownBotOn} disabled={busy || Boolean(ownBot?.switched)} ariaLabel={m.cbd_own_title()} onToggle={toggleOwnBot} />
+        </div>
+
+        {#if ownBotOn && ownBot?.switched}
+          <Callout variant="success" title={m.cbd_switched_title()}>
+            {m.cbd_switched_desc()}
+            {#snippet actions()}
+              <Button size="sm" variant="secondary" href={kotboInviteUrl} target="_blank" iconRight="external-link">{m.cbd_invite_kotbo()}</Button>
+              <Button size="sm" variant="danger" onclick={revert} loading={busy}>{m.cbd_revert_action()}</Button>
+            {/snippet}
+          </Callout>
+          {#if !ownBot.kotboInGuild}
+            <p class="text-xs text-on-surface-variant">{m.cbd_revert_hint()}</p>
+          {/if}
+        {:else if ownBotOn}
+          <ol class="space-y-3">
+            {#snippet tokenBody()}
+              <p class="text-xs text-on-surface-variant">{m.cbd_step_bot_desc()}</p>
+              {#if hasToken && !replacingToken}
+                <div class="flex flex-wrap items-center gap-3 px-4 py-3 bg-success/5 border border-success/20 rounded-lg">
+                  <span class="w-2 h-2 rounded-full bg-success"></span>
+                  <span class="text-sm text-on-surface">{m.cbx_configured()}</span>
+                  <span class="text-xs text-on-surface-variant font-mono">{config?.botToken}</span>
+                  <Button variant="ghost" size="sm" class="ml-auto" onclick={() => (replacingToken = true)}>{m.cbd_replace_token()}</Button>
+                </div>
+              {:else}
+                <form class="flex flex-col sm:flex-row gap-2" onsubmit={(e) => { e.preventDefault(); void connectToken(); }}>
+                  <div class="relative flex-1">
+                    <input
+                      bind:value={tokenInput}
+                      type={showToken ? 'text' : 'password'}
+                      autocomplete="off"
+                      aria-label={m.cbx_token_title()}
+                      placeholder={m.cbx_token_ph()}
+                      class="input font-mono pr-10"
+                    />
+                    <button
+                      type="button"
+                      onclick={() => (showToken = !showToken)}
+                      aria-label={showToken ? m.cbx_hide_token() : m.cbx_show_token()}
+                      class="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface"
+                    >
+                      <Papicon icon={showToken ? 'eye-off' : 'eye'} size={14} />
+                    </button>
+                  </div>
+                  <Button type="submit" variant="primary" loading={connecting} disabled={!tokenInput.trim()} disabledReason={m.common_reason_fill_field()}>{m.cbd_connect()}</Button>
+                  {#if replacingToken}
+                    <Button variant="ghost" onclick={() => { replacingToken = false; tokenInput = ''; }}>{m.cbd_cancel()}</Button>
+                  {/if}
+                </form>
+                <Button href="https://discord.com/developers/applications" target="_blank" variant="ghost" size="sm" iconRight="external-link">{m.cbd_open_portal()}</Button>
+              {/if}
+            {/snippet}
+            {@render stepCard(1, 'token', steps[0].title, steps[0].done, tokenBody)}
+
+            {#snippet startBody()}
+              <p class="text-xs text-on-surface-variant">{m.cbd_s_start_desc()}</p>
+              {#if !isRunning}
+                <Button variant="primary" icon="play" onclick={start} loading={busy} disabled={!hasToken} disabledReason={m.cbd_start_needs_token()}>{m.cbx_start()}</Button>
+              {/if}
+            {/snippet}
+            {@render stepCard(2, 'start', steps[1].title, steps[1].done, startBody)}
+
+            {#snippet domainBody()}
+              <p class="text-xs text-on-surface-variant">{m.cbd_s_domain_desc()}</p>
+              <Button size="sm" variant="secondary" href="#cb-domain-title" icon="arrow-down">{m.cbd_go_domain()}</Button>
+            {/snippet}
+            {@render stepCard(3, 'domain', steps[2].title, steps[2].done, domainBody)}
+
+            {#snippet inviteBody()}
+              <p class="text-xs text-on-surface-variant">{m.cbd_s_invite_desc()}</p>
+              <div class="flex flex-wrap gap-2">
+                <Button variant="primary" href={ownInviteUrl} target="_blank" iconRight="external-link" disabled={!ownInviteUrl} disabledReason={m.cbd_start_needs_token()}>{m.cbd_invite_own()}</Button>
+                <Button icon="refresh-cw" onclick={checkInvite} loading={checkingInvite}>{m.cbd_invite_check()}</Button>
+              </div>
+            {/snippet}
+            {@render stepCard(4, 'invite', steps[3].title, steps[3].done, inviteBody)}
+
+            {#snippet switchBody()}
+              <p class="text-xs text-on-surface-variant">{m.cbd_s_switch_desc()}</p>
+              <Button
+                variant="danger"
+                onclick={switchBot}
+                loading={busy}
+                disabled={!steps.slice(0, 4).every((s) => s.done)}
+                disabledReason={m.cbd_switch_needs_steps()}
+              >{m.cbd_switch_action()}</Button>
+            {/snippet}
+            {@render stepCard(5, 'switch', steps[4].title, steps[4].done, switchBody)}
+          </ol>
+        {/if}
       </section>
 
       <!-- 3. Dashboard sur le domaine du serveur -->
       <section class="section-card p-5 space-y-5" aria-labelledby="cb-domain-title">
         <div class="flex items-start justify-between gap-3">
           <div>
-            <h2 id="cb-domain-title" class="text-sm font-semibold text-on-surface flex items-center gap-2">
+            <h2 id="cb-domain-title" class="text-sm font-semibold text-on-surface flex items-center gap-2 scroll-mt-4">
               <Papicon icon="globe" size={14} class="text-primary" />
               {m.cbx_custom_dashboard()}
             </h2>

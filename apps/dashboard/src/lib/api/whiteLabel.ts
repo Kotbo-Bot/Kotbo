@@ -68,6 +68,19 @@ export async function bindGuildToInstance(instanceId: string, guildId: string) {
   return res.json();
 }
 
+async function adminInstanceAction(id: string, action: 'start' | 'stop') {
+  const res = await authorizedFetch(`${API_BASE_URL}/api/admin/whitelabel/${id}/${action}`, { method: 'POST' });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Action impossible. Réessaie.');
+  }
+  return res.json();
+}
+
+/** Lance une instance sans redémarrer le launcher. */
+export const startWhiteLabelInstance = (id: string) => adminInstanceAction(id, 'start');
+export const stopWhiteLabelInstance = (id: string) => adminInstanceAction(id, 'stop');
+
 // ============================================================================
 // CUSTOM BOT API (per-guild)
 // ============================================================================
@@ -90,6 +103,16 @@ export async function startCustomBot(guildId = authStore.selectedGuildId) {
 
 export async function verifyCustomBotDomain(guildId = authStore.selectedGuildId) {
   return dashboardRequest('/custom-bot/domain/verify', { method: 'POST', guildId, errorContext: 'API Error (Custom Domain):' });
+}
+
+/** Le bot du serveur prend le relais, Kotbo quitte le serveur. */
+export async function switchToCustomBot(guildId = authStore.selectedGuildId) {
+  return dashboardRequest('/custom-bot/switch', { method: 'POST', guildId, errorContext: 'API Error (Custom Bot Switch):' });
+}
+
+/** Kotbo reprend le serveur, le bot perso est arrêté. */
+export async function revertToKotbo(guildId = authStore.selectedGuildId) {
+  return dashboardRequest('/custom-bot/revert', { method: 'POST', guildId, errorContext: 'API Error (Custom Bot Revert):' });
 }
 
 export async function stopCustomBot(guildId = authStore.selectedGuildId) {
