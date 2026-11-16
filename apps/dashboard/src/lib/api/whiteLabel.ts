@@ -88,6 +88,10 @@ export async function startCustomBot(guildId = authStore.selectedGuildId) {
   return dashboardRequest('/custom-bot/start', { method: 'POST', guildId, errorContext: 'API Error (Start Bot):' });
 }
 
+export async function verifyCustomBotDomain(guildId = authStore.selectedGuildId) {
+  return dashboardRequest('/custom-bot/domain/verify', { method: 'POST', guildId, errorContext: 'API Error (Custom Domain):' });
+}
+
 export async function stopCustomBot(guildId = authStore.selectedGuildId) {
   return dashboardRequest('/custom-bot/stop', { method: 'POST', guildId, errorContext: 'API Error (Stop Bot):' });
 }
