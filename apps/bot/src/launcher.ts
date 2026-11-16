@@ -9,6 +9,7 @@ import prisma from './utils/db.js';
 import { logger } from './utils/logger.js';
 import { loadAllInstances, type ResolvedInstance } from './utils/instanceResolver.js';
 import { openSecret } from './utils/secretBox.js';
+import { withoutShardingEnv } from './utils/shardingEnv.js';
 import { applyCustomBotProfile } from './services/system/customBotProfile.js';
 import { comparePlans, normalizePlanKey } from '@kotbo/contracts';
 
@@ -63,9 +64,10 @@ async function startCustomBot(guildId: string, config: {
     customBotClients.delete(guildId);
   }
 
-  const client = new Client({
+  // Le lanceur n'est pas un shard : voir utils/shardingEnv.ts.
+  const client = withoutShardingEnv(() => new Client({
     intents: [GatewayIntentBits.Guilds],
-  });
+  }));
 
   client.once('ready', async (c) => {
     logger.success('CustomBot', `[${guildId}] Bot "${c.user.tag}" connecté.`);
