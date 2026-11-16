@@ -63,6 +63,9 @@ function applyBanDirective(data: BotPingResponse | null): void {
  * To avoid duplication, this only executes on Shard 0.
  */
 export async function pingMasterServer(client: Client): Promise<void> {
+  // Un bot perso ne représente qu'un serveur : son ping écraserait les stats de Kotbo.
+  if (!getCurrentInstance().isDefault) return;
+
   // If sharded, only run on Shard 0
   if (client.shard && !client.shard.ids.includes(0)) {
     return;
