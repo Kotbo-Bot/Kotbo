@@ -24,6 +24,7 @@ import {
   type Interaction,
 } from 'discord.js';
 import { logger } from './utils/logger.js';
+import { explainLoginError } from './utils/discordLoginError.js';
 import { ensureDashboardSchemaPatches } from './utils/schemaPatches.js';
 import { parseInstanceIdFromArgs, setCurrentInstance, getCurrentInstance, isWhiteLabelInstance } from './utils/instanceContext.js';
 import { loadAllInstances, getInstanceById, getDefaultInstance } from './utils/instanceResolver.js';
@@ -1236,6 +1237,19 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 client.login(token).catch((error) => {
-  logger.error('Bot', 'Échec critique lors de la connexion Discord (client.login) :', error);
-  process.exit(1);
+  const reason = explainLoginError(error);
+  if (!reason) {
+    logger.error('Bot', 'Échec critique lors de la connexion Discord (client.login) :', error);
+    process.exit(1);
+  }
+  // Cause connue (intents, token) : pas de trace d'erreur, on la remonte au lanceur
+  // qui l'affiche sur la page Identité, puis on sort proprement.
+  logger.warn('Bot', `Connexion Discord refusée : ${reason}`);
+  const exit = () => process.exit(1);
+  if (process.send && instanceId !== '__default__') {
+    process.send({ type: 'custom-instance-error', instanceId, reason }, exit);
+    setTimeout(exit, 1_000).unref();
+  } else {
+    exit();
+  }
 });

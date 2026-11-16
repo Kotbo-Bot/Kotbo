@@ -23,6 +23,8 @@ type ShardIpcMessage = {
 const activeManagers: ShardingManager[] = [];
 // Instances lancées ou arrêtées à chaud (bots perso des serveurs), par identifiant.
 const managersByInstance = new Map<string, ShardingManager>();
+// Cause d'un refus de connexion Discord, remontée par le shard juste avant sa sortie.
+const startFailures = new Map<string, string>();
 let shuttingDown = false;
 const workerPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'index.ts');
 
@@ -55,6 +57,7 @@ function stopInstance(instanceId: string) {
 /** (Re)lance une instance enregistrée en base, sans toucher aux autres. */
 async function startInstanceById(instanceId: string) {
   stopInstance(instanceId);
+  startFailures.delete(instanceId);
   const instance = (await loadAllInstances()).find((i) => i.id === instanceId);
   if (!instance) {
     logger.warn('CustomBot', `Instance ${instanceId} introuvable ou désactivée.`);
@@ -65,9 +68,13 @@ async function startInstanceById(instanceId: string) {
     await spawnInstance(instance);
     if (guildId) await markCustomBot(guildId, { isRunning: true, lastStartedAt: new Date(), lastError: null });
   } catch (err) {
-    logger.error('CustomBot', `Démarrage de l'instance ${instance.slug} impossible :`, err);
+    // Cause connue remontée par le shard (intents, token) : message clair, sans trace.
+    const known = startFailures.get(instanceId);
+    startFailures.delete(instanceId);
+    if (known) logger.warn('CustomBot', `Démarrage de l'instance ${instance.slug} impossible : ${known}`);
+    else logger.error('CustomBot', `Démarrage de l'instance ${instance.slug} impossible :`, err);
     stopInstance(instanceId);
-    if (guildId) await markCustomBot(guildId, { isRunning: false, lastError: (errorMessage(err) || 'Démarrage impossible').slice(0, 500) });
+    if (guildId) await markCustomBot(guildId, { isRunning: false, lastError: (known ?? (errorMessage(err) || 'Démarrage impossible')).slice(0, 500) });
   }
 }
 
@@ -154,6 +161,10 @@ function setupShardListeners(manager: ShardingManager, instanceLabel: string) {
           const instanceId = message.instanceId;
           if (message.type === 'custom-instance-start') {
             void startInstanceById(instanceId);
+            return;
+          }
+          if (message.type === 'custom-instance-error' && typeof message.reason === 'string') {
+            startFailures.set(instanceId, message.reason);
             return;
           }
           if (message.type === 'custom-instance-stop') {
