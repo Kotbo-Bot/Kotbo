@@ -2501,12 +2501,14 @@ export async function handleAdminRoutes(
       // Les bots perso des serveurs (`cb-<serveur>`) se gèrent depuis la page
       // Identité du serveur : on joint leur serveur et leur état pour les reconnaître.
       const customGuildIds = instances.filter((i) => i.slug.startsWith('cb-')).map((i) => i.slug.slice(3));
-      const [customConfigs, customGuilds] = await Promise.all([
+      // `Guild` n'a pas de colonne `name` : les noms viennent du cache / de DiscordExternalGuild.
+      const [customConfigs, customGuilds, customNames] = await Promise.all([
         prisma.customBotConfig.findMany({
           where: { guildId: { in: customGuildIds } },
           select: { guildId: true, isRunning: true, lastError: true, customDashboardUrl: true, customDomainVerifiedAt: true },
         }),
-        prisma.guild.findMany({ where: { id: { in: customGuildIds } }, select: { id: true, name: true, plan: true } }),
+        prisma.guild.findMany({ where: { id: { in: customGuildIds } }, select: { id: true, plan: true } }),
+        customGuildIds.length > 0 ? getKnownGuildNames(client, customGuildIds) : new Map<string, string>(),
       ]);
       const configByGuild = new Map(customConfigs.map((c) => [c.guildId, c]));
       const guildById = new Map(customGuilds.map((g) => [g.id, g]));
@@ -2536,7 +2538,7 @@ export async function handleAdminRoutes(
           kind: customGuildId ? 'custom-bot' : 'whitelabel',
           customBot: customGuildId ? {
             guildId: customGuildId,
-            guildName: guild?.name ?? null,
+            guildName: customGuildId ? customNames.get(customGuildId) ?? null : null,
             plan: guild?.plan ?? null,
             isRunning: config?.isRunning ?? false,
             lastError: config?.lastError ?? null,
