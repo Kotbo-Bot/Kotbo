@@ -6,12 +6,14 @@
   import {
     fetchWhiteLabelInstances,
     createWhiteLabelInstance,
-    updateWhiteLabelInstance,
+
     deleteWhiteLabelInstance,
     bindGuildToInstance,
     unbindGuildFromInstance,
     fetchWhiteLabelInstance,
     fetchAdminGuilds,
+    startWhiteLabelInstance,
+    stopWhiteLabelInstance,
   } from '../../lib/api';
   import Papicon from '../../lib/components/Papicon.svelte';
   import AdminShell from '../../lib/components/admin/AdminShell.svelte';
@@ -39,6 +41,17 @@
     maxGuilds: number;
     guildCount: number;
     createdAt: string;
+    kind: 'whitelabel' | 'custom-bot';
+    /** Bot perso d'un serveur, gere depuis sa page Identite. */
+    customBot: {
+      guildId: string;
+      guildName: string | null;
+      plan: string | null;
+      isRunning: boolean;
+      lastError: string | null;
+      domain: string | null;
+      switched: boolean;
+    } | null;
   }
 
   let instances = $state<WLInstance[]>([]);
@@ -113,9 +126,15 @@
     }
   }
 
+  // L'interrupteur lance ou arrete l'instance a chaud, sans redemarrer le launcher.
   async function handleToggle(inst: WLInstance) {
+    if (inst.enabled && inst.customBot?.switched && !(await confirmDialog.danger(
+      `Arrêter le bot de « ${inst.customBot.guildName ?? inst.customBot.guildId} » ?`,
+      'Kotbo a quitté ce serveur : plus aucun bot ne le servira tant que ce bot est arrêté.',
+      'Arrêter',
+    ))) return;
     try {
-      await updateWhiteLabelInstance(inst.id, { enabled: !inst.enabled });
+      await (inst.enabled ? stopWhiteLabelInstance(inst.id) : startWhiteLabelInstance(inst.id));
       toast.success(inst.enabled ? m.awl_instance_disabled({ name: inst.name }) : m.awl_instance_enabled({ name: inst.name }));
       await loadInstances();
     } catch (err) {
@@ -124,7 +143,13 @@
   }
 
   async function handleDelete(inst: WLInstance) {
-    if (!(await confirmDialog.danger(`Supprimer l'instance « ${inst.name} » ?`, `(${inst.slug}) Cette action est irréversible.`))) return;
+    const impacts = inst.customBot
+      ? [
+          `Le serveur ${inst.customBot.guildName ?? inst.customBot.guildId} perd son bot perso.`,
+          ...(inst.customBot.switched ? ['Kotbo a quitté ce serveur : il faudra le réinviter.'] : []),
+        ]
+      : [];
+    if (!(await confirmDialog.danger(`Supprimer l'instance « ${inst.name} » ?`, `(${inst.slug}) Cette action est irréversible.`, 'Supprimer', impacts))) return;
     try {
       await deleteWhiteLabelInstance(inst.id);
       toast.success(m.awl_instance_deleted());
@@ -170,6 +195,7 @@
     }
   }
 
+  const isCustomDetail = $derived(Boolean(detailInstance?.slug?.startsWith('cb-')));
   const boundGuilds = $derived<{ id: string }[]>(detailInstance?.guilds ?? []);
   const bindableGuilds = $derived(allGuilds.filter((guild) => !boundGuilds.some((bound) => bound.id === guild.id)));
   const guildName = (id: string) => allGuilds.find((guild) => guild.id === id)?.name ?? '';
@@ -215,14 +241,26 @@
             </span>
             <span class="min-w-0">
               <span class="block text-body-sm font-semibold text-on-surface truncate group-hover:text-primary transition-colors">{inst.name}</span>
-              <span class="block text-2xs text-on-surface-variant font-mono truncate">{inst.slug}</span>
+              {#if inst.customBot}
+                <span class="flex items-center gap-1.5 mt-0.5">
+                  <AdminBadge label="Bot perso" tone="info" />
+                  <span class="text-2xs text-on-surface-variant truncate">{inst.customBot.guildName ?? inst.customBot.guildId}</span>
+                </span>
+              {:else}
+                <span class="block text-2xs text-on-surface-variant font-mono truncate">{inst.slug}</span>
+              {/if}
             </span>
           </button>
         </td>
         <td class="px-4 py-3 text-right text-body-sm font-semibold text-on-surface tabular-nums">{inst.guildCount}/{inst.maxGuilds}</td>
         <td class="px-4 py-3 hidden md:table-cell">
-          <p class="text-xs text-on-surface-variant truncate max-w-64">{inst.dashboardUrl ?? 'Par défaut'}</p>
+          <p class="text-xs text-on-surface-variant truncate max-w-64">{inst.customBot ? (inst.customBot.domain ?? 'Aucun domaine vérifié') : (inst.dashboardUrl ?? 'Par défaut')}</p>
           {#if inst.apiPort}<p class="text-2xs text-on-surface-variant font-mono">Port {inst.apiPort}</p>{/if}
+          {#if inst.customBot}
+            <p class="text-2xs mt-0.5 {inst.customBot.lastError ? 'text-error' : 'text-on-surface-variant'}" title={inst.customBot.lastError ?? ''}>
+              {inst.customBot.lastError ? 'En erreur' : inst.customBot.isRunning ? 'En ligne' : 'Arrêté'}{inst.customBot.switched ? ' · sert le serveur' : ' · Kotbo encore présent'}
+            </p>
+          {/if}
         </td>
         <td class="px-4 py-3">
           <div class="flex justify-center">
@@ -245,7 +283,8 @@
     <dl class="grid grid-cols-1 sm:grid-cols-2 gap-4">
       {#each [
         { label: 'Client ID', value: detailInstance.discordClientId, mono: true },
-        { label: 'Jeton du bot', value: detailInstance.discordToken, mono: true },
+        // Jeton scelle d'un bot perso : ses derniers caracteres viennent du chiffre, pas du jeton.
+        ...(isCustomDetail ? [] : [{ label: 'Jeton du bot', value: detailInstance.discordToken, mono: true }]),
         { label: 'URL du dashboard', value: detailInstance.dashboardUrl || 'Par défaut', mono: false },
         { label: 'Propriétaire', value: detailInstance.ownerId, mono: true },
       ] as entry (entry.label)}
@@ -256,6 +295,12 @@
       {/each}
     </dl>
 
+    {#if isCustomDetail}
+      <p class="mt-6 pt-5 border-t border-outline-variant/20 text-body-sm text-on-surface-variant">
+        Bot perso créé depuis la page Identité de son serveur : jeton, profil, domaine et bascule se règlent là-bas.
+        Ici, on peut seulement le lancer, l'arrêter ou le supprimer.
+      </p>
+    {:else}
     <div class="mt-6 pt-5 border-t border-outline-variant/20 space-y-3">
       <div class="flex items-center justify-between gap-3">
         <h3 class="text-sm font-semibold text-on-surface">Serveurs rattachés</h3>
@@ -297,6 +342,7 @@
         <p class="text-xs text-on-surface-variant">Plafond atteint : détache un serveur pour en rattacher un autre.</p>
       {/if}
     </div>
+    {/if}
   {/if}
 </AdminDrawer>
 
