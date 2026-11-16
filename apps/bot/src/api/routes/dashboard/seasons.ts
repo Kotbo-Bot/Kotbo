@@ -76,7 +76,7 @@ export async function handleSeasonRoutes(
   // GET /api/dashboard/guilds/:guildId/seasons
   if (parts.length === 5 && method === 'GET') {
     try {
-      const data = await getSeasonsDashboardData(guildId);
+      const data = await getSeasonsDashboardData(guildId, client.guilds.cache.get(guildId) ?? null);
       // Le classement d'XP ne montre qu'une moitié de la saison : le RP a le
       // sien, remis à zéro à la clôture, et la page l'ignorait complètement.
       const rankedLeaderboard = await getRankedLeaderboard(guildId, 20).catch(() => []);
@@ -169,7 +169,7 @@ export async function handleSeasonRoutes(
   // GET /api/dashboard/guilds/:guildId/seasons/:seasonId/leaderboard
   if (parts.length === 7 && parts[6] === 'leaderboard' && method === 'GET') {
     try {
-      const leaderboard = await getSeasonLeaderboard(guildId, parts[5]);
+      const leaderboard = await getSeasonLeaderboard(guildId, parts[5], 20, client.guilds.cache.get(guildId) ?? null);
       // Le RP est archivé par la clôture (`RankedSeasonEntry`) mais n'était
       // jamais renvoyé : la page des saisons ne montrait que le classement
       // d'XP, comme si le prestige n'avait pas eu de saison.

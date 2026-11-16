@@ -7,7 +7,7 @@
  * la route d'action revérifie tout côté serveur.
  */
 
-import { GuildScheduledEventStatus } from 'discord.js';
+import { GuildScheduledEventStatus, type Guild } from 'discord.js';
 import prisma from '../../../utils/db.js';
 import { siteIconSvg } from '@kotbo/shared';
 import { cache } from '../../../utils/cache.js';
@@ -39,7 +39,7 @@ interface Row {
   level?: number;
 }
 
-async function loadLeaderboard(guildId: string, variant: string, limit: number): Promise<Row[]> {
+async function loadLeaderboard(guild: Guild | null, guildId: string, variant: string, limit: number): Promise<Row[]> {
   return cache.wrap(`guild:${guildId}:site-lb:${variant}:${limit}`, LEADERBOARD_TTL_SECONDS, async () => {
     switch (variant) {
       case 'prestige':
@@ -58,7 +58,7 @@ async function loadLeaderboard(guildId: string, variant: string, limit: number):
       case 'season': {
         const season = await prisma.levelingSeason.findFirst({ where: { guildId, status: 'ACTIVE' }, select: { id: true } });
         if (!season) return [];
-        return (await getSeasonLeaderboard(guildId, season.id, limit)).map((r) => ({ userId: r.userId, value: r.xp, level: r.level }));
+        return (await getSeasonLeaderboard(guildId, season.id, limit, guild)).map((r) => ({ userId: r.userId, value: r.xp, level: r.level }));
       }
       case 'xp':
       default:
@@ -95,7 +95,7 @@ function leaderboardValue(variant: string, value: number, ctx: BlockContext): st
 async function renderLeaderboard(ctx: BlockContext, config: Record<string, unknown>): Promise<string> {
   const variant = typeof config.variant === 'string' ? config.variant : 'xp';
   const limit = Number(config.limit) || 10;
-  const rows = await loadLeaderboard(ctx.site.guildId, variant, limit);
+  const rows = await loadLeaderboard(ctx.client.guilds.cache.get(ctx.site.guildId) ?? null, ctx.site.guildId, variant, limit);
   const o = { locale: ctx.locale };
   const titleFn = LEADERBOARD_TITLES[variant as keyof typeof LEADERBOARD_TITLES] ?? LEADERBOARD_TITLES.xp;
   if (rows.length === 0) return emptyState(m.site_leaderboard_empty({}, o));

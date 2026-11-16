@@ -1,10 +1,12 @@
 <script lang="ts">
   /**
    * Aperçu des deux annonces d'une saison, construites par la même fonction
-   * que celles du bot (`@kotbo/shared`). Le podium de clôture est fictif.
+   * que celles du bot (`@kotbo/shared`). Le classement de clôture est fictif
+   * et va jusqu'au dernier rang récompensé.
    */
   import {
     planSeasonRewards,
+    sampleSeasonStandings,
     seasonEndAnnouncement,
     seasonStartAnnouncement,
     type SeasonAnnouncementLabels,
@@ -28,8 +30,6 @@
     roleName: (roleId: string) => string;
   } = $props();
 
-  const SAMPLE_XP = [1_240, 980, 655];
-
   const intl = $derived(labels.locale === 'fr' ? 'fr-FR' : 'en-US');
   const format = (value: number) => value.toLocaleString(intl);
   const named = (reward: { roleId: string | null; coins: number }) => ({
@@ -37,7 +37,7 @@
     coins: reward.coins > 0 ? format(reward.coins) : null,
   });
 
-  const sample = $derived(SAMPLE_XP.map((xp, index) => ({ userId: String(index + 1), rank: index + 1, xp })));
+  const sample = $derived(sampleSeasonStandings(rewards));
   const member = (rank: number) => `@${m.sea_preview_member({ rank })}`;
 
   const start = $derived(seasonStartAnnouncement(
