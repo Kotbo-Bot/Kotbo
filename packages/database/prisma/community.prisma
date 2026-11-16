@@ -293,7 +293,7 @@ model Suggestion {
   userId         String
   username       String
   content        String
-  status         String   @default("PENDING") // PENDING, APPROVED, REJECTED, IMPLEMENTED
+  status         String   @default("PENDING") // PENDING, APPROVED, IN_PROGRESS, REJECTED, IMPLEMENTED
   channelId      String?
   messageId      String?
   responseText   String?
@@ -302,6 +302,20 @@ model Suggestion {
 
   upvoters       String[] @default([]) // Array of User IDs
   downvoters     String[] @default([]) // Array of User IDs
+
+  /// Titre facultatif, saisi dans la fenêtre de proposition.
+  title          String?
+  /// Fil de discussion ouvert sous le message, quand le serveur en crée.
+  threadId       String?
+  /// Premier passage du seuil de votes : la suggestion reste signalée même si
+  /// des votes partent ensuite.
+  thresholdReachedAt DateTime?
+  /// Catégorie choisie parmi celles du serveur, figée à la proposition.
+  category       String?
+  /// Récompense réellement versée à l'auteur, reprise si la décision favorable
+  /// est annulée ou la suggestion supprimée.
+  xpGranted      Int @default(0)
+  coinsGranted   Int @default(0)
 
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
 
@@ -332,6 +346,29 @@ model SuggestionConfig {
   voteWhileApproved Boolean @default(false)
   /// Rôles autorisés à proposer. Vide = tout le monde.
   allowedRoleIds String[] @default([])
+  /// Garde-fous de qui propose. `0` = aucune exigence ; un gestionnaire du
+  /// serveur passe toujours.
+  cooldownMinutes   Int @default(0)
+  minAccountAgeDays Int @default(0)
+  minMemberDays     Int @default(0)
+
+  /// Prévenir l'auteur en message privé quand le staff tranche.
+  notifyAuthor Boolean @default(true)
+  /// Ouvrir un fil de discussion sous chaque nouvelle suggestion.
+  createThread Boolean @default(false)
+  /// Votes « pour » qui signalent la suggestion au staff. `null` = pas de seuil.
+  voteThreshold  Int?
+  /// Épingler le message quand le seuil est atteint ; il est désépinglé à la décision.
+  pinAtThreshold Boolean @default(false)
+
+  /// Récompense de l'auteur quand sa suggestion est acceptée. `0` = rien ; versée
+  /// seulement si le module concerné (Niveaux, Économie) est actif.
+  rewardXp    Int @default(0)
+  rewardCoins Int @default(0)
+  /// Catégories proposées à qui suggère. Vide = pas de catégorie.
+  categories String[] @default([])
+  /// Le staff voit qui a voté pour et contre sur le dashboard.
+  showVoters Boolean @default(false)
 
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
 

@@ -103,7 +103,7 @@ export function registerReadCommunityTools(ctx: McpToolContext) {
       {
         description: 'Liste les suggestions de la communauté avec filtre optionnel par statut.',
         inputSchema: {
-          status: z.enum(['PENDING', 'APPROVED', 'REJECTED', 'IMPLEMENTED']).optional(),
+          status: z.enum(['PENDING', 'APPROVED', 'IN_PROGRESS', 'REJECTED', 'IMPLEMENTED']).optional(),
           limit: z.number().int().min(1).max(50).default(20),
         },
         _meta: toolMeta,

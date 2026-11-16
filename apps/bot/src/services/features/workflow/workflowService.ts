@@ -596,7 +596,30 @@ export async function buildTriggerOutputs(
       return {
         member,
         content: String(payload.content ?? ''),
+        title: String(payload.title ?? ''),
+        category: String(payload.category ?? ''),
         channel: channelOf(payload.channelId),
+        message: typeof payload.messageId === 'string'
+          ? toMessageValue({
+            id: payload.messageId,
+            content: String(payload.content ?? ''),
+            channelId: String(payload.channelId ?? ''),
+            authorId: guild.client.user?.id ?? '',
+          })
+          : null,
+      };
+    }
+
+    case 'OnSuggestionThresholdReached': {
+      const member = await memberOrDeparted(payload.userId, payload.username);
+      return {
+        member,
+        content: String(payload.content ?? ''),
+        title: String(payload.title ?? ''),
+        category: String(payload.category ?? ''),
+        upvotes: Number(payload.upvotes ?? 0),
+        downvotes: Number(payload.downvotes ?? 0),
+        threshold: Number(payload.threshold ?? 0),
         message: typeof payload.messageId === 'string'
           ? toMessageValue({
             id: payload.messageId,
@@ -610,15 +633,21 @@ export async function buildTriggerOutputs(
 
     case 'OnSuggestionResolved': {
       const status = String(payload.status ?? '');
+      const previous = String(payload.previousStatus ?? 'PENDING');
+      const label = (key: string) => (Object.hasOwn(SUGGESTION_STATUS_LABELS, key) ? SUGGESTION_STATUS_LABELS[key] : key);
       return {
         member: await memberOrDeparted(payload.userId, payload.username),
         staff: await memberOf(payload.respondedById),
         content: String(payload.content ?? ''),
+        title: String(payload.title ?? ''),
+        category: String(payload.category ?? ''),
         response: String(payload.responseText ?? ''),
-        statusLabel: Object.hasOwn(SUGGESTION_STATUS_LABELS, status) ? SUGGESTION_STATUS_LABELS[status] : status,
+        statusLabel: label(status),
+        previousStatusLabel: label(previous),
         upvotes: Number(payload.upvotes ?? 0),
         downvotes: Number(payload.downvotes ?? 0),
         isApproved: status === 'APPROVED',
+        isInProgress: status === 'IN_PROGRESS',
         isRejected: status === 'REJECTED',
         isImplemented: status === 'IMPLEMENTED',
       };

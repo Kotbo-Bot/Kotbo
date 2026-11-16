@@ -36,7 +36,7 @@
   ].join('\n'));
 </script>
 
-<DiscordEmbedPreview title={labels.title} {body} color={SUGGESTION_STATUS_COLORS[status]}>
+<DiscordEmbedPreview title={m.suggestions_preview_title()} {body} color={SUGGESTION_STATUS_COLORS[status]}>
   <div class="buttons" aria-hidden="true">
     <span class="button" class:disabled={!votingOpen}>{labels.voteUp} · {UP}</span>
     <span class="button" class:disabled={!votingOpen}>{labels.voteDown} · {DOWN}</span>

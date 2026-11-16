@@ -2,9 +2,11 @@ import { describe, expect, test } from 'bun:test';
 import { SUGGESTION_STATUS_COLORS } from '@kotbo/shared';
 import {
   buildSuggestionMessage,
+  buildSuggestionNotice,
   isSuggestionMessageFor,
   type SuggestionMessageLabels,
   type SuggestionMessageView,
+  type SuggestionNoticeLabels,
 } from '../../services/features/suggestionMessage.js';
 
 const LABELS: SuggestionMessageLabels = {
@@ -16,12 +18,14 @@ const LABELS: SuggestionMessageLabels = {
   votesValue: 'Pour : `{up}` | Contre : `{down}`',
   responseField: 'Réponse de la modération',
   noResponse: 'Aucun commentaire.',
+  categoryField: 'Catégorie',
   voteUp: 'Pour',
   voteDown: 'Contre',
   footer: 'ID de la suggestion : {id}',
   status: {
     PENDING: 'En cours d\'évaluation',
     APPROVED: 'Approuvée par le staff',
+    IN_PROGRESS: 'En cours de réalisation',
     REJECTED: 'Refusée par le staff',
     IMPLEMENTED: 'Mise en place',
   },
@@ -29,6 +33,8 @@ const LABELS: SuggestionMessageLabels = {
 
 const PENDING: SuggestionMessageView = {
   id: 'cmsugg1',
+  title: null,
+  category: null,
   authorName: 'Alice',
   authorAvatarUrl: 'https://cdn/a.png',
   content: 'Un salon pour les memes',
@@ -83,9 +89,84 @@ describe('message d\'une suggestion', () => {
     expect(buttons.map((b) => b.custom_id)).toEqual(['suggest_vote:cmsugg1:up', 'suggest_vote:cmsugg1:down']);
   });
 
+  test('un titre saisi remplace le titre générique', () => {
+    expect(render({ ...PENDING, title: 'Salon memes' }).embed.title).toBe('Salon memes');
+  });
+
+  test('une catégorie s\'affiche avant le statut', () => {
+    const { embed } = render({ ...PENDING, category: 'Événements' });
+    expect(embed.fields?.[0]).toEqual({ name: 'Catégorie', value: 'Événements', inline: true });
+    expect(embed.fields?.[1].name).toBe('Statut');
+  });
+
+  test('en cours avec votes ouverts : réponse affichée, boutons actifs', () => {
+    const { embed, buttons } = render({ ...PENDING, status: 'IN_PROGRESS', responseText: 'On s\'y met', votingOpen: true });
+    expect(embed.fields?.[0].value).toBe('En cours de réalisation');
+    expect(embed.fields?.[2].value).toBe('On s\'y met');
+    expect(buttons.every((b) => !b.disabled)).toBe(true);
+  });
+
   test('sans photo : auteur sans icône', () => {
     const { embed } = render({ ...PENDING, authorAvatarUrl: null });
     expect(embed.author).toEqual({ name: 'Alice' });
+  });
+});
+
+describe('avis de décision envoyé à l\'auteur', () => {
+  const NOTICE: SuggestionNoticeLabels = {
+    title: 'Ta suggestion sur {server}',
+    contentField: 'Ta suggestion',
+    responseField: 'Réponse du staff',
+    decided: {
+      APPROVED: 'Le staff a approuvé ta suggestion.',
+      IN_PROGRESS: 'Ta suggestion est en cours de réalisation.',
+      REJECTED: 'Le staff a refusé ta suggestion.',
+      IMPLEMENTED: 'Ta suggestion a été mise en place.',
+    },
+  };
+
+  test('statut, suggestion, réponse et lien vers le message', () => {
+    const embed = buildSuggestionNotice({
+      guildName: 'Kotbo',
+      status: 'APPROVED',
+      title: null,
+      content: 'Un salon memes',
+      responseText: 'Bonne idée',
+      messageUrl: 'https://discord.com/channels/1/2/3',
+    }, NOTICE).toJSON();
+    expect(embed.title).toBe('Ta suggestion sur Kotbo');
+    expect(embed.description).toBe('Le staff a approuvé ta suggestion.');
+    expect(embed.url).toBe('https://discord.com/channels/1/2/3');
+    expect(embed.color).toBe(parseInt(SUGGESTION_STATUS_COLORS.APPROVED.slice(1), 16));
+    expect(embed.fields).toEqual([
+      { name: 'Ta suggestion', value: 'Un salon memes', inline: false },
+      { name: 'Réponse du staff', value: 'Bonne idée', inline: false },
+    ]);
+  });
+
+  test('le titre plutôt que le texte, et pas de champ de réponse vide', () => {
+    const embed = buildSuggestionNotice({
+      guildName: 'Kotbo',
+      status: 'REJECTED',
+      title: 'Salon memes',
+      content: 'x'.repeat(3000),
+      responseText: null,
+      messageUrl: null,
+    }, NOTICE).toJSON();
+    expect(embed.fields).toEqual([{ name: 'Ta suggestion', value: 'Salon memes', inline: false }]);
+    expect(embed.url).toBeUndefined();
+  });
+
+  test('un long texte sans titre est coupé sous la limite d\'un champ', () => {
+    const embed = buildSuggestionNotice({
+      guildName: 'Kotbo',
+      status: 'IMPLEMENTED',
+      title: null,
+      content: 'x'.repeat(3000),
+      responseText: null,
+      messageUrl: null,
+    }, NOTICE).toJSON();
+    expect(embed.fields?.[0].value.length).toBeLessThanOrEqual(1024);
   });
 });
 
