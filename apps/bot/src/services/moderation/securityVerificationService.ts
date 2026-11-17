@@ -89,9 +89,9 @@ export function buildVerificationUrl(dashboardUrl: string, guildId: string, toke
  *
  * Chaque demande coupe la parole au membre (timeout de 28 jours) et lui envoie
  * un MP : la relancer en boucle le harcèle sans rien apprendre au staff. Une
- * heure laisse le temps de voir la demande précédente aboutir.
+ * semaine, c'est une demande par membre et par serveur.
  */
-export const VERIFICATION_REQUEST_COOLDOWN_MS = 60 * 60 * 1000;
+export const VERIFICATION_REQUEST_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** Nombre de demandes remontées dans la fiche membre. */
 const VERIFICATION_HISTORY_LIMIT = 10;

@@ -762,10 +762,9 @@ export async function handleMembersRoutes(
           createVerificationSession,
           buildVerificationUrl,
           buildVerificationEmbed,
-          getVerificationHistory,
         } = await import('../../../services/moderation/securityVerificationService.js');
 
-        const { isVerificationRequestSpam, VERIFICATION_SPAM_MESSAGE } = await import('../../../services/moderation/verificationSpamGuard.js');
+        const { isVerificationRequestSpam, checkVerificationEligibility, VERIFICATION_SPAM_MESSAGE } = await import('../../../services/moderation/verificationSpamGuard.js');
         if (await isVerificationRequestSpam(client, {
           guildId,
           guildName: discordGuild.name,
@@ -777,21 +776,20 @@ export async function handleMembersRoutes(
         }
 
         // Anti-spam : chaque demande timeout le membre 28 jours et lui envoie un
-        // MP. Deux modérateurs qui cliquent coup sur coup le harcèlent sans rien
-        // apprendre de plus (issue #216).
-        const history = await getVerificationHistory(guildId, userId);
-        if (history.hasPending) {
-          json(res, 409, {
-            error: 'Une demande de vérification est déjà en cours pour ce membre.',
-            verifications: { hasPending: true, cooldownUntil: history.cooldownUntil?.toISOString() ?? null },
-          });
-          return true;
-        }
-        if (history.cooldownUntil) {
-          const waitMinutes = Math.max(1, Math.ceil((history.cooldownUntil.getTime() - Date.now()) / 60000));
-          json(res, 429, {
-            error: `Une vérification vient d'être demandée pour ce membre. Réessayez dans ${waitMinutes} min.`,
-            verifications: { hasPending: false, cooldownUntil: history.cooldownUntil.toISOString() },
+        // MP. Une par semaine et par membre, 5 par heure sur tout le bot (issue #216).
+        const eligibility = await checkVerificationEligibility(client, {
+          guildId,
+          guildName: discordGuild.name,
+          userId,
+          moderatorTag: moderator.tag,
+        });
+        if (!eligibility.allowed) {
+          json(res, eligibility.reason === 'PENDING' ? 409 : 429, {
+            error: eligibility.message,
+            verifications: {
+              hasPending: eligibility.reason === 'PENDING',
+              cooldownUntil: eligibility.cooldownUntil?.toISOString() ?? null,
+            },
           });
           return true;
         }
@@ -1419,8 +1417,13 @@ export async function handleMembersRoutes(
           const timezone = await resolveViewTimezone(url.searchParams.get('tz'), guildId);
           const insights = await getInviteInsights(guildId, code, joins, labels, counts, timezone);
 
+          // Renvoie vers la fiche serveur : cette invitation est-elle celle par défaut ?
+          const { resolveDefaultInvite } = await import('../../../services/analytics/serverProfileService.js');
+          const defaultInvite = await resolveDefaultInvite(client, guildId).catch(() => null);
+
           json(res, 200, {
             invite,
+            defaultInvite: defaultInvite ? { ...defaultInvite, isThis: defaultInvite.code === code } : null,
             trend: {
               totalJoined,
               totalLeft,
