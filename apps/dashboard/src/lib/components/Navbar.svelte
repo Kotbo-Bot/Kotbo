@@ -237,7 +237,7 @@
           {#if !authStore.user}
             <div class="w-full h-full bg-surface-container-high animate-pulse"></div>
           {:else}
-            <img class="w-full h-full object-cover" src={getUserAvatar()} alt="Avatar"/>
+            <img class="w-full h-full object-cover" src={getUserAvatar()} alt=""/>
           {/if}
         </div>
         <div class="hidden sm:flex flex-col items-start">

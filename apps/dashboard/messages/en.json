@@ -19125,5 +19125,11 @@
   "imgp_hint": "PNG, JPEG, GIF or WebP, 8 MB max. Drop a file or paste a link.",
   "imgp_too_large": "Image too large: 8 MB max.",
   "imgp_unsupported": "Unsupported format: PNG, JPEG, GIF or WebP.",
-  "imgp_unreadable": "Could not read this image."
+  "imgp_unreadable": "Could not read this image.",
+  "a11y_breadcrumbs": "Breadcrumb",
+  "a11y_command_palette": "Command palette",
+  "a11y_main_nav": "Main navigation",
+  "a11y_color": "Colour {color}",
+  "onb_rules_article_title": "Article title",
+  "onb_rules_article_text": "Article text"
 }

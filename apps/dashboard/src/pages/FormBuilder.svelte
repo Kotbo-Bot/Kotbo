@@ -354,7 +354,7 @@
         <div class="border border-outline-variant/20 p-6 rounded-b-2xl"
           style="background:{theme.cardColor || 'var(--color-surface, #fff)'};{theme.glass ? 'backdrop-filter:blur(12px);background:color-mix(in srgb, ' + (theme.cardColor || '#151823') + ' 70%, transparent);' : ''}">
           {#if theme.logoUrl}
-            <img src={theme.logoUrl} alt="Logo" class="w-14 h-14 rounded-2xl object-cover mb-3 shadow" />
+            <img src={theme.logoUrl} alt="" class="w-14 h-14 rounded-2xl object-cover mb-3 shadow" />
           {/if}
           <h1 class="text-2xl font-semibold text-on-surface" style={theme.textColor ? `color:${theme.textColor}` : ''}>{formName}</h1>
           {#if formDescription}<p class="text-on-surface-variant mt-2 text-sm">{formDescription}</p>{/if}
@@ -560,7 +560,8 @@
               <button onclick={() => headerColor = color}
                 class="w-6 h-6 rounded-full transition-transform {headerColor === color ? 'ring-2 ring-offset-2 ring-offset-surface ring-primary scale-110' : ''}"
                 style="background:{color}"
-                aria-label="Color {color}"
+                aria-label={m.a11y_color({ color })}
+                aria-pressed={headerColor === color}
               ></button>
             {/each}
           </div>

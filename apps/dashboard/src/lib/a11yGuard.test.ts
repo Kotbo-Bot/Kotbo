@@ -124,6 +124,24 @@ describe("garde-fou d'accessibilite", () => {
     expect(offenders).toEqual([]);
   });
 
+  test('pas de nom accessible ecrit en dur hors back-office (RGAA 8.7)', () => {
+    // Un aria-label en francais reste en francais pour un lecteur d'ecran en
+    // anglais ; le garde-fou i18n ne le voit pas sans lettre accentuee.
+    const offenders = sources
+      .filter(({ file }) => !file.includes('admin/'))
+      .flatMap(({ file, text }) =>
+        [...text.matchAll(/\baria-label="([^"]*)"/g)]
+          .filter(([, value]) => /\p{L}/u.test(value.replace(/\{[^}]*\}/g, '')))
+          .map(([attr]) => `${file}: ${attr}`),
+      );
+    expect(offenders).toEqual([]);
+  });
+
+  test('pas de alt generique qui double le nom affiche a cote (RGAA 1.2)', () => {
+    const offenders = sources.filter(({ text }) => /\balt="(Avatar|Server Logo|Logo)"/.test(text)).map(({ file }) => file);
+    expect(offenders).toEqual([]);
+  });
+
   test('pas d\'aria-labelledby vers un id "modal-title" partage', () => {
     const offenders = sources.filter(({ text }) => /aria-labelledby="modal-title"/.test(text)).map(({ file }) => file);
     expect(offenders).toEqual([]);

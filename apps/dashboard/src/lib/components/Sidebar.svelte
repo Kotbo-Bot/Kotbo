@@ -233,9 +233,9 @@
   {#if href === '/notifications' && unread > 0}
     <span
       class="min-w-4 h-4 px-1 rounded-full bg-primary text-on-primary text-2xs font-semibold leading-none flex items-center justify-center"
-      aria-label="{unread} notifications non lues"
     >
-      {unread > 99 ? '99+' : unread}
+      <span aria-hidden="true">{unread > 99 ? '99+' : unread}</span>
+      <span class="sr-only">{unread === 1 ? m.home_notifications_one() : m.home_notifications_count({ n: unread })}</span>
     </span>
   {/if}
 {/snippet}
@@ -412,7 +412,7 @@
 
   <nav
     class="flex-1 overflow-y-auto overscroll-contain scrollbar-hide pb-3 {isCollapsed ? 'lg:px-2' : 'px-3'}"
-    aria-label="Navigation principale"
+    aria-label={m.a11y_main_nav()}
   >
     {#if isCollapsed}
       <div class="flex flex-col gap-1">

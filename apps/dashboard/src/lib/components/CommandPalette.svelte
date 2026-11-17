@@ -371,7 +371,7 @@
     use:dialogFocus={{}}
     role="dialog"
     aria-modal="true"
-    aria-label="Palette de commandes"
+    aria-label={m.a11y_command_palette()}
     tabindex="-1"
     onkeydown={(e) => { if (e.key === 'Escape') close(); }}
   >

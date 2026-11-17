@@ -19129,5 +19129,11 @@
   "imgp_hint": "PNG, JPEG, GIF ou WebP, 8 Mo maximum. Glisse un fichier ou colle un lien.",
   "imgp_too_large": "Image trop lourde : 8 Mo maximum.",
   "imgp_unsupported": "Format non pris en charge : PNG, JPEG, GIF ou WebP.",
-  "imgp_unreadable": "Impossible de lire cette image."
+  "imgp_unreadable": "Impossible de lire cette image.",
+  "a11y_breadcrumbs": "Fil d’Ariane",
+  "a11y_command_palette": "Palette de commandes",
+  "a11y_main_nav": "Navigation principale",
+  "a11y_color": "Couleur {color}",
+  "onb_rules_article_title": "Titre de l'article",
+  "onb_rules_article_text": "Texte de l'article"
 }

@@ -3419,7 +3419,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                       <!-- Avatar : doublon du pseudo pour la souris, hors du parcours clavier -->
                       <button type="button" tabindex="-1" aria-hidden="true" class="shrink-0" disabled={!memberCaseModal.canOpen} onclick={() => openMember(player)}>
                         {#if player.avatarUrl}
-                          <img src={player.avatarUrl} alt="Avatar" class="w-8 h-8 rounded-full border border-outline-variant/20" />
+                          <img src={player.avatarUrl} alt="" class="w-8 h-8 rounded-full border border-outline-variant/20" />
                         {:else}
                           <div class="w-8 h-8 rounded-full bg-primary/20 text-primary flex items-center justify-center font-bold">U</div>
                         {/if}

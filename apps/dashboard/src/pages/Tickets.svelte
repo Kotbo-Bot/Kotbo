@@ -933,7 +933,7 @@
                 <div class="flex items-start gap-2.5 lg:gap-4 p-2 rounded-xl hover:bg-white/5 transition-colors group">
                   <div class="shrink-0">
                     {#if msg.authorAvatar}
-                      <img src={msg.authorAvatar} alt="Avatar" class="h-8 w-8 lg:h-10 lg:w-10 rounded-full object-cover border border-white/10" />
+                      <img src={msg.authorAvatar} alt="" class="h-8 w-8 lg:h-10 lg:w-10 rounded-full object-cover border border-white/10" />
                     {:else}
                       <div class="h-8 w-8 lg:h-10 lg:w-10 rounded-full bg-white/10 flex items-center justify-center text-xs lg:text-sm font-semibold text-white/80">
                         {msg.authorName?.slice(0, 1).toUpperCase()}

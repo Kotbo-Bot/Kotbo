@@ -221,7 +221,7 @@
               {#if iconUrl}
                 <img
                   src={iconUrl}
-                  alt={guild.name}
+                  alt=""
                   referrerpolicy="no-referrer"
                   class="w-6 h-6 rounded object-cover"
                 />

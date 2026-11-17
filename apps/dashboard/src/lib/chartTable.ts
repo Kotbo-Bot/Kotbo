@@ -38,3 +38,23 @@ export function chartTable(data: ChartDataLike | undefined, format: (n: number) 
     })),
   };
 }
+
+/** `Node.DOCUMENT_POSITION_PRECEDING`, sans dependre du global `Node`. */
+const PRECEDING = 2;
+
+/**
+ * Legende par defaut : le titre le plus proche qui precede le graphique, en
+ * remontant quelques niveaux (le titre de sa carte, en pratique). Les appelants
+ * n'ont alors rien a passer pour que le tableau soit identifiable.
+ */
+export function nearestHeadingText(element: Element, maxDepth = 6): string {
+  let scope: Element | null = element.parentElement;
+  for (let depth = 0; scope && depth < maxDepth; depth++, scope = scope.parentElement) {
+    const before = [...scope.querySelectorAll('h1, h2, h3, h4, h5, h6')].filter(
+      (heading) => element.compareDocumentPosition(heading) & PRECEDING,
+    );
+    const last = before.at(-1);
+    if (last) return last.textContent?.trim() ?? '';
+  }
+  return '';
+}
