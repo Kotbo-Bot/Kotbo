@@ -36,6 +36,7 @@ import { handleLogsRoutes } from './modules/logs.js';
 import { handleTicketsRoutes } from './modules/tickets.js';
 import { handleServerTemplateRoutes } from './modules/server-template.js';
 import { handleStarboardRoutes } from './modules/starboard.js';
+import { handleTagAutomodRoutes } from './modules/tag-automod.js';
 
 export async function handleModulesRoutes(
   req: IncomingMessage,
@@ -80,6 +81,7 @@ export async function handleModulesRoutes(
     case 'tickets': return handleTicketsRoutes(ctx);
     case 'server-template': return handleServerTemplateRoutes(ctx);
     case 'starboard': return handleStarboardRoutes(ctx);
+    case 'tag-automod': return handleTagAutomodRoutes(ctx);
     default: return false;
   }
 }

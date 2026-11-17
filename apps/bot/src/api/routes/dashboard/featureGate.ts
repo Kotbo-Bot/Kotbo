@@ -51,6 +51,7 @@ export const SEGMENT_FEATURE_KEYS: Record<string, string | string[]> = {
   'banned-words': ['automod', 'nickname_moderation'],
   'raid-protection': 'raid_protection',
   'nickname-moderation': 'nickname_moderation',
+  'tag-automod': 'raid_protection',
   detections: 'double_accounts',
   'linked-accounts': 'double_accounts',
   verification: 'double_accounts',
