@@ -37,6 +37,7 @@
     initial = null,
     editing = null,
     jailConfigured = true,
+    aboveCase = false,
     onSaved,
   }: {
     open?: boolean;
@@ -45,6 +46,8 @@
     /** Règle existante à modifier. */
     editing?: TagAutomodRule | null;
     jailConfigured?: boolean;
+    /** Ouvert depuis une fiche (serveur, membre) : passe au-dessus d'elle. */
+    aboveCase?: boolean;
     onSaved?: (rule: TagAutomodRule) => void;
   } = $props();
 
@@ -164,7 +167,7 @@
   const VARIABLES = ['{user}', '{tag}', '{server}', '{delay}'];
 </script>
 
-<Modal bind:open title={editing ? m.tam_wiz_title_edit() : m.tam_wiz_title()} subtitle={m.tam_wiz_subtitle()} size="lg" onClose={() => (open = false)}>
+<Modal bind:open title={editing ? m.tam_wiz_title_edit() : m.tam_wiz_title()} subtitle={m.tam_wiz_subtitle()} size="lg" {aboveCase} onClose={() => (open = false)}>
   <!-- Progression -->
   <ol class="flex items-center gap-2 mb-6" aria-label={m.tam_wiz_progress()}>
     {#each steps as s, i (s)}

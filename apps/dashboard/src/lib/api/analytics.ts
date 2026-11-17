@@ -1081,3 +1081,43 @@ export async function fetchServerDetails(
     errorContext: 'API Error (Server Details):',
   });
 }
+
+export interface ServerInsightsGroup {
+  members: number;
+  active: number;
+  messages: number;
+  voiceMinutes: number;
+  analyzed: number;
+  toxic: number;
+  sanctions: number;
+}
+
+/** Porteurs du tag d'un serveur chez nous, recoupement en nombre et modération. */
+export interface ServerMemberInsights {
+  holders: ServerInsightsGroup;
+  others: ServerInsightsGroup;
+  activityByDay: Array<{ date: string; holders: number; others: number }>;
+  topHolders: Array<{ userId: string; messages: number; voiceMinutes: number }>;
+  movement: { joined30d: number; left30d: number; leftTotal: number };
+  overlap: { botPresent: boolean; shared: number | null; share: number | null };
+  moderation: {
+    sanctionsByType: Array<{ type: string; count: number }>;
+    recentSanctions: Array<{ id: string; type: string; targetUserId: string; targetTag: string | null; reason: string; createdAt: string }>;
+    fleet: { blocks: number; waveReports: number };
+    rule: { id: string; name: string; effect: 'BLOCK' | 'ALLOW'; action: string; enabled: boolean; expiresAt: string | null } | null;
+    events: Array<{ id: string; userId: string; userTag: string | null; trigger: string; action: string; status: string; createdAt: string }>;
+    waves: number;
+  };
+}
+
+export async function fetchServerMemberInsights(
+  targetGuildId: string,
+  guildId = authStore.selectedGuildId,
+): Promise<ServerMemberInsights | null> {
+  return dashboardRequest<ServerMemberInsights>(`/analytics/servers/${encodeURIComponent(targetGuildId)}/insights`, {
+    method: 'GET',
+    guildId,
+    errorContext: 'API Error (Server Insights):',
+    silent: true,
+  });
+}
