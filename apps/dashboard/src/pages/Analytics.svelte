@@ -39,6 +39,7 @@
   import KpiTile from "../lib/components/analytics/KpiTile.svelte";
   import MembersView from "../lib/components/analytics/MembersView.svelte";
   import ServerTagsSection from "../lib/components/analytics/ServerTagsSection.svelte";
+  import BoostsSection from "../lib/components/analytics/BoostsSection.svelte";
   import GhostMembersPanel from "../lib/components/analytics/GhostMembersPanel.svelte";
   import EngagementView from "../lib/components/analytics/EngagementView.svelte";
   import LifecycleView from "../lib/components/analytics/LifecycleView.svelte";
@@ -294,6 +295,7 @@
           icon: "Tag",
           scope: "period",
         },
+        { id: "boosts", label: m.anx_tab_boosts(), icon: "gem", scope: "period" },
         { id: "ghosts", label: m.ghost_tab(), icon: "Ghost", scope: "own" },
       ],
     },
@@ -434,6 +436,7 @@
     "members",
     "growth",
     "moderation",
+    "boosts",
   ]);
   const onFreePlan = $derived(dashboardStore.state.plan === "FREE");
   const isLocked = (id: string) => onFreePlan && !FREE_TABS.has(id);
@@ -1003,6 +1006,8 @@
           <AdvancedAnalyticsPanel section="social" onOpenMember={openMember} />
         {:else if activeTab === "server-tags"}
           <ServerTagsSection />
+        {:else if activeTab === "boosts"}
+          <BoostsSection />
         {:else if activeTab === "ghosts"}
           <GhostMembersPanel onOpenMember={openMember} />
         {:else if activeTab === "growth"}

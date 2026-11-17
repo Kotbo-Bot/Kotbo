@@ -813,6 +813,34 @@ export function registerAnalyticsInsightsRoutes(): void {
     { userId: MEMBERS[2]?.id ?? '3', name: MEMBERS[2]?.username ?? 'tom', username: MEMBERS[2]?.username ?? 'tom', avatarUrl: null, tag: 'KODA', badgeUrl: null, serverId: '930000000000000012', serverName: 'Koda', isOwnGuild: false, updatedAt: new Date(Date.now() - 6 * DAY_MS).toISOString() },
   ];
 
+  route('GET', `${base}/boosts`, ({ query }) => {
+    const days = periodOf(query);
+    const boosterIds = MEMBERS.slice(0, 6).map((m) => m.id);
+    const ago = (d: number) => new Date(Date.now() - d * DAY_MS).toISOString();
+    const series = Array.from({ length: days }, (_, i) => {
+      const left = days - 1 - i;
+      const boosters = left > 20 ? 5 : 6;
+      return { date: ago(left).slice(0, 10), boostCount: boosters * 2 - (left > 20 ? 1 : 0), boosterCount: boosters };
+    });
+    return {
+      boostCount: 12,
+      tier: 2,
+      boosterCount: boosterIds.length,
+      started: 2,
+      stopped: 1,
+      avgCurrentDays: 143,
+      avgEndedDays: 61,
+      series,
+      boosters: boosterIds.map((userId, i) => ({ userId, since: ago(400 - i * 70) })),
+      formerBoosters: [{ userId: MEMBERS[7]?.id ?? '8', since: ago(70), endedAt: ago(9) }],
+      events: [
+        { userId: boosterIds[5], type: 'START', at: ago(50), since: ago(50) },
+        { userId: MEMBERS[7]?.id ?? '8', type: 'STOP', at: ago(9), since: ago(70) },
+        { userId: boosterIds[4], type: 'START', at: ago(4), since: ago(4) },
+      ].filter((e) => new Date(e.at).getTime() >= Date.now() - days * DAY_MS),
+    };
+  });
+
   route('GET', `${base}/server-tags`, () => ({
     totalMembers: MEMBERS.length,
     taggedMembers: 24,

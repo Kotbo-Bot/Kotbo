@@ -1032,6 +1032,31 @@ export async function fetchServerTagAnalytics(
   });
 }
 
+export interface BoostAnalytics {
+  boostCount: number;
+  tier: number;
+  boosterCount: number;
+  started: number;
+  stopped: number;
+  avgCurrentDays: number | null;
+  avgEndedDays: number | null;
+  series: Array<{ date: string; boostCount: number | null; boosterCount: number | null }>;
+  boosters: Array<{ userId: string; since: string }>;
+  formerBoosters: Array<{ userId: string; since: string | null; endedAt: string }>;
+  events: Array<{ userId: string; type: 'START' | 'STOP'; at: string; since: string | null }>;
+}
+
+export async function fetchBoostAnalytics(
+  days: number,
+  guildId = authStore.selectedGuildId,
+): Promise<BoostAnalytics | null> {
+  return dashboardRequest<BoostAnalytics>(`/analytics/boosts?days=${days}`, {
+    method: 'GET',
+    guildId,
+    errorContext: 'API Error (Boost Analytics):',
+  });
+}
+
 export async function fetchServerDetails(
   targetGuildId: string,
   guildId = authStore.selectedGuildId,
