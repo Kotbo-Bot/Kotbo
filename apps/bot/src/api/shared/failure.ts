@@ -20,6 +20,7 @@ import { classifyFailure } from '../../utils/failureKind.js';
 import { isUserFacing } from '../../utils/publicError.js';
 
 export { classifyFailure, type FailureCode } from '../../utils/failureKind.js';
+import type { FailureCode } from '../../utils/failureKind.js';
 
 export function jsonFailure(
   res: ServerResponse,
@@ -27,8 +28,17 @@ export function jsonFailure(
   fallbackMessage: string,
   scope = 'API',
 ): void {
-  const { status, code, message } = classifyFailure(err);
+  const { status, body } = failurePayload(err, fallbackMessage, scope);
+  json(res, status, body);
+}
 
+/** Statut et corps d'un echec, journalisation comprise ; partage avec Hono. */
+export function failurePayload(
+  err: unknown,
+  fallbackMessage: string,
+  scope = 'API',
+): { status: number; body: { error: string; code: FailureCode } } {
+  const { status, code, message } = classifyFailure(err);
   // Une panne d'infrastructure vaut une ligne de journal distincte : c'est
   // elle qu'on cherche quand plusieurs routes echouent en meme temps. Les
   // erreurs ordinaires n'en ont pas besoin : la route les journalise deja
@@ -49,5 +59,5 @@ export function jsonFailure(
   // l'utilisateur et vaut mieux que le texte générique de la route ; tout autre
   // message (requête Prisma, trace réseau) reste dans les journaux.
   const exposed = isUserFacing(err) ? err.message : undefined;
-  json(res, status, { error: message ?? exposed ?? fallbackMessage, code });
+  return { status, body: { error: message ?? exposed ?? fallbackMessage, code } };
 }

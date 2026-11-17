@@ -1016,7 +1016,7 @@ function applyConditionalGet(res: ServerResponse, statusCode: number, body: stri
   const method = res.req?.method;
   if (method !== 'GET' && method !== 'HEAD') return false;
 
-  const etag = `W/"${crypto.createHash('sha1').update(body).digest('base64url')}"`;
+  const etag = weakEtag(body);
   if (!res.headersSent) {
     res.setHeader('ETag', etag);
     // Sans directive de cache, un navigateur ne conserve pas une réponse
@@ -1031,9 +1031,16 @@ function applyConditionalGet(res: ServerResponse, statusCode: number, body: stri
   }
 
   // `If-None-Match` peut lister plusieurs entités séparées par des virgules.
-  const ifNoneMatch = res.req.headers['if-none-match'];
-  if (!ifNoneMatch) return false;
+  return etagMatches(res.req.headers['if-none-match'], etag);
+}
 
+export function weakEtag(body: string): string {
+  return `W/"${crypto.createHash('sha1').update(body).digest('base64url')}"`;
+}
+
+/** `If-None-Match` peut lister plusieurs entités séparées par des virgules. */
+export function etagMatches(ifNoneMatch: string | undefined, etag: string): boolean {
+  if (!ifNoneMatch) return false;
   const candidates = ifNoneMatch.split(',').map((value) => value.trim());
   return candidates.includes(etag) || candidates.includes('*');
 }
@@ -1079,7 +1086,15 @@ function legacyBearerAuthEnabled(): boolean {
 }
 
 export const verifyAuth = async (req: IncomingMessage): Promise<AuthClaims | null> => {
-  const authHeader = req.headers.authorization;
+  const cookie = req.headers.cookie;
+  return verifyAuthHeaders(req.headers.authorization, Array.isArray(cookie) ? cookie[0] : cookie);
+};
+
+/** Même contrôle que `verifyAuth`, à partir des seuls en-têtes (routes Hono). */
+export const verifyAuthHeaders = async (
+  authHeader: string | undefined,
+  cookieHeader: string | undefined,
+): Promise<AuthClaims | null> => {
   if (legacyBearerAuthEnabled() && authHeader?.startsWith('Bearer ')) {
     const token = authHeader.split(' ')[1];
     try {
@@ -1090,8 +1105,8 @@ export const verifyAuth = async (req: IncomingMessage): Promise<AuthClaims | nul
     }
   }
 
-  const { getDashboardSession, sessionIdFromRequest } = await import('../auth/sessionStore.js');
-  const session = await getDashboardSession(sessionIdFromRequest(req));
+  const { getDashboardSession, sessionIdFromCookieHeader } = await import('../auth/sessionStore.js');
+  const session = await getDashboardSession(sessionIdFromCookieHeader(cookieHeader));
   if (!session) return null;
   return {
     userId: session.userId,
