@@ -1,4 +1,4 @@
-import { Hono, type Context } from 'hono';
+import { Hono } from 'hono';
 import type { Client } from 'discord.js';
 import { logger } from '../../../utils/logger.js';
 import {
@@ -7,16 +7,7 @@ import {
   generateAllStaffEvaluations,
   updateEvaluationNote,
 } from '../../../services/staff/staffEvaluationService.js';
-import { fail, guildRoute, send } from '../../hono/dashboard/kit.js';
-
-/** Corps tolérant (sans Content-Type exigé, `{}` si vide), comme l'ancienne route. */
-async function parseBody(c: Context): Promise<Record<string, unknown>> {
-  try {
-    return JSON.parse((await c.req.text()) || '{}');
-  } catch {
-    throw new Error('Invalid JSON');
-  }
-}
+import { fail, guildRoute, readLenientBody, send } from '../../hono/dashboard/kit.js';
 
 export function createEvaluationsRouter(client: Client) {
   const router = new Hono();
@@ -34,7 +25,7 @@ export function createEvaluationsRouter(client: Client) {
   router.post(`${base}/generate`, ...guildRoute(client), async (c) => {
     const guildId = c.req.param('guildId');
     try {
-      const body = await parseBody(c) as { staffUserId?: string; periodDays?: number };
+      const body = await readLenientBody<{ staffUserId?: string; periodDays?: number }>(c);
       if (body.staffUserId) {
         return send(c, await generateStaffEvaluation(guildId, body.staffUserId, body.periodDays ?? 30));
       }
@@ -48,7 +39,7 @@ export function createEvaluationsRouter(client: Client) {
 
   router.patch(`${base}/:evaluationId`, ...guildRoute(client), async (c) => {
     try {
-      const body = await parseBody(c) as { managerNote?: string };
+      const body = await readLenientBody<{ managerNote?: string }>(c);
       if (body.managerNote === undefined) return send(c, { error: 'managerNote requis' }, 400);
       return send(c, await updateEvaluationNote(c.req.param('evaluationId'), body.managerNote));
     } catch (err) {

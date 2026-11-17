@@ -59,6 +59,18 @@ export async function readBody<T = Record<string, unknown>>(c: Context): Promise
   }
 }
 
+/**
+ * Corps tolérant de quelques anciennes routes : pas de Content-Type exigé et
+ * `{}` si vide. Un JSON invalide reste une erreur (500, comme avant).
+ */
+export async function readLenientBody<T = Record<string, unknown>>(c: Context): Promise<T> {
+  try {
+    return JSON.parse((await c.req.text()) || '{}') as T;
+  } catch {
+    throw new Error('Invalid JSON');
+  }
+}
+
 /** Échec d'une route, comme `jsonFailure`. */
 export function fail(c: Context, err: unknown, fallbackMessage: string, scope = 'API'): Response {
   if (err instanceof HttpError) {
