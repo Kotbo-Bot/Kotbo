@@ -53,6 +53,7 @@ import { registerCodePoliceListener } from './events/codePolice.js';
 import { registerAdvancedLogsListener } from './events/advancedLogs.js';
 import { registerCloseSourceWarningListener } from './events/closeSourceWarning.js';
 import { registerNicknameModerationListener } from './events/nicknameModeration.js';
+import { registerTagAutomodListener } from './events/tagAutomod.js';
 import { registerTempVoiceListener } from './events/tempVoice.js';
 import { registerThreadPanelListener } from './events/threadPanel.js';
 import { registerHoneypotListener } from './events/honeypot.js';
@@ -569,6 +570,8 @@ client.once(Events.ClientReady, async (c) => {
   registerAdvancedLogsListener(scopeClientToModule(client, 'logs'));
   registerCloseSourceWarningListener(client);
   registerNicknameModerationListener(scopeClientToModule(client, 'nickname_moderation'));
+  // Pas de module : l'automod des tags a son propre interrupteur.
+  registerTagAutomodListener(client);
   registerTempVoiceListener(scopeClientToModule(client, 'auto_thread'));
   registerThreadPanelListener(scopeClientToModule(client, 'auto_thread'));
   registerStarboardListener(scopeClientToModule(client, 'starboard'));

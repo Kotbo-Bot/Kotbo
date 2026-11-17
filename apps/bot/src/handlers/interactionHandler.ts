@@ -851,6 +851,14 @@ export async function handleButton(interaction: Interaction, client: Client): Pr
     return;
   }
 
+  // ── Automod des tags : boutons de l'alerte de vague ──────────────────
+  // Les permissions (Bannir / Exclure temporairement) sont vérifiées par le handler.
+  if (customId.startsWith('tagwave:') && interaction.isButton() && interaction.inCachedGuild()) {
+    const { handleTagWaveButton } = await import('../services/moderation/tagAutomod/tagAutomodService.js');
+    await handleTagWaveButton(interaction);
+    return;
+  }
+
   // ── Shield : boutons du panneau ──────────────────────────────────────
   // Pas de contrôle de permission : le panneau vit dans un salon réservé à
   // l'équipe, l'accès au salon fait office de droit.

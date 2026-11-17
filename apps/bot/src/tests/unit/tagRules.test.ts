@@ -76,7 +76,7 @@ describe('tagRules', () => {
     const base = { waveMode: 'ADAPTIVE', wavePreset: 'NORMAL', waveThreshold: 5, waveWindowSec: 120 };
     expect(waveThreshold(base, 10)).toEqual({ threshold: 5, windowSec: 120 });
     expect(waveThreshold(base, 14_400).threshold).toBe(62);
-    expect(waveThreshold({ ...base, waveMode: 'FIXED', waveThreshold: 1, waveWindowSec: 5 })).toEqual({ threshold: 2, windowSec: 10 });
+    expect(waveThreshold({ ...base, waveMode: 'FIXED', waveThreshold: 1, waveWindowSec: 5 }, 0)).toEqual({ threshold: 2, windowSec: 10 });
   });
 
   test('variables du message', () => {
