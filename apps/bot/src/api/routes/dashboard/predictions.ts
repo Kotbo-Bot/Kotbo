@@ -3,6 +3,7 @@ import { Client } from 'discord.js';
 import { logger } from '../../../utils/logger.js';
 import { json, type AuthClaims, type DashboardAccess } from '../../shared.js';
 import { getPredictionData } from '../../../services/analytics/predictionService.js';
+import { getGuildPlan } from '../../../services/system/planService.js';
 
 import { jsonFailure } from '../../shared/failure.js';
 export async function handlePredictionRoutes(
@@ -20,6 +21,10 @@ export async function handlePredictionRoutes(
 
   // GET /api/dashboard/guilds/:guildId/predictions?days=30
   if (parts.length === 5 && method === 'GET') {
+    if ((await getGuildPlan(guildId)) === 'FREE') {
+      json(res, 402, { error: 'plan_required', message: "Les prédictions font partie de l'offre Plus." });
+      return true;
+    }
     try {
       // `getPredictionData` borne déjà la fenêtre à [7, 90] ; on se contente ici
       // de neutraliser une valeur non numérique (`?days=abc` donnait NaN, que

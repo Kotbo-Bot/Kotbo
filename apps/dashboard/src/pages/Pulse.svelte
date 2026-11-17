@@ -20,6 +20,7 @@
   import { Button, Callout, FilterPills, SectionCard, Tabs } from '../lib/components/ui';
   import { fetchPulseData, refreshPulse, fetchPredictions } from '../lib/api';
   import { toast } from '../lib/stores/toast.svelte';
+  import { dashboardStore } from '../lib/stores/dashboard.svelte';
   import { m } from '../lib/i18n';
   import ModulePage from '../lib/components/ModulePage.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
@@ -98,6 +99,9 @@
 
   const pulseTabs = ['apercu', 'sante', 'predictions'] as const;
   let activeTab: TabId = $state('apercu');
+  // Les prédictions font partie de Plus : le bot répond 402 en gratuit, on ne les demande pas.
+  const onFreePlan = $derived(dashboardStore.state.plan === 'FREE');
+  const loadPredictions = (days: number) => (onFreePlan ? Promise.resolve(null) : fetchPredictions(days));
   let period = $state('30');
   let historyMetric = $state('score');
   let selectedDay = $state<number | null>(null);
@@ -116,7 +120,7 @@
   async function load() {
     loading = true;
     try {
-      const [pulse, pred] = await Promise.all([fetchPulseData(), fetchPredictions(Number(period))]);
+      const [pulse, pred] = await Promise.all([fetchPulseData(), loadPredictions(Number(period))]);
       pulseData = pulse as PulsePayload;
       predData = pred as PredictionPayload;
     } catch {
@@ -134,7 +138,7 @@
       pulseData = pulse;
       selectedDay = null;
       // Le recalcul invalide le cache serveur des prévisions : on les relit.
-      predData = (await fetchPredictions(Number(period))) as PredictionPayload;
+      predData = (await loadPredictions(Number(period))) as PredictionPayload | null;
       toast.success(m.pulse_recomputed({ days: pulse.recomputedDays ?? 7 }));
     } catch {
       toast.error(m.pulse_refresh_error());
@@ -302,7 +306,7 @@
   <Tabs
     label={m.pulse_title()}
     class="mb-6"
-    tabs={pageTabItems('/pulse')}
+    tabs={pageTabItems('/pulse').map((t) => (onFreePlan && t.id === 'predictions' ? { ...t, icon: 'Lock' } : t))}
     active={activeTab}
     onchange={(id) => gotoTab('/pulse', id, 'apercu')}
   />
@@ -549,6 +553,14 @@
     {/if}
 
   <!-- ==================== PRÉVISIONS ==================== -->
+  {:else if activeTab === 'predictions' && onFreePlan}
+    <Callout variant="info" icon="Lock" title={m.anx_tab_locked({ tab: m.pulse_tab_predictions() })}>
+      {#snippet actions()}
+        <Button href="https://kotbo.fr/demo/pulse/predictions" target="_blank" variant="secondary" size="sm" icon="Eye">Voir un exemple rempli</Button>
+        <Button href="/billing" variant="primary" size="sm" iconRight="ArrowRight">{m.anx_unlock_plus()}</Button>
+      {/snippet}
+    </Callout>
+
   {:else if activeTab === 'predictions'}
     <div class="flex flex-col gap-6" class:opacity-60={predictionsLoading}>
       <FilterPills
