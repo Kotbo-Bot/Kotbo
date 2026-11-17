@@ -20,6 +20,7 @@
   import AdminBarList from '../../lib/components/admin/AdminBarList.svelte';
   import AdminHeatmap from '../../lib/components/admin/AdminHeatmap.svelte';
   import AdminContentMix from '../../lib/components/admin/AdminContentMix.svelte';
+  import AdminGuildMembers from '../../lib/components/admin/AdminGuildMembers.svelte';
   import MetricTabs, { type MetricTab } from '../../lib/components/analytics/MetricTabs.svelte';
   import TimeSeriesChart from '../../lib/components/analytics/TimeSeriesChart.svelte';
   import { SERIES, shortDate } from '../../lib/components/analytics/analyticsFormat';
@@ -29,7 +30,7 @@
 
   const { guildId }: { guildId: string } = $props();
 
-  type Section = 'overview' | 'activity' | 'setup' | 'moderation' | 'journal';
+  type Section = 'overview' | 'activity' | 'members' | 'setup' | 'moderation' | 'journal';
 
   let sheet = $state<GuildSheet | null>(null);
   let error = $state<string | null>(null);
@@ -221,6 +222,7 @@
       options={[
         { value: 'overview', label: 'Vue d’ensemble' },
         { value: 'activity', label: 'Activité' },
+        { value: 'members', label: 'Membres' },
         { value: 'setup', label: 'Modules et accès', count: enabledModules.length },
         { value: 'moderation', label: 'Modération' },
         { value: 'journal', label: 'Journal', count: sheet?.audit?.length ?? 0 },
@@ -242,6 +244,8 @@
     {#if loading}
       <div class="h-72 admin-surface animate-pulse"></div>
     {/if}
+  {:else if section === 'members'}
+    <AdminGuildMembers {guildId} days={Number(days)} />
   {:else if section === 'overview'}
     <div class="grid grid-cols-1 lg:grid-cols-5 gap-5">
       <AdminCard title="Santé du serveur" class="lg:col-span-3">
