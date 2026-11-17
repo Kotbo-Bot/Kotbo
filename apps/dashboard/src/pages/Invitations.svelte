@@ -207,7 +207,13 @@
   // fois et se demonte proprement.
   $effect(() => {
     document.addEventListener('click', handleClickOutside);
-    return () => document.removeEventListener('click', handleClickOutside);
+    // Le menu est en position fixed : il se ferme au défilement plutôt que de flotter.
+    const close = () => closeActionMenu();
+    window.addEventListener('scroll', close, true);
+    return () => {
+      document.removeEventListener('click', handleClickOutside);
+      window.removeEventListener('scroll', close, true);
+    };
   });
 
 
@@ -377,9 +383,23 @@
       actionMenuOpen = null;
     } else {
       const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
-      actionMenuPosition = { x: rect.right - 160, y: rect.bottom + 4 };
-      actionMenuOpen = inviteCode;
+      placeMenu(inviteCode, rect.right - 160, rect.bottom + 4, rect.top - 4);
     }
+  }
+
+  // Menu en position fixed (hors du scroll du tableau), recadré dans la fenêtre.
+  // shortcut: hauteur estimée à 290 px, à mesurer si le menu gagne des entrées.
+  function placeMenu(inviteCode: string, x: number, y: number, flipY = y) {
+    const w = 170, h = 290;
+    if (y + h > window.innerHeight) y = Math.max(8, flipY - h);
+    actionMenuPosition = { x: Math.max(8, Math.min(x, window.innerWidth - w - 8)), y };
+    actionMenuOpen = inviteCode;
+  }
+
+  function openContextMenu(inviteCode: string, event: MouseEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    placeMenu(inviteCode, event.clientX, event.clientY);
   }
 
   function closeActionMenu() {
@@ -656,7 +676,7 @@
               <tbody class="text-sm">
                 {#each filteredInvites as invite}
                   {@const status = getInviteStatus(invite)}
-                  <tr class="border-b border-outline-variant/5 hover:bg-surface-container-high/20 transition-colors">
+                  <tr class="border-b border-outline-variant/5 hover:bg-surface-container-high/20 transition-colors" oncontextmenu={(e) => openContextMenu(invite.code, e)}>
                     <td class="py-3 pr-4">
                       <code class="text-xs font-semibold text-primary dark:text-blue-300 bg-primary/10 dark:bg-blue-500/15 px-2 py-1 rounded-lg">{invite.code}</code>
                     </td>
@@ -735,7 +755,7 @@
                           <Papicon icon="MoreVertical" size={16} class="text-on-surface-variant" />
                         </button>
                         {#if actionMenuOpen === invite.code}
-                          <div class="absolute right-0 top-full mt-1 z-[9999] min-w-[160px] bg-surface-container rounded-xl shadow-sm border border-outline-variant/20 overflow-hidden">
+                          <div style="left:{actionMenuPosition.x}px;top:{actionMenuPosition.y}px" class="fixed z-[9999] min-w-[160px] bg-surface-container rounded-xl shadow-sm border border-outline-variant/20 overflow-hidden">
                             <button
                               class="w-full px-3 py-2 text-left text-xs font-bold hover:bg-surface-container-high/50 flex items-center gap-2 transition-colors"
                               onclick={() => { inviteDetailsModal.show(invite.code); closeActionMenu(); }}
