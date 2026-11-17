@@ -112,6 +112,8 @@ export const PAGE_TABS: Record<string, PageTabConfig[]> = {
     // Page a part (/security/filters/nicknames), rangee ici en onglet : elle
     // n'occupe plus de ligne dans le menu, qui depassait sept entrees.
     { id: 'nicknames', label: () => m.nav_nicknames(), icon: 'user' },
+    // Automod des tags : page à part (/security/filters/tags), comme les pseudos.
+    { id: 'tags', label: () => m.tam_tab(), icon: 'tag' },
   ],
 
   '/security/filters/nicknames': [
