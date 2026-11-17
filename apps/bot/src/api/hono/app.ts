@@ -24,6 +24,8 @@ import { createSiteAdminRouter } from './routes/siteAdmin.js';
 import { createShopAdminRouter } from './routes/shopAdmin.js';
 import { createAdminSitesRouter } from './routes/adminSites.js';
 import { logger } from '../../utils/logger.js';
+import { createDashboardRouter } from './dashboard/index.js';
+import { fail } from './dashboard/kit.js';
 
 /**
  * Crée et configure l'application Hono avec tous les middlewares et routes.
@@ -73,6 +75,7 @@ export function createHonoApp(client: Client): OpenAPIHono {
   app.route('/', createSiteAdminRouter(client));
   app.route('/', createShopAdminRouter(client));
   app.route('/', createAdminSitesRouter(client));
+  app.route('/', createDashboardRouter(client));
 
   // ---------------------------------------------------------------------------
   // OpenAPI / Swagger UI (uniquement en développement)
@@ -102,7 +105,8 @@ export function createHonoApp(client: Client): OpenAPIHono {
     }
 
     logger.error('HonoAPI', 'Erreur non gérée:', err);
-    return c.json({ error: 'Erreur interne du serveur' }, 500);
+    // Même réponse que l'ancien routeur : statut et texte selon la panne.
+    return fail(c, err, 'Erreur interne du serveur', 'HonoAPI');
   });
 
   app.notFound((c) => {
