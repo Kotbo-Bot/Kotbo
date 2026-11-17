@@ -16,6 +16,7 @@
   import { serverSwitcherStore } from '../stores/serverSwitcher.svelte';
   import { brandingStore } from '../stores/branding.svelte';
   import { dashboardStore } from '../stores/dashboard.svelte';
+  import { userPrefs } from '../stores/userPreferences.svelte';
 
   let isDesktop = $state(
     typeof window !== 'undefined'
@@ -242,7 +243,7 @@
 
 {#snippet pageLink(item: PageConfig, withIcon: boolean)}
   {@const active = isActiveNavItem(item.href)}
-  {@const plan = pagePlan(item)}
+  {@const plan = !userPrefs.prefs.showPlanCrowns && dashboardStore.state.plan !== 'FREE' ? null : pagePlan(item)}
   <div data-href={item.href} class="nav-row group relative flex items-center rounded-lg transition-colors duration-150 {active ? 'is-active' : ''}">
     {#if !withIcon}
       <span class="nav-row__node" aria-hidden="true">

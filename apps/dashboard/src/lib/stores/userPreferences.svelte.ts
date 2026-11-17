@@ -27,6 +27,8 @@ interface UserPrefs {
   accentColor: AccentColor;
   animationsEnabled: boolean;
   showOnlineStatus: boolean;
+  /** Couronnes Plus/freemium du menu, masquables sur un serveur déjà abonné. */
+  showPlanCrowns: boolean;
   /**
    * Fuseau de lecture des statistiques. Les agregats sont stockes en UTC :
    * sans ce reglage, un lecteur parisien voyait son pic de 14h annonce a midi.
@@ -45,6 +47,7 @@ const DEFAULT_PREFS: UserPrefs = {
   accentColor: 'violet',
   animationsEnabled: true,
   showOnlineStatus: true,
+  showPlanCrowns: true,
   timezone: 'auto',
 };
 

@@ -449,6 +449,18 @@
           onToggle={(v: boolean) => handleToggle('animationsEnabled', v)}
         />
       </div>
+
+      <!-- Couronnes d'offre -->
+      <div class="flex items-center justify-between p-4 rounded-lg bg-surface-container-high/20 border border-outline-variant/5 hover:bg-surface-container-high/40 transition-colors">
+        <div>
+          <p class="text-sm font-bold">{m.us_plan_crowns()}</p>
+          <p class="text-2xs text-on-surface-variant">{m.us_plan_crowns_desc()}</p>
+        </div>
+        <ToggleSwitch
+          checked={userPrefs.prefs.showPlanCrowns}
+          onToggle={(v: boolean) => handleToggle('showPlanCrowns', v)}
+        />
+      </div>
     </section>
 
     <!-- ─── Langue & Dates ────────────────────────────────────── -->

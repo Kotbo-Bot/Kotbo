@@ -551,6 +551,8 @@
   "us_desktop_notif_desc": "Une notification système quand tu n'as pas le dashboard sous les yeux, une bulle dans la page sinon",
   "us_online_status": "Afficher mon statut en ligne",
   "us_online_status_desc": "Visible par les autres membres du staff",
+  "us_plan_crowns": "Couronnes de l'offre Plus",
+  "us_plan_crowns_desc": "Marquent dans le menu les pages de l'offre Plus. Sur un serveur déjà abonné, tu peux les masquer pour alléger le menu.",
   "us_privacy_policy": "Politique de confidentialité",
   "us_privacy_policy_desc": "Traitements, destinataires et droits RGPD",
   "us_cookies": "Cookies et stockage local",
