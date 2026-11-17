@@ -14,6 +14,8 @@
   import { memberAvatarSrc } from "../../discordMedia";
   import { serverDetailsModal } from "../../stores/serverDetailsModal.svelte";
   import { memberCaseModal } from "../../stores/memberCaseModal.svelte";
+  import { inviteDetailsModal } from "../../stores/inviteDetailsModal.svelte";
+  import { toast } from "../../stores/toast.svelte";
   import { canViewFeature } from "../../permissions.svelte";
   import { fetchServerDetails, type ServerDetails } from "../../api";
   import { m, dateLocale } from "../../i18n";
@@ -110,6 +112,34 @@
           }))
       : [],
   );
+
+  const profile = $derived(details?.profile);
+  const inviteKindLabel = $derived(
+    profile?.defaultInvite?.kind === "vanity"
+      ? m.svd_default_invite_vanity()
+      : profile?.defaultInvite?.kind === "widget"
+        ? m.svd_default_invite_widget()
+        : m.svd_default_invite_tracked(),
+  );
+
+  /** COMMUNITY → « Community » : les tags sont les noms Discord, sans traduction. */
+  function prettyFeature(feature: string): string {
+    const text = feature.toLowerCase().replace(/_/g, " ");
+    return text.charAt(0).toUpperCase() + text.slice(1);
+  }
+
+  function copyLink(url: string) {
+    navigator.clipboard
+      .writeText(url)
+      .then(() => toast.success(m.svd_link_copied()))
+      .catch(() => toast.warning(m.d7_inv_link_copy_fail()));
+  }
+
+  // Le détail du lien se lit dans la fiche d'invitation : la fiche serveur se ferme d'abord.
+  function openInviteStats(code: string) {
+    closeModal();
+    inviteDetailsModal.show(code);
+  }
 
   function initials(label: string): string {
     const words = label.trim().split(/\s+/).filter(Boolean);
@@ -347,6 +377,98 @@
             {/if}
           </SectionCard>
         </div>
+
+        {#if profile}
+          <div class="svd-split">
+            <SectionCard title={m.svd_links_title()}>
+              <div class="space-y-4">
+                <div>
+                  <p class="text-xs font-medium text-on-surface-variant">{m.svd_default_invite()}</p>
+                  {#if profile.defaultInvite}
+                    <p class="mt-0.5 truncate font-mono text-sm text-on-surface">{profile.defaultInvite.url}</p>
+                    <p class="text-xs text-on-surface-variant">{inviteKindLabel}</p>
+                    <div class="mt-2 flex flex-wrap gap-2">
+                      <Button size="sm" icon="copy" onclick={() => copyLink(profile.defaultInvite!.url)}>
+                        {m.svd_copy_link()}
+                      </Button>
+                      <Button size="sm" variant="ghost" icon="external-link" href={profile.defaultInvite.url} target="_blank">
+                        {m.svd_open_link()}
+                      </Button>
+                      {#if details.server.isOwnGuild}
+                        <Button size="sm" variant="ghost" icon="bar-chart" onclick={() => openInviteStats(profile.defaultInvite!.code)}>
+                          {m.svd_invite_stats()}
+                        </Button>
+                      {/if}
+                    </div>
+                  {:else}
+                    <p class="mt-0.5 text-sm text-on-surface-variant">{m.svd_default_invite_none()}</p>
+                  {/if}
+                </div>
+
+                <div>
+                  <p class="text-xs font-medium text-on-surface-variant">{m.svd_discovery_page()}</p>
+                  {#if profile.discoveryUrl}
+                    <div class="mt-1 flex flex-wrap gap-2">
+                      <Button size="sm" variant="ghost" icon="external-link" href={profile.discoveryUrl} target="_blank">
+                        {m.svd_open_link()}
+                      </Button>
+                      <Button size="sm" variant="ghost" icon="copy" onclick={() => copyLink(profile.discoveryUrl!)}>
+                        {m.svd_copy_link()}
+                      </Button>
+                    </div>
+                  {:else}
+                    <p class="mt-0.5 text-sm text-on-surface-variant">{m.svd_discovery_none()}</p>
+                  {/if}
+                </div>
+
+                {#if profile.siteUrl}
+                  <div>
+                    <p class="text-xs font-medium text-on-surface-variant">{m.svd_site_page()}</p>
+                    <div class="mt-1">
+                      <Button size="sm" variant="ghost" icon="external-link" href={profile.siteUrl} target="_blank">
+                        {m.svd_open_link()}
+                      </Button>
+                    </div>
+                  </div>
+                {/if}
+              </div>
+            </SectionCard>
+
+            <SectionCard title={m.svd_info_title()}>
+              <dl class="sheet-facts">
+                <div>
+                  <dt>{m.svd_info_created()}</dt>
+                  <dd>{new Date(profile.createdAt).toLocaleDateString(dateLocale(), { day: "2-digit", month: "short", year: "numeric" })}</dd>
+                </div>
+                {#if profile.premiumTier !== null}
+                  <div>
+                    <dt>{m.svd_info_boosts()}</dt>
+                    <dd>{m.svd_info_boosts_value({ tier: String(profile.premiumTier), count: fmtNumber(profile.boostCount ?? 0) })}</dd>
+                  </div>
+                {/if}
+                {#if profile.locale}
+                  <div><dt>{m.svd_info_locale()}</dt><dd>{profile.locale}</dd></div>
+                {/if}
+                {#if profile.verificationLevel !== null}
+                  <div>
+                    <dt>{m.svd_info_verification()}</dt>
+                    <dd>{m.svd_info_verification_value({ level: String(profile.verificationLevel) })}</dd>
+                  </div>
+                {/if}
+              </dl>
+              <p class="mb-2 mt-4 text-xs font-medium text-on-surface-variant">{m.svd_tags_title()}</p>
+              {#if profile.features.length > 0}
+                <div class="flex flex-wrap gap-1.5">
+                  {#each profile.features as feature (feature)}
+                    <span class="svd-tag-pill">{prettyFeature(feature)}</span>
+                  {/each}
+                </div>
+              {:else}
+                <p class="text-sm text-on-surface-variant">{m.svd_tags_empty()}</p>
+              {/if}
+            </SectionCard>
+          </div>
+        {/if}
       </div>
     {:else if activeTab === "members"}
       {#if details.tagHolders.members.length === 0}

@@ -15,6 +15,8 @@
   import { memberAvatarSrc } from '../../discordMedia';
   import { inviteDetailsModal } from '../../stores/inviteDetailsModal.svelte';
   import { memberCaseModal } from '../../stores/memberCaseModal.svelte';
+  import { serverDetailsModal } from '../../stores/serverDetailsModal.svelte';
+  import { authStore } from '../../stores/auth.svelte';
   import { dashboardStore } from '../../stores/dashboard.svelte';
   import { toast } from '../../stores/toast.svelte';
   import { confirmDialog } from '../../stores/confirmDialog.svelte';
@@ -180,6 +182,14 @@
     navigator.clipboard.writeText(`https://discord.gg/${details.invite.code}`)
       .then(() => toast.success(m.d7_inv_link_copied()))
       .catch(() => toast.warning(m.d7_inv_link_copy_fail()));
+  }
+
+  // La fiche serveur porte l'invitation par défaut et ses liens : on s'y rend depuis ici.
+  function openServer() {
+    const id = authStore.selectedGuildId;
+    if (!id) return;
+    closeModal();
+    serverDetailsModal.show(id);
   }
 
   // Le détail se ferme avant d'ouvrir la fiche : resté ouvert dessous, un clic sur un code
@@ -363,6 +373,7 @@
 >
   {#snippet badges()}
     {#if details?.invite}
+      {#if details.defaultInvite?.isThis}<span class="badge badge-success"><Papicon icon="star" size={11} />{m.d7_inv_default_badge()}</span>{/if}
       {#if details.invite.sourceLabel}<span class="badge badge-info"><Papicon icon="tag" size={11} />{details.invite.sourceLabel}</span>{/if}
       {#if details.invite.isSuspended}<span class="badge badge-warning">{m.d7_inv_suspended_label()}</span>{/if}
       {#if details.invite.isDeleted}<span class="badge badge-danger">{m.d7_inv_deleted_label()}</span>{/if}
@@ -372,6 +383,7 @@
   {#snippet actions()}
     <FilterPills label={m.d7_inv_joins_trend()} options={periodOptions} value={days} onchange={(value) => (days = value)} />
     <Button size="sm" icon="copy" onclick={copyInvite}>{m.d7_inv_copy_link()}</Button>
+    <Button size="sm" variant="ghost" icon="globe" onclick={openServer}>{m.d7_inv_view_server()}</Button>
     <Button size="sm" variant="ghost" icon="x" aria-label={m.d7_inv_close_view()} onclick={closeModal} />
   {/snippet}
 

@@ -1010,6 +1010,20 @@ export interface ServerDetails {
     /** Absent des réponses mises en cache avant son ajout. */
     usageByDay?: Array<{ date: string; count: number }>;
   };
+  /** Absent des réponses mises en cache avant son ajout. */
+  profile?: {
+    defaultInvite: { code: string; url: string; kind: 'vanity' | 'widget' | 'tracked' } | null;
+    discoveryUrl: string | null;
+    discoverable: boolean;
+    siteUrl: string | null;
+    features: string[];
+    vanityCode: string | null;
+    createdAt: string;
+    premiumTier: number | null;
+    boostCount: number | null;
+    locale: string | null;
+    verificationLevel: number | null;
+  };
   activity?: {
     messages: number;
     voiceHours: number;
