@@ -6,6 +6,8 @@
   import { router } from 'tinro';
   import Papicon from '../lib/components/Papicon.svelte';
   import MetricCard from '../lib/components/MetricCard.svelte';
+  import BoosterBadge from '../lib/components/BoosterBadge.svelte';
+  import { boostMonths } from '@kotbo/contracts';
   import { formatRelative, formatTenure } from '../lib/components/staff/format';
   import { m, dateLocale } from '../lib/i18n';
 
@@ -133,6 +135,9 @@
                 </h1>
                 <div class="flex flex-wrap items-center justify-center md:justify-start gap-2.5">
                   <p class="text-base text-on-surface-variant font-bold">@{profile.username}</p>
+                  {#if profile.boostingSince}
+                    <BoosterBadge since={profile.boostingSince} size={16} />
+                  {/if}
                   {#if profile.isPrivate}
                     <span class="inline-flex items-center gap-1.5 rounded-lg bg-warning/10 border border-warning/20 px-2.5 py-1 text-xs font-semibold text-on-warning-container">
                       <Papicon icon="Lock" size={10} /> {m.ppf_private()}
@@ -217,6 +222,20 @@
             <div class="rounded-xl bg-surface-container-low/40 border border-outline-variant/10 p-8 shadow-sm relative overflow-hidden group">
               <h4 class="text-sm font-semibold text-primary mb-6">{m.ppf_file()}</h4>
               <div class="space-y-6">
+                {#if profile.boost?.boostingSince}
+                  <div class="flex items-center justify-between border-b border-outline-variant/5 pb-3">
+                    <span class="text-xs font-semibold text-on-surface-variant">{m.ppf_boost_title()}</span>
+                    <span class="text-xs font-bold text-on-surface">
+                      {formatDate(profile.boost.boostingSince)} · {m.ppf_boost_value({ months: String(boostMonths(new Date(profile.boost.boostingSince))) })}
+                    </span>
+                  </div>
+                {/if}
+                {#if profile.boost?.totalDays}
+                  <div class="flex items-center justify-between border-b border-outline-variant/5 pb-3">
+                    <span class="text-xs font-semibold text-on-surface-variant">{m.mcm_boost_total()}</span>
+                    <span class="text-xs font-bold text-on-surface">{m.boost_days({ count: String(profile.boost.totalDays) })}</span>
+                  </div>
+                {/if}
                 <div class="flex items-center justify-between border-b border-outline-variant/5 pb-3">
                   <span class="text-xs font-semibold text-on-surface-variant">{m.ppf_account_created()}</span>
                   <span class="text-xs font-bold text-on-surface">{formatDate(profile.accountCreatedAt)}</span>

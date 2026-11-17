@@ -1,5 +1,7 @@
 <script lang="ts">
   import MemberTag from './MemberTag.svelte';
+  import BoosterBadge from './BoosterBadge.svelte';
+  import HintTip from './economy/HintTip.svelte';
   import { Tabs, Button, Callout, SectionCard, EmptyState, Field } from './ui';
   import { memberAvatarSrc } from '../discordMedia';
   import MemberContentPanel from './analytics/MemberContentPanel.svelte';
@@ -1067,6 +1069,9 @@
                 <span>{caseData.serverTag.tag}</span>
               </button>
             {/if}
+            {#if caseData?.boost?.boostingSince}
+              <BoosterBadge since={caseData.boost.boostingSince} size={15} />
+            {/if}
           </div>
           <p class="mt-0.5 flex flex-wrap items-center gap-x-2 text-sm text-on-surface-variant">
             <span>@{caseData?.profile?.username || userName}</span>
@@ -1092,6 +1097,7 @@
               title={verifications?.lastRequestedAt ? m.mcm_verif_requested_on({ date: formatVerificationDate(verifications.lastRequestedAt) }) : undefined}
               onclick={handleRequestVerification}
             >{requestVerificationBusy ? m.mcm_sending() : m.mcm_request_verification()}</Button>
+            <HintTip text={m.mcm_verif_info()} />
           {/if}
           {#if showProfileLink && userId}
             <Button size="sm" variant="ghost" icon="maximize-2" href={`/members/${userId}`}>{m.mcm_open_profile()}</Button>
@@ -1332,6 +1338,27 @@
                     { label: m.mcm_last_seen(), value: formatDateTime(caseData?.profile?.lastSeenAt) },
                   ])}
                 </SectionCard>
+
+                {#if caseData?.boost}
+                  {@const boost = caseData.boost}
+                  <SectionCard title={m.mcm_boost_title()}>
+                    {@render facts([
+                      { label: m.mcm_boost_since(), value: boost.boostingSince ? formatDateTime(boost.boostingSince) : m.mcm_boost_not() },
+                      { label: m.mcm_boost_total(), value: m.boost_days({ count: String(boost.totalDays) }) },
+                      { label: m.mcm_boost_periods(), value: String(boost.periodCount) },
+                    ])}
+                    {#if boost.periods.length > 0}
+                      <ul class="mt-3 flex flex-col gap-1 border-t border-outline-variant pt-3 text-xs text-on-surface-variant">
+                        {#each boost.periods as period (period.start)}
+                          <li class="flex justify-between gap-2">
+                            <span>{formatDateTime(period.start)} → {period.end ? formatDateTime(period.end) : m.mcm_boost_ongoing()}</span>
+                            <span class="shrink-0 font-medium text-on-surface">{m.boost_days({ count: String(period.days) })}</span>
+                          </li>
+                        {/each}
+                      </ul>
+                    {/if}
+                  </SectionCard>
+                {/if}
 
                 <!-- Verifications : trace partagee entre moderateurs pour ne pas
                      redemander ce qu'un collegue a deja lance. -->
