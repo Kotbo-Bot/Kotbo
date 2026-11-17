@@ -66,7 +66,7 @@
   <span
     {id}
     role="tooltip"
-    class="fixed z-50 rounded-lg border border-outline-variant bg-surface-container-highest px-3 py-2 text-2xs font-normal leading-relaxed text-on-surface shadow-lg"
-    style="top: {position.top}px; left: {position.left}px; width: min({WIDTH}px, calc(100vw - {MARGIN * 2}px));"
+    class="fixed rounded-lg border border-outline-variant bg-surface-container-highest px-3 py-2 text-2xs font-normal leading-relaxed text-on-surface shadow-lg"
+    style="z-index: var(--layer-popover); top: {position.top}px; left: {position.left}px; width: min({WIDTH}px, calc(100vw - {MARGIN * 2}px));"
   >{text}</span>
 {/if}
