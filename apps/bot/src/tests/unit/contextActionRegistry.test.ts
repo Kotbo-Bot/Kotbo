@@ -89,8 +89,8 @@ describe('filtrage par permissions', () => {
     const visible = visibleActions('user', fakeMember('mod-1', PermissionFlagsBits.ModerateMembers), 'target-1');
     expect(visible.some((a) => a.id === 'timeout')).toBe(true);
     expect(visible.some((a) => a.id === 'alt')).toBe(true);
-    // ManageGuild non accordé : l'envoi de MP reste masqué.
-    expect(visible.some((a) => a.id === 'dm')).toBe(false);
+    // ManageGuild non accordé : l'historique d'invitation reste masqué.
+    expect(visible.some((a) => a.id === 'invites')).toBe(false);
   });
 
   test('les actions interdites sur soi-même sont masquées', () => {

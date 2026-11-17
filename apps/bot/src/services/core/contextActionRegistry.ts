@@ -808,47 +808,6 @@ const userActions: UserAction[] = [
     },
   },
   {
-    id: 'dm',
-    scope: 'user',
-    label: 'Envoyer un MP via le bot',
-    emoji: '📨',
-    description: 'Envoie un message privé au nom du bot',
-    category: 'Modération',
-    permission: PermissionFlagsBits.ManageGuild,
-    allowSelf: false,
-    modal: {
-      title: 'Envoyer un MP',
-      fields: [
-        {
-          id: 'content',
-          label: 'Message',
-          style: TextInputStyle.Paragraph,
-          placeholder: 'Le message envoyé au membre au nom du bot...',
-          required: true,
-          maxLength: 1800,
-        },
-      ],
-    },
-    async run(ctx, input) {
-      const member = await ctx.guild.members.fetch(ctx.targetId).catch(() => null);
-      if (!member) return fail('Membre introuvable', "Ce membre n'est plus sur le serveur.");
-
-      try {
-        const container = kotboContainer({
-          color: 'primary',
-          title: `📨 Message de l'équipe de ${ctx.guild.name}`,
-          fields: [input.content ?? ''],
-        });
-
-        await member.send(v2Message(container));
-      } catch {
-        return fail('MP bloqué', `<@${ctx.targetId}> n'accepte pas les messages privés venant de ce serveur.`);
-      }
-
-      return ok('MP envoyé', `Message transmis à <@${ctx.targetId}> au nom du bot.\n\n**Contenu**\n>>> ${truncate(input.content ?? '', 500)}`);
-    },
-  },
-  {
     id: 'invites',
     scope: 'user',
     label: 'Historique d\'invitation',

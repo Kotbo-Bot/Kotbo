@@ -37,7 +37,6 @@ import { roleCommand } from './commands/moderation/role.js';
 import { sanctionCommand, sanctionContextCommand } from './commands/moderation/sanction.js';
 import { requestVerificationCommand, requestVerificationContextCommand } from './commands/moderation/request-verification.js';
 import { sayCommand } from './commands/fun/say.js';
-import { mpsayCommand } from './commands/fun/mpsay.js';
 import { dailyCommand } from './commands/economy/daily.js';
 import { coinsCommand } from './commands/economy/coins.js';
 import { diceCommand } from './commands/economy/dice.js';
@@ -149,7 +148,6 @@ export const commands: SlashCommandDefinition[] = [
   transcriptCommand,
   ticketCommand,
   sayCommand,
-  mpsayCommand,
   demissionCommand,
   rankCommand,
   prestigeCommand,
