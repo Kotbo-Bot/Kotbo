@@ -413,7 +413,8 @@
       id: n.id,
       type: 'kotbo',
       position: n.position,
-      data: { nodeType: n.type, config: n.config ?? {}, graph: source },
+      // Copie : les textes du modele sont des getters (langue du bot), pas des champs editables.
+      data: { nodeType: n.type, config: { ...(n.config ?? {}) }, graph: source },
     }));
     // `revalidate` pose le drapeau d'animation juste après.
     edges = source.edges.map((e: any) => ({

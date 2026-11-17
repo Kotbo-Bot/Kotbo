@@ -1,4 +1,5 @@
 import { m } from '../../i18n';
+import { bot } from '../../stores/botLocale.svelte';
 import type { WorkflowGraph } from '@kotbo/shared';
 
 export interface WorkflowTemplate {
@@ -68,7 +69,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
           id: 'data-msg',
           type: 'ConstText',
           position: { x: 100, y: 340 },
-          config: { value: 'Bienvenue sur notre serveur Discord ! 👋 Pense à consulter le règlement.' },
+          config: { get value() { return m.bot_wf_welcome_dm({}, bot()); } },
         },
         {
           id: 'act-senddm',
@@ -144,13 +145,13 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
           id: 'act-timeout',
           type: 'TimeoutMember',
           position: { x: 760, y: 80 },
-          config: { minutes: 10, reason: 'Utilisation d\'un mot proscrit' },
+          config: { minutes: 10, get reason() { return m.bot_wf_badword_reason({}, bot()); } },
         },
         {
           id: 'data-warnmsg',
           type: 'ConstText',
           position: { x: 440, y: 680 },
-          config: { value: '⚠️ Les propos tenus ne sont pas autorisés sur ce serveur.' },
+          config: { get value() { return m.bot_wf_badword_warning({}, bot()); } },
         },
         {
           id: 'act-warn',
@@ -251,7 +252,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
           id: 'data-msg',
           type: 'ConstText',
           position: { x: 100, y: 340 },
-          config: { value: 'Bonjour ! Merci d\'avoir ouvert un ticket. Veuillez détailler votre demande ici.' },
+          config: { get value() { return m.bot_wf_ticket_greeting({}, bot()); } },
         },
         {
           id: 'act-sendmsg',
@@ -303,7 +304,7 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
           id: 'data-msg',
           type: 'ConstText',
           position: { x: 100, y: 340 },
-          config: { value: 'Bravo pour ton ascension ! Tu viens d\'atteindre un nouveau niveau sur le serveur 🎉' },
+          config: { get value() { return m.bot_wf_levelup({}, bot()); } },
         },
         {
           id: 'act-senddm',

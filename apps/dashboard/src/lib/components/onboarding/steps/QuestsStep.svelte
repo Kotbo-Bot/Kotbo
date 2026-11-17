@@ -15,6 +15,7 @@
    */
   import { m } from '../../../i18n';
   import { toast } from '../../../stores/toast.svelte';
+  import { bot } from '../../../stores/botLocale.svelte';
   import { wizard } from '../../../stores/onboardingWizard.svelte';
   import { onboardingData } from '../../../stores/onboardingData.svelte';
   import { QUEST_PRESETS, celebrateStep } from '../../../onboarding';
@@ -33,7 +34,7 @@
   );
   const chosen = $derived(QUEST_PRESETS.filter((quest) => selection.includes(quest.key)));
 
-  const currency = $derived(wizard.currencyName ?? 'pièces');
+  const currency = $derived(wizard.currencyName ?? m.bot_currency_coins_lc({}, bot()));
   const panelColor = $derived(wizard.panelColor ?? '#8B5CF6');
 
   function toggle(key: string) {
@@ -104,7 +105,7 @@
   </p>
 
   {#snippet preview()}
-    <DiscordPreview channel="quêtes">
+    <DiscordPreview channel={m.bot_ch_quests({}, bot())}>
       <DiscordEmbed
         color={panelColor}
         title={m.onb_quests_preview_title()}

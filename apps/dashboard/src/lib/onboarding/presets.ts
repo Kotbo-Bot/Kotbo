@@ -1,4 +1,5 @@
 import { m } from '../i18n';
+import { bot } from '../stores/botLocale.svelte';
 /**
  * Les reponses toutes faites du parcours, decrites une fois.
  *
@@ -140,65 +141,57 @@ export const RULE_PRESETS: RulePreset[] = [
   {
     key: 'respect',
     emoji: '🤝',
-    title: 'Respect de tous',
-    description:
-      "Insultes, harcèlement, propos haineux, discriminations : aucun n'a sa place ici. On peut être en désaccord sans être désagréable.",
+    get title() { return m.bot_rule_respect_title({}, bot()); },
+    get description() { return m.bot_rule_respect_desc({}, bot()); },
     byDefault: true,
   },
   {
     key: 'spam',
     emoji: '🔇',
-    title: 'Pas de spam',
-    description:
-      "Messages répétés, mentions en rafale, majuscules permanentes : gardez les salons lisibles pour les autres.",
+    get title() { return m.bot_rule_spam_title({}, bot()); },
+    get description() { return m.bot_rule_spam_desc({}, bot()); },
     byDefault: true,
   },
   {
     key: 'pub',
     emoji: '📢',
-    title: 'Pas de publicité',
-    description:
-      "Aucune invitation vers un autre serveur ni promotion personnelle sans l'accord du staff, messages privés compris.",
+    get title() { return m.bot_rule_pub_title({}, bot()); },
+    get description() { return m.bot_rule_pub_desc({}, bot()); },
     byDefault: true,
   },
   {
     key: 'nsfw',
     emoji: '🚫',
-    title: 'Contenu interdit',
-    description:
-      "Rien de choquant, illégal ou à caractère sexuel. Cela vaut aussi pour les pseudos, avatars et bannières.",
+    get title() { return m.bot_rule_nsfw_title({}, bot()); },
+    get description() { return m.bot_rule_nsfw_desc({}, bot()); },
     byDefault: true,
   },
   {
     key: 'channels',
     emoji: '🗂️',
-    title: 'Chaque salon a son sujet',
-    description:
-      "Postez au bon endroit : c'est ce qui permet de retrouver une discussion plus tard sans tout relire.",
+    get title() { return m.bot_rule_channels_title({}, bot()); },
+    get description() { return m.bot_rule_channels_desc({}, bot()); },
     byDefault: true,
   },
   {
     key: 'privacy',
     emoji: '🔒',
-    title: 'Vie privée',
-    description:
-      "Ne publiez jamais d'informations personnelles, les vôtres ou celles d'un autre membre, sans son accord explicite.",
+    get title() { return m.bot_rule_privacy_title({}, bot()); },
+    get description() { return m.bot_rule_privacy_desc({}, bot()); },
     byDefault: false,
   },
   {
     key: 'staff',
     emoji: '🛡️',
-    title: 'Décisions du staff',
-    description:
-      "L'équipe tranche et peut sanctionner. Un désaccord se discute en ticket, pas en public.",
+    get title() { return m.bot_rule_staff_title({}, bot()); },
+    get description() { return m.bot_rule_staff_desc({}, bot()); },
     byDefault: false,
   },
   {
     key: 'discord-tos',
     emoji: '📜',
-    title: 'Conditions de Discord',
-    description:
-      "Les règles de Discord s'appliquent en plus des nôtres, et vous devez avoir l'âge minimum requis pour utiliser la plateforme.",
+    get title() { return m.bot_rule_tos_title({}, bot()); },
+    get description() { return m.bot_rule_tos_desc({}, bot()); },
     byDefault: false,
   },
 ];
@@ -225,50 +218,50 @@ export const TICKET_PRESETS: TicketPreset[] = [
   {
     key: 'question',
     emoji: '❓',
-    label: 'Une question',
-    description: 'Pour tout ce qui ne rentre nulle part ailleurs.',
+    get label() { return m.bot_ticket_question({}, bot()); },
+    get description() { return m.bot_ticket_question_desc({}, bot()); },
     themes: ['communaute', 'gaming', 'entraide', 'creation'],
   },
   {
     key: 'help',
     emoji: '🆘',
-    label: "Demande d'aide",
-    description: "Un problème à résoudre, un coup de main à demander.",
+    get label() { return m.bot_ticket_help({}, bot()); },
+    get description() { return m.bot_ticket_help_desc({}, bot()); },
     themes: ['entraide'],
   },
   {
     key: 'report',
     emoji: '⚠️',
-    label: 'Signaler un membre',
-    description: "Un comportement à porter à la connaissance du staff.",
+    get label() { return m.bot_ticket_report({}, bot()); },
+    get description() { return m.bot_ticket_report_desc({}, bot()); },
     themes: ['communaute', 'gaming', 'entraide', 'creation'],
   },
   {
     key: 'bug',
     emoji: '🐛',
-    label: 'Signaler un bug',
-    description: "Quelque chose ne marche pas comme prévu.",
+    get label() { return m.bot_ticket_bug({}, bot()); },
+    get description() { return m.bot_ticket_bug_desc({}, bot()); },
     themes: ['entraide', 'gaming'],
   },
   {
     key: 'apply',
     emoji: '📝',
-    label: 'Candidature',
-    description: "Rejoindre le staff, une équipe ou un projet.",
+    get label() { return m.bot_ticket_apply({}, bot()); },
+    get description() { return m.bot_ticket_apply_desc({}, bot()); },
     themes: ['communaute', 'gaming'],
   },
   {
     key: 'partner',
     emoji: '🤝',
-    label: 'Partenariat',
-    description: "Proposer une collaboration entre serveurs ou créateurs.",
+    get label() { return m.bot_ticket_partner({}, bot()); },
+    get description() { return m.bot_ticket_partner_desc({}, bot()); },
     themes: ['communaute', 'creation'],
   },
   {
     key: 'feedback',
     emoji: '💡',
-    label: 'Suggestion',
-    description: "Une idée pour améliorer le serveur.",
+    get label() { return m.bot_ticket_feedback({}, bot()); },
+    get description() { return m.bot_ticket_feedback_desc({}, bot()); },
     themes: ['creation'],
   },
 ];

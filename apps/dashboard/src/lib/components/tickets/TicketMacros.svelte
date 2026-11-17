@@ -21,6 +21,7 @@
   import MultiSelect from '../MultiSelect.svelte';
   import ToggleSwitch from '../ToggleSwitch.svelte';
   import { m } from '../../i18n';
+  import { bot } from '../../stores/botLocale.svelte';
 
   const {
     refreshToken = 0,
@@ -231,7 +232,7 @@
       <h3 class="text-sm font-semibold text-on-surface">{m.tmac_sig_title()}</h3>
       <p class="text-on-surface-variant text-xs mt-0.5">{m.tmac_sig_desc()}</p>
     </div>
-    <FormTextarea ariaLabel={m.tmac_sig_title()} bind:value={signature.content} rows={3} placeholder={'✅ • {staff} - Modérateur\n🎧 • Support de {server}'} />
+    <FormTextarea ariaLabel={m.tmac_sig_title()} bind:value={signature.content} rows={3} placeholder={m.bot_ticket_signature_placeholder({ staff: '{staff}', server: '{server}' }, bot())} />
     <div class="flex items-center justify-between gap-3 flex-wrap">
       <label class="flex items-center gap-2 text-xs text-on-surface-variant">
         <ToggleSwitch size="sm" checked={signature.sendAsMe} onToggle={(v) => (signature.sendAsMe = v)} ariaLabel={m.tmac_sig_send_as_me()} />

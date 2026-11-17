@@ -1,4 +1,5 @@
 import { m } from '../i18n';
+import { bot } from '../stores/botLocale.svelte';
 /**
  * Les échelles de rôles que le parcours sait créer lui-même.
  *
@@ -72,7 +73,7 @@ export const STAFF_STRUCTURES: StaffStructure[] = [
     top: [
       {
         key: 'staff.founder',
-        name: 'Fondateur',
+        get name() { return m.bot_role_founder({}, bot()); },
         color: '#F59E0B',
         power: 'admin',
         hoist: true,
@@ -80,7 +81,7 @@ export const STAFF_STRUCTURES: StaffStructure[] = [
       },
       {
         key: 'staff.admin',
-        name: 'Administrateur',
+        get name() { return m.bot_role_admin({}, bot()); },
         color: '#EF4444',
         power: 'admin',
         hoist: true,
@@ -90,7 +91,7 @@ export const STAFF_STRUCTURES: StaffStructure[] = [
     ground: [
       {
         key: 'staff.moderator',
-        name: 'Modérateur',
+        get name() { return m.bot_role_moderator({}, bot()); },
         color: '#3B82F6',
         power: 'moderate',
         hoist: true,
@@ -116,7 +117,7 @@ export const STAFF_STRUCTURES: StaffStructure[] = [
     top: [
       {
         key: 'staff.admin',
-        name: 'Administrateur',
+        get name() { return m.bot_role_admin({}, bot()); },
         color: '#EF4444',
         power: 'admin',
         hoist: true,
@@ -124,7 +125,7 @@ export const STAFF_STRUCTURES: StaffStructure[] = [
       },
       {
         key: 'staff.supermod',
-        name: 'Responsable staff',
+        get name() { return m.bot_role_staff_lead({}, bot()); },
         color: '#F97316',
         power: 'manage',
         hoist: true,
@@ -134,7 +135,7 @@ export const STAFF_STRUCTURES: StaffStructure[] = [
     ground: [
       {
         key: 'staff.moderator',
-        name: 'Modérateur',
+        get name() { return m.bot_role_moderator({}, bot()); },
         color: '#3B82F6',
         power: 'moderate',
         hoist: true,
@@ -160,7 +161,7 @@ export const STAFF_STRUCTURES: StaffStructure[] = [
     top: [
       {
         key: 'staff.admin',
-        name: 'Administrateur',
+        get name() { return m.bot_role_admin({}, bot()); },
         color: '#EF4444',
         power: 'admin',
         hoist: true,
@@ -170,7 +171,7 @@ export const STAFF_STRUCTURES: StaffStructure[] = [
     ground: [
       {
         key: 'staff.moderator',
-        name: 'Modérateur',
+        get name() { return m.bot_role_moderator({}, bot()); },
         color: '#3B82F6',
         power: 'moderate',
         hoist: true,
@@ -199,7 +200,7 @@ export type StaffPole = RoleBlueprint & {
 const ALL_STAFF_POLES: StaffPole[] = [
   {
     key: 'staff.pole.moderation',
-    name: 'Responsable modération',
+    get name() { return m.bot_role_pole_moderation({}, bot()); },
     color: '#6366F1',
     power: 'moderate',
     hoist: false,
@@ -208,7 +209,7 @@ const ALL_STAFF_POLES: StaffPole[] = [
   },
   {
     key: 'staff.pole.events',
-    name: 'Responsable événements',
+    get name() { return m.bot_role_pole_events({}, bot()); },
     color: '#EC4899',
     power: 'coordinate',
     hoist: false,
@@ -217,7 +218,7 @@ const ALL_STAFF_POLES: StaffPole[] = [
   },
   {
     key: 'staff.pole.communication',
-    name: 'Responsable communication',
+    get name() { return m.bot_role_pole_comms({}, bot()); },
     color: '#0EA5E9',
     power: 'coordinate',
     hoist: false,
@@ -226,7 +227,7 @@ const ALL_STAFF_POLES: StaffPole[] = [
   },
   {
     key: 'staff.pole.recruitment',
-    name: 'Responsable recrutement',
+    get name() { return m.bot_role_pole_recruit({}, bot()); },
     color: '#8B5CF6',
     power: 'coordinate',
     hoist: false,
@@ -236,7 +237,7 @@ const ALL_STAFF_POLES: StaffPole[] = [
   {
     key: 'staff.pole.partnerships',
     module: 'partnerships',
-    name: 'Responsable partenariats',
+    get name() { return m.bot_role_pole_partners({}, bot()); },
     color: '#14B8A6',
     power: 'coordinate',
     hoist: false,
@@ -245,7 +246,7 @@ const ALL_STAFF_POLES: StaffPole[] = [
   },
   {
     key: 'staff.pole.animation',
-    name: 'Animateur',
+    get name() { return m.bot_role_pole_host({}, bot()); },
     color: '#F59E0B',
     power: 'coordinate',
     hoist: false,
@@ -298,21 +299,21 @@ export const LEVEL_LADDERS: LevelLadder[] = [
     label: m.obl_metals(),
     pitch: m.obl_metals_pitch(),
     icon: 'award',
-    names: ['Bronze', 'Argent', 'Or', 'Platine', 'Diamant', 'Maître', 'Champion', 'Légende'],
+    get names() { return m.bot_ladder_metals({}, bot()).split(','); },
   },
   {
     key: 'seniority',
     label: m.obl_seniority(),
     pitch: m.obl_seniority_pitch(),
     icon: 'clock',
-    names: ['Nouveau', 'Habitué', 'Régulier', 'Fidèle', 'Pilier', 'Vétéran', 'Ancien', 'Légende'],
+    get names() { return m.bot_ladder_seniority({}, bot()).split(','); },
   },
   {
     key: 'ranks',
     label: m.obl_ranks(),
     pitch: m.obl_ranks_pitch(),
     icon: 'trophy',
-    names: ['Recrue', 'Initié', 'Confirmé', 'Expert', 'Élite', 'Vétéran', 'Maître', 'Légende'],
+    get names() { return m.bot_ladder_ranks({}, bot()).split(','); },
   },
   {
     key: 'plain',
@@ -393,13 +394,13 @@ export function buildLevelLadder(ladder: LevelLadder, count: number): LevelRoleB
   const names =
     ladder.names.length > 0
       ? spread(ladder.names, tiers.length)
-      : tiers.map((level) => `Niveau ${level}`);
+      : tiers.map((level) => m.bot_role_level({ level }, bot()));
   const colors = spread(LADDER_COLORS, tiers.length);
 
   return tiers
     .map((level, index) => ({
       key: `level.${level}`,
-      name: names[index] ?? `Niveau ${level}`,
+      name: names[index] ?? m.bot_role_level({ level }, bot()),
       color: colors[index] ?? LADDER_COLORS[LADDER_COLORS.length - 1],
       // Aucun pouvoir : un rôle de palier récompense, il n'administre rien.
       power: 'none' as const,

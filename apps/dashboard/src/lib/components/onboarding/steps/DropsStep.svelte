@@ -15,6 +15,7 @@
    */
   import { m } from '../../../i18n';
   import { toast } from '../../../stores/toast.svelte';
+  import { bot } from '../../../stores/botLocale.svelte';
   import { wizard } from '../../../stores/onboardingWizard.svelte';
   import { onboardingData } from '../../../stores/onboardingData.svelte';
   import { DROP_RHYTHMS, celebrateStep, type DropRhythm } from '../../../onboarding';
@@ -39,7 +40,7 @@
   );
   const channelId = $derived(wizard.dropChannelId ?? suggested);
   const channelName = $derived(
-    channels.find((channel) => channel.id === channelId)?.name ?? 'général'
+    channels.find((channel) => channel.id === channelId)?.name ?? m.bot_ch_general({}, bot())
   );
 
   const interval = $derived(

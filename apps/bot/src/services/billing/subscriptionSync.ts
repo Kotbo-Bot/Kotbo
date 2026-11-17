@@ -203,6 +203,11 @@ export async function syncSubscription(subscription: Stripe.Subscription): Promi
 
   await invalidatePlan(guildId);
 
+  // Ce chemin écrit `plan` sans passer par `setGuildPlan` : la coupure du bot
+  // perso est donc déclenchée ici aussi. Un échec ne doit pas faire rejouer le webhook.
+  const { retireCustomBotIfIneligible } = await import('../system/customBotRetire.js');
+  await retireCustomBotIfIneligible(guildId).catch((err) => logger.error('CustomBot', `Coupure du bot perso de ${guildId} impossible :`, err));
+
   if (expiresAt && subscription.status === 'active') {
     await recordPayerCoverage(guildId, expiresAt);
   }

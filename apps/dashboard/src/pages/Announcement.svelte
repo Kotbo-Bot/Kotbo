@@ -1,6 +1,7 @@
 <script lang="ts">
   import { explainDisabled } from '../lib/actions/explainDisabled';
   import { m } from '../lib/i18n';
+  import { bot } from '../lib/stores/botLocale.svelte';
   import { channelDisplayName } from '../lib/channelUtils';
   import { onMount, onDestroy, untrack } from 'svelte';
   import { router } from 'tinro';
@@ -300,7 +301,7 @@
     return {
       enabled: false,
       channelId: null as string | null,
-      threadNameTemplate: '👋 Bienvenue {username} !',
+      threadNameTemplate: m.bot_welcome_thread_name({ username: '{username}' }, bot()),
       threadMode: 'public' as 'public' | 'private',
       autoArchiveMinutes: 1440,
       typingEnabled: true,
@@ -310,9 +311,9 @@
       webhookAvatarUrl: null as string | null,
       menuEnabled: true,
       menuStyle: 'buttons' as 'buttons' | 'select',
-      menuPlaceholder: 'Découvrir le serveur...',
-      embedTitle: 'Bienvenue sur {server} !',
-      embedDescription: "Explore les sections ci-dessous pour découvrir le serveur. 👇",
+      menuPlaceholder: m.bot_welcome_menu_placeholder({}, bot()),
+      embedTitle: m.bot_welcome_embed_title({ server: '{server}' }, bot()),
+      embedDescription: m.bot_welcome_embed_desc({}, bot()),
       embedColor: '#5865F2',
       embedImageUrl: null as string | null,
       embedThumbnailUrl: null as string | null,
@@ -1177,7 +1178,7 @@
                       id="threadNameTemplate"
                       type="text"
                       bind:value={threadConfig.threadNameTemplate}
-                      placeholder={`👋 Bienvenue {username} !`}
+                      placeholder={m.bot_welcome_thread_name({ username: '{username}' }, bot())}
                       class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
                       disabled={!canManageSettings}
                     />
@@ -1329,7 +1330,7 @@
                             id="menuEmbedTitle"
                             type="text"
                             bind:value={threadConfig.embedTitle}
-                            placeholder={`Bienvenue sur {server} !`}
+                            placeholder={m.bot_welcome_embed_title({ server: '{server}' }, bot())}
                             class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
                             disabled={!canManageSettings}
                           />

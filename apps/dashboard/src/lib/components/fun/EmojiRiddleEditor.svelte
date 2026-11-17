@@ -7,6 +7,8 @@
   import ToggleSwitch from '../ToggleSwitch.svelte';
   import EmojiPicker from '../EmojiPicker.svelte';
   import EmptyState from '../EmptyState.svelte';
+  import Skeleton from '../Skeleton.svelte';
+  import Button from '../ui/Button.svelte';
   import {
     fetchEmojiRiddles,
     createEmojiRiddle,
@@ -32,6 +34,8 @@
   let busy = $state(false);
   let showDefaults = $state(false);
 
+  /** Le formulaire reste replié tant qu'on n'ajoute ni ne modifie un rébus. */
+  let formOpen = $state(false);
   let editingId = $state<string | null>(null);
   let emojisDraft = $state('');
   let answersDraft = $state('');
@@ -65,12 +69,20 @@
   }
 
   function resetForm() {
+    formOpen = false;
     editingId = null;
     emojisDraft = '';
     answersDraft = '';
   }
 
+  function openForm() {
+    formOpen = true;
+    // Le champ n'existe qu'une fois le formulaire affiché.
+    queueMicrotask(() => document.getElementById('riddleEmojis')?.focus());
+  }
+
   function startEdit(riddle: Riddle) {
+    openForm();
     editingId = riddle.id;
     emojisDraft = riddle.emojis;
     answersDraft = riddle.answers.join('\n');
@@ -93,7 +105,14 @@
         const res = await createEmojiRiddle(payload);
         riddles = [...riddles, res.riddle];
       }
-      resetForm();
+      // Après un ajout, le formulaire reste ouvert et vide pour enchaîner ; après une modification, il se replie.
+      if (editingId) {
+        resetForm();
+      } else {
+        emojisDraft = '';
+        answersDraft = '';
+        document.getElementById('riddleEmojis')?.focus();
+      }
     } catch {
       // Erreur déjà signalée par dashboardRequest ; la saisie est conservée.
     } finally {
@@ -139,26 +158,25 @@
   </span>
 {/snippet}
 
-<section class="bg-surface-container-low/40 border border-outline-variant/30 p-8 rounded-xl space-y-6 mt-8">
-  <div class="flex items-center justify-between gap-4 pb-3 border-b border-outline-variant/15">
-    <div class="flex items-center gap-3 min-w-0">
-      <div class="w-10 h-10 rounded-xl bg-error/10 text-on-error-container flex items-center justify-center shrink-0">
-        <Papicon icon="Puzzle" size={20} />
-      </div>
-      <div class="min-w-0">
-        <h3 class="text-lg font-semibold tracking-tight text-on-surface">{m.fun_riddles_title()}</h3>
-        <p class="text-xs text-on-surface-variant mt-0.5">{m.fun_riddles_desc()}</p>
-      </div>
+<section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl space-y-5">
+  <div class="flex flex-wrap items-start justify-between gap-3 border-b border-outline-variant/15 pb-3">
+    <div class="min-w-0">
+      <h3 class="text-lg font-semibold flex items-center gap-2">
+        <Papicon icon="Puzzle" size={18} />
+        {m.fun_riddles_title()}
+        <span class="text-xs font-medium text-on-surface-variant">{m.fun_riddles_count({ count: riddles.length, max: MAX_RIDDLES })}</span>
+      </h3>
+      <p class="text-xs text-on-surface-variant mt-1">{m.fun_riddles_desc()}</p>
     </div>
-    <span class="text-xs font-medium text-on-surface-variant shrink-0">
-      {m.fun_riddles_count({ count: riddles.length, max: MAX_RIDDLES })}
-    </span>
+    {#if canManage && !formOpen && riddles.length > 0}
+      <Button size="sm" variant="primary" icon="plus" disabled={atLimit} onclick={openForm}>{m.fun_riddles_add_open()}</Button>
+    {/if}
   </div>
 
-  <div class="flex items-center justify-between gap-4">
+  <div class="flex items-start justify-between gap-4">
     <div class="min-w-0">
       <p class="text-sm font-semibold text-on-surface">{m.fun_riddles_use_defaults_title()}</p>
-      <p class="text-xs text-on-surface-variant mt-1">{m.fun_riddles_use_defaults_desc({ count: defaults.length })}</p>
+      <p class="text-xs text-on-surface-variant">{m.fun_riddles_use_defaults_desc({ count: defaults.length })}</p>
     </div>
     <ToggleSwitch
       checked={useDefaults}
@@ -168,13 +186,13 @@
     />
   </div>
 
-  {#if canManage}
+  {#if canManage && formOpen}
     <form
-      class="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-4 p-4 rounded-lg bg-surface-container-high/20 border border-outline-variant/10"
+      class="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)] gap-4 p-4 rounded-xl bg-surface-container-high/20 border border-outline-variant/10"
       onsubmit={(e) => { e.preventDefault(); submit(); }}
     >
-      <div class="space-y-1.5">
-        <label for="riddleEmojis" class="text-xs font-semibold text-on-surface-variant ml-2">{m.fun_riddles_emojis_label()}</label>
+      <div>
+        <label for="riddleEmojis" class="field-label">{m.fun_riddles_emojis_label()}</label>
         <div class="flex items-center gap-2">
           <input
             id="riddleEmojis"
@@ -183,48 +201,45 @@
             maxlength={100}
             placeholder={m.fun_riddles_emojis_placeholder()}
             disabled={busy}
-            class="flex-1 min-w-0 bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-lg focus:ring-2 focus:ring-error/30 transition-all disabled:opacity-50"
+            class="input flex-1 min-w-0 text-lg"
           />
           <EmojiPicker bind:value={picked} disabled={busy} />
         </div>
       </div>
 
-      <div class="space-y-1.5">
-        <label for="riddleAnswers" class="text-xs font-semibold text-on-surface-variant ml-2">{m.fun_riddles_answers_label()}</label>
+      <div>
+        <label for="riddleAnswers" class="field-label">{m.fun_riddles_answers_label()}</label>
         <textarea
           id="riddleAnswers"
           bind:value={answersDraft}
-          rows={3}
+          rows={2}
           placeholder={m.fun_riddles_answers_placeholder()}
           disabled={busy}
-          class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm resize-y focus:ring-2 focus:ring-error/30 transition-all disabled:opacity-50"
+          aria-describedby="riddleAnswersHint"
+          class="input resize-y"
         ></textarea>
-        <p class="text-2xs text-on-surface-variant ml-2">{m.fun_riddles_answers_hint()}</p>
+        <p id="riddleAnswersHint" class="field-hint">{m.fun_riddles_answers_hint()}</p>
       </div>
 
       <div class="md:col-span-2 flex justify-end gap-2">
-        {#if editingId}
-          <button type="button" class="btn btn-tonal btn-sm" onclick={resetForm} disabled={busy}>
-            {m.common_cancel()}
-          </button>
-        {/if}
-        <button type="submit" class="btn btn-primary btn-sm" disabled={busy || atLimit}>
+        <Button size="sm" variant="ghost" disabled={busy} onclick={resetForm}>{m.common_cancel()}</Button>
+        <Button size="sm" variant="primary" type="submit" loading={busy} disabled={atLimit}>
           {editingId ? m.common_save() : m.fun_riddles_add_btn()}
-        </button>
+        </Button>
       </div>
     </form>
   {/if}
 
   {#if loading}
-    <div class="flex justify-center py-6">
-      <div class="animate-spin w-5 h-5 border-2 border-error border-t-transparent rounded-full"></div>
-    </div>
+    <Skeleton height="48px" />
   {:else if riddles.length === 0}
-    <EmptyState icon="Puzzle" title={m.fun_riddles_empty_title()} description={m.fun_riddles_empty_desc()} actionLabel={canManage ? m.fun_riddles_empty_cta() : ''} actionIcon="plus" onAction={() => document.getElementById('riddleEmojis')?.focus()} reason="read-only" />
+    {#if !formOpen}
+      <EmptyState icon="Puzzle" title={m.fun_riddles_empty_title()} description={m.fun_riddles_empty_desc()} actionLabel={canManage ? m.fun_riddles_empty_cta() : ''} actionIcon="plus" onAction={openForm} reason="read-only" />
+    {/if}
   {:else}
     <ul class="divide-y divide-outline-variant/15">
       {#each riddles as riddle (riddle.id)}
-        <li class="flex items-center gap-4 py-3 {editingId === riddle.id ? 'opacity-60' : ''}">
+        <li class="flex items-center gap-4 py-2.5 {editingId === riddle.id ? 'opacity-60' : ''}">
           <div class="shrink-0 min-w-24">{@render clue(riddle.emojis)}</div>
           <div class="flex-1 min-w-0 flex flex-wrap gap-1.5">
             {#each riddle.answers as answer}
@@ -233,24 +248,23 @@
           </div>
           {#if canManage}
             <div class="flex items-center gap-1 shrink-0">
-              <button
-                type="button"
-                class="p-2 rounded-lg text-on-surface-variant hover:bg-surface-container-high transition-colors disabled:opacity-40"
-                onclick={() => startEdit(riddle)}
+              <Button
+                size="sm"
+                variant="ghost"
+                icon="pencil"
                 disabled={busy}
                 aria-label={m.fun_riddles_edit_aria({ emojis: riddle.emojis })}
-              >
-                <Papicon icon="pencil" size={14} />
-              </button>
-              <button
-                type="button"
-                class="p-2 rounded-lg text-error hover:bg-error/10 transition-colors disabled:opacity-40"
-                onclick={() => remove(riddle)}
+                onclick={() => startEdit(riddle)}
+              />
+              <Button
+                size="sm"
+                variant="ghost"
+                icon="trash-2"
+                class="text-error"
                 disabled={busy}
                 aria-label={m.fun_riddles_delete_aria({ emojis: riddle.emojis })}
-              >
-                <Papicon icon="trash-2" size={14} />
-              </button>
+                onclick={() => remove(riddle)}
+              />
             </div>
           {/if}
         </li>

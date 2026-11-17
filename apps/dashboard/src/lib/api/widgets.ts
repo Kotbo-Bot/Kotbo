@@ -1,4 +1,5 @@
 /** Widgets embarquables. */
+import { m } from '../i18n';
 import { authStore } from '../stores/auth.svelte';
 import { API_BASE_URL, authorizedFetch, dashboardRequest } from './client';
 
@@ -33,7 +34,7 @@ export async function unbindGuildFromInstance(instanceId: string, guildId: strin
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || 'Erreur lors du détachement');
+    throw new Error(err.error || m.api_err_widget_detach());
   }
   return res.json();
 }

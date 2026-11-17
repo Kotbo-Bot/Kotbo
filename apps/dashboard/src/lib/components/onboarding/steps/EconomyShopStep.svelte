@@ -14,6 +14,7 @@
    */
   import { m, dateLocale } from '../../../i18n';
   import { toast } from '../../../stores/toast.svelte';
+  import { bot } from '../../../stores/botLocale.svelte';
   import { wizard } from '../../../stores/onboardingWizard.svelte';
   import { onboardingData } from '../../../stores/onboardingData.svelte';
   import { SHOP_PRESETS, celebrateStep, type ShopPreset } from '../../../onboarding';
@@ -26,7 +27,7 @@
   import { errorMessage } from '@kotbo/shared';
   const { onEditTracks, skip }: { onEditTracks: () => void; skip: () => void } = $props();
 
-  const currency = $derived(wizard.currencyName ?? 'Pièces');
+  const currency = $derived(wizard.currencyName ?? m.bot_currency_coins({}, bot()));
   const emoji = $derived(wizard.currencyEmoji ?? '🪙');
 
   const selection = $derived(

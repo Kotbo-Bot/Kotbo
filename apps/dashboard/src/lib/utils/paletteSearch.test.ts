@@ -11,6 +11,13 @@ describe('paletteSearch', () => {
     expect(score(sanctions, normalize('ban'))).toBeGreaterThan(0);
   });
 
+  test('un terme associe trouve une page hors registre des modules', () => {
+    const mcp = { label: 'Connecter une IA', group: 'Intégrations', keywords: moduleKeywords('/mcp-settings') };
+    expect(score(mcp, 'mcp')).toBeGreaterThan(0);
+    const billing = { label: 'Facturation', group: 'Compte', keywords: moduleKeywords('/billing') };
+    expect(score(billing, normalize('abonnement'))).toBeGreaterThan(0);
+  });
+
   test('le nom passe avant les mots-cles', () => {
     expect(score(sanctions, 'sanc')).toBeGreaterThan(score(croissance, 'sanc'));
   });

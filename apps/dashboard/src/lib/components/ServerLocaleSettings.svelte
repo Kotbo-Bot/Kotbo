@@ -16,6 +16,7 @@
   import { navigationStore } from '../stores/navigation.svelte';
   import { timezoneStore } from '../stores/timezone.svelte';
   import { toast } from '../stores/toast.svelte';
+  import { botLocale } from '../stores/botLocale.svelte';
   import {
     fetchGuildLanguage,
     updateGuildLanguage,
@@ -99,6 +100,7 @@
       const state = await updateGuildLanguage(value === 'auto' ? { mode: 'auto' } : { language: value as 'fr' | 'en' });
       if (!state) return;
       language = state;
+      botLocale.set(state.locale);
       // Changer de langue republie les panneaux deja poses (reglement,
       // tickets, roles-reaction) : le taire laisserait croire qu'ils sont
       // restes dans l'ancienne langue, ou qu'ils ont tous suivi alors que non.

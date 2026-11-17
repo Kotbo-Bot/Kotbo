@@ -8,6 +8,7 @@
   import { dashboardStore } from '../../stores/dashboard.svelte';
   import { toast } from '../../stores/toast.svelte';
   import { m } from '../../i18n';
+  import { bot } from '../../stores/botLocale.svelte';
   import {
     guessColumnMapping,
     normalizeImportRow,
@@ -104,7 +105,7 @@
         targetTag: row.targetTag,
         moderatorUserId: row.moderatorUserId,
         moderatorTag: row.moderatorTag,
-        reason: row.reason || 'Sanction importée (raison non renseignée).',
+        reason: row.reason || m.bot_sanction_imported_reason({}, bot()),
         createdAt: row.createdAt!,
         durationSeconds: row.durationSeconds
       }));

@@ -15,14 +15,63 @@ export const normalize = (value: string): string =>
 const splitWords = (value: string): string[] => value.split(/[\s›>/'(),.:;-]+/).filter(Boolean);
 
 /**
- * Mots-cles d'une page, tires du registre des modules. On cherche un sujet
- * (« ban », « captcha », « xp ») plus souvent que le nom exact de la page, et
- * la description du module les cite deja.
+ * Termes qu'on tape pour une page sans qu'ils figurent dans son nom ni dans la
+ * description de son module (« mcp » pour « Connecter une IA »). Clef : chemin,
+ * valable aussi pour ses sous-pages et ses onglets.
+ */
+const PAGE_KEYWORDS: Record<string, string> = {
+  '/': 'accueil home dashboard tableau de bord apercu overview',
+  '/custom-bot': 'bot perso custom white label marque avatar nom domaine personnalise',
+  '/setup': 'onboarding demarrage configuration installation premiers pas',
+  '/pulse': 'sante score activite climat health',
+  '/notifications': 'inbox boite de reception alertes',
+  '/members': 'utilisateurs users fiche membre',
+  '/invitations': 'invites lien parrainage tracker',
+  '/logs': 'logs journal audit historique',
+  '/forms': 'formulaire candidature questionnaire',
+  '/security': 'securite moderation protection',
+  '/security/aegis': 'ia toxicite emotions filtre intelligent',
+  '/security/sanctions': 'ban kick mute timeout warn avertissement casier',
+  '/security/sanctions/appeals': 'unban appel recours',
+  '/economy': 'argent monnaie coins boutique shop',
+  '/rpg': 'jeu donjon monstre tour peche',
+  '/giveaways': 'concours tirage lot',
+  '/reaction-roles': 'roles reaction boutons auto-roles',
+  '/starboard': 'etoiles star hall of fame',
+  '/embed-builder': 'embed message builder',
+  '/regulation': 'reglement regles rules charte',
+  '/news': 'flux rss actu youtube twitch',
+  '/site': 'site web page wiki blog',
+  '/staff-management': 'staff equipe moderateurs',
+  '/recruitment': 'candidature postuler recrutement',
+  '/tickets': 'support aide transcript',
+  '/planning': 'absences calendrier agenda reunion',
+  '/doing-lists': 'trello kanban taches todo suivi',
+  '/channel-links': 'cross serveur passerelle relais',
+  '/channels-management': 'salons auto thread fil sticky',
+  '/command-access': 'slash commandes permissions',
+  '/backups': 'sauvegarde restauration backup',
+  '/schedules': 'cron planifie automatique rappel',
+  '/mcp-settings': 'mcp ia ai claude chatgpt agent api cle token llm',
+  '/webhooks': 'webhook http integration evenements sortants',
+  '/billing': 'abonnement paiement plus premium facture prix offre stripe',
+  '/userSettings': 'parametres reglages compte langue theme',
+};
+
+/**
+ * Mots-cles d'une page : les mots de son chemin, ses synonymes, puis le
+ * registre des modules. On cherche un sujet (« ban », « captcha », « xp »)
+ * plus souvent que le nom exact de la page.
  */
 export function moduleKeywords(href: string): string | undefined {
-  const key = getModuleForPath(href.split('?')[0]);
+  const path = href.split('?')[0];
+  const key = getModuleForPath(path);
   const mod = key ? getModuleDefinition(key) : undefined;
-  return mod ? normalize(`${mod.name} ${mod.description}`) : undefined;
+  const aliases = Object.entries(PAGE_KEYWORDS)
+    .filter(([prefix]) => path === prefix || (prefix !== '/' && path.startsWith(`${prefix}/`)))
+    .map(([, words]) => words);
+  const text = [path.replace(/[/-]/g, ' '), ...aliases, mod ? `${mod.name} ${mod.description}` : ''].join(' ');
+  return normalize(text) || undefined;
 }
 
 function tokenScore(item: SearchableItem, label: string, words: string[], token: string): number {

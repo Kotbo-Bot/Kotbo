@@ -11,6 +11,7 @@
    */
   import { authStore } from '../../../stores/auth.svelte';
   import { toast } from '../../../stores/toast.svelte';
+  import { bot } from '../../../stores/botLocale.svelte';
   import { wizard } from '../../../stores/onboardingWizard.svelte';
   import { onboardingData } from '../../../stores/onboardingData.svelte';
   import { celebrateStep } from '../../../onboarding';
@@ -22,10 +23,13 @@
   import { errorMessage } from '@kotbo/shared';
   const { onEditTracks }: { onEditTracks: () => void } = $props();
 
+  /** Variables Discord laissees telles quelles dans le texte. */
+  const VARS = { user: '{user}', server: '{server}' };
+
   const TONES = [
-    { key: 'warm', label: m.obx_gr_warm(), icon: 'heart', text: "Bienvenue {user} sur **{server}** ! Installe-toi, présente-toi, et n'hésite pas si tu as la moindre question. 🎉" },
-    { key: 'plain', label: m.obx_gr_plain(), icon: 'align-left', text: 'Bienvenue {user} sur **{server}**. Merci de lire le règlement avant de participer.' },
-    { key: 'playful', label: m.obx_gr_playful(), icon: 'star', text: 'Un nouveau membre est apparu ! {user} rejoint **{server}**. 👋 Fais-toi plaisir, on ne mord pas.' },
+    { key: 'warm', label: m.obx_gr_warm(), icon: 'heart', get text() { return m.bot_greet_warm(VARS, bot()); } },
+    { key: 'plain', label: m.obx_gr_plain(), icon: 'align-left', get text() { return m.bot_greet_plain(VARS, bot()); } },
+    { key: 'playful', label: m.obx_gr_playful(), icon: 'star', get text() { return m.bot_greet_playful(VARS, bot()); } },
   ];
 
   let message = $state('');
@@ -49,9 +53,9 @@
       try {
         const config = await fetchWelcomeConfig();
         message = config?.welcomeMessage
-          || 'Bienvenue {user} sur **{server}** ! Prends le temps de lire le règlement. 🎉';
+          || m.bot_greet_default_server(VARS, bot());
       } catch {
-        message = 'Bienvenue {user} ! Prends le temps de lire le règlement. 🎉';
+        message = m.bot_greet_default(VARS, bot());
       }
     })();
   });
@@ -103,7 +107,7 @@
     rows="5"
     class="w-full rounded-xl border border-field-border bg-surface-container-low/40 px-4 py-3 text-sm text-on-surface
            placeholder-on-surface-variant/40 focus:outline-none focus:border-primary/50 resize-none"
-    placeholder="Bienvenue {'{user}'} !"
+    placeholder={m.bot_greet_placeholder(VARS, bot())}
   ></textarea>
 
   <p class="mt-2 text-xs text-on-surface-variant/55 leading-relaxed">

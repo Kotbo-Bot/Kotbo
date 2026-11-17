@@ -10,7 +10,7 @@
   import { prefetchRoute } from '../lazyRoutes';
   import { portal } from '../actions/portal';
   import { lockBodyScroll, unlockBodyScroll } from '../scrollLock';
-  import type { PageConfig } from '../config/pages';
+  import { pagePlan, type PageConfig } from '../config/pages';
   import { resolveGuildIconSrc } from '../discordMedia';
   import { m } from '../i18n';
   import { serverSwitcherStore } from '../stores/serverSwitcher.svelte';
@@ -242,6 +242,7 @@
 
 {#snippet pageLink(item: PageConfig, withIcon: boolean)}
   {@const active = isActiveNavItem(item.href)}
+  {@const plan = pagePlan(item)}
   <div data-href={item.href} class="nav-row group relative flex items-center rounded-lg transition-colors duration-150 {active ? 'is-active' : ''}">
     {#if !withIcon}
       <span class="nav-row__node" aria-hidden="true">
@@ -259,6 +260,13 @@
         <Papicon icon={item.icon} size={16} class="shrink-0 nav-row__icon" />
       {/if}
       <span class="flex-1 min-w-0 truncate text-body-sm">{item.name}</span>
+      {#if plan}
+        {@const planLabel = plan === 'plus' ? m.nav_plan_plus() : m.nav_plan_freemium()}
+        <span title={planLabel} class="shrink-0 flex {plan === 'plus' ? 'text-warning' : 'text-on-surface-variant'}">
+          <Papicon icon="crown" size={12} class={plan === 'plus' ? 'fill-current' : ''} />
+          <span class="sr-only">{planLabel}</span>
+        </span>
+      {/if}
       {@render unreadBadge(item.href)}
     </a>
     <button

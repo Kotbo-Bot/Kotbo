@@ -1,4 +1,5 @@
 import { m } from '../i18n';
+import { lowestPlanWithModule } from '@kotbo/contracts';
 
 export interface PageConfig {
   name: string;
@@ -17,6 +18,18 @@ export interface PageConfig {
    * atteint depuis un hub (les configurations rapides, depuis Prise en main).
    */
   hidden?: boolean;
+  /**
+   * Couronne du menu, pour les pages dont l'offre ne se lit pas dans le
+   * registre des modules (verrou porté par l'API) ou qui sont bridées en
+   * gratuit (`freemium`). Sinon déduite de `featureKey` par `pagePlan`.
+   */
+  plan?: 'plus' | 'freemium';
+}
+
+/** `plus` : réservée aux offres payantes. `freemium` : gratuite, avec un plafond que Plus lève. */
+export function pagePlan(page: PageConfig): 'plus' | 'freemium' | null {
+  if (page.plan) return page.plan;
+  return page.featureKey && lowestPlanWithModule(page.featureKey) ? 'plus' : null;
 }
 
 export function isPageBeta(page: PageConfig): boolean {
@@ -31,7 +44,7 @@ export const generalItems: PageConfig[] = [
   { name: m.nav_home(),           icon: "home",      href: "/",          featureKey: "dashboard", beta: false, wip: false },
   // Identité du bot juste après l'accueil : c'est ce qui fait que le bot est
   // celui du serveur. Réservée aux offres payantes, verrou porté par l'API.
-  { name: m.nav_custom_bot(),     icon: "bot",       href: "/custom-bot", featureKey: "settings", beta: false, wip: false },
+  { name: m.nav_custom_bot(),     icon: "bot",       href: "/custom-bot", featureKey: "settings", beta: false, wip: false, plan: "plus" },
   // Prise en main juste apres l'accueil : c'est la page qu'on ouvre en
   // arrivant, et celle vers laquelle on revient pour verifier qu'il ne
   // manque rien.
@@ -48,7 +61,7 @@ export const generalItems: PageConfig[] = [
   // les serveurs, y compris ceux qui n'ont jamais eu d'autre bot.
   { name: m.nav_pulse(),        icon: "activity",  href: "/pulse",     featureKey: "dashboard", beta: true, wip: false },
   { name: m.nav_inbox(),             icon: "inbox",     href: "/notifications", beta: false, wip: false },
-  { name: m.nav_analytics(),         icon: "pie-chart", href: "/analytics", featureKey: "analytics", beta: false, wip: false },
+  { name: m.nav_analytics(),         icon: "pie-chart", href: "/analytics", featureKey: "analytics", beta: false, wip: false, plan: "freemium" },
 ];
 
 export const moderationItems: PageConfig[] = [
@@ -79,7 +92,7 @@ export const securityItems: PageConfig[] = [
   { name: m.nav_security_antiraid(),  icon: "shieldwarning", href: "/security/anti-raid", featureKey: "raid_protection", beta: false, wip: false },
   { name: m.nav_security_filters(),   icon: "shield-alert",  href: "/security/filters",   featureKey: "automod", beta: false, wip: false },
   { name: m.nav_nicknames(),          icon: "user",          href: "/security/filters/nicknames", featureKey: "nickname_moderation", beta: false, wip: false, hidden: true },
-  { name: m.nav_aegis(),              icon: "sparkles",      href: "/security/aegis",     featureKey: "automod", beta: false, wip: false },
+  { name: m.nav_aegis(),              icon: "sparkles",      href: "/security/aegis",     featureKey: "automod", beta: false, wip: false, plan: "plus" },
   { name: m.nav_security_accounts(),  icon: "shield",        href: "/security/accounts",  featureKey: "double_accounts", beta: false, wip: false },
   { name: m.nav_security_sanctions(), icon: "alert-triangle",href: "/security/sanctions", featureKey: "sanctions", beta: false, wip: false },
   { name: m.nav_ban_appeals(),        icon: "gavel",         href: "/security/sanctions/appeals", featureKey: "ban_appeals", beta: false, wip: false, hidden: true },
@@ -215,7 +228,7 @@ export const configItems: PageConfig[] = [
 
 /** Ce qui relie Kotbo a l'exterieur : agents, services tiers, autres serveurs. */
 export const integrationItems: PageConfig[] = [
-  { name: m.nav_mcp_api(),             icon: "cpu",           href: "/mcp-settings",         featureKey: "settings", beta: false, wip: false },
+  { name: m.nav_mcp_api(),             icon: "cpu",           href: "/mcp-settings",         featureKey: "settings", beta: false, wip: false, plan: "plus" },
   { name: m.nav_outgoing_webhooks(),   icon: "send",          href: "/webhooks",             featureKey: "settings", beta: true, wip: false },
 ];
 
