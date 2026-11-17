@@ -6,7 +6,8 @@
   import { createAsyncActionState } from '../lib/asyncAction.svelte';
   import { unsavedChanges } from '../lib/stores/unsavedChanges.svelte';
   import { confirmDialog } from '../lib/stores/confirmDialog.svelte';
-  import { FUN_GAMES, activeGameCount, gamesInGroup, type FunGame, type FunGameId } from '../lib/funGames';
+  import { MediaQuery } from 'svelte/reactivity';
+  import { FUN_GAMES, activeGames, type FunGame, type FunGameId } from '../lib/funGames';
   import Papicon from '../lib/components/Papicon.svelte';
   import InlineFeedback from '../lib/components/InlineFeedback.svelte';
   import SearchableSelect from '../lib/components/SearchableSelect.svelte';
@@ -19,7 +20,8 @@
   import Button from '../lib/components/ui/Button.svelte';
   import Field from '../lib/components/ui/Field.svelte';
   import Tabs, { type TabItem } from '../lib/components/ui/Tabs.svelte';
-  import FunGameCard from '../lib/components/fun/FunGameCard.svelte';
+  import Modal from '../lib/components/Modal.svelte';
+  import Callout from '../lib/components/ui/Callout.svelte';
   import EmojiRiddleEditor from '../lib/components/fun/EmojiRiddleEditor.svelte';
   import {
     fetchFunConfig,
@@ -85,12 +87,15 @@
     emojiRiddleEmojis: null as string | null
   });
 
+  const dirty = $derived(JSON.stringify(config) !== JSON.stringify(savedConfig));
+  // Le choix « rébus fournis » vit dans l'onglet Rébus : il marque cet onglet, pas Réglages.
+  const riddlesDirty = $derived(config.funEmojiRiddleUseDefaults !== savedConfig.funEmojiRiddleUseDefaults);
+  const settingsDirty = $derived(
+    JSON.stringify({ ...config, funEmojiRiddleUseDefaults: null }) !== JSON.stringify({ ...savedConfig, funEmojiRiddleUseDefaults: null })
+  );
+
   // Detect changes and register/deregister with the global bar
   $effect(() => {
-    const current = JSON.stringify(config);
-    const saved = JSON.stringify(savedConfig);
-    const dirty = current !== saved;
-
     if (dirty && canManageSettings) {
       untrack(() => {
         unsavedChanges.register({
@@ -209,45 +214,60 @@
 
   let resetting = $state<FunGameId | null>(null);
 
-  const resetCounting = () => resetGame('counting', resetCountingGame, {
-    title: m.fun_reset_counting_confirm_title(), confirm: m.fun_reset_counting_confirm_btn(), toast: m.fun_reset_counting_toast()
-  }, 'warning');
-  const resetGuess = () => {
-    guessRevealed = false;
-    return resetGame('guess', resetGuessNumberGame, {
-      title: m.fun_reset_guess_confirm_title(), confirm: m.fun_reset_guess_confirm_btn(), toast: m.fun_reset_guess_toast()
-    });
+  const RESETS: Partial<Record<FunGameId, () => Promise<void>>> = {
+    counting: () => resetGame('counting', resetCountingGame, {
+      title: m.fun_reset_counting_confirm_title(), confirm: m.fun_reset_counting_confirm_btn(), toast: m.fun_reset_counting_toast()
+    }, 'warning'),
+    guess: () => {
+      guessRevealed = false;
+      return resetGame('guess', resetGuessNumberGame, {
+        title: m.fun_reset_guess_confirm_title(), confirm: m.fun_reset_guess_confirm_btn(), toast: m.fun_reset_guess_toast()
+      });
+    },
+    wordchain: () => resetGame('wordchain', resetWordChainGame, {
+      title: m.fun_reset_wordchain_confirm_title(), confirm: m.fun_reset_wordchain_confirm_btn(), toast: m.fun_reset_wordchain_toast()
+    }, 'warning'),
+    emojiriddle: () => resetGame('emojiriddle', resetEmojiRiddleGame, {
+      title: m.fun_reset_emojiriddle_confirm_title(), confirm: m.fun_reset_emojiriddle_confirm_btn(), toast: m.fun_reset_emojiriddle_toast()
+    }),
   };
-  const resetWordChain = () => resetGame('wordchain', resetWordChainGame, {
-    title: m.fun_reset_wordchain_confirm_title(), confirm: m.fun_reset_wordchain_confirm_btn(), toast: m.fun_reset_wordchain_toast()
-  }, 'warning');
-  const resetEmojiRiddle = () => resetGame('emojiriddle', resetEmojiRiddleGame, {
-    title: m.fun_reset_emojiriddle_confirm_title(), confirm: m.fun_reset_emojiriddle_confirm_btn(), toast: m.fun_reset_emojiriddle_toast()
+
+  const RESET_LABELS = $derived<Partial<Record<FunGameId, string>>>({
+    counting: m.fun_reset_counting_btn(),
+    guess: m.fun_reset_guess_btn(),
+    wordchain: m.fun_reset_wordchain_btn(),
+    emojiriddle: m.fun_reset_emojiriddle_btn(),
   });
 
-  type Tab = 'games' | 'confessions' | 'riddles';
-  let activeTab = $state<Tab>('games');
+  type Tab = 'overview' | 'confessions' | 'riddles' | 'settings';
+  let activeTab = $state<Tab>('overview');
 
-  let tabsAnchor = $state<HTMLDivElement>();
+  /** Sur grand écran, l'état du module reste à côté du contenu ; sinon il s'ouvre en fenêtre. */
+  const wide = new MediaQuery('min-width: 64rem');
+  let statusOpen = $state(false);
 
-  /** Depuis la carte Rébus, plus bas dans la page : l'onglet s'ouvre en haut, on y remonte. */
-  function showRiddles() {
-    activeTab = 'riddles';
-    tabsAnchor?.scrollIntoView({ block: 'start', behavior: 'smooth' });
-  }
+  /** Jeu dont on choisit le salon, dans la fenêtre des réglages. */
+  let editingGame = $state<FunGame | null>(null);
 
   /** La cible du nombre mystère reste cachée : une capture d'écran ne doit pas la livrer. */
   let guessRevealed = $state(false);
 
   const channelOptions = $derived(availableChannels.map((c) => ({ id: c.id, name: channelDisplayName(c) })));
-  const activeCount = $derived(activeGameCount(config));
-  const scoreGames = gamesInGroup('score');
-  const ruleGames = gamesInGroup('rule');
+  // Le suivi et l'état du module montrent ce qui tourne sur Discord, donc la
+  // configuration enregistrée : un salon choisi mais pas encore enregistré
+  // n'est pas encore un jeu actif.
+  const running = $derived(activeGames(savedConfig));
+
+  function channelName(channelId: string | null): string {
+    if (!channelId) return m.fun_status_inactive();
+    return channelOptions.find((channel) => channel.id === channelId)?.name ?? m.fun_channel_gone();
+  }
 
   const tabItems = $derived<TabItem[]>([
-    { id: 'games', label: m.fun_tab_games(), icon: 'Gamepad2', badge: `${activeCount}/${FUN_GAMES.length}` },
+    { id: 'overview', label: m.fun_tab_overview(), icon: 'Gamepad2' },
     { id: 'confessions', label: m.fun_tab_confessions(), icon: 'MessageCircle' },
-    { id: 'riddles', label: m.fun_tab_riddles(), icon: 'Puzzle' },
+    { id: 'riddles', label: m.fun_tab_riddles(), icon: 'Puzzle', badge: riddlesDirty ? m.fun_tab_modified() : undefined },
+    { id: 'settings', label: m.fun_tab_settings(), icon: 'Gears', badge: settingsDirty ? m.fun_tab_modified() : undefined },
   ]);
 
   const gameTexts = $derived<Record<FunGameId, { title: string; subtitle: string; rule?: string }>>({
@@ -266,111 +286,91 @@
   }
 </script>
 
-{#snippet statValue(label: string, value: string, tone = 'text-on-surface')}
-  <div class="min-w-0">
-    <p class="text-xs text-on-surface-variant">{label}</p>
-    <p class="mt-0.5 truncate text-2xl font-bold {tone}">{value}</p>
+{#snippet statTile(icon: string, tone: string, value: string, label: string)}
+  <div class="bg-surface-container-high/30 rounded-xl p-4 flex items-center gap-3">
+    <div class="h-9 w-9 rounded-lg flex items-center justify-center shrink-0 {tone}">
+      <Papicon {icon} size={20} />
+    </div>
+    <div class="flex flex-col min-w-0">
+      <span class="text-xl font-bold text-on-surface truncate">{value}</span>
+      <span class="text-xs font-medium text-on-surface-variant">{label}</span>
+    </div>
   </div>
 {/snippet}
 
-{#snippet lastPlayer(label: string, userId: string | null)}
-  <div class="min-w-0">
-    <p class="text-xs text-on-surface-variant">{label}</p>
-    <p class="mt-1 text-sm font-semibold text-on-surface">
-      {#if userId}
-        <MemberName {userId} />
-      {:else}
-        {m.fun_none()}
-      {/if}
-    </p>
+{#snippet sectionHeader(icon: string, title: string, description: string)}
+  <div class="border-b border-outline-variant/15 pb-3">
+    <h3 class="text-lg font-semibold flex items-center gap-2"><Papicon {icon} size={18} /> {title}</h3>
+    <p class="text-xs text-on-surface-variant mt-1">{description}</p>
   </div>
 {/snippet}
 
-{#snippet gameStateView(game: FunGame)}
+{#snippet gameIcon(game: FunGame)}
+  <div class="h-9 w-9 rounded-lg flex items-center justify-center shrink-0 {game.tone}">
+    <Papicon icon={game.icon} size={18} />
+  </div>
+{/snippet}
+
+{#snippet player(userId: string | null)}
+  {#if userId}
+    <MemberName {userId} />
+  {:else}
+    {m.fun_none()}
+  {/if}
+{/snippet}
+
+<!-- Ce que la partie montre au staff : une ligne courte, sous le nom du jeu. -->
+{#snippet gameStatus(game: FunGame)}
   {#if game.id === 'counting'}
-    <div class="grid grid-cols-2 gap-4">
-      {@render statValue(m.fun_counting_number(), String(gameState.countingCurrent), 'text-warning')}
-      {@render lastPlayer(m.fun_last_player(), gameState.countingLastUserId)}
-    </div>
+    <span>{m.fun_stat_counting()} :</span>
+    <span class="font-semibold text-on-surface">{gameState.countingCurrent}</span>
+    <span>· {m.fun_last_player()} :</span> {@render player(gameState.countingLastUserId)}
   {:else if game.id === 'guess'}
-    <div class="flex items-center justify-between gap-3">
-      {@render statValue(m.fun_guess_target(), guessRevealed && gameState.guessNumberTarget ? String(gameState.guessNumberTarget) : '•••', 'text-success')}
-      <Button
-        variant="ghost"
-        size="sm"
-        icon={guessRevealed ? 'EyeOff' : 'Eye'}
-        aria-label={m.fun_guess_reveal()}
-        aria-pressed={guessRevealed}
-        onclick={() => (guessRevealed = !guessRevealed)}
-      />
-    </div>
+    <span>{m.fun_guess_target()} :</span>
+    <span class="font-semibold text-on-surface">{guessRevealed && gameState.guessNumberTarget ? gameState.guessNumberTarget : '•••'}</span>
+    <Button
+      variant="ghost"
+      size="sm"
+      icon={guessRevealed ? 'EyeOff' : 'Eye'}
+      aria-label={m.fun_guess_reveal()}
+      aria-pressed={guessRevealed}
+      onclick={() => (guessRevealed = !guessRevealed)}
+    />
   {:else if game.id === 'wordchain'}
-    <div class="grid grid-cols-2 gap-4">
-      {@render statValue(m.fun_wordchain_last_word(), gameState.wordChainLastWord || m.fun_none(), 'text-sky-500')}
-      {@render lastPlayer(m.fun_last_player(), gameState.wordChainLastUserId)}
-    </div>
+    <span>{m.fun_wordchain_last_word()} :</span>
+    <span class="font-semibold text-on-surface">{gameState.wordChainLastWord || m.fun_none()}</span>
+    <span>· {m.fun_last_player()} :</span> {@render player(gameState.wordChainLastUserId)}
   {:else if game.id === 'emojiriddle'}
-    <div class="flex items-center justify-between gap-3">
-      <div class="min-w-0">
-        <p class="text-xs text-on-surface-variant">{m.fun_emojiriddle_current_clue()}</p>
-        <p class="mt-1 text-3xl">{gameState.emojiRiddleEmojis || '❓'}</p>
-      </div>
-      <Button variant="ghost" size="sm" icon="Puzzle" onclick={showRiddles}>{m.fun_riddles_manage()}</Button>
-    </div>
+    <span>{m.fun_emojiriddle_current_clue()} :</span>
+    <span class="text-lg leading-none">{gameState.emojiRiddleEmojis || '❓'}</span>
   {:else if game.id === 'oneword'}
-    {@render lastPlayer(m.fun_last_author(), gameState.oneWordStoryLastUserId)}
+    <span>{m.fun_last_author()} :</span> {@render player(gameState.oneWordStoryLastUserId)}
+  {:else}
+    <span>{gameTexts[game.id].subtitle}</span>
   {/if}
 {/snippet}
 
-{#snippet resetButton(id: FunGameId, label: string, onclick: () => void)}
-  <Button
-    size="sm"
-    icon="refresh-cw"
-    loading={resetting === id}
-    disabled={!canManageSettings}
-    disabledReason={m.common_reason_no_permission()}
-    {onclick}
-  >{label}</Button>
-{/snippet}
-
-{#snippet gameActionsView(game: FunGame)}
-  {#if game.id === 'counting'}
-    {@render resetButton('counting', m.fun_reset_counting_btn(), resetCounting)}
-  {:else if game.id === 'guess'}
-    {@render resetButton('guess', m.fun_reset_guess_btn(), resetGuess)}
-  {:else if game.id === 'wordchain'}
-    {@render resetButton('wordchain', m.fun_reset_wordchain_btn(), resetWordChain)}
-  {:else if game.id === 'emojiriddle'}
-    {@render resetButton('emojiriddle', m.fun_reset_emojiriddle_btn(), resetEmojiRiddle)}
-  {/if}
-{/snippet}
-
-{#snippet gameGroup(title: string, description: string, games: FunGame[])}
-  <section class="space-y-4">
-    <div>
-      <h2 class="text-lg font-semibold text-on-surface">{title}</h2>
-      <p class="text-xs text-on-surface-variant mt-0.5">{description}</p>
-    </div>
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-      {#each games as game (game.id)}
-        {@const texts = gameTexts[game.id]}
-        <FunGameCard
-          {game}
-          title={texts.title}
-          subtitle={texts.subtitle}
-          rule={texts.rule}
-          bind:channelId={config[game.channelKey]}
-          channels={channelOptions}
-          canManage={canManageSettings}
-        >
-          {@render gameStateView(game)}
-          {#snippet actions()}
-            {@render gameActionsView(game)}
-          {/snippet}
-        </FunGameCard>
+{#snippet statusPanel()}
+  {#if loading}
+    <Skeleton height="160px" />
+  {:else}
+    <dl class="space-y-2 text-sm">
+      {#each FUN_GAMES as game (game.id)}
+        <div class="flex items-center justify-between gap-3">
+          <dt class="text-on-surface-variant truncate">{gameTexts[game.id].title}</dt>
+          <dd class="font-semibold text-right truncate {savedConfig[game.channelKey] ? '' : 'text-on-surface-variant'}">{channelName(savedConfig[game.channelKey])}</dd>
+        </div>
       {/each}
-    </div>
-  </section>
+      <div class="flex items-center justify-between gap-3 border-t border-outline-variant/15 pt-2">
+        <dt class="text-on-surface-variant">{m.fun_confession_title()}</dt>
+        <dd class="font-semibold text-right truncate {savedConfig.funConfessionChannelId ? '' : 'text-on-surface-variant'}">{channelName(savedConfig.funConfessionChannelId)}</dd>
+      </div>
+      <div class="flex items-center justify-between gap-3">
+        <dt class="text-on-surface-variant">{m.fun_punitive_title()}</dt>
+        <dd class="font-semibold">{savedConfig.funPunitiveMode ? m.fun_status_on() : m.fun_status_off()}</dd>
+      </div>
+    </dl>
+  {/if}
 {/snippet}
 
 <ModulePage
@@ -381,128 +381,228 @@
 >
   <InlineFeedback state={actionState} />
 
-  <div bind:this={tabsAnchor} class="mb-6 scroll-mt-4">
-    <Tabs label={m.fun_tabs_label()} tabs={tabItems} active={activeTab} onchange={(id) => (activeTab = id as Tab)} />
-  </div>
-
-  {#if loading}
-    <div class="space-y-6">
-      <Skeleton height="96px" />
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Skeleton height="260px" />
-        <Skeleton height="260px" />
-      </div>
+  {#if !wide.current}
+    <div class="mb-4">
+      <Button size="sm" icon="List" onclick={() => (statusOpen = true)}>{m.fun_status_title()}</Button>
     </div>
-    <div class="flex justify-center mt-4">
-      <LoadingHint context="config" />
-    </div>
-  {:else if activeTab === 'games'}
-    <div class="space-y-8">
-      <section class="grid gap-6 rounded-xl border border-outline-variant/30 bg-surface-container-low/40 p-6 md:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] md:items-center">
-        <div class="space-y-3">
-          <div>
-            <p class="text-xs text-on-surface-variant">{m.fun_active_summary()}</p>
-            <p class="mt-0.5 text-2xl font-bold text-on-surface">{activeCount} / {FUN_GAMES.length}</p>
-          </div>
-          <div class="flex gap-1.5" aria-hidden="true">
-            {#each FUN_GAMES as game (game.id)}
-              <span class="h-2 flex-1 rounded-full {config[game.channelKey] ? 'bg-success' : 'bg-surface-container-high'}"></span>
-            {/each}
-          </div>
-        </div>
-        <div class="flex items-center justify-between gap-4 md:border-l md:border-outline-variant/20 md:pl-6">
-          <div class="min-w-0">
-            <p class="text-sm font-semibold text-on-surface">{m.fun_punitive_title()}</p>
-            <p class="text-xs text-on-surface-variant mt-1">{m.fun_punitive_desc()}</p>
-          </div>
-          <ToggleSwitch
-            checked={config.funPunitiveMode}
-            disabled={!canManageSettings}
-            onToggle={() => (config.funPunitiveMode = !config.funPunitiveMode)}
-            ariaLabel={m.fun_punitive_title()}
-          />
-        </div>
-      </section>
-
-      {@render gameGroup(m.fun_group_score_title(), m.fun_group_score_desc(), scoreGames)}
-      {@render gameGroup(m.fun_group_rule_title(), m.fun_group_rule_desc(), ruleGames)}
-    </div>
-  {:else if activeTab === 'confessions'}
-    <div class="space-y-6">
-      <section class="space-y-5 rounded-xl border border-outline-variant/30 bg-surface-container-low/40 p-6">
-        <div class="flex items-start gap-3 border-b border-outline-variant/15 pb-3">
-          <div class="h-10 w-10 shrink-0 rounded-xl flex items-center justify-center bg-violet-500/10 text-violet-500">
-            <Papicon icon="MessageCircle" size={20} />
-          </div>
-          <div class="min-w-0">
-            <h3 class="text-base font-semibold text-on-surface">{m.fun_confession_title()}</h3>
-            <p class="text-xs text-on-surface-variant">{m.fun_confession_subtitle()}</p>
-          </div>
-        </div>
-
-        <div class="grid gap-5 md:grid-cols-3">
-          <Field label={m.fun_channel_label()}>
-            {#snippet children(id)}
-              <SearchableSelect {id} bind:value={config.funConfessionChannelId} options={channelOptions} placeholder={m.fun_no_channel()} disabled={!canManageSettings} />
-            {/snippet}
-          </Field>
-          <Field label={m.fun_confession_log_label()}>
-            {#snippet children(id)}
-              <SearchableSelect {id} bind:value={config.funConfessionLogChannelId} options={channelOptions} placeholder={m.fun_no_channel()} disabled={!canManageSettings} />
-            {/snippet}
-          </Field>
-          <Field label={m.fun_confession_cooldown_label()} hint={m.fun_confession_cooldown_hint()}>
-            {#snippet children(id, describedBy)}
-              <input
-                {id}
-                aria-describedby={describedBy}
-                type="number"
-                min="0"
-                max="86400"
-                step="1"
-                bind:value={config.funConfessionCooldownSeconds}
-                class="input"
-                disabled={!canManageSettings}
-              />
-            {/snippet}
-          </Field>
-        </div>
-
-        <p class="flex items-start gap-2 text-xs text-on-surface-variant">
-          <Papicon icon="info" size={14} class="mt-0.5 shrink-0" />
-          <span>{m.fun_confession_hint()}</span>
-        </p>
-      </section>
-
-      <section class="space-y-4 rounded-xl border border-outline-variant/30 bg-surface-container-low/40 p-6">
-        <h3 class="text-base font-semibold flex items-center gap-2.5">
-          <Papicon icon="List" size={16} />
-          {m.fun_confession_recent_title()}
-        </h3>
-        {#if confessions.length === 0}
-          <EmptyState icon="MessageCircle" title={m.fun_confession_empty()} reason="accumulating" />
-        {:else}
-          <ul class="space-y-3">
-            {#each confessions as c (c.number)}
-              <li class="rounded-xl border border-outline-variant/10 bg-surface-container-high/20 p-4 {c.deletedAt ? 'opacity-60' : ''}">
-                <div class="mb-2 flex flex-wrap items-center gap-2 text-xs text-on-surface-variant">
-                  <span class="rounded-full bg-violet-500/10 px-2 py-0.5 font-semibold text-violet-500">#{c.number}</span>
-                  <span>{formatDate(c.createdAt)}</span>
-                  {#if c.revealedAt}
-                    <span class="rounded-full bg-warning/10 px-2 py-0.5 font-semibold text-warning">{m.fun_confession_revealed()}</span>
-                  {/if}
-                  {#if c.deletedAt}
-                    <span class="rounded-full bg-error/10 px-2 py-0.5 font-semibold text-error">{m.fun_confession_deleted()}</span>
-                  {/if}
-                </div>
-                <p class="whitespace-pre-wrap break-words text-sm text-on-surface {c.deletedAt ? 'line-through' : ''}">{c.content}</p>
-              </li>
-            {/each}
-          </ul>
-        {/if}
-      </section>
-    </div>
-  {:else}
-    <EmojiRiddleEditor bind:useDefaults={config.funEmojiRiddleUseDefaults} canManage={canManageSettings} />
+    <Modal bind:open={statusOpen} onClose={() => (statusOpen = false)} title={m.fun_status_title()}>
+      {@render statusPanel()}
+    </Modal>
   {/if}
+
+  {#if editingGame}
+    {@const game = editingGame}
+    {@const texts = gameTexts[game.id]}
+    <Modal open={true} onClose={() => (editingGame = null)} title={texts.title} subtitle={texts.subtitle}>
+      <div class="space-y-4">
+        <p class="text-sm text-on-surface-variant">{texts.rule ?? m.fun_game_score_rule()}</p>
+        <Field label={m.fun_channel_label()} hint={m.fun_game_channel_hint()}>
+          {#snippet children(id)}
+            <SearchableSelect {id} bind:value={config[game.channelKey]} options={channelOptions} placeholder={m.fun_no_channel()} />
+          {/snippet}
+        </Field>
+      </div>
+      {#snippet footer()}
+        <div class="flex flex-wrap justify-end gap-2">
+          {#if config[game.channelKey]}
+            <Button variant="ghost" icon="power" onclick={() => { config[game.channelKey] = null; editingGame = null; }}>{m.fun_game_disable()}</Button>
+          {/if}
+          <Button variant="primary" onclick={() => (editingGame = null)}>{m.common_close()}</Button>
+        </div>
+      {/snippet}
+    </Modal>
+  {/if}
+
+  <!-- Sur grand écran, l'état du module reste à côté du contenu, quel que soit l'onglet. -->
+  <div class="lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start lg:gap-6">
+    <div class="min-w-0">
+      <Tabs label={m.fun_tabs_label()} tabs={tabItems} active={activeTab} onchange={(id) => (activeTab = id as Tab)} class="mb-6" />
+
+      {#if loading}
+        <div class="space-y-6">
+          <Skeleton height="80px" />
+          <Skeleton height="300px" />
+        </div>
+        <div class="flex justify-center mt-4">
+          <LoadingHint context="config" />
+        </div>
+      {:else if activeTab === 'overview'}
+        <div class="space-y-6">
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {@render statTile('Gamepad2', 'bg-primary/10 text-primary', `${running.length} / ${FUN_GAMES.length}`, m.fun_active_summary())}
+            {@render statTile('Binary', 'bg-warning/10 text-warning', savedConfig.funCountingChannelId ? String(gameState.countingCurrent) : '-', m.fun_stat_counting())}
+            {@render statTile('Shield', 'bg-secondary/10 text-secondary', savedConfig.funPunitiveMode ? m.fun_status_on() : m.fun_status_off(), m.fun_punitive_title())}
+          </div>
+
+          {#if running.length === 0}
+            <Callout variant="info" title={m.fun_empty_title()}>
+              <p>{m.fun_empty_desc()}</p>
+              {#snippet actions()}
+                <Button size="sm" icon="Gears" onclick={() => (activeTab = 'settings')}>{m.fun_empty_action()}</Button>
+              {/snippet}
+            </Callout>
+          {:else}
+            <section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl space-y-4">
+              <div class="flex flex-wrap items-center justify-between gap-3">
+                <h3 class="text-base font-semibold flex items-center gap-2.5">
+                  <Papicon icon="Gamepad2" size={16} />
+                  {m.fun_running_title()}
+                </h3>
+                <Button variant="ghost" size="sm" icon="Gears" onclick={() => (activeTab = 'settings')}>{m.fun_running_edit()}</Button>
+              </div>
+              <ul class="space-y-3">
+                {#each running as game (game.id)}
+                  {@const reset = RESETS[game.id]}
+                  <li class="bg-surface-container-high/20 border border-outline-variant/10 rounded-xl p-4 flex flex-wrap items-center gap-3">
+                    {@render gameIcon(game)}
+                    <div class="min-w-0 flex-1 space-y-0.5">
+                      <p class="text-sm font-semibold text-on-surface">
+                        {gameTexts[game.id].title}
+                        <span class="font-normal text-on-surface-variant">· {channelName(savedConfig[game.channelKey])}</span>
+                      </p>
+                      <div class="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-on-surface-variant">
+                        {@render gameStatus(game)}
+                      </div>
+                    </div>
+                    {#if reset}
+                      <Button
+                        size="sm"
+                        icon="refresh-cw"
+                        loading={resetting === game.id}
+                        disabled={!canManageSettings}
+                        disabledReason={m.common_reason_no_permission()}
+                        onclick={reset}
+                      >{RESET_LABELS[game.id]}</Button>
+                    {/if}
+                  </li>
+                {/each}
+              </ul>
+            </section>
+          {/if}
+        </div>
+      {:else if activeTab === 'confessions'}
+        <section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl space-y-4">
+          <h3 class="text-base font-semibold flex items-center gap-2.5">
+            <Papicon icon="List" size={16} />
+            {m.fun_confession_recent_title()}
+          </h3>
+          {#if !savedConfig.funConfessionChannelId && confessions.length === 0}
+            <Callout variant="info" title={m.fun_confession_off_title()}>
+              <p>{m.fun_confession_subtitle()}</p>
+              {#snippet actions()}
+                <Button size="sm" icon="Gears" onclick={() => (activeTab = 'settings')}>{m.fun_empty_action()}</Button>
+              {/snippet}
+            </Callout>
+          {:else if confessions.length === 0}
+            <EmptyState icon="MessageCircle" title={m.fun_confession_empty()} reason="accumulating" />
+          {:else}
+            <ul class="space-y-3">
+              {#each confessions as c (c.number)}
+                <li class="bg-surface-container-high/20 border border-outline-variant/10 rounded-xl p-4 space-y-2 {c.deletedAt ? 'opacity-60' : ''}">
+                  <div class="flex flex-wrap items-center gap-2 text-xs text-on-surface-variant">
+                    <span class="font-semibold text-on-surface">#{c.number}</span>
+                    <span>{formatDate(c.createdAt)}</span>
+                    {#if c.revealedAt}
+                      <span class="rounded-full bg-warning/10 px-2 py-0.5 font-semibold text-warning">{m.fun_confession_revealed()}</span>
+                    {/if}
+                    {#if c.deletedAt}
+                      <span class="rounded-full bg-error/10 px-2 py-0.5 font-semibold text-error">{m.fun_confession_deleted()}</span>
+                    {/if}
+                  </div>
+                  <p class="whitespace-pre-wrap break-words text-sm text-on-surface {c.deletedAt ? 'line-through' : ''}">{c.content}</p>
+                </li>
+              {/each}
+            </ul>
+          {/if}
+        </section>
+      {:else if activeTab === 'riddles'}
+        <EmojiRiddleEditor bind:useDefaults={config.funEmojiRiddleUseDefaults} canManage={canManageSettings} />
+      {:else}
+        <div class="space-y-6">
+          <section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl space-y-5">
+            {@render sectionHeader('Gamepad2', m.fun_settings_games_title(), m.fun_settings_games_desc())}
+            <ul class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {#each FUN_GAMES as game (game.id)}
+                {@const channelId = config[game.channelKey]}
+                <li class="rounded-xl border p-4 flex items-center gap-3 {channelId ? 'border-success/30 bg-success/5' : 'border-outline-variant/20 bg-surface-container-high/20'}">
+                  {@render gameIcon(game)}
+                  <div class="min-w-0 flex-1">
+                    <p class="text-sm font-semibold text-on-surface">{gameTexts[game.id].title}</p>
+                    <p class="text-xs truncate {channelId ? 'text-success' : 'text-on-surface-variant'}">
+                      {channelId ? channelName(channelId) : gameTexts[game.id].subtitle}
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant={channelId ? 'ghost' : 'secondary'}
+                    icon={channelId ? 'pencil' : 'plus'}
+                    disabled={!canManageSettings}
+                    disabledReason={m.common_reason_no_permission()}
+                    onclick={() => (editingGame = game)}
+                  >{channelId ? m.fun_game_change() : m.fun_game_enable()}</Button>
+                </li>
+              {/each}
+            </ul>
+          </section>
+
+          <section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl space-y-5">
+            {@render sectionHeader('Shield', m.fun_settings_rules_title(), m.fun_settings_rules_desc())}
+            <div class="flex items-start justify-between gap-4">
+              <div>
+                <p class="text-sm font-semibold">{m.fun_punitive_title()}</p>
+                <p class="text-xs text-on-surface-variant">{m.fun_punitive_desc()}</p>
+              </div>
+              <ToggleSwitch
+                checked={config.funPunitiveMode}
+                disabled={!canManageSettings}
+                onToggle={(value) => (config.funPunitiveMode = value)}
+                ariaLabel={m.fun_punitive_title()}
+              />
+            </div>
+          </section>
+
+          <section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl space-y-5">
+            {@render sectionHeader('MessageCircle', m.fun_confession_title(), m.fun_confession_subtitle())}
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Field label={m.fun_channel_label()}>
+                {#snippet children(id)}
+                  <SearchableSelect {id} bind:value={config.funConfessionChannelId} options={channelOptions} placeholder={m.fun_no_channel()} disabled={!canManageSettings} />
+                {/snippet}
+              </Field>
+              <Field label={m.fun_confession_log_label()}>
+                {#snippet children(id)}
+                  <SearchableSelect {id} bind:value={config.funConfessionLogChannelId} options={channelOptions} placeholder={m.fun_no_channel()} disabled={!canManageSettings} />
+                {/snippet}
+              </Field>
+              <Field label={m.fun_confession_cooldown_label()} hint={m.fun_confession_cooldown_hint()}>
+                {#snippet children(id, describedBy)}
+                  <input
+                    {id}
+                    aria-describedby={describedBy}
+                    type="number"
+                    min="0"
+                    max="86400"
+                    step="1"
+                    bind:value={config.funConfessionCooldownSeconds}
+                    class="input"
+                    disabled={!canManageSettings}
+                  />
+                {/snippet}
+              </Field>
+            </div>
+            <p class="text-xs text-on-surface-variant">{m.fun_confession_hint()}</p>
+          </section>
+        </div>
+      {/if}
+    </div>
+
+    {#if wide.current}
+      <aside class="sticky top-4 space-y-4" aria-label={m.fun_status_title()}>
+        <section class="bg-surface-container-low/40 border border-outline-variant/30 p-4 rounded-xl space-y-3">
+          <h3 class="text-sm font-semibold flex items-center gap-2"><Papicon icon="List" size={15} /> {m.fun_status_title()}</h3>
+          {@render statusPanel()}
+        </section>
+      </aside>
+    {/if}
+  </div>
 </ModulePage>
