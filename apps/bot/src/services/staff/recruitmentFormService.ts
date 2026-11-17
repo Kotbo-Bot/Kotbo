@@ -1,6 +1,8 @@
 import { createHash, randomBytes } from 'node:crypto';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
+import { assertFreeQuota } from '../system/freeQuota.js';
+import { countRecruitmentForms } from '../features/customFormService.js';
 
 // ============================================================================
 // API KEY GENERATION
@@ -121,6 +123,8 @@ export async function createRecruitmentForm(
   description: string | undefined,
   structure: FormStructure
 ) {
+  await assertFreeQuota(guildId, 'recruitmentForms', () => countRecruitmentForms(guildId));
+
   let apiKeyId: string | null = null;
   let apiKey: string | null = null;
   let displayKey: string | null = null;

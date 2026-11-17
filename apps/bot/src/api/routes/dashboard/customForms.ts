@@ -5,6 +5,7 @@ import { Prisma } from '@prisma/client';
 import { logger } from '../../../utils/logger.js';
 import { json, readJsonBody, type AuthClaims, type DashboardAccess } from '../../shared.js';
 import {
+  countRecruitmentForms,
   createCustomForm,
   getCustomForms,
   getCustomForm,
@@ -17,6 +18,7 @@ import { getMemberIdentities } from '../../../services/moderation/memberIdentity
 import { refreshRecruitmentPanels, syncRecruitmentFormAvailability } from '../../../services/staff/recruitmentPanelService.js';
 
 import { jsonFailure } from '../../shared/failure.js';
+import { assertFreeQuota } from '../../../services/system/freeQuota.js';
 interface CustomFormCreateBody {
   name: string;
   description?: string;
@@ -170,8 +172,12 @@ export async function handleCustomFormRoutes(
 
         const current = await prisma.customForm.findFirst({
           where: { id: formId, guildId },
-          select: { isActive: true, acceptedCapMode: true },
+          select: { isActive: true, acceptedCapMode: true, isRecruitment: true },
         });
+        // Passer un formulaire en recrutement en crée un de plus pour le plafond gratuit.
+        if (current && body.isRecruitment === true && !current.isRecruitment) {
+          await assertFreeQuota(guildId, 'recruitmentForms', () => countRecruitmentForms(guildId));
+        }
         // Ouvrir ou fermer a la main reprend la main sur le bot : la fermeture
         // automatique est oubliee, et en mode RESET une reouverture relance une
         // vague de recrutement avec un compteur d'acceptes a zero.

@@ -117,6 +117,7 @@ export {
 export {
   FREE_ANALYTICS_DAYS,
   FREE_MODULES,
+  FREE_QUOTAS,
   GIFT_DURATIONS_MONTHS,
   PLAN_KEYS,
   PLAN_REGISTRY,
@@ -137,6 +138,7 @@ export {
 } from './types/plans.js';
 export type {
   BillingInterval,
+  FreeQuotaKey,
   GiftDurationMonths,
   PaidPlanKey,
   PlanDefinition,

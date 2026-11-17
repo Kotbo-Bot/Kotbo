@@ -8,6 +8,7 @@ import { json, readJsonBody, resolveDashboardAccess, pushAudit, type AuthClaims 
 import { reloadSchedule, stopSchedule, executeSchedule } from '../../../services/system/scheduleService.js';
 
 import { jsonFailure } from '../../shared/failure.js';
+import { assertFreeQuota } from '../../../services/system/freeQuota.js';
 /** Texte du message programme. Vide = pas de texte, l'embed peut suffire. */
 function messageText(value: unknown): string | null {
   // 2000 caracteres : la limite d'un message Discord. Tronquer ici evite un
@@ -110,6 +111,8 @@ export async function handleScheduleRoutes(
         json(res, 400, { error: 'Expression cron invalide' });
         return true;
       }
+
+      await assertFreeQuota(guildId, 'scheduledTasks', () => prisma.scheduledTask.count({ where: { guildId } }));
 
       const schedule = await prisma.scheduledTask.create({
         data: {

@@ -6,6 +6,7 @@ import { logger } from '../../utils/logger.js';
 import { handleFormTrigger } from './autoResponseService.js';
 import { labelFormAnswers } from './customFormAnswers.js';
 import { syncRecruitmentFormAvailability } from '../staff/recruitmentPanelService.js';
+import { assertFreeQuota } from '../system/freeQuota.js';
 
 
 // ============================================================================
@@ -31,6 +32,15 @@ export type CustomFormStructure = {
 // CRUD FORMULAIRES
 // ============================================================================
 
+/** Recrutements du serveur : formulaires marqués recrutement + anciens formulaires dédiés. */
+export async function countRecruitmentForms(guildId: string): Promise<number> {
+  const [custom, legacy] = await Promise.all([
+    prisma.customForm.count({ where: { guildId, isRecruitment: true } }),
+    prisma.recruitmentForm.count({ where: { guildId } }),
+  ]);
+  return custom + legacy;
+}
+
 export async function createCustomForm(
   guildId: string,
   data: {
@@ -44,6 +54,17 @@ export async function createCustomForm(
     hierarchyId?: string | null;
   }
 ) {
+  if (data.isRecruitment) {
+    await assertFreeQuota(guildId, 'recruitmentForms', () => countRecruitmentForms(guildId));
+  } else {
+    await assertFreeQuota(guildId, 'customForms', async () => {
+      // Le formulaire d'appel par défaut est posé par Kotbo : il ne compte pas.
+      const appeal = await prisma.banAppealConfig.findUnique({ where: { guildId }, select: { formId: true } });
+      return prisma.customForm.count({
+        where: { guildId, isRecruitment: false, ...(appeal?.formId ? { id: { not: appeal.formId } } : {}) },
+      });
+    });
+  }
   return prisma.customForm.create({
     data: {
       guildId,

@@ -6,6 +6,7 @@ import { logger } from '../../../utils/logger.js';
 import { createBackup } from '../../../services/system/backupService.js';
 import { parseBackupImport } from '../../../services/system/backupImportValidation.js';
 import { jsonFailure } from '../../shared/failure.js';
+import { assertFreeQuota } from '../../../services/system/freeQuota.js';
 import {
   json,
   readJsonBody,
@@ -261,6 +262,7 @@ export async function handleBackupRoutes(
         where: { guildId, isPreset: false },
       });
 
+      await assertFreeQuota(guildId, 'backups', async () => existingBackups);
       const MAX_BACKUPS_PER_GUILD = 3;
       if (existingBackups >= MAX_BACKUPS_PER_GUILD) {
         json(res, 400, { error: 'Limite de sauvegardes atteinte' });

@@ -3,6 +3,7 @@ import { Guild } from 'discord.js';
 import prisma from '../../utils/db.js';
 import { fetchAllMembers } from '../../utils/discord.js';
 import { exportKotboConfig, type KotboConfigData } from './kotboConfigBackup.js';
+import { assertFreeQuota, isAtFreeQuota } from './freeQuota.js';
 
 export interface BackupOptions {
   name: string;
@@ -18,6 +19,8 @@ export interface BackupOptions {
   createdByUserId: string;
   createdByUsername: string;
   createdByTag?: string;
+  /** Au plafond gratuit, remplace la plus ancienne au lieu d'échouer (sauvegarde planifiée). */
+  rotate?: boolean;
 }
 
 export interface BackupData {
@@ -109,6 +112,17 @@ export interface ReactionData {
 }
 
 export async function createBackup(guild: Guild, options: BackupOptions) {
+  const countBackups = () => prisma.serverBackup.count({ where: { guildId: guild.id, isPreset: false } });
+  if (options.rotate && await isAtFreeQuota(guild.id, 'backups', countBackups)) {
+    const oldest = await prisma.serverBackup.findFirst({
+      where: { guildId: guild.id, isPreset: false },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
+    });
+    if (oldest) await prisma.serverBackup.delete({ where: { id: oldest.id } });
+  }
+  await assertFreeQuota(guild.id, 'backups', countBackups);
+
   console.log(`[BackupService] Starting backup for guild: "${guild.name}" (${guild.id})`);
   const backupData: BackupData = {
     roles: [],
