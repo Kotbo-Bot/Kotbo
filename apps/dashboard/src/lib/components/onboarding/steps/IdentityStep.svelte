@@ -12,6 +12,7 @@
    */
   import { m } from '../../../i18n';
   import { toast } from '../../../stores/toast.svelte';
+  import { botLocale } from '../../../stores/botLocale.svelte';
   import { wizard } from '../../../stores/onboardingWizard.svelte';
   import { onboardingData } from '../../../stores/onboardingData.svelte';
   import { COMMON_TIMEZONES, celebrateStep } from '../../../onboarding';
@@ -72,6 +73,7 @@
       if (language !== savedLanguage) {
         await updateGuildLanguage({ language }, undefined, { silent: true });
         savedLanguage = language;
+        botLocale.set(language);
         // La maquette est nommee dans la langue du serveur : sans relecture,
         // l'ecran « structure » annoncerait des salons dans l'ancienne.
         await onboardingData.refreshTemplate();

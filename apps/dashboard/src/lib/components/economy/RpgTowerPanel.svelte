@@ -4,6 +4,7 @@
   /** La Tour (mode roguelite du RPG) et la Tour de clan, dans une coque façon Analytics. */
   import { onMount } from 'svelte';
   import { m } from '../../i18n';
+  import { bot } from '../../stores/botLocale.svelte';
   import { channelDisplayName } from '../../channelUtils';
   import { confirmDialog } from '../../stores/confirmDialog.svelte';
   import { dashboardStore } from '../../stores/dashboard.svelte';
@@ -184,7 +185,7 @@
     skillPrice: 10,
     weeklyShardCap: 0,
     idleTimeoutMinutes: 30,
-    currencyName: 'Éclats de Tour',
+    currencyName: m.bot_currency_tower_shards({}, bot()),
     currencyEmoji: '',
     upgrades: defaultUpgrades(),
     merchant: { ...MERCHANT_DEFAULTS, offers: [...OFFERS] },

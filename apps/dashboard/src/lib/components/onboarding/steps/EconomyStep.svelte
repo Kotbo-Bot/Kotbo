@@ -18,6 +18,7 @@
   import { m, dateLocale } from '../../../i18n';
   import { authStore } from '../../../stores/auth.svelte';
   import { toast } from '../../../stores/toast.svelte';
+  import { bot } from '../../../stores/botLocale.svelte';
   import { wizard } from '../../../stores/onboardingWizard.svelte';
   import { onboardingData } from '../../../stores/onboardingData.svelte';
   import {
@@ -38,7 +39,7 @@
   import { errorMessage } from '@kotbo/shared';
   const { onEditTracks, skip }: { onEditTracks: () => void; skip: () => void } = $props();
 
-  const name = $derived(wizard.currencyName ?? 'Pièces');
+  const name = $derived(wizard.currencyName ?? m.bot_currency_coins({}, bot()));
   const emoji = $derived(wizard.currencyEmoji ?? '🪙');
   const rhythm = $derived<EconomyRhythm>(wizard.economyRhythm ?? 'standard');
 
@@ -194,17 +195,17 @@
   </div>
 
   {#snippet preview()}
-    <DiscordPreview channel="économie">
+    <DiscordPreview channel={m.bot_ch_economy({}, bot())}>
       <DiscordEmbed
         color={panelColor}
         title={m.onb_economy_preview_daily()}
         description={m.onb_economy_preview_daily_line({
           amount: `${emoji} ${sample}`,
-          currency: name.trim() || 'pièces',
+          currency: name.trim() || m.bot_currency_coins_lc({}, bot()),
           hours: config.dailyCooldownHour,
         })}
         fields={[
-          { emoji, name: m.onb_economy_preview_balance(), value: `${(sample * 7).toLocaleString(dateLocale())} ${name.trim() || 'pièces'}` },
+          { emoji, name: m.onb_economy_preview_balance(), value: `${(sample * 7).toLocaleString(dateLocale())} ${name.trim() || m.bot_currency_coins_lc({}, bot())}` },
         ]}
       />
     </DiscordPreview>

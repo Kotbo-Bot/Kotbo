@@ -4,6 +4,7 @@
   import { channelDisplayName } from '../lib/channelUtils';
   import { isMissingReference } from '../lib/discordReferences';
   import { m } from '../lib/i18n';
+  import { bot } from '../lib/stores/botLocale.svelte';
   import { onMount, onDestroy, untrack } from 'svelte';
   import { router } from 'tinro';
   import { resolveTabFromUrl, gotoTab } from '../lib/tabRouting';
@@ -129,7 +130,7 @@
     cooldownSeconds: 60,
     vocalXpPerMin: 5,
     levelUpChannelId: null as string | null,
-    levelUpMessage: 'Félicitations {user} ! Tu passes au niveau **{level}** ! 🎉',
+    levelUpMessage: m.bot_levelup_message({ user: '{user}', level: '{level}' }, bot()),
     stackRewards: false,
     ignoredChannels: [] as string[],
     ignoredRoles: [] as string[],
@@ -159,7 +160,7 @@
     cooldownSeconds: 60,
     vocalXpPerMin: 5,
     levelUpChannelId: null as string | null,
-    levelUpMessage: 'Félicitations {user} ! Tu passes au niveau **{level}** ! 🎉',
+    levelUpMessage: m.bot_levelup_message({ user: '{user}', level: '{level}' }, bot()),
     stackRewards: false,
     ignoredChannels: [] as string[],
     ignoredRoles: [] as string[],

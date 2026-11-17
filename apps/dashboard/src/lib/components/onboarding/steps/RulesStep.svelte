@@ -10,6 +10,7 @@
    */
   import { authStore } from '../../../stores/auth.svelte';
   import { toast } from '../../../stores/toast.svelte';
+  import { bot } from '../../../stores/botLocale.svelte';
   import { wizard } from '../../../stores/onboardingWizard.svelte';
   import { onboardingData } from '../../../stores/onboardingData.svelte';
   import { PANEL_COLORS, RULE_PRESETS, celebrateStep } from '../../../onboarding';
@@ -164,7 +165,7 @@
             type="button"
             onclick={() => { rule.selected = !rule.selected; celebrateStep(); }}
             aria-pressed={rule.selected}
-            aria-label={rule.selected ? `Retirer « ${rule.title} »` : `Ajouter « ${rule.title} »`}
+            aria-label={rule.selected ? m.onb_rules_remove_aria({ title: rule.title }) : m.onb_rules_add_aria({ title: rule.title })}
             class="mt-0.5 w-5 h-5 shrink-0 rounded-md border flex items-center justify-center transition-colors
             {rule.selected
               ? 'bg-primary border-primary text-on-primary'
@@ -197,14 +198,14 @@
               <input
                 bind:value={rule.title}
                 maxlength="80"
-                aria-label="Titre de l'article"
+                aria-label={m.onb_rules_title_aria()}
                 class="mt-2 w-full rounded-lg border border-outline-variant/40 bg-surface-container-low/50 px-3 py-2 text-body-sm font-semibold text-on-surface
                        focus:outline-none focus:border-primary/50"
               />
               <textarea
                 bind:value={rule.description}
                 rows="3"
-                aria-label="Texte de l'article"
+                aria-label={m.onb_rules_text_aria()}
                 class="mt-2 w-full rounded-lg border border-outline-variant/40 bg-surface-container-low/50 px-3 py-2 text-body-sm text-on-surface
                        focus:outline-none focus:border-primary/50 resize-none"
               ></textarea>
@@ -222,11 +223,11 @@
          ensemble : juger les nouveaux articles hors de ceux qui les entourent
          ne dit pas si l'ensemble se tient. -->
     {#if published.length}
-      <DiscordPreview channel="règlement">
+      <DiscordPreview channel={m.bot_ch_rules({}, bot())}>
         <DiscordEmbed
           color={panelColor}
-          title={`Règlement de ${selectedGuild?.name ?? 'votre serveur'}`}
-          description="En participant à ce serveur, vous acceptez les règles suivantes."
+          title={m.bot_rules_embed_title({ server: selectedGuild?.name ?? m.bot_rules_embed_your_server({}, bot()) }, bot())}
+          description={m.bot_rules_embed_desc({}, bot())}
           fields={published.map((rule) => ({ emoji: rule.emoji, name: rule.title, value: rule.description }))}
         />
       </DiscordPreview>
@@ -243,7 +244,7 @@
       onclick={skip}
       class="text-body-sm font-medium text-on-surface-variant hover:text-on-surface transition-colors"
     >
-      Passer
+      {m.obx_skip()}
     </button>
     <button
       type="button"
@@ -252,15 +253,15 @@
       class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-on-primary text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-40"
     >
       {#if onboardingData.busy}
-        Publication…
+        {m.onb_rules_publishing()}
       {:else if chosen.length && existing.length}
-        Ajouter {chosen.length} article(s)
+        {m.onb_rules_add_count({ count: chosen.length })}
       {:else if chosen.length}
-        Publier {chosen.length} articles
+        {m.onb_rules_publish_count({ count: chosen.length })}
       {:else if existing.length}
-        Publier le règlement
+        {m.onb_rules_publish()}
       {:else}
-        Continuer
+        {m.obx_continue()}
       {/if}
       <Papicon icon="ChevronRight" size={15} />
     </button>
