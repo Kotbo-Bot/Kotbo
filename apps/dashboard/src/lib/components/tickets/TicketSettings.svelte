@@ -333,7 +333,7 @@
   /**
    * Les réglages « verrouillage » et « validation » d'un type de ticket sont
    * tri-états côté bot (`true` / `false` / `null` = suivre le serveur). Un
-   * `<select>` ne manipulant que des chaînes, la conversion se fait ici, dans
+   * une liste `select` ne manipulant que des chaînes, la conversion se fait ici, dans
    * les deux sens, plutôt que d'éparpiller des ternaires dans le balisage.
    */
   function inheritedToSelect(value: unknown): '' | 'YES' | 'NO' {

@@ -493,7 +493,7 @@
               {/if}
             </div>
 
-            <FormTextarea
+            <FormTextarea ariaLabel={m.camp_content_ph({ server: '{server}', user: '{user}' })}
               bind:value={step.content}
               placeholder={m.camp_content_ph({ server: '{server}', user: '{user}' })}
               className="w-full h-20"

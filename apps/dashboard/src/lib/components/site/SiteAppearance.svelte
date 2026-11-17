@@ -236,7 +236,7 @@
 
     <SectionCard title={m.ste_custom_css()} description={m.ste_custom_css_desc()} icon="code">
       <div class="px-5 pb-5 space-y-2">
-        <textarea class="input w-full font-mono text-xs" rows="10" spellcheck="false" maxlength="30000" placeholder=".site-root h2 &#123; &#125;" bind:value={customCss}></textarea>
+        <textarea aria-label={m.ste_custom_css()} class="input w-full font-mono text-xs" rows="10" spellcheck="false" maxlength="30000" placeholder=".site-root h2 &#123; &#125;" bind:value={customCss}></textarea>
         <p class="text-2xs text-on-surface-variant">{m.ste_custom_css_rules()}</p>
       </div>
     </SectionCard>

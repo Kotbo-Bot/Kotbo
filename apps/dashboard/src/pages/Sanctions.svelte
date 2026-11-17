@@ -1452,7 +1452,7 @@
 
               {#if showAddTableField}
                 <div class="flex gap-2 p-2 bg-surface-container-high/40 rounded-lg border border-outline-variant/10">
-                  <FormInput 
+                  <FormInput ariaLabel={m.sc_scale_name_ph()} 
                     bind:value={newTableName} 
                     placeholder={m.sc_scale_name_ph()} 
                     className="flex-1 text-xs px-3 py-2 bg-transparent outline-none border-none text-on-surface"
@@ -1510,7 +1510,7 @@
                 {#if currentTable}
                   <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-outline-variant/10 pb-4">
                     <div class="flex items-center gap-4">
-                      <FormInput 
+                      <FormInput ariaLabel={m.sc_table_name()} 
                         bind:value={currentTable.name} 
                         className="text-lg font-semibold bg-transparent border-none text-on-surface focus:ring-0 px-0 py-0 w-60"
                       />

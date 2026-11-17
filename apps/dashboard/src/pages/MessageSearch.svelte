@@ -390,7 +390,7 @@
           <div class="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant">
             <Papicon icon="search" size={18} />
           </div>
-          <input
+          <input aria-label={m.ms_search_placeholder()}
             type="text"
             bind:value={query}
             oninput={onQueryInput}

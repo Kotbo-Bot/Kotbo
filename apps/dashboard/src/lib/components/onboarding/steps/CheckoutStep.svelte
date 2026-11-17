@@ -286,7 +286,7 @@
         <div class="rounded-2xl border border-outline-variant/30 bg-surface-container-low/30 p-4">
           <p class="text-body-sm font-semibold text-on-surface mb-2">{m.obx_co_code()}</p>
           <div class="flex items-center gap-2">
-            <input
+            <input aria-label={m.obx_co_code()}
               type="text"
               bind:value={codeValue}
               disabled={codeBusy}

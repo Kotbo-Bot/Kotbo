@@ -522,7 +522,7 @@
 
                             {#if !decided && item.sanctionId}
                               <div class="flex flex-wrap items-center gap-2 pt-1">
-                                <select bind:value={itemOutcomes[item.id]}
+                                <select aria-label={m.ba_item_outcome()} bind:value={itemOutcomes[item.id]}
                                   class="flex-1 min-w-[180px] bg-surface-container rounded-lg px-3 py-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-primary border border-outline-variant/20">
                                   <option value="UPHELD">{m.ba_outcome_upheld()}</option>
                                   <option value="ARCHIVED">{m.ba_outcome_archived()}</option>
@@ -647,7 +647,7 @@
                   <!-- Décision -->
                   {#if appeal.status === 'PENDING' || appeal.status === 'NEEDS_INFO'}
                     <div class="space-y-3 pt-2 border-t border-outline-variant/10">
-                      <textarea bind:value={actionReason} rows="2"
+                      <textarea aria-label={m.ba_decision_placeholder()} bind:value={actionReason} rows="2"
                         placeholder={m.ba_decision_placeholder()}
                         class="w-full bg-surface rounded-xl px-4 py-3 text-sm outline-none border border-outline-variant/20 focus:border-primary transition-colors resize-y"></textarea>
                       <div class="flex flex-wrap gap-2">
@@ -716,7 +716,7 @@
           <div>
             <p class="text-xs font-semibold text-on-surface-variant mb-1.5">{m.ba_appeal_form()}</p>
             <div class="flex gap-2">
-              <select bind:value={config.formId}
+              <select aria-label={m.ba_appeal_form()} bind:value={config.formId}
                 class="flex-1 bg-surface-container rounded-lg px-3 py-2.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary border border-outline-variant/20">
                 <option value={null}>{m.ba_none()}</option>
                 {#each forms as f}
@@ -738,7 +738,7 @@
           <div class="grid sm:grid-cols-2 gap-4">
             <div>
               <p class="text-xs font-semibold text-on-surface-variant mb-1.5">{m.ba_staff_channel()}</p>
-              <select bind:value={config.staffChannelId}
+              <select aria-label={m.ba_staff_channel()} bind:value={config.staffChannelId}
                 class="w-full bg-surface-container rounded-lg px-3 py-2.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary border border-outline-variant/20">
                 <option value={null}>{m.ba_none()}</option>
                 {#if staffServerChannels.length > 0}
@@ -766,7 +766,7 @@
             </div>
             <div>
               <p class="text-xs font-semibold text-on-surface-variant mb-1.5">{m.ba_invite_channel()}</p>
-              <select bind:value={config.inviteChannelId}
+              <select aria-label={m.ba_invite_channel()} bind:value={config.inviteChannelId}
                 class="w-full bg-surface-container rounded-lg px-3 py-2.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary border border-outline-variant/20">
                 <option value={null}>{m.ba_auto()}</option>
                 {#each textChannels as c}
@@ -832,7 +832,7 @@
             <p class="text-xs font-semibold text-on-surface-variant mb-1.5">
               {config.cooldownDays > 1 ? m.ba_cooldown_other({ days: config.cooldownDays }) : m.ba_cooldown_one({ days: config.cooldownDays })}
             </p>
-            <input type="range" min="0" max="180" bind:value={config.cooldownDays} class="w-full accent-primary" />
+            <input aria-label={config.cooldownDays > 1 ? m.ba_cooldown_other({ days: config.cooldownDays }) : m.ba_cooldown_one({ days: config.cooldownDays })} type="range" min="0" max="180" bind:value={config.cooldownDays} class="w-full accent-primary" />
           </div>
 
           <!-- Portée de la contestation : quels types, combien, dans quel délai -->
@@ -942,20 +942,20 @@
 
           <div>
             <p class="text-xs font-semibold text-on-surface-variant mb-1.5">{m.ba_welcome_text()}</p>
-            <textarea bind:value={config.welcomeText} rows="2"
+            <textarea aria-label={m.ba_welcome_text()} bind:value={config.welcomeText} rows="2"
               placeholder={m.ba_welcome_placeholder()}
               class="w-full bg-surface-container rounded-lg px-3 py-2.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary border border-outline-variant/20 resize-none"></textarea>
           </div>
           <div class="grid sm:grid-cols-2 gap-4">
             <div>
               <p class="text-xs font-semibold text-on-surface-variant mb-1.5">{m.ba_dm_accepted()}</p>
-              <textarea bind:value={config.acceptMessage} rows="3"
+              <textarea aria-label={m.ba_dm_accepted()} bind:value={config.acceptMessage} rows="3"
                 placeholder={m.ba_dm_accepted_placeholder({ server: '{server}', invite: '{invite}' })}
                 class="w-full bg-surface-container rounded-lg px-3 py-2.5 text-xs outline-none focus-visible:ring-2 focus-visible:ring-primary border border-outline-variant/20 resize-none"></textarea>
             </div>
             <div>
               <p class="text-xs font-semibold text-on-surface-variant mb-1.5">{m.ba_dm_denied()}</p>
-              <textarea bind:value={config.denyMessage} rows="3"
+              <textarea aria-label={m.ba_dm_denied()} bind:value={config.denyMessage} rows="3"
                 placeholder={m.ba_dm_denied_placeholder({ server: '{server}', reason: '{reason}' })}
                 class="w-full bg-surface-container rounded-lg px-3 py-2.5 text-xs outline-none focus-visible:ring-2 focus-visible:ring-primary border border-outline-variant/20 resize-none"></textarea>
             </div>

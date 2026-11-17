@@ -206,7 +206,7 @@
             {m.obx_mp_empty_category()}
           </p>
         {:else}
-          <select
+          <select aria-label={m.obx_mp_category()}
             value={valueOf(category.key)}
             disabled={locked}
             onchange={(event) => choose(category, event.currentTarget.value)}
@@ -265,7 +265,7 @@
               {/if}
             </div>
 
-            <select
+            <select aria-label={line.name}
               value={valueOf(line.key)}
               disabled={locked}
               onchange={(event) => choose(line, event.currentTarget.value)}

@@ -370,7 +370,7 @@
       {/each}
 
       <form class="flex gap-2 pt-1" onsubmit={(e) => { e.preventDefault(); void createList(); }}>
-        <input
+        <input aria-label={m.vis_new_list_ph()}
           type="text"
           maxlength="60"
           bind:value={newListName}

@@ -395,7 +395,7 @@
               <span class="text-body-sm font-medium text-on-surface">{row.label}</span>
               <span class="text-body-sm font-semibold tabular-nums text-on-surface">{config[row.field]}</span>
             </div>
-            <input
+            <input aria-label={row.label}
               type="range"
               min="0"
               max="101"

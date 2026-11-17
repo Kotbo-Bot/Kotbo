@@ -3369,7 +3369,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
           <h3 class="text-lg font-semibold">{m.eco_players_title()}</h3>
           
           <div class="flex flex-col sm:flex-row sm:items-center gap-2 w-full md:w-auto">
-            <input 
+            <input aria-label={m.eco_search_players_ph()} 
               type="search" 
               placeholder={m.eco_search_players_ph()} 
               bind:value={searchQuery}
@@ -4163,7 +4163,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
               className="flex-1 min-w-0"
               on:change={(e: any) => ingredient.itemName = e.detail?.value ?? ''}
             />
-            <input type="number" min="1" bind:value={ingredient.quantity} class="w-20 bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs text-right focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+            <input aria-label={m.eco_inventory_quantity()} type="number" min="1" bind:value={ingredient.quantity} class="w-20 bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs text-right focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
             <button
               type="button"
               onclick={() => removeRecipeIngredient(index)}

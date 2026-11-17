@@ -68,7 +68,7 @@
     {/each}
   </div>
 
-  <select
+  <select aria-label={m.wf_channel_filter_add()}
     value=""
     onchange={(e) => { add(e.currentTarget.value); e.currentTarget.value = ''; }}
     class="w-full px-2 py-1 rounded-lg bg-surface-container-highest border border-outline-variant/20 text-2xs text-on-surface {compact ? 'nodrag' : ''}"

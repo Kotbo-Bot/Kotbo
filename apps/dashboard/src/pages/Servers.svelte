@@ -347,7 +347,7 @@
       {#if servers.length > 3}
         <div class="relative">
           <Papicon icon="Search" size={15} class="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/40" />
-          <input
+          <input aria-label={m.srv_search_ph()}
             type="search"
             bind:value={query}
             placeholder={m.srv_search_ph()}

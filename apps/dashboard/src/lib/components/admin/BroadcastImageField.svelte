@@ -4,7 +4,7 @@
    * Champ image d'un broadcast : upload hébergé, glisser-déposer, collage, ou
    * URL externe.
    *
-   * Pourquoi un composant dédié plutôt qu'un simple `<input type="url">` :
+   * Pourquoi un composant dédié plutôt qu'un simple champ `url` :
    * l'ancienne version n'acceptait qu'une URL, et les liens que l'on obtient
    * naturellement (copie depuis Discord, `data:` d'un aperçu local) ne
    * s'affichent jamais dans un embed. Le champ refuse donc explicitement ces

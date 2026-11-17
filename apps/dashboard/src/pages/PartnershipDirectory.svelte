@@ -422,7 +422,7 @@
   {:else if tab === 'discover'}
     <div class="space-y-4">
       <div class="flex flex-wrap gap-2 items-center">
-        <input
+        <input aria-label={m.pdir_search_ph()}
           class="flex-1 min-w-[200px] max-w-md rounded-lg border border-outline-variant/30 bg-surface-container-low px-3 py-1.5 text-xs text-on-surface"
           placeholder={m.pdir_search_ph()}
           bind:value={query}

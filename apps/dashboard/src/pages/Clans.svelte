@@ -1443,13 +1443,13 @@ savedBetSettings = {
               <div class="space-y-2">
                 <span class="text-xs font-semibold text-on-surface-variant block ml-1">{m.clan_start_date_label()}</span>
                 <div class="grid grid-cols-3 gap-2">
-                  <input
+                  <input aria-label={m.clan_start_date_label()}
                     type="date"
                     bind:value={startDate}
                     class="col-span-2 bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-medium"
                     disabled={!canManageSettings}
                   />
-                  <input
+                  <input aria-label={m.clan_start_time()}
                     type="time"
                     bind:value={startTime}
                     class="col-span-1 bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-medium"
@@ -1462,13 +1462,13 @@ savedBetSettings = {
               <div class="space-y-2">
                 <span class="text-xs font-semibold text-on-surface-variant block ml-1">{m.clan_end_date_label()}</span>
                 <div class="grid grid-cols-3 gap-2">
-                  <input
+                  <input aria-label={m.clan_end_date_label()}
                     type="date"
                     bind:value={endDate}
                     class="col-span-2 bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-medium"
                     disabled={!canManageSettings}
                   />
-                  <input
+                  <input aria-label={m.clan_end_time()}
                     type="time"
                     bind:value={endTime}
                     class="col-span-1 bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-medium"

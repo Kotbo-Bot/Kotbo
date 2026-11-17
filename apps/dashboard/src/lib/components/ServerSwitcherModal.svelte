@@ -166,7 +166,7 @@
     >
       <div class="flex items-center gap-2.5 px-3 py-2.5 border-b border-outline-variant">
         <Papicon icon="Search" size={15} class="text-on-surface-variant/40 shrink-0" />
-        <input
+        <input aria-label={m.d7_search_server()}
           bind:this={inputEl}
           bind:value={query}
           oninput={() => selectedIndex = 0}

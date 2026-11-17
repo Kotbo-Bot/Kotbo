@@ -666,7 +666,7 @@
     <!-- Barre de recherche palette -->
     <div class="relative min-w-48">
       <Papicon icon="Search" size={13} class="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant" />
-      <input
+      <input aria-label={m.wf_search_block()}
         type="text"
         bind:value={searchQuery}
         placeholder={m.wf_search_block()}
@@ -810,7 +810,7 @@
                 <div class="space-y-1">
                   {#each (currentConfig('cases') as string[]) ?? [] as caseValue, index}
                     <div class="flex gap-1">
-                      <input
+                      <input aria-label={m.wf_case_value({ n: index + 1 })}
                         value={caseValue}
                         oninput={(e) => updateCase(index, e.currentTarget.value)}
                         class="flex-1 px-2 py-1 rounded-lg bg-surface-container-highest border border-outline-variant/20 text-2xs text-on-surface"

@@ -173,7 +173,7 @@
 </script>
 
 <div class={`relative ${className}`.trim()}>
-  <input
+  <input aria-label={placeholder}
     type="text"
     value={query}
     placeholder={placeholder}

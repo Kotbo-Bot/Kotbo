@@ -287,7 +287,7 @@
         <div class="flex flex-wrap gap-3 mb-4">
           <div class="relative flex-1 min-w-48">
             <Papicon icon="search" size={16} class="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/40" />
-            <input bind:value={searchQuery} placeholder={m.cfr_search_ph()}
+            <input aria-label={m.cfr_search_ph()} bind:value={searchQuery} placeholder={m.cfr_search_ph()}
               class="w-full bg-surface-container rounded-xl pl-9 pr-4 py-2.5 text-sm outline-none focus:ring-2 ring-primary/20 transition-all" />
           </div>
         </div>

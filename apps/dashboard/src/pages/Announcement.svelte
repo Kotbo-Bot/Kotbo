@@ -1356,7 +1356,7 @@
                                 class="w-11 h-11 border-0 bg-transparent rounded-lg cursor-pointer shrink-0"
                                 disabled={!canManageSettings}
                               />
-                              <input
+                              <input aria-label={m.a11y_hex_color()}
                                 type="text"
                                 bind:value={threadConfig.embedColor}
                                 placeholder="#5865F2"
@@ -1482,7 +1482,7 @@
                         </div>
                       </div>
 
-                      <textarea
+                      <textarea aria-label={m.announcements_thread_message_content_placeholder()}
                         bind:value={step.content}
                         placeholder={m.announcements_thread_message_content_placeholder()}
                         maxlength="2000"

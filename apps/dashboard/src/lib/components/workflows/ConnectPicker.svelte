@@ -85,7 +85,7 @@
           aria-label={m.wf_close()}
         ><Papicon icon="Cross" size={15} /></button>
       </div>
-      <input
+      <input aria-label={m.wf_search_block()}
         type="text"
         bind:value={search}
         placeholder={m.wf_search_block()}

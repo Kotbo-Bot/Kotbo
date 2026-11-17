@@ -273,7 +273,7 @@
               <div class="rounded-xl border border-outline-variant/30 bg-surface-container-low/40 p-4">
                 <div class="flex items-start gap-3">
                   {#if finding.action}
-                    <input
+                    <input aria-label={finding.title}
                       type="checkbox"
                       checked={selected[finding.key] ?? false}
                       onchange={(e) => (selected = { ...selected, [finding.key]: e.currentTarget.checked })}
@@ -328,7 +328,7 @@
         title={m.mig_import_title()}
         description={m.mig_import_desc()}
       >
-        <input
+        <input aria-label={m.mig_import_title()}
           type="file"
           accept="application/json,.json"
           onchange={handleFile}
@@ -349,7 +349,7 @@
                   </p>
                   <p class="text-2xs text-on-surface-variant font-mono truncate">{candidate.path}</p>
                 </div>
-                <FormSelect
+                <FormSelect ariaLabel={m.mig_target_for({ name: candidate.name })}
                   value={assignments[candidate.value] ?? ''}
                   onchange={(e: Event) => {
                     assignments = { ...assignments, [candidate.value]: (e.target as HTMLSelectElement).value };

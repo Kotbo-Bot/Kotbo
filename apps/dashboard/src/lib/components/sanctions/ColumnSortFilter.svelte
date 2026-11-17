@@ -138,7 +138,7 @@
       </div>
 
       {#if displaySearch}
-        <input
+        <input aria-label={m.csf_search_ph()}
           type="text"
           bind:value={searchTerm}
           placeholder={m.csf_search_ph()}

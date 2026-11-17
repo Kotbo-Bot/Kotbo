@@ -127,7 +127,7 @@
       <h3 class="text-lg font-semibold">{m.eco_guilds_title()}</h3>
       <p class="text-xs text-on-surface-variant mt-1 leading-relaxed max-w-2xl">{m.eco_guilds_desc()}</p>
     </div>
-    <input
+    <input aria-label={m.eco_guilds_search_ph()}
       type="search"
       placeholder={m.eco_guilds_search_ph()}
       bind:value={search}

@@ -133,7 +133,7 @@
             <div class="absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant/40">
               <Papicon icon="MagnifyingGlass" size={20} />
             </div>
-            <input 
+            <input aria-label={m.d7_dam_search_placeholder()} 
               type="text" 
               bind:value={searchQuery}
               placeholder={m.d7_dam_search_placeholder()}
@@ -141,7 +141,7 @@
             />
           </div>
           <div class="flex gap-2">
-            <select 
+            <select aria-label={m.a11y_sort_by()} 
               bind:value={sortKey}
               class="bg-surface-container-high/40 text-on-surface text-sm font-bold rounded-lg px-4 py-3 border border-outline-variant/5 focus:border-primary/50 focus:outline-none transition-colors appearance-none cursor-pointer"
             >

@@ -176,6 +176,7 @@
                   {roles}
                   {channels}
                   placeholder={field.placeholder}
+                  label={field.label}
                   optional={field.optional}
                   onChange={(value) => setValue(field.key, value)}
                 />
@@ -191,6 +192,7 @@
               kind={option.kind}
               value={(step as ActionStep).values[option.key]}
               {triggerType}
+              label={option.label}
               onChange={(value) => setValue(option.key, value)}
             />
           </div>
@@ -218,7 +220,7 @@
         <div class="flex flex-wrap items-center gap-2 text-sm text-on-surface">
           <Papicon icon="Clock" size={14} class="text-sky-700 dark:text-sky-300 shrink-0" />
           <span class="text-on-surface-variant/90">{m.wf_wait_prefix()}</span>
-          <input
+          <input aria-label={m.wf_wait_seconds()}
             type="number"
             min="1"
             value={(step as WaitStep).seconds}
@@ -273,7 +275,7 @@
             <Papicon icon="GitBranch" size={14} class="text-warning shrink-0" />
             <span class="text-sm font-semibold text-on-surface">{m.wf_if()}</span>
             {#if (step as ConditionStep).tests.length > 1}
-              <select
+              <select aria-label={m.wf_match_mode()}
                 value={(step as ConditionStep).match}
                 onchange={(event) => onChange({ ...(step as ConditionStep), match: event.currentTarget.value as 'all' | 'any' })}
                 class="px-2 py-0.5 rounded-lg text-2xs bg-surface-container-highest border border-outline-variant/25 text-on-surface-variant cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
@@ -292,7 +294,7 @@
                   {#if piece.text}
                     <span class="text-on-surface-variant/90">{piece.text}</span>
                   {:else if piece.field === 'operator' && def.operators}
-                    <select
+                    <select aria-label={m.wf_operator()}
                       value={test.operator ?? def.defaultOperator}
                       onchange={(event) => updateTest(test.id, { operator: event.currentTarget.value })}
                       class="px-2 py-1 rounded-lg text-xs bg-surface-container-highest border border-outline-variant/25 text-on-surface cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
@@ -315,6 +317,7 @@
                     <ValueField
                       kind={def.valueKind}
                       value={test.value}
+                      label={m.wf_test_value()}
                       {triggerType}
                       {roles}
                       {channels}

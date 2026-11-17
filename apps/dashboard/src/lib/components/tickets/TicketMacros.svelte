@@ -231,7 +231,7 @@
       <h3 class="text-sm font-semibold text-on-surface">{m.tmac_sig_title()}</h3>
       <p class="text-on-surface-variant text-xs mt-0.5">{m.tmac_sig_desc()}</p>
     </div>
-    <FormTextarea bind:value={signature.content} rows={3} placeholder={'✅ • {staff} - Modérateur\n🎧 • Support de {server}'} />
+    <FormTextarea ariaLabel={m.tmac_sig_title()} bind:value={signature.content} rows={3} placeholder={'✅ • {staff} - Modérateur\n🎧 • Support de {server}'} />
     <div class="flex items-center justify-between gap-3 flex-wrap">
       <label class="flex items-center gap-2 text-xs text-on-surface-variant">
         <ToggleSwitch size="sm" checked={signature.sendAsMe} onToggle={(v) => (signature.sendAsMe = v)} ariaLabel={m.tmac_sig_send_as_me()} />
@@ -394,7 +394,7 @@
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">{m.tmac_retype()}</span>
-          <FormSelect bind:value={macroForm.setTicketTypeId} className="w-full">
+          <FormSelect ariaLabel={m.tmac_retype()} bind:value={macroForm.setTicketTypeId} className="w-full">
             <option value="">{m.tmac_no_change()}</option>
             {#each ticketTypes as t (t.id)}
               <option value={t.id}>{t.label}</option>
@@ -403,7 +403,7 @@
         </div>
         <div>
           <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">{m.tmac_add_role()}</span>
-          <FormSelect bind:value={macroForm.addRoleId} className="w-full">
+          <FormSelect ariaLabel={m.tmac_add_role()} bind:value={macroForm.addRoleId} className="w-full">
             <option value="">{m.common_none()}</option>
             {#each discordRoles as role (role.id)}
               <option value={role.id}>@{role.name}</option>
@@ -412,7 +412,7 @@
         </div>
         <div>
           <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">{m.tmac_remove_role()}</span>
-          <FormSelect bind:value={macroForm.removeRoleId} className="w-full">
+          <FormSelect ariaLabel={m.tmac_remove_role()} bind:value={macroForm.removeRoleId} className="w-full">
             <option value="">{m.common_none()}</option>
             {#each discordRoles as role (role.id)}
               <option value={role.id}>@{role.name}</option>

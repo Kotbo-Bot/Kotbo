@@ -587,10 +587,10 @@
         </select>
         {#if !linkPage}
           <!-- svelte-ignore a11y_autofocus -->
-          <input class="site-bubble-input" type="text" placeholder="https://" bind:value={linkValue} autofocus />
+          <input aria-label={m.ste_link_url()} class="site-bubble-input" type="text" placeholder="https://" bind:value={linkValue} autofocus />
         {/if}
         <button type="submit" class="site-bubble-btn">{m.ste_link_apply()}</button>
-        <button type="button" class="site-bubble-btn" onclick={() => (linkOpen = false)}>×</button>
+        <button type="button" class="site-bubble-btn" aria-label={m.common_close()} onclick={() => (linkOpen = false)}>×</button>
       </form>
     {:else}
       <button type="button" class="site-bubble-btn" class:is-on={active.bold} aria-pressed={active.bold} title={m.ste_fmt_bold()} onclick={() => editor?.chain().focus().toggleBold().run()}><b>B</b></button>

@@ -1779,7 +1779,7 @@
                       {/if}
                     </p>
                   </div>
-                  <select
+                  <select aria-label={m.prg_tier_role({ name: tier.name })}
                     value={missingRole ? '' : (linkedRoleId ?? '')}
                     onchange={(e) => bindRole(tier.key, (e.currentTarget as HTMLSelectElement).value)}
                     class="prestige-input mt-0! max-w-[45%]"
@@ -2229,7 +2229,7 @@
 
           {#if boardView === 'guild'}
             <div class="relative flex-1 min-w-[240px] max-w-sm">
-              <input
+              <input aria-label={m.prg_board_search_placeholder()}
                 type="search"
                 bind:value={boardSearch}
                 placeholder={m.prg_board_search_placeholder()}

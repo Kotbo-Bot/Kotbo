@@ -469,7 +469,7 @@
               style={statusFilter === status ? `background: ${STATUS_META[status].color}` : ''}
             >{STATUS_META[status].label()}</button>
           {/each}
-          <input
+          <input aria-label={m.ghost_search_placeholder()}
             type="search"
             bind:value={search}
             oninput={onSearchInput}

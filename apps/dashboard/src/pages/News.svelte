@@ -413,7 +413,7 @@
                 <p class="text-xs font-bold leading-tight">{m.news_publish_now_label()}</p>
                 <p class="text-2xs text-on-surface-variant">{m.news_publish_now_sub()}</p>
               </div>
-              <input 
+              <input aria-label={m.news_publish_now_label()} 
                 type="checkbox" 
                 bind:checked={published}
                 class="w-5 h-5 rounded border-outline-variant text-primary focus:ring-primary/30"
@@ -572,7 +572,7 @@
               <span class="absolute inset-y-0 left-0 pl-4 flex items-center text-on-surface-variant/40">
                 <Papicon icon="search" size={18} />
               </span>
-              <input 
+              <input aria-label={m.news_search_ph()} 
                 type="text" 
                 bind:value={searchQuery} 
                 placeholder={m.news_search_ph()} 

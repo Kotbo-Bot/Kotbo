@@ -997,7 +997,7 @@
                 <label for="bc-color" class="text-xs font-semibold text-on-surface-variant mb-1.5 block">Couleur de la barre</label>
                 <div class="flex items-center gap-2 flex-wrap">
                   <input id="bc-color" type="color" bind:value={color} class="w-10 h-10 rounded-xl border border-outline-variant/25 bg-transparent cursor-pointer" />
-                  <input
+                  <input aria-label="Couleur de la barre (code hexadécimal)"
                     bind:value={color}
                     class="w-28 h-10 px-3 rounded-xl bg-surface-container-low/70 border border-outline-variant/25 text-sm font-mono text-on-surface focus:outline-none focus:border-primary/60 uppercase"
                   />
@@ -1240,7 +1240,7 @@
                 </label>
                 {#if scheduleEnabled}
                   <div class="space-y-2 pt-1">
-                    <input
+                    <input aria-label="Date et heure d’envoi"
                       type="datetime-local"
                       bind:value={scheduledAt}
                       class="w-full h-10 px-3 rounded-xl bg-surface-container-lowest border text-sm text-on-surface focus:outline-none focus:border-primary/60
@@ -1608,7 +1608,7 @@
                   tone={guild.channelStatus === 'OK' ? 'success' : guild.channelStatus === 'MISSING' ? 'danger' : 'warning'}
                 />
               </div>
-              <select
+              <select aria-label={`Salon de diffusion pour ${guild.name}`}
                 value={guild.broadcastChannelId ?? ''}
                 disabled={savingChannel === guild.id}
                 onchange={(event) => saveChannelFor(guild, (event.currentTarget as HTMLSelectElement).value || null)}
@@ -2046,7 +2046,7 @@
 <Modal bind:open={showEmojiPicker} title="Emojis personnalisés Kotbo" size="md">
   <div class="space-y-4">
     <div class="flex items-center gap-2">
-      <input
+      <input aria-label="Rechercher un emoji"
         bind:value={emojiSearch}
         placeholder="Rechercher un emoji (:nom:)..."
         class="flex-1 h-9 px-3 rounded-xl bg-surface-container-low/70 border border-outline-variant/25 text-xs text-on-surface focus:outline-none focus:border-primary/60"

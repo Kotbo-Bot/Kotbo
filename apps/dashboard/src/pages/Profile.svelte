@@ -714,7 +714,7 @@
 
               <div class="flex flex-col md:flex-row gap-3 md:items-end">
                 <div class="flex-1">
-                  <FormInput id="new-note" placeholder={m.pf_add_note_ph()} bind:value={newNoteContent} className="w-full" />
+                  <FormInput ariaLabel={m.pf_add_note_ph()} id="new-note" placeholder={m.pf_add_note_ph()} bind:value={newNoteContent} className="w-full" />
                 </div>
                 <Button variant="primary" onclick={submitManagerNote} loading={sendingNote} disabled={!newNoteContent.trim()}>
                   {m.pf_add_note()}

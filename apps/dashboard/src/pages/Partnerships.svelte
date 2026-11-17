@@ -282,7 +282,7 @@
     />
 
     {#if view === 'pipeline'}
-      <input
+      <input aria-label={m.pship_search_ph()}
         class="flex-1 min-w-[180px] max-w-xs rounded-lg border border-outline-variant/30 bg-surface-container-low px-3 py-1.5 text-xs text-on-surface"
         placeholder={m.pship_search_ph()}
         bind:value={search}

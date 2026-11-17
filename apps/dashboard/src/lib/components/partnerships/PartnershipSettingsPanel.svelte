@@ -92,7 +92,7 @@
 
       <div class="mt-3">
         <span class="text-2xs font-bold text-on-surface-variant/80 ml-1 mb-1.5 block">{m.pset_default_tier()}</span>
-        <FormSelect
+        <FormSelect ariaLabel={m.pset_default_tier()}
           value={settings.defaultTier}
           className="w-full"
           onchange={(event) => set('defaultTier', (event.target as HTMLSelectElement).value)}

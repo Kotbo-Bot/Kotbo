@@ -1384,7 +1384,7 @@
             <div class="flex items-center gap-2.5 mb-2 shrink-0">
               <h3 class="text-sm font-medium text-on-surface">{m.home_team_notes()}</h3>
             </div>
-            <textarea
+            <textarea aria-label={m.home_team_notes()}
               value={staffNotes}
               oninput={saveStaffNotes}
               placeholder={m.home_notes_placeholder()}
@@ -1899,13 +1899,13 @@
             <Papicon icon="save" size={14} class="text-primary" /> {m.home_save_current_layout()}
           </h3>
           <div class="flex gap-2">
-            <input
+            <input aria-label={m.home_preset_name_ph()}
               type="text"
               bind:value={presetName}
               placeholder={m.home_preset_name_ph()}
               class="grow px-3 py-2 text-xs bg-surface-container border border-outline-variant rounded-lg outline-none focus:border-primary/50 text-on-surface"
             />
-            <input
+            <input aria-label={m.home_preset_desc_ph()}
               type="text"
               bind:value={presetDescription}
               placeholder={m.home_preset_desc_ph()}
@@ -1926,7 +1926,7 @@
             <Papicon icon="upload" size={14} class="text-secondary" /> {m.home_import_preset_json()}
           </h3>
           <div class="flex gap-2">
-            <textarea
+            <textarea aria-label={m.home_import_preset_json()}
               bind:value={presetImportJson}
               placeholder={m.home_paste_json_ph() + ' {"name": "...", "layout": [...]}'}
               class="grow px-3 py-2 text-xs bg-surface-container border border-outline-variant rounded-lg outline-none focus:border-primary/50 text-on-surface min-h-[60px] resize-none"

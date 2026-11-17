@@ -592,7 +592,7 @@
         <!-- Formulaire d'ajout -->
         <div class="flex gap-3 items-start flex-wrap">
           <div class="flex-1 min-w-[200px] relative">
-            <input
+            <input aria-label={m.nm_word_placeholder()}
               id="banned-word-input"
               type="text"
               bind:value={newWord}
@@ -602,7 +602,7 @@
               class="w-full bg-surface-container/60 border border-outline-variant/30 rounded-lg px-5 py-3.5 text-sm text-on-surface placeholder:text-on-surface-variant/30 focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/20 transition-all"
             />
           </div>
-          <select
+          <select aria-label={m.nm_col_category()}
             bind:value={newCategory}
             class="bg-surface-container/60 border border-outline-variant/30 rounded-lg px-4 py-3.5 text-sm text-on-surface focus:outline-none focus:border-primary/60 transition-all"
           >
@@ -747,7 +747,7 @@
           </div>
 
           <div class="flex gap-2">
-            <input
+            <input aria-label={m.nm_nick_placeholder()}
               type="text"
               bind:value={newWhitelistItem}
               onkeydown={handleWhitelistKeydown}

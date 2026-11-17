@@ -235,7 +235,7 @@
    * Les quatre axes de présentation du panneau, en cartes-radio avec une aide
    * PAR OPTION : même forme que `NOTIFY_MODES` ci-dessus, et que la maquette de
    * référence (`blocMode`/`blocFormat`/`blocCouleurs`) : le choix et ce qu'il
-   * coûte se lisent ensemble, au lieu d'un `<select>` surmontant une aide
+   * coûte se lisent ensemble, au lieu d'une liste `select` surmontant une aide
    * partagée qui ne décrivait que l'option déjà sélectionnée.
    */
   const PANEL_COMPONENTS_MODES: Array<{ key: TempVoicePanelComponents; label: () => string; hints: Array<() => string> }> = [
@@ -1204,7 +1204,7 @@
               <h3 class="text-sm font-semibold text-on-surface">{m.cm_bc_title()}</h3>
               <p class="text-body-sm text-on-surface-variant mt-0.5">{m.cm_bc_desc()}</p>
             </div>
-            <input
+            <input aria-label={m.cm_bc_filter_placeholder()}
               type="text"
               bind:value={byChannelQuery}
               placeholder={m.cm_bc_filter_placeholder()}
@@ -1624,7 +1624,7 @@
             </div>
             
             <div class="flex items-center gap-2">
-              <input 
+              <input aria-label={m.a11y_enable({ name: m.cm_stats_channels_title() })} 
                 type="checkbox" 
                 bind:checked={config.statsEnabled} 
                 class="w-10 h-6 bg-surface-container-high rounded-full relative appearance-none cursor-pointer transition-all border border-outline-variant/20 checked:bg-primary before:content-[''] before:absolute before:h-4 before:w-4 before:rounded-full before:bg-white before:top-0.5 before:left-0.5 checked:before:translate-x-4 before:transition-all"
@@ -1701,7 +1701,7 @@
               <div class="space-y-3 p-5 bg-surface-container-high/20 border border-outline-variant/5 rounded-xl transition-all">
                 <div class="flex items-center justify-between">
                   <label for="stats-member-channel" class="text-xs font-bold text-on-surface/80 block">{m.cm_member_counter_label()}</label>
-                  <input 
+                  <input aria-label={m.a11y_enable({ name: m.cm_member_counter_label() })} 
                     type="checkbox" 
                     bind:checked={config.statsConfig.memberEnabled} 
                     class="w-8 h-5 bg-surface-container-high rounded-full relative appearance-none cursor-pointer transition-all border border-outline-variant/20 checked:bg-primary before:content-[''] before:absolute before:h-3.5 before:w-3.5 before:rounded-full before:bg-white before:top-0.5 before:left-0.5 checked:before:translate-x-3 before:transition-all"
@@ -1729,7 +1729,7 @@
                       {m.cm_create_channel()}
                     </button>
                   </div>
-                  <input 
+                  <input aria-label={m.cm_template_members_placeholder({ count: '{count}' })} 
                     type="text" 
                     bind:value={config.statsConfig.memberTemplate} 
                     placeholder={m.cm_template_members_placeholder({ count: '{count}' })} 
@@ -1742,7 +1742,7 @@
               <div class="space-y-3 p-5 bg-surface-container-high/20 border border-outline-variant/5 rounded-xl transition-all">
                 <div class="flex items-center justify-between">
                   <label for="stats-bot-channel" class="text-xs font-bold text-on-surface/80 block">{m.cm_bot_counter_label()}</label>
-                  <input 
+                  <input aria-label={m.a11y_enable({ name: m.cm_bot_counter_label() })} 
                     type="checkbox" 
                     bind:checked={config.statsConfig.botEnabled} 
                     class="w-8 h-5 bg-surface-container-high rounded-full relative appearance-none cursor-pointer transition-all border border-outline-variant/20 checked:bg-primary before:content-[''] before:absolute before:h-3.5 before:w-3.5 before:rounded-full before:bg-white before:top-0.5 before:left-0.5 checked:before:translate-x-3 before:transition-all"
@@ -1770,7 +1770,7 @@
                       {m.cm_create_channel()}
                     </button>
                   </div>
-                  <input 
+                  <input aria-label={m.cm_template_bots_placeholder({ count: '{count}' })} 
                     type="text" 
                     bind:value={config.statsConfig.botTemplate} 
                     placeholder={m.cm_template_bots_placeholder({ count: '{count}' })} 
@@ -1783,7 +1783,7 @@
               <div class="space-y-3 p-5 bg-surface-container-high/20 border border-outline-variant/5 rounded-xl transition-all">
                 <div class="flex items-center justify-between">
                   <label for="stats-role-channel" class="text-xs font-bold text-on-surface/80 block">{m.cm_role_counter_label()}</label>
-                  <input 
+                  <input aria-label={m.a11y_enable({ name: m.cm_role_counter_label() })} 
                     type="checkbox" 
                     bind:checked={config.statsConfig.roleEnabled} 
                     class="w-8 h-5 bg-surface-container-high rounded-full relative appearance-none cursor-pointer transition-all border border-outline-variant/20 checked:bg-primary before:content-[''] before:absolute before:h-3.5 before:w-3.5 before:rounded-full before:bg-white before:top-0.5 before:left-0.5 checked:before:translate-x-3 before:transition-all"
@@ -1816,7 +1816,7 @@
                     bind:value={config.statsConfig.roleTargetId} 
                     placeholder={m.cm_select_target_role_placeholder()}
                   />
-                  <input 
+                  <input aria-label={m.cm_template_staff_placeholder({ count: '{count}' })} 
                     type="text" 
                     bind:value={config.statsConfig.roleTemplate} 
                     placeholder={m.cm_template_staff_placeholder({ count: '{count}' })} 
@@ -1829,7 +1829,7 @@
               <div class="space-y-3 p-5 bg-surface-container-high/20 border border-outline-variant/5 rounded-xl transition-all">
                 <div class="flex items-center justify-between">
                   <label for="stats-channel-channel" class="text-xs font-bold text-on-surface/80 block">{m.cm_channel_counter_label()}</label>
-                  <input 
+                  <input aria-label={m.a11y_enable({ name: m.cm_channel_counter_label() })} 
                     type="checkbox" 
                     bind:checked={config.statsConfig.channelEnabled} 
                     class="w-8 h-5 bg-surface-container-high rounded-full relative appearance-none cursor-pointer transition-all border border-outline-variant/20 checked:bg-primary before:content-[''] before:absolute before:h-3.5 before:w-3.5 before:rounded-full before:bg-white before:top-0.5 before:left-0.5 checked:before:translate-x-3 before:transition-all"
@@ -1857,7 +1857,7 @@
                       {m.cm_create_channel()}
                     </button>
                   </div>
-                  <input 
+                  <input aria-label={m.cm_template_channels_placeholder({ count: '{count}' })} 
                     type="text" 
                     bind:value={config.statsConfig.channelTemplate} 
                     placeholder={m.cm_template_channels_placeholder({ count: '{count}' })} 
@@ -1870,7 +1870,7 @@
               <div class="space-y-3 p-5 bg-surface-container-high/20 border border-outline-variant/5 rounded-xl transition-all">
                 <div class="flex items-center justify-between">
                   <label for="stats-category-channel" class="text-xs font-bold text-on-surface/80 block">{m.cm_category_counter_label()}</label>
-                  <input 
+                  <input aria-label={m.a11y_enable({ name: m.cm_category_counter_label() })} 
                     type="checkbox" 
                     bind:checked={config.statsConfig.categoryEnabled} 
                     class="w-8 h-5 bg-surface-container-high rounded-full relative appearance-none cursor-pointer transition-all border border-outline-variant/20 checked:bg-primary before:content-[''] before:absolute before:h-3.5 before:w-3.5 before:rounded-full before:bg-white before:top-0.5 before:left-0.5 checked:before:translate-x-3 before:transition-all"
@@ -1898,7 +1898,7 @@
                       {m.cm_create_channel()}
                     </button>
                   </div>
-                  <input 
+                  <input aria-label={m.cm_template_categories_placeholder({ count: '{count}' })} 
                     type="text" 
                     bind:value={config.statsConfig.categoryTemplate} 
                     placeholder={m.cm_template_categories_placeholder({ count: '{count}' })} 
@@ -1911,7 +1911,7 @@
               <div class="space-y-3 p-5 bg-surface-container-high/20 border border-outline-variant/5 rounded-xl transition-all">
                 <div class="flex items-center justify-between">
                   <label for="stats-activity-channel" class="text-xs font-bold text-on-surface/80 block">{m.cm_activity_counter_label()}</label>
-                  <input 
+                  <input aria-label={m.a11y_enable({ name: m.cm_activity_counter_label() })} 
                     type="checkbox" 
                     bind:checked={config.statsConfig.activityEnabled} 
                     class="w-8 h-5 bg-surface-container-high rounded-full relative appearance-none cursor-pointer transition-all border border-outline-variant/20 checked:bg-primary before:content-[''] before:absolute before:h-3.5 before:w-3.5 before:rounded-full before:bg-white before:top-0.5 before:left-0.5 checked:before:translate-x-3 before:transition-all"
@@ -1939,7 +1939,7 @@
                       {m.cm_create_channel()}
                     </button>
                   </div>
-                  <input 
+                  <input aria-label={m.cm_template_activity_placeholder({ count: '{count}' })} 
                     type="text" 
                     bind:value={config.statsConfig.activityTemplate} 
                     placeholder={m.cm_template_activity_placeholder({ count: '{count}' })} 
@@ -2665,7 +2665,7 @@
                         <td class="py-3 px-4">
                           {#if editingChannel === chan.id}
                             <div class="flex items-center gap-2">
-                              <input 
+                              <input aria-label={m.cm_col_channel_name()} 
                                 type="text" 
                                 bind:value={newChannelName}
                                 class="bg-surface-container-high/40 border border-outline-variant/20 rounded-md px-2.5 py-1 text-xs text-on-surface outline-none focus:ring-1 focus:ring-primary/50"
@@ -2755,7 +2755,7 @@
                     <div class="flex items-center justify-between">
                       {#if editingChannel === chan.id}
                         <div class="flex items-center gap-2">
-                          <input 
+                          <input aria-label={m.cm_col_channel_name()} 
                             type="text" 
                             bind:value={newChannelName}
                             class="bg-surface-container-high/40 border border-outline-variant/20 rounded-md px-2.5 py-1 text-xs text-on-surface outline-none focus-visible:ring-2 focus-visible:ring-primary"
@@ -3165,7 +3165,7 @@
             {#each ADMIN_PERMISSION_ROWS as row (row.key)}
               <div class="flex items-center justify-between gap-4 p-4 bg-surface-container-high/20 border border-outline-variant/5 rounded-xl">
                 <span class="text-xs font-bold text-on-surface/80">{row.label()}</span>
-                <select
+                <select aria-label={row.label()}
                   value={config.tempVoiceModPermissions[row.key] ? 'true' : 'false'}
                   onchange={(e) => {
                     config.tempVoiceModPermissions[row.key] = (e.currentTarget as HTMLSelectElement).value === 'true';

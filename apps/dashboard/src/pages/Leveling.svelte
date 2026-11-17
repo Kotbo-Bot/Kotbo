@@ -2378,7 +2378,7 @@
 
           <!-- Barre de recherche -->
           <div class="relative w-full md:w-80">
-            <input 
+            <input aria-label={m.lv_search_member()} 
               type="text" 
               placeholder={m.lv_search_member()} 
               bind:value={searchQuery}
@@ -2752,7 +2752,7 @@
               ondragleave={() => isDragging = false}
               ondrop={handleFileDrop}
             >
-              <input 
+              <input aria-label={m.lv_import_file()} 
                 type="file" 
                 accept=".json" 
                 class="absolute inset-0 w-full h-full opacity-0 cursor-pointer"

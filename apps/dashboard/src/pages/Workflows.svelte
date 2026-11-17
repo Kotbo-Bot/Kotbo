@@ -924,7 +924,7 @@
 
         <div class="relative min-w-64">
           <Papicon icon="Search" size={14} class="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant" />
-          <input
+          <input aria-label={m.wf_search_placeholder()}
             type="text"
             bind:value={searchFilter}
             placeholder={m.wf_search_placeholder()}

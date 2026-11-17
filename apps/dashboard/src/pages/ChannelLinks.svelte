@@ -558,7 +558,7 @@
 
                   {#if selected}
                     <div class="px-3 pb-3">
-                      <select
+                      <select aria-label={m.channel_links_target_channel({ server: guild.name })}
                         value={selected.channelId}
                         onchange={(e) => setTargetChannel(guild.id, (e.currentTarget as HTMLSelectElement).value)}
                         class="w-full px-3 py-2 rounded-lg bg-surface-container border border-outline-variant/30 text-on-surface text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
@@ -703,7 +703,7 @@
                     <p class="text-xs text-on-surface-variant">#{member.channelName}</p>
                   </div>
 
-                  <select
+                  <select aria-label={m.channel_links_field_member_mode()}
                     value={member.mode}
                     onchange={(e) => handleMemberChange(member.id, { mode: (e.currentTarget as HTMLSelectElement).value })}
                     class="px-2 py-1.5 rounded-lg bg-surface-container border border-outline-variant/30 text-on-surface text-xs outline-none focus-visible:ring-2 focus-visible:ring-primary"
@@ -713,7 +713,7 @@
                     <option value="RECEIVE_ONLY">{m.channel_links_member_mode_receive()}</option>
                   </select>
 
-                  <select
+                  <select aria-label={m.channel_links_field_relay_mode()}
                     value={member.relayMode}
                     onchange={(e) => handleMemberChange(member.id, { relayMode: (e.currentTarget as HTMLSelectElement).value })}
                     class="px-2 py-1.5 rounded-lg bg-surface-container border border-outline-variant/30 text-on-surface text-xs outline-none focus-visible:ring-2 focus-visible:ring-primary"
@@ -757,7 +757,7 @@
             <div class="mt-3 flex flex-col gap-2 px-3 py-3 rounded-lg bg-surface-container/30 border border-outline-variant/10">
               <span class="text-sm font-medium text-on-surface">{m.channel_links_add_member_heading()}</span>
               <div class="grid grid-cols-2 gap-2">
-                <select
+                <select aria-label={m.channel_links_add_server()}
                   bind:value={addGuildId}
                   onchange={() => { addChannelId = ''; }}
                   class="px-3 py-2 rounded-lg bg-surface-container border border-outline-variant/30 text-on-surface text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
@@ -767,7 +767,7 @@
                     <option value={guild.id}>{guild.name}</option>
                   {/each}
                 </select>
-                <select
+                <select aria-label={m.channel_links_add_channel()}
                   bind:value={addChannelId}
                   disabled={!addGuildId}
                   class="px-3 py-2 rounded-lg bg-surface-container border border-outline-variant/30 text-on-surface text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
@@ -779,7 +779,7 @@
                 </select>
               </div>
               <div class="flex items-center gap-2">
-                <select
+                <select aria-label={m.channel_links_field_member_mode()}
                   bind:value={addMode}
                   class="flex-1 px-3 py-2 rounded-lg bg-surface-container border border-outline-variant/30 text-on-surface text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 >

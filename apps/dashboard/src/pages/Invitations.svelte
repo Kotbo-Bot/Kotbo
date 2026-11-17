@@ -587,20 +587,20 @@
               <div class="h-10 w-16 bg-surface-container-high/40 rounded-xl animate-pulse"></div>
             </div>
           {:else}
-            <FormInput
+            <FormInput ariaLabel={m.iv_search_placeholder()}
               placeholder={m.iv_search_placeholder()}
               bind:value={searchQuery}
               className="w-full lg:w-80 px-4 py-2.5 rounded-xl bg-surface-container-high/30 border border-outline-variant/20 text-sm"
             />
             <div class="flex gap-2 flex-wrap">
-              <select bind:value={statusFilter} class="px-3 py-2 rounded-xl bg-surface-container-high/40 text-xs font-bold border border-outline-variant/20">
+              <select aria-label={m.iv_filter_status()} bind:value={statusFilter} class="px-3 py-2 rounded-xl bg-surface-container-high/40 text-xs font-bold border border-outline-variant/20">
                 <option value="all">{m.iv_all_statuses()}</option>
                 <option value="active">{m.iv_filter_active()}</option>
                 <option value="suspended">{m.iv_filter_suspended()}</option>
                 <option value="expired">{m.iv_filter_expired()}</option>
                 <option value="deleted">{m.iv_filter_deleted()}</option>
               </select>
-              <select bind:value={sortBy} class="px-3 py-2 rounded-xl bg-surface-container-high/40 text-xs font-bold border border-outline-variant/20">
+              <select aria-label={m.a11y_sort_by()} bind:value={sortBy} class="px-3 py-2 rounded-xl bg-surface-container-high/40 text-xs font-bold border border-outline-variant/20">
                 <option value="createdAt">{m.iv_col_creation()}</option>
                 <option value="uses">{m.iv_col_uses()}</option>
                 <option value="joins">{m.iv_col_joins()}</option>
@@ -1008,17 +1008,17 @@
             </div>
           {:else}
             <div class="space-y-3">
-              <FormInput
+              <FormInput ariaLabel={m.iv_user_id_placeholder()}
                 placeholder={m.iv_user_id_placeholder()}
                 bind:value={suspendUserId}
                 className="w-full px-4 py-2.5 rounded-xl bg-surface-container-high/30 border border-outline-variant/20 text-sm"
               />
-              <FormInput
+              <FormInput ariaLabel={m.iv_user_tag_placeholder()}
                 placeholder={m.iv_user_tag_placeholder()}
                 bind:value={suspendUserTag}
                 className="w-full px-4 py-2.5 rounded-xl bg-surface-container-high/30 border border-outline-variant/20 text-sm"
               />
-              <FormInput
+              <FormInput ariaLabel={m.iv_suspend_reason_placeholder()}
                 placeholder={m.iv_suspend_reason_placeholder()}
                 bind:value={suspendReason}
                 className="w-full px-4 py-2.5 rounded-xl bg-surface-container-high/30 border border-outline-variant/20 text-sm"

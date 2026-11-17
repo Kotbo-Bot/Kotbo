@@ -48,7 +48,7 @@
           <Papicon icon="Cross" size={14} />
         </button>
       </div>
-      <input
+      <input aria-label={m.wf_search_action()}
         type="text"
         bind:value={search}
         placeholder={m.wf_search_action()}

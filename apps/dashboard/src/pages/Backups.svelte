@@ -483,7 +483,7 @@
   <div class="space-y-6">
     <div class="space-y-2">
       <span class="block text-xs font-semibold text-on-surface-variant ml-2">{m.backups_field_name()}</span>
-      <input
+      <input aria-label={m.backups_field_name()}
         type="text"
         bind:value={createOptions.name}
         placeholder={m.backups_field_name_ph()}
@@ -493,7 +493,7 @@
     
     <div class="space-y-2">
       <span class="block text-xs font-semibold text-on-surface-variant ml-2">{m.backups_field_desc()}</span>
-      <input
+      <input aria-label={m.backups_field_desc()}
         type="text"
         bind:value={createOptions.description}
         placeholder={m.backups_field_desc_ph()}
@@ -584,7 +584,7 @@
   <div class="space-y-6">
     <div class="space-y-2">
       <span class="block text-xs font-semibold text-on-surface-variant ml-2">{m.backups_field_file()}</span>
-      <input
+      <input aria-label={m.backups_field_file()}
         type="file"
         accept=".json" 
         onchange={(e) => importFile = (e.currentTarget as HTMLInputElement).files?.[0] || null} 
@@ -594,7 +594,7 @@
     
     <div class="space-y-2">
       <span class="block text-xs font-semibold text-on-surface-variant ml-2">{m.backups_field_name_optional()}</span>
-      <input
+      <input aria-label={m.backups_field_name_optional()}
         type="text"
         bind:value={createOptions.name}
         placeholder={m.backups_field_name_ph()}

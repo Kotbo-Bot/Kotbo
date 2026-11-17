@@ -267,7 +267,7 @@
               </div>
             {/if}
             <form class="flex gap-2" onsubmit={(e) => { e.preventDefault(); void addServer(); }}>
-              <input type="text" bind:value={invite} placeholder={m.sff_invite_ph()} class="flex-1 rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface" />
+              <input aria-label={m.sff_invite_ph()} type="text" bind:value={invite} placeholder={m.sff_invite_ph()} class="flex-1 rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface" />
               <Button type="submit" size="sm" icon="Plus" disabled={busy || !invite.trim() || servers.length >= 25}>{m.sff_add()}</Button>
             </form>
           </div>
@@ -352,7 +352,7 @@
                       {GROUP_LABELS[group]}
                     </label>
                   {/each}
-                  <input type="text" bind:value={draft.extensions} placeholder={m.sff_extra_ext_ph()} class="flex-1 min-w-40 rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-1.5 text-body-sm text-on-surface font-mono" />
+                  <input aria-label={m.sff_extra_ext_ph()} type="text" bind:value={draft.extensions} placeholder={m.sff_extra_ext_ph()} class="flex-1 min-w-40 rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-1.5 text-body-sm text-on-surface font-mono" />
                 </div>
               {/if}
             {/if}

@@ -67,7 +67,7 @@
 
 <div class="flex flex-wrap items-center gap-2">
   {#if showRaw}
-    <input
+    <input aria-label={m.wf_schedule_cron()}
       type="text"
       {value}
       oninput={(event) => onChange(event.currentTarget.value)}
@@ -85,7 +85,7 @@
       >{m.wf_schedule_simple()}</button>
     {/if}
   {:else}
-    <select
+    <select aria-label={m.wf_schedule_frequency()}
       value={current.frequency}
       onchange={(event) => patch({ frequency: event.currentTarget.value as ScheduleFrequency })}
       class="{control} cursor-pointer"
@@ -96,7 +96,7 @@
     </select>
 
     {#if current.frequency === 'weekly'}
-      <select
+      <select aria-label={m.wf_schedule_weekday()}
         value={current.weekday}
         onchange={(event) => patch({ weekday: Number(event.currentTarget.value) })}
         class="{control} cursor-pointer"
@@ -108,7 +108,7 @@
     {/if}
 
     {#if current.frequency === 'monthly'}
-      <select
+      <select aria-label={m.wf_schedule_monthday()}
         value={current.day}
         onchange={(event) => patch({ day: Number(event.currentTarget.value) })}
         class="{control} cursor-pointer"
@@ -121,7 +121,7 @@
 
     {#if current.frequency === 'hourly'}
       <span class="text-xs text-on-surface-variant">{m.wf_schedule_at_minute()}</span>
-      <input
+      <input aria-label={m.wf_schedule_at_minute()}
         type="number"
         min="0"
         max="59"
@@ -131,7 +131,7 @@
       />
     {:else}
       <span class="text-xs text-on-surface-variant">{m.wf_schedule_at()}</span>
-      <input
+      <input aria-label={m.wf_schedule_time()}
         type="time"
         value={timeValue}
         oninput={(event) => setTime(event.currentTarget.value)}

@@ -326,7 +326,7 @@
                       <Papicon icon="account_tree" size={14} />
                       {m.cf_target_hierarchy()}
                     </span>
-                    <select
+                    <select aria-label={m.cf_target_hierarchy()}
                       value={form.hierarchyId || ''}
                       onchange={(e) => updateFormHierarchy(form.id, (e.currentTarget as HTMLSelectElement).value)}
                       class="min-w-0 max-w-40 bg-surface-container rounded-lg px-2 py-1.5 text-2xs font-semibold outline-none border border-outline-variant/20 focus:border-primary"
@@ -358,7 +358,7 @@
                         class="w-20 bg-surface-container rounded-lg px-2 py-1 text-2xs font-semibold outline-none border border-outline-variant/20 focus:border-primary" />
                     </label>
                     {#if form.maxAcceptedCandidatures}
-                      <select
+                      <select aria-label={m.cf_autoclose_title()}
                         value={form.acceptedCapMode}
                         onchange={(e) => patchForm(form.id, { acceptedCapMode: (e.currentTarget as HTMLSelectElement).value })}
                         class="w-full bg-surface-container rounded-lg px-2 py-1.5 text-2xs font-semibold outline-none border border-outline-variant/20 focus:border-primary"

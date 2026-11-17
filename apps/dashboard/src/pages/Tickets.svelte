@@ -898,7 +898,7 @@
 
                 {#if selectedTicketDetail.channelId && selectedTicketDetail.mode !== 'DM'}
                   <div class="mt-3 flex gap-2 items-center">
-                    <FormInput type="text" bind:value={ticketRenameName} placeholder={m.e1_tickets_rename_ph()} className="flex-1" />
+                    <FormInput ariaLabel={m.e1_tickets_rename_ph()} type="text" bind:value={ticketRenameName} placeholder={m.e1_tickets_rename_ph()} className="flex-1" />
                     <button onclick={renameTicket} disabled={renameAction.state.loading} use:explainDisabled={(!ticketRenameName.trim()) ? m.common_reason_fill_field() : ''}
                       class="px-3 py-1.5 bg-primary/10 text-primary border border-primary/20 rounded-lg text-xs font-semibold hover:bg-primary hover:text-white transition-all disabled:opacity-50 disabled:pointer-events-none flex items-center gap-1.5 shrink-0"
                     >

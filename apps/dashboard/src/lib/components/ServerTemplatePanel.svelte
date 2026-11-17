@@ -1222,7 +1222,7 @@
       {@const candidates = adoptCandidates(item)}
       {#if candidates.length > 0}
         <div class="pl-[26px] flex items-center gap-2">
-          <select
+          <select aria-label={m.stp_adopt_for({ name: item.name })}
             value={adopt[item.key] ?? ''}
             disabled={isTraced(item.key)}
             onchange={(event) => setAdopt(item.key, event.currentTarget.value)}

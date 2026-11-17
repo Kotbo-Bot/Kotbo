@@ -390,7 +390,7 @@
           />
           <span>Avec aperçu uniquement</span>
         </label>
-        <select
+        <select aria-label="Filtrer par source"
           value={visionSourceFilter}
           onchange={(e) => {
             visionSourceFilter = e.currentTarget.value;

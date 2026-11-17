@@ -159,7 +159,7 @@
 
                 {#if request.status === 'PENDING'}
                   <div class="space-y-3 pt-2 border-t border-outline-variant/10">
-                    <textarea bind:value={actionReason} rows="2"
+                    <textarea aria-label={m.e7_alr_reject_placeholder()} bind:value={actionReason} rows="2"
                       placeholder={m.e7_alr_reject_placeholder()}
                       class="w-full bg-surface rounded-xl px-4 py-3 text-sm outline-none border border-outline-variant/20 focus:border-primary transition-colors resize-y"></textarea>
                     <div class="flex flex-wrap gap-2">

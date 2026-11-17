@@ -130,7 +130,7 @@
     <div class="space-y-2">
       <p class="field-label">{m.sc_import_step_file()}</p>
       <div class="flex flex-wrap items-center gap-3">
-        <input
+        <input aria-label={m.sc_import_step_file()}
           type="file"
           bind:this={fileInput}
           onchange={onFileSelected}

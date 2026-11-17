@@ -1139,7 +1139,7 @@
                 <p class="text-xs text-on-surface-variant ml-2">{m.am_antibot_bypass_desc()}</p>
                 {#if isOwner}
                   <div class="flex gap-2">
-                    <input
+                    <input aria-label={m.am_antibot_user_id_placeholder()}
                       type="text"
                       bind:value={antiBotBypassInput}
                       placeholder={m.am_antibot_user_id_placeholder()}
@@ -1294,7 +1294,7 @@
                         <input id="burstFastLimit" type="number" min="1" max="100" bind:value={config.burstSuspendFastLimit} disabled={!isOwner}
                           class="w-full bg-surface-container-high/45 border border-outline-variant/10 rounded-lg px-3 py-2.5 text-sm text-on-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
                         <span class="text-xs text-on-surface-variant whitespace-nowrap">{m.am_burst_act_per()}</span>
-                        <input type="number" min="1" max="3600" bind:value={config.burstSuspendFastWindowSec} disabled={!isOwner}
+                        <input aria-label={m.am_burst_window()} type="number" min="1" max="3600" bind:value={config.burstSuspendFastWindowSec} disabled={!isOwner}
                           class="w-20 bg-surface-container-high/45 border border-outline-variant/10 rounded-lg px-3 py-2.5 text-sm text-on-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
                         <span class="text-xs text-on-surface-variant">s</span>
                       </div>
@@ -1305,7 +1305,7 @@
                         <input id="burstSlowLimit" type="number" min="1" max="500" bind:value={config.burstSuspendSlowLimit} disabled={!isOwner}
                           class="w-full bg-surface-container-high/45 border border-outline-variant/10 rounded-lg px-3 py-2.5 text-sm text-on-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
                         <span class="text-xs text-on-surface-variant whitespace-nowrap">{m.am_burst_act_per()}</span>
-                        <input type="number" min="1" max="3600" bind:value={config.burstSuspendSlowWindowSec} disabled={!isOwner}
+                        <input aria-label={m.am_burst_window()} type="number" min="1" max="3600" bind:value={config.burstSuspendSlowWindowSec} disabled={!isOwner}
                           class="w-20 bg-surface-container-high/45 border border-outline-variant/10 rounded-lg px-3 py-2.5 text-sm text-on-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
                         <span class="text-xs text-on-surface-variant">s</span>
                       </div>

@@ -157,6 +157,45 @@ describe("garde-fou d'accessibilite", () => {
     expect(offenders).toEqual([]);
   });
 
+  test('les champs ont une etiquette accessible (RGAA 11.1)', () => {
+    // Un placeholder n'est pas une etiquette : il disparait a la saisie et
+    // n'est pas toujours lu. Un champ est etiquete par aria-label(ledby), par
+    // un <label for> vers son id, ou en etant dans un <label>. Les composants
+    // d'emballage recoivent leur etiquette de l'appelant.
+    const WRAPPERS = new Set([
+      'lib/components/FormInput.svelte',
+      'lib/components/FormSelect.svelte',
+      'lib/components/FormTextarea.svelte',
+      'lib/components/MultiSelect.svelte',
+    ]);
+    const unlabeled = sources.flatMap(({ file, text }) => {
+      // `labelFor` (SettingsRow) et l'`id` d'un <Field> posent eux-memes le <label for>.
+      const fors = new Set(
+        [...text.matchAll(/(?:\bfor|\blabelFor|<Field\b[^>]*?\bid)=(?:"([^"]+)"|\{([^}]+)\})/g)].map((m) => m[1] || m[2]),
+      );
+      const tags = ['FormInput', 'FormSelect', 'FormTextarea', ...(WRAPPERS.has(file) ? [] : ['input', 'textarea', 'select'])];
+      return tags.flatMap((tag) => {
+        const found: string[] = [];
+        let from = 0;
+        for (const opening of openingTags(text, tag)) {
+          const index = text.indexOf(opening, from);
+          from = index + opening.length;
+          if (/type="(hidden|submit|button|reset|image)"/.test(opening)) continue;
+          // Masque (class hidden) : hors de l'arbre d'accessibilite, declenche par un bouton.
+          if (/\bhidden\b(?!-)/.test(opening.match(/class="([^"]*)"/)?.[1] ?? '') || /\shidden[\s/>]|aria-hidden="true"|display:\s*none/.test(opening)) continue;
+          if (/aria-label(ledby)?=|\bariaLabel=|\{ariaLabel\}|\blabel=|\{\.\.\./.test(opening)) continue;
+          const id = opening.match(/\bid=(?:"([^"]+)"|\{([^}]+)\})|\{id\}/);
+          if (id && (fors.has(id[1] || id[2] || 'id') || !(id[1] || id[2]))) continue;
+          const before = text.slice(0, index);
+          if ((before.match(/<label\b/g) ?? []).length > (before.match(/<\/label>/g) ?? []).length) continue;
+          found.push(`${file}:${before.split('\n').length}`);
+        }
+        return found;
+      });
+    });
+    expect(unlabeled).toEqual([]);
+  });
+
   test('pas d\'aria-labelledby vers un id "modal-title" partage', () => {
     const offenders = sources.filter(({ text }) => /aria-labelledby="modal-title"/.test(text)).map(({ file }) => file);
     expect(offenders).toEqual([]);

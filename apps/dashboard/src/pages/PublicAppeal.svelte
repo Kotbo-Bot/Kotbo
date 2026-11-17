@@ -362,7 +362,7 @@
             </div>
           {/if}
 
-          <textarea bind:value={infoResponseText} rows="5" maxlength="2000"
+          <textarea aria-label={m.pa_response_placeholder()} bind:value={infoResponseText} rows="5" maxlength="2000"
             placeholder={m.pa_response_placeholder()}
             class="w-full bg-surface-container rounded-xl px-4 py-3 text-sm outline-none border-b-2 border-primary/20 focus:border-primary transition-colors resize-y"></textarea>
           {#if submitError}
@@ -551,7 +551,7 @@
                   </label>
 
                   {#if checked}
-                    <textarea rows="3" maxlength="1500"
+                    <textarea aria-label={m.pa_statement_placeholder()} rows="3" maxlength="1500"
                       value={statements[sanction.id] ?? ''}
                       oninput={(e) => { statements = { ...statements, [sanction.id]: (e.target as HTMLTextAreaElement).value }; }}
                       placeholder={m.pa_statement_placeholder()}

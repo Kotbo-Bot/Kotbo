@@ -510,7 +510,7 @@
         <!-- Fuseau horaire des statistiques -->
         <div class="space-y-3">
           <p class="text-xs font-semibold text-on-surface-variant">{m.us_timezone()}</p>
-          <select
+          <select aria-label={m.us_timezone()}
             value={timezoneChoice}
             onchange={(e) => handleTimezone((e.currentTarget as HTMLSelectElement).value)}
             class="w-full bg-surface-container-high/20 border border-outline-variant/20 rounded-xl px-4 py-3 text-sm text-on-surface outline-none focus:border-secondary transition-colors"

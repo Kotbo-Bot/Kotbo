@@ -242,7 +242,7 @@
           <h3 class="text-sm font-semibold text-on-surface-variant/80">{m.embed_builder_templates_title()}</h3>
           {#if canManageSettings}
             <div class="flex flex-col sm:flex-row gap-2">
-              <input
+              <input aria-label={m.embed_builder_template_name_ph()}
                 type="text"
                 bind:value={templateName}
                 placeholder={m.embed_builder_template_name_ph()}
@@ -422,7 +422,7 @@
                   class="w-10 h-10 border-0 bg-transparent rounded-xl cursor-pointer"
                   disabled={!canManageSettings}
                 />
-                <input 
+                <input aria-label={m.a11y_hex_color()} 
                   type="text" 
                   bind:value={embed.color} 
                   placeholder="#5865F2"
