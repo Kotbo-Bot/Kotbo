@@ -240,3 +240,32 @@ export interface QueryStats {
 }
 
 export const fetchQueryStats = (limit = 60) => read<QueryStats>(`/api/admin/query-stats?limit=${limit}`);
+
+// ── Fiche serveur : membres ──────────────────────────────────────────────────
+
+type AdminPerson = { userId: string; name: string; avatarUrl: string | null };
+type AdminServerLabel = { guildId: string; name: string | null; iconUrl: string | null; tag: string | null };
+
+export interface GuildMembersSheet {
+  cohorts: { month: string; joined: number; stillHere: number | null; d1: number | null; d7: number | null; d30: number | null }[];
+  profile: {
+    humans: number;
+    bots: number;
+    accountAge: { known: number; buckets: { key: string; count: number }[] };
+    locales: { locale: string; count: number }[];
+    tags: (AdminServerLabel & { count: number })[];
+    roles: { roleId: string; name: string; color: string | null; count: number }[];
+  };
+  topMembers: (AdminPerson & { messages: number; voiceMinutes: number; staff: boolean })[];
+  staff: { declared: number; acting: number; idleDeclared: number; moderators: (AdminPerson & { sanctions: number; declared: boolean })[] };
+  atRisk: { sanctions: (AdminPerson & { count: number })[]; toxic: (AdminPerson & { toxic: number; analyzed: number })[] };
+  sources: { tracked: number; kinds: { kind: string; joined: number; retention: number | null }[]; links: { code: string; label: string | null; joined: number; retention: number | null; isVanity: boolean }[] } | null;
+  newcomers: { joined: number; left24h: { count: number; rate: number | null } } | null;
+  overlap: (AdminServerLabel & { shared: number })[];
+}
+
+export const fetchGuildMembersSheet = (guildId: string, days = 30) =>
+  read<GuildMembersSheet>(`/api/admin/insights/guilds/${guildId}/members?days=${days}`);
+
+export const fetchSharedMembers = (guildId: string, otherGuildId: string) =>
+  read<{ members: { userId: string; name: string; username: string | null; avatarUrl: string | null }[] }>(`/api/admin/insights/guilds/${guildId}/overlap/${otherGuildId}`);
