@@ -228,6 +228,14 @@
   type Tab = 'games' | 'confessions' | 'riddles';
   let activeTab = $state<Tab>('games');
 
+  let tabsAnchor = $state<HTMLDivElement>();
+
+  /** Depuis la carte Rébus, plus bas dans la page : l'onglet s'ouvre en haut, on y remonte. */
+  function showRiddles() {
+    activeTab = 'riddles';
+    tabsAnchor?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }
+
   /** La cible du nombre mystère reste cachée : une capture d'écran ne doit pas la livrer. */
   let guessRevealed = $state(false);
 
@@ -238,7 +246,7 @@
 
   const tabItems = $derived<TabItem[]>([
     { id: 'games', label: m.fun_tab_games(), icon: 'Gamepad2', badge: `${activeCount}/${FUN_GAMES.length}` },
-    { id: 'confessions', label: m.fun_tab_confessions(), icon: 'MessageCircle', badge: confessions.length || undefined },
+    { id: 'confessions', label: m.fun_tab_confessions(), icon: 'MessageCircle' },
     { id: 'riddles', label: m.fun_tab_riddles(), icon: 'Puzzle' },
   ]);
 
@@ -291,7 +299,7 @@
         variant="ghost"
         size="sm"
         icon={guessRevealed ? 'EyeOff' : 'Eye'}
-        aria-label={guessRevealed ? m.fun_guess_hide() : m.fun_guess_reveal()}
+        aria-label={m.fun_guess_reveal()}
         aria-pressed={guessRevealed}
         onclick={() => (guessRevealed = !guessRevealed)}
       />
@@ -307,7 +315,7 @@
         <p class="text-xs text-on-surface-variant">{m.fun_emojiriddle_current_clue()}</p>
         <p class="mt-1 text-3xl">{gameState.emojiRiddleEmojis || '❓'}</p>
       </div>
-      <Button variant="ghost" size="sm" icon="Puzzle" onclick={() => (activeTab = 'riddles')}>{m.fun_riddles_manage()}</Button>
+      <Button variant="ghost" size="sm" icon="Puzzle" onclick={showRiddles}>{m.fun_riddles_manage()}</Button>
     </div>
   {:else if game.id === 'oneword'}
     {@render lastPlayer(m.fun_last_author(), gameState.oneWordStoryLastUserId)}
@@ -373,7 +381,9 @@
 >
   <InlineFeedback state={actionState} />
 
-  <Tabs label={m.fun_tabs_label()} tabs={tabItems} active={activeTab} onchange={(id) => (activeTab = id as Tab)} class="mb-6" />
+  <div bind:this={tabsAnchor} class="mb-6 scroll-mt-4">
+    <Tabs label={m.fun_tabs_label()} tabs={tabItems} active={activeTab} onchange={(id) => (activeTab = id as Tab)} />
+  </div>
 
   {#if loading}
     <div class="space-y-6">
@@ -390,10 +400,10 @@
     <div class="space-y-8">
       <section class="grid gap-6 rounded-xl border border-outline-variant/30 bg-surface-container-low/40 p-6 md:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] md:items-center">
         <div class="space-y-3">
-          <p class="text-sm text-on-surface-variant">
-            <span class="text-2xl font-bold text-on-surface">{activeCount}</span>
-            {m.fun_active_summary({ total: FUN_GAMES.length })}
-          </p>
+          <div>
+            <p class="text-xs text-on-surface-variant">{m.fun_active_summary()}</p>
+            <p class="mt-0.5 text-2xl font-bold text-on-surface">{activeCount} / {FUN_GAMES.length}</p>
+          </div>
           <div class="flex gap-1.5" aria-hidden="true">
             {#each FUN_GAMES as game (game.id)}
               <span class="h-2 flex-1 rounded-full {config[game.channelKey] ? 'bg-success' : 'bg-surface-container-high'}"></span>
