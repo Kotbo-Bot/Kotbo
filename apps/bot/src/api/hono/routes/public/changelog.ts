@@ -1,5 +1,4 @@
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
-import { execSync } from 'child_process';
 
 const CommitSchema = z.object({
   hash: z.string(),
@@ -75,10 +74,13 @@ export function createChangelogRouter() {
     try {
       const separator = '---COMMIT_SEP---';
       const fieldSep = '---FIELD_SEP---';
-      const raw = execSync(
-        `git log --max-count=50 --format="${separator}%H${fieldSep}%aI${fieldSep}%B" HEAD`,
-        { encoding: 'utf-8', timeout: 5000 },
+      // Asynchrone : execSync figeait toute l'API jusqu'à 5 s à chaque cache expiré.
+      const proc = Bun.spawn(
+        ['git', 'log', '--max-count=50', `--format=${separator}%H${fieldSep}%aI${fieldSep}%B`, 'HEAD'],
+        { stdout: 'pipe', stderr: 'ignore', timeout: 5000 },
       );
+      const [raw, code] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);
+      if (code !== 0) throw new Error(`git log: code ${code}`);
 
       const commits = raw
         .split(separator)
