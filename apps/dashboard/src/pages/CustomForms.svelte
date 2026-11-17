@@ -407,7 +407,7 @@
               </button>
               <button
                 onclick={() => deleteForm(form.id)}
-                class="px-3 py-2.5 rounded-xl bg-error/10 text-error text-body-sm font-medium hover:bg-error/20 transition-all"
+                class="px-3 py-2.5 rounded-xl bg-error/10 text-on-error-container text-body-sm font-medium hover:bg-error/20 transition-all"
                 title={m.cf_btn_delete()}
               >
                 <Papicon icon="delete" size={14} />

@@ -39,8 +39,8 @@
   let executing = $state(false);
 
   const VARIANTS = {
-    danger: { icon: 'AlertTriangle', tone: 'bg-error/10 text-error', button: 'danger' },
-    warning: { icon: 'AlertTriangle', tone: 'bg-warning/10 text-warning', button: 'primary' },
+    danger: { icon: 'AlertTriangle', tone: 'bg-error/10 text-on-error-container', button: 'danger' },
+    warning: { icon: 'AlertTriangle', tone: 'bg-warning/10 text-on-warning-container', button: 'primary' },
     default: { icon: 'Info', tone: 'bg-primary/10 text-primary', button: 'primary' },
   } as const;
 

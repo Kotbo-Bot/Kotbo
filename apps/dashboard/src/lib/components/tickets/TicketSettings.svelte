@@ -936,7 +936,7 @@
           <button
             type="button"
             class="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
-            bg-warning/15 text-warning border border-warning/30 hover:bg-warning/25 transition-colors"
+            bg-warning/15 text-on-warning-container border border-warning/30 hover:bg-warning/25 transition-colors"
             onclick={() => (expandedConfigSection = 'channels')}
           >
             <Papicon icon="arrow-right" size={13} />
@@ -958,7 +958,7 @@
   <div data-guide="tickets-channels" class="rounded-xl border border-outline-variant/10 bg-surface-container-low/40 overflow-hidden">
     <button onclick={() => toggleConfigSection('channels')} class="w-full flex items-center justify-between p-4 lg:p-5 hover:bg-white/3 transition-colors text-left">
       <div class="flex items-center gap-3">
-        <div class="w-9 h-9 rounded-lg bg-success/10 text-success flex items-center justify-center shrink-0">
+        <div class="w-9 h-9 rounded-lg bg-success/10 text-on-success-container flex items-center justify-center shrink-0">
           <Papicon icon="hash" size={18} />
         </div>
         <div>
@@ -1190,7 +1190,7 @@
       </div>
       <div class="flex items-center gap-2 shrink-0">
         {#if ticketLockUntilClaim || ticketApprovalEnabled}
-          <span class="px-2 py-0.5 rounded-full text-2xs font-semibold uppercase bg-success/10 text-success border border-success/20">{m.e1_tickets_active_badge()}</span>
+          <span class="px-2 py-0.5 rounded-full text-2xs font-semibold uppercase bg-success/10 text-on-success-container border border-success/20">{m.e1_tickets_active_badge()}</span>
         {/if}
         <Papicon icon={expandedConfigSection === 'gatekeeping' ? 'chevron-up' : 'chevron-down'} size={16} class="text-on-surface-variant/40" />
       </div>
@@ -1244,7 +1244,7 @@
       </div>
       <div class="flex items-center gap-2 shrink-0">
         {#if ticketArchiveCategoryId || ticketHistoryPanelEnabled}
-          <span class="px-2 py-0.5 rounded-full text-2xs font-semibold uppercase bg-success/10 text-success border border-success/20">{m.e1_tickets_active_badge()}</span>
+          <span class="px-2 py-0.5 rounded-full text-2xs font-semibold uppercase bg-success/10 text-on-success-container border border-success/20">{m.e1_tickets_active_badge()}</span>
         {/if}
         <Papicon icon={expandedConfigSection === 'archive' ? 'chevron-up' : 'chevron-down'} size={16} class="text-on-surface-variant/40" />
       </div>
@@ -1309,7 +1309,7 @@
   <div class="rounded-xl border border-outline-variant/10 bg-surface-container-low/40 overflow-hidden">
     <button onclick={() => toggleConfigSection('inactivity')} class="w-full flex items-center justify-between p-4 lg:p-5 hover:bg-white/3 transition-colors text-left">
       <div class="flex items-center gap-3">
-        <div class="w-9 h-9 rounded-lg bg-warning/10 text-warning flex items-center justify-center shrink-0">
+        <div class="w-9 h-9 rounded-lg bg-warning/10 text-on-warning-container flex items-center justify-center shrink-0">
           <Papicon icon="clock" size={18} />
         </div>
         <div>
@@ -1319,7 +1319,7 @@
       </div>
       <div class="flex items-center gap-2 shrink-0">
         {#if ticketInactivityEnabled || ticketStaffReminderEnabled}
-          <span class="px-2 py-0.5 rounded-full text-2xs font-semibold uppercase bg-success/10 text-success border border-success/20">{m.e1_tickets_active_badge()}</span>
+          <span class="px-2 py-0.5 rounded-full text-2xs font-semibold uppercase bg-success/10 text-on-success-container border border-success/20">{m.e1_tickets_active_badge()}</span>
         {/if}
         <Papicon icon={expandedConfigSection === 'inactivity' ? 'chevron-up' : 'chevron-down'} size={16} class="text-on-surface-variant/40" />
       </div>
@@ -1377,7 +1377,7 @@
       </div>
       <div class="flex items-center gap-2 shrink-0">
         {#if ticketRecordingNoticeEnabled}
-          <span class="px-2 py-0.5 rounded-full text-2xs font-semibold bg-success/10 text-success border border-success/20">{m.e1_tickets_active_badge()}</span>
+          <span class="px-2 py-0.5 rounded-full text-2xs font-semibold bg-success/10 text-on-success-container border border-success/20">{m.e1_tickets_active_badge()}</span>
         {/if}
         <Papicon icon={expandedConfigSection === 'recording' ? 'chevron-up' : 'chevron-down'} size={16} class="text-on-surface-variant/40" />
       </div>
@@ -1432,7 +1432,7 @@
       </div>
       <div class="flex items-center gap-2 shrink-0">
         {#if ticketSlaFirstResponseMinutes || ticketSlaResolutionHours}
-          <span class="px-2 py-0.5 rounded-full text-2xs font-semibold bg-success/10 text-success border border-success/20">{m.e1_tickets_active_badge()}</span>
+          <span class="px-2 py-0.5 rounded-full text-2xs font-semibold bg-success/10 text-on-success-container border border-success/20">{m.e1_tickets_active_badge()}</span>
         {/if}
         <Papicon icon={expandedConfigSection === 'sla' ? 'chevron-up' : 'chevron-down'} size={16} class="text-on-surface-variant/40" />
       </div>
@@ -1469,7 +1469,7 @@
       </div>
       <div class="flex items-center gap-2 shrink-0">
         {#if activeQuotaCount > 0}
-          <span class="px-2 py-0.5 rounded-full text-2xs font-semibold uppercase bg-success/10 text-success border border-success/20">
+          <span class="px-2 py-0.5 rounded-full text-2xs font-semibold uppercase bg-success/10 text-on-success-container border border-success/20">
             {activeQuotaCount > 1 ? m.tq_active_many({ count: activeQuotaCount }) : m.tq_active_one()}
           </span>
         {/if}
@@ -1603,7 +1603,7 @@
   <div class="rounded-xl border border-outline-variant/10 bg-surface-container-low/40 overflow-hidden">
     <button onclick={() => toggleConfigSection('satisfaction')} class="w-full flex items-center justify-between p-4 lg:p-5 hover:bg-white/3 transition-colors text-left">
       <div class="flex items-center gap-3">
-        <div class="w-9 h-9 rounded-lg bg-success/10 text-success flex items-center justify-center shrink-0">
+        <div class="w-9 h-9 rounded-lg bg-success/10 text-on-success-container flex items-center justify-center shrink-0">
           <Papicon icon="smile" size={18} />
         </div>
         <div>
@@ -1613,7 +1613,7 @@
       </div>
       <div class="flex items-center gap-2 shrink-0">
         {#if ticketSatisfactionCommentEnabled || ticketSatisfactionLogChannelId}
-          <span class="px-2 py-0.5 rounded-full text-2xs font-semibold uppercase bg-success/10 text-success border border-success/20">{m.e1_tickets_active_badge()}</span>
+          <span class="px-2 py-0.5 rounded-full text-2xs font-semibold uppercase bg-success/10 text-on-success-container border border-success/20">{m.e1_tickets_active_badge()}</span>
         {/if}
         <Papicon icon={expandedConfigSection === 'satisfaction' ? 'chevron-up' : 'chevron-down'} size={16} class="text-on-surface-variant/40" />
       </div>
@@ -1668,7 +1668,7 @@
   <div class="rounded-xl border border-outline-variant/10 bg-surface-container-low/40 overflow-hidden">
     <button onclick={() => toggleConfigSection('types')} class="w-full flex items-center justify-between p-4 lg:p-5 hover:bg-white/3 transition-colors text-left">
       <div class="flex items-center gap-3">
-        <div class="w-9 h-9 rounded-lg bg-error/10 text-error flex items-center justify-center shrink-0">
+        <div class="w-9 h-9 rounded-lg bg-error/10 text-on-error-container flex items-center justify-center shrink-0">
           <Papicon icon="layers" size={18} />
         </div>
         <div>
@@ -1711,7 +1711,7 @@
                       {:else if ticketType.mode === 'DM'}
                         <span class="px-1.5 py-0.5 rounded text-xs font-semibold bg-purple-500/10 text-purple-400 border border-purple-500/15">{m.e1_tickets_badge_dm()}</span>
                       {:else if ticketType.mode === 'THREAD'}
-                        <span class="px-1.5 py-0.5 rounded text-xs font-semibold bg-warning/10 text-warning border border-warning/15">{m.e1_tickets_badge_thread()}</span>
+                        <span class="px-1.5 py-0.5 rounded text-xs font-semibold bg-warning/10 text-on-warning-container border border-warning/15">{m.e1_tickets_badge_thread()}</span>
                       {:else}
                         <span class="px-1.5 py-0.5 rounded text-xs font-semibold bg-surface-container-high text-on-surface-variant border border-outline-variant/10">{m.e1_tickets_badge_global_mode()}</span>
                       {/if}
@@ -1719,7 +1719,7 @@
                       <!-- Staff Role Badge -->
                       {#if ticketType.staffRoleId}
                         {@const role = discordRoles.find(r => r.id === ticketType.staffRoleId)}
-                        <span class="px-1.5 py-0.5 rounded text-2xs font-semibold tracking-wider bg-success/10 text-success border border-success/15">Staff: @{role?.name || m.e1_tickets_unknown_role()}</span>
+                        <span class="px-1.5 py-0.5 rounded text-2xs font-semibold tracking-wider bg-success/10 text-on-success-container border border-success/15">Staff: @{role?.name || m.e1_tickets_unknown_role()}</span>
                       {:else}
                         <span class="px-1.5 py-0.5 rounded text-2xs font-semibold tracking-wider bg-surface-container-high text-on-surface-variant/40 border border-outline-variant/10">{m.e1_tickets_badge_inherited_staff()}</span>
                       {/if}
@@ -1767,7 +1767,7 @@
                   <!-- Delete button -->
                   <button
                     onclick={() => removeTicketType(index)}
-                    class="p-1.5 rounded-lg bg-error/10 text-error hover:bg-rose-500 hover:text-white border border-error/15 transition-all"
+                    class="p-1.5 rounded-lg bg-error/10 text-on-error-container hover:bg-rose-500 hover:text-white border border-error/15 transition-all"
                     title={m.e1_tickets_type_delete()}
                   >
                     <Papicon icon="trash-2" size={13} />

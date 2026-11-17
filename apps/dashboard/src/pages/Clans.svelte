@@ -317,8 +317,8 @@
 
   function betStatusClass(status: string): string {
     if (status === 'ACTIVE') return 'bg-primary/15 text-primary';
-    if (status === 'RESOLVED') return 'bg-success/15 text-success';
-    if (status === 'PENDING' || status === 'LOCKED') return 'bg-warning/15 text-warning';
+    if (status === 'RESOLVED') return 'bg-success/15 text-on-success-container';
+    if (status === 'PENDING' || status === 'LOCKED') return 'bg-warning/15 text-on-warning-container';
     return 'bg-surface-container-high/60 text-on-surface-variant';
   }
 
@@ -1196,7 +1196,7 @@ savedBetSettings = {
         <section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl space-y-6">
           <div class="flex items-center justify-between border-b border-outline-variant/15 pb-2">
             <h3 class="text-lg font-semibold flex items-center gap-2"><Papicon icon="Calendar" size={18} /> {m.clan_current_season_heading()}</h3>
-            <span class="px-3 py-1 bg-warning/10 text-warning text-xs font-bold rounded-full">{m.clan_season_badge({ n: currentClanSeason })}</span>
+            <span class="px-3 py-1 bg-warning/10 text-on-warning-container text-xs font-bold rounded-full">{m.clan_season_badge({ n: currentClanSeason })}</span>
           </div>
 
           <div class="space-y-4">
@@ -1380,7 +1380,7 @@ savedBetSettings = {
                 <Papicon icon="calendar" size={16} class="text-primary" />
                 {m.clan_current_season_heading()}
               </h3>
-              <span class="px-3 py-1 bg-warning/10 text-warning text-xs font-bold rounded-full">{m.clan_season_badge({ n: currentClanSeason })}</span>
+              <span class="px-3 py-1 bg-warning/10 text-on-warning-container text-xs font-bold rounded-full">{m.clan_season_badge({ n: currentClanSeason })}</span>
             </div>
 
             <div class="space-y-4">
@@ -1700,7 +1700,7 @@ savedBetSettings = {
                   <button
                     onclick={saveBridgeSettings}
                     disabled={bridgeAction.state.loading}
-                    class="w-full py-3 bg-warning/10 text-warning border border-warning/30 rounded-lg text-body-sm font-medium transition-colors hover:bg-warning/20 disabled:opacity-50"
+                    class="w-full py-3 bg-warning/10 text-on-warning-container border border-warning/30 rounded-lg text-body-sm font-medium transition-colors hover:bg-warning/20 disabled:opacity-50"
                   >
                     {bridgeAction.state.loading ? m.clan_da_saving_btn() : m.clan_da_save_btn()}
                   </button>
@@ -1760,7 +1760,7 @@ savedBetSettings = {
                   <button
                     type="button"
                     onclick={() => handleClanPoints(-1)}
-                    class="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-error/10 hover:bg-error/20 text-error border border-error/20 font-semibold text-xs rounded-lg transition-colors cursor-pointer"
+                    class="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-error/10 hover:bg-error/20 text-on-error-container border border-error/20 font-semibold text-xs rounded-lg transition-colors cursor-pointer"
                     disabled={!selectedClanIdForPoints}
                   >
                     <Papicon icon="Minus" size={14} /> {m.clan_remove_clan_points_btn()}
@@ -1815,7 +1815,7 @@ savedBetSettings = {
                   <button
                     type="button"
                     onclick={() => handleMemberPoints(-1)}
-                    class="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-error/10 hover:bg-error/20 text-error border border-error/20 font-semibold text-xs rounded-lg transition-colors cursor-pointer"
+                    class="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-error/10 hover:bg-error/20 text-on-error-container border border-error/20 font-semibold text-xs rounded-lg transition-colors cursor-pointer"
                     use:explainDisabled={(!manualPointsMemberUserId) ? m.common_reason_fill_field() : ''}
                   >
                     <Papicon icon="Minus" size={14} /> {m.clan_remove_member_points_btn()}
@@ -1841,7 +1841,7 @@ savedBetSettings = {
           </div>
 
           {#if !clansEnabled}
-            <p class="text-xs text-warning bg-warning/10 border border-warning/20 rounded-lg px-4 py-3">
+            <p class="text-xs text-on-warning-container bg-warning/10 border border-warning/20 rounded-lg px-4 py-3">
               {m.clan_bets_requires_clans()}
             </p>
           {/if}
@@ -1954,7 +1954,7 @@ savedBetSettings = {
               {/each}
             </div>
           {:else}
-            <p class="text-xs text-warning bg-warning/10 border border-warning/20 rounded-lg px-4 py-3">
+            <p class="text-xs text-on-warning-container bg-warning/10 border border-warning/20 rounded-lg px-4 py-3">
               {m.clan_bets_managers_empty()}
             </p>
           {/if}
@@ -2248,7 +2248,7 @@ savedBetSettings = {
                 {m.clan_reset_all_desc()}
               </p>
 
-              <div class="p-3 bg-error/10 rounded-lg border border-error/10 text-error text-xs flex gap-2">
+              <div class="p-3 bg-error/10 rounded-lg border border-error/10 text-on-error-container text-xs flex gap-2">
                 <Papicon icon="Info" size={16} class="shrink-0 mt-0.5" />
                 <span><strong>{m.clan_reset_all_warning_prefix()}</strong> {m.clan_reset_all_warning({ tab: m.clan_tab_seasons() })}</span>
               </div>

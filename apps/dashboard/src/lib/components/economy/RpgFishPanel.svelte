@@ -327,7 +327,7 @@
                           type="button"
                           onclick={() => removeFish(fish)}
                           disabled={disabled}
-                          class="px-3 py-1.5 bg-error/10 hover:bg-error/20 text-error text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                          class="px-3 py-1.5 bg-error/10 hover:bg-error/20 text-on-error-container text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <Papicon icon={fish.overridesDefault ? 'RotateCcw' : 'trash'} size={12} />
                           {fish.overridesDefault ? m.eco_fish_restore_btn() : m.eco_fish_delete_btn()}

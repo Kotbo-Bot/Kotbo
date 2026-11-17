@@ -37,8 +37,8 @@
   const hint = $derived(permissionHint(step?.error));
 
   const STATUS = {
-    OK: { label: () => m.wf_replay_status_ok(), color: 'bg-success/15 text-success', dot: 'bg-success' },
-    ERROR: { label: () => m.wf_replay_status_error(), color: 'bg-error/15 text-error', dot: 'bg-error' },
+    OK: { label: () => m.wf_replay_status_ok(), color: 'bg-success/15 text-on-success-container', dot: 'bg-success' },
+    ERROR: { label: () => m.wf_replay_status_error(), color: 'bg-error/15 text-on-error-container', dot: 'bg-error' },
     SKIPPED: {
       label: () => m.wf_replay_status_skipped(),
       color: 'bg-surface-container-highest text-on-surface-variant',

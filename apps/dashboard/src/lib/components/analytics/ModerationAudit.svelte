@@ -106,7 +106,7 @@
     <!-- Distribution Chart -->
     <div class="premium-card p-6 rounded-xl flex flex-col items-center justify-center min-h-[220px]">
       <div class="flex items-center gap-3 mb-6 w-full">
-        <div class="p-2 rounded-xl bg-warning/10 text-warning">
+        <div class="p-2 rounded-xl bg-warning/10 text-on-warning-container">
           <Papicon icon="ChartPieSlice" size={18} />
         </div>
         <h4 class="text-sm font-semibold text-on-surface">{m.d4_distribution()}</h4>
@@ -123,7 +123,7 @@
     <!-- Trend Chart -->
     <div class="premium-card p-6 rounded-xl flex flex-col min-h-[220px] space-y-4">
       <div class="flex items-center gap-3">
-        <div class="p-2 rounded-xl bg-error/10 text-error">
+        <div class="p-2 rounded-xl bg-error/10 text-on-error-container">
           <Papicon icon="ChartLineUp" size={18} />
         </div>
         <h4 class="text-sm font-semibold text-on-surface">{m.d4_trend()}</h4>
@@ -174,7 +174,7 @@
     <div class="premium-card p-8 rounded-xl space-y-6 flex flex-col">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-3">
-          <div class="p-2 rounded-xl bg-error/10 text-error">
+          <div class="p-2 rounded-xl bg-error/10 text-on-error-container">
             <Papicon icon="UserFocus" size={20} />
           </div>
           <h3 class="text-lg font-semibold text-on-surface">{m.d4_sanctioned_members()}</h3>
@@ -210,7 +210,7 @@
   <div class="premium-card p-8 rounded-xl space-y-8">
     <div class="flex items-center justify-between">
       <div class="flex items-center gap-4">
-        <div class="bg-error/10 p-3 rounded-lg text-error">
+        <div class="bg-error/10 p-3 rounded-lg text-on-error-container">
           <Papicon icon="Gavel" size={24} />
         </div>
         <div>

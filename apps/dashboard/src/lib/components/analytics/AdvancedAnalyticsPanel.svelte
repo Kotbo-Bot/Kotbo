@@ -114,8 +114,8 @@
   }
 
   function trendBadge(pct: number): { cls: string; label: string } {
-    if (pct > 0) return { cls: 'text-success bg-success/10', label: `+${pct}%` };
-    if (pct < 0) return { cls: 'text-error bg-error/10', label: `${pct}%` };
+    if (pct > 0) return { cls: 'text-on-success-container bg-success/10', label: `+${pct}%` };
+    if (pct < 0) return { cls: 'text-on-error-container bg-error/10', label: `${pct}%` };
     return { cls: 'text-on-surface-variant bg-surface-container', label: '0%' };
   }
 

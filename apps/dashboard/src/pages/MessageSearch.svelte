@@ -536,7 +536,7 @@
                     <span class="text-xs text-on-surface-variant/40">{m.ms_edited()}</span>
                   {/if}
                   {#if message.deletedAt}
-                    <span class="px-1.5 py-0.5 text-2xs font-bold bg-error/20 text-error rounded">{m.ms_deleted_badge()}</span>
+                    <span class="px-1.5 py-0.5 text-2xs font-bold bg-error/20 text-on-error-container rounded">{m.ms_deleted_badge()}</span>
                   {/if}
                 </div>
 

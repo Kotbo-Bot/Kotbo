@@ -420,7 +420,7 @@
                         {/if}
                         {#if member.isLinkOnly}
                           <span
-                            class="text-2xs px-2 py-0.5 rounded-full bg-success/10 text-success border border-success/20"
+                            class="text-2xs px-2 py-0.5 rounded-full bg-success/10 text-on-success-container border border-success/20"
                             title={m.channel_links_badge_link_only_tooltip()}
                           >
                             {m.channel_links_badge_link_only()}
@@ -428,7 +428,7 @@
                         {/if}
                         {#if warnings.length > 0}
                           <span
-                            class="text-2xs px-2 py-0.5 rounded-full bg-warning/10 text-warning border border-warning/20"
+                            class="text-2xs px-2 py-0.5 rounded-full bg-warning/10 text-on-warning-container border border-warning/20"
                             title={warnings.join(' ')}
                           >
                             {m.channel_links_perm_badge()}

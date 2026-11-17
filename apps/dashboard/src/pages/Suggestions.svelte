@@ -491,12 +491,12 @@
       />
       <div class="flex flex-wrap items-center gap-2">
         {#if suggestion.thresholdReachedAt && suggestion.status === 'PENDING'}
-          <span class="text-2xs font-semibold px-2 py-0.5 rounded-full bg-success/10 text-success border border-success/20 inline-flex items-center gap-1">
+          <span class="text-2xs font-semibold px-2 py-0.5 rounded-full bg-success/10 text-on-success-container border border-success/20 inline-flex items-center gap-1">
             <Papicon icon="TrendingUp" size={11} /> {m.suggestions_threshold_badge()}
           </span>
         {/if}
         {#if stale}
-          <span class="text-2xs font-semibold px-2 py-0.5 rounded-full bg-warning/10 text-warning border border-warning/20">{m.suggestions_stale_badge()}</span>
+          <span class="text-2xs font-semibold px-2 py-0.5 rounded-full bg-warning/10 text-on-warning-container border border-warning/20">{m.suggestions_stale_badge()}</span>
         {/if}
         <span class="text-2xs font-semibold px-2 py-0.5 rounded-full border {SUGGESTION_STATUS_TONE[suggestion.status]}">{suggestionStatusLabel(suggestion.status)}</span>
       </div>
@@ -621,9 +621,9 @@
       {:else if activeTab === 'queue'}
         <div class="space-y-6">
           <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-            {@render statTile('Inbox', 'bg-warning/10 text-warning', String(data.stats.pending), m.suggestions_stat_pending())}
+            {@render statTile('Inbox', 'bg-warning/10 text-on-warning-container', String(data.stats.pending), m.suggestions_stat_pending())}
             {@render statTile('Clock', 'bg-primary/10 text-primary', formatDelay(data.stats.avgResponseHours), m.suggestions_stat_delay({ days: SUGGESTION_STATS_DAYS }))}
-            {@render statTile('Check', 'bg-success/10 text-success', formatRate(data.stats.acceptanceRate), m.suggestions_stat_acceptance({ days: SUGGESTION_STATS_DAYS }))}
+            {@render statTile('Check', 'bg-success/10 text-on-success-container', formatRate(data.stats.acceptanceRate), m.suggestions_stat_acceptance({ days: SUGGESTION_STATS_DAYS }))}
             {@render statTile('Lightbulb', 'bg-secondary/10 text-secondary', String(data.stats.createdRecent), m.suggestions_stat_created({ days: SUGGESTION_STATS_DAYS }))}
           </div>
 

@@ -92,6 +92,10 @@
      chacun leur valeur par theme, comme le reste de la palette. */
   --color-warning: var(--warning-color);
   --color-success: var(--success-color);
+  /* Texte d'etat pose sur un fond teinte de la meme couleur (badges
+     bg-warning/15) : 4,5:1 dans les deux themes (RGAA 3.2). */
+  --color-on-warning-container: var(--on-warning-container-color);
+  --color-on-success-container: var(--on-success-container-color);
 
   /* Echelle de texte du dashboard : 2xs (11px), xs (12px), body-sm (13px),
      sm (14px). Les pages ecrivaient une quinzaine de tailles en dur, de 8 a
@@ -187,6 +191,8 @@
   --on-tertiary-container-color: #6d28d9;
   --warning-color: #b45309;
   --success-color: #15803d;
+  --on-warning-container-color: #78350f;
+  --on-success-container-color: #14532d;
   --error-color: #dc2626;
   --on-error-color: #ffffff;
   --error-container-color: #fef2f2;
@@ -220,6 +226,8 @@
   --on-tertiary-container-color: #ddd6fe;
   --warning-color: #fbbf24;
   --success-color: #4ade80;
+  --on-warning-container-color: #fbbf24;
+  --on-success-container-color: #4ade80;
   --error-color: #f87171;
   --on-error-color: #450a0a;
   --error-container-color: #450a0a;

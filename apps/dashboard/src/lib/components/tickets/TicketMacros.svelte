@@ -280,7 +280,7 @@
                   <span class="text-2xs px-1.5 py-0.5 rounded bg-surface-container text-on-surface-variant">{macro.category}</span>
                 {/if}
                 {#if !macro.enabled}
-                  <span class="text-2xs px-1.5 py-0.5 rounded bg-error/10 text-error">{m.tmac_disabled()}</span>
+                  <span class="text-2xs px-1.5 py-0.5 rounded bg-error/10 text-on-error-container">{m.tmac_disabled()}</span>
                 {/if}
                 {#if macro.autoSendOnOpen}
                   <span class="text-2xs px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-400">{m.tmac_auto()}</span>

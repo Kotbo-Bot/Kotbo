@@ -624,7 +624,7 @@
         {/each}
 
         {#if submitError}
-          <div class="rounded-lg bg-error/10 border border-error/20 px-5 py-4 text-sm text-error font-medium">
+          <div class="rounded-lg bg-error/10 border border-error/20 px-5 py-4 text-sm text-on-error-container font-medium">
             {submitError}
           </div>
         {/if}

@@ -138,7 +138,7 @@
   {#if successResult}
     <!-- Success screen -->
     <div class="p-6 space-y-6 text-center max-w-md mx-auto relative z-10">
-      <div class="w-16 h-16 bg-success/10 text-success rounded-full flex items-center justify-center mx-auto mb-2 border border-success/20">
+      <div class="w-16 h-16 bg-success/10 text-on-success-container rounded-full flex items-center justify-center mx-auto mb-2 border border-success/20">
         <Papicon icon="check_circle" size={32} />
       </div>
       

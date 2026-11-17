@@ -268,7 +268,7 @@
       <section class="bg-surface-container-low/40 border border-outline-variant/30 p-8 rounded-xl flex flex-col justify-between gap-6 hover:bg-surface-container-low/60 transition-all duration-300">
         <div class="space-y-4">
           <div class="flex items-center gap-3 pb-3 border-b border-outline-variant/15">
-            <div class="w-10 h-10 rounded-xl bg-warning/10 text-warning flex items-center justify-center">
+            <div class="w-10 h-10 rounded-xl bg-warning/10 text-on-warning-container flex items-center justify-center">
               <Papicon icon="Binary" size={20} />
             </div>
             <div>
@@ -311,7 +311,7 @@
           onclick={handleResetCounting}
           disabled={actionState.state.loading}
           use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''}
-          class="w-full py-3.5 bg-warning/10 hover:bg-warning/20 text-warning rounded-lg text-body-sm font-medium transition-all duration-200 flex items-center justify-center gap-2 active:scale-95 disabled:opacity-40"
+          class="w-full py-3.5 bg-warning/10 hover:bg-warning/20 text-on-warning-container rounded-lg text-body-sm font-medium transition-all duration-200 flex items-center justify-center gap-2 active:scale-95 disabled:opacity-40"
         >
           <Papicon icon="refresh-cw" size={14} />
           {m.fun_reset_counting_btn()}
@@ -363,7 +363,7 @@
       <section class="bg-surface-container-low/40 border border-outline-variant/30 p-8 rounded-xl flex flex-col justify-between gap-6 hover:bg-surface-container-low/60 transition-all duration-300">
         <div class="space-y-4">
           <div class="flex items-center gap-3 pb-3 border-b border-outline-variant/15">
-            <div class="w-10 h-10 rounded-xl bg-success/10 text-success flex items-center justify-center">
+            <div class="w-10 h-10 rounded-xl bg-success/10 text-on-success-container flex items-center justify-center">
               <Papicon icon="Gamepad2" size={20} />
             </div>
             <div>
@@ -398,7 +398,7 @@
           onclick={handleResetGuessNumber}
           disabled={actionState.state.loading}
           use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''}
-          class="w-full py-3.5 bg-success/10 hover:bg-success/20 text-success rounded-lg text-body-sm font-medium transition-all duration-200 flex items-center justify-center gap-2 active:scale-95 disabled:opacity-40"
+          class="w-full py-3.5 bg-success/10 hover:bg-success/20 text-on-success-container rounded-lg text-body-sm font-medium transition-all duration-200 flex items-center justify-center gap-2 active:scale-95 disabled:opacity-40"
         >
           <Papicon icon="refresh-cw" size={14} />
           {m.fun_reset_guess_btn()}
@@ -455,7 +455,7 @@
       <section class="bg-surface-container-low/40 border border-outline-variant/30 p-8 rounded-xl flex flex-col justify-between gap-6 hover:bg-surface-container-low/60 transition-all duration-300">
         <div class="space-y-4">
           <div class="flex items-center gap-3 pb-3 border-b border-outline-variant/15">
-            <div class="w-10 h-10 rounded-xl bg-error/10 text-error flex items-center justify-center">
+            <div class="w-10 h-10 rounded-xl bg-error/10 text-on-error-container flex items-center justify-center">
               <Papicon icon="Puzzle" size={20} />
             </div>
             <div>
@@ -489,7 +489,7 @@
           onclick={handleResetEmojiRiddle}
           disabled={actionState.state.loading}
           use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''}
-          class="w-full py-3.5 bg-error/10 hover:bg-error/20 text-error rounded-lg text-body-sm font-medium transition-all duration-200 flex items-center justify-center gap-2 active:scale-95 disabled:opacity-40"
+          class="w-full py-3.5 bg-error/10 hover:bg-error/20 text-on-error-container rounded-lg text-body-sm font-medium transition-all duration-200 flex items-center justify-center gap-2 active:scale-95 disabled:opacity-40"
         >
           <Papicon icon="refresh-cw" size={14} />
           {m.fun_reset_emojiriddle_btn()}

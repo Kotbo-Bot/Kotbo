@@ -226,7 +226,7 @@
                   class="w-6 h-6 rounded object-cover"
                 />
               {:else}
-                <div class="w-6 h-6 rounded bg-primary/10 flex items-center justify-center text-[10px] font-medium text-primary">
+                <div class="w-6 h-6 rounded bg-primary/10 flex items-center justify-center text-[10px] font-medium text-on-primary-container">
                   {guild.name.charAt(0)}
                 </div>
               {/if}

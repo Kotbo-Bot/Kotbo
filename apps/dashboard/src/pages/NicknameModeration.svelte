@@ -454,7 +454,7 @@
       <LoadingHint context="config" />
     </div>
   {:else if loadError}
-    <div class="rounded-xl bg-error/10 border border-error/20 p-6 text-error text-sm font-semibold flex items-center gap-2">
+    <div class="rounded-xl bg-error/10 border border-error/20 p-6 text-on-error-container text-sm font-semibold flex items-center gap-2">
       <Papicon icon="alert-triangle" size={18} />
       <span>{loadError}</span>
     </div>

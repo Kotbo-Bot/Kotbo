@@ -275,7 +275,7 @@
         <div class="w-10 h-10 border-3 border-primary/20 border-t-primary rounded-full animate-spin"></div>
       </div>
     {:else if error}
-      <div class="rounded-lg bg-error/10 border border-error/20 p-5 text-error text-sm">{error}</div>
+      <div class="rounded-lg bg-error/10 border border-error/20 p-5 text-on-error-container text-sm">{error}</div>
     {:else if responses.length === 0}
       <div class="rounded-lg border-2 border-dashed border-outline-variant/20 p-16 text-center text-on-surface-variant/40">
         <Papicon icon="inbox" size={48} class="mb-3" />

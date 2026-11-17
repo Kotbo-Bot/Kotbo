@@ -198,9 +198,9 @@
         <MetricCard label={m.evc_col_status()} value={statusLabel(event.status)} icon="Zap" />
         {#if withRegistrations}
           <MetricCard label={m.evc_col_form()} value={event.customForm?.name || m.evc_direct_registration()} icon="FileText" toneClass="bg-tertiary/10 text-tertiary" />
-          <MetricCard label={m.evc_registered_count()} value={registrations.length} icon="Users" toneClass="bg-success/10 text-success" />
+          <MetricCard label={m.evc_registered_count()} value={registrations.length} icon="Users" toneClass="bg-success/10 text-on-success-container" />
         {:else if event.type === 'CTF'}
-          <MetricCard label={m.evc_col_challenges()} value={event.ctfChallenges?.length || 0} icon="Flag" toneClass="bg-success/10 text-success" />
+          <MetricCard label={m.evc_col_challenges()} value={event.ctfChallenges?.length || 0} icon="Flag" toneClass="bg-success/10 text-on-success-container" />
           <MetricCard label={m.evc_participants_count()} value={event.participants?.length || 0} icon="Users" toneClass="bg-tertiary/10 text-tertiary" />
         {:else}
           <MetricCard label={m.evc_col_progression()} value={m.evc_progression_value({ current: currentQIdx || 1, total: totalQ })} icon="HelpCircle" toneClass="bg-primary/10 text-primary" />
@@ -229,7 +229,7 @@
               {#each stats.challenges as challenge (challenge.id ?? challenge.title)}
                 <SectionCard title={challenge.title} description={`${challenge.points} pts · ${challenge.xpReward} XP`} icon="Flag">
                   {#snippet actions()}
-                    <span class="rounded-md bg-success/10 px-2 py-0.5 text-xs font-medium text-success">{m.evc_solves_count({ count: challenge.solveCount })}</span>
+                    <span class="rounded-md bg-success/10 px-2 py-0.5 text-xs font-medium text-on-success-container">{m.evc_solves_count({ count: challenge.solveCount })}</span>
                   {/snippet}
                   {#if challenge.solves?.length}
                     <ul class="max-h-40 space-y-1 overflow-y-auto text-sm">
@@ -255,7 +255,7 @@
             {@const total = values.reduce((a, b) => a + b, 0) || 1}
             <SectionCard title={stats.questionText} icon="PieChart">
               {#snippet actions()}
-                <span class="rounded-md bg-success/10 px-2 py-0.5 text-xs font-medium text-success">{m.evc_live_badge()}</span>
+                <span class="rounded-md bg-success/10 px-2 py-0.5 text-xs font-medium text-on-success-container">{m.evc_live_badge()}</span>
               {/snippet}
               <div class="grid grid-cols-1 items-center gap-10 lg:grid-cols-2">
                 <div class="relative mx-auto h-56 w-56">

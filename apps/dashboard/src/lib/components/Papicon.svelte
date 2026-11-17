@@ -32,7 +32,7 @@
       depth += 1;
     }
 
-    // Papicons rend un <svg>. Toute autre forme (composant non deroule, element
+    // Papicons rend un `svg`. Toute autre forme (composant non deroule, element
     // vide) signifie que le depaquetage a echoue : on repasse alors sur Lucide
     // plutot que d'emettre un SVG vide qui casse la mise en page.
     return current?.type === "svg" ? current : null;
@@ -90,6 +90,8 @@
       xmlns="http://www.w3.org/2000/svg"
       class={mergedClassName}
       style={mergedStyle}
+      aria-hidden="true"
+      focusable="false"
     >
       {#each svgChildren as child}
         {#if child.type === 'path'}
@@ -109,6 +111,6 @@
       {/each}
     </svg>
   {:else}
-    <LucideComponent size={size} class={mergedClassName} style={mergedStyle} stroke-width={2.25} />
+    <LucideComponent size={size} class={mergedClassName} style={mergedStyle} stroke-width={2.25} aria-hidden="true" />
   {/if}
 {/key}

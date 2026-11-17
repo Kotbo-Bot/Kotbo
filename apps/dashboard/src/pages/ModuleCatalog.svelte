@@ -408,7 +408,7 @@
                           <Papicon icon="Lock" size={9} /> {planLabel(mod.requiredPlan)}
                         </span>
                       {:else if blocked}
-                        <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-semibold bg-warning/15 text-warning">
+                        <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-semibold bg-warning/15 text-on-warning-container">
                           {m.mc_badge_blocked()}
                         </span>
                       {/if}

@@ -573,9 +573,9 @@
   };
 
   const STATUS_META: Record<string, { label: () => string; color: string }> = {
-    COMPLETED: { label: () => m.wf_exec_status_completed(), color: 'bg-success/15 text-success' },
-    FAILED: { label: () => m.wf_exec_status_failed(), color: 'bg-error/15 text-error' },
-    WAITING: { label: () => m.wf_exec_status_waiting(), color: 'bg-warning/15 text-warning' },
+    COMPLETED: { label: () => m.wf_exec_status_completed(), color: 'bg-success/15 text-on-success-container' },
+    FAILED: { label: () => m.wf_exec_status_failed(), color: 'bg-error/15 text-on-error-container' },
+    WAITING: { label: () => m.wf_exec_status_waiting(), color: 'bg-warning/15 text-on-warning-container' },
     RUNNING: { label: () => m.wf_exec_status_running(), color: 'bg-sky-500/15 text-sky-700 dark:text-sky-300' },
     CANCELLED: { label: () => m.wf_exec_status_cancelled(), color: 'bg-surface-container-highest text-on-surface-variant' },
   };
@@ -690,7 +690,7 @@
     </div>
 
   {:else if error}
-    <div class="p-6 rounded-2xl bg-error/10 border border-error/20 text-error flex items-center gap-3">
+    <div class="p-6 rounded-2xl bg-error/10 border border-error/20 text-on-error-container flex items-center gap-3">
       <Papicon icon="Warning" size={20} />
       <span>{error}</span>
     </div>
@@ -779,7 +779,7 @@
         />
 
         {#if replay.error}
-          <span class="px-2.5 py-1 rounded-lg text-2xs font-semibold bg-error/10 text-error max-w-72 truncate" title={replay.error}>
+          <span class="px-2.5 py-1 rounded-lg text-2xs font-semibold bg-error/10 text-on-error-container max-w-72 truncate" title={replay.error}>
             {replay.error}
           </span>
         {/if}
@@ -974,7 +974,7 @@
                 {:else}
                   <span
                     class="px-2.5 py-1 rounded-full text-2xs font-bold shrink-0 {workflow.enabled
-                      ? 'bg-success/15 text-success border border-success/30'
+                      ? 'bg-success/15 text-on-success-container border border-success/30'
                       : 'bg-surface-container-highest text-on-surface-variant'}"
                   >{workflow.enabled ? m.wf_status_active() : m.wf_status_paused()}</span>
                 {/if}

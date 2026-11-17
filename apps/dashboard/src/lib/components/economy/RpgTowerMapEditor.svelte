@@ -1330,7 +1330,7 @@
     <div class="flex flex-wrap gap-1.5">
       {#each POWERS as power}
         <button type="button" disabled={disabled} use:explainDisabled={(!canManage) ? m.common_reason_no_permission() : ''} onclick={() => updateSelected({ powerPercent: power })}
-          class="px-2 py-1 rounded-lg text-2xs font-bold border font-mono {room.powerPercent === power ? (power > 100 ? 'border-error bg-error/15 text-error' : power < 100 ? 'border-success bg-success/15 text-success' : 'border-primary bg-primary/15') : 'border-outline-variant/15'}">×{power / 100}</button>
+          class="px-2 py-1 rounded-lg text-2xs font-bold border font-mono {room.powerPercent === power ? (power > 100 ? 'border-error bg-error/15 text-on-error-container' : power < 100 ? 'border-success bg-success/15 text-on-success-container' : 'border-primary bg-primary/15') : 'border-outline-variant/15'}">×{power / 100}</button>
       {/each}
     </div>
     <p class="text-2xs text-on-surface-variant">{m.eco_tower_map_power_hint()}</p>
@@ -1389,7 +1389,7 @@
       <button type="button" onclick={loadExample} disabled={disabled} class="px-3 py-2 bg-outline-variant/10 hover:bg-outline-variant/25 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 disabled:opacity-50">
         <Papicon icon="Sparkles" size={12} /> {m.eco_tower_map_example()}
       </button>
-      <button type="button" onclick={clearMap} disabled={disabled} class="px-3 py-2 bg-error/10 hover:bg-error/20 text-error text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 disabled:opacity-50">
+      <button type="button" onclick={clearMap} disabled={disabled} class="px-3 py-2 bg-error/10 hover:bg-error/20 text-on-error-container text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 disabled:opacity-50">
         <Papicon icon="trash" size={12} /> {m.eco_tower_map_clear()}
       </button>
       <div class="flex items-center gap-1 px-1 py-1 rounded-lg bg-outline-variant/10">
@@ -1460,7 +1460,7 @@
         <button type="button" onclick={() => pickTool('SELECT')} title={m.eco_tower_map_tool_select_tip()} class="px-3 py-1.5 rounded-lg text-xs font-bold border transition-all flex items-center gap-1.5 {tool === 'SELECT' ? 'border-primary bg-primary/15' : 'border-transparent hover:bg-outline-variant/10'}">
           <Papicon icon="MousePointer" size={12} /> {m.eco_tower_map_tool_select()}
         </button>
-        <button type="button" onclick={() => pickTool('ERASE')} title={m.eco_tower_map_tool_erase_tip()} class="px-3 py-1.5 rounded-lg text-xs font-bold border transition-all flex items-center gap-1.5 {tool === 'ERASE' ? 'border-error bg-error/15 text-error' : 'border-transparent hover:bg-outline-variant/10'}">
+        <button type="button" onclick={() => pickTool('ERASE')} title={m.eco_tower_map_tool_erase_tip()} class="px-3 py-1.5 rounded-lg text-xs font-bold border transition-all flex items-center gap-1.5 {tool === 'ERASE' ? 'border-error bg-error/15 text-on-error-container' : 'border-transparent hover:bg-outline-variant/10'}">
           <Papicon icon="Eraser" size={12} /> {m.eco_tower_map_tool_erase()}
         </button>
         <button type="button" onclick={undo} disabled={disabled} use:explainDisabled={(past.length === 0) ? m.common_reason_select_one() : ''} title={m.eco_tower_map_undo_tip()} aria-label={m.eco_tower_map_undo()}
@@ -1581,7 +1581,7 @@
           <button type="button" onclick={jumpToFloor} class="px-2 py-1 rounded-md bg-outline-variant/10 hover:bg-outline-variant/25 text-2xs font-bold">{m.eco_tower_floor_jump()}</button>
           {#if invalidFloors > 0}
             <button type="button" onclick={nextInvalid} title={m.eco_tower_floor_next_invalid()} aria-label={m.eco_tower_floor_next_invalid()}
-              class="ml-auto px-2 py-1 rounded-md bg-warning/10 hover:bg-warning/20 text-warning text-2xs font-bold flex items-center gap-1">
+              class="ml-auto px-2 py-1 rounded-md bg-warning/10 hover:bg-warning/20 text-on-warning-container text-2xs font-bold flex items-center gap-1">
               <Papicon icon="AlertTriangle" size={11} /> {invalidFloors}
             </button>
           {/if}
@@ -1601,7 +1601,7 @@
           <button type="button" onclick={duplicateFloor} disabled={disabled || floors.length >= floorsMax} class="px-2 py-1.5 rounded-md bg-outline-variant/10 hover:bg-outline-variant/25 text-2xs font-bold flex items-center justify-center gap-1 disabled:opacity-40">
             <Papicon icon="Copy" size={11} /> {m.eco_tower_floor_duplicate()}
           </button>
-          <button type="button" onclick={removeFloor} disabled={disabled} class="px-2 py-1.5 rounded-md bg-error/10 hover:bg-error/20 text-error text-2xs font-bold flex items-center justify-center gap-1 disabled:opacity-40">
+          <button type="button" onclick={removeFloor} disabled={disabled} class="px-2 py-1.5 rounded-md bg-error/10 hover:bg-error/20 text-on-error-container text-2xs font-bold flex items-center justify-center gap-1 disabled:opacity-40">
             <Papicon icon="trash" size={11} /> {m.eco_tower_floor_delete()}
           </button>
           <button type="button" onclick={exportTower} title={m.eco_tower_export_all_tip()} class="px-2 py-1.5 rounded-md bg-outline-variant/10 hover:bg-outline-variant/25 text-2xs font-bold flex items-center justify-center gap-1">
@@ -1848,7 +1848,7 @@
               <div class="flex flex-wrap gap-1.5">
                 {#each TRAITS as trait}
                   <button type="button" disabled={disabled || (!selected.traits.includes(trait) && selected.traits.length >= TRAITS_MAX)} use:explainDisabled={(!canManage) ? m.common_reason_no_permission() : ''} title={traitTip(trait)} onclick={() => toggleTrait(trait)}
-                    class="px-2 py-1 rounded-lg text-2xs font-bold border disabled:opacity-40 {selected.traits.includes(trait) ? 'border-error bg-error/15 text-error' : 'border-outline-variant/15'}">{traitLabel(trait)}</button>
+                    class="px-2 py-1 rounded-lg text-2xs font-bold border disabled:opacity-40 {selected.traits.includes(trait) ? 'border-error bg-error/15 text-on-error-container' : 'border-outline-variant/15'}">{traitLabel(trait)}</button>
                 {/each}
               </div>
               <p class="text-2xs text-on-surface-variant">{m.eco_tower_map_traits_hint()}</p>

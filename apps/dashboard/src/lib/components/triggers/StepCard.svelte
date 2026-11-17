@@ -330,7 +330,7 @@
                   type="button"
                   onclick={() => updateTest(test.id, { negate: !test.negate })}
                   class="px-2 py-0.5 rounded-lg text-2xs font-medium border transition-colors {test.negate
-                    ? 'bg-error/15 border-error/30 text-error'
+                    ? 'bg-error/15 border-error/30 text-on-error-container'
                     : 'bg-surface-container-highest border-outline-variant/20 text-on-surface-variant hover:text-on-surface'}"
                   title={m.wf_invert_title()}
                 >{m.wf_invert()}</button>

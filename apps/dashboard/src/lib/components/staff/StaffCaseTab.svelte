@@ -72,7 +72,7 @@
           <span class="sc-chip bg-primary/10 text-primary"><Papicon icon="user-check" size={12} />{m.sm_tutor_badge()}</span>
         {/if}
         {#if member.suspendedAt}
-          <span class="sc-chip bg-warning/10 text-warning"><Papicon icon="pause" size={12} />{m.sx_suspended_since({ date: formatDate(member.suspendedAt) })}</span>
+          <span class="sc-chip bg-warning/10 text-on-warning-container"><Papicon icon="pause" size={12} />{m.sx_suspended_since({ date: formatDate(member.suspendedAt) })}</span>
         {/if}
         <dl class="flex flex-wrap gap-x-5 gap-y-1 text-xs">
           <div class="flex gap-1"><dt class="text-on-surface-variant">{m.sx_fact_joined()}</dt><dd class="text-on-surface">{formatDate(member.joinedStaffAt)}</dd></div>

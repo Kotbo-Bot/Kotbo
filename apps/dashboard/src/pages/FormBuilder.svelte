@@ -704,7 +704,7 @@
       </aside>
 
       <!-- ── CENTER: canvas ────────────────────────────────────────────────── -->
-      <main class="form-builder-canvas flex-1 overflow-y-auto bg-surface/50 p-6">
+      <div class="form-builder-canvas flex-1 overflow-y-auto bg-surface/50 p-6">
         <div class="max-w-2xl mx-auto space-y-3">
 
           <!-- Form header card -->
@@ -934,7 +934,7 @@
             </div>
           {/if}
         </div>
-      </main>
+      </div>
     </div>
   </div>
 {/if}

@@ -152,10 +152,10 @@
 
   const STATUS: Record<Season['status'], { label: () => string; cls: string }> = {
     UPCOMING: { label: () => m.sea_status_upcoming(), cls: 'bg-primary/10 text-primary border-primary/20' },
-    ACTIVE: { label: () => m.sea_status_active(), cls: 'bg-success/10 text-success border-success/20' },
+    ACTIVE: { label: () => m.sea_status_active(), cls: 'bg-success/10 text-on-success-container border-success/20' },
     ENDED: { label: () => m.sea_status_ended(), cls: 'bg-surface-container-high/40 text-on-surface-variant border-outline-variant/20' },
   };
-  const PODIUM = ['bg-warning/15 text-warning', 'bg-surface-container-highest text-on-surface', 'bg-primary/10 text-primary'];
+  const PODIUM = ['bg-warning/15 text-on-warning-container', 'bg-surface-container-highest text-on-surface', 'bg-primary/10 text-primary'];
 
   function formatDateTime(iso: string): string {
     return new Date(iso).toLocaleString(dateLocale(), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
@@ -459,7 +459,7 @@
   {:else if (season.rewards?.length ?? 0) > 0 || (season.tiers?.length ?? 0) > 0 || season.topRoleId}
     <ul class="flex flex-wrap gap-2">
       {#if season.topRoleId}
-        <li class="text-xs px-2.5 py-1 rounded-full bg-warning/10 text-warning border border-warning/20 flex items-center gap-1.5">
+        <li class="text-xs px-2.5 py-1 rounded-full bg-warning/10 text-on-warning-container border border-warning/20 flex items-center gap-1.5">
           <Papicon icon="Crown" size={12} /> {m.sea_top_role_chip({ role: roleName(season.topRoleId) })}
         </li>
       {/if}
@@ -568,8 +568,8 @@
 
               <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 {@render statTile('Users', 'bg-primary/10 text-primary', (data.activeTotals?.participants ?? data.activeLeaderboard.length).toLocaleString(dateLocale()), m.sea_stat_participants())}
-                {@render statTile('Zap', 'bg-success/10 text-success', (data.activeTotals?.totalXp ?? 0).toLocaleString(dateLocale()), m.sea_stat_xp())}
-                {@render statTile('Clock', 'bg-warning/10 text-warning', String(progress.daysLeft), m.sea_stat_days_left())}
+                {@render statTile('Zap', 'bg-success/10 text-on-success-container', (data.activeTotals?.totalXp ?? 0).toLocaleString(dateLocale()), m.sea_stat_xp())}
+                {@render statTile('Clock', 'bg-warning/10 text-on-warning-container', String(progress.daysLeft), m.sea_stat_days_left())}
               </div>
 
               <div class="space-y-2">

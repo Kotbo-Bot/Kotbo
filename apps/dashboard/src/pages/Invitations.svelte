@@ -269,9 +269,9 @@
 
   function getStatusClass(status: InviteStatus) {
     switch (status) {
-      case 'active': return 'bg-success/10 text-success';
-      case 'suspended': return 'bg-warning/10 text-warning';
-      case 'deleted': return 'bg-error/10 text-error';
+      case 'active': return 'bg-success/10 text-on-success-container';
+      case 'suspended': return 'bg-warning/10 text-on-warning-container';
+      case 'deleted': return 'bg-error/10 text-on-error-container';
       case 'expired': return 'bg-slate-500/10 text-on-surface-variant';
     }
   }
@@ -531,7 +531,7 @@
 
   <div class="space-y-6">
     {#if error}
-      <div class="p-4 rounded-lg bg-error/10 text-error text-sm font-bold">{error}</div>
+      <div class="p-4 rounded-lg bg-error/10 text-on-error-container text-sm font-bold">{error}</div>
     {/if}
 
     <!-- Stats compactes -->
@@ -706,7 +706,7 @@
                           {getStatusLabel(status)}
                         </span>
                         {#if invite.inviterSuspended}
-                          <span class="px-2 py-0.5 rounded-full text-2xs font-semibold bg-error/10 text-error">{m.iv_inviter_suspended_badge()}</span>
+                          <span class="px-2 py-0.5 rounded-full text-2xs font-semibold bg-error/10 text-on-error-container">{m.iv_inviter_suspended_badge()}</span>
                         {/if}
                         {#if isDormant(invite)}
                           <span class="px-2 py-0.5 rounded-full text-2xs font-semibold bg-slate-500/10 text-on-surface-variant">{m.iv_dormant()}</span>
@@ -930,7 +930,7 @@
     {:else if activeTab === 'top'}
       <div class="premium-card p-6 rounded-xl space-y-4">
         <div class="flex items-center gap-3">
-          <div class="p-2 rounded-xl bg-success/10 text-success">
+          <div class="p-2 rounded-xl bg-success/10 text-on-success-container">
             <Papicon icon="Crown" size={18} />
           </div>
           <div>
@@ -989,7 +989,7 @@
         <!-- Formulaire de suspension -->
         <div class="premium-card p-6 rounded-xl space-y-4">
           <div class="flex items-center gap-3">
-            <div class="p-2 rounded-xl bg-warning/10 text-warning">
+            <div class="p-2 rounded-xl bg-warning/10 text-on-warning-container">
               <Papicon icon="UserMinus" size={18} />
             </div>
             <div>
@@ -1041,7 +1041,7 @@
         <!-- Liste des créateurs suspendus -->
         <div class="premium-card p-6 rounded-xl space-y-4">
           <div class="flex items-center gap-3">
-            <div class="p-2 rounded-xl bg-error/10 text-error">
+            <div class="p-2 rounded-xl bg-error/10 text-on-error-container">
               <Papicon icon="UserX" size={18} />
             </div>
             <div>

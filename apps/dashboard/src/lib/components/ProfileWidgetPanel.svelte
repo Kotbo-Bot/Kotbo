@@ -423,7 +423,7 @@
             <div class="flex items-center gap-4 py-3">
               <span class="flex-1 font-mono text-sm text-on-surface">{sub.userId}</span>
               <span class="text-xs text-on-surface-variant">{new Date(sub.createdAt).toLocaleDateString(dateLocale())}</span>
-              <span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-success/10 text-success border border-success/15">{m.pwp_active()}</span>
+              <span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-success/10 text-on-success-container border border-success/15">{m.pwp_active()}</span>
             </div>
           {/each}
         </div>

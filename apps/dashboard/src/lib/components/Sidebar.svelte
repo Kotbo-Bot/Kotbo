@@ -398,7 +398,8 @@
       onclick={openSearch}
       onmouseenter={(e) => showTooltip(e, m.nav_search_pages())}
       onmouseleave={hideTooltip}
-      aria-label={m.nav_search_pages()}
+      aria-label={isCollapsed ? m.nav_search_pages() : undefined}
+      aria-keyshortcuts="Control+K"
       class="nav-search w-full flex items-center gap-2 h-9 rounded-lg border border-outline-variant bg-surface-container-low text-on-surface-variant hover:text-on-surface hover:border-outline transition-colors
         {isCollapsed ? 'lg:justify-center lg:px-0 px-3' : 'px-3'}"
     >

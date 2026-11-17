@@ -1741,7 +1741,7 @@
                           <td class="px-6 py-3.5 text-sm font-semibold flex items-center gap-2">
                             <Papicon icon="Trophy" size={15} class="shrink-0 text-warning" />
                             <span>{getRoleName(winningClan.roleId)}</span>
-                            <span class="text-xs bg-warning/20 text-warning px-1.5 py-0.5 rounded font-semibold">{m.lv_winning_clan_badge()}</span>
+                            <span class="text-xs bg-warning/20 text-on-warning-container px-1.5 py-0.5 rounded font-semibold">{m.lv_winning_clan_badge()}</span>
                           </td>
                           <td class="px-6 py-3.5 text-sm font-semibold text-warning">{clanRewardXpBoostRate}x</td>
                           {#if canManageSettings}
@@ -2013,7 +2013,7 @@
               {/each}
             </div>
 
-            <div class="p-3 bg-warning/10 border border-warning/20 rounded-lg text-2xs text-warning leading-relaxed flex items-start gap-2">
+            <div class="p-3 bg-warning/10 border border-warning/20 rounded-lg text-2xs text-on-warning-container leading-relaxed flex items-start gap-2">
               <Papicon icon="AlertTriangle" size={13} class="shrink-0 mt-0.5" />
               <div class="min-w-0 flex-1">
               {#if curveDirty && curveStats}
@@ -2053,7 +2053,7 @@
                     <button
                       type="button"
                       onclick={stopRoleResync}
-                      class="px-4 py-2 bg-error/10 text-error font-medium text-xs rounded-lg hover:bg-error/20 transition-all"
+                      class="px-4 py-2 bg-error/10 text-on-error-container font-medium text-xs rounded-lg hover:bg-error/20 transition-all"
                     >
                       {m.lv_role_resync_stop()}
                     </button>
@@ -2213,7 +2213,7 @@
                     Lvl {reward.level}
                     {#if unreachableRewardIds.has(reward.id)}
                       <span
-                        class="ml-2 px-2 py-0.5 rounded-full bg-warning/15 text-warning text-2xs font-bold align-middle"
+                        class="ml-2 px-2 py-0.5 rounded-full bg-warning/15 text-on-warning-container text-2xs font-bold align-middle"
                         title={m.lv_reward_unreachable_hint({ level: levelCurve.maxLevel })}
                       >{m.lv_reward_unreachable()}</span>
                     {/if}
@@ -2543,7 +2543,7 @@
             <div class="flex items-center gap-4 p-4 rounded-lg bg-surface-container-high/15 border border-outline-variant/5 hover:bg-surface-container-high/30 hover:border-outline-variant/15 transition-all duration-350 group">
               <!-- Rang -->
               <div class="w-10 h-10 rounded-xl flex items-center justify-center font-semibold text-sm shrink-0 font-mono
- {index === 0 ? 'bg-warning/15 text-warning border border-warning/25 shadow-sm shadow-amber-400/5' : 
+ {index === 0 ? 'bg-warning/15 text-on-warning-container border border-warning/25 shadow-sm shadow-amber-400/5' : 
                  index === 1 ? 'bg-slate-400/15 text-on-surface-variant border border-slate-400/25 shadow-sm shadow-slate-400/5' : 
                  index === 2 ? 'bg-amber-700/15 text-warning border border-amber-700/25 shadow-sm shadow-amber-700/5' : 
                  'bg-surface-container text-on-surface-variant border border-outline-variant/5'}">
@@ -2588,7 +2588,7 @@
               <!-- Niveau Badge -->
               <div class="text-right shrink-0">
                 <span class="text-body-sm font-medium px-3.5 py-2 rounded-xl border whitespace-nowrap shadow-xs
- {index === 0 ? 'bg-warning/10 text-warning border-warning/20' : 
+ {index === 0 ? 'bg-warning/10 text-on-warning-container border-warning/20' : 
                    index === 1 ? 'bg-slate-400/10 text-on-surface-variant border-slate-400/20' : 
                    index === 2 ? 'bg-amber-700/10 text-warning border-amber-700/20' : 
                    'bg-primary/10 text-primary border-primary/15'}">
@@ -2780,7 +2780,7 @@
 
             <!-- Messages d'erreur locaux / globaux -->
             {#if importFileError}
-              <div class="bg-error/10 text-error text-xs font-bold px-4 py-3 rounded-lg border border-error/20 flex items-center gap-2">
+              <div class="bg-error/10 text-on-error-container text-xs font-bold px-4 py-3 rounded-lg border border-error/20 flex items-center gap-2">
                 <Papicon icon="x" size={13} />
                 <span>{importFileError}</span>
               </div>
@@ -2937,7 +2937,7 @@
               {/if}
 
               {#if importResults.dryRun}
-                <p class="p-3 bg-warning/10 border border-warning/20 rounded-lg text-2xs text-warning leading-relaxed">
+                <p class="p-3 bg-warning/10 border border-warning/20 rounded-lg text-2xs text-on-warning-container leading-relaxed">
                   {m.lv_import_dry_run_notice()}
                 </p>
               {/if}

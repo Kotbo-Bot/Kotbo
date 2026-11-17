@@ -1150,6 +1150,7 @@
         {/if}
         <div class="overflow-x-auto">
           <table class="w-full text-left border-collapse">
+            <caption class="sr-only">{m.sc_tab_history()}</caption>
             <thead>
         <tr class="bg-surface-container-low dark:bg-white/5">
           <th class="px-4 py-4 w-10">
@@ -1248,11 +1249,11 @@
               <td class="px-4 py-4 text-xs font-bold text-primary">
                 {typeLabel(entry.type)}
                 {#if entry.archivedAt}
-                  <span class="ml-1 inline-flex items-center rounded-full bg-success/10 px-2 py-0.5 text-2xs font-bold text-success"
+                  <span class="ml-1 inline-flex items-center rounded-full bg-success/10 px-2 py-0.5 text-2xs font-bold text-on-success-container"
                     title={entry.archiveReason || ''}>{m.sc_badge_archived()}</span>
                 {/if}
                 {#if entry.appealable === false}
-                  <span class="ml-1 inline-flex items-center rounded-full bg-error/10 px-2 py-0.5 text-2xs font-bold text-error"
+                  <span class="ml-1 inline-flex items-center rounded-full bg-error/10 px-2 py-0.5 text-2xs font-bold text-on-error-container"
                     title={entry.appealLockReason || ''}>{m.sc_badge_locked()}</span>
                 {/if}
               </td>
@@ -1555,6 +1556,7 @@
                   <div class="max-h-[500px] overflow-y-auto pr-2">
                     <div class="overflow-x-auto rounded-lg border border-outline-variant/10 bg-surface-container-low/20">
                       <table class="w-full text-left border-collapse font-inter text-xs">
+                        <caption class="sr-only">{currentTable.name || m.sc_scales_title()}</caption>
                         <thead>
                           <tr class="bg-surface-container-high/40 text-xs font-semibold text-on-surface-variant border-b border-outline-variant/15 select-none">
                             <th class="py-3 px-4 w-20 text-center border-r border-outline-variant/10">{m.sc_col_tier()}</th>

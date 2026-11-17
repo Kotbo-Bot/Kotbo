@@ -952,7 +952,7 @@
                 <div class="flex flex-col gap-1.5 shrink-0">
                   <button
                     type="button"
-                    class="px-2.5 py-1 rounded-lg text-xs font-medium bg-success/15 text-success border border-success/30 hover:bg-success/25 disabled:opacity-50 transition-colors"
+                    class="px-2.5 py-1 rounded-lg text-xs font-medium bg-success/15 text-on-success-container border border-success/30 hover:bg-success/25 disabled:opacity-50 transition-colors"
                     disabled={busyAction !== null}
                     onclick={() => decideInvite(request, true)}
                   >
@@ -960,7 +960,7 @@
                   </button>
                   <button
                     type="button"
-                    class="px-2.5 py-1 rounded-lg text-xs font-medium bg-error/15 text-error border border-error/30 hover:bg-error/25 disabled:opacity-50 transition-colors"
+                    class="px-2.5 py-1 rounded-lg text-xs font-medium bg-error/15 text-on-error-container border border-error/30 hover:bg-error/25 disabled:opacity-50 transition-colors"
                     disabled={busyAction !== null}
                     onclick={() => decideInvite(request, false)}
                   >
@@ -1061,7 +1061,7 @@
                   </span>
                   <button
                     type="button"
-                    class="px-3 py-1.5 rounded-lg text-xs font-medium bg-error/15 text-error border border-error/30 hover:bg-error/25 disabled:opacity-50 transition-colors"
+                    class="px-3 py-1.5 rounded-lg text-xs font-medium bg-error/15 text-on-error-container border border-error/30 hover:bg-error/25 disabled:opacity-50 transition-colors"
                     disabled={busyAction !== null || quarantinePreview === 0}
                     onclick={() => runQuarantine(false)}
                   >

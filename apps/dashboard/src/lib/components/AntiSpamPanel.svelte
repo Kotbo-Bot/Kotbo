@@ -578,9 +578,9 @@
                     <span
                       class="text-xs font-semibold tabular-nums px-1.5 py-0.5 rounded
                       {sample.score >= config.timeoutThreshold
-                        ? 'bg-error/15 text-error'
+                        ? 'bg-error/15 text-on-error-container'
                         : sample.score >= config.deleteThreshold
-                          ? 'bg-warning/15 text-warning'
+                          ? 'bg-warning/15 text-on-warning-container'
                           : 'bg-sky-500/15 text-sky-500'}"
                     >
                       {sample.score}/100
@@ -594,8 +594,8 @@
                     {#if sample.label}
                       <span
                         class="text-2xs px-1.5 py-0.5 rounded {sample.label === 'TRUE_POSITIVE'
-                          ? 'bg-error/10 text-error'
-                          : 'bg-success/10 text-success'}"
+                          ? 'bg-error/10 text-on-error-container'
+                          : 'bg-success/10 text-on-success-container'}"
                       >
                         {sample.label === 'TRUE_POSITIVE' ? m.asp_label_true_positive() : m.asp_label_false_positive()}
                       </span>
@@ -622,7 +622,7 @@
                   <div class="flex flex-col gap-1.5 shrink-0">
                     <button
                       type="button"
-                      class="px-2.5 py-1 rounded-lg text-xs font-medium bg-error/15 text-error border border-error/30 hover:bg-error/25 disabled:opacity-50 transition-colors"
+                      class="px-2.5 py-1 rounded-lg text-xs font-medium bg-error/15 text-on-error-container border border-error/30 hover:bg-error/25 disabled:opacity-50 transition-colors"
                       disabled={decidingId !== null}
                       onclick={() => decide(sample, true)}
                     >
@@ -630,7 +630,7 @@
                     </button>
                     <button
                       type="button"
-                      class="px-2.5 py-1 rounded-lg text-xs font-medium bg-success/15 text-success border border-success/30 hover:bg-success/25 disabled:opacity-50 transition-colors"
+                      class="px-2.5 py-1 rounded-lg text-xs font-medium bg-success/15 text-on-success-container border border-success/30 hover:bg-success/25 disabled:opacity-50 transition-colors"
                       disabled={decidingId !== null}
                       onclick={() => decide(sample, false)}
                     >

@@ -234,7 +234,7 @@
                     type="button"
                     onclick={retryConfig}
                     disabled={isRetrying}
-                    class="admin-press mt-2.5 h-8 px-3.5 rounded-full bg-error/15 text-xs font-semibold text-error hover:bg-error/25 disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-error"
+                    class="admin-press mt-2.5 h-8 px-3.5 rounded-full bg-error/15 text-xs font-semibold text-on-error-container hover:bg-error/25 disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-error"
                   >
                     {m.login_retry()}
                   </button>

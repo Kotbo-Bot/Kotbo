@@ -246,7 +246,7 @@
           >
             {m.obx_co_yearly()}
             {#if yearlySavingPercent > 0}
-              <span class="text-2xs px-1.5 py-0.5 rounded bg-success/20 text-success font-semibold">
+              <span class="text-2xs px-1.5 py-0.5 rounded bg-success/20 text-on-success-container font-semibold">
                 −{yearlySavingPercent}%
               </span>
             {/if}

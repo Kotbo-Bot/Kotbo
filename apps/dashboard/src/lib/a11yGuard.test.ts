@@ -222,6 +222,95 @@ describe("garde-fou d'accessibilite", () => {
     expect(listbox).not.toContain('d4_no_result_for');
   });
 
+  const fileText = (suffix: string) => sources.find(({ file }) => file.endsWith(suffix))?.text ?? '';
+
+  test('les icones Papicon sont decoratives (RGAA 1.2)', () => {
+    // Aucun appel ne leur donne de nom : c'est le bouton ou le texte voisin qui
+    // porte le sens. Sans aria-hidden, chaque svg est annonce comme une image vide.
+    const papicon = fileText('components/Papicon.svelte');
+    expect(openingTags(papicon, 'svg').every((tag) => /aria-hidden="true"/.test(tag))).toBe(true);
+    expect(openingTags(papicon, 'LucideComponent').every((tag) => /aria-hidden="true"/.test(tag))).toBe(true);
+  });
+
+  test('une seule zone <main> par page (RGAA 12.6)', () => {
+    // MainLayout porte le <main> ; une page rendue dedans n'en ouvre pas un second.
+    const OWN_MAIN = [
+      'lib/components/MainLayout.svelte',
+      'lib/components/admin/AdminShell.svelte',
+      'lib/components/onboarding/WizardShell.svelte',
+      'pages/Activation.svelte',
+      'pages/Login.svelte',
+      'pages/MemberSpace.svelte',
+      'pages/SanctionEvidenceFile.svelte',
+    ];
+    const offenders = sources
+      .filter(({ file, text }) => !OWN_MAIN.includes(file) && openingTags(text, 'main').length > 0)
+      .map(({ file }) => file);
+    expect(offenders).toEqual([]);
+  });
+
+  test('les tuiles de MetricTabs sont des boutons radio, pas des onglets sans panneau (RGAA 7.1)', () => {
+    const tabs = fileText('analytics/MetricTabs.svelte');
+    expect(tabs).not.toContain('role="tab"');
+    expect(tabs).toContain('role="radiogroup"');
+    expect(tabs).toContain('role="radio"');
+  });
+
+  test('des tuiles sans effet ne sont pas cliquables (RGAA 7.1)', () => {
+    // onchange vide : le bouton ne fait rien, il doit etre affiche en simples chiffres.
+    const offenders = sources.flatMap(({ file, text }) =>
+      openingTags(text, 'MetricTabs')
+        .filter((tag) => /onchange=\{\(\) => \{\}\}/.test(tag) && !/interactive=\{false\}/.test(tag))
+        .map(() => file),
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  test('texte d\'etat sur fond teinte : jeton on-*-container (RGAA 3.2)', () => {
+    // text-warning sur bg-warning/15 : 4,08:1 en theme clair. Les jetons
+    // on-*-container passent 4,5:1 sur ces fonds dans les deux themes.
+    const offenders = sources.flatMap(({ file, text }) =>
+      // Toute chaine sur une ligne : class="...", ternaires, tables de statut.
+      [...text.matchAll(/(['`"])((?:(?!\1)[^\n])*)\1/g)]
+        .map((m) => m[2])
+        .filter((cls) =>
+          ['warning', 'success', 'error'].some(
+            (c) => new RegExp(`(^|\\s)bg-${c}/\\d+`).test(cls) && new RegExp(`(^|\\s)text-${c}(?![\\w/-])`).test(cls),
+          ),
+        )
+        .map((cls) => `${file}: ${cls.slice(0, 60)}`),
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  test('le nom accessible contient le texte visible (RGAA 7.1, 11.9)', () => {
+    // Recherche du menu : texte visible « Rechercher », nom « Rechercher une page ».
+    const sidebar = fileText('components/Sidebar.svelte');
+    const search = openingTags(sidebar, 'button').find((tag) => tag.includes('nav-search')) ?? '';
+    expect(search).toContain('aria-label={isCollapsed ? m.nav_search_pages() : undefined}');
+    // Profil : le nom commence par le pseudo affiche.
+    const navbar = fileText('components/Navbar.svelte');
+    const profile = openingTags(navbar, 'button').find((tag) => tag.includes('app-navbar__profile')) ?? '';
+    expect(profile).toContain('m.nbx_open_profile_named(');
+  });
+
+  test('les tableaux de donnees ont un titre (RGAA 5.4) : cliquet', () => {
+    // Plafond : il ne remonte jamais, le baisser quand un tableau recoit son titre.
+    const CEILING = 64;
+    const untitled = sources.flatMap(({ file, text }) => {
+      let from = 0;
+      return openingTags(text, 'table').flatMap((tag) => {
+        const index = text.indexOf(tag, from);
+        from = index + tag.length;
+        const after = text.slice(from, from + 300);
+        const titled = /aria-label(ledby)?=/.test(tag) || /^\s*(<!--[\s\S]*?-->\s*)*<caption/.test(after);
+        return titled ? [] : [`${file}:${text.slice(0, index).split('\n').length}`];
+      });
+    });
+    expect(untitled.length).toBeLessThanOrEqual(CEILING);
+    expect(untitled.some((at) => at.startsWith('pages/Sanctions.svelte'))).toBe(false);
+  });
+
   test('pas d\'aria-labelledby vers un id "modal-title" partage', () => {
     const offenders = sources.filter(({ text }) => /aria-labelledby="modal-title"/.test(text)).map(({ file }) => file);
     expect(offenders).toEqual([]);

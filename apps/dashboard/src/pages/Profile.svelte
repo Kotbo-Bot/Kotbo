@@ -504,7 +504,7 @@
             </span>
           {/if}
           {#if isBlacklisted}
-            <span class="inline-flex items-center gap-1.5 rounded-md bg-error/10 px-2 py-0.5 text-xs font-medium text-error">
+            <span class="inline-flex items-center gap-1.5 rounded-md bg-error/10 px-2 py-0.5 text-xs font-medium text-on-error-container">
               <Papicon icon="Slash" size={13} />
               {m.pf_restricted_account()}
             </span>

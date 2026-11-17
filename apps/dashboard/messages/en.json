@@ -19177,5 +19177,6 @@
   "stp_adopt_for": "Existing item to reuse for {name}",
   "sc_table_name": "Sanction table name",
   "timezone_hint_select": "Time zone",
-  "lv_import_file": "JSON file to import"
+  "lv_import_file": "JSON file to import",
+  "nbx_open_profile_named": "{name}, open the profile menu"
 }

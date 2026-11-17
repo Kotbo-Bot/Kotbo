@@ -511,7 +511,7 @@
 <Modal bind:open={showDeleteModal} title={m.schedules_modal_delete_title()}>
   <div class="space-y-4">
     <p class="text-sm font-medium">{m.schedules_confirm_delete({ name: selectedSchedule?.name ?? '' })}</p>
-    <p class="text-xs text-error font-bold bg-error/10 border border-error/20 px-4 py-3 rounded-lg flex items-center gap-2">
+    <p class="text-xs text-on-error-container font-bold bg-error/10 border border-error/20 px-4 py-3 rounded-lg flex items-center gap-2">
       <Papicon icon="alert-triangle" size={16} />
       {m.schedules_confirm_delete_warning()}
     </p>

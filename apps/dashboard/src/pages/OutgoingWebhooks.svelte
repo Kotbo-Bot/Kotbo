@@ -116,9 +116,9 @@
   }
 
   const TONE_CLASS = {
-    success: 'bg-success/10 text-success',
-    warning: 'bg-warning/10 text-warning',
-    error: 'bg-error/10 text-error',
+    success: 'bg-success/10 text-on-success-container',
+    warning: 'bg-warning/10 text-on-warning-container',
+    error: 'bg-error/10 text-on-error-container',
     muted: 'bg-surface-container text-on-surface-variant',
   } as const;
 

@@ -121,9 +121,9 @@
   const toneClass: Record<string, string> = {
     neutral: 'bg-surface-container text-on-surface-variant',
     info: 'bg-primary/10 text-primary',
-    success: 'bg-success/10 text-success',
-    warning: 'bg-warning/10 text-warning',
-    danger: 'bg-error/10 text-error',
+    success: 'bg-success/10 text-on-success-container',
+    warning: 'bg-warning/10 text-on-warning-container',
+    danger: 'bg-error/10 text-on-error-container',
   };
 
   function healthClass(score: number): string {

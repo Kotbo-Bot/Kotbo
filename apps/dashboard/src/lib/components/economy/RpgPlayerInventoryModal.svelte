@@ -168,7 +168,7 @@
                     type="button"
                     onclick={() => remove(entry, entry.quantity)}
                     disabled={actionState.state.loading}
-                    class="px-2.5 py-1.5 bg-error/10 hover:bg-error/20 text-error text-xs font-bold rounded-lg transition-all disabled:opacity-50"
+                    class="px-2.5 py-1.5 bg-error/10 hover:bg-error/20 text-on-error-container text-xs font-bold rounded-lg transition-all disabled:opacity-50"
                   >
                     {m.eco_inventory_remove_all()}
                   </button>

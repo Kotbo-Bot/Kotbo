@@ -241,7 +241,7 @@
                   type="button"
                   onclick={() => remove(event)}
                   disabled={disabled}
-                  class="px-3 py-1.5 bg-error/10 hover:bg-error/20 text-error text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                  class="px-3 py-1.5 bg-error/10 hover:bg-error/20 text-on-error-container text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Papicon icon={event.overridesGlobal ? 'RotateCcw' : 'trash'} size={12} />
                   {event.overridesGlobal ? m.eco_events_restore_btn() : m.eco_events_delete_btn()}

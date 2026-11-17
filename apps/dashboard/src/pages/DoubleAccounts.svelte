@@ -696,7 +696,7 @@
             <!-- Header: status + date -->
             <div class="flex items-center justify-between mb-3">
               <span class="px-2 py-0.5 rounded text-xs font-medium
- {link.status === 'VALIDATED' ? 'bg-success/10 text-success' : link.status === 'PENDING' ? 'bg-warning/10 text-warning' : 'bg-error/10 text-error'}">
+ {link.status === 'VALIDATED' ? 'bg-success/10 text-on-success-container' : link.status === 'PENDING' ? 'bg-warning/10 text-on-warning-container' : 'bg-error/10 text-on-error-container'}">
                 {link.status === 'VALIDATED' ? m.da_link_validated() : link.status === 'PENDING' ? m.da_link_pending() : m.da_link_rejected()}
               </span>
               <span class="text-2xs text-on-surface-variant/30">{new Date(link.createdAt).toLocaleDateString('fr-FR')}</span>
@@ -723,11 +723,11 @@
             <div class="flex items-center gap-2 pt-3 border-t border-outline-variant/5">
               {#if link.status === 'PENDING'}
                 <button onclick={() => handleUpdateStatus(link.id, 'VALIDATED')} disabled={saveAction.state.loading}
-                  class="flex-1 py-2 rounded-lg bg-success/10 text-success text-xs font-medium hover:bg-emerald-500 hover:text-white transition-all flex items-center justify-center gap-1.5 disabled:opacity-50">
+                  class="flex-1 py-2 rounded-lg bg-success/10 text-on-success-container text-xs font-medium hover:bg-emerald-500 hover:text-white transition-all flex items-center justify-center gap-1.5 disabled:opacity-50">
                   <Papicon icon="Check" size={12} /> {m.da_validate()}
                 </button>
                 <button onclick={() => handleUpdateStatus(link.id, 'REJECTED')} disabled={saveAction.state.loading}
-                  class="flex-1 py-2 rounded-lg bg-error/10 text-error text-xs font-medium hover:bg-rose-500 hover:text-white transition-all flex items-center justify-center gap-1.5 disabled:opacity-50">
+                  class="flex-1 py-2 rounded-lg bg-error/10 text-on-error-container text-xs font-medium hover:bg-rose-500 hover:text-white transition-all flex items-center justify-center gap-1.5 disabled:opacity-50">
                   <Papicon icon="X" size={12} /> {m.da_reject()}
                 </button>
               {:else}
@@ -825,7 +825,7 @@
       </div>
     {:else if detections.length === 0}
       <div class="flex flex-col items-center py-20 text-center rounded-lg border border-outline-variant/10 bg-surface-container-low/30">
-        <div class="h-14 w-14 rounded-xl bg-success/10 flex items-center justify-center text-success">
+        <div class="h-14 w-14 rounded-xl bg-success/10 flex items-center justify-center text-on-success-container">
           <Papicon icon="ShieldCheck" size={28} />
         </div>
         <h3 class="mt-5 text-base font-bold text-on-surface">{m.da_no_detection()}</h3>
@@ -977,7 +977,7 @@
               {#if d.suspectedAlts && d.suspectedAlts.length > 0}
                 <button onclick={() => { const alt = d.suspectedAlts?.[0]; if (alt) handleLinkDetection(d, alt.userId); }}
                   disabled={saveAction.state.loading}
-                  class="flex-1 py-2 rounded-lg bg-success/10 text-success text-xs font-medium hover:bg-emerald-500 hover:text-white transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 min-w-25">
+                  class="flex-1 py-2 rounded-lg bg-success/10 text-on-success-container text-xs font-medium hover:bg-emerald-500 hover:text-white transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 min-w-25">
                   <Papicon icon="Link2" size={12} /> {m.da_link()}
                 </button>
               {/if}
@@ -1266,7 +1266,7 @@
                   </button>
                   <button onclick={() => { handleLinkDetection(det, alt.userId); reportModalDetection = null; }}
                     disabled={saveAction.state.loading}
-                    class="shrink-0 px-3 py-1.5 rounded-lg bg-success/10 text-success text-xs font-medium hover:bg-emerald-500 hover:text-white transition-all disabled:opacity-50 flex items-center gap-1">
+                    class="shrink-0 px-3 py-1.5 rounded-lg bg-success/10 text-on-success-container text-xs font-medium hover:bg-emerald-500 hover:text-white transition-all disabled:opacity-50 flex items-center gap-1">
                     <Papicon icon="Link2" size={11} /> {m.da_link()}
                   </button>
                 </div>

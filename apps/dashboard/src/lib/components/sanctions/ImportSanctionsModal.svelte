@@ -156,7 +156,7 @@
       </div>
 
       {#if parseError}
-        <div class="rounded-lg bg-error/10 text-error text-xs font-medium p-3">{parseError}</div>
+        <div class="rounded-lg bg-error/10 text-on-error-container text-xs font-medium p-3">{parseError}</div>
       {/if}
     </div>
 
@@ -195,7 +195,7 @@
         </div>
 
         {#if validRows.length === 0}
-          <div class="rounded-lg bg-warning/10 text-warning text-xs font-medium p-4">
+          <div class="rounded-lg bg-warning/10 text-on-warning-container text-xs font-medium p-4">
             {m.sc_import_no_valid_rows()}
           </div>
         {:else}

@@ -56,7 +56,7 @@
           <span class="text-2xs font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary">{m.drop_claim_rules_active()}</span>
         {/if}
         {#if roleMissing}
-          <span class="text-2xs font-semibold px-2 py-0.5 rounded-full bg-warning/10 text-warning">{m.drop_claim_required_role_missing_badge()}</span>
+          <span class="text-2xs font-semibold px-2 py-0.5 rounded-full bg-warning/10 text-on-warning-container">{m.drop_claim_required_role_missing_badge()}</span>
         {/if}
       </h4>
       <p class="text-xs text-on-surface-variant mt-0.5">{m.drop_claim_rules_desc()}</p>

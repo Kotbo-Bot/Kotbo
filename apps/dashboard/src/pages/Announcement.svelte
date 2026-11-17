@@ -1735,7 +1735,7 @@
                                 <span class="text-2xs font-semibold text-on-surface-variant">{m.announcements_role_linked_choices()}</span>
                                 {#if groupMembers.length > 0}
                                   {#each groupMembers as memberPage}
-                                    <span class="rounded-md border border-warning/15 bg-warning/10 px-2 py-1 text-2xs font-semibold text-warning">
+                                    <span class="rounded-md border border-warning/15 bg-warning/10 px-2 py-1 text-2xs font-semibold text-on-warning-container">
                                       {memberPage.label || m.announcements_thread_nameless_page()}
                                     </span>
                                   {/each}

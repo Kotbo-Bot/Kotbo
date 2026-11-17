@@ -142,7 +142,7 @@
 <section class="bg-surface-container-low/40 border border-outline-variant/30 p-8 rounded-xl space-y-6 mt-8">
   <div class="flex items-center justify-between gap-4 pb-3 border-b border-outline-variant/15">
     <div class="flex items-center gap-3 min-w-0">
-      <div class="w-10 h-10 rounded-xl bg-error/10 text-error flex items-center justify-center shrink-0">
+      <div class="w-10 h-10 rounded-xl bg-error/10 text-on-error-container flex items-center justify-center shrink-0">
         <Papicon icon="Puzzle" size={20} />
       </div>
       <div class="min-w-0">

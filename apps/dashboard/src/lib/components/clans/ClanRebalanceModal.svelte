@@ -217,7 +217,7 @@
           {/each}
         </div>
         {#if mode === 'most_active'}
-          <p class="text-2xs font-semibold text-warning bg-warning/10 border border-warning/20 rounded-lg px-3 py-2 flex items-start gap-2">
+          <p class="text-2xs font-semibold text-on-warning-container bg-warning/10 border border-warning/20 rounded-lg px-3 py-2 flex items-start gap-2">
             <Papicon icon="AlertTriangle" size={13} /> <span>{m.clan_rebalance_mode_most_warning()}</span>
           </p>
         {/if}
@@ -297,7 +297,7 @@
     </section>
 
     {#if error}
-      <p class="text-xs font-semibold text-error bg-error/10 border border-error/20 rounded-lg px-3 py-2">{error}</p>
+      <p class="text-xs font-semibold text-on-error-container bg-error/10 border border-error/20 rounded-lg px-3 py-2">{error}</p>
     {/if}
 
     <!-- 2. Aperçu -->

@@ -507,8 +507,8 @@
         <div class="space-y-6">
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {@render statTile('Heart', 'bg-primary/10 text-primary', data.stats.totalVotes, m.rep_total_votes())}
-            {@render statTile('Star', 'bg-warning/10 text-warning', data.stats.votesLast7Days, m.rep_votes_last_7_days())}
-            {@render statTile('Users', 'bg-success/10 text-success', data.stats.activeGivers7Days, m.rep_status_active_givers())}
+            {@render statTile('Star', 'bg-warning/10 text-on-warning-container', data.stats.votesLast7Days, m.rep_votes_last_7_days())}
+            {@render statTile('Users', 'bg-success/10 text-on-success-container', data.stats.activeGivers7Days, m.rep_status_active_givers())}
           </div>
 
           {#if data.config.tiers.length === 0}

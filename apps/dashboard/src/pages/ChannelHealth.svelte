@@ -370,7 +370,7 @@ onMount(async () => {
                   <td class="px-3 py-2.5 text-sm">{ch.confidence}%</td>
                   <td class="px-3 py-2.5 text-sm whitespace-nowrap">
                     {#if ch.status === 'OVERLOADED'}
-                      <button class="px-3 py-1.5 bg-warning/10 text-warning rounded-lg text-xs font-bold hover:bg-warning/20 transition-all" onclick={() => handleSplit(ch.channelId)}>{m.channel_health_action_split()}</button>
+                      <button class="px-3 py-1.5 bg-warning/10 text-on-warning-container rounded-lg text-xs font-bold hover:bg-warning/20 transition-all" onclick={() => handleSplit(ch.channelId)}>{m.channel_health_action_split()}</button>
                     {:else if ch.status === 'DEAD'}
                       <button class="px-3 py-1.5 bg-surface-container-high/40 text-on-surface-variant rounded-lg text-xs font-bold hover:bg-surface-container-high/60 transition-all" onclick={() => handleArchive(ch.channelId)}>{m.channel_health_action_archive()}</button>
                     {/if}

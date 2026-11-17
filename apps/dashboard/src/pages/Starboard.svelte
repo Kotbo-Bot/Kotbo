@@ -556,7 +556,7 @@
         onClick={openMemberOnClick(entry.authorName)}
       />
       {#if entry.blocked}
-        <span class="text-2xs font-semibold px-2 py-0.5 rounded-full bg-error/10 text-error border border-error/20" title={m.starboard_entry_blocked_title()}>
+        <span class="text-2xs font-semibold px-2 py-0.5 rounded-full bg-error/10 text-on-error-container border border-error/20" title={m.starboard_entry_blocked_title()}>
           {m.starboard_entry_blocked()}
         </span>
       {:else if !entry.onBoard}
@@ -694,9 +694,9 @@
       {:else if activeTab === 'overview'}
         <div class="space-y-6">
           <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-            {@render statTile('Star', 'bg-warning/10 text-warning', String(data.stats.postedRecent), m.starboard_stat_posted({ days: STARBOARD_STATS_DAYS }))}
+            {@render statTile('Star', 'bg-warning/10 text-on-warning-container', String(data.stats.postedRecent), m.starboard_stat_posted({ days: STARBOARD_STATS_DAYS }))}
             {@render statTile('TrendingUp', 'bg-primary/10 text-primary', formatScore(data.stats.avgPeakRecent), m.starboard_stat_avg({ days: STARBOARD_STATS_DAYS }))}
-            {@render statTile('Trophy', 'bg-success/10 text-success', formatScore(data.stats.bestPeakRecent), m.starboard_stat_best({ days: STARBOARD_STATS_DAYS }))}
+            {@render statTile('Trophy', 'bg-success/10 text-on-success-container', formatScore(data.stats.bestPeakRecent), m.starboard_stat_best({ days: STARBOARD_STATS_DAYS }))}
             {@render statTile('Eye', 'bg-secondary/10 text-secondary', String(data.stats.onBoard), m.starboard_stat_on_board())}
           </div>
 
@@ -1001,7 +1001,7 @@
                     {id}
                     bind:values={config.ignoredChannels}
                     options={channels}
-                    accentClass="bg-error/20 text-error border-error/40"
+                    accentClass="bg-error/20 text-on-error-container border-error/40"
                     disabled={!canConfigure}
                   />
                 {/snippet}

@@ -123,18 +123,18 @@
   });
 
   const OUTCOME_META: Record<Outcome, { label: string; classes: string; icon: string }> = $derived({
-    PENDING: { label: m.ba_outcome_pending(), classes: 'bg-warning/10 text-warning border-warning/30', icon: 'clock' },
+    PENDING: { label: m.ba_outcome_pending(), classes: 'bg-warning/10 text-on-warning-container border-warning/30', icon: 'clock' },
     UPHELD: { label: m.ba_outcome_upheld(), classes: 'bg-surface-container text-on-surface-variant border-outline-variant/30', icon: 'gavel' },
-    ARCHIVED: { label: m.ba_outcome_archived(), classes: 'bg-success/10 text-success border-success/30', icon: 'inbox' },
-    DELETED: { label: m.ba_outcome_deleted(), classes: 'bg-error/10 text-error border-error/30', icon: 'trash' },
+    ARCHIVED: { label: m.ba_outcome_archived(), classes: 'bg-success/10 text-on-success-container border-success/30', icon: 'inbox' },
+    DELETED: { label: m.ba_outcome_deleted(), classes: 'bg-error/10 text-on-error-container border-error/30', icon: 'trash' },
     LOCKED: { label: m.ba_outcome_locked(), classes: 'bg-rose-900/20 text-error border-rose-900/40', icon: 'lock' },
   });
 
   const STATUS_META: Record<string, { label: string; classes: string }> = $derived({
-    PENDING: { label: m.ba_status_pending(), classes: 'bg-warning/10 text-warning border-warning/30' },
+    PENDING: { label: m.ba_status_pending(), classes: 'bg-warning/10 text-on-warning-container border-warning/30' },
     NEEDS_INFO: { label: m.ba_status_needs_info(), classes: 'bg-blue-500/10 text-blue-500 border-blue-500/30' },
-    ACCEPTED: { label: m.ba_status_accepted(), classes: 'bg-success/10 text-success border-success/30' },
-    DENIED: { label: m.ba_status_denied(), classes: 'bg-error/10 text-error border-error/30' },
+    ACCEPTED: { label: m.ba_status_accepted(), classes: 'bg-success/10 text-on-success-container border-success/30' },
+    DENIED: { label: m.ba_status_denied(), classes: 'bg-error/10 text-on-error-container border-error/30' },
     DENIED_PERMANENT: { label: m.ba_status_denied_permanent(), classes: 'bg-rose-900/20 text-error border-rose-900/40' },
   });
 
@@ -987,7 +987,7 @@
               </p>
             </div>
             <button onclick={() => removeFromBlacklist(entry.userId)}
-              class="px-3 py-1.5 rounded-lg bg-error/10 text-error text-xs font-bold hover:bg-error/20 transition-colors shrink-0">
+              class="px-3 py-1.5 rounded-lg bg-error/10 text-on-error-container text-xs font-bold hover:bg-error/20 transition-colors shrink-0">
               {m.ba_remove()}
             </button>
           </div>

@@ -738,6 +738,8 @@
   }
   .cmd-search-input::placeholder { color: var(--on-surface-variant); opacity: 0.5; }
   .cmd-search-input:focus { border-color: var(--color-primary); }
+  /* Le changement de couleur d'une bordure de 1 px ne suffit pas au clavier (RGAA 10.7). */
+  .cmd-search-input:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 1px; }
 
   .cmd-card {
     display: flex;
@@ -893,6 +895,7 @@
     outline: none;
   }
   .cmd-user-input:focus { border-color: var(--color-primary); }
+  .cmd-user-input:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 1px; }
   .cmd-user-input:disabled { opacity: 0.5; }
 
   .cmd-mini-btn {

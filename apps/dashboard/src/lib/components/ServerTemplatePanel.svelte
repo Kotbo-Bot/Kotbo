@@ -761,7 +761,7 @@
       </div>
     {:else if missingPermissions.length > 0}
       <div class="flex flex-col sm:flex-row sm:items-center gap-4 bg-error/5 border border-error/20 rounded-xl px-6 py-5">
-        <div class="w-10 h-10 rounded-lg bg-error/10 text-error flex items-center justify-center shrink-0">
+        <div class="w-10 h-10 rounded-lg bg-error/10 text-on-error-container flex items-center justify-center shrink-0">
           <Papicon icon="Lock" size={20} />
         </div>
         <div class="space-y-0.5">

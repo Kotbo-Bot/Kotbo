@@ -1344,7 +1344,7 @@
                     {#if template.channelId}
                       <span class="px-2 py-1 rounded-lg bg-surface-container-high/40">{getChannelName(template.channelId)}</span>
                     {:else}
-                      <span class="px-2 py-1 rounded-lg bg-warning/10 text-warning">{m.giv_tpl_badge_no_channel()}</span>
+                      <span class="px-2 py-1 rounded-lg bg-warning/10 text-on-warning-container">{m.giv_tpl_badge_no_channel()}</span>
                     {/if}
                     {#if template.ignoreBonuses}
                       <span class="px-2 py-1 rounded-lg bg-surface-container-high/40">{m.giv_tpl_badge_no_bonus()}</span>
@@ -1989,7 +1989,7 @@
                 <span class="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-xl bg-blue-500/10 text-blue-400 border border-blue-500/10">
                   <Papicon icon="Users" size={10} />{m.giv_participants_count({ count: giveaway.participants.length })}
                 </span>
-                <span class="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-xl bg-warning/10 text-warning border border-warning/10">
+                <span class="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-xl bg-warning/10 text-on-warning-container border border-warning/10">
                   <Papicon icon="Crown" size={10} />{m.giv_winners_count({ count: giveaway.winnerCount })}
                 </span>
               </div>

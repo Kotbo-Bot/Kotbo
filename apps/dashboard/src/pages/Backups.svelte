@@ -567,7 +567,7 @@
 <Modal bind:open={showDeleteModal} title={m.backups_delete_modal_title()}>
   <div class="space-y-4">
     <p class="text-sm font-medium">{m.backups_delete_confirm({ name: selectedBackup?.name ?? '' })}</p>
-    <p class="text-xs text-error font-bold bg-error/10 border border-error/20 px-4 py-3 rounded-lg flex items-center gap-2">
+    <p class="text-xs text-on-error-container font-bold bg-error/10 border border-error/20 px-4 py-3 rounded-lg flex items-center gap-2">
       <Papicon icon="AlertTriangle" size={16} />
       {m.backups_irreversible()}
     </p>
@@ -614,7 +614,7 @@
 <Modal bind:open={showRestoreModal} title={m.backups_restore_modal_title()}>
   <div class="space-y-4">
     <p class="text-sm font-medium">{m.backups_restore_confirm({ name: selectedBackup?.name ?? '' })}</p>
-    <p class="text-xs text-warning font-bold bg-warning/10 border border-warning/20 px-4 py-3 rounded-lg flex items-center gap-2">
+    <p class="text-xs text-on-warning-container font-bold bg-warning/10 border border-warning/20 px-4 py-3 rounded-lg flex items-center gap-2">
       <Papicon icon="AlertTriangle" size={16} />
       {m.backups_restore_warning()}
     </p>

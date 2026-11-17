@@ -19181,5 +19181,6 @@
   "stp_adopt_for": "Élément existant à reprendre pour {name}",
   "sc_table_name": "Nom du tableau de sanctions",
   "timezone_hint_select": "Fuseau horaire",
-  "lv_import_file": "Fichier JSON à importer"
+  "lv_import_file": "Fichier JSON à importer",
+  "nbx_open_profile_named": "{name}, ouvrir le menu du profil"
 }

@@ -1862,7 +1862,7 @@
     </div>
 
     {#if targetedUnconfigured.length > 0}
-      <div class="rounded-xl border border-warning/25 bg-warning/8 p-3 text-xs text-warning leading-snug">
+      <div class="rounded-xl border border-warning/25 bg-warning/8 p-3 text-xs text-on-warning-container leading-snug">
         <strong>{targetedUnconfigured.length} serveur(s)</strong> recevront l’annonce via leur salon de repli automatique ({channelPref}) car aucun salon de diffusion n’est configuré pour eux.
       </div>
     {/if}

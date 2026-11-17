@@ -372,13 +372,13 @@
   </section>
 
   {#if searchError}
-    <div class="rounded-lg border border-error/20 bg-error/5 px-4 py-3 text-sm font-medium text-error flex items-center gap-3">
+    <div class="rounded-lg border border-error/20 bg-error/5 px-4 py-3 text-sm font-medium text-on-error-container flex items-center gap-3">
       <Papicon icon="alert-circle" size={18} />
       {searchError}
     </div>
   {/if}
 
-  <!-- Grille de résultats (la coque porte deja le <main> de la page) -->
+  <!-- Grille de résultats (la coque porte deja la zone `main` de la page) -->
   <div>
     {#if loadingSearch && members.length === 0}
       <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">

@@ -1272,7 +1272,7 @@
                     </div>
                     <button
                       onclick={() => handleMarkAsRead(notif.id)}
-                      class="w-5 h-5 rounded bg-success/10 text-success hover:bg-success/20 transition-colors flex items-center justify-center shrink-0 cursor-pointer"
+                      class="w-5 h-5 rounded bg-success/10 text-on-success-container hover:bg-success/20 transition-colors flex items-center justify-center shrink-0 cursor-pointer"
                     >
                       <Papicon icon="check" size={10} />
                     </button>
@@ -1434,7 +1434,7 @@
                 <h3 class="text-sm font-medium text-on-surface">{m.home_mod_bothosting_title()}</h3>
               </div>
               {#if hosting}
-                <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-2xs bg-success/20 text-success font-medium">
+                <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-2xs bg-success/20 text-on-success-container font-medium">
                   <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> {m.home_online_label()}
                 </span>
               {/if}
@@ -1842,7 +1842,7 @@
               
               <div class="flex justify-end pt-1">
                 {#if isVisible}
-                  <span class="inline-flex items-center gap-1 text-2xs text-success font-medium bg-success/10 px-2 py-1 rounded">
+                  <span class="inline-flex items-center gap-1 text-2xs text-on-success-container font-medium bg-success/10 px-2 py-1 rounded">
                     <Papicon icon="check" size={10} /> {m.home_already_visible()}
                   </span>
                 {:else}

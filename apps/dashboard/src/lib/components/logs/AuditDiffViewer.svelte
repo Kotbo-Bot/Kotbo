@@ -419,11 +419,11 @@
                     {:else}
                       <!-- Champ scalaire : ancienne valeur barrée, nouvelle en vert -->
                       <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <div class="px-3 py-2 rounded-lg bg-error/10 border border-error/20 text-xs text-error wrap-break-word">
+                        <div class="px-3 py-2 rounded-lg bg-error/10 border border-error/20 text-xs text-on-error-container wrap-break-word">
                           <span class="block text-xs text-on-surface-variant mb-0.5">{m.audit_before()}</span>
                           {displayValue(change.before)}
                         </div>
-                        <div class="px-3 py-2 rounded-lg bg-success/10 border border-success/20 text-xs text-success wrap-break-word">
+                        <div class="px-3 py-2 rounded-lg bg-success/10 border border-success/20 text-xs text-on-success-container wrap-break-word">
                           <span class="block text-xs text-on-surface-variant mb-0.5">{m.audit_after()}</span>
                           {displayValue(change.after)}
                         </div>

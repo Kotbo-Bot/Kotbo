@@ -60,7 +60,7 @@ html.admin-theme .metric-tab {
   border-color: var(--admin-line);
 }
 html.admin-theme .metric-tab:hover:not(.metric-tab--static),
-html.admin-theme .metric-tab[aria-selected='true'] {
+html.admin-theme .metric-tab[aria-checked='true'] {
   background: var(--surface-container-low);
 }
 html.admin-theme .kpi-tile {

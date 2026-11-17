@@ -1181,7 +1181,7 @@
       <LoadingHint context="config" />
     </div>
   {:else if loadError}
-    <div class="flex items-center gap-2 rounded-xl bg-error/10 border border-error/20 p-6 text-error text-sm font-semibold">
+    <div class="flex items-center gap-2 rounded-xl bg-error/10 border border-error/20 p-6 text-on-error-container text-sm font-semibold">
       <Papicon icon="alert-triangle" size={16} />
       <span>{loadError}</span>
     </div>
@@ -1314,7 +1314,7 @@
                         <button
                           type="button"
                           class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
-                          bg-error/10 text-error border border-error/30 hover:bg-error/20
+                          bg-error/10 text-on-error-container border border-error/30 hover:bg-error/20
                           disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                           disabled={!ch.manageable}
                           title={ch.manageable ? '' : m.cm_bc_cannot_delete()}
@@ -1580,7 +1580,7 @@
                       type="button"
                       onclick={() => handleDeleteSticky(index)}
                       disabled={stickyBusy === sticky.channelId}
-                      class="px-3.5 py-2 bg-error/10 text-error border border-error/20 rounded-lg text-xs font-bold hover:bg-rose-500 hover:text-white transition-all inline-flex items-center gap-2 disabled:opacity-50"
+                      class="px-3.5 py-2 bg-error/10 text-on-error-container border border-error/20 rounded-lg text-xs font-bold hover:bg-rose-500 hover:text-white transition-all inline-flex items-center gap-2 disabled:opacity-50"
                     >
                       <Papicon icon="trash-2" size={13} />
                       {m.common_delete()}
@@ -1689,7 +1689,7 @@
                     }
                   }}
                   disabled={rescanAction.state.loading || loading}
-                  class="px-5 py-3 bg-error/10 hover:bg-error/20 text-error border border-error/20 text-xs font-bold rounded-lg transition-all whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed flex-1 md:flex-none"
+                  class="px-5 py-3 bg-error/10 hover:bg-error/20 text-on-error-container border border-error/20 text-xs font-bold rounded-lg transition-all whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed flex-1 md:flex-none"
                 >
                   {m.cm_force_rescan()}
                 </button>
@@ -2736,7 +2736,7 @@
                             type="button"
                             onclick={() => handleDeleteChannel(chan.id)}
                             disabled={actionInProgress}
-                            class="px-2.5 py-1.5 bg-error/10 text-error border border-error/20 rounded-lg text-xs font-semibold hover:bg-rose-500 hover:text-white transition-all inline-flex items-center gap-1"
+                            class="px-2.5 py-1.5 bg-error/10 text-on-error-container border border-error/20 rounded-lg text-xs font-semibold hover:bg-rose-500 hover:text-white transition-all inline-flex items-center gap-1"
                           >
                             <Papicon icon="trash-2" size={12} />
                             {m.common_close()}
@@ -2819,7 +2819,7 @@
                         type="button"
                         onclick={() => handleDeleteChannel(chan.id)}
                         disabled={actionInProgress}
-                        class="px-2.5 py-1.5 bg-error/10 text-error border border-error/20 rounded-lg text-xs font-semibold hover:bg-rose-500 hover:text-white transition-all inline-flex items-center gap-1"
+                        class="px-2.5 py-1.5 bg-error/10 text-on-error-container border border-error/20 rounded-lg text-xs font-semibold hover:bg-rose-500 hover:text-white transition-all inline-flex items-center gap-1"
                       >
                         <Papicon icon="trash-2" size={12} />
                         {m.cm_close_channel_full()}
@@ -3467,7 +3467,7 @@
               {/if}
 
               <!-- Alert Warning Card -->
-              <div class="p-5 bg-error/10 border border-error/20 text-error rounded-xl space-y-3">
+              <div class="p-5 bg-error/10 border border-error/20 text-on-error-container rounded-xl space-y-3">
                 <h4 class="text-body-sm font-medium flex items-center gap-2">
                   <Papicon icon="alert-triangle" size={16} />
                   {m.cm_security_warning_title()}

@@ -43,9 +43,9 @@
   };
 
   const STATUS_META: Record<string, { label: string; classes: string }> = {
-    PENDING: { label: m.e7_alr_status_pending(), classes: 'bg-warning/10 text-warning border-warning/30' },
-    APPROVED: { label: m.e7_alr_status_approved(), classes: 'bg-success/10 text-success border-success/30' },
-    REJECTED: { label: m.e7_alr_status_rejected(), classes: 'bg-error/10 text-error border-error/30' },
+    PENDING: { label: m.e7_alr_status_pending(), classes: 'bg-warning/10 text-on-warning-container border-warning/30' },
+    APPROVED: { label: m.e7_alr_status_approved(), classes: 'bg-success/10 text-on-success-container border-success/30' },
+    REJECTED: { label: m.e7_alr_status_rejected(), classes: 'bg-error/10 text-on-error-container border-error/30' },
     EXPIRED: { label: m.e7_alr_status_expired(), classes: 'bg-rose-900/20 text-error border-rose-900/40' },
   };
 
@@ -132,7 +132,7 @@
           <div class="rounded-xl border border-outline-variant/20 bg-surface overflow-hidden">
             <button onclick={() => toggleOpen(request.id)}
               class="w-full p-4 flex items-center gap-4 hover:bg-surface-container/40 transition-colors text-left">
-              <div class="w-10 h-10 rounded-full bg-error/10 text-error flex items-center justify-center shrink-0">
+              <div class="w-10 h-10 rounded-full bg-error/10 text-on-error-container flex items-center justify-center shrink-0">
                 <Papicon icon="lock" size={18} />
               </div>
               <div class="flex-1 min-w-0">
