@@ -1,14 +1,13 @@
-import { IncomingMessage, ServerResponse } from 'node:http';
-import { Client } from 'discord.js';
+import { Hono } from 'hono';
+import type { Client } from 'discord.js';
 import { logger } from '../../../utils/logger.js';
-import { json, type AuthClaims, type DashboardAccess } from '../../shared.js';
 import {
   getPulseDashboardDataWithToday,
   backfillPulseHistory,
 } from '../../../services/analytics/pulseService.js';
 import { invalidatePredictionCache } from '../../../services/analytics/predictionService.js';
+import { fail, guildRoute, send } from '../../hono/dashboard/kit.js';
 
-import { jsonFailure } from '../../shared/failure.js';
 /** Nombre de jours reconsolidés par un « Recalculer ». */
 const REFRESH_BACKFILL_DAYS = 7;
 
@@ -20,57 +19,42 @@ const REFRESH_BACKFILL_DAYS = 7;
 const REFRESH_COOLDOWN_MS = 30_000;
 const lastRefreshAt = new Map<string, number>();
 
-export async function handlePulseRoutes(
-  req: IncomingMessage,
-  res: ServerResponse,
-  parts: string[],
-  url: URL,
-  client: Client,
-  user: AuthClaims,
-  guildId: string,
-  _access: DashboardAccess,
-): Promise<boolean> {
-  const method = req.method;
-  if (parts[4] !== 'pulse') return false;
+export function createPulseRouter(client: Client) {
+  const router = new Hono();
+  const base = '/api/dashboard/guilds/:guildId/pulse';
 
-  // GET /api/dashboard/guilds/:guildId/pulse
-  if (parts.length === 5 && method === 'GET') {
+  router.get(base, ...guildRoute(client), async (c) => {
     try {
-      const data = await getPulseDashboardDataWithToday(client, guildId);
-      json(res, 200, data);
+      return send(c, await getPulseDashboardDataWithToday(client, c.req.param('guildId')));
     } catch (err) {
       logger.error('PulseAPI', 'Error fetching pulse data:', err);
-      jsonFailure(res, err, 'Erreur lors de la récupération des données Pulse', 'PulseAPI');
+      return fail(c, err, 'Erreur lors de la récupération des données Pulse', 'PulseAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/pulse/refresh
-  if (parts.length === 6 && parts[5] === 'refresh' && method === 'POST') {
+  router.post(`${base}/refresh`, ...guildRoute(client), async (c) => {
+    const guildId = c.req.param('guildId');
     const now = Date.now();
     const previous = lastRefreshAt.get(guildId) ?? 0;
     if (now - previous < REFRESH_COOLDOWN_MS) {
-      json(res, 429, {
+      return send(c, {
         error: 'Recalcul déjà en cours, réessayez dans quelques secondes.',
         retryAfterMs: REFRESH_COOLDOWN_MS - (now - previous),
-      });
-      return true;
+      }, 429);
     }
     lastRefreshAt.set(guildId, now);
 
     try {
       const written = await backfillPulseHistory(client, guildId, REFRESH_BACKFILL_DAYS);
       invalidatePredictionCache(guildId);
-
       const data = await getPulseDashboardDataWithToday(client, guildId);
-      json(res, 200, { ...data, recomputedDays: written });
+      return send(c, { ...data, recomputedDays: written });
     } catch (err) {
       lastRefreshAt.delete(guildId);
       logger.error('PulseAPI', 'Error refreshing pulse:', err);
-      jsonFailure(res, err, 'Erreur lors du rafraîchissement', 'PulseAPI');
+      return fail(c, err, 'Erreur lors du rafraîchissement', 'PulseAPI');
     }
-    return true;
-  }
+  });
 
-  return false;
+  return router;
 }

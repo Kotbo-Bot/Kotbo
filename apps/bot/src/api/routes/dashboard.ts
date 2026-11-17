@@ -34,14 +34,11 @@ import { handleCustomBotRoutes } from './dashboard/customBot.js';
 import { handleChannelLinkRoutes } from './dashboard/channelLinks.js';
 import { handleStaffServerRoutes } from './dashboard/staffServer.js';
 import { handleChannelHealthRoutes } from './dashboard/channelHealth.js';
-import { handlePulseRoutes } from './dashboard/pulse.js';
 import { handleHomeWidgetsRoutes } from './dashboard/homeWidgets.js';
-import { handleHomeTasksRoutes } from './dashboard/homeTasks.js';
 import { handleReputationRoutes } from './dashboard/reputation.js';
 import { handleSuggestionRoutes } from './dashboard/suggestions.js';
 import { handleSeasonRoutes } from './dashboard/seasons.js';
 import { handleRankedRoutes } from './dashboard/ranked.js';
-import { handleEvaluationRoutes } from './dashboard/evaluations.js';
 import { handleQuestRoutes } from './dashboard/quests.js';
 import { handleWidgetRoutes } from './dashboard/widget.js';
 import { handleMessageLogRoutes } from './dashboard/messageLogs.js';
@@ -241,14 +238,7 @@ export async function handleDashboardRoutes(
       if (method !== 'GET') await cache.invalidateGuild(guildId);
       return true;
     }
-    if (await handlePulseRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
-      if (method !== 'GET') await cache.invalidateGuild(guildId);
-      return true;
-    }
     if (await handleHomeWidgetsRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
-      return true;
-    }
-    if (await handleHomeTasksRoutes(req, res, parts, client, user, guildId, effectiveAccess)) {
       return true;
     }
     if (await handleReputationRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
@@ -264,10 +254,6 @@ export async function handleDashboardRoutes(
       return true;
     }
     if (await handleRankedRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
-      if (method !== 'GET') await cache.invalidateGuild(guildId);
-      return true;
-    }
-    if (await handleEvaluationRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
       if (method !== 'GET') await cache.invalidateGuild(guildId);
       return true;
     }
