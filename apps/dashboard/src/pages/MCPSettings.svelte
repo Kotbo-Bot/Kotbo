@@ -1,14 +1,13 @@
 <script lang="ts">
-  import { explainDisabled } from '../lib/actions/explainDisabled';
   import { onMount } from 'svelte';
   import { authStore } from '../lib/stores/auth.svelte';
   import { toast } from '../lib/stores/toast.svelte';
   import ModulePage from '../lib/components/ModulePage.svelte';
   import { API_BASE_URL, fetchMcpKeys, createMcpKey, deleteMcpKey, fetchMcpDirectUrl, fetchMcpLogs } from '../lib/api';
-  import Modal from '../lib/components/Modal.svelte';
   import ConfirmModal from '../lib/components/ConfirmModal.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
   import LoadingHint from '../lib/components/LoadingHint.svelte';
+  import { Button, Callout, Field, Modal, SectionCard, EmptyState } from '../lib/components/ui';
   import { localInitialAvatar } from '../lib/discordMedia';
   import { m, dateLocale } from '../lib/i18n';
 
@@ -32,6 +31,7 @@
     { value: 'READ_SITE',       label: m.mcp_perm_read_site_label(),      desc: m.mcp_perm_read_site_desc() },
     { value: 'WRITE_SITE',      label: m.mcp_perm_write_site_label(),     desc: m.mcp_perm_write_site_desc() },
   ]);
+  const DEFAULT_PERMS = ['READ_STATS', 'READ_MEMBERS', 'READ_SANCTIONS'];
 
   type McpKey = {
     id: string;
@@ -68,7 +68,7 @@
   // Create modal
   let createOpen = $state(false);
   let newKeyName = $state('');
-  let newKeyPerms = $state<string[]>(['READ_STATS', 'READ_MEMBERS', 'READ_SANCTIONS']);
+  let newKeyPerms = $state<string[]>([...DEFAULT_PERMS]);
   let creating = $state(false);
   let createdKey = $state<CreatedKey | null>(null);
   let helpOpen = $state(false);
@@ -93,16 +93,28 @@
   const guildId = $derived(authStore.selectedGuildId ?? '');
   const readPermissions = $derived(PERMISSIONS.filter((p) => p.value.startsWith('READ_')));
   const writePermissions = $derived(PERMISSIONS.filter((p) => p.value.startsWith('WRITE_')));
+  const readValues = $derived(readPermissions.map((p) => p.value));
+  const allValues = $derived(PERMISSIONS.map((p) => p.value));
+  const selectedReadCount = $derived(newKeyPerms.filter((p) => p.startsWith('READ_')).length);
+  const selectedWriteCount = $derived(newKeyPerms.filter((p) => p.startsWith('WRITE_')).length);
   const endpointUrl = $derived(guildId ? `${API_BASE_URL}/api/mcp/${guildId}` : '');
   const restApiUrl = $derived(guildId ? `${API_BASE_URL}/api/v1/${guildId}` : '');
+
+  const presets = $derived([
+    { id: 'read', label: m.mcp_preset_read_only(), hint: m.mcp_preset_read_only_hint(), icon: 'eye', perms: readValues },
+    { id: 'all', label: m.mcp_preset_all(), hint: m.mcp_preset_all_hint(), icon: 'zap', perms: allValues },
+    { id: 'none', label: m.mcp_preset_none(), hint: m.mcp_preset_none_hint(), icon: 'rotate-ccw', perms: [] as string[] },
+  ]);
+  const permSections = $derived([
+    { id: 'read', title: m.mcp_perm_read_section(), hint: m.mcp_perm_read_section_hint(), icon: 'eye', perms: readPermissions, write: false },
+    { id: 'write', title: m.mcp_perm_write_section(), hint: m.mcp_perm_write_section_hint(), icon: 'edit-3', perms: writePermissions, write: true },
+  ]);
+
   const aiGuides = $derived({
     claude: {
       name: 'Claude',
-      shortName: 'Claude',
       logoUrl: localInitialAvatar('Claude'),
-      color: 'text-[#d97757]',
-      bg: 'bg-[#d97757]/12',
-      border: 'border-[#d97757]/25',
+      badge: m.mcp_help_guide_claude_badge(),
       setupUrl: 'https://claude.ai/settings/connectors',
       docsUrl: 'https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp',
       primaryAction: m.mcp_help_claude_action(),
@@ -122,11 +134,8 @@
     },
     chatgpt: {
       name: 'ChatGPT',
-      shortName: 'ChatGPT',
       logoUrl: localInitialAvatar('ChatGPT'),
-      color: 'text-emerald-300',
-      bg: 'bg-emerald-400/10',
-      border: 'border-emerald-400/25',
+      badge: m.mcp_help_guide_chatgpt_badge(),
       setupUrl: 'https://chatgpt.com/#settings/Apps',
       docsUrl: 'https://developers.openai.com/api/docs/guides/developer-mode',
       primaryAction: m.mcp_help_chatgpt_action(),
@@ -146,11 +155,8 @@
     },
     gemini: {
       name: 'Gemini',
-      shortName: 'Gemini',
       logoUrl: localInitialAvatar('Gemini'),
-      color: 'text-sky-300',
-      bg: 'bg-sky-400/10',
-      border: 'border-sky-400/25',
+      badge: m.mcp_help_guide_gemini_badge(),
       setupUrl: 'https://ai.google.dev/gemini-api/docs/interactions/deep-research',
       docsUrl: 'https://ai.google.dev/gemini-api/docs/interactions/deep-research',
       primaryAction: m.mcp_help_gemini_action(),
@@ -194,8 +200,27 @@
       : [...newKeyPerms, perm];
   }
 
+  function sameSet(a: string[], b: string[]) {
+    return a.length === b.length && a.every((p) => b.includes(p));
+  }
+
+  /** Coche ou decoche toute une section sans toucher a l'autre. */
+  function toggleSection(values: string[]) {
+    const allOn = values.every((v) => newKeyPerms.includes(v));
+    newKeyPerms = allOn
+      ? newKeyPerms.filter((p) => !values.includes(p))
+      : [...new Set([...newKeyPerms, ...values])];
+  }
+
+  function openCreateModal() {
+    createdKey = null;
+    newKeyName = '';
+    newKeyPerms = [...DEFAULT_PERMS];
+    createOpen = true;
+  }
+
   async function handleCreate() {
-    if (!newKeyName.trim()) return;
+    if (!newKeyName.trim() || newKeyPerms.length === 0) return;
     creating = true;
     try {
       const result = await createMcpKey({ name: newKeyName.trim(), permissions: newKeyPerms });
@@ -207,7 +232,7 @@
           createdKey = { ...createdKey, directUrl };
         }
         newKeyName = '';
-        newKeyPerms = ['READ_STATS', 'READ_MEMBERS', 'READ_SANCTIONS'];
+        newKeyPerms = [...DEFAULT_PERMS];
       }
     } catch {
       toast.error(m.mcp_toast_err_create_key());
@@ -279,8 +304,8 @@
     return new Date(iso).toLocaleDateString(dateLocale(), { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
   }
 
-  function permLabel(perm: string) {
-    return PERMISSIONS.find((p) => p.value === perm)?.label ?? perm;
+  function permInfo(perm: string) {
+    return PERMISSIONS.find((p) => p.value === perm);
   }
 
   function selectAiGuide(id: string) {
@@ -293,10 +318,6 @@
     expandedKeyId = expandedKeyId === keyId ? null : keyId;
   }
 
-  function formatLogData(data: Record<string, unknown>) {
-    return JSON.stringify(data, null, 2);
-  }
-
   function formatLogTime(ts: string) {
     return new Date(ts).toLocaleTimeString(dateLocale(), { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   }
@@ -307,7 +328,6 @@
     try {
       const result = await fetchMcpLogs(guildId);
       diagLogs = Array.isArray(result?.logs) ? result.logs : [];
-      console.info('[MCP logs]', diagLogs);
     } catch {
       toast.error(m.mcp_toast_err_load_logs());
     } finally {
@@ -326,7 +346,31 @@
       toggleExpandedKey(keyId);
     }
   }
+
+  const LOG_TONE = {
+    error: 'border-error/30 bg-error/5 text-error',
+    warn: 'border-warning/30 bg-warning/5 text-warning',
+    info: 'border-outline-variant bg-surface-container-low text-on-surface',
+  } as const;
 </script>
+
+<!-- Valeur copiable : code + bouton Copier. -->
+{#snippet copyRow(text: string, field: string, highlight = false)}
+  <div class="flex items-center gap-2">
+    <code class="flex-1 min-w-0 rounded-lg border px-3 py-2 font-mono text-xs break-all bg-surface-container-lowest {highlight ? 'border-primary/40 text-primary' : 'border-outline-variant text-on-surface'}">
+      {text}
+    </code>
+    <Button size="sm" variant="secondary" icon={copiedField === field ? 'check' : 'copy'} onclick={() => copy(text, field)}>
+      {copiedField === field ? m.mcp_btn_copied() : m.mcp_btn_copy()}
+    </Button>
+  </div>
+{/snippet}
+
+{#snippet permChip(perm: string)}
+  <span class="px-1.5 py-0.5 rounded text-2xs font-medium {perm.startsWith('WRITE_') ? 'bg-error/10 text-error' : 'bg-primary/10 text-primary'}">
+    {permInfo(perm)?.label ?? perm}
+  </span>
+{/snippet}
 
 <ModulePage
   title={m.mcp_title()}
@@ -334,72 +378,48 @@
   icon="cpu"
 >
   {#snippet actions()}
-    <button
-      onclick={() => { helpOpen = true; }}
-      class="p-2 rounded-lg border border-outline-variant text-on-surface-variant hover:text-on-surface hover:border-outline transition-colors"
-      title={m.mcp_btn_help()}
-    >
-      <Papicon icon="help-circle" size={16} />
-    </button>
-    <button
-      onclick={() => { createOpen = true; createdKey = null; }}
-      class="flex items-center gap-1.5 px-3.5 py-2 bg-primary hover:bg-primary/90 text-white rounded-lg text-sm font-medium transition-colors shadow-sm shadow-primary/20"
-    >
-      <Papicon icon="plus" size={14} />
-      {m.mcp_btn_new_key()}
-    </button>
+    <Button variant="ghost" icon="help-circle" aria-label={m.mcp_btn_help()} title={m.mcp_btn_help()} onclick={() => { helpOpen = true; }} />
+    <Button variant="primary" icon="plus" onclick={openCreateModal}>{m.mcp_btn_new_key()}</Button>
   {/snippet}
 
+  <Callout variant="info" icon="sparkles" title={m.mcp_howto_title()}>
+    <ol class="mt-1 space-y-1">
+      {#each [m.mcp_howto_step1(), m.mcp_howto_step2(), m.mcp_howto_step3()] as step, i}
+        <li class="flex gap-2">
+          <span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/15 text-2xs font-semibold text-primary">{i + 1}</span>
+          <span>{step}</span>
+        </li>
+      {/each}
+    </ol>
+  </Callout>
+
   <!-- Endpoint -->
-  <div class="bg-[#1a1d23] border border-white/8 rounded-xl p-4">
-    <p class="text-xs font-medium text-gray-500 mb-2.5">{m.mcp_endpoint_label()}</p>
-    <div class="flex items-center gap-2">
-      <code class="flex-1 bg-black/40 border border-white/8 rounded-lg px-3 py-2.5 text-sm text-gray-200 font-mono break-all">
-        {endpointUrl || m.mcp_endpoint_select_server()}
-      </code>
+  <SectionCard title={m.mcp_endpoint_label()} description={m.mcp_endpoint_notice()} icon="globe">
+    {#snippet actions()}
       {#if endpointUrl}
-        <button
-          onclick={() => copy(endpointUrl, 'endpoint')}
-          class="shrink-0 px-3 py-2.5 rounded-lg border border-white/10 text-xs text-gray-400 hover:text-white hover:border-white/20 transition-colors"
-        >
-          {copiedField === 'endpoint' ? m.mcp_btn_copied() : m.mcp_btn_copy()}
-        </button>
-        <button
-          onclick={openMcpDiagnostics}
-          class="shrink-0 px-3 py-2.5 rounded-lg border border-amber-400/25 text-xs text-amber-300 hover:text-amber-200 hover:border-amber-400/40 transition-colors"
-        >
-          {m.mcp_btn_logs()}
-        </button>
+        <Button size="sm" variant="ghost" icon="activity" onclick={openMcpDiagnostics}>{m.mcp_btn_logs()}</Button>
+      {/if}
+    {/snippet}
+    <div class="space-y-4 px-5 pb-5 pt-3">
+      {#if endpointUrl}
+        {@render copyRow(endpointUrl, 'endpoint')}
+      {:else}
+        <p class="text-sm text-on-surface-variant">{m.mcp_endpoint_select_server()}</p>
+      {/if}
+      {#if restApiUrl}
+        <div class="space-y-1.5">
+          <p class="text-xs font-medium text-on-surface-variant">{m.mcp_rest_label()}</p>
+          {@render copyRow(restApiUrl, 'rest')}
+          <p class="text-xs text-on-surface-variant">{m.mcp_rest_notice()}</p>
+        </div>
       {/if}
     </div>
-    <p class="text-xs text-gray-600 mt-2">
-      {m.mcp_endpoint_notice()}
-    </p>
-    {#if restApiUrl}
-      <div class="mt-4">
-        <p class="text-xs font-medium text-gray-500 mb-1.5">{m.mcp_rest_label()}</p>
-        <div class="flex items-center gap-2">
-          <code class="flex-1 bg-black/40 border border-white/8 rounded-lg px-3 py-2 text-xs font-mono text-gray-300 break-all">
-            {restApiUrl}
-          </code>
-          <button
-            onclick={() => copy(restApiUrl, 'rest')}
-            class="shrink-0 px-2.5 py-2 rounded-lg border border-white/10 text-xs text-gray-400 hover:text-white transition-colors"
-          >
-            {copiedField === 'rest' ? m.mcp_btn_copied() : m.mcp_btn_copy()}
-          </button>
-        </div>
-        <p class="text-xs text-gray-600 mt-2">{m.mcp_rest_notice()}</p>
-      </div>
-    {/if}
-  </div>
+  </SectionCard>
 
   <!-- Keys -->
-  <div class="space-y-2">
-    <h2 class="text-sm font-semibold text-white">{m.mcp_keys_section_title()}</h2>
-
+  <SectionCard title={m.mcp_keys_section_title()} icon="key" flush>
     {#if loading}
-      <div class="flex flex-col items-center justify-center py-12 text-gray-600 bg-[#1a1d23] border border-white/8 rounded-xl">
+      <div class="flex flex-col items-center justify-center py-12 text-on-surface-variant">
         <div class="flex items-center">
           <Papicon icon="loader-2" size={18} class="animate-spin mr-2" />
           <span class="text-sm">{m.mcp_loading()}</span>
@@ -408,345 +428,284 @@
       </div>
 
     {:else if keys.length === 0}
-      <div class="bg-[#1a1d23] border border-white/8 rounded-xl p-10 text-center space-y-2">
-        <Papicon icon="key" size={30} class="text-gray-700 mx-auto" />
-        <p class="text-sm text-gray-500">{m.mcp_empty_title()}</p>
-        <p class="text-xs text-gray-700">{m.mcp_empty_desc()}</p>
-      </div>
+      <EmptyState
+        icon="key"
+        title={m.mcp_empty_title()}
+        description={m.mcp_empty_desc()}
+        actionLabel={m.mcp_btn_new_key()}
+        actionIcon="plus"
+        onAction={openCreateModal}
+      />
 
     {:else}
-      <div class="bg-[#1a1d23] border border-white/8 rounded-xl overflow-hidden">
-        {#each keys as key (key.id)}
-          <!-- Key row -->
-          <div class="border-b border-white/5 last:border-0">
-            <div
-              role="button"
-              tabindex="0"
-              class="flex items-center gap-4 px-4 py-3.5 hover:bg-white/[0.02] transition-colors cursor-pointer"
-              onclick={() => toggleExpandedKey(key.id)}
-              onkeydown={(event) => handleKeyRowKeyboard(event, key.id)}
-            >
-              <!-- Status dot -->
-              <div class="w-2 h-2 rounded-full bg-green-400 shrink-0"></div>
+      {#each keys as key (key.id)}
+        <div class="border-b border-outline-variant last:border-0">
+          <div
+            role="button"
+            tabindex="0"
+            aria-expanded={expandedKeyId === key.id}
+            class="flex items-center gap-4 px-5 py-3.5 hover:bg-surface-container-low transition-colors cursor-pointer"
+            onclick={() => toggleExpandedKey(key.id)}
+            onkeydown={(event) => handleKeyRowKeyboard(event, key.id)}
+          >
+            <div class="w-2 h-2 rounded-full bg-success shrink-0"></div>
 
-              <!-- Name -->
-              <div class="flex-1 min-w-0">
-                <p class="flex items-center gap-1.5 text-sm font-medium text-white">
-                  {key.name}
-                  {#if !key.ownerId}
-                    <!-- Une cle sans proprietaire survit au depart de celui qui
-                         s'en sert : rien ne la relie a un compte, seule une
-                         revocation a la main l'arrete. -->
-                    <span class="px-1.5 py-0.5 rounded text-2xs font-medium bg-amber-500/15 text-amber-400" title={m.mcp_key_orphan_hint()}>
-                      {m.mcp_key_orphan()}
-                    </span>
-                  {/if}
-                </p>
-                <p class="text-xs text-gray-600 mt-0.5">
-                  {m.mcp_last_used({ date: formatDate(key.lastUsedAt) })}
-                </p>
-              </div>
-
-              <!-- Permissions -->
-              <div class="hidden sm:flex flex-wrap gap-1 max-w-xs">
-                {#each key.permissions as perm}
-                  <span class="px-1.5 py-0.5 rounded text-2xs font-medium
- {perm.startsWith('WRITE_') ? 'bg-red-500/15 text-red-400' : 'bg-primary/12 text-primary/80'}">
-                    {permLabel(perm)}
+            <div class="flex-1 min-w-0">
+              <p class="flex items-center gap-1.5 text-sm font-medium text-on-surface">
+                {key.name}
+                {#if !key.ownerId}
+                  <!-- Une cle sans proprietaire survit au depart de celui qui
+                       s'en sert : rien ne la relie a un compte, seule une
+                       revocation a la main l'arrete. -->
+                  <span class="px-1.5 py-0.5 rounded text-2xs font-medium bg-warning/15 text-warning" title={m.mcp_key_orphan_hint()}>
+                    {m.mcp_key_orphan()}
                   </span>
-                {/each}
-              </div>
-
-              <!-- Chevron + delete -->
-              <div class="flex items-center gap-2 shrink-0">
-                <button
-                  onclick={(e) => { e.stopPropagation(); confirmDelete(key); }}
-                  class="p-1.5 rounded-lg text-gray-600 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                  title={m.mcp_btn_revoke()}
-                >
-                  <Papicon icon="trash-2" size={13} />
-                </button>
-                <Papicon
-                  icon="chevron-down"
-                  size={14}
-                  class="text-gray-600 transition-transform duration-200 {expandedKeyId === key.id ? 'rotate-180' : ''}"
-                />
-              </div>
+                {/if}
+              </p>
+              <p class="text-xs text-on-surface-variant mt-0.5">
+                {m.mcp_last_used({ date: formatDate(key.lastUsedAt) })}
+              </p>
             </div>
 
-            <!-- Expanded credentials -->
-            {#if expandedKeyId === key.id}
-              <div class="px-4 pb-4 pt-1 border-t border-white/5 bg-black/20 space-y-3">
-                <!-- Client ID -->
-                <div class="space-y-1">
-                  <p class="text-xs font-medium text-gray-500">{m.mcp_client_id_label()}</p>
-                  <div class="flex items-center gap-2">
-                    <code class="flex-1 bg-black/40 border border-white/8 rounded-lg px-3 py-2 text-xs font-mono text-gray-300 break-all">
-                      {key.id}
-                    </code>
-                    <button
-                      onclick={() => copy(key.id, `id-${key.id}`)}
-                      class="shrink-0 px-2.5 py-2 rounded-lg border border-white/10 text-xs text-gray-400 hover:text-white transition-colors"
-                    >
-                      {copiedField === `id-${key.id}` ? m.mcp_btn_copied() : m.mcp_btn_copy()}
-                    </button>
-                  </div>
-                </div>
+            <div class="hidden sm:flex flex-wrap justify-end gap-1 max-w-xs">
+              {#each key.permissions as perm}
+                {@render permChip(perm)}
+              {/each}
+            </div>
 
-                <!-- Client Secret (display key) -->
-                <div class="space-y-1">
-                  <p class="text-xs font-medium text-gray-500">
-                    {m.mcp_client_secret_label()} <span class="text-gray-700 normal-case font-normal">{m.mcp_client_secret_hint()}</span>
-                  </p>
-                  <div class="flex items-center gap-2">
-                    <code class="flex-1 bg-black/40 border border-white/8 rounded-lg px-3 py-2 text-xs font-mono text-gray-600 break-all">
-                      {key.displayKey}
-                    </code>
-                  </div>
-                </div>
-
-                <!-- Endpoint for this guild -->
-                <div class="space-y-1">
-                  <p class="text-xs font-medium text-gray-500">{m.mcp_endpoint_url_label()}</p>
-                  <div class="flex items-center gap-2">
-                    <code class="flex-1 bg-black/40 border border-white/8 rounded-lg px-3 py-2 text-xs font-mono text-gray-300 break-all">
-                      {endpointUrl}
-                    </code>
-                    <button
-                      onclick={() => copy(endpointUrl, `url-${key.id}`)}
-                      class="shrink-0 px-2.5 py-2 rounded-lg border border-white/10 text-xs text-gray-400 hover:text-white transition-colors"
-                    >
-                      {copiedField === `url-${key.id}` ? m.mcp_btn_copied() : m.mcp_btn_copy()}
-                    </button>
-                  </div>
-                </div>
-
-                <!-- Direct signed endpoint for Claude fallback -->
-                <div class="space-y-1 rounded-lg border border-amber-400/15 bg-amber-400/5 p-3">
-                  <div class="flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <p class="text-xs font-medium text-amber-300">{m.mcp_direct_url_title()}</p>
-                      <p class="mt-0.5 text-xs text-amber-200/70">
-                        {m.mcp_direct_url_desc()}
-                      </p>
-                    </div>
-                    <button
-                      onclick={() => directUrls[key.id]?.url ? copy(directUrls[key.id].url, `direct-${key.id}`) : loadDirectUrl(key.id)}
-                      disabled={directUrlLoadingKeyId === key.id}
-                      class="shrink-0 px-2.5 py-2 rounded-lg border border-amber-400/25 text-xs text-amber-200 hover:border-amber-400/40 hover:text-amber-100 disabled:opacity-50 transition-colors"
-                    >
-                      {directUrlLoadingKeyId === key.id ? m.mcp_btn_generating() : copiedField === `direct-${key.id}` ? m.mcp_btn_copied() : directUrls[key.id]?.url ? m.mcp_btn_copy() : m.mcp_btn_generate()}
-                    </button>
-                  </div>
-                  {#if directUrls[key.id]?.url}
-                    <code class="mt-2 block bg-black/40 border border-white/8 rounded-lg px-3 py-2 text-xs font-mono text-gray-200 break-all">
-                      {directUrls[key.id].url}
-                    </code>
-                    <p class="mt-1 text-2xs text-gray-600">
-                      {m.mcp_direct_url_expires({ date: new Date(directUrls[key.id].expiresAt).toLocaleDateString(dateLocale()) })}
-                    </p>
-                  {/if}
-                </div>
-
-                <!-- Permissions list -->
-                <div class="space-y-1">
-                  <p class="text-xs font-medium text-gray-500">{m.mcp_permissions_label()}</p>
-                  <div class="flex flex-wrap gap-1.5">
-                    {#each key.permissions as perm}
-                      <span class="px-2 py-1 rounded-lg text-xs font-medium
- {perm.startsWith('WRITE_') ? 'bg-red-500/15 text-red-400 border border-red-500/20' : 'bg-primary/10 text-primary/80 border border-primary/15'}">
-                        {permLabel(perm)}
-                        <span class="text-gray-600 font-normal ml-1">- {PERMISSIONS.find(p => p.value === perm)?.desc}</span>
-                      </span>
-                    {/each}
-                  </div>
-                </div>
-              </div>
-            {/if}
+            <div class="flex items-center gap-1 shrink-0">
+              <Button
+                size="sm"
+                variant="ghost"
+                icon="trash-2"
+                aria-label={m.mcp_btn_revoke()}
+                title={m.mcp_btn_revoke()}
+                onclick={(e) => { e.stopPropagation(); confirmDelete(key); }}
+              />
+              <Papicon
+                icon="chevron-down"
+                size={14}
+                class="text-on-surface-variant transition-transform duration-200 {expandedKeyId === key.id ? 'rotate-180' : ''}"
+              />
+            </div>
           </div>
-        {/each}
-      </div>
+
+          {#if expandedKeyId === key.id}
+            <div class="px-5 pb-5 pt-3 border-t border-outline-variant bg-surface-container-low space-y-3">
+              <div class="space-y-1">
+                <p class="text-xs font-medium text-on-surface-variant">{m.mcp_client_id_label()}</p>
+                {@render copyRow(key.id, `id-${key.id}`)}
+              </div>
+
+              <div class="space-y-1">
+                <p class="text-xs font-medium text-on-surface-variant">
+                  {m.mcp_client_secret_label()} <span class="font-normal">{m.mcp_client_secret_hint()}</span>
+                </p>
+                <code class="block rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-2 font-mono text-xs text-on-surface-variant break-all">
+                  {key.displayKey}
+                </code>
+              </div>
+
+              <div class="space-y-1">
+                <p class="text-xs font-medium text-on-surface-variant">{m.mcp_endpoint_url_label()}</p>
+                {@render copyRow(endpointUrl, `url-${key.id}`)}
+              </div>
+
+              <Callout variant="warning" icon="link" title={m.mcp_direct_url_title()}>
+                <p>{m.mcp_direct_url_desc()}</p>
+                {#if directUrls[key.id]?.url}
+                  <div class="mt-2">{@render copyRow(directUrls[key.id].url, `direct-${key.id}`)}</div>
+                  <p class="mt-1 text-2xs">
+                    {m.mcp_direct_url_expires({ date: new Date(directUrls[key.id].expiresAt).toLocaleDateString(dateLocale()) })}
+                  </p>
+                {/if}
+                {#snippet actions()}
+                  {#if !directUrls[key.id]?.url}
+                    <Button size="sm" variant="secondary" loading={directUrlLoadingKeyId === key.id} onclick={() => loadDirectUrl(key.id)}>
+                      {directUrlLoadingKeyId === key.id ? m.mcp_btn_generating() : m.mcp_btn_generate()}
+                    </Button>
+                  {/if}
+                {/snippet}
+              </Callout>
+
+              <div class="space-y-1.5">
+                <p class="text-xs font-medium text-on-surface-variant">{m.mcp_permissions_label()}</p>
+                <ul class="grid gap-1.5 sm:grid-cols-2">
+                  {#each key.permissions as perm}
+                    <li class="rounded-lg border px-3 py-2 {perm.startsWith('WRITE_') ? 'border-error/25 bg-error/5' : 'border-outline-variant bg-surface-container-lowest'}">
+                      <p class="text-xs font-semibold {perm.startsWith('WRITE_') ? 'text-error' : 'text-on-surface'}">{permInfo(perm)?.label ?? perm}</p>
+                      <p class="mt-0.5 text-2xs leading-relaxed text-on-surface-variant">{permInfo(perm)?.desc}</p>
+                    </li>
+                  {/each}
+                </ul>
+              </div>
+            </div>
+          {/if}
+        </div>
+      {/each}
     {/if}
-  </div>
+  </SectionCard>
 </ModulePage>
 
 <!-- ── Create Modal ──────────────────────────────────────────────────────── -->
-<Modal bind:open={createOpen} onClose={closeCreateModal} title={createdKey ? m.mcp_modal_created_title() : m.mcp_modal_create_title()}>
+<Modal
+  bind:open={createOpen}
+  onClose={closeCreateModal}
+  size={createdKey ? 'md' : 'lg'}
+  title={createdKey ? m.mcp_modal_created_title() : m.mcp_modal_create_title()}
+  subtitle={createdKey ? '' : m.mcp_create_intro()}
+>
   {#if createdKey}
     <div class="space-y-4">
-      <div class="flex items-start gap-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
-        <Papicon icon="alert-triangle" size={15} class="text-amber-400 shrink-0 mt-0.5" />
-        <p class="text-xs text-amber-300 leading-relaxed">
-          {m.mcp_modal_created_warning()}
-        </p>
-      </div>
+      <Callout variant="warning">{m.mcp_modal_created_warning()}</Callout>
 
-      <!-- Client ID -->
       <div class="space-y-1.5">
-        <div class="flex items-center gap-1.5 text-xs font-medium text-gray-400">
+        <p class="flex items-center gap-1.5 text-xs font-medium text-on-surface-variant">
           <Papicon icon="hash" size={12} />
           {m.mcp_client_id_label()}
-          <span class="text-gray-600 font-normal">{m.mcp_client_id_hint()}</span>
-        </div>
-        <div class="flex items-center gap-2">
-          <code class="flex-1 bg-black/40 border border-white/8 rounded-lg px-3 py-2.5 text-xs font-mono text-gray-200 break-all">
-            {createdKey.clientId}
-          </code>
-          <button
-            onclick={() => copy(createdKey!.clientId, 'new-id')}
-            class="shrink-0 px-2.5 py-2 rounded-lg border border-white/10 text-xs text-gray-400 hover:text-white transition-colors"
-          >
-            {copiedField === 'new-id' ? m.mcp_btn_copied() : m.mcp_btn_copy()}
-          </button>
-        </div>
+          <span class="font-normal">{m.mcp_client_id_hint()}</span>
+        </p>
+        {@render copyRow(createdKey.clientId, 'new-id')}
       </div>
 
-      <!-- Client Secret -->
       <div class="space-y-1.5">
-        <div class="flex items-center gap-1.5 text-xs font-medium text-gray-400">
+        <p class="flex items-center gap-1.5 text-xs font-medium text-on-surface-variant">
           <Papicon icon="key" size={12} />
           {m.mcp_client_secret_label()}
-          <span class="text-gray-600 font-normal">{m.mcp_modal_created_secret_hint()}</span>
-        </div>
-        <div class="flex items-center gap-2">
-          <code class="flex-1 bg-black/40 border border-primary/25 rounded-lg px-3 py-2.5 text-xs font-mono text-green-400 break-all">
-            {createdKey.clientSecret}
-          </code>
-          <button
-            onclick={() => copy(createdKey!.clientSecret, 'new-secret')}
-            class="shrink-0 px-2.5 py-2 rounded-lg border border-white/10 text-xs text-gray-400 hover:text-white transition-colors"
-          >
-            {copiedField === 'new-secret' ? m.mcp_btn_copied() : m.mcp_btn_copy()}
-          </button>
-        </div>
+          <span class="font-normal">{m.mcp_modal_created_secret_hint()}</span>
+        </p>
+        {@render copyRow(createdKey.clientSecret, 'new-secret', true)}
       </div>
 
-      <!-- Endpoint -->
       <div class="space-y-1.5">
-        <div class="flex items-center gap-1.5 text-xs font-medium text-gray-400">
+        <p class="flex items-center gap-1.5 text-xs font-medium text-on-surface-variant">
           <Papicon icon="globe" size={12} />
           {m.mcp_modal_created_mcp_url_label()}
-        </div>
-        <div class="flex items-center gap-2">
-          <code class="flex-1 bg-black/40 border border-white/8 rounded-lg px-3 py-2.5 text-xs font-mono text-gray-300 break-all">
-            {endpointUrl}
-          </code>
-          <button
-            onclick={() => copy(endpointUrl, 'new-url')}
-            class="shrink-0 px-2.5 py-2 rounded-lg border border-white/10 text-xs text-gray-400 hover:text-white transition-colors"
-          >
-            {copiedField === 'new-url' ? m.mcp_btn_copied() : m.mcp_btn_copy()}
-          </button>
-        </div>
+        </p>
+        {@render copyRow(endpointUrl, 'new-url')}
       </div>
 
       {#if createdKey.directUrl}
-        <div class="space-y-1.5 rounded-lg border border-amber-400/20 bg-amber-400/5 p-3">
-          <div class="flex items-center gap-1.5 text-xs font-medium text-amber-300">
-            <Papicon icon="link" size={12} />
-            {m.mcp_direct_url_title()}
-          </div>
-          <div class="flex items-center gap-2">
-            <code class="flex-1 bg-black/40 border border-white/8 rounded-lg px-3 py-2.5 text-xs font-mono text-gray-200 break-all">
-              {createdKey.directUrl}
-            </code>
-            <button
-              onclick={() => copy(createdKey!.directUrl!, 'new-direct-url')}
-              class="shrink-0 px-2.5 py-2 rounded-lg border border-white/10 text-xs text-gray-400 hover:text-white transition-colors"
-            >
-              {copiedField === 'new-direct-url' ? m.mcp_btn_copied() : m.mcp_btn_copy()}
-            </button>
-          </div>
-          <p class="text-2xs leading-relaxed text-amber-200/70">
-            {m.mcp_modal_created_claude_notice()}
-          </p>
-        </div>
+        <Callout variant="warning" icon="link" title={m.mcp_direct_url_title()}>
+          <div class="my-1.5">{@render copyRow(createdKey.directUrl, 'new-direct-url')}</div>
+          <p>{m.mcp_modal_created_claude_notice()}</p>
+        </Callout>
       {/if}
-
-      <button onclick={closeCreateModal} class="w-full py-2.5 rounded-lg bg-primary hover:bg-primary/90 text-white text-sm font-medium transition-colors">
-        {m.mcp_modal_created_btn_done()}
-      </button>
     </div>
 
   {:else}
     <div class="space-y-5">
-      <div>
-        <label for="key-name" class="block text-sm font-medium text-gray-300 mb-1.5">{m.mcp_form_key_name()}</label>
-        <input
-          id="key-name"
-          type="text"
-          bind:value={newKeyName}
-          placeholder={m.mcp_form_key_name_placeholder()}
-          maxlength={64}
-          class="w-full bg-black/20 border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-primary/50 transition-colors"
-        />
-      </div>
+      <Field label={m.mcp_form_key_name()} hint={m.mcp_form_key_name_hint()} required>
+        {#snippet children(id, describedBy)}
+          <input
+            {id}
+            aria-describedby={describedBy}
+            type="text"
+            class="input"
+            bind:value={newKeyName}
+            placeholder={m.mcp_form_key_name_placeholder()}
+            maxlength={64}
+          />
+        {/snippet}
+      </Field>
 
-      <div>
-        <p class="text-sm font-medium text-gray-300 mb-3">{m.mcp_permissions_label()}</p>
-        <div class="space-y-4 max-h-[380px] overflow-y-auto pr-1">
-          <!-- Lecture Section -->
-          <div>
-            <h4 class="text-xs font-semibold text-gray-500 mb-2 border-b border-white/5 pb-1">{m.mcp_perm_read_section()}</h4>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
-              {#each readPermissions as perm}
-                <div class="flex items-center justify-between p-2.5 rounded-lg border border-white/5 bg-black/20 hover:border-white/10 hover:bg-white/[0.01] transition-all">
-                  <div class="min-w-0 pr-3">
-                    <span class="text-xs font-semibold text-white">{perm.label}</span>
-                    <p class="text-2xs text-gray-500 mt-0.5 leading-normal">{perm.desc}</p>
-                  </div>
-                  <button
-                    type="button"
-                    onclick={() => togglePerm(perm.value)}
-                    aria-label={m.mcp_form_toggle_perm_aria({ label: perm.label })}
-                    class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none {newKeyPerms.includes(perm.value) ? 'bg-primary' : 'bg-white/10'}"
-                  >
-                    <span
-                      class="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition duration-200 ease-in-out {newKeyPerms.includes(perm.value) ? 'translate-x-4' : 'translate-x-0'}"
-                    ></span>
-                  </button>
-                </div>
-              {/each}
-            </div>
-          </div>
-
-          <!-- Ecriture Section -->
-          <div>
-            <h4 class="text-xs font-semibold text-gray-500 mb-2 border-b border-white/5 pb-1">{m.mcp_perm_write_section()}</h4>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
-              {#each writePermissions as perm}
-                <div class="flex items-center justify-between p-2.5 rounded-lg border border-white/5 bg-black/20 hover:border-white/10 hover:bg-white/[0.01] transition-all">
-                  <div class="min-w-0 pr-3">
-                    <span class="text-xs font-semibold text-white">{perm.label}</span>
-                    <p class="text-2xs text-gray-500 mt-0.5 leading-normal">{perm.desc}</p>
-                  </div>
-                  <button
-                    type="button"
-                    onclick={() => togglePerm(perm.value)}
-                    aria-label={m.mcp_form_toggle_perm_aria({ label: perm.label })}
-                    class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none {newKeyPerms.includes(perm.value) ? 'bg-red-500/80 hover:bg-red-500' : 'bg-white/10'}"
-                  >
-                    <span
-                      class="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow transition duration-200 ease-in-out {newKeyPerms.includes(perm.value) ? 'translate-x-4' : 'translate-x-0'}"
-                    ></span>
-                  </button>
-                </div>
-              {/each}
-            </div>
-          </div>
+      <!-- Choix rapide : un clic remplit toute la grille, on affine ensuite. -->
+      <div class="space-y-2">
+        <p class="text-sm font-medium text-on-surface">{m.mcp_preset_label()}</p>
+        <div class="grid gap-2 sm:grid-cols-3">
+          {#each presets as preset (preset.id)}
+            {@const active = sameSet(newKeyPerms, preset.perms)}
+            <button
+              type="button"
+              aria-pressed={active}
+              onclick={() => { newKeyPerms = [...preset.perms]; }}
+              class="flex items-start gap-2.5 rounded-lg border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 {active ? 'border-primary bg-primary/10' : 'border-outline-variant bg-surface-container-low hover:border-primary/40'}"
+            >
+              <Papicon icon={preset.icon} size={16} class="mt-0.5 shrink-0 {active ? 'text-primary' : 'text-on-surface-variant'}" />
+              <span class="min-w-0">
+                <span class="block text-sm font-semibold {active ? 'text-primary' : 'text-on-surface'}">{preset.label}</span>
+                <span class="mt-0.5 block text-xs leading-snug text-on-surface-variant">{preset.hint}</span>
+              </span>
+            </button>
+          {/each}
         </div>
       </div>
 
-      <button
-        onclick={handleCreate}
-        disabled={creating}
-        use:explainDisabled={(!newKeyName.trim()) ? m.common_reason_fill_field() : (newKeyPerms.length === 0) ? m.common_reason_select_one() : ''}
-        class="w-full py-2.5 rounded-lg bg-primary hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium transition-colors"
-      >
-        {creating ? m.mcp_btn_creating() : m.mcp_btn_generate_key()}
-      </button>
+      {#each permSections as section (section.id)}
+        {@const values = section.perms.map((p) => p.value)}
+        {@const count = values.filter((v) => newKeyPerms.includes(v)).length}
+        <fieldset class="space-y-2">
+          <div class="flex flex-wrap items-start justify-between gap-2">
+            <div class="min-w-0">
+              <legend class="flex items-center gap-2 text-sm font-semibold {section.write ? 'text-error' : 'text-on-surface'}">
+                <Papicon icon={section.icon} size={15} />
+                {section.title}
+                <span class="rounded-full bg-surface-container-high px-2 py-0.5 text-2xs font-medium text-on-surface-variant">
+                  {m.mcp_perm_count({ selected: count, total: values.length })}
+                </span>
+              </legend>
+              <p class="mt-0.5 text-xs text-on-surface-variant">{section.hint}</p>
+            </div>
+            <Button size="sm" variant="ghost" icon={count === values.length ? 'square' : 'check-square'} onclick={() => toggleSection(values)}>
+              {count === values.length ? m.mcp_deselect_all() : m.mcp_select_all()}
+            </Button>
+          </div>
+
+          <div class="grid gap-2 sm:grid-cols-2">
+            {#each section.perms as perm (perm.value)}
+              {@const on = newKeyPerms.includes(perm.value)}
+              <label
+                class="flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary/50
+                  {on
+                    ? (section.write ? 'border-error/40 bg-error/5' : 'border-primary/40 bg-primary/5')
+                    : 'border-outline-variant bg-surface-container-low hover:border-outline'}"
+              >
+                <input
+                  type="checkbox"
+                  checked={on}
+                  onchange={() => togglePerm(perm.value)}
+                  class="mt-0.5 h-4 w-4 shrink-0 cursor-pointer {section.write ? 'accent-error' : 'accent-primary'}"
+                />
+                <span class="min-w-0">
+                  <span class="block text-sm font-medium text-on-surface">{perm.label}</span>
+                  <span class="mt-0.5 block text-xs leading-relaxed text-on-surface-variant">{perm.desc.replace(/^⚠\s*/, '')}</span>
+                </span>
+              </label>
+            {/each}
+          </div>
+        </fieldset>
+      {/each}
+
+      {#if selectedWriteCount > 0}
+        <Callout variant="danger" title={m.mcp_write_warning_title()}>{m.mcp_write_warning()}</Callout>
+      {/if}
     </div>
   {/if}
+
+  {#snippet footer()}
+    {#if createdKey}
+      <Button variant="primary" fullWidth onclick={closeCreateModal}>{m.mcp_modal_created_btn_done()}</Button>
+    {:else}
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <p class="text-xs text-on-surface-variant">
+          {m.mcp_summary({ read: selectedReadCount, write: selectedWriteCount })}
+        </p>
+        <div class="flex items-center gap-2">
+          <Button variant="ghost" onclick={closeCreateModal}>{m.common_cancel()}</Button>
+          <Button
+            variant="primary"
+            icon="key"
+            loading={creating}
+            disabled={!newKeyName.trim() || newKeyPerms.length === 0}
+            disabledReason={!newKeyName.trim() ? m.common_reason_fill_field() : m.common_reason_select_one()}
+            onclick={handleCreate}
+          >
+            {creating ? m.mcp_btn_creating() : m.mcp_btn_generate_key()}
+          </Button>
+        </div>
+      </div>
+    {/if}
+  {/snippet}
 </Modal>
 
 <!-- ── AI setup helper ───────────────────────────────────────────────────── -->
@@ -755,45 +714,34 @@
     <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
       {#each Object.entries(aiGuides) as [id, guide]}
         <button
+          type="button"
+          aria-pressed={selectedAi === id}
           onclick={() => selectAiGuide(id)}
-          class="min-h-24 rounded-lg border p-3 text-left transition-colors
- {selectedAi === id ? `${guide.bg} ${guide.border}` : 'border-white/8 bg-black/20 hover:border-white/16'}"
+          class="rounded-lg border p-3 text-left transition-colors {selectedAi === id ? 'border-primary bg-primary/10' : 'border-outline-variant bg-surface-container-low hover:border-primary/40'}"
         >
-          <div class="flex h-full items-start gap-3">
-            <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white">
-              <img src={guide.logoUrl} alt="Logo {guide.name}" class="h-6 w-6 object-contain" loading="lazy" />
+          <div class="flex items-start gap-3">
+            <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-outline-variant bg-white">
+              <img src={guide.logoUrl} alt="" class="h-6 w-6 object-contain" loading="lazy" />
             </div>
             <div class="min-w-0">
-              <span class="block text-sm font-semibold {selectedAi === id ? guide.color : 'text-gray-200'}">{guide.name}</span>
-              <span class="mt-1 block text-xs leading-relaxed text-gray-500">
-                {id === 'claude' ? m.mcp_help_guide_claude_badge() : id === 'chatgpt' ? m.mcp_help_guide_chatgpt_badge() : m.mcp_help_guide_gemini_badge()}
-              </span>
+              <span class="block text-sm font-semibold {selectedAi === id ? 'text-primary' : 'text-on-surface'}">{guide.name}</span>
+              <span class="mt-1 block text-xs leading-relaxed text-on-surface-variant">{guide.badge}</span>
             </div>
           </div>
         </button>
       {/each}
     </div>
 
-    <div class="rounded-lg border {currentGuide.border} {currentGuide.bg} p-4">
-      <div class="flex items-start gap-3">
-        <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white">
-          <img src={currentGuide.logoUrl} alt="Logo {currentGuide.name}" class="h-7 w-7 object-contain" loading="lazy" />
-        </div>
-        <div class="min-w-0">
-          <p class="text-sm font-semibold {currentGuide.color}">{currentGuide.name}</p>
-          <p class="mt-1 text-xs leading-relaxed text-gray-300">{currentGuide.note}</p>
-        </div>
-      </div>
-    </div>
+    <Callout variant="info" title={currentGuide.name}>{currentGuide.note}</Callout>
 
     <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
       <div class="space-y-4">
         <div class="space-y-2">
-          <p class="text-xs font-medium text-gray-500">{m.mcp_help_tutorial_title({ name: currentGuide.name })}</p>
+          <p class="text-xs font-medium text-on-surface-variant">{m.mcp_help_tutorial_title({ name: currentGuide.name })}</p>
           <ol class="space-y-2">
             {#each currentGuide.steps as step, index}
-              <li class="flex gap-2 text-sm text-gray-300">
-                <span class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/8 text-2xs text-gray-400">{index + 1}</span>
+              <li class="flex gap-2 text-sm text-on-surface">
+                <span class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-surface-container-high text-2xs text-on-surface-variant">{index + 1}</span>
                 <span class="leading-relaxed">{step}</span>
               </li>
             {/each}
@@ -801,60 +749,41 @@
         </div>
 
         <div class="flex flex-col gap-2 sm:flex-row">
-          <a
-            href={currentGuide.setupUrl}
-            target="_blank"
-            rel="noreferrer"
-            class="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary/90"
-          >
-            <Papicon icon="external-link" size={14} />
+          <Button variant="primary" icon="external-link" href={currentGuide.setupUrl} target="_blank" class="flex-1">
             {currentGuide.primaryAction}
-          </a>
-          <a
-            href={currentGuide.docsUrl}
-            target="_blank"
-            rel="noreferrer"
-            class="inline-flex items-center justify-center gap-2 rounded-lg border border-white/10 px-3 py-2.5 text-sm text-gray-300 transition-colors hover:text-white"
-          >
-            <Papicon icon="book-open" size={14} />
+          </Button>
+          <Button variant="secondary" icon="book-open" href={currentGuide.docsUrl} target="_blank">
             {m.mcp_help_official_doc()}
-          </a>
+          </Button>
         </div>
       </div>
 
       <div class="space-y-3">
-        <div class="rounded-lg border border-white/8 bg-black/20 p-3">
-          <div class="mb-2 flex items-center justify-between gap-2">
-            <p class="text-xs font-medium text-gray-500">{m.mcp_help_mcp_url()}</p>
-            <button
-              use:explainDisabled={(!endpointUrl) ? m.common_reason_fill_field() : ''}
-              onclick={() => copy(endpointUrl, 'help-endpoint')}
-              class="shrink-0 rounded-md border border-white/10 px-2 py-1 text-xs text-gray-400 transition-colors hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {copiedField === 'help-endpoint' ? m.mcp_btn_copied() : m.mcp_btn_copy()}
-            </button>
-          </div>
-          <code class="block rounded-lg border border-white/8 bg-black/40 px-3 py-2.5 font-mono text-xs text-gray-200 break-all">
-            {endpointUrl || m.mcp_help_select_server_placeholder()}
-          </code>
+        <div class="rounded-lg border border-outline-variant bg-surface-container-low p-3 space-y-2">
+          <p class="text-xs font-medium text-on-surface-variant">{m.mcp_help_mcp_url()}</p>
+          {#if endpointUrl}
+            {@render copyRow(endpointUrl, 'help-endpoint')}
+          {:else}
+            <p class="text-xs text-on-surface-variant">{m.mcp_help_select_server_placeholder()}</p>
+          {/if}
         </div>
 
-        <div class="rounded-lg border border-white/8 bg-black/20 p-3">
-          <p class="mb-2 text-xs font-medium text-gray-500">{m.mcp_help_fields_to_fill()}</p>
+        <div class="rounded-lg border border-outline-variant bg-surface-container-low p-3">
+          <p class="mb-2 text-xs font-medium text-on-surface-variant">{m.mcp_help_fields_to_fill()}</p>
           <div class="space-y-2">
             {#each currentGuide.fields as field}
-              <div class="rounded-lg border border-white/6 bg-black/25 px-3 py-2">
-                <p class="text-2xs font-medium text-gray-500">{field.label}</p>
-                <p class="mt-0.5 text-xs leading-relaxed text-gray-300">{field.value}</p>
+              <div class="rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-2">
+                <p class="text-2xs font-medium text-on-surface-variant">{field.label}</p>
+                <p class="mt-0.5 text-xs leading-relaxed text-on-surface">{field.value}</p>
               </div>
             {/each}
           </div>
         </div>
 
         {#if selectedAi === 'gemini'}
-          <div class="rounded-lg border border-sky-400/20 bg-sky-400/8 p-3">
-            <p class="mb-2 text-xs font-medium text-sky-300">{m.mcp_help_gemini_example()}</p>
-            <pre class="overflow-x-auto rounded-lg border border-white/8 bg-black/40 p-3 text-2xs leading-relaxed text-gray-300">{`{
+          <div class="rounded-lg border border-outline-variant bg-surface-container-low p-3">
+            <p class="mb-2 text-xs font-medium text-on-surface-variant">{m.mcp_help_gemini_example()}</p>
+            <pre class="overflow-x-auto rounded-lg border border-outline-variant bg-surface-container-lowest p-3 text-2xs leading-relaxed text-on-surface">{`{
   "type": "mcp_server",
   "name": "Kotbo",
   "url": "${endpointUrl || 'https://api-kotbo.example/api/mcp/GUILD_ID'}",
@@ -865,7 +794,7 @@
           </div>
         {/if}
 
-        <p class="text-xs leading-relaxed text-gray-600">
+        <p class="text-xs leading-relaxed text-on-surface-variant">
           {m.mcp_help_key_notice()}
         </p>
       </div>
@@ -876,37 +805,39 @@
 <Modal bind:open={diagOpen} onClose={() => { diagOpen = false; }} title={m.mcp_logs_modal_title()} size="xl">
   <div class="space-y-3">
     <div class="flex items-center justify-between gap-3">
-      <p class="text-sm text-gray-400">{m.mcp_logs_subtitle()}</p>
-      <button
+      <p class="text-sm text-on-surface-variant">{m.mcp_logs_subtitle()}</p>
+      <Button
+        size="sm"
+        icon="refresh-cw"
+        loading={diagRunning}
+        disabled={!guildId}
+        disabledReason={m.common_reason_fill_field()}
         onclick={refreshMcpLogs}
-        disabled={diagRunning}
-        use:explainDisabled={(!guildId) ? m.common_reason_fill_field() : ''}
-        class="px-3 py-2 rounded-lg border border-white/10 text-sm text-gray-300 hover:text-white disabled:opacity-40"
       >
         {diagRunning ? m.mcp_logs_btn_refreshing() : m.mcp_logs_btn_refresh()}
-      </button>
+      </Button>
     </div>
 
     {#if diagLogs.length === 0}
-      <div class="rounded-lg border border-white/8 bg-black/20 p-6 text-sm text-gray-500">
+      <div class="rounded-lg border border-outline-variant bg-surface-container-low p-6 text-sm text-on-surface-variant">
         {diagRunning ? m.mcp_logs_loading() : m.mcp_logs_empty()}
       </div>
     {:else}
       <div class="space-y-2">
         {#each diagLogs as log (log.id)}
-          <div class="rounded-lg border {log.level === 'error' ? 'border-red-400/25 bg-red-400/5' : log.level === 'warn' ? 'border-amber-400/25 bg-amber-400/5' : 'border-white/8 bg-black/20'} p-3">
+          <div class="rounded-lg border p-3 {LOG_TONE[log.level] ?? LOG_TONE.info}">
             <div class="flex flex-wrap items-center justify-between gap-3">
               <div class="min-w-0">
                 <div class="flex flex-wrap items-center gap-2">
-                  <span class="text-xs text-gray-500">{formatLogTime(log.ts)}</span>
-                  <span class="rounded border px-1.5 py-0.5 text-2xs uppercase {log.level === 'error' ? 'border-red-400/30 text-red-300' : log.level === 'warn' ? 'border-amber-400/30 text-amber-300' : 'border-white/10 text-gray-400'}">{log.level}</span>
-                  <span class="text-sm font-semibold {log.level === 'error' ? 'text-red-300' : log.level === 'warn' ? 'text-amber-300' : 'text-gray-200'}">{log.event}</span>
+                  <span class="text-xs text-on-surface-variant">{formatLogTime(log.ts)}</span>
+                  <span class="rounded border border-current px-1.5 py-0.5 text-2xs">{log.level}</span>
+                  <span class="text-sm font-semibold">{log.event}</span>
                 </div>
-                <p class="mt-1 break-all font-mono text-2xs text-gray-600">{log.method} {log.url}</p>
+                <p class="mt-1 break-all font-mono text-2xs text-on-surface-variant">{log.method} {log.url}</p>
               </div>
-              <span class="max-w-full truncate text-xs text-gray-500">{log.ua || m.mcp_logs_no_ua()}</span>
+              <span class="max-w-full truncate text-xs text-on-surface-variant">{log.ua || m.mcp_logs_no_ua()}</span>
             </div>
-            <pre class="mt-2 max-h-48 overflow-auto whitespace-pre-wrap rounded-lg bg-black/35 p-3 text-xs leading-relaxed text-gray-300">{formatLogData(log.data)}</pre>
+            <pre class="mt-2 max-h-48 overflow-auto whitespace-pre-wrap rounded-lg bg-surface-container-lowest p-3 text-xs leading-relaxed text-on-surface">{JSON.stringify(log.data, null, 2)}</pre>
           </div>
         {/each}
       </div>

@@ -23,7 +23,7 @@ import { join } from 'node:path';
 const SRC = join(import.meta.dir, '..');
 const DARK_DECOR = new Set([
   'ClanBoardPublic.svelte', 'LevelingClanPublic.svelte', 'GiveawaysPublic.svelte',
-  'LevelingPublic.svelte', 'PrestigePublic.svelte', 'MCPSettings.svelte',
+  'LevelingPublic.svelte', 'PrestigePublic.svelte',
   'GlobalInteractionGraph.svelte', 'Activation.svelte', 'Verify.svelte',
   'SanctionEvidenceFile.svelte', 'Config.svelte',
 ]);
