@@ -1226,7 +1226,7 @@
             value={adopt[item.key] ?? ''}
             disabled={isTraced(item.key)}
             onchange={(event) => setAdopt(item.key, event.currentTarget.value)}
-            class="min-w-0 flex-1 rounded-lg border border-outline-variant/30 bg-surface-container-lowest/50 px-2.5 py-1.5
+            class="min-w-0 flex-1 rounded-lg border border-field-border bg-surface-container-lowest/50 px-2.5 py-1.5
                    text-xs text-on-surface-variant/85 disabled:opacity-50"
           >
             <option value="">Créer {item.kind === 'role' ? `@${item.name}` : item.name}</option>

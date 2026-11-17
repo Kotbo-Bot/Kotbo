@@ -339,7 +339,7 @@
     width: 100%;
     height: 2.75rem;
     padding: 0 2.75rem 0 2.5rem;
-    border: 1px solid var(--outline-variant);
+    border: 1px solid var(--field-border-color);
     border-radius: 0.75rem;
     background: var(--surface-container);
     color: var(--on-surface);

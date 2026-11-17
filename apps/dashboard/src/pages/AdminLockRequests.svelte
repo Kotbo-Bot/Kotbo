@@ -161,7 +161,7 @@
                   <div class="space-y-3 pt-2 border-t border-outline-variant/10">
                     <textarea aria-label={m.e7_alr_reject_placeholder()} bind:value={actionReason} rows="2"
                       placeholder={m.e7_alr_reject_placeholder()}
-                      class="w-full bg-surface rounded-xl px-4 py-3 text-sm outline-none border border-outline-variant/20 focus:border-primary transition-colors resize-y"></textarea>
+                      class="w-full bg-surface rounded-xl px-4 py-3 text-sm outline-none border border-field-border focus:border-primary transition-colors resize-y"></textarea>
                     <div class="flex flex-wrap gap-2">
                       <button onclick={() => decide(request, 'APPROVED')} disabled={actionInProgress}
                         class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors disabled:opacity-50 flex items-center gap-1.5">

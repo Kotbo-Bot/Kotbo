@@ -903,7 +903,7 @@
                       bind:value={opt.emoji}
                       placeholder="+"
                       aria-label={m.reaction_roles_field_emoji()}
-                      class="w-full min-w-0 bg-surface-container rounded-lg px-3 py-2 text-xs text-on-surface border border-outline-variant/10 focus:ring-2 focus:ring-primary/30 focus:outline-none transition-all"
+                      class="w-full min-w-0 bg-surface-container rounded-lg px-3 py-2 text-xs text-on-surface border border-field-border focus:ring-2 focus:ring-primary/30 focus:outline-none transition-all"
                       disabled={!canManageSettings}
                     />
                     <EmojiPicker bind:value={opt.emoji} disabled={!canManageSettings} />
@@ -916,7 +916,7 @@
                     placeholder={roleNameOf(opt) || m.reaction_roles_field_label_ph()}
                     maxlength={BUTTON_LABEL_MAX_LENGTH}
                     aria-label={m.reaction_roles_field_label()}
-                    class="w-full bg-surface-container rounded-lg px-3 py-2 text-xs text-on-surface border border-outline-variant/10 focus:ring-2 focus:ring-primary/30 focus:outline-none transition-all"
+                    class="w-full bg-surface-container rounded-lg px-3 py-2 text-xs text-on-surface border border-field-border focus:ring-2 focus:ring-primary/30 focus:outline-none transition-all"
                     disabled={!canManageSettings}
                   />
 
@@ -1004,7 +1004,7 @@
                 type="text"
                 bind:value={formTitle}
                 placeholder={m.reaction_roles_field_title_ph()}
-                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
                 required
                 disabled={!canManageSettings}
               />
@@ -1033,7 +1033,7 @@
               rows="2"
               maxlength={MENU_DESCRIPTION_MAX}
               placeholder={previewSubtitle}
-              class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none resize-y"
+              class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none resize-y"
               disabled={!canManageSettings}
             ></textarea>
             <p class="text-2xs text-on-surface-variant">{m.reaction_roles_field_description_hint()}</p>

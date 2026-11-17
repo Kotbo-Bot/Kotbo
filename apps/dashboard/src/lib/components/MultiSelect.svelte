@@ -84,7 +84,7 @@
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
-    class="flex flex-wrap gap-1.5 min-h-11 w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 cursor-text transition-all {open ? 'ring-2 ring-primary/30' : ''} focus-within:ring-2 focus-within:ring-primary {disabled ? 'opacity-50 cursor-not-allowed' : ''}"
+    class="flex flex-wrap gap-1.5 min-h-11 w-full bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-2 cursor-text transition-all {open ? 'ring-2 ring-primary/30' : ''} focus-within:ring-2 focus-within:ring-primary {disabled ? 'opacity-50 cursor-not-allowed' : ''}"
     onclick={() => { if (!disabled) { open = true; inputEl?.focus(); } }}
   >
     <!-- Selected pills -->

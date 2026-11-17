@@ -145,7 +145,7 @@
         <div class="flex flex-wrap gap-2">
           <select aria-label={m.shd_panel()}
             bind:value={panelChannel}
-            class="flex-1 min-w-0 rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-1.5 text-body-sm text-on-surface"
+            class="flex-1 min-w-0 rounded-lg bg-surface-container border border-field-border px-3 py-1.5 text-body-sm text-on-surface"
           >
             <option value="">{m.shd_pick_channel()}</option>
             {#each channels as channel (channel.id)}<option value={channel.id}>#{channel.name}</option>{/each}

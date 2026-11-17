@@ -270,7 +270,7 @@
   .ntf-filters select {
     width: 100%;
     padding: 0.5rem 0.75rem;
-    border: 1px solid var(--outline-variant);
+    border: 1px solid var(--field-border-color);
     border-radius: 0.75rem;
     background: var(--surface-container-lowest);
     color: var(--on-surface);

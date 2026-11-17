@@ -404,7 +404,7 @@
                   {/each}
                 </div>
               {:else if field.type === 'dropdown'}
-                <select aria-label={field.label} class="w-full bg-surface-container rounded-xl px-4 py-2.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary border border-outline-variant/30">
+                <select aria-label={field.label} class="w-full bg-surface-container rounded-xl px-4 py-2.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary border border-field-border">
                   <option value="">{m.fb_select_placeholder()}</option>
                   {#each field.options || [] as opt}
                     <option>{opt}</option>
@@ -424,9 +424,9 @@
                   {#if field.scaleMaxLabel}<span class="text-xs text-on-surface-variant">{field.scaleMaxLabel}</span>{/if}
                 </div>
               {:else if field.type === 'date'}
-                <input aria-label={field.label} type="date" class="w-full bg-surface-container rounded-xl px-4 py-2.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary border border-outline-variant/30" />
+                <input aria-label={field.label} type="date" class="w-full bg-surface-container rounded-xl px-4 py-2.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary border border-field-border" />
               {:else if field.type === 'time'}
-                <input aria-label={field.label} type="time" class="w-full bg-surface-container rounded-xl px-4 py-2.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary border border-outline-variant/30" />
+                <input aria-label={field.label} type="time" class="w-full bg-surface-container rounded-xl px-4 py-2.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary border border-field-border" />
               {:else if field.type === 'multiple_choice_grid' || field.type === 'checkbox_grid'}
                 <div class="overflow-x-auto mt-2">
                   <table class="w-full text-sm">
@@ -582,12 +582,12 @@
                 <div>
                   <p class="text-2xs font-semibold text-on-surface-variant mb-1">{m.fb_banner_url()}</p>
                   <input aria-label={m.fb_banner_url()} bind:value={theme.bannerUrl} placeholder="https://…/banniere.png"
-                    class="w-full bg-surface-container rounded-lg px-3 py-2 text-xs outline-none border border-outline-variant/20 focus:border-primary" />
+                    class="w-full bg-surface-container rounded-lg px-3 py-2 text-xs outline-none border border-field-border focus:border-primary" />
                 </div>
                 <div>
                   <p class="text-2xs font-semibold text-on-surface-variant mb-1">{m.fb_logo_url()}</p>
                   <input aria-label={m.fb_logo_url()} bind:value={theme.logoUrl} placeholder="https://…/logo.png"
-                    class="w-full bg-surface-container rounded-lg px-3 py-2 text-xs outline-none border border-outline-variant/20 focus:border-primary" />
+                    class="w-full bg-surface-container rounded-lg px-3 py-2 text-xs outline-none border border-field-border focus:border-primary" />
                 </div>
                 <div class="grid grid-cols-2 gap-2">
                   <div>
@@ -619,7 +619,7 @@
                   <p class="text-2xs font-semibold text-on-surface-variant mb-1">{m.fb_font()}</p>
                   <select aria-label={m.fb_font()} value={theme.fontFamily || ''}
                     onchange={(e) => { const v = (e.currentTarget as HTMLSelectElement).value; theme.fontFamily = v || undefined; if (v) loadGoogleFont(v); }}
-                    class="w-full bg-surface-container rounded-lg px-3 py-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-primary border border-outline-variant/20">
+                    class="w-full bg-surface-container rounded-lg px-3 py-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-primary border border-field-border">
                     <option value="">{m.fb_font_default()}</option>
                     {#each ALLOWED_FONTS as font}
                       <option value={font}>{font}</option>
@@ -643,18 +643,18 @@
                 <div>
                   <p class="text-2xs font-semibold text-on-surface-variant mb-1">{m.fb_welcome_text()}</p>
                   <textarea aria-label={m.fb_welcome_text()} bind:value={theme.welcomeText} rows="2" placeholder={m.fb_welcome_text_ph()}
-                    class="w-full bg-surface-container rounded-lg px-3 py-2 text-xs outline-none border border-outline-variant/20 focus:border-primary resize-none"></textarea>
+                    class="w-full bg-surface-container rounded-lg px-3 py-2 text-xs outline-none border border-field-border focus:border-primary resize-none"></textarea>
                 </div>
                 <div>
                   <p class="text-2xs font-semibold text-on-surface-variant mb-1">{m.fb_confirmation_text()}</p>
                   <textarea aria-label={m.fb_confirmation_text()} bind:value={theme.confirmationText} rows="2" placeholder={m.fb_confirmation_text_ph()}
-                    class="w-full bg-surface-container rounded-lg px-3 py-2 text-xs outline-none border border-outline-variant/20 focus:border-primary resize-none"></textarea>
+                    class="w-full bg-surface-container rounded-lg px-3 py-2 text-xs outline-none border border-field-border focus:border-primary resize-none"></textarea>
                 </div>
                 <div>
                   <p class="text-2xs font-semibold text-on-surface-variant mb-1">{m.fb_custom_css()}</p>
                   <textarea aria-label={m.fb_custom_css()} bind:value={customCss} rows="6" spellcheck="false"
                     placeholder={'.pf-card { border: 1px solid gold; }'}
-                    class="w-full bg-surface-container rounded-lg px-3 py-2 text-2xs font-mono outline-none border border-outline-variant/20 focus:border-primary resize-y"></textarea>
+                    class="w-full bg-surface-container rounded-lg px-3 py-2 text-2xs font-mono outline-none border border-field-border focus:border-primary resize-y"></textarea>
                 </div>
               </div>
             {/if}
@@ -799,15 +799,15 @@
                   <!-- Preview of field type -->
                   {#if field.type === 'short_text' || field.type === 'email' || field.type === 'number'}
                     <input aria-label={field.label} disabled placeholder={field.placeholder || m.fb_short_response_ph()}
-                      class="w-full bg-surface-container/50 rounded-lg px-3 py-2 text-sm text-on-surface-variant border-b border-outline-variant/30" />
+                      class="w-full bg-surface-container/50 rounded-lg px-3 py-2 text-sm text-on-surface-variant border-b border-field-border" />
                   {:else if field.type === 'paragraph'}
                     <div class="w-full bg-surface-container/50 rounded-lg px-3 py-2 text-sm text-on-surface-variant/40 border-b border-outline-variant/30 h-14">
                       {m.fb_long_response_ph()}
                     </div>
                   {:else if field.type === 'date'}
-                    <input aria-label={field.label} type="date" disabled class="bg-surface-container/50 rounded-lg px-3 py-2 text-sm text-on-surface-variant border border-outline-variant/20" />
+                    <input aria-label={field.label} type="date" disabled class="bg-surface-container/50 rounded-lg px-3 py-2 text-sm text-on-surface-variant border border-field-border" />
                   {:else if field.type === 'time'}
-                    <input aria-label={field.label} type="time" disabled class="bg-surface-container/50 rounded-lg px-3 py-2 text-sm text-on-surface-variant border border-outline-variant/20" />
+                    <input aria-label={field.label} type="time" disabled class="bg-surface-container/50 rounded-lg px-3 py-2 text-sm text-on-surface-variant border border-field-border" />
                   {:else if field.type === 'linear_scale'}
                     <div class="flex items-center gap-2 text-xs text-on-surface-variant">
                       <span>{field.scaleMin ?? 1}</span>
@@ -822,7 +822,7 @@
                           {:else if field.type === 'checkboxes'}<div class="w-3.5 h-3.5 rounded border-2 border-primary/40 shrink-0"></div>
                           {:else}<span class="text-xs text-on-surface-variant/40 w-4">{optIdx + 1}.</span>{/if}
                           <input aria-label={m.fb_option_default({ number: optIdx + 1 })} value={opt} oninput={(e) => updateOption(field.id, optIdx, (e.target as HTMLInputElement).value)}
-                            class="flex-1 bg-transparent border-b border-outline-variant/20 focus:border-primary/50 outline-none text-sm pb-0.5"
+                            class="flex-1 bg-transparent border-b border-field-border focus:border-primary/50 outline-none text-sm pb-0.5"
                             placeholder={m.fb_option_default({ number: optIdx + 1 })} />
                           <button onclick={() => removeOption(field.id, optIdx)}
                             class="p-0.5 rounded hover:bg-error/10 text-error transition-colors">
@@ -841,7 +841,7 @@
                         <p class="font-bold text-on-surface-variant mb-1">{m.fb_grid_rows()}</p>
                         {#each field.rows || [] as row, rowIdx}
                           <input aria-label={m.fb_row_default({ number: rowIdx + 1 })} value={row.label} oninput={(e) => { const rows = [...(field.rows||[])]; rows[rows.indexOf(row)].label = (e.target as HTMLInputElement).value; updateField(field.id,'rows',rows); }}
-                            class="block w-full bg-transparent border-b border-outline-variant/20 focus:border-primary/50 outline-none py-0.5 mb-1" />
+                            class="block w-full bg-transparent border-b border-field-border focus:border-primary/50 outline-none py-0.5 mb-1" />
                         {/each}
                         <button onclick={() => addGridRow(field.id)} class="text-primary/70 hover:text-primary font-semibold">{m.fb_add_row()}</button>
                       </div>
@@ -849,7 +849,7 @@
                         <p class="font-bold text-on-surface-variant mb-1">{m.fb_grid_cols()}</p>
                         {#each field.columns || [] as col, colIdx}
                           <input aria-label={m.fb_col_default({ number: colIdx + 1 })} value={col.label} oninput={(e) => { const cols = [...(field.columns||[])]; cols[cols.indexOf(col)].label = (e.target as HTMLInputElement).value; updateField(field.id,'columns',cols); }}
-                            class="block w-full bg-transparent border-b border-outline-variant/20 focus:border-primary/50 outline-none py-0.5 mb-1" />
+                            class="block w-full bg-transparent border-b border-field-border focus:border-primary/50 outline-none py-0.5 mb-1" />
                         {/each}
                         <button onclick={() => addGridColumn(field.id)} class="text-primary/70 hover:text-primary font-semibold">{m.fb_add_col()}</button>
                       </div>

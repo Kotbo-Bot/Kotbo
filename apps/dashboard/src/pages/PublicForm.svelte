@@ -464,7 +464,7 @@
           {:else if field.type === 'dropdown'}
             <select id={field.id} value={(answers[field.id] as string) || ''}
               onchange={(e) => setAnswer(field.id, (e.target as HTMLSelectElement).value)}
-              class="w-full bg-surface-container rounded-xl px-4 py-3 text-sm outline-none border border-outline-variant/30 focus:border-primary transition-colors appearance-none cursor-pointer">
+              class="w-full bg-surface-container rounded-xl px-4 py-3 text-sm outline-none border border-field-border focus:border-primary transition-colors appearance-none cursor-pointer">
               <option value="" disabled>{m.pfm_select()}</option>
               {#each field.options || [] as opt}
                 <option value={opt}>{opt}</option>
@@ -503,12 +503,12 @@
           {:else if field.type === 'date'}
             <input id={field.id} type="date" value={(answers[field.id] as string) || ''}
               onchange={(e) => setAnswer(field.id, (e.target as HTMLInputElement).value)}
-              class="w-full bg-surface-container rounded-xl px-4 py-3 text-sm outline-none border border-outline-variant/30 focus:border-primary transition-colors" />
+              class="w-full bg-surface-container rounded-xl px-4 py-3 text-sm outline-none border border-field-border focus:border-primary transition-colors" />
 
           {:else if field.type === 'time'}
             <input id={field.id} type="time" value={(answers[field.id] as string) || ''}
               onchange={(e) => setAnswer(field.id, (e.target as HTMLInputElement).value)}
-              class="w-full bg-surface-container rounded-xl px-4 py-3 text-sm outline-none border border-outline-variant/30 focus:border-primary transition-colors" />
+              class="w-full bg-surface-container rounded-xl px-4 py-3 text-sm outline-none border border-field-border focus:border-primary transition-colors" />
 
           {:else if field.type === 'multiple_choice_grid' || field.type === 'checkbox_grid'}
             {@const isMulti = field.type === 'checkbox_grid'}

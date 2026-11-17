@@ -108,7 +108,7 @@
     onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commitDraft(); } }}
     {placeholder}
     {disabled}
-    class="flex-1 min-w-0 bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-on-surface focus:outline-none focus:border-primary/60 disabled:opacity-50"
+    class="flex-1 min-w-0 bg-surface-container border border-field-border rounded-lg px-3 py-2 text-sm text-on-surface focus:outline-none focus:border-primary/60 disabled:opacity-50"
   />
   <EmojiPicker bind:value={picked} {disabled} format="id" />
   <button type="button" class="btn btn-tonal btn-sm shrink-0" {disabled} onclick={commitDraft}>

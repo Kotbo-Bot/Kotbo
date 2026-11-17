@@ -47,7 +47,7 @@
     <select aria-label={m.timezone_hint_select()}
       value={value ?? '__server__'}
       onchange={(e) => apply((e.currentTarget as HTMLSelectElement).value)}
-      class="bg-surface-container border border-outline-variant/20 rounded px-2 py-0.5 text-2xs text-on-surface outline-none focus:border-primary"
+      class="bg-surface-container border border-field-border rounded px-2 py-0.5 text-2xs text-on-surface outline-none focus:border-primary"
     >
       <option value="__server__">{m.timezone_hint_server({ zone: timezoneStore.timezone })}</option>
       {#each zones as zone}

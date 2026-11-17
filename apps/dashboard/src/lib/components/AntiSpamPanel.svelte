@@ -304,7 +304,7 @@
             <span class="text-xs font-medium text-on-surface-variant">{m.asp_alert_channel()}</span>
             <select
               bind:value={config.alertChannelId}
-              class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
+              class="mt-1 w-full rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface"
             >
               <option value={null}>{m.asp_alert_channel_default()}</option>
               {#each channels as channel (channel.id)}
@@ -322,7 +322,7 @@
               min="1"
               max="40320"
               bind:value={config.timeoutMinutes}
-              class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
+              class="mt-1 w-full rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface"
             />
           </label>
         </div>
@@ -451,7 +451,7 @@
           <input
             type="number" min="5" max="300"
             bind:value={config.windowSeconds}
-            class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
+            class="mt-1 w-full rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface"
           />
         </label>
         <label class="block">
@@ -459,7 +459,7 @@
           <input
             type="number" min="2" max="20"
             bind:value={config.crossChannelThreshold}
-            class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
+            class="mt-1 w-full rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface"
           />
         </label>
         <label class="block">
@@ -467,7 +467,7 @@
           <input
             type="number" min="0.5" max="1" step="0.01"
             bind:value={config.duplicateSimilarity}
-            class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
+            class="mt-1 w-full rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface"
           />
         </label>
       </div>

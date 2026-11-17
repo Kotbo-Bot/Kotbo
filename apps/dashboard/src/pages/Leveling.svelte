@@ -1308,7 +1308,7 @@
               id="xpMin"
               type="number" 
               bind:value={config.xpMin} 
-              class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+              class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
               disabled={!canManageSettings}
             />
           </div>
@@ -1319,7 +1319,7 @@
               id="xpMax"
               type="number" 
               bind:value={config.xpMax} 
-              class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+              class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
               disabled={!canManageSettings}
             />
           </div>
@@ -1330,7 +1330,7 @@
               id="cooldown"
               type="number" 
               bind:value={config.cooldownSeconds} 
-              class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+              class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
               disabled={!canManageSettings}
             />
           </div>
@@ -1341,7 +1341,7 @@
               id="vocalXp"
               type="number" 
               bind:value={config.vocalXpPerMin} 
-              class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+              class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
               disabled={!canManageSettings}
             />
           </div>
@@ -1400,7 +1400,7 @@
                   min="1"
                   max="25"
                   bind:value={config.voiceMinMembers}
-                  class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+                  class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
                   disabled={!canManageSettings}
                 />
                 <p class="text-2xs text-on-surface-variant ml-2">{m.lv_voice_min_members_hint({ count: config.voiceMinMembers })}</p>
@@ -1422,7 +1422,7 @@
                 type="number"
                 min="0"
                 bind:value={config.dailyXpCap}
-                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
                 disabled={!canManageSettings}
               />
               <p class="text-2xs text-on-surface-variant ml-2">{m.lv_daily_cap_hint()}</p>
@@ -1481,7 +1481,7 @@
                       type="number"
                       min="1"
                       bind:value={config.lengthBonusThreshold}
-                      class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+                      class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
                       disabled={!canManageSettings}
                     />
                     <p class="text-2xs text-on-surface-variant ml-2">{m.lv_length_bonus_threshold_hint({ count: config.lengthBonusThreshold })}</p>
@@ -1496,7 +1496,7 @@
                       max="10"
                       step="0.1"
                       bind:value={config.lengthBonusMaxMultiplier}
-                      class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+                      class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
                       disabled={!canManageSettings}
                     />
                     <p class="text-2xs text-on-surface-variant ml-2">{m.lv_length_bonus_max_hint({ max: config.lengthBonusMaxMultiplier })}</p>
@@ -1705,7 +1705,7 @@
                     min="0.1"
                     max="10"
                     bind:value={newMultValue} 
-                    class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+                    class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
                   />
                 </div>
 
@@ -1873,7 +1873,7 @@
                 min={LEVEL_CURVE_LIMITS.baseXp.min}
                 max={LEVEL_CURVE_LIMITS.baseXp.max}
                 bind:value={config.curveBaseXp}
-                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
                 disabled={!canManageSettings}
               />
               <p class="text-2xs text-on-surface-variant ml-2">{m.lv_curve_base_hint()}</p>
@@ -1887,7 +1887,7 @@
                 min={LEVEL_CURVE_LIMITS.linearXp.min}
                 max={LEVEL_CURVE_LIMITS.linearXp.max}
                 bind:value={config.curveLinearXp}
-                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
                 disabled={!canManageSettings}
               />
               <p class="text-2xs text-on-surface-variant ml-2">{m.lv_curve_linear_hint()}</p>
@@ -1902,7 +1902,7 @@
                 max={LEVEL_CURVE_LIMITS.exponent.max}
                 step="0.1"
                 bind:value={config.curveExponent}
-                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
                 disabled={!canManageSettings}
               />
               <p class="text-2xs text-on-surface-variant ml-2">{m.lv_curve_exponent_hint()}</p>
@@ -1918,7 +1918,7 @@
                 min={LEVEL_CURVE_LIMITS.maxLevel.min}
                 max={LEVEL_CURVE_LIMITS.maxLevel.max}
                 bind:value={config.maxLevel}
-                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
                 disabled={!canManageSettings}
               />
               <p class="text-2xs text-on-surface-variant ml-2">{m.lv_curve_max_level_hint()}</p>
@@ -2128,7 +2128,7 @@
                       min="1.0"
                       max="10"
                       bind:value={clanRewardXpBoostRate} 
-                      class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none font-bold"
+                      class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none font-bold"
                       disabled={!canManageSettings}
                     />
                   </div>
@@ -2168,7 +2168,7 @@
                 min="1"
                 placeholder="Ex: 5"
                 bind:value={newRewardLevel} 
-                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
                 required
               />
             </div>
@@ -2294,7 +2294,7 @@
               id="lvlMsg"
               type="text" 
               bind:value={config.levelUpMessage} 
-              class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+              class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
               placeholder={m.lv_levelup_message_ph({ user: '{user}', level: '{level}' })}
               disabled={!canManageSettings}
             />
@@ -2382,7 +2382,7 @@
               type="text" 
               placeholder={m.lv_search_member()} 
               bind:value={searchQuery}
-              class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 pl-11 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-tertiary/30 placeholder:text-on-surface-variant transition-all shadow-inner"
+              class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 pl-11 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-tertiary/30 placeholder:text-on-surface-variant transition-all shadow-inner"
             />
             <div class="absolute left-4 top-1/2 -translate-y-1/2 text-sm opacity-40 text-on-surface flex items-center">
               <Papicon icon="Search" size={14} />
@@ -2708,7 +2708,7 @@
                   id="aiText"
                   rows="6"
                   bind:value={aiText}
-                  class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-xs font-mono focus:ring-2 focus:ring-secondary/30 text-on-surface focus:outline-none resize-y"
+                  class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-xs font-mono focus:ring-2 focus:ring-secondary/30 text-on-surface focus:outline-none resize-y"
                 ></textarea>
                 <InlineFeedback state={aiActionState} />
                 <div class="flex justify-end">
@@ -2732,7 +2732,7 @@
                     type="password"
                     autocomplete="off"
                     bind:value={importApiKey}
-                    class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-xs font-mono focus:ring-2 focus:ring-secondary/30 text-on-surface focus:outline-none"
+                    class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-xs font-mono focus:ring-2 focus:ring-secondary/30 text-on-surface focus:outline-none"
                   />
                 {/if}
                 <p>{importSource === 'tatsu' ? m.lv_import_source_score_as_xp() : m.lv_import_source_kept_level()}</p>
@@ -2773,7 +2773,7 @@
                 rows="10"
                 bind:value={importRawJson}
                 placeholder={`[\n  {\n    "username": "@klaynight",\n    "display_name": "Klaynight",\n    "level": 48,\n    "xp": 119652\n  }\n]`}
-                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-xs font-mono focus:ring-2 focus:ring-secondary/30 transition-all text-on-surface focus:outline-none resize-y"
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-xs font-mono focus:ring-2 focus:ring-secondary/30 transition-all text-on-surface focus:outline-none resize-y"
               ></textarea>
             </div>
             {/if}

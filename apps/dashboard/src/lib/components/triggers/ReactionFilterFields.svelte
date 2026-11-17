@@ -31,7 +31,7 @@
       value={messageText}
       oninput={(e) => onChange('messages', e.currentTarget.value)}
       placeholder={m.wf_message_filter_placeholder()}
-      class="w-full px-2 py-1 rounded-lg bg-surface-container-highest border border-outline-variant/20 text-2xs text-on-surface"
+      class="w-full px-2 py-1 rounded-lg bg-surface-container-highest border border-field-border text-2xs text-on-surface"
     />
     {#if messageUnreadable}
       <span class="block text-2xs text-warning">{m.wf_message_filter_unreadable()}</span>
@@ -45,7 +45,7 @@
       value={emojiText}
       oninput={(e) => onChange('emojis', e.currentTarget.value)}
       placeholder={m.wf_emoji_filter_placeholder()}
-      class="w-full px-2 py-1 rounded-lg bg-surface-container-highest border border-outline-variant/20 text-2xs text-on-surface"
+      class="w-full px-2 py-1 rounded-lg bg-surface-container-highest border border-field-border text-2xs text-on-surface"
     />
   </label>
 </div>

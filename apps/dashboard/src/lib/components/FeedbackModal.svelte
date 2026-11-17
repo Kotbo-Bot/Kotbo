@@ -206,7 +206,7 @@
       <!-- Type Selection -->
       <div class="space-y-2">
         <label for="feedback-type" class="text-body-sm font-medium text-on-surface-variant">{m.d1_fb_type_label()}</label>
-        <FormSelect id="feedback-type" bind:value={type} className="w-full rounded-lg border border-outline-variant/20 bg-surface-container-low px-4 py-3 text-sm text-on-surface outline-hidden focus:border-primary/40 focus:ring-4 focus:ring-primary/10 transition-all duration-300">
+        <FormSelect id="feedback-type" bind:value={type} className="w-full rounded-lg border border-field-border bg-surface-container-low px-4 py-3 text-sm text-on-surface outline-hidden focus:border-primary/40 focus:ring-4 focus:ring-primary/10 transition-all duration-300">
           <option value="retour">{m.d1_fb_opt_feedback()}</option>
           <option value="bloquage">{m.d1_fb_opt_bug()}</option>
           <option value="suggestion">{m.d1_fb_opt_suggestion()}</option>
@@ -226,7 +226,7 @@
               bind:value={projectName}
               placeholder={m.d1_fb_ph_project_name()}
               disabled={isSending}
-              className="w-full rounded-lg border border-outline-variant/20 bg-surface-container-low px-4 py-2.5 text-sm text-on-surface outline-hidden focus:border-primary/40 focus:ring-4 focus:ring-primary/10 transition-all duration-300 font-medium"
+              className="w-full rounded-lg border border-field-border bg-surface-container-low px-4 py-2.5 text-sm text-on-surface outline-hidden focus:border-primary/40 focus:ring-4 focus:ring-primary/10 transition-all duration-300 font-medium"
             />
           </div>
 
@@ -238,7 +238,7 @@
               bind:value={projectUrl}
               placeholder={m.d1_fb_ph_project_url()}
               disabled={isSending}
-              className="w-full rounded-lg border border-outline-variant/20 bg-surface-container-low px-4 py-2.5 text-sm text-on-surface outline-hidden focus:border-primary/40 focus:ring-4 focus:ring-primary/10 transition-all duration-300 font-medium"
+              className="w-full rounded-lg border border-field-border bg-surface-container-low px-4 py-2.5 text-sm text-on-surface outline-hidden focus:border-primary/40 focus:ring-4 focus:ring-primary/10 transition-all duration-300 font-medium"
             />
           </div>
 
@@ -250,7 +250,7 @@
               bind:value={memberCount}
               placeholder={m.d1_fb_ph_members()}
               disabled={isSending}
-              className="w-full rounded-lg border border-outline-variant/20 bg-surface-container-low px-4 py-2.5 text-sm text-on-surface outline-hidden focus:border-primary/40 focus:ring-4 focus:ring-primary/10 transition-all duration-300 font-medium"
+              className="w-full rounded-lg border border-field-border bg-surface-container-low px-4 py-2.5 text-sm text-on-surface outline-hidden focus:border-primary/40 focus:ring-4 focus:ring-primary/10 transition-all duration-300 font-medium"
             />
           </div>
 
@@ -262,7 +262,7 @@
               bind:value={availability}
               placeholder={m.d1_fb_ph_availability()}
               disabled={isSending}
-              className="w-full rounded-lg border border-outline-variant/20 bg-surface-container-low px-4 py-2.5 text-sm text-on-surface outline-hidden focus:border-primary/40 focus:ring-4 focus:ring-primary/10 transition-all duration-300 font-medium"
+              className="w-full rounded-lg border border-field-border bg-surface-container-low px-4 py-2.5 text-sm text-on-surface outline-hidden focus:border-primary/40 focus:ring-4 focus:ring-primary/10 transition-all duration-300 font-medium"
             />
           </div>
         </div>
@@ -275,7 +275,7 @@
             bind:value={contact}
             placeholder={m.d1_fb_ph_contact()}
             disabled={isSending}
-            className="w-full rounded-lg border border-outline-variant/20 bg-surface-container-low px-4 py-2.5 text-sm text-on-surface outline-hidden focus:border-primary/40 focus:ring-4 focus:ring-primary/10 transition-all duration-300 font-medium"
+            className="w-full rounded-lg border border-field-border bg-surface-container-low px-4 py-2.5 text-sm text-on-surface outline-hidden focus:border-primary/40 focus:ring-4 focus:ring-primary/10 transition-all duration-300 font-medium"
           />
         </div>
 
@@ -293,7 +293,7 @@
             rows={3}
             placeholder={m.d1_fb_ph_description()}
             disabled={isSending}
-            className="w-full rounded-lg border border-outline-variant/20 bg-surface-container-low px-4 py-3 text-sm text-on-surface outline-hidden focus:border-primary/40 focus:ring-4 focus:ring-primary/10 transition-all duration-300 resize-none font-medium leading-relaxed placeholder:text-on-surface-variant/40"
+            className="w-full rounded-lg border border-field-border bg-surface-container-low px-4 py-3 text-sm text-on-surface outline-hidden focus:border-primary/40 focus:ring-4 focus:ring-primary/10 transition-all duration-300 resize-none font-medium leading-relaxed placeholder:text-on-surface-variant/40"
           />
         </div>
 
@@ -311,7 +311,7 @@
             rows={3}
             placeholder={m.d1_fb_ph_motivation()}
             disabled={isSending}
-            className="w-full rounded-lg border border-outline-variant/20 bg-surface-container-low px-4 py-3 text-sm text-on-surface outline-hidden focus:border-primary/40 focus:ring-4 focus:ring-primary/10 transition-all duration-300 resize-none font-medium leading-relaxed placeholder:text-on-surface-variant/40"
+            className="w-full rounded-lg border border-field-border bg-surface-container-low px-4 py-3 text-sm text-on-surface outline-hidden focus:border-primary/40 focus:ring-4 focus:ring-primary/10 transition-all duration-300 resize-none font-medium leading-relaxed placeholder:text-on-surface-variant/40"
           />
         </div>
 
@@ -329,7 +329,7 @@
             rows={2}
             placeholder={m.d1_fb_ph_experience()}
             disabled={isSending}
-            className="w-full rounded-lg border border-outline-variant/20 bg-surface-container-low px-4 py-3 text-sm text-on-surface outline-hidden focus:border-primary/40 focus:ring-4 focus:ring-primary/10 transition-all duration-300 resize-none font-medium leading-relaxed placeholder:text-on-surface-variant/40"
+            className="w-full rounded-lg border border-field-border bg-surface-container-low px-4 py-3 text-sm text-on-surface outline-hidden focus:border-primary/40 focus:ring-4 focus:ring-primary/10 transition-all duration-300 resize-none font-medium leading-relaxed placeholder:text-on-surface-variant/40"
           />
         </div>
       {:else}
@@ -347,7 +347,7 @@
             rows={5}
             placeholder={m.d1_fb_ph_message()}
             disabled={isSending}
-            className="w-full rounded-lg border border-outline-variant/20 bg-surface-container-low px-4 py-3 text-sm text-on-surface outline-hidden focus:border-primary/40 focus:ring-4 focus:ring-primary/10 transition-all duration-300 resize-none font-medium leading-relaxed placeholder:text-on-surface-variant/40"
+            className="w-full rounded-lg border border-field-border bg-surface-container-low px-4 py-3 text-sm text-on-surface outline-hidden focus:border-primary/40 focus:ring-4 focus:ring-primary/10 transition-all duration-300 resize-none font-medium leading-relaxed placeholder:text-on-surface-variant/40"
           />
         </div>
       {/if}

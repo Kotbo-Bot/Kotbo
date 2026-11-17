@@ -139,7 +139,7 @@
           oninput={(e) => handleInput(index, e.currentTarget.value)}
           {placeholder}
           {disabled}
-          class="w-full rounded-lg bg-surface-container-high pl-10 pr-4 py-3 text-xs font-bold text-on-surface border border-outline-variant/10 focus:border-primary/50 outline-hidden transition-all"
+          class="w-full rounded-lg bg-surface-container-high pl-10 pr-4 py-3 text-xs font-bold text-on-surface border border-field-border focus:border-primary/50 outline-hidden transition-all"
         />
       </div>
       

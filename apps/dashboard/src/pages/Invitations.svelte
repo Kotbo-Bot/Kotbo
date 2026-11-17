@@ -590,17 +590,17 @@
             <FormInput ariaLabel={m.iv_search_placeholder()}
               placeholder={m.iv_search_placeholder()}
               bind:value={searchQuery}
-              className="w-full lg:w-80 px-4 py-2.5 rounded-xl bg-surface-container-high/30 border border-outline-variant/20 text-sm"
+              className="w-full lg:w-80 px-4 py-2.5 rounded-xl bg-surface-container-high/30 border border-field-border text-sm"
             />
             <div class="flex gap-2 flex-wrap">
-              <select aria-label={m.iv_filter_status()} bind:value={statusFilter} class="px-3 py-2 rounded-xl bg-surface-container-high/40 text-xs font-bold border border-outline-variant/20">
+              <select aria-label={m.iv_filter_status()} bind:value={statusFilter} class="px-3 py-2 rounded-xl bg-surface-container-high/40 text-xs font-bold border border-field-border">
                 <option value="all">{m.iv_all_statuses()}</option>
                 <option value="active">{m.iv_filter_active()}</option>
                 <option value="suspended">{m.iv_filter_suspended()}</option>
                 <option value="expired">{m.iv_filter_expired()}</option>
                 <option value="deleted">{m.iv_filter_deleted()}</option>
               </select>
-              <select aria-label={m.a11y_sort_by()} bind:value={sortBy} class="px-3 py-2 rounded-xl bg-surface-container-high/40 text-xs font-bold border border-outline-variant/20">
+              <select aria-label={m.a11y_sort_by()} bind:value={sortBy} class="px-3 py-2 rounded-xl bg-surface-container-high/40 text-xs font-bold border border-field-border">
                 <option value="createdAt">{m.iv_col_creation()}</option>
                 <option value="uses">{m.iv_col_uses()}</option>
                 <option value="joins">{m.iv_col_joins()}</option>
@@ -835,7 +835,7 @@
                 maxlength="60"
                 placeholder={m.iv_source_input_placeholder()}
                 aria-label={m.iv_source_aria()}
-                class="flex-1 md:w-72 px-3 py-2.5 rounded-xl bg-surface border border-outline-variant/30 text-sm outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/15"
+                class="flex-1 md:w-72 px-3 py-2.5 rounded-xl bg-surface border border-field-border text-sm outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/15"
                 onkeydown={(event) => {
                   if (event.key === 'Enter') void saveSource(editingInvite);
                   if (event.key === 'Escape') cancelSourceEdit();
@@ -1011,17 +1011,17 @@
               <FormInput ariaLabel={m.iv_user_id_placeholder()}
                 placeholder={m.iv_user_id_placeholder()}
                 bind:value={suspendUserId}
-                className="w-full px-4 py-2.5 rounded-xl bg-surface-container-high/30 border border-outline-variant/20 text-sm"
+                className="w-full px-4 py-2.5 rounded-xl bg-surface-container-high/30 border border-field-border text-sm"
               />
               <FormInput ariaLabel={m.iv_user_tag_placeholder()}
                 placeholder={m.iv_user_tag_placeholder()}
                 bind:value={suspendUserTag}
-                className="w-full px-4 py-2.5 rounded-xl bg-surface-container-high/30 border border-outline-variant/20 text-sm"
+                className="w-full px-4 py-2.5 rounded-xl bg-surface-container-high/30 border border-field-border text-sm"
               />
               <FormInput ariaLabel={m.iv_suspend_reason_placeholder()}
                 placeholder={m.iv_suspend_reason_placeholder()}
                 bind:value={suspendReason}
-                className="w-full px-4 py-2.5 rounded-xl bg-surface-container-high/30 border border-outline-variant/20 text-sm"
+                className="w-full px-4 py-2.5 rounded-xl bg-surface-container-high/30 border border-field-border text-sm"
               />
               <label class="flex items-center gap-2 text-sm font-bold text-on-surface-variant cursor-pointer">
                 <input type="checkbox" bind:checked={suspendCascade} class="rounded" />

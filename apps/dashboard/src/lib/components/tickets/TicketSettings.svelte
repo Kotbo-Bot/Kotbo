@@ -1337,7 +1337,7 @@
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <label class="block">
               <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">{m.e1_tickets_delay_hours()}</span>
-              <input type="number" bind:value={ticketInactivityHours} min={1} max={168} class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-outline-variant/10 focus:ring-1 ring-primary/30 transition-all outline-none" />
+              <input type="number" bind:value={ticketInactivityHours} min={1} max={168} class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-field-border focus:ring-1 ring-primary/30 transition-all outline-none" />
             </label>
             <label class="block sm:col-span-2">
               <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">{m.e1_tickets_inactivity_message_label()}</span>
@@ -1356,7 +1356,7 @@
         {#if ticketStaffReminderEnabled}
           <label class="block sm:max-w-[33%]">
             <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">{m.e1_tickets_staff_reminder_minutes()}</span>
-            <input type="number" bind:value={ticketStaffReminderMinutes} min={1} max={10080} class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-outline-variant/10 focus:ring-1 ring-primary/30 transition-all outline-none" />
+            <input type="number" bind:value={ticketStaffReminderMinutes} min={1} max={10080} class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-field-border focus:ring-1 ring-primary/30 transition-all outline-none" />
           </label>
         {/if}
       </div>
@@ -1493,7 +1493,7 @@
           {#if ticketQuotaOpenEnabled}
             <label class="block ml-7 max-w-[220px]">
               <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">{m.tq_open_max()}</span>
-              <input type="number" bind:value={ticketQuotaOpenMax} min={1} max={50} class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-outline-variant/10 focus:ring-1 ring-primary/30 transition-all outline-none" />
+              <input type="number" bind:value={ticketQuotaOpenMax} min={1} max={50} class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-field-border focus:ring-1 ring-primary/30 transition-all outline-none" />
             </label>
           {/if}
         </div>
@@ -1509,7 +1509,7 @@
           {#if ticketQuotaCooldownEnabled}
             <label class="block ml-7 max-w-[220px]">
               <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">{m.tq_cooldown_minutes()}</span>
-              <input type="number" bind:value={ticketQuotaCooldownMinutes} min={1} max={10080} class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-outline-variant/10 focus:ring-1 ring-primary/30 transition-all outline-none" />
+              <input type="number" bind:value={ticketQuotaCooldownMinutes} min={1} max={10080} class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-field-border focus:ring-1 ring-primary/30 transition-all outline-none" />
             </label>
           {/if}
         </div>
@@ -1526,11 +1526,11 @@
             <div class="ml-7 grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-[460px]">
               <label class="block">
                 <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">{m.tq_period_max()}</span>
-                <input type="number" bind:value={ticketQuotaPeriodMax} min={1} max={500} class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-outline-variant/10 focus:ring-1 ring-primary/30 transition-all outline-none" />
+                <input type="number" bind:value={ticketQuotaPeriodMax} min={1} max={500} class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-field-border focus:ring-1 ring-primary/30 transition-all outline-none" />
               </label>
               <label class="block">
                 <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">{m.tq_period_hours()}</span>
-                <input type="number" bind:value={ticketQuotaPeriodHours} min={1} max={720} class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-outline-variant/10 focus:ring-1 ring-primary/30 transition-all outline-none" />
+                <input type="number" bind:value={ticketQuotaPeriodHours} min={1} max={720} class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-field-border focus:ring-1 ring-primary/30 transition-all outline-none" />
               </label>
             </div>
           {/if}
@@ -1561,7 +1561,7 @@
             <div class="space-y-3">
               <label class="block max-w-[220px]">
                 <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">{m.tq_load_max()}</span>
-                <input type="number" bind:value={ticketQuotaStaffLoadMax} min={1} max={200} class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-outline-variant/10 focus:ring-1 ring-primary/30 transition-all outline-none" />
+                <input type="number" bind:value={ticketQuotaStaffLoadMax} min={1} max={200} class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-field-border focus:ring-1 ring-primary/30 transition-all outline-none" />
               </label>
               <div>
                 <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-1 block">{m.tq_load_bypass()}</span>
@@ -1591,7 +1591,7 @@
           {#if ticketQuotaReopenEnabled}
             <label class="block ml-7 max-w-[220px]">
               <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">{m.tq_reopen_max()}</span>
-              <input type="number" bind:value={ticketQuotaReopenMax} min={1} max={50} class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-outline-variant/10 focus:ring-1 ring-primary/30 transition-all outline-none" />
+              <input type="number" bind:value={ticketQuotaReopenMax} min={1} max={50} class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-field-border focus:ring-1 ring-primary/30 transition-all outline-none" />
             </label>
           {/if}
         </div>
@@ -1635,7 +1635,7 @@
             </label>
             <label class="block">
               <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">{m.e1_tickets_sat_comment_timeout_label()}</span>
-              <input type="number" bind:value={ticketSatisfactionCommentTimeout} min={30} max={900} step={10} class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-outline-variant/10 focus:ring-1 ring-primary/30 transition-all outline-none" />
+              <input type="number" bind:value={ticketSatisfactionCommentTimeout} min={30} max={900} step={10} class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-field-border focus:ring-1 ring-primary/30 transition-all outline-none" />
             </label>
           </div>
           <p class="text-2xs text-on-surface-variant ml-1">{m.e1_tickets_sat_comment_hint()}</p>

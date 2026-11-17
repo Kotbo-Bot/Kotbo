@@ -27,7 +27,7 @@
       step="1"
       value={Number(value) || ''}
       oninput={(event) => onChange(Math.trunc(Number(event.currentTarget.value)))}
-      class="w-20 px-2.5 py-1 rounded-lg bg-surface-container-highest border border-outline-variant/25 text-on-surface focus:outline-none focus:border-primary/60"
+      class="w-20 px-2.5 py-1 rounded-lg bg-surface-container-highest border border-field-border text-on-surface focus:outline-none focus:border-primary/60"
     />
     <span>{triggerType === 'OnMemberTenure' ? m.wf_member_days_tenure() : m.wf_member_days_inactive()}</span>
   </label>

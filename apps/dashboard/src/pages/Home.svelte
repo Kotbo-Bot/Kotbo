@@ -1388,7 +1388,7 @@
               value={staffNotes}
               oninput={saveStaffNotes}
               placeholder={m.home_notes_placeholder()}
-              class="w-full grow p-2.5 text-xs bg-surface-container border border-outline-variant rounded-lg outline-none resize-none focus:border-primary/50 text-on-surface min-h-[100px]"
+              class="w-full grow p-2.5 text-xs bg-surface-container border border-field-border rounded-lg outline-none resize-none focus:border-primary/50 text-on-surface min-h-[100px]"
             ></textarea>
           </div>
         {:else if item.id === 'serverInfo'}
@@ -1903,13 +1903,13 @@
               type="text"
               bind:value={presetName}
               placeholder={m.home_preset_name_ph()}
-              class="grow px-3 py-2 text-xs bg-surface-container border border-outline-variant rounded-lg outline-none focus:border-primary/50 text-on-surface"
+              class="grow px-3 py-2 text-xs bg-surface-container border border-field-border rounded-lg outline-none focus:border-primary/50 text-on-surface"
             />
             <input aria-label={m.home_preset_desc_ph()}
               type="text"
               bind:value={presetDescription}
               placeholder={m.home_preset_desc_ph()}
-              class="grow px-3 py-2 text-xs bg-surface-container border border-outline-variant rounded-lg outline-none focus:border-primary/50 text-on-surface"
+              class="grow px-3 py-2 text-xs bg-surface-container border border-field-border rounded-lg outline-none focus:border-primary/50 text-on-surface"
             />
             <button
               onclick={saveAsPreset}
@@ -1929,7 +1929,7 @@
             <textarea aria-label={m.home_import_preset_json()}
               bind:value={presetImportJson}
               placeholder={m.home_paste_json_ph() + ' {"name": "...", "layout": [...]}'}
-              class="grow px-3 py-2 text-xs bg-surface-container border border-outline-variant rounded-lg outline-none focus:border-primary/50 text-on-surface min-h-[60px] resize-none"
+              class="grow px-3 py-2 text-xs bg-surface-container border border-field-border rounded-lg outline-none focus:border-primary/50 text-on-surface min-h-[60px] resize-none"
             ></textarea>
             <button
               onclick={importPresetFromJson}

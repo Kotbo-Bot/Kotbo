@@ -599,12 +599,12 @@
               onkeydown={handleKeydown}
               maxlength={100}
               placeholder={m.nm_word_placeholder()}
-              class="w-full bg-surface-container/60 border border-outline-variant/30 rounded-lg px-5 py-3.5 text-sm text-on-surface placeholder:text-on-surface-variant/30 focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/20 transition-all"
+              class="w-full bg-surface-container/60 border border-field-border rounded-lg px-5 py-3.5 text-sm text-on-surface placeholder:text-on-surface-variant/30 focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/20 transition-all"
             />
           </div>
           <select aria-label={m.nm_col_category()}
             bind:value={newCategory}
-            class="bg-surface-container/60 border border-outline-variant/30 rounded-lg px-4 py-3.5 text-sm text-on-surface focus:outline-none focus:border-primary/60 transition-all"
+            class="bg-surface-container/60 border border-field-border rounded-lg px-4 py-3.5 text-sm text-on-surface focus:outline-none focus:border-primary/60 transition-all"
           >
             {#each Object.entries(CATEGORIES) as [key, meta]}
               <option value={key}>{meta.label}</option>
@@ -752,7 +752,7 @@
               bind:value={newWhitelistItem}
               onkeydown={handleWhitelistKeydown}
               placeholder={m.nm_nick_placeholder()}
-              class="flex-1 min-w-0 bg-surface-container/60 border border-outline-variant/30 rounded-lg px-4 py-3 text-sm text-on-surface placeholder:text-on-surface-variant/30 focus:outline-none focus:border-primary/60 transition-all"
+              class="flex-1 min-w-0 bg-surface-container/60 border border-field-border rounded-lg px-4 py-3 text-sm text-on-surface placeholder:text-on-surface-variant/30 focus:outline-none focus:border-primary/60 transition-all"
             />
             <button
               onclick={addWhitelistItem}

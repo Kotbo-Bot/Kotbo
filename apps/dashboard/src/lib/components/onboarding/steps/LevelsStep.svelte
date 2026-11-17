@@ -244,7 +244,7 @@
             <select
               bind:value={rewards[level]}
               aria-label={m.obx_lv_reward_aria({ level })}
-              class="flex-1 min-w-0 rounded-lg border border-outline-variant/40 bg-surface-container-lowest/60 px-3 py-1.5 text-body-sm text-on-surface focus:outline-none focus:border-primary/50"
+              class="flex-1 min-w-0 rounded-lg border border-field-border bg-surface-container-lowest/60 px-3 py-1.5 text-body-sm text-on-surface focus:outline-none focus:border-primary/50"
             >
               <option value={undefined}>{m.obx_lv_no_role()}</option>
               {#each roles as role (role.id)}

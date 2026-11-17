@@ -20,7 +20,7 @@
     <span class="text-xs font-medium text-on-surface-variant">{label}</span>
     <select
       bind:value={config[field]}
-      class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
+      class="mt-1 w-full rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface"
     >
       <option value={null}>{m.common_none()}</option>
       {#each list as item (item.id)}
@@ -36,7 +36,7 @@
     <span class="text-xs font-medium text-on-surface-variant">{label}</span>
     <select
       bind:value={config[field]}
-      class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
+      class="mt-1 w-full rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface"
     >
       <option value={null}>{m.common_none()}</option>
       {#each roles as role (role.id)}
@@ -53,7 +53,7 @@
     <input
       type="number" {min} {max}
       bind:value={config[field]}
-      class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
+      class="mt-1 w-full rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface"
     />
     {#if help}<p class="text-2xs text-on-surface-variant mt-1">{help}</p>{/if}
   </label>
@@ -72,7 +72,7 @@
     <span class="text-xs font-medium text-on-surface-variant">{m.sff_mode()}</span>
     <select
       bind:value={config.captchaMode}
-      class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
+      class="mt-1 w-full rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface"
     >
       <option value="IMAGE">{m.cap_mode_image()}</option>
       <option value="VOICE">{m.cap_mode_voice()}</option>
@@ -96,7 +96,7 @@
         <span class="text-xs font-medium text-on-surface-variant">{m.cap_voice_lang()}</span>
         <select
           bind:value={config.captchaVoiceLocale}
-          class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
+          class="mt-1 w-full rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface"
         >
           <option value="FR">{m.cap_lang_fr()}</option>
           <option value="EN">{m.cap_lang_en()}</option>
@@ -113,7 +113,7 @@
       <span class="text-xs font-medium text-on-surface-variant">{m.cap_fail()}</span>
       <select
         bind:value={config.captchaFailAction}
-        class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
+        class="mt-1 w-full rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface"
       >
         <option value="KICK">{m.arx_age_action_kick()}</option>
         <option value="BAN">{m.cap_ban()}</option>

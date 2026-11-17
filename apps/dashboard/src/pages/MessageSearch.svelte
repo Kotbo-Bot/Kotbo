@@ -293,7 +293,7 @@
                 bind:value={retentionInput}
                 onchange={saveRetention}
                 disabled={savingConfig}
-                class="w-20 px-2 py-1.5 bg-surface-container border border-outline-variant/30 rounded-md text-sm text-on-surface focus:outline-none focus:border-primary/60"
+                class="w-20 px-2 py-1.5 bg-surface-container border border-field-border rounded-md text-sm text-on-surface focus:outline-none focus:border-primary/60"
               />
             </div>
             <ToggleSwitch
@@ -395,7 +395,7 @@
             bind:value={query}
             oninput={onQueryInput}
             placeholder={m.ms_search_placeholder()}
-            class="w-full pl-10 pr-4 py-2.5 bg-surface-container-low border border-outline-variant/30 rounded-lg text-sm text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:border-primary/60 transition-colors"
+            class="w-full pl-10 pr-4 py-2.5 bg-surface-container-low border border-field-border rounded-lg text-sm text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:border-primary/60 transition-colors"
           />
         </div>
         <button
@@ -416,7 +416,7 @@
               id="f-channel"
               bind:value={channelId}
               onchange={() => search(true)}
-              class="px-3 py-2 bg-surface-container border border-outline-variant/30 rounded-md text-sm text-on-surface focus:outline-none focus:border-primary/60"
+              class="px-3 py-2 bg-surface-container border border-field-border rounded-md text-sm text-on-surface focus:outline-none focus:border-primary/60"
             >
               <option value="">{m.ms_all_channels()}</option>
               {#each channels as c (c.channelId)}
@@ -433,7 +433,7 @@
               bind:value={authorId}
               onchange={() => search(true)}
               placeholder="123456789012345678"
-              class="px-3 py-2 bg-surface-container border border-outline-variant/30 rounded-md text-sm text-on-surface placeholder:text-on-surface-variant/40 focus:outline-none focus:border-primary/60"
+              class="px-3 py-2 bg-surface-container border border-field-border rounded-md text-sm text-on-surface placeholder:text-on-surface-variant/40 focus:outline-none focus:border-primary/60"
             />
           </div>
 
@@ -443,7 +443,7 @@
               id="f-bot"
               bind:value={botFilter}
               onchange={() => search(true)}
-              class="px-3 py-2 bg-surface-container border border-outline-variant/30 rounded-md text-sm text-on-surface focus:outline-none focus:border-primary/60"
+              class="px-3 py-2 bg-surface-container border border-field-border rounded-md text-sm text-on-surface focus:outline-none focus:border-primary/60"
             >
               <option value="all">{m.ms_authors_all()}</option>
               <option value="false">{m.ms_humans_only()}</option>
@@ -457,7 +457,7 @@
               id="f-order"
               bind:value={order}
               onchange={() => search(true)}
-              class="px-3 py-2 bg-surface-container border border-outline-variant/30 rounded-md text-sm text-on-surface focus:outline-none focus:border-primary/60"
+              class="px-3 py-2 bg-surface-container border border-field-border rounded-md text-sm text-on-surface focus:outline-none focus:border-primary/60"
             >
               <option value="desc">{m.ms_newer_first()}</option>
               <option value="asc">{m.ms_older_first()}</option>

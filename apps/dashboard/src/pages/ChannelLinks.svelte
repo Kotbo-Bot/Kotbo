@@ -497,7 +497,7 @@
             id="new-group-name"
             bind:value={newGroupName}
             placeholder={m.channel_links_group_name_ph()}
-            class="w-full px-3 py-2 rounded-lg bg-surface-container border border-outline-variant/30 text-on-surface text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            class="w-full px-3 py-2 rounded-lg bg-surface-container border border-field-border text-on-surface text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
           />
         </div>
 
@@ -507,7 +507,7 @@
           <select
             id="new-source-channel-id"
             bind:value={newSourceChannelId}
-            class="w-full px-3 py-2 rounded-lg bg-surface-container border border-outline-variant/30 text-on-surface text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            class="w-full px-3 py-2 rounded-lg bg-surface-container border border-field-border text-on-surface text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
             <option value="">{m.channel_links_select_channel_ph()}</option>
             {#each channels as ch}
@@ -561,7 +561,7 @@
                       <select aria-label={m.channel_links_target_channel({ server: guild.name })}
                         value={selected.channelId}
                         onchange={(e) => setTargetChannel(guild.id, (e.currentTarget as HTMLSelectElement).value)}
-                        class="w-full px-3 py-2 rounded-lg bg-surface-container border border-outline-variant/30 text-on-surface text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                        class="w-full px-3 py-2 rounded-lg bg-surface-container border border-field-border text-on-surface text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
                       >
                         <option value="">{m.channel_links_select_channel_ph()}</option>
                         <option value={CREATE_CHANNEL}>{m.channel_links_create_channel_option()}</option>
@@ -584,7 +584,7 @@
             <select
               id="new-owner-mode"
               bind:value={newOwnerMode}
-              class="w-full px-3 py-2 rounded-lg bg-surface-container border border-outline-variant/30 text-on-surface text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              class="w-full px-3 py-2 rounded-lg bg-surface-container border border-field-border text-on-surface text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
               <option value="BOTH">{m.channel_links_member_mode_both()}</option>
               <option value="SEND_ONLY">{m.channel_links_member_mode_send()}</option>
@@ -596,7 +596,7 @@
             <select
               id="new-relay-mode"
               bind:value={newRelayMode}
-              class="w-full px-3 py-2 rounded-lg bg-surface-container border border-outline-variant/30 text-on-surface text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              class="w-full px-3 py-2 rounded-lg bg-surface-container border border-field-border text-on-surface text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
               <option value="WEBHOOK">{m.channel_links_mode_webhook_mirror()}</option>
               <option value="EMBED">{m.channel_links_mode_embed()}</option>
@@ -679,7 +679,7 @@
               id="config-group-name"
               bind:value={configGroup.name}
               placeholder={m.channel_links_group_name_ph()}
-              class="w-full px-3 py-2 rounded-lg bg-surface-container border border-outline-variant/30 text-on-surface text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              class="w-full px-3 py-2 rounded-lg bg-surface-container border border-field-border text-on-surface text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
             />
           </div>
 
@@ -706,7 +706,7 @@
                   <select aria-label={m.channel_links_field_member_mode()}
                     value={member.mode}
                     onchange={(e) => handleMemberChange(member.id, { mode: (e.currentTarget as HTMLSelectElement).value })}
-                    class="px-2 py-1.5 rounded-lg bg-surface-container border border-outline-variant/30 text-on-surface text-xs outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    class="px-2 py-1.5 rounded-lg bg-surface-container border border-field-border text-on-surface text-xs outline-none focus-visible:ring-2 focus-visible:ring-primary"
                   >
                     <option value="BOTH">{m.channel_links_member_mode_both()}</option>
                     <option value="SEND_ONLY">{m.channel_links_member_mode_send()}</option>
@@ -716,7 +716,7 @@
                   <select aria-label={m.channel_links_field_relay_mode()}
                     value={member.relayMode}
                     onchange={(e) => handleMemberChange(member.id, { relayMode: (e.currentTarget as HTMLSelectElement).value })}
-                    class="px-2 py-1.5 rounded-lg bg-surface-container border border-outline-variant/30 text-on-surface text-xs outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    class="px-2 py-1.5 rounded-lg bg-surface-container border border-field-border text-on-surface text-xs outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     title={m.channel_links_field_relay_mode()}
                   >
                     <option value="WEBHOOK">{relayModeLabel('WEBHOOK')}</option>
@@ -760,7 +760,7 @@
                 <select aria-label={m.channel_links_add_server()}
                   bind:value={addGuildId}
                   onchange={() => { addChannelId = ''; }}
-                  class="px-3 py-2 rounded-lg bg-surface-container border border-outline-variant/30 text-on-surface text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  class="px-3 py-2 rounded-lg bg-surface-container border border-field-border text-on-surface text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 >
                   <option value="">{m.channel_links_select_guild_ph()}</option>
                   {#each otherGuilds as guild}
@@ -770,7 +770,7 @@
                 <select aria-label={m.channel_links_add_channel()}
                   bind:value={addChannelId}
                   disabled={!addGuildId}
-                  class="px-3 py-2 rounded-lg bg-surface-container border border-outline-variant/30 text-on-surface text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
+                  class="px-3 py-2 rounded-lg bg-surface-container border border-field-border text-on-surface text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
                 >
                   <option value="">{m.channel_links_select_channel_ph()}</option>
                   {#each addGuildChannels as ch}
@@ -781,7 +781,7 @@
               <div class="flex items-center gap-2">
                 <select aria-label={m.channel_links_field_member_mode()}
                   bind:value={addMode}
-                  class="flex-1 px-3 py-2 rounded-lg bg-surface-container border border-outline-variant/30 text-on-surface text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  class="flex-1 px-3 py-2 rounded-lg bg-surface-container border border-field-border text-on-surface text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 >
                   <option value="BOTH">{m.channel_links_member_mode_both()}</option>
                   <option value="SEND_ONLY">{m.channel_links_member_mode_send()}</option>

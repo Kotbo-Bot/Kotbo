@@ -823,7 +823,7 @@
             id="wf-name"
             bind:value={form.name}
             placeholder={m.wf_name_example()}
-            class="w-full px-3 py-2 rounded-xl bg-surface-container-highest border border-outline-variant/20 text-sm text-on-surface focus:border-primary/50 focus:outline-none"
+            class="w-full px-3 py-2 rounded-xl bg-surface-container-highest border border-field-border text-sm text-on-surface focus:border-primary/50 focus:outline-none"
           />
         </div>
 
@@ -928,7 +928,7 @@
             type="text"
             bind:value={searchFilter}
             placeholder={m.wf_search_placeholder()}
-            class="w-full pl-9 pr-3 py-2 rounded-xl bg-surface-container-highest border border-outline-variant/20 text-xs text-on-surface focus:border-primary/50 focus:outline-none"
+            class="w-full pl-9 pr-3 py-2 rounded-xl bg-surface-container-highest border border-field-border text-xs text-on-surface focus:border-primary/50 focus:outline-none"
           />
         </div>
       </div>
@@ -1061,7 +1061,7 @@
               value={execStatus}
               onchange={(e) => { execStatus = e.currentTarget.value as typeof execStatus; applyExecutionFilters(); }}
               aria-label={m.wf_exec_filter_status()}
-              class="px-2.5 py-1.5 rounded-xl bg-surface-container-high border border-outline-variant/15 text-xs text-on-surface"
+              class="px-2.5 py-1.5 rounded-xl bg-surface-container-high border border-field-border text-xs text-on-surface"
             >
               <option value="">{m.wf_exec_filter_status_all()}</option>
               {#each Object.entries(STATUS_META) as [value, meta] (value)}
@@ -1072,7 +1072,7 @@
               value={execWorkflow}
               onchange={(e) => { execWorkflow = e.currentTarget.value; applyExecutionFilters(); }}
               aria-label={m.wf_exec_filter_workflow()}
-              class="px-2.5 py-1.5 rounded-xl bg-surface-container-high border border-outline-variant/15 text-xs text-on-surface max-w-56"
+              class="px-2.5 py-1.5 rounded-xl bg-surface-container-high border border-field-border text-xs text-on-surface max-w-56"
             >
               <option value="">{m.wf_exec_filter_workflow_all()}</option>
               {#each workflows as workflow (workflow.id)}

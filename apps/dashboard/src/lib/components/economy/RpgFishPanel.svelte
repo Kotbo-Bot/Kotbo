@@ -419,12 +419,12 @@
       <div class="grid grid-cols-3 gap-3">
         <div class="col-span-2 space-y-1">
           <label for="fishName" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_fish_field_name()}</label>
-          <input id="fishName" type="text" maxlength="40" disabled={editingFish.nameLocked} bind:value={editingFish.name} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60" />
+          <input id="fishName" type="text" maxlength="40" disabled={editingFish.nameLocked} bind:value={editingFish.name} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60" />
         </div>
         <div class="space-y-1">
           <label for="fishEmoji" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_item_emoji()}</label>
           <div class="flex gap-2">
-            <input id="fishEmoji" type="text" bind:value={editingFish.emoji} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+            <input id="fishEmoji" type="text" bind:value={editingFish.emoji} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
             <EmojiPicker bind:value={editingFish.emoji} />
           </div>
         </div>
@@ -433,7 +433,7 @@
       <div class="grid grid-cols-3 gap-3">
         <div class="space-y-1">
           <label for="fishRarity" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_fish_field_rarity()}</label>
-          <select id="fishRarity" bind:value={editingFish.rarity} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+          <select id="fishRarity" bind:value={editingFish.rarity} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary">
             {#each RARITIES as rarity}
               <option value={rarity}>{rarityLabel(rarity)}</option>
             {/each}
@@ -441,11 +441,11 @@
         </div>
         <div class="space-y-1">
           <label for="fishValue" class="text-xs font-semibold text-on-surface-variant ml-2">{currencyName || m.eco_fish_field_value()}</label>
-          <input id="fishValue" type="number" min="0" bind:value={editingFish.value} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+          <input id="fishValue" type="number" min="0" bind:value={editingFish.value} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
         </div>
         <div class="space-y-1">
           <label for="fishXp" class="text-xs font-semibold text-on-surface-variant ml-2">XP</label>
-          <input id="fishXp" type="number" min="0" bind:value={editingFish.xp} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+          <input id="fishXp" type="number" min="0" bind:value={editingFish.xp} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
         </div>
       </div>
 
@@ -483,15 +483,15 @@
       <div class="grid grid-cols-2 gap-3">
         <div class="space-y-1">
           <label for="rewardCoins" class="text-xs font-semibold text-on-surface-variant ml-2">{currencyName || m.eco_fish_field_value()}</label>
-          <input id="rewardCoins" type="number" min="0" bind:value={editingReward.coinReward} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+          <input id="rewardCoins" type="number" min="0" bind:value={editingReward.coinReward} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
         </div>
         <div class="space-y-1">
           <label for="rewardXp" class="text-xs font-semibold text-on-surface-variant ml-2">XP</label>
-          <input id="rewardXp" type="number" min="0" bind:value={editingReward.xpReward} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+          <input id="rewardXp" type="number" min="0" bind:value={editingReward.xpReward} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
         </div>
         <div class="col-span-2 space-y-1">
           <label for="rewardClan" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_fish_reward_clan_points()}</label>
-          <input id="rewardClan" type="number" min="0" bind:value={editingReward.clanPoints} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+          <input id="rewardClan" type="number" min="0" bind:value={editingReward.clanPoints} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
           <p class="text-2xs text-on-surface-variant leading-relaxed mt-1">{m.eco_fish_reward_clan_points_hint()}</p>
         </div>
         <div class="col-span-2 space-y-1">

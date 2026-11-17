@@ -327,7 +327,7 @@
                 <select
                   value={list.reviewChannelId}
                   onchange={(e) => patchList(list, { reviewChannelId: e.currentTarget.value || null })}
-                  class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
+                  class="mt-1 w-full rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface"
                 >
                   <option value="">{m.common_none()}</option>
                   {#each channels as channel (channel.id)}
@@ -340,7 +340,7 @@
                 <select
                   value={list.sanction ?? ''}
                   onchange={(e) => patchList(list, { sanction: (e.currentTarget.value || null) as VisionSanction | null })}
-                  class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
+                  class="mt-1 w-full rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface"
                 >
                   <option value="">{m.vis_default_sanction()}</option>
                   {#each SANCTIONS as s (s.value)}
@@ -354,7 +354,7 @@
                   <select
                     value={list.durationMin === null ? '' : String(list.durationMin)}
                     onchange={(e) => patchList(list, { durationMin: e.currentTarget.value ? Number(e.currentTarget.value) : null })}
-                    class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
+                    class="mt-1 w-full rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface"
                   >
                     {#each DURATIONS as d (d.label)}
                       {#if d.value !== null || list.sanction === 'BAN' || list.sanction === 'JAIL'}
@@ -376,7 +376,7 @@
           bind:value={newListName}
           placeholder={canCreateList ? m.vis_new_list_ph() : m.vis_max_lists()}
           disabled={!canCreateList}
-          class="flex-1 rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
+          class="flex-1 rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface"
         />
         <Button type="submit" size="sm" icon="Plus" disabled={!canCreateList || !newListName.trim() || busy !== null}>{m.vis_create()}</Button>
       </form>

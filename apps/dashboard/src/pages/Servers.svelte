@@ -351,7 +351,7 @@
             type="search"
             bind:value={query}
             placeholder={m.srv_search_ph()}
-            class="w-full h-10 pl-9 pr-3 rounded-lg bg-surface-container-low/40 border border-outline-variant/30 text-sm text-on-surface placeholder-on-surface-variant/40 focus:outline-none focus:border-primary/50"
+            class="w-full h-10 pl-9 pr-3 rounded-lg bg-surface-container-low/40 border border-field-border text-sm text-on-surface placeholder-on-surface-variant/40 focus:outline-none focus:border-primary/50"
           />
         </div>
       {/if}

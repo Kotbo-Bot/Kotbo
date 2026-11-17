@@ -193,7 +193,7 @@
 {#snippet modeSelect(field: string, label: string, help: string)}
   <label class="block">
     <span class="text-xs font-medium text-on-surface-variant">{label}</span>
-    <select bind:value={config[field]} class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface">
+    <select bind:value={config[field]} class="mt-1 w-full rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface">
       {#each MODES as mode (mode.value)}<option value={mode.value}>{mode.label}</option>{/each}
     </select>
     <p class="text-2xs text-on-surface-variant mt-1">{help}</p>
@@ -204,7 +204,7 @@
   <div class="grid sm:grid-cols-2 gap-3">
     <label class="block">
       <span class="text-xs font-medium text-on-surface-variant">{m.sff_sanction()}</span>
-      <select bind:value={config[sanctionField]} class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface">
+      <select bind:value={config[sanctionField]} class="mt-1 w-full rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface">
         {#each SANCTIONS as s (s.value)}<option value={s.value}>{s.label}</option>{/each}
       </select>
       <p class="text-2xs text-on-surface-variant mt-1">{m.sff_sanction_hint()}</p>
@@ -212,7 +212,7 @@
     {#if ['TIMEOUT', 'BAN', 'JAIL'].includes(config[sanctionField])}
       <label class="block">
         <span class="text-xs font-medium text-on-surface-variant">{m.arx_vision_duration()}</span>
-        <select bind:value={config[durationField]} class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface">
+        <select bind:value={config[durationField]} class="mt-1 w-full rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface">
           {#each DURATIONS as d (d.value)}<option value={d.value}>{d.label}</option>{/each}
         </select>
       </label>
@@ -241,7 +241,7 @@
           {#if config.otherInvitesMode !== 'OFF'}
             <label class="block sm:w-1/2">
               <span class="text-xs font-medium text-on-surface-variant">{m.sff_friend_invites()}</span>
-              <select bind:value={config.otherFriendInvites} class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface">
+              <select bind:value={config.otherFriendInvites} class="mt-1 w-full rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface">
                 <option value="FOLLOW">{m.sff_follow_list()}</option>
                 <option value="ALLOW">{m.sff_always_allowed()}</option>
                 <option value="BLOCK">{m.sff_always_deleted()}</option>
@@ -267,7 +267,7 @@
               </div>
             {/if}
             <form class="flex gap-2" onsubmit={(e) => { e.preventDefault(); void addServer(); }}>
-              <input aria-label={m.sff_invite_ph()} type="text" bind:value={invite} placeholder={m.sff_invite_ph()} class="flex-1 rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface" />
+              <input aria-label={m.sff_invite_ph()} type="text" bind:value={invite} placeholder={m.sff_invite_ph()} class="flex-1 rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface" />
               <Button type="submit" size="sm" icon="Plus" disabled={busy || !invite.trim() || servers.length >= 25}>{m.sff_add()}</Button>
             </form>
           </div>
@@ -298,7 +298,7 @@
                 value={(config.fileExtensions ?? []).join(', ')}
                 onchange={(e) => (config.fileExtensions = e.currentTarget.value.split(/[,\s]+/).map((x) => x.trim().replace(/^\./, '')).filter(Boolean))}
                 placeholder="exe, msi"
-                class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface font-mono"
+                class="mt-1 w-full rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface font-mono"
               />
             </label>
             {#if config.fileFilterMode === 'WHITELIST' && !(config.fileGroups ?? []).length && !(config.fileExtensions ?? []).length}
@@ -329,7 +329,7 @@
               <div class="grid sm:grid-cols-[1fr_1fr_auto] gap-2 items-end">
                 <label class="block">
                   <span class="text-xs font-medium text-on-surface-variant">{m.sff_target()}</span>
-                  <select bind:value={draft.targetId} class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface">
+                  <select bind:value={draft.targetId} class="mt-1 w-full rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface">
                     <option value="">{m.sff_choose()}</option>
                     {#each categories as category (category.id)}<option value={category.id}>📁 {category.name}</option>{/each}
                     {#each channels as channel (channel.id)}<option value={channel.id}>#{channel.name}</option>{/each}
@@ -337,7 +337,7 @@
                 </label>
                 <label class="block">
                   <span class="text-xs font-medium text-on-surface-variant">{m.sff_mode()}</span>
-                  <select bind:value={draft.mode} class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface">
+                  <select bind:value={draft.mode} class="mt-1 w-full rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface">
                     <option value="BLACKLIST">{m.sff_blacklist()}</option>
                     <option value="WHITELIST">{m.sff_whitelist()}</option>
                   </select>
@@ -352,7 +352,7 @@
                       {GROUP_LABELS[group]}
                     </label>
                   {/each}
-                  <input aria-label={m.sff_extra_ext_ph()} type="text" bind:value={draft.extensions} placeholder={m.sff_extra_ext_ph()} class="flex-1 min-w-40 rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-1.5 text-body-sm text-on-surface font-mono" />
+                  <input aria-label={m.sff_extra_ext_ph()} type="text" bind:value={draft.extensions} placeholder={m.sff_extra_ext_ph()} class="flex-1 min-w-40 rounded-lg bg-surface-container border border-field-border px-3 py-1.5 text-body-sm text-on-surface font-mono" />
                 </div>
               {/if}
             {/if}

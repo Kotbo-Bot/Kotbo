@@ -229,7 +229,7 @@
             max="200"
             step="1"
             bind:value={messageLimit}
-            class="min-w-0 flex-1 rounded-lg border border-outline-variant/15 bg-surface-container-lowest px-4 py-3 text-lg font-semibold tabular-nums text-on-surface outline-none transition-colors focus:border-primary/60 focus:ring-2 focus:ring-primary/15"
+            class="min-w-0 flex-1 rounded-lg border border-field-border bg-surface-container-lowest px-4 py-3 text-lg font-semibold tabular-nums text-on-surface outline-none transition-colors focus:border-primary/60 focus:ring-2 focus:ring-primary/15"
           />
           <span class="shrink-0 text-xs font-medium text-on-surface-variant">{m.sev_limit_max()}</span>
         </div>

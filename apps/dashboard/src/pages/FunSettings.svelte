@@ -634,7 +634,7 @@
                 max="86400"
                 step="1"
                 bind:value={config.funConfessionCooldownSeconds}
-                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm text-on-surface focus:ring-2 focus:ring-violet-500/30 transition-all"
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm text-on-surface focus:ring-2 focus:ring-violet-500/30 transition-all"
                 disabled={!canManageSettings}
               />
               <p class="text-2xs text-on-surface-variant/55 ml-2">{m.fun_confession_cooldown_hint()}</p>

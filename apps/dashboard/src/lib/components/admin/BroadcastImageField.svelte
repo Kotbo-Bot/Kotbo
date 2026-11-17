@@ -147,7 +147,7 @@
         placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary/15 transition
         {diagnosis?.level === 'error'
           ? 'border-error/50 focus:border-error'
-          : 'border-outline-variant/25 focus:border-primary/60'}"
+          : 'border-field-border focus:border-primary/60'}"
     />
     <button
       type="button"

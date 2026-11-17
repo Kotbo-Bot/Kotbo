@@ -729,7 +729,7 @@
     width: 100%;
     padding: 0.5rem 0.75rem 0.5rem 2.25rem;
     border-radius: 0.5rem;
-    border: 1px solid var(--outline-variant);
+    border: 1px solid var(--field-border-color);
     background: var(--surface-container-low);
     font-size: 0.8125rem;
     color: var(--on-surface);
@@ -887,7 +887,7 @@
     min-width: 0;
     padding: 0.375rem 0.625rem;
     border-radius: 0.5rem;
-    border: 1px solid var(--outline-variant);
+    border: 1px solid var(--field-border-color);
     background: var(--surface-container-low);
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     font-size: 0.75rem;

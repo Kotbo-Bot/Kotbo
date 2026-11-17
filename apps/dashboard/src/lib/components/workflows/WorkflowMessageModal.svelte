@@ -80,7 +80,7 @@
             bind:value={text}
             rows="5"
             placeholder={m.wfm_content_ph()}
-            class="w-full px-3.5 py-2.5 rounded-xl bg-surface-container-highest border border-outline-variant/30 text-sm text-on-surface focus:border-primary/50 focus:outline-none transition-all resize-y"
+            class="w-full px-3.5 py-2.5 rounded-xl bg-surface-container-highest border border-field-border text-sm text-on-surface focus:border-primary/50 focus:outline-none transition-all resize-y"
           ></textarea>
         </div>
 

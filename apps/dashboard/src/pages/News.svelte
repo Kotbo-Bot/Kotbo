@@ -372,7 +372,7 @@
               type="text" 
               bind:value={title} 
               placeholder={m.news_field_title_ph()}
-              class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-5 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all outline-none"
+              class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-5 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all outline-none"
             />
           </div>
 
@@ -386,7 +386,7 @@
                 list="categories-list"
                 bind:value={category} 
                 placeholder={m.news_field_category_ph()}
-                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-5 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all outline-none"
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-5 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all outline-none"
               />
               <datalist id="categories-list">
                 {#each categories as cat}
@@ -403,7 +403,7 @@
                 type="text"
                 bind:value={subcategory} 
                 placeholder={m.news_field_subcategory_ph()}
-                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-5 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all outline-none"
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-5 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all outline-none"
               />
             </div>
 
@@ -452,7 +452,7 @@
               type="text" 
               bind:value={imageUrl} 
               placeholder="https://example.com/image.png"
-              class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-5 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all outline-none"
+              class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-5 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all outline-none"
             />
           </div>
 
@@ -464,7 +464,7 @@
               bind:value={summary} 
               rows="2" 
               placeholder={m.news_field_summary_ph()}
-              class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-5 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all outline-none resize-none"
+              class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-5 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all outline-none resize-none"
             ></textarea>
           </div>
 
@@ -476,7 +476,7 @@
               bind:value={content} 
               rows="12" 
               placeholder={m.news_field_content_ph()}
-              class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-5 py-4 text-sm focus:ring-2 focus:ring-primary/30 transition-all outline-none font-mono"
+              class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-5 py-4 text-sm focus:ring-2 focus:ring-primary/30 transition-all outline-none font-mono"
             ></textarea>
           </div>
 
@@ -576,7 +576,7 @@
                 type="text" 
                 bind:value={searchQuery} 
                 placeholder={m.news_search_ph()} 
-                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg pl-11 pr-5 py-3 text-xs outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg pl-11 pr-5 py-3 text-xs outline-none focus:ring-2 focus:ring-primary/20 transition-all"
               />
             </div>
 
@@ -585,7 +585,7 @@
               <select 
                 id="filter-category" 
                 bind:value={categoryFilter} 
-                class="bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+                class="bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs outline-none focus:ring-2 focus:ring-primary/20 transition-all"
               >
                 <option value="ALL">{m.news_filter_all()}</option>
                 {#each categories as cat}
@@ -895,7 +895,7 @@
                       list="categories-config-list"
                       bind:value={configCategory}
                       placeholder={m.news_config_rubric_ph()}
-                      class="w-full bg-surface-container-high/45 border border-outline-variant/10 rounded-lg px-5 py-3 text-sm focus:ring-2 focus:ring-primary/30 outline-none transition-all"
+                      class="w-full bg-surface-container-high/45 border border-field-border rounded-lg px-5 py-3 text-sm focus:ring-2 focus:ring-primary/30 outline-none transition-all"
                     />
                     <datalist id="categories-config-list">
                       {#each categories as cat}
@@ -912,7 +912,7 @@
                       type="text"
                       bind:value={configSubcategory}
                       placeholder={m.news_config_subrubric_ph()}
-                      class="w-full bg-surface-container-high/45 border border-outline-variant/10 rounded-lg px-5 py-3 text-sm focus:ring-2 focus:ring-primary/30 outline-none transition-all"
+                      class="w-full bg-surface-container-high/45 border border-field-border rounded-lg px-5 py-3 text-sm focus:ring-2 focus:ring-primary/30 outline-none transition-all"
                     />
                   </div>
 

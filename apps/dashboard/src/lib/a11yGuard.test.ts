@@ -311,6 +311,22 @@ describe("garde-fou d'accessibilite", () => {
     expect(untitled.some((at) => at.startsWith('pages/Sanctions.svelte'))).toBe(false);
   });
 
+  test('la bordure des champs contraste a 3:1 avec le fond (RGAA 3.3)', () => {
+    // outline-variant (#e5e7eb) ne donnait que 1,24:1 : un champ vide ne se
+    // distinguait pas du fond. Les champs portent le jeton field-border.
+    const css = readFileSync(join(SRC, 'app.css'), 'utf-8');
+    const input = css.match(/\.input \{[^}]*\}/)?.[0] ?? '';
+    expect(input).toContain('var(--field-border-color)');
+    const FIELDS = ['input', 'select', 'textarea', 'FormInput', 'FormSelect', 'FormTextarea'];
+    const offenders = sources.flatMap(({ file, text }) =>
+      FIELDS.flatMap((tag) => openingTags(text, tag))
+        .filter((tag) => !/type="(checkbox|radio|range|color|file|hidden)"/.test(tag))
+        .filter((tag) => /(^|[\s"'{`])border-outline-variant(\/\d+)?(?![\w-])/.test(tag))
+        .map(() => file),
+    );
+    expect(offenders).toEqual([]);
+  });
+
   test('pas d\'aria-labelledby vers un id "modal-title" partage', () => {
     const offenders = sources.filter(({ text }) => /aria-labelledby="modal-title"/.test(text)).map(({ file }) => file);
     expect(offenders).toEqual([]);

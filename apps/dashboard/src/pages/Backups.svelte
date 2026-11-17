@@ -487,7 +487,7 @@
         type="text"
         bind:value={createOptions.name}
         placeholder={m.backups_field_name_ph()}
-        class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+        class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
       />
     </div>
     
@@ -497,7 +497,7 @@
         type="text"
         bind:value={createOptions.description}
         placeholder={m.backups_field_desc_ph()}
-        class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+        class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
       />
     </div>
 
@@ -598,7 +598,7 @@
         type="text"
         bind:value={createOptions.name}
         placeholder={m.backups_field_name_ph()}
-        class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+        class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
       />
     </div>
 

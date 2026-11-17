@@ -317,7 +317,7 @@
             aria-label={m.bill_trial_title()}
             placeholder={m.bill_referral_placeholder()}
             autocomplete="off"
-            class="w-full max-w-xs rounded-lg border border-outline-variant/40 bg-surface-container px-3 py-2 text-body-sm text-on-surface uppercase placeholder:normal-case placeholder:text-on-surface-variant/40 focus:outline-none focus:ring-2 focus:ring-primary/40"
+            class="w-full max-w-xs rounded-lg border border-field-border bg-surface-container px-3 py-2 text-body-sm text-on-surface uppercase placeholder:normal-case placeholder:text-on-surface-variant/40 focus:outline-none focus:ring-2 focus:ring-primary/40"
           />
         </div>
       </div>

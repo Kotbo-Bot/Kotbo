@@ -523,7 +523,7 @@
                             {#if !decided && item.sanctionId}
                               <div class="flex flex-wrap items-center gap-2 pt-1">
                                 <select aria-label={m.ba_item_outcome()} bind:value={itemOutcomes[item.id]}
-                                  class="flex-1 min-w-[180px] bg-surface-container rounded-lg px-3 py-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-primary border border-outline-variant/20">
+                                  class="flex-1 min-w-[180px] bg-surface-container rounded-lg px-3 py-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-primary border border-field-border">
                                   <option value="UPHELD">{m.ba_outcome_upheld()}</option>
                                   <option value="ARCHIVED">{m.ba_outcome_archived()}</option>
                                   <option value="LOCKED">{m.ba_outcome_locked()}</option>
@@ -649,7 +649,7 @@
                     <div class="space-y-3 pt-2 border-t border-outline-variant/10">
                       <textarea aria-label={m.ba_decision_placeholder()} bind:value={actionReason} rows="2"
                         placeholder={m.ba_decision_placeholder()}
-                        class="w-full bg-surface rounded-xl px-4 py-3 text-sm outline-none border border-outline-variant/20 focus:border-primary transition-colors resize-y"></textarea>
+                        class="w-full bg-surface rounded-xl px-4 py-3 text-sm outline-none border border-field-border focus:border-primary transition-colors resize-y"></textarea>
                       <div class="flex flex-wrap gap-2">
                         <button onclick={() => decide('ACCEPTED')} disabled={actionInProgress}
                           class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors disabled:opacity-50 flex items-center gap-1.5">
@@ -717,7 +717,7 @@
             <p class="text-xs font-semibold text-on-surface-variant mb-1.5">{m.ba_appeal_form()}</p>
             <div class="flex gap-2">
               <select aria-label={m.ba_appeal_form()} bind:value={config.formId}
-                class="flex-1 bg-surface-container rounded-lg px-3 py-2.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary border border-outline-variant/20">
+                class="flex-1 bg-surface-container rounded-lg px-3 py-2.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary border border-field-border">
                 <option value={null}>{m.ba_none()}</option>
                 {#each forms as f}
                   <option value={f.id}>{f.name}</option>
@@ -739,7 +739,7 @@
             <div>
               <p class="text-xs font-semibold text-on-surface-variant mb-1.5">{m.ba_staff_channel()}</p>
               <select aria-label={m.ba_staff_channel()} bind:value={config.staffChannelId}
-                class="w-full bg-surface-container rounded-lg px-3 py-2.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary border border-outline-variant/20">
+                class="w-full bg-surface-container rounded-lg px-3 py-2.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary border border-field-border">
                 <option value={null}>{m.ba_none()}</option>
                 {#if staffServerChannels.length > 0}
                   <optgroup label={m.ba_this_server()}>
@@ -767,7 +767,7 @@
             <div>
               <p class="text-xs font-semibold text-on-surface-variant mb-1.5">{m.ba_invite_channel()}</p>
               <select aria-label={m.ba_invite_channel()} bind:value={config.inviteChannelId}
-                class="w-full bg-surface-container rounded-lg px-3 py-2.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary border border-outline-variant/20">
+                class="w-full bg-surface-container rounded-lg px-3 py-2.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary border border-field-border">
                 <option value={null}>{m.ba_auto()}</option>
                 {#each textChannels as c}
                   <option value={c.id}># {c.name}</option>
@@ -801,7 +801,7 @@
               <div class="grid gap-4 grid-cols-1 sm:grid-cols-2 pt-2 border-t border-outline-variant/10">
                 <label class="space-y-1.5">
                   <span class="text-xs font-semibold text-on-surface-variant">{m.ba_verification_level()}</span>
-                  <select bind:value={config.appealVerificationLevel} class="w-full bg-surface-container rounded-lg px-3 py-2.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary border border-outline-variant/20">
+                  <select bind:value={config.appealVerificationLevel} class="w-full bg-surface-container rounded-lg px-3 py-2.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary border border-field-border">
                     <option value="LOW">{m.ba_level_low()}</option>
                     <option value="MEDIUM">{m.ba_level_medium()}</option>
                     <option value="HIGH">{m.ba_level_high()}</option>
@@ -860,13 +860,13 @@
                           placeholder={String(config.cooldownDays)}
                           value={config.cooldownByType?.[type] ?? ''}
                           oninput={(e) => setTypeCooldown(type, e.currentTarget.value)}
-                          class="w-full bg-surface-container rounded-lg px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary border border-outline-variant/20" />
+                          class="w-full bg-surface-container rounded-lg px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary border border-field-border" />
                       </label>
                       <label class="space-y-1">
                         <span class="text-2xs font-semibold text-on-surface-variant">{m.ba_type_form()}</span>
                         <select value={config.formIdByType?.[type] ?? ''}
                           onchange={(e) => setTypeForm(type, e.currentTarget.value)}
-                          class="w-full bg-surface-container rounded-lg px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary border border-outline-variant/20">
+                          class="w-full bg-surface-container rounded-lg px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary border border-field-border">
                           <option value="">{m.ba_type_form_default()}</option>
                           {#each forms as f}
                             <option value={f.id}>{f.name}</option>
@@ -883,14 +883,14 @@
               <label class="space-y-1.5">
                 <span class="text-xs font-semibold text-on-surface-variant">{m.ba_max_sanctions()}</span>
                 <input type="number" min="1" max="10" bind:value={config.maxSanctionsPerAppeal}
-                  class="w-full bg-surface-container rounded-lg px-3 py-2.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary border border-outline-variant/20" />
+                  class="w-full bg-surface-container rounded-lg px-3 py-2.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary border border-field-border" />
               </label>
               <label class="space-y-1.5">
                 <span class="text-xs font-semibold text-on-surface-variant">{m.ba_appeal_window()}</span>
                 <input type="number" min="0" max="3650" placeholder={m.ba_appeal_window_none()}
                   value={config.appealWindowDays ?? ''}
                   oninput={(e) => { if (config) config.appealWindowDays = e.currentTarget.value === '' ? null : Number(e.currentTarget.value); }}
-                  class="w-full bg-surface-container rounded-lg px-3 py-2.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary border border-outline-variant/20" />
+                  class="w-full bg-surface-container rounded-lg px-3 py-2.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary border border-field-border" />
               </label>
             </div>
 
@@ -944,20 +944,20 @@
             <p class="text-xs font-semibold text-on-surface-variant mb-1.5">{m.ba_welcome_text()}</p>
             <textarea aria-label={m.ba_welcome_text()} bind:value={config.welcomeText} rows="2"
               placeholder={m.ba_welcome_placeholder()}
-              class="w-full bg-surface-container rounded-lg px-3 py-2.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary border border-outline-variant/20 resize-none"></textarea>
+              class="w-full bg-surface-container rounded-lg px-3 py-2.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary border border-field-border resize-none"></textarea>
           </div>
           <div class="grid sm:grid-cols-2 gap-4">
             <div>
               <p class="text-xs font-semibold text-on-surface-variant mb-1.5">{m.ba_dm_accepted()}</p>
               <textarea aria-label={m.ba_dm_accepted()} bind:value={config.acceptMessage} rows="3"
                 placeholder={m.ba_dm_accepted_placeholder({ server: '{server}', invite: '{invite}' })}
-                class="w-full bg-surface-container rounded-lg px-3 py-2.5 text-xs outline-none focus-visible:ring-2 focus-visible:ring-primary border border-outline-variant/20 resize-none"></textarea>
+                class="w-full bg-surface-container rounded-lg px-3 py-2.5 text-xs outline-none focus-visible:ring-2 focus-visible:ring-primary border border-field-border resize-none"></textarea>
             </div>
             <div>
               <p class="text-xs font-semibold text-on-surface-variant mb-1.5">{m.ba_dm_denied()}</p>
               <textarea aria-label={m.ba_dm_denied()} bind:value={config.denyMessage} rows="3"
                 placeholder={m.ba_dm_denied_placeholder({ server: '{server}', reason: '{reason}' })}
-                class="w-full bg-surface-container rounded-lg px-3 py-2.5 text-xs outline-none focus-visible:ring-2 focus-visible:ring-primary border border-outline-variant/20 resize-none"></textarea>
+                class="w-full bg-surface-container rounded-lg px-3 py-2.5 text-xs outline-none focus-visible:ring-2 focus-visible:ring-primary border border-field-border resize-none"></textarea>
             </div>
           </div>
           <p class="text-2xs text-on-surface-variant">

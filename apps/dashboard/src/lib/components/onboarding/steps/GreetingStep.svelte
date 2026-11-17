@@ -101,7 +101,7 @@
     id="welcome-message"
     bind:value={message}
     rows="5"
-    class="w-full rounded-xl border border-outline-variant/40 bg-surface-container-low/40 px-4 py-3 text-sm text-on-surface
+    class="w-full rounded-xl border border-field-border bg-surface-container-low/40 px-4 py-3 text-sm text-on-surface
            placeholder-on-surface-variant/40 focus:outline-none focus:border-primary/50 resize-none"
     placeholder="Bienvenue {'{user}'} !"
   ></textarea>

@@ -96,6 +96,8 @@
      bg-warning/15) : 4,5:1 dans les deux themes (RGAA 3.2). */
   --color-on-warning-container: var(--on-warning-container-color);
   --color-on-success-container: var(--on-success-container-color);
+  /* Bordure des champs de saisie : 3:1 avec tous les fonds de surface (RGAA 3.3). */
+  --color-field-border: var(--field-border-color);
 
   /* Echelle de texte du dashboard : 2xs (11px), xs (12px), body-sm (13px),
      sm (14px). Les pages ecrivaient une quinzaine de tailles en dur, de 8 a
@@ -193,6 +195,7 @@
   --success-color: #15803d;
   --on-warning-container-color: #78350f;
   --on-success-container-color: #14532d;
+  --field-border-color: #7c8390;
   --error-color: #dc2626;
   --on-error-color: #ffffff;
   --error-container-color: #fef2f2;
@@ -228,6 +231,7 @@
   --success-color: #4ade80;
   --on-warning-container-color: #fbbf24;
   --on-success-container-color: #4ade80;
+  --field-border-color: #7a7a83;
   --error-color: #f87171;
   --on-error-color: #450a0a;
   --error-container-color: #450a0a;
@@ -646,7 +650,7 @@ button[aria-disabled="true"]:not(.btn) { opacity: 0.5; cursor: not-allowed; }
   width: 100%;
   padding: 0.5rem 0.75rem;
   border-radius: 0.5rem;
-  border: 1px solid var(--outline-variant);
+  border: 1px solid var(--field-border-color);
   background: var(--surface-container);
   color: var(--on-surface);
   font-size: 0.875rem;

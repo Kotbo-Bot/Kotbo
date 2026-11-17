@@ -506,12 +506,12 @@ onMount(async () => {
 
         <div class="space-y-1.5">
           <label for="analysis-period" class="field-label">{m.channel_health_field_period()}</label>
-          <input id="analysis-period" type="number" class="w-full max-w-[300px] px-3 py-2 bg-surface-container-high/30 border border-outline-variant/10 rounded-lg text-on-surface text-sm focus:border-primary focus:outline-none" bind:value={configDraft.analysisPeriodDays} min={7} max={90} />
+          <input id="analysis-period" type="number" class="w-full max-w-[300px] px-3 py-2 bg-surface-container-high/30 border border-field-border rounded-lg text-on-surface text-sm focus:border-primary focus:outline-none" bind:value={configDraft.analysisPeriodDays} min={7} max={90} />
         </div>
 
         <div class="space-y-1.5">
           <label for="split-mode" class="field-label">{m.channel_health_field_split_mode()}</label>
-          <select id="split-mode" class="w-full max-w-[300px] px-3 py-2 bg-surface-container-high/30 border border-outline-variant/10 rounded-lg text-on-surface text-sm" bind:value={configDraft.splitMode}>
+          <select id="split-mode" class="w-full max-w-[300px] px-3 py-2 bg-surface-container-high/30 border border-field-border rounded-lg text-on-surface text-sm" bind:value={configDraft.splitMode}>
             <option value="NOTIFY">{m.channel_health_mode_notify_only()}</option>
             <option value="AUTO">{m.channel_health_mode_auto()}</option>
           </select>
@@ -519,7 +519,7 @@ onMount(async () => {
 
         <div class="space-y-1.5">
           <label for="archive-mode" class="field-label">{m.channel_health_field_archive_mode()}</label>
-          <select id="archive-mode" class="w-full max-w-[300px] px-3 py-2 bg-surface-container-high/30 border border-outline-variant/10 rounded-lg text-on-surface text-sm" bind:value={configDraft.archiveMode}>
+          <select id="archive-mode" class="w-full max-w-[300px] px-3 py-2 bg-surface-container-high/30 border border-field-border rounded-lg text-on-surface text-sm" bind:value={configDraft.archiveMode}>
             <option value="NOTIFY">{m.channel_health_mode_notify_only()}</option>
             <option value="AUTO">{m.channel_health_mode_auto()}</option>
           </select>
@@ -554,12 +554,12 @@ onMount(async () => {
 
         <div class="space-y-1.5">
           <label for="overload-msg-hour" class="field-label">{m.channel_health_field_overload_msg_hour()}</label>
-          <input id="overload-msg-hour" type="number" class="w-full max-w-[300px] px-3 py-2 bg-surface-container-high/30 border border-outline-variant/10 rounded-lg text-on-surface text-sm focus:border-primary focus:outline-none" bind:value={configDraft.overloadMsgPerHour} min={10} />
+          <input id="overload-msg-hour" type="number" class="w-full max-w-[300px] px-3 py-2 bg-surface-container-high/30 border border-field-border rounded-lg text-on-surface text-sm focus:border-primary focus:outline-none" bind:value={configDraft.overloadMsgPerHour} min={10} />
         </div>
 
         <div class="space-y-1.5">
           <label for="overload-unique-users" class="field-label">{m.channel_health_field_overload_unique_users()}</label>
-          <input id="overload-unique-users" type="number" class="w-full max-w-[300px] px-3 py-2 bg-surface-container-high/30 border border-outline-variant/10 rounded-lg text-on-surface text-sm focus:border-primary focus:outline-none" bind:value={configDraft.overloadUniqueUsers} min={5} />
+          <input id="overload-unique-users" type="number" class="w-full max-w-[300px] px-3 py-2 bg-surface-container-high/30 border border-field-border rounded-lg text-on-surface text-sm focus:border-primary focus:outline-none" bind:value={configDraft.overloadUniqueUsers} min={5} />
         </div>
 
         <!-- Divider: Underuse thresholds -->
@@ -572,17 +572,17 @@ onMount(async () => {
 
         <div class="space-y-1.5">
           <label for="underused-msg-day" class="field-label">{m.channel_health_field_underused_msg_day()}</label>
-          <input id="underused-msg-day" type="number" class="w-full max-w-[300px] px-3 py-2 bg-surface-container-high/30 border border-outline-variant/10 rounded-lg text-on-surface text-sm focus:border-primary focus:outline-none" bind:value={configDraft.underusedMsgPerDay} min={1} />
+          <input id="underused-msg-day" type="number" class="w-full max-w-[300px] px-3 py-2 bg-surface-container-high/30 border border-field-border rounded-lg text-on-surface text-sm focus:border-primary focus:outline-none" bind:value={configDraft.underusedMsgPerDay} min={1} />
         </div>
 
         <div class="space-y-1.5">
           <label for="underused-unique-users" class="field-label">{m.channel_health_field_underused_unique_users()}</label>
-          <input id="underused-unique-users" type="number" class="w-full max-w-[300px] px-3 py-2 bg-surface-container-high/30 border border-outline-variant/10 rounded-lg text-on-surface text-sm focus:border-primary focus:outline-none" bind:value={configDraft.underusedUniqueUsers} min={1} />
+          <input id="underused-unique-users" type="number" class="w-full max-w-[300px] px-3 py-2 bg-surface-container-high/30 border border-field-border rounded-lg text-on-surface text-sm focus:border-primary focus:outline-none" bind:value={configDraft.underusedUniqueUsers} min={1} />
         </div>
 
         <div class="space-y-1.5">
           <label for="dead-msg-week" class="field-label">{m.channel_health_field_dead_msg_week()}</label>
-          <input id="dead-msg-week" type="number" class="w-full max-w-[300px] px-3 py-2 bg-surface-container-high/30 border border-outline-variant/10 rounded-lg text-on-surface text-sm focus:border-primary focus:outline-none" bind:value={configDraft.deadMsgPerWeek} min={0} />
+          <input id="dead-msg-week" type="number" class="w-full max-w-[300px] px-3 py-2 bg-surface-container-high/30 border border-field-border rounded-lg text-on-surface text-sm focus:border-primary focus:outline-none" bind:value={configDraft.deadMsgPerWeek} min={0} />
         </div>
 
         <!-- Divider: Weekly digest -->
@@ -600,7 +600,7 @@ onMount(async () => {
 
         <div class="space-y-1.5">
           <label for="weekly-digest-day" class="field-label">{m.channel_health_field_digest_day()}</label>
-          <select id="weekly-digest-day" class="w-full max-w-[300px] px-3 py-2 bg-surface-container-high/30 border border-outline-variant/10 rounded-lg text-on-surface text-sm" bind:value={configDraft.weeklyDigestDay}>
+          <select id="weekly-digest-day" class="w-full max-w-[300px] px-3 py-2 bg-surface-container-high/30 border border-field-border rounded-lg text-on-surface text-sm" bind:value={configDraft.weeklyDigestDay}>
             <option value={0}>{m.channel_health_day_sunday()}</option>
             <option value={1}>{m.channel_health_day_monday()}</option>
             <option value={2}>{m.channel_health_day_tuesday()}</option>

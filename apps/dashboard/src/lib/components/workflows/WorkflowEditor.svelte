@@ -670,7 +670,7 @@
         type="text"
         bind:value={searchQuery}
         placeholder={m.wf_search_block()}
-        class="w-full pl-8 pr-3 py-1.5 rounded-xl bg-surface-container-highest border border-outline-variant/20 text-xs text-on-surface focus:border-primary/50 focus:outline-none"
+        class="w-full pl-8 pr-3 py-1.5 rounded-xl bg-surface-container-highest border border-field-border text-xs text-on-surface focus:border-primary/50 focus:outline-none"
       />
     </div>
   </div>
@@ -813,7 +813,7 @@
                       <input aria-label={m.wf_case_value({ n: index + 1 })}
                         value={caseValue}
                         oninput={(e) => updateCase(index, e.currentTarget.value)}
-                        class="flex-1 px-2 py-1 rounded-lg bg-surface-container-highest border border-outline-variant/20 text-2xs text-on-surface"
+                        class="flex-1 px-2 py-1 rounded-lg bg-surface-container-highest border border-field-border text-2xs text-on-surface"
                       />
                       <button onclick={() => removeCase(index)} class="px-1.5 rounded text-error hover:bg-error/10">
                         <Papicon icon="Cross" size={11} />
@@ -841,7 +841,7 @@
                   max={field.max}
                   value={Number(currentConfig(field.key) ?? field.defaultValue ?? 0)}
                   oninput={(e) => updateConfig(field.key, Number(e.currentTarget.value))}
-                  class="w-full px-2 py-1 rounded-lg bg-surface-container-highest border border-outline-variant/20 text-2xs text-on-surface"
+                  class="w-full px-2 py-1 rounded-lg bg-surface-container-highest border border-field-border text-2xs text-on-surface"
                 />
               {:else if field.type === 'channels'}
                 <ChannelFilterField
@@ -858,7 +858,7 @@
                   id="cfg-{field.key}"
                   value={String(currentConfig(field.key) ?? '')}
                   onchange={(e) => updateConfig(field.key, e.currentTarget.value)}
-                  class="w-full px-2 py-1 rounded-lg bg-surface-container-highest border border-outline-variant/20 text-2xs text-on-surface"
+                  class="w-full px-2 py-1 rounded-lg bg-surface-container-highest border border-field-border text-2xs text-on-surface"
                 >
                   <option value="">-</option>
                   {#each (field.type === 'role' ? availableRoles : availableChannels) as option}
@@ -870,7 +870,7 @@
                   id="cfg-{field.key}"
                   value={String(currentConfig(field.key) ?? field.defaultValue ?? '')}
                   onchange={(e) => updateConfig(field.key, e.currentTarget.value)}
-                  class="w-full px-2 py-1 rounded-lg bg-surface-container-highest border border-outline-variant/20 text-2xs text-on-surface"
+                  class="w-full px-2 py-1 rounded-lg bg-surface-container-highest border border-field-border text-2xs text-on-surface"
                 >
                   {#each field.options ?? [] as option}
                     <option value={option.value}>{option.label}</option>
@@ -883,7 +883,7 @@
                   value={String(currentConfig(field.key) ?? '')}
                   oninput={(e) => updateConfig(field.key, e.currentTarget.value)}
                   placeholder={field.placeholder}
-                  class="w-full px-2 py-1 rounded-lg bg-surface-container-highest border border-outline-variant/20 text-2xs text-on-surface"
+                  class="w-full px-2 py-1 rounded-lg bg-surface-container-highest border border-field-border text-2xs text-on-surface"
                 ></textarea>
               {:else}
                 <input
@@ -892,7 +892,7 @@
                   value={String(currentConfig(field.key) ?? '')}
                   oninput={(e) => updateConfig(field.key, e.currentTarget.value)}
                   placeholder={field.placeholder}
-                  class="w-full px-2 py-1 rounded-lg bg-surface-container-highest border border-outline-variant/20 text-2xs text-on-surface"
+                  class="w-full px-2 py-1 rounded-lg bg-surface-container-highest border border-field-border text-2xs text-on-surface"
                 />
               {/if}
             </div>

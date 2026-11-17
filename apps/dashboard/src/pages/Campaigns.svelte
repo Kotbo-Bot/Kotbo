@@ -414,7 +414,7 @@
           <input
             type="datetime-local"
             bind:value={form.startAt}
-            class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-outline-variant/10 focus:ring-1 ring-primary/30 transition-all outline-none"
+            class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-field-border focus:ring-1 ring-primary/30 transition-all outline-none"
           />
         </label>
       </div>
@@ -470,7 +470,7 @@
                 <input
                   type="number"
                   bind:value={step.offsetMinutes}
-                  class="w-full bg-surface-container-high text-sm px-3 py-2 rounded-xl border border-outline-variant/10 focus:ring-1 ring-primary/30 outline-none"
+                  class="w-full bg-surface-container-high text-sm px-3 py-2 rounded-xl border border-field-border focus:ring-1 ring-primary/30 outline-none"
                 />
               </label>
               <label class="block">

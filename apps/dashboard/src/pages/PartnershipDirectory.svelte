@@ -423,7 +423,7 @@
     <div class="space-y-4">
       <div class="flex flex-wrap gap-2 items-center">
         <input aria-label={m.pdir_search_ph()}
-          class="flex-1 min-w-[200px] max-w-md rounded-lg border border-outline-variant/30 bg-surface-container-low px-3 py-1.5 text-xs text-on-surface"
+          class="flex-1 min-w-[200px] max-w-md rounded-lg border border-field-border bg-surface-container-low px-3 py-1.5 text-xs text-on-surface"
           placeholder={m.pdir_search_ph()}
           bind:value={query}
           onkeydown={(event) => event.key === 'Enter' && search()}
@@ -449,7 +449,7 @@
             <label class="block">
               <span class="text-2xs font-bold text-on-surface-variant/80 ml-1 mb-1.5 block">{m.pdir_type()}</span>
               <select
-                class="w-full rounded-lg border border-outline-variant/30 bg-surface-container-low px-3 py-2 text-xs text-on-surface"
+                class="w-full rounded-lg border border-field-border bg-surface-container-low px-3 py-2 text-xs text-on-surface"
                 bind:value={proposalType}
               >
                 {#each types as type (type.key)}
@@ -463,7 +463,7 @@
                 {m.pdir_message()}
               </span>
               <textarea
-                class="w-full rounded-lg border border-outline-variant/30 bg-surface-container-low px-3 py-2 text-xs text-on-surface"
+                class="w-full rounded-lg border border-field-border bg-surface-container-low px-3 py-2 text-xs text-on-surface"
                 rows="3"
                 placeholder={m.pdir_message_ph()}
                 bind:value={proposalMessage}

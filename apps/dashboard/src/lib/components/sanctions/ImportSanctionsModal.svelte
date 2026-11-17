@@ -152,7 +152,7 @@
 
       <div class="max-w-xs">
         <label for="import-source" class="field-label">{m.sc_import_source_label()}</label>
-        <FormInput id="import-source" type="text" bind:value={sourceLabel} placeholder={m.sc_import_source_ph()} className="mt-1 w-full rounded-lg px-3 py-2.5 bg-surface-container-high border border-outline-variant/10 text-sm" />
+        <FormInput id="import-source" type="text" bind:value={sourceLabel} placeholder={m.sc_import_source_ph()} className="mt-1 w-full rounded-lg px-3 py-2.5 bg-surface-container-high border border-field-border text-sm" />
       </div>
 
       {#if parseError}
@@ -174,7 +174,7 @@
                 id="mapping-{field}"
                 value={mapping[field] ?? ''}
                 onchange={(e) => updateMapping(field, (e.currentTarget as HTMLSelectElement).value)}
-                className="w-full rounded-lg px-3 py-2 bg-surface-container-high border border-outline-variant/10 text-xs font-medium"
+                className="w-full rounded-lg px-3 py-2 bg-surface-container-high border border-field-border text-xs font-medium"
               >
                 <option value="">{m.sc_import_col_none()}</option>
                 {#each headers as header (header)}

@@ -183,7 +183,7 @@
             maxlength={100}
             placeholder={m.fun_riddles_emojis_placeholder()}
             disabled={busy}
-            class="flex-1 min-w-0 bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-lg focus:ring-2 focus:ring-error/30 transition-all disabled:opacity-50"
+            class="flex-1 min-w-0 bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-lg focus:ring-2 focus:ring-error/30 transition-all disabled:opacity-50"
           />
           <EmojiPicker bind:value={picked} disabled={busy} />
         </div>
@@ -197,7 +197,7 @@
           rows={3}
           placeholder={m.fun_riddles_answers_placeholder()}
           disabled={busy}
-          class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm resize-y focus:ring-2 focus:ring-error/30 transition-all disabled:opacity-50"
+          class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm resize-y focus:ring-2 focus:ring-error/30 transition-all disabled:opacity-50"
         ></textarea>
         <p class="text-2xs text-on-surface-variant ml-2">{m.fun_riddles_answers_hint()}</p>
       </div>

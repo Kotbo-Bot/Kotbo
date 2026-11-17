@@ -329,7 +329,7 @@
                     <select aria-label={m.cf_target_hierarchy()}
                       value={form.hierarchyId || ''}
                       onchange={(e) => updateFormHierarchy(form.id, (e.currentTarget as HTMLSelectElement).value)}
-                      class="min-w-0 max-w-40 bg-surface-container rounded-lg px-2 py-1.5 text-2xs font-semibold outline-none border border-outline-variant/20 focus:border-primary"
+                      class="min-w-0 max-w-40 bg-surface-container rounded-lg px-2 py-1.5 text-2xs font-semibold outline-none border border-field-border focus:border-primary"
                     >
                       <option value="">{m.cf_hierarchy_lowest_role()}</option>
                       {#each hierarchies as h}
@@ -349,19 +349,19 @@
                       <span>{m.cf_autoclose_pending()}</span>
                       <input type="number" min="0" max="10000" value={form.maxPendingCandidatures ?? ''} placeholder="∞"
                         onchange={(e) => patchForm(form.id, { maxPendingCandidatures: Number((e.currentTarget as HTMLInputElement).value) || null })}
-                        class="w-20 bg-surface-container rounded-lg px-2 py-1 text-2xs font-semibold outline-none border border-outline-variant/20 focus:border-primary" />
+                        class="w-20 bg-surface-container rounded-lg px-2 py-1 text-2xs font-semibold outline-none border border-field-border focus:border-primary" />
                     </label>
                     <label class="flex items-center justify-between gap-3">
                       <span>{m.cf_autoclose_accepted()}</span>
                       <input type="number" min="0" max="10000" value={form.maxAcceptedCandidatures ?? ''} placeholder="∞"
                         onchange={(e) => patchForm(form.id, { maxAcceptedCandidatures: Number((e.currentTarget as HTMLInputElement).value) || null })}
-                        class="w-20 bg-surface-container rounded-lg px-2 py-1 text-2xs font-semibold outline-none border border-outline-variant/20 focus:border-primary" />
+                        class="w-20 bg-surface-container rounded-lg px-2 py-1 text-2xs font-semibold outline-none border border-field-border focus:border-primary" />
                     </label>
                     {#if form.maxAcceptedCandidatures}
                       <select aria-label={m.cf_autoclose_title()}
                         value={form.acceptedCapMode}
                         onchange={(e) => patchForm(form.id, { acceptedCapMode: (e.currentTarget as HTMLSelectElement).value })}
-                        class="w-full bg-surface-container rounded-lg px-2 py-1.5 text-2xs font-semibold outline-none border border-outline-variant/20 focus:border-primary"
+                        class="w-full bg-surface-container rounded-lg px-2 py-1.5 text-2xs font-semibold outline-none border border-field-border focus:border-primary"
                       >
                         <option value="RESET">{m.cf_autoclose_mode_reset()}</option>
                         <option value="TOTAL">{m.cf_autoclose_mode_total()}</option>
@@ -456,7 +456,7 @@
             id="form-description"
             bind:value={newFormDescription}
             placeholder={m.cf_field_desc_ph()}
-            class="w-full bg-surface-container rounded-lg p-4 text-sm text-on-surface placeholder:text-on-surface-variant focus:outline-hidden border border-outline-variant/10 focus:border-primary/50 transition-all resize-none h-24 font-sans"
+            class="w-full bg-surface-container rounded-lg p-4 text-sm text-on-surface placeholder:text-on-surface-variant focus:outline-hidden border border-field-border focus:border-primary/50 transition-all resize-none h-24 font-sans"
           ></textarea>
         </div>
       </div>

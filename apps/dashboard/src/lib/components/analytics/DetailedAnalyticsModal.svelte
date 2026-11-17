@@ -137,13 +137,13 @@
               type="text" 
               bind:value={searchQuery}
               placeholder={m.d7_dam_search_placeholder()}
-              class="w-full bg-surface-container-high/40 text-on-surface text-sm font-bold rounded-lg pl-12 pr-4 py-3 border border-outline-variant/5 focus:border-primary/50 focus:outline-none transition-colors placeholder:text-on-surface-variant/40"
+              class="w-full bg-surface-container-high/40 text-on-surface text-sm font-bold rounded-lg pl-12 pr-4 py-3 border border-field-border focus:border-primary/50 focus:outline-none transition-colors placeholder:text-on-surface-variant/40"
             />
           </div>
           <div class="flex gap-2">
             <select aria-label={m.a11y_sort_by()} 
               bind:value={sortKey}
-              class="bg-surface-container-high/40 text-on-surface text-sm font-bold rounded-lg px-4 py-3 border border-outline-variant/5 focus:border-primary/50 focus:outline-none transition-colors appearance-none cursor-pointer"
+              class="bg-surface-container-high/40 text-on-surface text-sm font-bold rounded-lg px-4 py-3 border border-field-border focus:border-primary/50 focus:outline-none transition-colors appearance-none cursor-pointer"
             >
               <option value="volume">{m.d7_dam_sort_volume()}</option>
               <option value="name">{m.d7_dam_sort_alpha()}</option>

@@ -189,15 +189,15 @@
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
       <div class="space-y-1">
         <label for="new-quest-name" class="field-label">{m.que_field_name()}</label>
-        <input id="new-quest-name" type="text" bind:value={newQuest.name} placeholder={m.que_placeholder_name()} class="w-full px-3 py-2 bg-surface-container-high/30 border border-outline-variant/10 rounded-lg text-on-surface text-sm focus:border-primary focus:outline-none transition-colors" />
+        <input id="new-quest-name" type="text" bind:value={newQuest.name} placeholder={m.que_placeholder_name()} class="w-full px-3 py-2 bg-surface-container-high/30 border border-field-border rounded-lg text-on-surface text-sm focus:border-primary focus:outline-none transition-colors" />
       </div>
       <div class="space-y-1">
         <label for="new-quest-description" class="field-label">{m.que_field_desc()}</label>
-        <input id="new-quest-description" type="text" bind:value={newQuest.description} placeholder={m.que_placeholder_desc()} class="w-full px-3 py-2 bg-surface-container-high/30 border border-outline-variant/10 rounded-lg text-on-surface text-sm focus:border-primary focus:outline-none transition-colors" />
+        <input id="new-quest-description" type="text" bind:value={newQuest.description} placeholder={m.que_placeholder_desc()} class="w-full px-3 py-2 bg-surface-container-high/30 border border-field-border rounded-lg text-on-surface text-sm focus:border-primary focus:outline-none transition-colors" />
       </div>
       <div class="space-y-1">
         <label for="new-quest-type" class="field-label">{m.que_field_type()}</label>
-        <select id="new-quest-type" bind:value={newQuest.type} class="w-full px-3 py-2 bg-surface-container-high/30 border border-outline-variant/10 rounded-lg text-on-surface text-sm focus:border-primary focus:outline-none transition-colors">
+        <select id="new-quest-type" bind:value={newQuest.type} class="w-full px-3 py-2 bg-surface-container-high/30 border border-field-border rounded-lg text-on-surface text-sm focus:border-primary focus:outline-none transition-colors">
           {#each Object.entries(questTypes) as [key, label]}
             <option value={key}>{label}</option>
           {/each}
@@ -205,22 +205,22 @@
       </div>
       <div class="space-y-1">
         <label for="new-quest-frequency" class="field-label">{m.que_field_freq()}</label>
-        <select id="new-quest-frequency" bind:value={newQuest.frequency} class="w-full px-3 py-2 bg-surface-container-high/30 border border-outline-variant/10 rounded-lg text-on-surface text-sm focus:border-primary focus:outline-none transition-colors">
+        <select id="new-quest-frequency" bind:value={newQuest.frequency} class="w-full px-3 py-2 bg-surface-container-high/30 border border-field-border rounded-lg text-on-surface text-sm focus:border-primary focus:outline-none transition-colors">
           <option value="DAILY">{m.que_freq_daily()}</option>
           <option value="WEEKLY">{m.que_freq_weekly()}</option>
         </select>
       </div>
       <div class="space-y-1">
         <label for="new-quest-target" class="field-label">{m.que_field_target()}</label>
-        <input id="new-quest-target" type="number" bind:value={newQuest.target} min="1" class="w-full px-3 py-2 bg-surface-container-high/30 border border-outline-variant/10 rounded-lg text-on-surface text-sm focus:border-primary focus:outline-none transition-colors" />
+        <input id="new-quest-target" type="number" bind:value={newQuest.target} min="1" class="w-full px-3 py-2 bg-surface-container-high/30 border border-field-border rounded-lg text-on-surface text-sm focus:border-primary focus:outline-none transition-colors" />
       </div>
       <div class="space-y-1">
         <label for="new-quest-reward-coins" class="field-label">{m.que_field_reward_coins()}</label>
-        <input id="new-quest-reward-coins" type="number" bind:value={newQuest.rewardCoins} min="0" class="w-full px-3 py-2 bg-surface-container-high/30 border border-outline-variant/10 rounded-lg text-on-surface text-sm focus:border-primary focus:outline-none transition-colors" />
+        <input id="new-quest-reward-coins" type="number" bind:value={newQuest.rewardCoins} min="0" class="w-full px-3 py-2 bg-surface-container-high/30 border border-field-border rounded-lg text-on-surface text-sm focus:border-primary focus:outline-none transition-colors" />
       </div>
       <div class="space-y-1">
         <label for="new-quest-reward-xp" class="field-label">{m.que_field_reward_xp()}</label>
-        <input id="new-quest-reward-xp" type="number" bind:value={newQuest.rewardXp} min="0" class="w-full px-3 py-2 bg-surface-container-high/30 border border-outline-variant/10 rounded-lg text-on-surface text-sm focus:border-primary focus:outline-none transition-colors" />
+        <input id="new-quest-reward-xp" type="number" bind:value={newQuest.rewardXp} min="0" class="w-full px-3 py-2 bg-surface-container-high/30 border border-field-border rounded-lg text-on-surface text-sm focus:border-primary focus:outline-none transition-colors" />
       </div>
     </div>
     <div class="flex justify-end gap-2">

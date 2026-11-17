@@ -832,7 +832,7 @@
                     bind:value={title}
                     placeholder="Titre de l’annonce Discord"
                     class="flex-1 h-10 px-3 rounded-xl bg-surface-container-low/70 border text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/15 transition
-                      {titleOver ? 'border-error/50' : 'border-outline-variant/25 focus:border-primary/60'}"
+                      {titleOver ? 'border-error/50' : 'border-field-border focus:border-primary/60'}"
                   />
                   <button
                     type="button"
@@ -974,7 +974,7 @@
                   placeholder="Rédigez l’annonce ici. Le Markdown Discord et les mentions sont prévisualisés en temps réel sur la droite."
                   class="w-full px-3 py-2.5 rounded-b-xl rounded-t-none bg-surface-container-low/70 border text-sm text-on-surface leading-relaxed resize-y
                     placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary/15 transition
-                    {messageOver ? 'border-error/50' : 'border-outline-variant/25 focus:border-primary/60'}"
+                    {messageOver ? 'border-error/50' : 'border-field-border focus:border-primary/60'}"
                 ></textarea>
               </div>
 
@@ -988,7 +988,7 @@
                   id="bc-footer"
                   bind:value={footerText}
                   class="w-full h-10 px-3 rounded-xl bg-surface-container-low/70 border text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/15 transition
-                    {footerOver ? 'border-error/50' : 'border-outline-variant/25 focus:border-primary/60'}"
+                    {footerOver ? 'border-error/50' : 'border-field-border focus:border-primary/60'}"
                 />
               </div>
 
@@ -999,7 +999,7 @@
                   <input id="bc-color" type="color" bind:value={color} class="w-10 h-10 rounded-xl border border-outline-variant/25 bg-transparent cursor-pointer" />
                   <input aria-label="Couleur de la barre (code hexadécimal)"
                     bind:value={color}
-                    class="w-28 h-10 px-3 rounded-xl bg-surface-container-low/70 border border-outline-variant/25 text-sm font-mono text-on-surface focus:outline-none focus:border-primary/60 uppercase"
+                    class="w-28 h-10 px-3 rounded-xl bg-surface-container-low/70 border border-field-border text-sm font-mono text-on-surface focus:outline-none focus:border-primary/60 uppercase"
                   />
                   <div class="flex gap-1.5 flex-wrap">
                     {#each COLOR_PRESETS as preset (preset.hex)}
@@ -1088,7 +1088,7 @@
                         maxlength="80"
                         placeholder="Option {index + 1}"
                         aria-label="Option {index + 1}"
-                        class="flex-1 h-10 px-3 rounded-xl bg-surface-container-low/70 border border-outline-variant/25 text-sm text-on-surface focus:outline-none focus:border-primary/60"
+                        class="flex-1 h-10 px-3 rounded-xl bg-surface-container-low/70 border border-field-border text-sm text-on-surface focus:outline-none focus:border-primary/60"
                       />
                       {#if pollOptions.length > 2}
                         <button
@@ -1122,7 +1122,7 @@
                     id="bc-poll-close"
                     type="datetime-local"
                     bind:value={pollClosesAt}
-                    class="w-full h-10 px-3 rounded-xl bg-surface-container-lowest border border-outline-variant/25 text-sm text-on-surface focus:outline-none focus:border-primary/60"
+                    class="w-full h-10 px-3 rounded-xl bg-surface-container-lowest border border-field-border text-sm text-on-surface focus:outline-none focus:border-primary/60"
                   />
                   <p class="text-2xs text-on-surface-variant mt-1">Sans date de clôture, le sondage reste ouvert en continu.</p>
                 </div>
@@ -1219,7 +1219,7 @@
                 <select
                   id="bc-pref"
                   bind:value={channelPref}
-                  class="w-full h-10 px-3 rounded-xl bg-surface-container-low/70 border border-outline-variant/25 text-sm text-on-surface focus:outline-none focus:border-primary/60"
+                  class="w-full h-10 px-3 rounded-xl bg-surface-container-low/70 border border-field-border text-sm text-on-surface focus:outline-none focus:border-primary/60"
                 >
                   <option value="AUTO">Automatique - Annonces, puis public, puis staff</option>
                   <option value="NEWS">Priorité salon d’annonces</option>
@@ -1244,7 +1244,7 @@
                       type="datetime-local"
                       bind:value={scheduledAt}
                       class="w-full h-10 px-3 rounded-xl bg-surface-container-lowest border text-sm text-on-surface focus:outline-none focus:border-primary/60
-                        {scheduleInvalid ? 'border-error/50' : 'border-outline-variant/25'}"
+                        {scheduleInvalid ? 'border-error/50' : 'border-field-border'}"
                     />
                     <!-- Raccourcis horaires rapides -->
                     <div class="flex items-center gap-1.5 flex-wrap">
@@ -1612,7 +1612,7 @@
                 value={guild.broadcastChannelId ?? ''}
                 disabled={savingChannel === guild.id}
                 onchange={(event) => saveChannelFor(guild, (event.currentTarget as HTMLSelectElement).value || null)}
-                class="mt-1.5 w-full h-8 px-2 rounded-lg bg-surface-container-low/70 border border-outline-variant/25 text-xs text-on-surface focus:outline-none focus:border-primary/60 disabled:opacity-50"
+                class="mt-1.5 w-full h-8 px-2 rounded-lg bg-surface-container-low/70 border border-field-border text-xs text-on-surface focus:outline-none focus:border-primary/60 disabled:opacity-50"
               >
                 <option value="">- Aucun (repli automatique) -</option>
                 {#each guild.channels as channel (channel.id)}
@@ -1904,7 +1904,7 @@
         id="tpl-name"
         bind:value={templateName}
         placeholder="Maintenance planifiée"
-        class="w-full h-10 px-3 rounded-xl bg-surface-container-low/70 border border-outline-variant/25 text-sm text-on-surface focus:outline-none focus:border-primary/60"
+        class="w-full h-10 px-3 rounded-xl bg-surface-container-low/70 border border-field-border text-sm text-on-surface focus:outline-none focus:border-primary/60"
       />
     </div>
     <div class="flex gap-2 justify-end">
@@ -2049,7 +2049,7 @@
       <input aria-label="Rechercher un emoji"
         bind:value={emojiSearch}
         placeholder="Rechercher un emoji (:nom:)..."
-        class="flex-1 h-9 px-3 rounded-xl bg-surface-container-low/70 border border-outline-variant/25 text-xs text-on-surface focus:outline-none focus:border-primary/60"
+        class="flex-1 h-9 px-3 rounded-xl bg-surface-container-low/70 border border-field-border text-xs text-on-surface focus:outline-none focus:border-primary/60"
       />
       <span class="text-2xs text-on-surface-variant shrink-0 tabular-nums">
         {filteredEmojis.length} emoji(s)

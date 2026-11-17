@@ -52,7 +52,7 @@
         type="text"
         bind:value={search}
         placeholder={m.wf_search_action()}
-        class="w-full px-3 py-2 rounded-xl bg-surface-container-highest border border-outline-variant/20 text-sm text-on-surface focus:outline-none focus:border-primary/50"
+        class="w-full px-3 py-2 rounded-xl bg-surface-container-highest border border-field-border text-sm text-on-surface focus:outline-none focus:border-primary/50"
       />
     </div>
 

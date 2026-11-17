@@ -170,14 +170,14 @@
       <div class="grid gap-4 grid-cols-1 sm:grid-cols-2">
         <label class="space-y-1.5">
           <span class="text-xs font-medium text-on-surface-variant/40">{m.da_send_mode()}</span>
-          <select bind:value={verifConfig.verificationMode} class="w-full rounded-lg border border-outline-variant/10 bg-surface-container-high/40 px-3 py-2.5 text-sm">
+          <select bind:value={verifConfig.verificationMode} class="w-full rounded-lg border border-field-border bg-surface-container-high/40 px-3 py-2.5 text-sm">
             <option value="DM">{m.da_mode_dm()}</option>
             <option value="EMBED">{m.da_embed_button()}</option>
           </select>
         </label>
         <label class="space-y-1.5">
           <span class="text-xs font-medium text-on-surface-variant/40">{m.da_action_if_dc()}</span>
-          <select bind:value={verifConfig.verificationAction} class="w-full rounded-lg border border-outline-variant/10 bg-surface-container-high/40 px-3 py-2.5 text-sm">
+          <select bind:value={verifConfig.verificationAction} class="w-full rounded-lg border border-field-border bg-surface-container-high/40 px-3 py-2.5 text-sm">
             <option value="NOTIFY_STAFF">{m.da_notify_staff()}</option>
             <option value="AUTO_LINK">{m.da_auto_link()}</option>
           </select>
@@ -188,7 +188,7 @@
       <div class="grid gap-4 grid-cols-1 sm:grid-cols-2">
         <label class="space-y-1.5">
           <span class="text-xs font-medium text-on-surface-variant/40">{m.da_level_command()}</span>
-          <select bind:value={verifConfig.verificationLevelCommand} class="w-full rounded-lg border border-outline-variant/10 bg-surface-container-high/40 px-3 py-2.5 text-sm">
+          <select bind:value={verifConfig.verificationLevelCommand} class="w-full rounded-lg border border-field-border bg-surface-container-high/40 px-3 py-2.5 text-sm">
             <option value="LOW">{m.da_level_low()}</option>
             <option value="MEDIUM">{m.da_level_medium()}</option>
             <option value="HIGH">{m.da_level_high()}</option>
@@ -196,7 +196,7 @@
         </label>
         <label class="space-y-1.5">
           <span class="text-xs font-medium text-on-surface-variant/40">{m.da_level_join()}</span>
-          <select bind:value={verifConfig.verificationLevelJoin} class="w-full rounded-lg border border-outline-variant/10 bg-surface-container-high/40 px-3 py-2.5 text-sm">
+          <select bind:value={verifConfig.verificationLevelJoin} class="w-full rounded-lg border border-field-border bg-surface-container-high/40 px-3 py-2.5 text-sm">
             <option value="LOW">{m.da_level_low()}</option>
             <option value="MEDIUM">{m.da_level_medium()}</option>
             <option value="HIGH">{m.da_level_high()}</option>
@@ -230,20 +230,20 @@
       <div class="grid gap-4 grid-cols-1 sm:grid-cols-2">
         <label class="space-y-1.5">
           <span class="text-xs font-medium text-on-surface-variant/40">{m.da_embed_title()}</span>
-          <input type="text" bind:value={verifConfig.verificationEmbedTitle} maxlength="256" class="w-full rounded-lg border border-outline-variant/10 bg-surface-container-high/40 px-3 py-2.5 text-sm" />
+          <input type="text" bind:value={verifConfig.verificationEmbedTitle} maxlength="256" class="w-full rounded-lg border border-field-border bg-surface-container-high/40 px-3 py-2.5 text-sm" />
         </label>
         <label class="space-y-1.5">
           <span class="text-xs font-medium text-on-surface-variant/40">{m.da_color()}</span>
           <div class="flex items-center gap-2">
             <input type="color" bind:value={verifConfig.verificationEmbedColor} class="h-9.5 w-9.5 rounded-lg border border-outline-variant/10 bg-transparent cursor-pointer shrink-0" />
-            <input type="text" bind:value={verifConfig.verificationEmbedColor} maxlength="7" class="flex-1 rounded-lg border border-outline-variant/10 bg-surface-container-high/40 px-3 py-2.5 text-sm font-mono" />
+            <input type="text" bind:value={verifConfig.verificationEmbedColor} maxlength="7" class="flex-1 rounded-lg border border-field-border bg-surface-container-high/40 px-3 py-2.5 text-sm font-mono" />
           </div>
         </label>
       </div>
 
       <label class="space-y-1.5">
         <span class="text-xs font-medium text-on-surface-variant/40">{m.da_description()}</span>
-        <textarea bind:value={verifConfig.verificationEmbedDesc} rows="3" maxlength="2048" class="w-full rounded-lg border border-outline-variant/10 bg-surface-container-high/40 px-3 py-2.5 text-sm resize-y"></textarea>
+        <textarea bind:value={verifConfig.verificationEmbedDesc} rows="3" maxlength="2048" class="w-full rounded-lg border border-field-border bg-surface-container-high/40 px-3 py-2.5 text-sm resize-y"></textarea>
       </label>
 
       <!-- Auto on join -->
@@ -312,7 +312,7 @@
                     const v = parseInt((e.target as HTMLInputElement).value);
                     verifConfig!.verificationWarnThreshold = isNaN(v) || v <= 0 ? null : v;
                   }}
-                  class="w-full rounded-lg border border-outline-variant/10 bg-surface-container-high/40 px-3 py-2.5 text-sm"
+                  class="w-full rounded-lg border border-field-border bg-surface-container-high/40 px-3 py-2.5 text-sm"
                 />
                 {#if !verifConfig.verificationWarnThreshold}
                   <span class="text-xs text-on-surface-variant/40 whitespace-nowrap">{m.da_disabled()}</span>
@@ -323,7 +323,7 @@
 
             <label class="space-y-1.5">
               <span class="text-xs font-medium text-on-surface-variant/40">{m.da_trigger_mode()}</span>
-              <select bind:value={verifConfig.verificationWarnAutoMode} class="w-full rounded-lg border border-outline-variant/10 bg-surface-container-high/40 px-3 py-2.5 text-sm" disabled={!verifConfig.verificationWarnThreshold}>
+              <select bind:value={verifConfig.verificationWarnAutoMode} class="w-full rounded-lg border border-field-border bg-surface-container-high/40 px-3 py-2.5 text-sm" disabled={!verifConfig.verificationWarnThreshold}>
                 <option value="FULL_AUTO">{m.da_mode_full_auto_opt()}</option>
                 <option value="NOTIFY_STAFF">{m.da_mode_notify_opt()}</option>
               </select>
@@ -337,7 +337,7 @@
                 type="text"
                 maxlength="512"
                 bind:value={verifConfig.verificationWarnReason}
-                class="w-full rounded-lg border border-outline-variant/10 bg-surface-container-high/40 px-3 py-2.5 text-sm"
+                class="w-full rounded-lg border border-field-border bg-surface-container-high/40 px-3 py-2.5 text-sm"
               />
             </label>
 
@@ -367,7 +367,7 @@
                   const v = parseInt((e.target as HTMLInputElement).value);
                   verifConfig!.warnAutoArchiveDays = isNaN(v) || v <= 0 ? null : v;
                 }}
-                class="w-full rounded-lg border border-outline-variant/10 bg-surface-container-high/40 px-3 py-2.5 text-sm"
+                class="w-full rounded-lg border border-field-border bg-surface-container-high/40 px-3 py-2.5 text-sm"
               />
               <p class="text-2xs text-on-surface-variant/40">{m.da_warn_auto_archive_hint()}</p>
             </label>
@@ -407,7 +407,7 @@
                     const v = parseInt((e.target as HTMLInputElement).value);
                     verifConfig!.warnDecayDays = isNaN(v) || v <= 0 ? null : v;
                   }}
-                  class="w-full rounded-lg border border-outline-variant/10 bg-surface-container-high/40 px-3 py-2.5 text-sm"
+                  class="w-full rounded-lg border border-field-border bg-surface-container-high/40 px-3 py-2.5 text-sm"
                 />
                 <p class="text-2xs text-on-surface-variant/40">
                   {m.da_warn_decay_hint()}

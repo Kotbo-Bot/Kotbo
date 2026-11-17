@@ -2518,7 +2518,7 @@
     width: 100%;
     border-radius: 0.5rem;
     background: var(--surface-container, rgba(255, 255, 255, 0.04));
-    border: 1px solid rgb(from var(--outline-variant, #444) r g b / 40%);
+    border: 1px solid var(--field-border-color);
     padding: 0.5rem 0.75rem;
     font-size: 13px;
     color: var(--on-surface, inherit);

@@ -741,7 +741,7 @@
                       placeholder={m.pf_resignation_ph()}
                       maxlength={500}
                       rows={4}
-                      class="w-full rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:border-primary resize-none"
+                      class="w-full rounded-lg border border-field-border bg-surface-container-lowest px-3 py-2 text-sm text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:border-primary resize-none"
                     ></textarea>
                     <p class="mt-1 text-right text-xs text-on-surface-variant">{resignationReason.length}/500</p>
                   </div>

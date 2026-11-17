@@ -60,7 +60,7 @@
   <select aria-label={m.wf_role_filter_add()}
     value=""
     onchange={(e) => { add(e.currentTarget.value); e.currentTarget.value = ''; }}
-    class="w-full px-2 py-1 rounded-lg bg-surface-container-highest border border-outline-variant/20 text-2xs text-on-surface {compact ? 'nodrag' : ''}"
+    class="w-full px-2 py-1 rounded-lg bg-surface-container-highest border border-field-border text-2xs text-on-surface {compact ? 'nodrag' : ''}"
   >
     <option value="">{m.wf_role_filter_add()}</option>
     {#each roles.filter((o) => !selected.includes(o.id)) as option (option.id)}

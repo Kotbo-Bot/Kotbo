@@ -177,7 +177,7 @@
     on:focus={() => !disabled && (open = true)}
     on:blur={() => setTimeout(() => (open = false), 150)}
     on:keydown={handleKeydown}
-    class="w-full bg-surface-container-high text-on-surface text-sm {adorned ? 'pl-9 pr-4' : 'px-4'} py-2.5 rounded-xl border border-outline-variant/10 outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
+    class="w-full bg-surface-container-high text-on-surface text-sm {adorned ? 'pl-9 pr-4' : 'px-4'} py-2.5 rounded-xl border border-field-border outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
     autocomplete="off"
     disabled={disabled}
   />

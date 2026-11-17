@@ -292,7 +292,7 @@
               disabled={codeBusy}
               placeholder={m.obx_co_code_ph()}
               onkeydown={(event) => event.key === 'Enter' && redeemCode()}
-              class="min-w-0 flex-1 rounded-lg border border-outline-variant/40 bg-surface-container px-3 py-2 text-body-sm text-on-surface placeholder:text-on-surface-variant/40 focus:outline-none focus:ring-2 focus:ring-primary/40"
+              class="min-w-0 flex-1 rounded-lg border border-field-border bg-surface-container px-3 py-2 text-body-sm text-on-surface placeholder:text-on-surface-variant/40 focus:outline-none focus:ring-2 focus:ring-primary/40"
             />
             <button
               type="button"

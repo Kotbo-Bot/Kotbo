@@ -81,7 +81,7 @@
         bind:value={query}
         oninput={handleSearchInput}
         placeholder={m.sta_search_placeholder()}
-        class="w-full pl-10 pr-4 py-2.5 bg-surface-container-low border border-outline-variant/30 rounded-lg text-xs text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:border-primary/60 transition-colors"
+        class="w-full pl-10 pr-4 py-2.5 bg-surface-container-low border border-field-border rounded-lg text-xs text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:border-primary/60 transition-colors"
       />
     </div>
 

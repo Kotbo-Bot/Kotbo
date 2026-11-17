@@ -680,7 +680,7 @@
   .site-bubble-swatch.hl-accent { background: var(--site-accent, var(--color-primary)); } .site-bubble-swatch.hl-yellow { background: #facc15; } .site-bubble-swatch.hl-green { background: #22c55e; }
   .site-bubble-swatch.hl-blue { background: #3b82f6; } .site-bubble-swatch.hl-pink { background: #ec4899; } .site-bubble-swatch.hl-red { background: #ef4444; }
   .site-bubble-link { display: flex; align-items: center; gap: 4px; }
-  .site-bubble-input, .site-bubble-select { height: 30px; border-radius: 7px; border: 1px solid var(--color-outline-variant); background: var(--color-surface-container); color: var(--color-on-surface); padding: 0 8px; font: 13px Inter, system-ui, sans-serif; }
+  .site-bubble-input, .site-bubble-select { height: 30px; border-radius: 7px; border: 1px solid var(--color-field-border); background: var(--color-surface-container); color: var(--color-on-surface); padding: 0 8px; font: 13px Inter, system-ui, sans-serif; }
   .site-bubble-input { width: 220px; }
   .site-canvas-wrap { position: relative; }
   .site-block-handle { position: absolute; z-index: 15; }

@@ -225,7 +225,7 @@
             min="1"
             value={(step as WaitStep).seconds}
             oninput={(event) => onChange({ ...(step as WaitStep), seconds: Math.max(1, Number(event.currentTarget.value)) })}
-            class="w-24 px-2.5 py-1 rounded-lg text-xs bg-surface-container-highest border border-outline-variant/25 text-on-surface focus:outline-none focus:border-primary/60"
+            class="w-24 px-2.5 py-1 rounded-lg text-xs bg-surface-container-highest border border-field-border text-on-surface focus:outline-none focus:border-primary/60"
           />
           <span class="text-on-surface-variant/90">{m.wf_wait_suffix()}</span>
         </div>
@@ -239,13 +239,13 @@
             min="1"
             value={cooldownDuration.amount}
             oninput={(event) => setCooldown({ seconds: toSeconds(Number(event.currentTarget.value), cooldownDuration.unit) })}
-            class="w-20 px-2.5 py-1 rounded-lg text-xs bg-surface-container-highest border border-outline-variant/25 text-on-surface focus:outline-none focus:border-primary/60"
+            class="w-20 px-2.5 py-1 rounded-lg text-xs bg-surface-container-highest border border-field-border text-on-surface focus:outline-none focus:border-primary/60"
             aria-label={m.wf_cooldown_amount()}
           />
           <select
             value={cooldownDuration.unit}
             onchange={(event) => setCooldown({ seconds: toSeconds(cooldownDuration.amount, event.currentTarget.value as DurationUnit) })}
-            class="px-2 py-1 rounded-lg text-xs bg-surface-container-highest border border-outline-variant/25 text-on-surface cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            class="px-2 py-1 rounded-lg text-xs bg-surface-container-highest border border-field-border text-on-surface cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             aria-label={m.wf_cooldown_unit()}
           >
             {#each DURATION_UNITS as entry (entry.unit)}
@@ -259,7 +259,7 @@
               const scope = event.currentTarget.value;
               if (isCooldownScope(scope)) setCooldown({ scope });
             }}
-            class="px-2 py-1 rounded-lg text-xs bg-surface-container-highest border border-outline-variant/25 text-on-surface cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            class="px-2 py-1 rounded-lg text-xs bg-surface-container-highest border border-field-border text-on-surface cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             aria-label={m.wf_cooldown_scope()}
           >
             {#each COOLDOWN_SCOPES as scope (scope)}
@@ -278,7 +278,7 @@
               <select aria-label={m.wf_match_mode()}
                 value={(step as ConditionStep).match}
                 onchange={(event) => onChange({ ...(step as ConditionStep), match: event.currentTarget.value as 'all' | 'any' })}
-                class="px-2 py-0.5 rounded-lg text-2xs bg-surface-container-highest border border-outline-variant/25 text-on-surface-variant cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                class="px-2 py-0.5 rounded-lg text-2xs bg-surface-container-highest border border-field-border text-on-surface-variant cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               >
                 <option value="all">{m.wf_match_all()}</option>
                 <option value="any">{m.wf_match_any()}</option>
@@ -297,7 +297,7 @@
                     <select aria-label={m.wf_operator()}
                       value={test.operator ?? def.defaultOperator}
                       onchange={(event) => updateTest(test.id, { operator: event.currentTarget.value })}
-                      class="px-2 py-1 rounded-lg text-xs bg-surface-container-highest border border-outline-variant/25 text-on-surface cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                      class="px-2 py-1 rounded-lg text-xs bg-surface-container-highest border border-field-border text-on-surface cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     >
                       {#each def.operators as operator (operator.value)}
                         <option value={operator.value}>{operator.label}</option>
@@ -310,7 +310,7 @@
                       maxlength={MAX_VARIABLE_NAME_LENGTH}
                       placeholder={m.wf_variable_placeholder()}
                       oninput={(event) => updateTest(test.id, { name: event.currentTarget.value })}
-                      class="w-28 px-2.5 py-1 rounded-lg text-xs bg-surface-container-highest border border-outline-variant/25 text-on-surface focus:outline-none focus:border-primary/60"
+                      class="w-28 px-2.5 py-1 rounded-lg text-xs bg-surface-container-highest border border-field-border text-on-surface focus:outline-none focus:border-primary/60"
                       aria-label={m.wf_variable_name()}
                     />
                   {:else if piece.field === 'value' && def.valueKind}

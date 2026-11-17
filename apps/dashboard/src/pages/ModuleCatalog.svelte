@@ -328,7 +328,7 @@
         type="search"
         bind:value={search}
         placeholder={m.mc_search_placeholder()}
-        class="w-full h-10 pl-9 pr-3 rounded-lg bg-surface-container-low border border-outline-variant/40 text-sm text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/40"
+        class="w-full h-10 pl-9 pr-3 rounded-lg bg-surface-container-low border border-field-border text-sm text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/40"
       />
     </label>
 

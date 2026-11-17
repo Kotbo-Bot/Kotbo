@@ -1126,7 +1126,7 @@
               type="search"
               bind:value={searchQuery}
               placeholder={m.sc_search_ph()}
-              className="w-full rounded-xl border border-outline-variant bg-surface-container-low pl-10 pr-4 py-2.5 text-sm text-on-surface outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
+              className="w-full rounded-xl border border-field-border bg-surface-container-low pl-10 pr-4 py-2.5 text-sm text-on-surface outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
             />
           </label>
         </div>
@@ -1605,7 +1605,7 @@
                                       type="number" 
                                       value={initialVal} 
                                       oninput={(e) => updateTierDuration(selectedTableIndex, tierIdx, Number((e.target as HTMLInputElement).value), initialUnit)}
-                                      class="w-16 text-center py-1 px-1.5 rounded-lg bg-surface-container-high/30 text-on-surface border border-outline-variant/10 focus:border-primary/40 focus:bg-surface-container-high/60 outline-hidden transition-all text-xs font-bold"
+                                      class="w-16 text-center py-1 px-1.5 rounded-lg bg-surface-container-high/30 text-on-surface border border-field-border focus:border-primary/40 focus:bg-surface-container-high/60 outline-hidden transition-all text-xs font-bold"
                                       min="1"
                                     />
                                     <select 
@@ -1806,11 +1806,11 @@
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div class="space-y-1.5">
                 <label for="report-incident-at" class="field-label">{m.sc_incident_datetime()}</label>
-                <input id="report-incident-at" type="datetime-local" bind:value={incidentAt} class="w-full rounded-lg bg-surface-container-high px-5 py-3 text-sm font-bold text-on-surface border border-outline-variant/10 focus:border-primary/50 outline-hidden transition-all" />
+                <input id="report-incident-at" type="datetime-local" bind:value={incidentAt} class="w-full rounded-lg bg-surface-container-high px-5 py-3 text-sm font-bold text-on-surface border border-field-border focus:border-primary/50 outline-hidden transition-all" />
               </div>
               <div class="space-y-1.5">
                 <label for="report-duration" class="field-label">{m.sc_applied_duration()}</label>
-                <input id="report-duration" type="text" bind:value={sanctionDurationLabel} placeholder={m.sc_duration_ph()} class="w-full rounded-lg bg-surface-container-high px-5 py-3 text-sm font-bold text-on-surface border border-outline-variant/10 focus:border-primary/50 outline-hidden transition-all" />
+                <input id="report-duration" type="text" bind:value={sanctionDurationLabel} placeholder={m.sc_duration_ph()} class="w-full rounded-lg bg-surface-container-high px-5 py-3 text-sm font-bold text-on-surface border border-field-border focus:border-primary/50 outline-hidden transition-all" />
               </div>
             </div>
 
@@ -1828,7 +1828,7 @@
 
             <div class="space-y-1.5">
               <label for="report-reason" class="field-label">{m.sc_detailed_reason()}</label>
-              <textarea id="report-reason" bind:value={detailedReason} rows={4} placeholder={m.sc_describe_facts_ph()} class="w-full rounded-xl bg-surface-container-high px-5 py-4 text-sm font-bold text-on-surface border border-outline-variant/10 focus:border-primary/50 outline-hidden transition-all resize-none"></textarea>
+              <textarea id="report-reason" bind:value={detailedReason} rows={4} placeholder={m.sc_describe_facts_ph()} class="w-full rounded-xl bg-surface-container-high px-5 py-4 text-sm font-bold text-on-surface border border-field-border focus:border-primary/50 outline-hidden transition-all resize-none"></textarea>
             </div>
 
             <div class="space-y-3">
@@ -1843,7 +1843,7 @@
 
             <div class="space-y-1.5">
               <label for="report-notes" class="field-label">{m.sc_context_notes()}</label>
-              <textarea id="report-notes" bind:value={additionalNotes} rows={2} placeholder={m.sc_context_ph()} class="w-full rounded-lg bg-surface-container-high px-5 py-3 text-sm font-bold text-on-surface border border-outline-variant/10 focus:border-primary/50 outline-hidden transition-all resize-none"></textarea>
+              <textarea id="report-notes" bind:value={additionalNotes} rows={2} placeholder={m.sc_context_ph()} class="w-full rounded-lg bg-surface-container-high px-5 py-3 text-sm font-bold text-on-surface border border-field-border focus:border-primary/50 outline-hidden transition-all resize-none"></textarea>
             </div>
 
             {#if reportMessage}
@@ -1920,7 +1920,7 @@
           type="text"
           bind:value={deleteConfirmationText}
           autocomplete="off"
-          className="mt-1 w-full rounded-xl px-3 py-2.5 bg-surface-container-low border border-outline-variant text-sm focus:ring-2 focus:ring-error/40 focus:border-error transition-all"
+          className="mt-1 w-full rounded-xl px-3 py-2.5 bg-surface-container-low border border-field-border text-sm focus:ring-2 focus:ring-error/40 focus:border-error transition-all"
           placeholder={m.sc_delete_keyword()}
         />
       </div>

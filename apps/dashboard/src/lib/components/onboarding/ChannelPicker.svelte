@@ -80,7 +80,7 @@
     {id}
     {value}
     onchange={(event) => onpick(event.currentTarget.value || null)}
-    class="w-full rounded-xl border border-outline-variant/40 bg-surface-container-lowest/60 px-3.5 py-2.5
+    class="w-full rounded-xl border border-field-border bg-surface-container-lowest/60 px-3.5 py-2.5
            text-sm text-on-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
   >
     {#if noneLabel}
