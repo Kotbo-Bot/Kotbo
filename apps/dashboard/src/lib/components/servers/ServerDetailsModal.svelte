@@ -17,11 +17,14 @@
   import { inviteDetailsModal } from "../../stores/inviteDetailsModal.svelte";
   import { toast } from "../../stores/toast.svelte";
   import { canViewFeature } from "../../permissions.svelte";
-  import { fetchServerDetails, type ServerDetails } from "../../api";
+  import { fetchServerDetails, fetchServerMemberInsights, type ServerDetails, type ServerMemberInsights, type ServerInsightsGroup, type TagAction, type TagTrigger } from "../../api";
+  import TagRuleWizard from "../tagAutomod/TagRuleWizard.svelte";
+  import { tagActionMeta, tagStatusMeta, tagTriggerLabel } from "../tagAutomod/tagAutomodLabels";
+  import { router } from "tinro";
   import { m, dateLocale } from "../../i18n";
   import { errorMessage } from "@kotbo/shared";
 
-  type ServerTab = "overview" | "members" | "assets";
+  type ServerTab = "overview" | "members" | "moderation" | "assets";
   type Holder = ServerDetails["tagHolders"]["members"][number];
 
   let details = $state<ServerDetails | null>(null);
@@ -29,6 +32,10 @@
   let error = $state("");
   let activeTab = $state<ServerTab>("overview");
   let requestId = 0;
+  let insights = $state<ServerMemberInsights | null>(null);
+  let insightsFor = $state<string | null>(null);
+  let wizardOpen = $state(false);
+  let wizardBlock = $state(true);
 
   const isOpen = $derived(serverDetailsModal.open);
   const guildId = $derived(serverDetailsModal.guildId);
@@ -50,6 +57,8 @@
     error = "";
     loading = false;
     activeTab = "overview";
+    insights = null;
+    insightsFor = null;
   });
 
   async function loadDetails(targetId: string) {
@@ -67,6 +76,58 @@
     } finally {
       if (id === requestId) loading = false;
     }
+  }
+
+  // Membres et Modération : chargés à la première ouverture d'un de ces onglets.
+  $effect(() => {
+    if (!isOpen || !guildId || insightsFor === guildId) return;
+    if (activeTab !== "members" && activeTab !== "moderation") return;
+    insightsFor = guildId;
+    const target = guildId;
+    void fetchServerMemberInsights(target)
+      .then((res) => { if (serverDetailsModal.guildId === target) insights = res; })
+      .catch(() => { if (serverDetailsModal.guildId === target) insights = null; });
+  });
+
+  const canModerateTags = $derived(canViewFeature("raid_protection"));
+
+  function perMember(g: ServerInsightsGroup, value: number): number {
+    return g.members > 0 ? value / g.members : 0;
+  }
+
+  type Comparison = { label: string; holders: number; others: number; format: (v: number) => string; higherIsWorse: boolean };
+  const comparisons = $derived<Comparison[]>(insights ? [
+    { label: m.svdx_cmp_messages(), holders: perMember(insights.holders, insights.holders.messages), others: perMember(insights.others, insights.others.messages), format: (v) => v.toLocaleString(dateLocale(), { maximumFractionDigits: 1 }), higherIsWorse: false },
+    { label: m.svdx_cmp_active(), holders: perMember(insights.holders, insights.holders.active) * 100, others: perMember(insights.others, insights.others.active) * 100, format: (v) => `${Math.round(v)} %`, higherIsWorse: false },
+    { label: m.svdx_cmp_voice(), holders: perMember(insights.holders, insights.holders.voiceMinutes), others: perMember(insights.others, insights.others.voiceMinutes), format: (v) => `${Math.round(v)} min`, higherIsWorse: false },
+    { label: m.svdx_cmp_toxic(), holders: insights.holders.analyzed ? (insights.holders.toxic / insights.holders.analyzed) * 100 : 0, others: insights.others.analyzed ? (insights.others.toxic / insights.others.analyzed) * 100 : 0, format: (v) => `${v.toLocaleString(dateLocale(), { maximumFractionDigits: 1 })} %`, higherIsWorse: true },
+    { label: m.svdx_cmp_sanctions(), holders: perMember(insights.holders, insights.holders.sanctions) * 100, others: perMember(insights.others, insights.others.sanctions) * 100, format: (v) => v.toLocaleString(dateLocale(), { maximumFractionDigits: 1 }), higherIsWorse: true },
+  ] : []);
+
+  function verdict(c: Comparison): { text: string; tone: string } | null {
+    if (c.holders === 0 && c.others === 0) return null;
+    if (c.others === 0) return { text: m.svdx_only_them(), tone: c.higherIsWorse ? "text-error" : "text-success" };
+    const ratio = c.holders / c.others;
+    if (ratio > 0.85 && ratio < 1.15) return { text: m.svdx_similar(), tone: "text-on-surface-variant" };
+    const worse = (ratio > 1) === c.higherIsWorse;
+    const text = ratio > 1 ? m.svdx_times_more({ ratio: ratio.toLocaleString(dateLocale(), { maximumFractionDigits: 1 }) }) : m.svdx_times_less({ ratio: (1 / Math.max(ratio, 0.01)).toLocaleString(dateLocale(), { maximumFractionDigits: 1 }) });
+    return { text, tone: worse ? "text-error" : "text-success" };
+  }
+
+  const SANCTION_LABELS: Record<string, () => string> = {
+    WARN: m.anx_mod_warn, TIMEOUT: m.anx_mod_timeout, KICK: m.anx_mod_kick, SOFTBAN: m.anx_mod_softban,
+    TEMP_BAN: m.anx_mod_tempban, BAN: m.anx_mod_ban, JAIL: m.tam_action_jail,
+  };
+  const sanctionLabel = (type: string) => SANCTION_LABELS[type]?.() ?? type;
+
+  function openTagWizard(block: boolean) {
+    wizardBlock = block;
+    wizardOpen = true;
+  }
+
+  function goToTagAutomod() {
+    closeModal();
+    router.goto("/security/filters/tags");
   }
 
   function closeModal() {
@@ -87,6 +148,14 @@
       icon: "Users",
       badge: details?.tagHolders.count || undefined,
     },
+    ...(details?.server.isOwnGuild
+      ? []
+      : [{
+          id: "moderation",
+          label: m.svdx_tab_moderation(),
+          icon: "ShieldAlert",
+          badge: insights?.moderation.fleet.blocks || undefined,
+        }]),
     {
       id: "assets",
       label: m.svd_tab_assets(),
@@ -471,14 +540,155 @@
         {/if}
       </div>
     {:else if activeTab === "members"}
-      {#if details.tagHolders.members.length === 0}
-        <SectionCard>
-          <EmptyState icon="users" title={m.svd_holders_empty()} reason="all-clear" />
-        </SectionCard>
+      <div class="space-y-4">
+        {#if insights}
+          <div class="svd-kpis">
+            <KpiTile label={m.svdx_kpi_holders()} value={fmtNumber(insights.holders.members)} hint={m.svdx_kpi_holders_hint({ active: fmtNumber(insights.holders.active) })} />
+            <KpiTile label={m.svdx_kpi_joined()} value={fmtNumber(insights.movement.joined30d)} hint={m.svdx_kpi_joined_hint()} />
+            <KpiTile label={m.svdx_kpi_left()} value={fmtNumber(insights.movement.left30d)} hint={m.svdx_kpi_left_hint({ total: fmtNumber(insights.movement.leftTotal) })} />
+            <KpiTile
+              label={m.svdx_kpi_overlap()}
+              value={insights.overlap.shared != null ? fmtNumber(insights.overlap.shared) : "-"}
+              hint={insights.overlap.shared != null
+                ? m.svdx_kpi_overlap_hint({ share: String(Math.round((insights.overlap.share ?? 0) * 1000) / 10) })
+                : m.svdx_kpi_overlap_unknown()}
+            />
+          </div>
+
+          {#if insights.holders.members > 0}
+            <SectionCard title={m.svdx_cmp_title()} description={m.svdx_cmp_desc()}>
+              <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                  <caption class="sr-only">{m.svdx_cmp_title()}</caption>
+                  <thead>
+                    <tr class="text-left text-xs text-on-surface-variant">
+                      <th scope="col" class="py-2 pr-3 font-medium">{m.svdx_cmp_metric()}</th>
+                      <th scope="col" class="py-2 px-3 font-medium text-right">{m.svdx_cmp_holders()}</th>
+                      <th scope="col" class="py-2 px-3 font-medium text-right">{m.svdx_cmp_others()}</th>
+                      <th scope="col" class="py-2 pl-3 font-medium text-right">{m.svdx_cmp_verdict()}</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-outline-variant">
+                    {#each comparisons as c (c.label)}
+                      {@const v = verdict(c)}
+                      <tr>
+                        <th scope="row" class="py-2 pr-3 text-left font-normal text-on-surface">{c.label}</th>
+                        <td class="py-2 px-3 text-right font-medium text-on-surface tabular-nums">{c.format(c.holders)}</td>
+                        <td class="py-2 px-3 text-right text-on-surface-variant tabular-nums">{c.format(c.others)}</td>
+                        <td class="py-2 pl-3 text-right text-xs {v?.tone ?? ''}">{v?.text ?? "-"}</td>
+                      </tr>
+                    {/each}
+                  </tbody>
+                </table>
+              </div>
+            </SectionCard>
+
+            <SectionCard title={m.svdx_activity_title()}>
+              <TimeSeriesChart
+                labels={insights.activityByDay.map((d) => shortDate(d.date))}
+                mode="bar"
+                main={{ label: m.svdx_activity_series(), values: insights.activityByDay.map((d) => d.holders), color: SERIES[0] }}
+                format={(v) => fmtNumber(v)}
+                height={180}
+              />
+            </SectionCard>
+          {/if}
+        {/if}
+
+        {#if details.tagHolders.members.length === 0}
+          <SectionCard>
+            <EmptyState icon="users" title={m.svd_holders_empty()} reason="all-clear" />
+          </SectionCard>
+        {:else}
+          <SectionCard flush title={m.svdx_holders_list()}>
+            {@render holderList(details.tagHolders.members, true)}
+          </SectionCard>
+        {/if}
+      </div>
+    {:else if activeTab === "moderation"}
+      {#if !insights}
+        <SectionCard><p class="py-6 text-center text-sm text-on-surface-variant">{m.svdx_loading()}</p></SectionCard>
       {:else}
-        <SectionCard flush>
-          {@render holderList(details.tagHolders.members, true)}
-        </SectionCard>
+        {@const mod = insights.moderation}
+        <div class="space-y-4">
+          {#if mod.fleet.blocks > 0 || mod.fleet.waveReports > 0}
+            <Callout variant={mod.fleet.blocks >= 3 ? "danger" : "warning"}>
+              {m.svdx_fleet_signal({ blocks: String(mod.fleet.blocks), waves: String(mod.fleet.waveReports) })}
+            </Callout>
+          {/if}
+
+          <SectionCard title={m.svdx_rule_title()} description={m.svdx_rule_desc()}>
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              {#if mod.rule}
+                <p class="text-sm text-on-surface">
+                  {mod.rule.effect === "ALLOW"
+                    ? m.svdx_rule_allowed()
+                    : m.svdx_rule_blocked({ action: tagActionMeta(mod.rule.action as TagAction).label })}
+                  {#if !mod.rule.enabled}<span class="text-on-surface-variant"> · {m.svdx_rule_disabled()}</span>{/if}
+                  {#if mod.rule.expiresAt}<span class="text-on-surface-variant"> · {m.tam_until({ date: new Date(mod.rule.expiresAt).toLocaleString(dateLocale(), { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) })}</span>{/if}
+                </p>
+                {#if canModerateTags}<Button size="sm" variant="secondary" icon="Settings" onclick={goToTagAutomod}>{m.svdx_rule_manage()}</Button>{/if}
+              {:else}
+                <p class="text-sm text-on-surface-variant">{m.svdx_rule_none()}</p>
+                {#if canModerateTags}
+                  <span class="flex gap-2">
+                    <Button size="sm" variant="secondary" icon="ShieldCheck" onclick={() => openTagWizard(false)}>{m.svdx_allow()}</Button>
+                    <Button size="sm" variant="danger" icon="ShieldAlert" onclick={() => openTagWizard(true)}>{m.svdx_block()}</Button>
+                  </span>
+                {/if}
+              {/if}
+            </div>
+          </SectionCard>
+
+          <div class="svd-split">
+            <SectionCard title={m.svdx_sanctions_title()} description={m.svdx_sanctions_desc()}>
+              {#if mod.sanctionsByType.length === 0}
+                <EmptyState icon="shieldcheck" title={m.svdx_sanctions_empty()} reason="all-clear" />
+              {:else}
+                <BarList items={mod.sanctionsByType.map((s) => ({ id: s.type, label: sanctionLabel(s.type), value: s.count }))} />
+              {/if}
+            </SectionCard>
+            <SectionCard title={m.svdx_recent_title()} flush>
+              {#if mod.recentSanctions.length === 0}
+                <div class="p-4"><EmptyState icon="shieldcheck" title={m.svdx_sanctions_empty()} reason="all-clear" /></div>
+              {:else}
+                <ul class="divide-y divide-outline-variant">
+                  {#each mod.recentSanctions as s (s.id)}
+                    <li>
+                      <button type="button" class="svd-member-row" disabled={!canOpenMembers} onclick={() => openMember(s.targetUserId, s.targetTag ?? s.targetUserId)}>
+                        <div class="min-w-0 flex-1 text-left">
+                          <p class="truncate text-sm font-medium text-on-surface">{s.targetTag ?? s.targetUserId}</p>
+                          <p class="truncate text-xs text-on-surface-variant">{s.reason}</p>
+                        </div>
+                        <span class="text-xs text-on-surface">{sanctionLabel(s.type)}</span>
+                        <span class="hidden text-xs text-on-surface-variant sm:inline">{new Date(s.createdAt).toLocaleDateString(dateLocale(), { day: "2-digit", month: "short" })}</span>
+                      </button>
+                    </li>
+                  {/each}
+                </ul>
+              {/if}
+            </SectionCard>
+          </div>
+
+          <SectionCard title={m.svdx_journal_title()} description={m.svdx_journal_desc({ waves: String(mod.waves) })} flush>
+            {#if mod.events.length === 0}
+              <div class="p-4"><EmptyState icon="shieldcheck" title={m.tam_journal_empty()} reason="all-clear" /></div>
+            {:else}
+              <ul class="divide-y divide-outline-variant">
+                {#each mod.events as ev (ev.id)}
+                  {@const st = tagStatusMeta(ev.status as "APPLIED")}
+                  <li class="flex flex-wrap items-center gap-2 px-4 py-2.5 text-xs">
+                    <span class="font-medium text-on-surface">{ev.userTag ?? ev.userId}</span>
+                    <span class="text-on-surface-variant">{tagTriggerLabel(ev.trigger as TagTrigger)}</span>
+                    <span class="text-on-surface">→ {tagActionMeta(ev.action as TagAction).label}</span>
+                    <span class="rounded-full border px-2 py-0.5 text-2xs font-medium {st.className}">{st.label}</span>
+                    <span class="ml-auto text-on-surface-variant">{new Date(ev.createdAt).toLocaleDateString(dateLocale(), { day: "2-digit", month: "short" })}</span>
+                  </li>
+                {/each}
+              </ul>
+            {/if}
+          </SectionCard>
+        </div>
       {/if}
     {:else if activeTab === "assets"}
       {#if details.assets.emojis.length === 0 && details.assets.stickers.length === 0}
@@ -555,6 +765,24 @@
     {/if}
   {/if}
 </DetailSheet>
+
+{#if guildId}
+  <TagRuleWizard
+    bind:open={wizardOpen}
+    aboveCase
+    initial={{
+      effect: wizardBlock ? "BLOCK" : "ALLOW",
+      targetType: "SERVER",
+      targetGuildId: guildId,
+      targetName: details?.server.name ?? displayName,
+      targetIcon: details?.server.iconUrl ?? null,
+      action: "TICKET",
+      escalateAfterMin: wizardBlock ? 1440 : null,
+      escalateAction: wizardBlock ? "KICK" : null,
+    }}
+    onSaved={() => { insightsFor = null; }}
+  />
+{/if}
 
 <style>
   /* Grille locale : la .kpi-grid d'Analytics n'est stylée que dans sa page. */
