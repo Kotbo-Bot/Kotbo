@@ -1,6 +1,7 @@
 <script lang="ts">
   /** Aide d'un champ : s'ouvre au survol, au clavier et au toucher (mobile). */
   import Papicon from '../Papicon.svelte';
+  import { portal } from '$lib/actions/portal';
 
   const { text }: { text: string } = $props();
 
@@ -66,6 +67,7 @@
   <span
     {id}
     role="tooltip"
+    use:portal
     class="fixed rounded-lg border border-outline-variant bg-surface-container-highest px-3 py-2 text-2xs font-normal leading-relaxed text-on-surface shadow-lg"
     style="z-index: var(--layer-popover); top: {position.top}px; left: {position.left}px; width: min({WIDTH}px, calc(100vw - {MARGIN * 2}px));"
   >{text}</span>
