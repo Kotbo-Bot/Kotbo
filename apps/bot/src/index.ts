@@ -94,6 +94,7 @@ import { registerStaffServerListener } from './events/staffServerEvents.js';
 import { registerAbsenceMentionListener } from './events/absenceMentionEvents.js';
 import { registerRaidProtectionListener } from './events/raidProtection.js';
 import { registerServerTagRoleListener } from './events/serverTagRole.js';
+import { registerBoostTracker } from './events/boostTracker.js';
 import { registerClanListener } from './events/clanEvents.js';
 import { registerEventBusBridge } from './events/eventBusBridge.js';
 import { registerAnalyticsBusSubscribers } from './modules/analytics.module.js';
@@ -596,6 +597,7 @@ client.once(Events.ClientReady, async (c) => {
   registerAbsenceMentionListener(scopeClientToModule(client, 'absences'));
   registerRaidProtectionListener(scopeClientToModule(client, 'raid_protection'));
   registerServerTagRoleListener(client);
+  registerBoostTracker(client);
   registerClanListener(scopeClientToModule(client, 'clans'));
 
   // Un arrêt en plein tour de captcha vocal laisse des autorisations

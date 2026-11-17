@@ -69,6 +69,7 @@ export type BackgroundJobName =
   | 'aegis-prune'
   | 'workflow-executions-prune'
   | 'ban-hygiene-scan'
+  | 'boost-snapshots'
   | 'warn-auto-archive'
   | 'staff-reminders'
   | 'bump-reminder-tick'

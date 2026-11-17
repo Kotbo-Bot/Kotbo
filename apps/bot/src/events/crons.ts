@@ -485,6 +485,10 @@ export async function registerCrons(client: Client): Promise<void> {
     'ban-hygiene-scan': async () => {
       await runBanHygieneScan(client);
     },
+    'boost-snapshots': async () => {
+      const { runBoostSnapshots } = await import('../services/analytics/boostService.js');
+      await runBoostSnapshots(client);
+    },
     'warn-auto-archive': async () => {
       const { runWarnAutoArchive } = await import('../services/moderation/sanctionArchiveService.js');
       const archived = await runWarnAutoArchive();
@@ -922,6 +926,14 @@ export async function registerCrons(client: Client): Promise<void> {
   cron.schedule('15 5 * * *', async () => {
     await runCronJob('ban-hygiene-scan', async () => {
       await runBanHygieneScan(client);
+    }, 3000);
+  });
+
+  // 💎 Boosts : rattrapage des boosters et point du jour, refait chaque heure pour survivre à un arrêt du bot
+  cron.schedule('17 * * * *', async () => {
+    await runCronJob('boost-snapshots', async () => {
+      const { runBoostSnapshots } = await import('../services/analytics/boostService.js');
+      await runBoostSnapshots(client);
     }, 3000);
   });
 

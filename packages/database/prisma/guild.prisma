@@ -1015,6 +1015,9 @@ model MemberProfile {
   primaryGuildBadge String?
   primaryGuildUpdatedAt DateTime?
 
+  // Boost en cours (member.premiumSince), historique dans BoostEvent (boosts.prisma)
+  boostingSince DateTime?
+
   isSuspectedDC Boolean @default(false)
   dcScore       Int?      // Dernier score de détection calculé (0-100)
   lastDcAlertAt DateTime? // Timestamp de la dernière alerte DC envoyée (cooldown 24h)
@@ -1051,6 +1054,7 @@ model MemberProfile {
   @@index([guildId, username])
   @@index([guildId, ghostStatus])
   @@index([guildId, primaryGuildId])
+  @@index([guildId, boostingSince])
   @@index([userId])
   @@map("member_profiles")
 }

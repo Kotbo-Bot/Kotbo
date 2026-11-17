@@ -357,3 +357,17 @@ export type {
   ReactionRolePresetKey,
   RoleBlocker,
 } from './types/reactionRoles.js';
+
+export {
+  BOOST_BADGE_MONTHS,
+  BOOST_PERKS,
+  BOOST_TIER_THRESHOLDS,
+  BOOSTS_PER_NITRO,
+  boostBadge,
+  boostGoal,
+  boostMargin,
+  boostMonths,
+  boostTierFor,
+  tierForPerks,
+} from './types/boosts.js';
+export type { BoostBadge, BoostGoal, BoostPerkId } from './types/boosts.js';

@@ -102,6 +102,7 @@ export const NOTIFICATION_KINDS = {
   'community.level_up': { category: 'community' },
   'community.shop': { category: 'community' },
   'community.site': { category: 'community' },
+  'community.boost_lost': { category: 'community' },
 
   // Système
   'system.workflow_failed': { category: 'system' },
