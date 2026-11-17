@@ -357,7 +357,7 @@
 <!-- Valeur copiable : code + bouton Copier. -->
 {#snippet copyRow(text: string, field: string, highlight = false)}
   <div class="flex items-center gap-2">
-    <code class="flex-1 min-w-0 rounded-lg border px-3 py-2 font-mono text-xs break-all bg-surface-container-lowest {highlight ? 'border-primary/40 text-primary' : 'border-outline-variant text-on-surface'}">
+    <code class="flex-1 min-w-0 rounded-lg border px-2.5 py-1.5 font-mono text-2xs break-all bg-surface-container-lowest {highlight ? 'border-primary/40 text-primary' : 'border-outline-variant text-on-surface'}">
       {text}
     </code>
     <Button size="sm" variant="secondary" icon={copiedField === field ? 'check' : 'copy'} onclick={() => copy(text, field)}>
@@ -382,41 +382,45 @@
     <Button variant="primary" icon="plus" onclick={openCreateModal}>{m.mcp_btn_new_key()}</Button>
   {/snippet}
 
-  <Callout variant="info" icon="sparkles" title={m.mcp_howto_title()}>
-    <ol class="mt-1 space-y-1">
-      {#each [m.mcp_howto_step1(), m.mcp_howto_step2(), m.mcp_howto_step3()] as step, i}
-        <li class="flex gap-2">
-          <span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/15 text-2xs font-semibold text-primary">{i + 1}</span>
-          <span>{step}</span>
-        </li>
-      {/each}
-    </ol>
-  </Callout>
+<div class="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+  <!-- Colonne de droite : brancher l'IA (les clés, le travail courant, restent à gauche) -->
+  <aside class="space-y-3 lg:order-2">
+    <SectionCard title={m.mcp_howto_title()} icon="sparkles">
+      <ol class="space-y-2 px-4 pb-4 pt-2">
+        {#each [m.mcp_howto_step1(), m.mcp_howto_step2(), m.mcp_howto_step3()] as step, i}
+          <li class="flex gap-2.5 text-xs leading-relaxed text-on-surface-variant">
+            <span class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/15 text-2xs font-semibold text-primary">{i + 1}</span>
+            <span>{step}</span>
+          </li>
+        {/each}
+      </ol>
+    </SectionCard>
 
-  <!-- Endpoint -->
-  <SectionCard title={m.mcp_endpoint_label()} description={m.mcp_endpoint_notice()} icon="globe">
-    {#snippet actions()}
-      {#if endpointUrl}
-        <Button size="sm" variant="ghost" icon="activity" onclick={openMcpDiagnostics}>{m.mcp_btn_logs()}</Button>
-      {/if}
-    {/snippet}
-    <div class="space-y-4 px-5 pb-5 pt-3">
-      {#if endpointUrl}
-        {@render copyRow(endpointUrl, 'endpoint')}
-      {:else}
-        <p class="text-sm text-on-surface-variant">{m.mcp_endpoint_select_server()}</p>
-      {/if}
-      {#if restApiUrl}
-        <div class="space-y-1.5">
-          <p class="text-xs font-medium text-on-surface-variant">{m.mcp_rest_label()}</p>
-          {@render copyRow(restApiUrl, 'rest')}
-          <p class="text-xs text-on-surface-variant">{m.mcp_rest_notice()}</p>
-        </div>
-      {/if}
-    </div>
-  </SectionCard>
+    <SectionCard title={m.mcp_endpoint_label()} description={m.mcp_endpoint_notice()} icon="globe">
+      {#snippet actions()}
+        {#if endpointUrl}
+          <Button size="sm" variant="ghost" icon="activity" onclick={openMcpDiagnostics}>{m.mcp_btn_logs()}</Button>
+        {/if}
+      {/snippet}
+      <div class="space-y-3 px-4 pb-4 pt-2">
+        {#if endpointUrl}
+          {@render copyRow(endpointUrl, 'endpoint')}
+        {:else}
+          <p class="text-xs text-on-surface-variant">{m.mcp_endpoint_select_server()}</p>
+        {/if}
+        {#if restApiUrl}
+          <div class="space-y-1">
+            <p class="text-2xs font-medium text-on-surface-variant">{m.mcp_rest_label()}</p>
+            {@render copyRow(restApiUrl, 'rest')}
+            <p class="text-2xs text-on-surface-variant">{m.mcp_rest_notice()}</p>
+          </div>
+        {/if}
+      </div>
+    </SectionCard>
+  </aside>
 
   <!-- Keys -->
+  <div class="min-w-0 lg:order-1">
   <SectionCard title={m.mcp_keys_section_title()} icon="key" flush>
     {#if loading}
       <div class="flex flex-col items-center justify-center py-12 text-on-surface-variant">
@@ -444,14 +448,14 @@
             role="button"
             tabindex="0"
             aria-expanded={expandedKeyId === key.id}
-            class="flex items-center gap-4 px-5 py-3.5 hover:bg-surface-container-low transition-colors cursor-pointer"
+            class="flex items-center gap-3 px-4 py-2.5 hover:bg-surface-container-low transition-colors cursor-pointer"
             onclick={() => toggleExpandedKey(key.id)}
             onkeydown={(event) => handleKeyRowKeyboard(event, key.id)}
           >
             <div class="w-2 h-2 rounded-full bg-success shrink-0"></div>
 
             <div class="flex-1 min-w-0">
-              <p class="flex items-center gap-1.5 text-sm font-medium text-on-surface">
+              <p class="flex items-center gap-1.5 text-body-sm font-medium text-on-surface">
                 {key.name}
                 {#if !key.ownerId}
                   <!-- Une cle sans proprietaire survit au depart de celui qui
@@ -462,15 +466,14 @@
                   </span>
                 {/if}
               </p>
-              <p class="text-xs text-on-surface-variant mt-0.5">
+              <p class="text-2xs text-on-surface-variant mt-0.5">
                 {m.mcp_last_used({ date: formatDate(key.lastUsedAt) })}
               </p>
-            </div>
-
-            <div class="hidden sm:flex flex-wrap justify-end gap-1 max-w-xs">
-              {#each key.permissions as perm}
-                {@render permChip(perm)}
-              {/each}
+              <div class="mt-1.5 flex flex-wrap gap-1">
+                {#each key.permissions as perm}
+                  {@render permChip(perm)}
+                {/each}
+              </div>
             </div>
 
             <div class="flex items-center gap-1 shrink-0">
@@ -545,6 +548,8 @@
       {/each}
     {/if}
   </SectionCard>
+  </div>
+</div>
 </ModulePage>
 
 <!-- ── Create Modal ──────────────────────────────────────────────────────── -->
