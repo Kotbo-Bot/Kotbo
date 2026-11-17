@@ -7,9 +7,8 @@
    * qui en faisait une page dans la page. Le droit reste celui d'AutoMod, qui
    * garde aussi les routes `/aegis*` de l'API.
    *
-   * AutoMod est gratuit, l'IA non : le bot la lit comme éteinte sur `FREE`
-   * (`aegisConfig.ts`). La page reste réglable, l'encadré dit pourquoi rien ne
-   * part.
+   * Sur `FREE`, l'IA tourne en revue seule (`freeTierAegisConfig` dans
+   * `aegisConfig.ts`) : la page reste réglable, l'encadré dit ce qui manque.
    */
   import { m } from '../../lib/i18n';
   import ModulePage from '../../lib/components/ModulePage.svelte';

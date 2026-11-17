@@ -9,7 +9,10 @@ import { UserFacingError } from '../../../utils/userFacingError.js';
 import { getGuildPlan } from '../../system/planService.js';
 
 /** Ce que le traitement lit : sans dates, la valeur fait l'aller-retour Redis telle quelle. */
-export type AegisRuntimeConfig = Omit<AegisConfig, 'createdAt' | 'updatedAt' | 'trainingConsentAt' | 'trainingConsentById'>;
+export type AegisRuntimeConfig = Omit<AegisConfig, 'createdAt' | 'updatedAt' | 'trainingConsentAt' | 'trainingConsentById'> & {
+  /** Plan Gratuit : une décision « auto » part en revue, le bot n'agit jamais seul. */
+  reviewOnly?: boolean;
+};
 
 export const AEGIS_AUTO_ACTIONS = ['DELETE', 'DELETE_AND_WARN', 'DELETE_AND_TIMEOUT'] as const;
 export const AEGIS_HARASSMENT_ACTIONS = ['ALERT', 'TIMEOUT'] as const;
@@ -28,14 +31,29 @@ async function readAegisConfig(guildId: string): Promise<AegisRuntimeConfig | nu
 }
 
 /**
- * AegisAI vit dans AutoMod, ouvert en gratuit, mais l'IA est réservée aux
- * offres payantes : sur `FREE`, la configuration se lit comme éteinte. Le
- * partage pour l'entraînement, lui, reste un choix du serveur.
+ * AegisAI en gratuit : revue seule. Il note les messages et envoie les plus
+ * toxiques au staff, sans action automatique ni modules dérivés (conflits,
+ * harcèlement, détresse) ni analyse étendue (fils, vocaux, pseudos, tickets).
  */
+export function freeTierAegisConfig(config: AegisRuntimeConfig): AegisRuntimeConfig {
+  return {
+    ...config,
+    reviewOnly: true,
+    conflictEnabled: false,
+    harassmentEnabled: false,
+    distressEnabled: false,
+    analyzeThreads: false,
+    analyzeVoiceChats: false,
+    analyzeNicknames: false,
+    analyzeTickets: false,
+    ticketPriorityBoost: false,
+  };
+}
+
 async function readPlanAwareConfig(guildId: string): Promise<AegisRuntimeConfig | null> {
   const config = await readAegisConfig(guildId);
-  if (!config?.enabled) return config;
-  return (await getGuildPlan(guildId)) === 'FREE' ? { ...config, enabled: false } : config;
+  if (!config) return config;
+  return (await getGuildPlan(guildId)) === 'FREE' ? freeTierAegisConfig(config) : config;
 }
 
 /** Configuration active, ou null si le module est éteint sur ce serveur. */
