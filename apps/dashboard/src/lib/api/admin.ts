@@ -821,6 +821,51 @@ export async function fetchAdminAuditActions(): Promise<{ actions: { action: str
   return response.json();
 }
 
+export interface LinkedGroupAccount {
+  userId: string;
+  name: string | null;
+  username: string | null;
+  avatarUrl: string | null;
+  guildCount: number;
+}
+
+export interface LinkedGroupLink {
+  guildId: string;
+  guildName: string;
+  user1Id: string;
+  user2Id: string;
+  type: 'MANUAL' | 'AUTOMATIC';
+  status: 'VALIDATED' | 'PENDING' | 'REJECTED';
+  reason: string | null;
+  createdAt: string;
+}
+
+export interface LinkedGroup {
+  id: string;
+  accounts: LinkedGroupAccount[];
+  links: LinkedGroupLink[];
+  guildCount: number;
+  validatedCount: number;
+  manualCount: number;
+  lastLinkedAt: string;
+}
+
+export async function fetchAdminLinkedGroups(query: {
+  search?: string;
+  status?: 'VALIDATED' | 'PENDING';
+  minAccounts?: number;
+  offset?: number;
+  limit?: number;
+} = {}): Promise<{ groups: LinkedGroup[]; total: number; totalAccounts: number; truncated: boolean }> {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) {
+    if (value !== undefined && value !== null && value !== '') params.set(key, String(value));
+  }
+  const response = await authorizedFetch(`${API_BASE_URL}/api/admin/linked-accounts?${params.toString()}`);
+  if (!response.ok) throw new Error('Impossible de charger les doubles comptes. Réessaie.');
+  return response.json();
+}
+
 export interface ManualAchievementHolder {
   userId: string;
   unlockedAt: string;

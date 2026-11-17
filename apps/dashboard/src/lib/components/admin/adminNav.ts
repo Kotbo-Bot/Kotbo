@@ -57,6 +57,7 @@ export const ADMIN_SPACES: AdminSpace[] = [
     icon: 'ShieldCheck',
     tabs: [
       { path: '/admin/security', label: 'Accès et liste noire' },
+      { path: '/admin/linked-accounts', label: 'Doubles comptes' },
       { path: '/admin/content', label: 'Mots globaux' },
       { path: '/admin/sites', label: 'Sites' },
       { path: '/admin/gdpr', label: 'Export RGPD' },

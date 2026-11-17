@@ -816,6 +816,10 @@
               load={() => import("./pages/admin/Security.svelte")}
             />
             <LazyRoute
+              path="/admin/linked-accounts"
+              load={() => import("./pages/admin/LinkedAccounts.svelte")}
+            />
+            <LazyRoute
               path="/admin/content"
               load={() => import("./pages/admin/Content.svelte")}
             />
