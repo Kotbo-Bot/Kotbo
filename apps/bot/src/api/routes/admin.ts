@@ -77,6 +77,7 @@ import {
   purgeErrors,
   resolveErrorGroup,
 } from '../../services/system/botErrorLogService.js';
+import { listLinkedGroups } from '../../services/moderation/adminLinkedAccountsService.js';
 import { handleAdminAnalyticsRoutes } from './admin/analytics.js';
 import { handleAdminInsightRoutes } from './admin/insights.js';
 import { handleAdminAchievementRoutes } from './admin/achievements.js';
@@ -233,6 +234,24 @@ export async function handleAdminRoutes(
     } catch (err) {
       logger.error('AdminAPI', 'GET admin audit actions error:', err);
       jsonFailure(res, err, 'Erreur lors du chargement des actions', 'AdminAPI');
+    }
+    return true;
+  }
+
+  // GET /api/admin/linked-accounts - Groupes de doubles comptes, tous serveurs confondus
+  if (parts[2] === 'linked-accounts' && parts.length === 3 && method === 'GET') {
+    try {
+      const status = url.searchParams.get('status');
+      json(res, 200, await listLinkedGroups(client, {
+        search: url.searchParams.get('search') || undefined,
+        status: status === 'VALIDATED' || status === 'PENDING' ? status : undefined,
+        minAccounts: Number(url.searchParams.get('minAccounts')) || undefined,
+        offset: Number(url.searchParams.get('offset')) || 0,
+        limit: Number(url.searchParams.get('limit')) || 30,
+      }));
+    } catch (err) {
+      logger.error('AdminAPI', 'GET admin linked-accounts error:', err);
+      jsonFailure(res, err, 'Erreur lors du chargement des doubles comptes', 'AdminAPI');
     }
     return true;
   }
