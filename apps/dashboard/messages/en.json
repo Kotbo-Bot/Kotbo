@@ -19729,5 +19729,6 @@
   "svdx_sanctions_empty": "No sanctions",
   "svdx_recent_title": "Latest sanctions",
   "svdx_journal_title": "Automod decisions",
-  "svdx_journal_desc": "Linked to this tag on your server. Waves detected: {waves}."
+  "svdx_journal_desc": "Linked to this tag on your server. Waves detected: {waves}.",
+  "tam_sff_hint": "For more on tags (ticket, escalation, join waves, shared list), use the Tags tab."
 }

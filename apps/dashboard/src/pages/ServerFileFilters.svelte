@@ -248,6 +248,10 @@
               </select>
             </label>
           {/if}
+          <Callout variant="info">
+            {m.tam_sff_hint()}
+            {#snippet actions()}<Button size="sm" variant="secondary" icon="Tag" onclick={() => gotoTab('/security/filters', 'tags', 'bot')}>{m.tam_tab()}</Button>{/snippet}
+          </Callout>
           {#if config.otherTagsMode !== 'OFF' && !config.jailRoleId}
             <Callout variant="warning">{m.sff_no_jail()}</Callout>
           {/if}

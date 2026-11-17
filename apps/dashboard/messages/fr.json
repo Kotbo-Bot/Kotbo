@@ -19733,5 +19733,6 @@
   "svdx_sanctions_empty": "Aucune sanction",
   "svdx_recent_title": "Dernières sanctions",
   "svdx_journal_title": "Décisions de l'automod",
-  "svdx_journal_desc": "Liées à ce tag chez toi. Vagues détectées : {waves}."
+  "svdx_journal_desc": "Liées à ce tag chez toi. Vagues détectées : {waves}.",
+  "tam_sff_hint": "Pour aller plus loin sur les tags (ticket, escalade, vagues d'arrivées, liste partagée), utilise l'onglet Tags."
 }
