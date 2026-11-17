@@ -19,6 +19,7 @@ export * from './admin';
 export * from './invitations';
 export * from './feedback';
 export * from './moderation';
+export * from './tagAutomod';
 export * from './content';
 export * from './partnerships';
 export * from './hierarchies';
