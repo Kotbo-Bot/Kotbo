@@ -1,5 +1,6 @@
 <script lang="ts">
   import { dialogFocus } from '../actions/dialogFocus';
+  import { portal } from '../actions/portal';
   import { m } from '../i18n';
   import { router } from 'tinro';
   import Papicon from './Papicon.svelte';
@@ -367,7 +368,8 @@
 
 {#if open}
   <div
-    class="command-palette fixed inset-0 z-100 flex items-start justify-center pt-[15vh] px-4"
+    class="command-palette layer-command fixed inset-0 flex items-start justify-center pt-[15vh] px-4"
+    use:portal
     use:dialogFocus={{}}
     role="dialog"
     aria-modal="true"

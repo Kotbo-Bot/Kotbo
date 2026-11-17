@@ -126,6 +126,9 @@
 .z-110 {
   z-index: 110;
 }
+.layer-command {
+  z-index: var(--layer-command);
+}
 
 
 :root {
@@ -161,6 +164,8 @@
      sur la page Planifications). */
   --layer-popover: 15000;
   --layer-confirm: 20000;
+  /* Ctrl+K (recherche) et Ctrl+G (changer de serveur) : par-dessus tout, fiches et confirmations comprises. */
+  --layer-command: 30000;
 
   --background: #ffffff;
   --surface: #ffffff;
