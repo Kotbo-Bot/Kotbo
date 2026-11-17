@@ -18,7 +18,20 @@ COPY packages/shared/package.json packages/shared/
 # Install dependencies (only for the dashboard)
 RUN bun install --frozen-lockfile
 
+# Compilation paraglide (~55 s) isolee : elle ne lit que project.inlang et
+# messages, donc cette couche n'est rejouee que si les messages changent. Le
+# plugin Vite est desactive plus bas (KOTBO_SKIP_PARAGLIDE) pour ne pas
+# recompiler au build.
+WORKDIR /app/apps/dashboard
+COPY apps/dashboard/project.inlang project.inlang
+COPY apps/dashboard/messages messages
+# --strategy doit rester identique a celle de vite.config.ts : le CLI n'a pas la
+# meme valeur par defaut que le plugin, et le runtime genere en depend.
+RUN bunx @inlang/paraglide-js compile --project ./project.inlang --outdir ./src/lib/paraglide \
+      --strategy localStorage preferredLanguage baseLocale
+
 # Copy dashboard source and workspace packages
+WORKDIR /app
 COPY packages packages
 COPY apps/dashboard apps/dashboard
 
@@ -26,6 +39,7 @@ COPY apps/dashboard apps/dashboard
 WORKDIR /app/apps/dashboard
 ARG VITE_API_URL
 ENV VITE_API_URL=${VITE_API_URL}
+ENV KOTBO_SKIP_PARAGLIDE=1
 RUN bun run build
 
 # Pre-compression gzip des assets textuels, servis ensuite par `gzip_static on`

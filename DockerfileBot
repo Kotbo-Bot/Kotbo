@@ -26,15 +26,20 @@ RUN bun install --frozen-lockfile
 COPY packages/database packages/database
 RUN bun run db:generate
 
+# Les messages i18n sont compiles une fois ici, et non plus a chaque demarrage
+# du conteneur (deploy-commands et prestart relancaient chacun paraglide).
+# Paraglide ne lit que project.inlang et messages : on les copie seuls, avant
+# les sources, pour que la compilation (~17 s) ne se rejoue que si les messages
+# changent. Le COPY apps/bot plus bas ajoute le reste sans toucher src/lib/paraglide.
+COPY apps/bot/project.inlang apps/bot/project.inlang
+COPY apps/bot/messages apps/bot/messages
+RUN bun run --filter @kotbo/bot build:i18n
+
 # Copy remaining source code
 COPY packages/core packages/core
 COPY packages/contracts packages/contracts
 COPY packages/shared packages/shared
 COPY apps/bot apps/bot
-
-# Les messages i18n sont compiles une fois ici, et non plus a chaque demarrage
-# du conteneur (deploy-commands et prestart relancaient chacun paraglide).
-RUN bun run --filter @kotbo/bot build:i18n
 
 # Stage 2: Runtime stage
 FROM oven/bun:1-alpine
