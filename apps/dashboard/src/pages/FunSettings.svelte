@@ -246,6 +246,9 @@
   const wide = new MediaQuery('min-width: 64rem');
   let statusOpen = $state(false);
 
+  /** Jeu dont on choisit le salon, dans la fenêtre des réglages. */
+  let editingGame = $state<FunGame | null>(null);
+
   /** La cible du nombre mystère reste cachée : une capture d'écran ne doit pas la livrer. */
   let guessRevealed = $state(false);
 
@@ -387,6 +390,29 @@
     </Modal>
   {/if}
 
+  {#if editingGame}
+    {@const game = editingGame}
+    {@const texts = gameTexts[game.id]}
+    <Modal open={true} onClose={() => (editingGame = null)} title={texts.title} subtitle={texts.subtitle}>
+      <div class="space-y-4">
+        <p class="text-sm text-on-surface-variant">{texts.rule ?? m.fun_game_score_rule()}</p>
+        <Field label={m.fun_channel_label()} hint={m.fun_game_channel_hint()}>
+          {#snippet children(id)}
+            <SearchableSelect {id} bind:value={config[game.channelKey]} options={channelOptions} placeholder={m.fun_no_channel()} />
+          {/snippet}
+        </Field>
+      </div>
+      {#snippet footer()}
+        <div class="flex flex-wrap justify-end gap-2">
+          {#if config[game.channelKey]}
+            <Button variant="ghost" icon="power" onclick={() => { config[game.channelKey] = null; editingGame = null; }}>{m.fun_game_disable()}</Button>
+          {/if}
+          <Button variant="primary" onclick={() => (editingGame = null)}>{m.common_close()}</Button>
+        </div>
+      {/snippet}
+    </Modal>
+  {/if}
+
   <!-- Sur grand écran, l'état du module reste à côté du contenu, quel que soit l'onglet. -->
   <div class="lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start lg:gap-6">
     <div class="min-w-0">
@@ -495,27 +521,25 @@
         <div class="space-y-6">
           <section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl space-y-5">
             {@render sectionHeader('Gamepad2', m.fun_settings_games_title(), m.fun_settings_games_desc())}
-            <ul class="divide-y divide-outline-variant/15">
+            <ul class="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {#each FUN_GAMES as game (game.id)}
-                {@const texts = gameTexts[game.id]}
-                <li class="grid gap-3 py-4 first:pt-0 last:pb-0 md:grid-cols-[minmax(0,1fr)_16rem] md:items-start">
-                  <div class="flex items-start gap-3 min-w-0">
-                    {@render gameIcon(game)}
-                    <div class="min-w-0">
-                      <p class="text-sm font-semibold text-on-surface">{texts.title}</p>
-                      <p class="text-xs text-on-surface-variant">{texts.rule ?? texts.subtitle}</p>
-                    </div>
+                {@const channelId = config[game.channelKey]}
+                <li class="rounded-xl border p-4 flex items-center gap-3 {channelId ? 'border-success/30 bg-success/5' : 'border-outline-variant/20 bg-surface-container-high/20'}">
+                  {@render gameIcon(game)}
+                  <div class="min-w-0 flex-1">
+                    <p class="text-sm font-semibold text-on-surface">{gameTexts[game.id].title}</p>
+                    <p class="text-xs truncate {channelId ? 'text-success' : 'text-on-surface-variant'}">
+                      {channelId ? channelName(channelId) : gameTexts[game.id].subtitle}
+                    </p>
                   </div>
-                  <div>
-                    <label class="sr-only" for="fun-channel-{game.id}">{m.fun_channel_aria({ game: texts.title })}</label>
-                    <SearchableSelect
-                      id="fun-channel-{game.id}"
-                      bind:value={config[game.channelKey]}
-                      options={channelOptions}
-                      placeholder={m.fun_no_channel()}
-                      disabled={!canManageSettings}
-                    />
-                  </div>
+                  <Button
+                    size="sm"
+                    variant={channelId ? 'ghost' : 'secondary'}
+                    icon={channelId ? 'pencil' : 'plus'}
+                    disabled={!canManageSettings}
+                    disabledReason={m.common_reason_no_permission()}
+                    onclick={() => (editingGame = game)}
+                  >{channelId ? m.fun_game_change() : m.fun_game_enable()}</Button>
                 </li>
               {/each}
             </ul>
