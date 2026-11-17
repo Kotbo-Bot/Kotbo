@@ -5,7 +5,7 @@ import { logger } from '../../../../utils/logger.js';
 import { getApiUrl, getDashboardUrl } from '../../../shared.js';
 import { getAllInstances } from '../../../../utils/instanceResolver.js';
 import { normalizeOgPath, resolveOgMetadata, type OgMetadata } from '../../../../services/system/ogMetadataService.js';
-import { OG_CARD_VERSION, tryRenderOgCard } from '../../../../services/system/ogImageService.js';
+import { OG_CARD_SIZE, OG_CARD_VERSION, tryRenderOgCard } from '../../../../services/system/ogImageService.js';
 
 // ============================================================================
 // APERCU DES LIENS POUR LES ROBOTS SOCIAUX
@@ -143,13 +143,20 @@ export function buildComponentEmbed(
     buttons.push({ type: 2, style: 5, url: `${apiOrigin}/api/public/invite`, label: fr ? 'Inviter Kotbo' : 'Invite Kotbo' });
   }
 
+  const text = { type: 10, content: `# [${title}](${canonicalUrl})\n${description}` };
   const payload = {
     component: {
       type: 17,
       accent_color: parseInt(meta.themeColor.replace('#', ''), 16) || 0x818cf8,
       components: [
-        { type: 10, content: `# [${title}](${canonicalUrl})\n${description}` },
-        ...(imageUrl ? [{ type: 12, items: [{ media: { url: imageUrl }, description: meta.imageAlt.slice(0, 200) }] }] : []),
+        // Vignette a cote du texte (section + accessoire), pas en banniere.
+        imageUrl
+          ? {
+              type: 9,
+              components: [text],
+              accessory: { type: 11, media: { url: imageUrl }, description: meta.imageAlt.slice(0, 200) },
+            }
+          : text,
         { type: 1, components: buttons },
       ],
     },
@@ -181,7 +188,7 @@ export function renderPreviewHtml(meta: OgMetadata, canonicalUrl: string, apiOri
     metaTag('robots', meta.robots, 'name'),
     // Discord colore la barre laterale de l'embed avec `theme-color`.
     metaTag('theme-color', meta.themeColor, 'name'),
-    metaTag('twitter:card', imageUrl ? 'summary_large_image' : 'summary', 'name'),
+    metaTag('twitter:card', 'summary', 'name'),
     metaTag('twitter:title', meta.title, 'name'),
     metaTag('twitter:description', meta.description, 'name'),
   ];
@@ -191,8 +198,8 @@ export function renderPreviewHtml(meta: OgMetadata, canonicalUrl: string, apiOri
       metaTag('og:image', imageUrl),
       metaTag('og:image:secure_url', imageUrl),
       metaTag('og:image:type', 'image/png'),
-      metaTag('og:image:width', '1200'),
-      metaTag('og:image:height', '630'),
+      metaTag('og:image:width', String(OG_CARD_SIZE)),
+      metaTag('og:image:height', String(OG_CARD_SIZE)),
       metaTag('og:image:alt', meta.imageAlt),
       metaTag('twitter:image', imageUrl, 'name'),
     );
@@ -321,8 +328,8 @@ export function createOgRouter(client: Client): OpenAPIHono {
       ...(meta.imagePath
         ? {
             thumbnail_url: `${apiOrigin}${meta.imagePath}`,
-            thumbnail_width: 1200,
-            thumbnail_height: 630,
+            thumbnail_width: OG_CARD_SIZE,
+            thumbnail_height: OG_CARD_SIZE,
           }
         : {}),
     });
