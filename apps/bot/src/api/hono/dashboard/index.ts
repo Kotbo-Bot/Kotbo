@@ -7,6 +7,9 @@
 import { Hono } from 'hono';
 import { compress } from 'hono/compress';
 import type { Client } from 'discord.js';
+import { createAdminLockRouter } from '../../routes/dashboard/adminLock.js';
+import { createAuditEventsRouter } from '../../routes/dashboard/auditEvents.js';
+import { createQuestsRouter } from '../../routes/dashboard/quests.js';
 import { createEvaluationsRouter } from '../../routes/dashboard/evaluations.js';
 import { createPulseRouter } from '../../routes/dashboard/pulse.js';
 import { createHomeTasksRouter } from '../../routes/dashboard/homeTasks.js';
@@ -28,5 +31,8 @@ export function createDashboardRouter(client: Client) {
   router.route('/', createHomeTasksRouter(client));
   router.route('/', createPulseRouter(client));
   router.route('/', createEvaluationsRouter(client));
+  router.route('/', createQuestsRouter(client));
+  router.route('/', createAuditEventsRouter(client));
+  router.route('/', createAdminLockRouter(client));
   return router;
 }

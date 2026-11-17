@@ -12,7 +12,6 @@ import { handleRecruitmentWebhookRoute, handleRecruitmentRoutes } from './dashbo
 import { handleRecruitmentFormRoutes } from './dashboard/recruitmentForms.js';
 import { handleCustomFormRoutes } from './dashboard/customForms.js';
 import { handleBanAppealRoutes } from './dashboard/banAppeals.js';
-import { handleAdminLockRoutes } from './dashboard/adminLock.js';
 import { handleMembersRoutes } from './dashboard/members.js';
 import { handleMemberProfileRoutes } from './dashboard/memberProfile.js';
 import { handleLeadershipRoutes, handleGuildLeadershipRoutes } from './dashboard/leadership.js';
@@ -39,14 +38,12 @@ import { handleReputationRoutes } from './dashboard/reputation.js';
 import { handleSuggestionRoutes } from './dashboard/suggestions.js';
 import { handleSeasonRoutes } from './dashboard/seasons.js';
 import { handleRankedRoutes } from './dashboard/ranked.js';
-import { handleQuestRoutes } from './dashboard/quests.js';
 import { handleWidgetRoutes } from './dashboard/widget.js';
 import { handleMessageLogRoutes } from './dashboard/messageLogs.js';
 import { handleRaidProtectionRoutes } from './dashboard/raidProtection.js';
 import { handleClansRoutes } from './dashboard/clans.js';
 import { handleDropsRoutes } from './dashboard/drops.js';
 import { handleGhostMembersRoutes } from './dashboard/ghostMembers.js';
-import { handleAuditEventRoutes } from './dashboard/auditEvents.js';
 import { handleWorkflowRoutes } from './dashboard/workflows.js';
 import { handleSimulationRoutes } from './dashboard/simulation.js';
 import { handleTelemetryRoute } from './dashboard/telemetry.js';
@@ -136,10 +133,6 @@ export async function handleDashboardRoutes(
       return true;
     }
     if (await handleBanAppealRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
-      if (method !== 'GET') await cache.invalidateGuild(guildId);
-      return true;
-    }
-    if (await handleAdminLockRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
       if (method !== 'GET') await cache.invalidateGuild(guildId);
       return true;
     }
@@ -257,10 +250,6 @@ export async function handleDashboardRoutes(
       if (method !== 'GET') await cache.invalidateGuild(guildId);
       return true;
     }
-    if (await handleQuestRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
-      if (method !== 'GET') await cache.invalidateGuild(guildId);
-      return true;
-    }
     if (await handleWidgetRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
       if (method !== 'GET') await cache.invalidateGuild(guildId);
       return true;
@@ -270,10 +259,6 @@ export async function handleDashboardRoutes(
       return true;
     }
     if (await handleGhostMembersRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
-      if (method !== 'GET') await cache.invalidateGuild(guildId);
-      return true;
-    }
-    if (await handleAuditEventRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
       if (method !== 'GET') await cache.invalidateGuild(guildId);
       return true;
     }
