@@ -75,6 +75,8 @@
   "nav_theme_light": "Light theme",
   "nav_theme_dark": "Dark theme",
   "nav_favorite": "Pin",
+  "nav_plan_plus": "Plus plan",
+  "nav_plan_freemium": "Free, fuller with the Plus plan",
   "nav_unfavorite": "Unpin",
   "nav_back_to": "Back to {page}",
   "nav_account_open": "My account and settings",

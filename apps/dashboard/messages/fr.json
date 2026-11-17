@@ -75,6 +75,8 @@
   "nav_theme_light": "Thème clair",
   "nav_theme_dark": "Thème sombre",
   "nav_favorite": "Épingler",
+  "nav_plan_plus": "Offre Plus",
+  "nav_plan_freemium": "Gratuit, plus complet avec l'offre Plus",
   "nav_unfavorite": "Désépingler",
   "nav_back_to": "Revenir à {page}",
   "nav_account_open": "Mon compte et mes réglages",
