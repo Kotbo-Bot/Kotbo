@@ -7,6 +7,9 @@
 import { Hono } from 'hono';
 import { compress } from 'hono/compress';
 import type { Client } from 'discord.js';
+import { createPredictionsRouter } from '../../routes/dashboard/predictions.js';
+import { createSatisfactionRouter } from '../../routes/dashboard/satisfaction.js';
+import { createMarketplaceRouter } from '../../routes/dashboard/marketplace.js';
 
 export function createDashboardRouter(client: Client) {
   const router = new Hono();
@@ -14,6 +17,10 @@ export function createDashboardRouter(client: Client) {
   // L'ancien routeur compressait en gzip au-delà de 1 Ko : les listes du
   // dashboard (membres, journaux, analytics) en dépendent.
   router.use('/api/dashboard/*', compress({ threshold: 1024 }));
+
+  router.route('/', createPredictionsRouter(client));
+  router.route('/', createSatisfactionRouter(client));
+  router.route('/', createMarketplaceRouter(client));
 
   return router;
 }

@@ -39,12 +39,9 @@ import { handleHomeWidgetsRoutes } from './dashboard/homeWidgets.js';
 import { handleHomeTasksRoutes } from './dashboard/homeTasks.js';
 import { handleReputationRoutes } from './dashboard/reputation.js';
 import { handleSuggestionRoutes } from './dashboard/suggestions.js';
-import { handleSatisfactionRoutes } from './dashboard/satisfaction.js';
 import { handleSeasonRoutes } from './dashboard/seasons.js';
 import { handleRankedRoutes } from './dashboard/ranked.js';
-import { handlePredictionRoutes } from './dashboard/predictions.js';
 import { handleEvaluationRoutes } from './dashboard/evaluations.js';
-import { handleMarketplaceRoutes } from './dashboard/marketplace.js';
 import { handleQuestRoutes } from './dashboard/quests.js';
 import { handleWidgetRoutes } from './dashboard/widget.js';
 import { handleMessageLogRoutes } from './dashboard/messageLogs.js';
@@ -262,10 +259,6 @@ export async function handleDashboardRoutes(
       if (method !== 'GET') await cache.invalidateGuild(guildId);
       return true;
     }
-    if (await handleSatisfactionRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
-      if (method !== 'GET') await cache.invalidateGuild(guildId);
-      return true;
-    }
     if (await handleSeasonRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
       if (method !== 'GET') await cache.invalidateGuild(guildId);
       return true;
@@ -274,15 +267,7 @@ export async function handleDashboardRoutes(
       if (method !== 'GET') await cache.invalidateGuild(guildId);
       return true;
     }
-    if (await handlePredictionRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
-      if (method !== 'GET') await cache.invalidateGuild(guildId);
-      return true;
-    }
     if (await handleEvaluationRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
-      if (method !== 'GET') await cache.invalidateGuild(guildId);
-      return true;
-    }
-    if (await handleMarketplaceRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
       if (method !== 'GET') await cache.invalidateGuild(guildId);
       return true;
     }
