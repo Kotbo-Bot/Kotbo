@@ -218,7 +218,7 @@ model MemberJail {
   guildId    String
   userId     String
   sanctionId String?
-  // MANUAL | SERVER_TAG | ACCOUNT_AGE | DISCORD_QUARANTINE | HONEYPOT | VISION
+  // MANUAL | SERVER_TAG | ACCOUNT_AGE | DISCORD_QUARANTINE | HONEYPOT | VISION | TAG_AUTOMOD
   source     String   @default("MANUAL")
   roleIds    String[] @default([])
   reason     String?

@@ -27,7 +27,7 @@ import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { getRaidProtectionConfig, upsertRaidProtectionConfig } from './raidProtectionService.js';
 
-export type JailSource = 'MANUAL' | 'SERVER_TAG' | 'ACCOUNT_AGE' | 'DISCORD_QUARANTINE' | 'HONEYPOT' | 'VISION';
+export type JailSource = 'MANUAL' | 'SERVER_TAG' | 'ACCOUNT_AGE' | 'DISCORD_QUARANTINE' | 'HONEYPOT' | 'VISION' | 'TAG_AUTOMOD';
 
 export class JailNotConfiguredError extends Error {
   constructor() {
