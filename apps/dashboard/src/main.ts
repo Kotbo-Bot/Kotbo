@@ -51,6 +51,30 @@ if (import.meta.env.PROD && import.meta.env.VITE_DEMO !== '1' && 'serviceWorker'
   })
 }
 
+// Apres un deploiement, les chunks hashes de l'ancienne version n'existent plus :
+// un import dynamique (fiche serveur, salon...) echoue et plante la page. On
+// recharge une fois (garde 1 min contre une boucle) pour recuperer la nouvelle version.
+function reloadOnStaleChunk() {
+  try {
+    const last = Number(sessionStorage.getItem('kotbo:chunk-reload') ?? 0)
+    if (Date.now() - last < 60_000) return false
+    sessionStorage.setItem('kotbo:chunk-reload', String(Date.now()))
+  } catch {
+    return false
+  }
+  window.location.reload()
+  return true
+}
+window.addEventListener('vite:preloadError', (event) => {
+  if (reloadOnStaleChunk()) event.preventDefault()
+})
+window.addEventListener('unhandledrejection', (event) => {
+  const message = String((event.reason as Error | undefined)?.message ?? event.reason ?? '')
+  if (/dynamically imported module|Importing a module script failed/i.test(message) && reloadOnStaleChunk()) {
+    event.preventDefault()
+  }
+})
+
 const app = mount(App, {
   target: document.getElementById('app'),
 })
