@@ -11,6 +11,7 @@ import {
   guildTagBadgeUrl,
   resolveExternalGuild,
 } from '../core/serverTagService.js';
+import { getServerProfile, guildCreatedAt, type ServerProfile } from './serverProfileService.js';
 
 export interface ServerTagServerSummary {
   guildId: string;
@@ -99,6 +100,8 @@ export interface ServerDetailsResult {
     /** Utilisations par jour des emojis/stickers du serveur, 30 derniers jours (jours vides inclus). */
     usageByDay: Array<{ date: string; count: number }>;
   };
+  /** Liens publics et caractéristiques Discord : invitation par défaut, découverte, tags. */
+  profile: ServerProfile;
   /** Activité des porteurs du tag sur le serveur actif (profils en base). */
   activity: {
     messages: number;
@@ -423,6 +426,7 @@ export async function getServerDetails(
     }).catch(() => 0),
   ]);
 
+  const profile = await getServerProfile(client, targetGuildId, resolved.name).catch(() => null);
   const liveGuild = client.guilds.cache.get(targetGuildId);
   const bannerUrl = liveGuild?.bannerURL({ size: 1024 })
     ?? liveGuild?.discoverySplashURL({ size: 1024 })
@@ -581,6 +585,19 @@ export async function getServerDetails(
       stickers,
       totalUses,
       usageByDay,
+    },
+    profile: profile ?? {
+      defaultInvite: null,
+      discoveryUrl: null,
+      discoverable: false,
+      siteUrl: null,
+      features: [],
+      vanityCode: null,
+      createdAt: guildCreatedAt(targetGuildId),
+      premiumTier: null,
+      boostCount: null,
+      locale: null,
+      verificationLevel: null,
     },
     activity: {
       messages: holderTotals?._sum.messageCount ?? 0,
