@@ -1,4 +1,5 @@
 /** Instances self-host : télémétrie et bannissement à distance. */
+import { m } from '../i18n';
 import { API_BASE_URL, authorizedFetch } from './client';
 
 export type InstanceBanMode = 'SHUTDOWN' | 'DISABLE_FEATURES';
@@ -39,7 +40,7 @@ export interface OrphanInstanceBan {
 
 export async function fetchBotInstances(): Promise<{ instances: BotInstance[]; orphanBans: OrphanInstanceBan[] }> {
   const res = await authorizedFetch(`${API_BASE_URL}/api/admin/instances`);
-  if (!res.ok) throw new Error('Impossible de récupérer les instances. Réessaie.');
+  if (!res.ok) throw new Error(m.api_err_wl_list());
   return res.json();
 }
 
@@ -51,7 +52,7 @@ export async function banBotInstance(botClientId: string, data: { reason?: strin
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || "Erreur lors du bannissement de l'instance");
+    throw new Error(err.error || m.api_err_instance_ban());
   }
   return res.json();
 }
@@ -62,7 +63,7 @@ export async function unbanBotInstance(botClientId: string) {
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || "Erreur lors du débannissement de l'instance");
+    throw new Error(err.error || m.api_err_instance_unban());
   }
   return res.json();
 }

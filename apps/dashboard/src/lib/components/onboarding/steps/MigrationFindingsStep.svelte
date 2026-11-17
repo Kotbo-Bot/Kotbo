@@ -109,7 +109,7 @@
             label={finding.title}
             pitch={finding.detail}
             icon="download"
-            meta={finding.entities.length > 1 ? `${finding.entities.length} éléments` : undefined}
+            meta={finding.entities.length > 1 ? m.onb_findings_items({ count: finding.entities.length }) : undefined}
             selected={!dropped.includes(finding.key)}
             onclick={() => toggle(finding.key)}
           >

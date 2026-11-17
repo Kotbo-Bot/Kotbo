@@ -1,4 +1,5 @@
 /** Instances marque blanche et bot personnalise. */
+import { m } from '../i18n';
 import { authStore } from '../stores/auth.svelte';
 import { API_BASE_URL, authorizedFetch, dashboardRequest } from './client';
 
@@ -8,13 +9,13 @@ import { API_BASE_URL, authorizedFetch, dashboardRequest } from './client';
 
 export async function fetchWhiteLabelInstances() {
   const res = await authorizedFetch(`${API_BASE_URL}/api/admin/whitelabel`);
-  if (!res.ok) throw new Error('Impossible de récupérer les instances. Réessaie.');
+  if (!res.ok) throw new Error(m.api_err_wl_list());
   return res.json();
 }
 
 export async function fetchWhiteLabelInstance(id: string) {
   const res = await authorizedFetch(`${API_BASE_URL}/api/admin/whitelabel/${id}`);
-  if (!res.ok) throw new Error('Impossible de récupérer l\'instance. Réessaie.');
+  if (!res.ok) throw new Error(m.api_err_wl_get());
   return res.json();
 }
 
@@ -26,7 +27,7 @@ export async function createWhiteLabelInstance(data: Record<string, unknown>) {
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || 'Impossible de créer. Réessaie.');
+    throw new Error(err.error || m.api_err_create());
   }
   return res.json();
 }
@@ -39,7 +40,7 @@ export async function updateWhiteLabelInstance(id: string, data: Record<string, 
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || 'Impossible de mettre à jour. Réessaie.');
+    throw new Error(err.error || m.api_err_update());
   }
   return res.json();
 }
@@ -50,7 +51,7 @@ export async function deleteWhiteLabelInstance(id: string) {
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || 'Impossible de supprimer. Réessaie.');
+    throw new Error(err.error || m.api_err_delete());
   }
   return res.json();
 }
@@ -63,7 +64,7 @@ export async function bindGuildToInstance(instanceId: string, guildId: string) {
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || 'Erreur lors du rattachement');
+    throw new Error(err.error || m.api_err_wl_attach());
   }
   return res.json();
 }
@@ -72,7 +73,7 @@ async function adminInstanceAction(id: string, action: 'start' | 'stop') {
   const res = await authorizedFetch(`${API_BASE_URL}/api/admin/whitelabel/${id}/${action}`, { method: 'POST' });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || 'Action impossible. Réessaie.');
+    throw new Error(err.error || m.api_err_action());
   }
   return res.json();
 }
