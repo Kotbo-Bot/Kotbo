@@ -1287,3 +1287,38 @@ describe('B — mention du propriétaire : du PATCH du dashboard au salon créé
     });
   }
 });
+
+describe('« Le propriétaire est parti » : le message dit qui a récupéré le salon', () => {
+  const messageRecuperer = (sc: Scene) => [...sc.monde.messages.values()]
+    .find((msg) => msg.channel_id === sc.salonId && !(msg.flags & 64) && trouverComposant(msg, 'tempvoice:reclamer'));
+
+  for (const format of FORMATS) for (const depuis of ['message', 'panneau'] as const) {
+    test(`${format} · clic depuis le ${depuis} : la réécriture est acceptée par Discord et nomme le nouveau propriétaire`, async () => {
+      const sc = await monterScene({ langue: 'fr', format, mode: 'CLASSIC' });
+      Object.assign(base.reglages!, { handoverDmEnabled: false });
+      avancer(1_500);
+      sc.monde.bouger(IDS.PROPRIO, null);
+      await sc.monde.calme(sc.enCours);
+      const avant = messageRecuperer(sc);
+      expect(avant).toBeDefined();
+
+      avancer(1_500);
+      const clic = depuis === 'message'
+        ? clicSur('tempvoice:reclamer', { genre: 'bouton' }, IDS.AUTORISE, avant!, 'CLASSIC')
+        : (await parcourir(sc, CAS_PAR_ACTION('claim'), IDS.AUTORISE)).clic;
+      const r = await cliquer(sc, clic);
+      await sc.monde.calme(sc.enCours);
+      expect(tv.tempChannels.get(sc.salonId)?.creatorId).toBe(IDS.AUTORISE);
+
+      const reecritures = sc.monde.appels.filter((a) => a.methode === 'PATCH' && a.route === `/channels/${sc.salonId}/messages/${avant!.id}`);
+      expect(reecritures.length).toBeGreaterThan(0);
+      expect(reecritures.flatMap((a) => [...a.violations, ...(a.erreur ? [String(a.erreur)] : [])])).toEqual([]);
+      const apres = sc.monde.messages.get(avant!.id)!;
+      expect(textesVisibles(apres).join(' ')).toContain(`<@${IDS.AUTORISE}>`);
+      expect(trouverComposant(apres, 'tempvoice:reclamer')?.disabled).toBe(true);
+      // Le format du message ne change pas : un message V1 reste en embeds.
+      expect(Boolean(apres.flags & (1 << 15))).toBe(format === 'V2');
+      tracer(`récupération ${format} ${depuis}`, r);
+    });
+  }
+});

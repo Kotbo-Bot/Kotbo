@@ -5050,6 +5050,8 @@ function clorePropriete(salonId: string): EtapePropriete | undefined {
 
 /** Réécrit un message de passation ; un échec (message supprimé, MP fermé) n'arrête rien. */
 function editerMessage(message: Message | null | undefined, charge: PanneauRendu): void {
+  // Un message posté en V1 reste en V1 : converti en V2 à l'édition, il garderait son embed et Discord refuserait.
+  if (message && !messageEstV2(message)) sansConversionV2(charge);
   void Promise.resolve().then(() => message?.edit(charge)).catch(() => null);
 }
 
@@ -5809,9 +5811,9 @@ async function repondreDebordement(ctx: ActionContext, choix: 'deplacer' | 'deco
 /** Referme la carte de décision : ses boutons ne doivent pas rester cliquables. */
 async function cloreCarteDecision(interaction: RepliableInteraction, verdictAffiche: string): Promise<void> {
   if (!interaction.isMessageComponent()) return;
-  await interaction.message
-    .edit({ components: [], embeds: [avis(verdictAffiche)] })
-    .catch(() => null);
+  const charge = { components: [], embeds: [avis(verdictAffiche)] };
+  if (!messageEstV2(interaction.message)) sansConversionV2(charge);
+  await interaction.message.edit(charge).catch(() => null);
 }
 
 /** Le refus reste privé : l'écrire dans un salon que tout le monde lit
