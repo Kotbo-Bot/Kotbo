@@ -9,11 +9,17 @@
    * `userId`, le composant complete ce qui lui manque depuis le store partage
    * `memberIdentities` ; les valeurs passees en props restent prioritaires.
    * Les options `avatar`, `handle` et `tag` choisissent ce qui s'affiche.
+   *
+   * Par defaut, la photo et le pseudo ouvrent la fiche membre et la pastille de
+   * tag ouvre la fiche du serveur du tag. `onClick={null}` fige la photo et le pseudo ; pose
+   * dans un bouton ou un lien, le composant le detecte et ne capte aucun clic.
    */
   import { memberAvatarSrc } from '../discordMedia';
   import { memberIdentities } from '../stores/memberIdentities.svelte';
   import ServerTagPill from './ServerTagPill.svelte';
   import BoosterBadge from './BoosterBadge.svelte';
+  import { memberCaseModal } from '../stores/memberCaseModal.svelte';
+  import { serverDetailsModal } from '../stores/serverDetailsModal.svelte';
 
   const {
     userId = null,
@@ -29,7 +35,7 @@
     tag = true,
     boost = true,
     resolve = true,
-    onClick = null,
+    onClick = undefined,
     class: className = '',
   }: {
     /** Identifiant Discord : repli d'affichage, graine de couleur et cle de resolution. */
@@ -40,7 +46,7 @@
     username?: string | null;
     avatarUrl?: string | null;
     /** Tag deja connu de l'appelant ; `null` force l'absence de tag. */
-    serverTag?: { tag: string; badgeUrl?: string | null } | null;
+    serverTag?: { tag: string; badgeUrl?: string | null; guildId?: string | null } | null;
     /** Seconde ligne facultative (role, date, compteur...). */
     subtitle?: string | null;
     size?: 'xs' | 'sm' | 'md' | 'lg';
@@ -56,7 +62,7 @@
     boost?: boolean;
     /** Complete les champs manquants depuis le store ; false pour un rendu fige. */
     resolve?: boolean;
-    /** Rend l'ensemble cliquable (ouverture de la fiche membre). */
+    /** Clic sur la photo ou le pseudo ; par defaut la fiche membre, `null` pour aucun. */
     onClick?: ((userId: string) => void) | null;
     class?: string;
   } = $props();
@@ -91,23 +97,57 @@
   const shownTag = $derived(tag ? (serverTag === undefined ? known?.serverTag : serverTag) ?? null : null);
   const boostingSince = $derived(boost ? known?.boostingSince ?? null : null);
   const secondLine = $derived([handle && at ? `@${at}` : null, subtitle].filter(Boolean).join(' · '));
-  const clickable = $derived(!!onClick && !!userId);
+  let nested = $state(false);
+  let root: HTMLElement | undefined = $state();
+  // Un bouton dans un bouton est invalide et ferait partir deux clics : le parent garde la main.
+  $effect(() => {
+    nested = !!root?.parentElement?.closest('button, a, [role="button"], [role="link"]');
+  });
+  const handler = $derived(
+    onClick === undefined ? (memberCaseModal.canOpen ? (id: string) => void memberCaseModal.show(id, label) : null) : onClick,
+  );
+  const clickable = $derived(!nested && !!handler && !!userId);
+  const tagGuildId = $derived(shownTag && 'guildId' in shownTag ? shownTag.guildId ?? null : null);
+  const openTag = $derived(
+    !nested && tagGuildId && shownTag
+      ? () => serverDetailsModal.show(tagGuildId, shownTag.tag)
+      : null,
+  );
 </script>
 
-{#snippet body()}
+<span
+  bind:this={root}
+  title={userId ?? undefined}
+  class="inline-flex items-center {GAP_CLASSES[size]} min-w-0 {className}"
+>
   {#if avatar}
-    <img
-      src={avatarSrc}
-      alt=""
-      loading="lazy"
-      class="{AVATAR_CLASSES[size]} shrink-0 object-cover bg-surface-container"
-    />
+    {#if clickable}
+      <!-- Doublon souris du pseudo, deja atteignable au clavier : hors de l'ordre de tabulation. -->
+      <button type="button" tabindex="-1" aria-hidden="true" class="shrink-0" onclick={() => handler?.(userId!)}>
+        <img src={avatarSrc} alt="" loading="lazy" class="{AVATAR_CLASSES[size]} object-cover bg-surface-container" />
+      </button>
+    {:else}
+      <img
+        src={avatarSrc}
+        alt=""
+        loading="lazy"
+        class="{AVATAR_CLASSES[size]} shrink-0 object-cover bg-surface-container"
+      />
+    {/if}
   {/if}
   <span class="min-w-0 flex flex-col text-left">
     <span class="flex min-w-0 items-center gap-1.5">
-      <span class="{NAME_CLASSES[size]} font-semibold text-on-surface truncate">{prefix}{label}</span>
+      {#if clickable}
+        <button
+          type="button"
+          onclick={() => handler?.(userId!)}
+          class="{NAME_CLASSES[size]} font-semibold text-on-surface truncate text-left rounded transition-colors hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+        >{prefix}{label}</button>
+      {:else}
+        <span class="{NAME_CLASSES[size]} font-semibold text-on-surface truncate">{prefix}{label}</span>
+      {/if}
       {#if shownTag}
-        <ServerTagPill tag={shownTag.tag} badgeUrl={shownTag.badgeUrl} />
+        <ServerTagPill tag={shownTag.tag} badgeUrl={shownTag.badgeUrl} onclick={openTag} />
       {/if}
       {#if boostingSince}
         <BoosterBadge since={boostingSince} size={size === 'lg' ? 15 : 13} />
@@ -117,22 +157,4 @@
       <span class="text-2xs font-medium text-on-surface-variant truncate">{secondLine}</span>
     {/if}
   </span>
-{/snippet}
-
-{#if clickable}
-  <button
-    type="button"
-    onclick={() => onClick?.(userId!)}
-    title={userId ?? undefined}
-    class="inline-flex items-center {GAP_CLASSES[size]} min-w-0 rounded-lg transition-colors hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 {className}"
-  >
-    {@render body()}
-  </button>
-{:else}
-  <span
-    title={userId ?? undefined}
-    class="inline-flex items-center {GAP_CLASSES[size]} min-w-0 {className}"
-  >
-    {@render body()}
-  </span>
-{/if}
+</span>
