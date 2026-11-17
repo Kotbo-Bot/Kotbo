@@ -1,12 +1,12 @@
 <script lang="ts">
-  import { explainDisabled } from '../lib/actions/explainDisabled';
-  import { m } from '../lib/i18n';
+  import { m, dateLocale } from '../lib/i18n';
   import { channelDisplayName } from '../lib/channelUtils';
   import { onMount, onDestroy, untrack } from 'svelte';
   import { dashboardStore } from '../lib/stores/dashboard.svelte';
   import { createAsyncActionState } from '../lib/asyncAction.svelte';
   import { unsavedChanges } from '../lib/stores/unsavedChanges.svelte';
   import { confirmDialog } from '../lib/stores/confirmDialog.svelte';
+  import { FUN_GAMES, activeGameCount, gamesInGroup, type FunGame, type FunGameId } from '../lib/funGames';
   import Papicon from '../lib/components/Papicon.svelte';
   import InlineFeedback from '../lib/components/InlineFeedback.svelte';
   import SearchableSelect from '../lib/components/SearchableSelect.svelte';
@@ -14,6 +14,12 @@
   import LoadingHint from '../lib/components/LoadingHint.svelte';
   import ModulePage from '../lib/components/ModulePage.svelte';
   import ToggleSwitch from '../lib/components/ToggleSwitch.svelte';
+  import EmptyState from '../lib/components/EmptyState.svelte';
+  import MemberName from '../lib/components/MemberName.svelte';
+  import Button from '../lib/components/ui/Button.svelte';
+  import Field from '../lib/components/ui/Field.svelte';
+  import Tabs, { type TabItem } from '../lib/components/ui/Tabs.svelte';
+  import FunGameCard from '../lib/components/fun/FunGameCard.svelte';
   import EmojiRiddleEditor from '../lib/components/fun/EmojiRiddleEditor.svelte';
   import {
     fetchFunConfig,
@@ -177,58 +183,187 @@
     return success;
   }
 
-  async function handleResetCounting() {
+  /** Relance une partie après confirmation : comptage, nombre mystère, chaîne, rébus. */
+  async function resetGame(
+    id: FunGameId,
+    reset: () => Promise<{ gameState?: unknown } | null | undefined>,
+    texts: { title: string; confirm: string; toast: string },
+    variant?: 'warning'
+  ) {
     if (!canManageSettings) return;
-    if (!(await confirmDialog.ask({ title: m.fun_reset_counting_confirm_title(), confirmLabel: m.fun_reset_counting_confirm_btn(), variant: 'warning' }))) return;
+    if (!(await confirmDialog.ask({ title: texts.title, confirmLabel: texts.confirm, variant }))) return;
 
-    await actionState.run(async () => {
-      const res = await resetCountingGame();
-      if (res && res.gameState) {
-        gameState = mapGameState(res.gameState);
-      }
-      return true;
-    }, { successMessage: m.fun_reset_counting_toast() });
+    resetting = id;
+    try {
+      await actionState.run(async () => {
+        const res = await reset();
+        if (res && res.gameState) {
+          gameState = mapGameState(res.gameState);
+        }
+        return true;
+      }, { successMessage: texts.toast });
+    } finally {
+      resetting = null;
+    }
   }
 
-  async function handleResetGuessNumber() {
-    if (!canManageSettings) return;
-    if (!(await confirmDialog.ask({ title: m.fun_reset_guess_confirm_title(), confirmLabel: m.fun_reset_guess_confirm_btn() }))) return;
+  let resetting = $state<FunGameId | null>(null);
 
-    await actionState.run(async () => {
-      const res = await resetGuessNumberGame();
-      if (res && res.gameState) {
-        gameState = mapGameState(res.gameState);
-      }
-      return true;
-    }, { successMessage: m.fun_reset_guess_toast() });
-  }
+  const resetCounting = () => resetGame('counting', resetCountingGame, {
+    title: m.fun_reset_counting_confirm_title(), confirm: m.fun_reset_counting_confirm_btn(), toast: m.fun_reset_counting_toast()
+  }, 'warning');
+  const resetGuess = () => {
+    guessRevealed = false;
+    return resetGame('guess', resetGuessNumberGame, {
+      title: m.fun_reset_guess_confirm_title(), confirm: m.fun_reset_guess_confirm_btn(), toast: m.fun_reset_guess_toast()
+    });
+  };
+  const resetWordChain = () => resetGame('wordchain', resetWordChainGame, {
+    title: m.fun_reset_wordchain_confirm_title(), confirm: m.fun_reset_wordchain_confirm_btn(), toast: m.fun_reset_wordchain_toast()
+  }, 'warning');
+  const resetEmojiRiddle = () => resetGame('emojiriddle', resetEmojiRiddleGame, {
+    title: m.fun_reset_emojiriddle_confirm_title(), confirm: m.fun_reset_emojiriddle_confirm_btn(), toast: m.fun_reset_emojiriddle_toast()
+  });
 
-  async function handleResetWordChain() {
-    if (!canManageSettings) return;
-    if (!(await confirmDialog.ask({ title: m.fun_reset_wordchain_confirm_title(), confirmLabel: m.fun_reset_wordchain_confirm_btn(), variant: 'warning' }))) return;
+  type Tab = 'games' | 'confessions' | 'riddles';
+  let activeTab = $state<Tab>('games');
 
-    await actionState.run(async () => {
-      const res = await resetWordChainGame();
-      if (res && res.gameState) {
-        gameState = mapGameState(res.gameState);
-      }
-      return true;
-    }, { successMessage: m.fun_reset_wordchain_toast() });
-  }
+  /** La cible du nombre mystère reste cachée : une capture d'écran ne doit pas la livrer. */
+  let guessRevealed = $state(false);
 
-  async function handleResetEmojiRiddle() {
-    if (!canManageSettings) return;
-    if (!(await confirmDialog.ask({ title: m.fun_reset_emojiriddle_confirm_title(), confirmLabel: m.fun_reset_emojiriddle_confirm_btn() }))) return;
+  const channelOptions = $derived(availableChannels.map((c) => ({ id: c.id, name: channelDisplayName(c) })));
+  const activeCount = $derived(activeGameCount(config));
+  const scoreGames = gamesInGroup('score');
+  const ruleGames = gamesInGroup('rule');
 
-    await actionState.run(async () => {
-      const res = await resetEmojiRiddleGame();
-      if (res && res.gameState) {
-        gameState = mapGameState(res.gameState);
-      }
-      return true;
-    }, { successMessage: m.fun_reset_emojiriddle_toast() });
+  const tabItems = $derived<TabItem[]>([
+    { id: 'games', label: m.fun_tab_games(), icon: 'Gamepad2', badge: `${activeCount}/${FUN_GAMES.length}` },
+    { id: 'confessions', label: m.fun_tab_confessions(), icon: 'MessageCircle', badge: confessions.length || undefined },
+    { id: 'riddles', label: m.fun_tab_riddles(), icon: 'Puzzle' },
+  ]);
+
+  const gameTexts = $derived<Record<FunGameId, { title: string; subtitle: string; rule?: string }>>({
+    counting: { title: m.fun_counting_title(), subtitle: m.fun_counting_subtitle() },
+    guess: { title: m.fun_guess_title(), subtitle: m.fun_guess_subtitle() },
+    wordchain: { title: m.fun_wordchain_title(), subtitle: m.fun_wordchain_subtitle() },
+    emojiriddle: { title: m.fun_emojiriddle_title(), subtitle: m.fun_emojiriddle_subtitle() },
+    oneword: { title: m.fun_oneword_title(), subtitle: m.fun_oneword_subtitle(), rule: m.fun_oneword_hint() },
+    neversay: { title: m.fun_neversay_title(), subtitle: m.fun_neversay_subtitle(), rule: m.fun_neversay_hint() },
+    emojionly: { title: m.fun_emojionly_title(), subtitle: m.fun_emojionly_subtitle(), rule: m.fun_emojionly_hint() },
+    imageofday: { title: m.fun_imageofday_title(), subtitle: m.fun_imageofday_subtitle(), rule: m.fun_imageofday_hint() },
+  });
+
+  function formatDate(iso: string): string {
+    return new Date(iso).toLocaleString(dateLocale(), { dateStyle: 'medium', timeStyle: 'short' });
   }
 </script>
+
+{#snippet statValue(label: string, value: string, tone = 'text-on-surface')}
+  <div class="min-w-0">
+    <p class="text-xs text-on-surface-variant">{label}</p>
+    <p class="mt-0.5 truncate text-2xl font-bold {tone}">{value}</p>
+  </div>
+{/snippet}
+
+{#snippet lastPlayer(label: string, userId: string | null)}
+  <div class="min-w-0">
+    <p class="text-xs text-on-surface-variant">{label}</p>
+    <p class="mt-1 text-sm font-semibold text-on-surface">
+      {#if userId}
+        <MemberName {userId} />
+      {:else}
+        {m.fun_none()}
+      {/if}
+    </p>
+  </div>
+{/snippet}
+
+{#snippet gameStateView(game: FunGame)}
+  {#if game.id === 'counting'}
+    <div class="grid grid-cols-2 gap-4">
+      {@render statValue(m.fun_counting_number(), String(gameState.countingCurrent), 'text-warning')}
+      {@render lastPlayer(m.fun_last_player(), gameState.countingLastUserId)}
+    </div>
+  {:else if game.id === 'guess'}
+    <div class="flex items-center justify-between gap-3">
+      {@render statValue(m.fun_guess_target(), guessRevealed && gameState.guessNumberTarget ? String(gameState.guessNumberTarget) : '•••', 'text-success')}
+      <Button
+        variant="ghost"
+        size="sm"
+        icon={guessRevealed ? 'EyeOff' : 'Eye'}
+        aria-label={guessRevealed ? m.fun_guess_hide() : m.fun_guess_reveal()}
+        aria-pressed={guessRevealed}
+        onclick={() => (guessRevealed = !guessRevealed)}
+      />
+    </div>
+  {:else if game.id === 'wordchain'}
+    <div class="grid grid-cols-2 gap-4">
+      {@render statValue(m.fun_wordchain_last_word(), gameState.wordChainLastWord || m.fun_none(), 'text-sky-500')}
+      {@render lastPlayer(m.fun_last_player(), gameState.wordChainLastUserId)}
+    </div>
+  {:else if game.id === 'emojiriddle'}
+    <div class="flex items-center justify-between gap-3">
+      <div class="min-w-0">
+        <p class="text-xs text-on-surface-variant">{m.fun_emojiriddle_current_clue()}</p>
+        <p class="mt-1 text-3xl">{gameState.emojiRiddleEmojis || '❓'}</p>
+      </div>
+      <Button variant="ghost" size="sm" icon="Puzzle" onclick={() => (activeTab = 'riddles')}>{m.fun_riddles_manage()}</Button>
+    </div>
+  {:else if game.id === 'oneword'}
+    {@render lastPlayer(m.fun_last_author(), gameState.oneWordStoryLastUserId)}
+  {/if}
+{/snippet}
+
+{#snippet resetButton(id: FunGameId, label: string, onclick: () => void)}
+  <Button
+    size="sm"
+    icon="refresh-cw"
+    loading={resetting === id}
+    disabled={!canManageSettings}
+    disabledReason={m.common_reason_no_permission()}
+    {onclick}
+  >{label}</Button>
+{/snippet}
+
+{#snippet gameActionsView(game: FunGame)}
+  {#if game.id === 'counting'}
+    {@render resetButton('counting', m.fun_reset_counting_btn(), resetCounting)}
+  {:else if game.id === 'guess'}
+    {@render resetButton('guess', m.fun_reset_guess_btn(), resetGuess)}
+  {:else if game.id === 'wordchain'}
+    {@render resetButton('wordchain', m.fun_reset_wordchain_btn(), resetWordChain)}
+  {:else if game.id === 'emojiriddle'}
+    {@render resetButton('emojiriddle', m.fun_reset_emojiriddle_btn(), resetEmojiRiddle)}
+  {/if}
+{/snippet}
+
+{#snippet gameGroup(title: string, description: string, games: FunGame[])}
+  <section class="space-y-4">
+    <div>
+      <h2 class="text-lg font-semibold text-on-surface">{title}</h2>
+      <p class="text-xs text-on-surface-variant mt-0.5">{description}</p>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {#each games as game (game.id)}
+        {@const texts = gameTexts[game.id]}
+        <FunGameCard
+          {game}
+          title={texts.title}
+          subtitle={texts.subtitle}
+          rule={texts.rule}
+          bind:channelId={config[game.channelKey]}
+          channels={channelOptions}
+          canManage={canManageSettings}
+        >
+          {@render gameStateView(game)}
+          {#snippet actions()}
+            {@render gameActionsView(game)}
+          {/snippet}
+        </FunGameCard>
+      {/each}
+    </div>
+  </section>
+{/snippet}
 
 <ModulePage
   title={m.fun_page_title()}
@@ -238,435 +373,126 @@
 >
   <InlineFeedback state={actionState} />
 
-  {#if !loading}
-    <div class="flex items-center justify-between gap-4 rounded-xl bg-surface-container-low/40 border border-outline-variant/30 p-6 mb-8">
-      <div class="min-w-0">
-        <p class="text-sm font-semibold text-on-surface">{m.fun_punitive_title()}</p>
-        <p class="text-xs text-on-surface-variant mt-1">{m.fun_punitive_desc()}</p>
-      </div>
-      <ToggleSwitch
-        checked={config.funPunitiveMode}
-        disabled={!canManageSettings}
-        onToggle={() => (config.funPunitiveMode = !config.funPunitiveMode)}
-        ariaLabel={m.fun_punitive_title()}
-      />
-    </div>
-  {/if}
+  <Tabs label={m.fun_tabs_label()} tabs={tabItems} active={activeTab} onchange={(id) => (activeTab = id as Tab)} class="mb-6" />
 
   {#if loading}
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-      <Skeleton height="320px" radius="2.5rem" />
-      <Skeleton height="320px" radius="2.5rem" />
-      <Skeleton height="320px" radius="2.5rem" />
+    <div class="space-y-6">
+      <Skeleton height="96px" />
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Skeleton height="260px" />
+        <Skeleton height="260px" />
+      </div>
     </div>
     <div class="flex justify-center mt-4">
       <LoadingHint context="config" />
     </div>
-  {:else}
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-      <!-- Counting Card -->
-      <section class="bg-surface-container-low/40 border border-outline-variant/30 p-8 rounded-xl flex flex-col justify-between gap-6 hover:bg-surface-container-low/60 transition-all duration-300">
-        <div class="space-y-4">
-          <div class="flex items-center gap-3 pb-3 border-b border-outline-variant/15">
-            <div class="w-10 h-10 rounded-xl bg-warning/10 text-warning flex items-center justify-center">
-              <Papicon icon="Binary" size={20} />
-            </div>
-            <div>
-              <h3 class="text-lg font-semibold tracking-tight text-on-surface">{m.fun_counting_title()}</h3>
-              <p class="text-xs text-on-surface-variant/55 font-semibold">{m.fun_counting_subtitle()}</p>
-            </div>
-          </div>
-
-          <div class="space-y-1.5">
-            <label for="countingChannel" class="text-xs font-semibold text-on-surface-variant ml-2">{m.fun_channel_label()}</label>
-            <SearchableSelect
-              id="countingChannel"
-              bind:value={config.funCountingChannelId}
-              options={availableChannels.map(c => ({ id: c.id, name: channelDisplayName(c) }))}
-              placeholder={m.fun_no_channel()}
-              className="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-warning/30 transition-all"
-              disabled={!canManageSettings}
-            />
-          </div>
-
-          <div class="p-4 rounded-lg bg-surface-container-high/20 border border-outline-variant/5 space-y-2.5">
-            <p class="text-xs font-medium text-on-surface-variant">{m.fun_game_state_title()}</p>
-            <div class="grid grid-cols-2 gap-4">
-              <div class="bg-surface-container-high/40 p-3 rounded-xl border border-outline-variant/10 text-center">
-                <span class="text-2xs text-on-surface-variant uppercase font-bold">{m.fun_counting_number()}</span>
-                <p class="text-2xl font-semibold text-warning mt-0.5">{gameState.countingCurrent}</p>
-              </div>
-              <div class="bg-surface-container-high/40 p-3 rounded-xl border border-outline-variant/10 text-center flex flex-col justify-center min-w-0">
-                <span class="text-2xs text-on-surface-variant uppercase font-bold truncate">{m.fun_last_player()}</span>
-                <p class="text-xs font-bold text-on-surface mt-1 truncate" title={gameState.countingLastUserId || m.fun_none()}>
-                  {gameState.countingLastUserId ? m.fun_user_id({ id: gameState.countingLastUserId }) : m.fun_none()}
-                </p>
-              </div>
-            </div>
+  {:else if activeTab === 'games'}
+    <div class="space-y-8">
+      <section class="grid gap-6 rounded-xl border border-outline-variant/30 bg-surface-container-low/40 p-6 md:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] md:items-center">
+        <div class="space-y-3">
+          <p class="text-sm text-on-surface-variant">
+            <span class="text-2xl font-bold text-on-surface">{activeCount}</span>
+            {m.fun_active_summary({ total: FUN_GAMES.length })}
+          </p>
+          <div class="flex gap-1.5" aria-hidden="true">
+            {#each FUN_GAMES as game (game.id)}
+              <span class="h-2 flex-1 rounded-full {config[game.channelKey] ? 'bg-success' : 'bg-surface-container-high'}"></span>
+            {/each}
           </div>
         </div>
-
-        <button
-          type="button"
-          onclick={handleResetCounting}
-          disabled={actionState.state.loading}
-          use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''}
-          class="w-full py-3.5 bg-warning/10 hover:bg-warning/20 text-warning rounded-lg text-body-sm font-medium transition-all duration-200 flex items-center justify-center gap-2 active:scale-95 disabled:opacity-40"
-        >
-          <Papicon icon="refresh-cw" size={14} />
-          {m.fun_reset_counting_btn()}
-        </button>
-      </section>
-
-      <!-- One Word Story Card -->
-      <section class="bg-surface-container-low/40 border border-outline-variant/30 p-8 rounded-xl flex flex-col justify-between gap-6 hover:bg-surface-container-low/60 transition-all duration-300">
-        <div class="space-y-4">
-          <div class="flex items-center gap-3 pb-3 border-b border-outline-variant/15">
-            <div class="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-500 flex items-center justify-center">
-              <Papicon icon="BookOpen" size={20} />
-            </div>
-            <div>
-              <h3 class="text-lg font-semibold tracking-tight text-on-surface">{m.fun_oneword_title()}</h3>
-              <p class="text-xs text-on-surface-variant/55 font-semibold">{m.fun_oneword_subtitle()}</p>
-            </div>
+        <div class="flex items-center justify-between gap-4 md:border-l md:border-outline-variant/20 md:pl-6">
+          <div class="min-w-0">
+            <p class="text-sm font-semibold text-on-surface">{m.fun_punitive_title()}</p>
+            <p class="text-xs text-on-surface-variant mt-1">{m.fun_punitive_desc()}</p>
           </div>
-
-          <div class="space-y-1.5">
-            <label for="oneWordStoryChannel" class="text-xs font-semibold text-on-surface-variant ml-2">{m.fun_channel_label()}</label>
-            <SearchableSelect
-              id="oneWordStoryChannel"
-              bind:value={config.funOneWordStoryChannelId}
-              options={availableChannels.map(c => ({ id: c.id, name: channelDisplayName(c) }))}
-              placeholder={m.fun_no_channel()}
-              className="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-purple-500/30 transition-all"
-              disabled={!canManageSettings}
-            />
-          </div>
-
-          <div class="p-4 rounded-lg bg-surface-container-high/20 border border-outline-variant/5 space-y-2.5">
-            <p class="text-xs font-medium text-on-surface-variant">{m.fun_game_state_title()}</p>
-            <div class="bg-surface-container-high/40 p-3 rounded-xl border border-outline-variant/10 text-center flex flex-col justify-center min-w-0">
-              <span class="text-2xs text-on-surface-variant uppercase font-bold truncate">{m.fun_last_author()}</span>
-              <p class="text-xs font-bold text-on-surface mt-1 truncate" title={gameState.oneWordStoryLastUserId || m.fun_none()}>
-                {gameState.oneWordStoryLastUserId ? m.fun_user_id({ id: gameState.oneWordStoryLastUserId }) : m.fun_none()}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div class="text-2xs text-on-surface-variant/40 italic text-center py-2 leading-relaxed font-medium">
-          {m.fun_oneword_hint()}
+          <ToggleSwitch
+            checked={config.funPunitiveMode}
+            disabled={!canManageSettings}
+            onToggle={() => (config.funPunitiveMode = !config.funPunitiveMode)}
+            ariaLabel={m.fun_punitive_title()}
+          />
         </div>
       </section>
 
-      <!-- Guess Number Card -->
-      <section class="bg-surface-container-low/40 border border-outline-variant/30 p-8 rounded-xl flex flex-col justify-between gap-6 hover:bg-surface-container-low/60 transition-all duration-300">
-        <div class="space-y-4">
-          <div class="flex items-center gap-3 pb-3 border-b border-outline-variant/15">
-            <div class="w-10 h-10 rounded-xl bg-success/10 text-success flex items-center justify-center">
-              <Papicon icon="Gamepad2" size={20} />
-            </div>
-            <div>
-              <h3 class="text-lg font-semibold tracking-tight text-on-surface">{m.fun_guess_title()}</h3>
-              <p class="text-xs text-on-surface-variant/55 font-semibold">{m.fun_guess_subtitle()}</p>
-            </div>
+      {@render gameGroup(m.fun_group_score_title(), m.fun_group_score_desc(), scoreGames)}
+      {@render gameGroup(m.fun_group_rule_title(), m.fun_group_rule_desc(), ruleGames)}
+    </div>
+  {:else if activeTab === 'confessions'}
+    <div class="space-y-6">
+      <section class="space-y-5 rounded-xl border border-outline-variant/30 bg-surface-container-low/40 p-6">
+        <div class="flex items-start gap-3 border-b border-outline-variant/15 pb-3">
+          <div class="h-10 w-10 shrink-0 rounded-xl flex items-center justify-center bg-violet-500/10 text-violet-500">
+            <Papicon icon="MessageCircle" size={20} />
           </div>
-
-          <div class="space-y-1.5">
-            <label for="guessNumberChannel" class="text-xs font-semibold text-on-surface-variant ml-2">{m.fun_channel_label()}</label>
-            <SearchableSelect
-              id="guessNumberChannel"
-              bind:value={config.funGuessNumberChannelId}
-              options={availableChannels.map(c => ({ id: c.id, name: channelDisplayName(c) }))}
-              placeholder={m.fun_no_channel()}
-              className="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-success/30 transition-all"
-              disabled={!canManageSettings}
-            />
-          </div>
-
-          <div class="p-4 rounded-lg bg-surface-container-high/20 border border-outline-variant/5 space-y-2.5">
-            <p class="text-xs font-medium text-on-surface-variant">{m.fun_game_state_title()}</p>
-            <div class="bg-surface-container-high/40 p-3 rounded-xl border border-outline-variant/10 text-center">
-              <span class="text-2xs text-on-surface-variant uppercase font-bold">{m.fun_guess_target()}</span>
-              <p class="text-2xl font-semibold text-success mt-0.5">{gameState.guessNumberTarget || '???'}</p>
-            </div>
+          <div class="min-w-0">
+            <h3 class="text-base font-semibold text-on-surface">{m.fun_confession_title()}</h3>
+            <p class="text-xs text-on-surface-variant">{m.fun_confession_subtitle()}</p>
           </div>
         </div>
 
-        <button
-          type="button"
-          onclick={handleResetGuessNumber}
-          disabled={actionState.state.loading}
-          use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''}
-          class="w-full py-3.5 bg-success/10 hover:bg-success/20 text-success rounded-lg text-body-sm font-medium transition-all duration-200 flex items-center justify-center gap-2 active:scale-95 disabled:opacity-40"
-        >
-          <Papicon icon="refresh-cw" size={14} />
-          {m.fun_reset_guess_btn()}
-        </button>
-      </section>
-
-      <!-- Word Chain Card -->
-      <section class="bg-surface-container-low/40 border border-outline-variant/30 p-8 rounded-xl flex flex-col justify-between gap-6 hover:bg-surface-container-low/60 transition-all duration-300">
-        <div class="space-y-4">
-          <div class="flex items-center gap-3 pb-3 border-b border-outline-variant/15">
-            <div class="w-10 h-10 rounded-xl bg-sky-500/10 text-sky-500 flex items-center justify-center">
-              <Papicon icon="Link" size={20} />
-            </div>
-            <div>
-              <h3 class="text-lg font-semibold tracking-tight text-on-surface">{m.fun_wordchain_title()}</h3>
-              <p class="text-xs text-on-surface-variant/55 font-semibold">{m.fun_wordchain_subtitle()}</p>
-            </div>
-          </div>
-
-          <div class="space-y-1.5">
-            <label for="wordChainChannel" class="text-xs font-semibold text-on-surface-variant ml-2">{m.fun_channel_label()}</label>
-            <SearchableSelect
-              id="wordChainChannel"
-              bind:value={config.funWordChainChannelId}
-              options={availableChannels.map(c => ({ id: c.id, name: channelDisplayName(c) }))}
-              placeholder={m.fun_no_channel()}
-              className="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-sky-500/30 transition-all"
-              disabled={!canManageSettings}
-            />
-          </div>
-
-          <div class="p-4 rounded-lg bg-surface-container-high/20 border border-outline-variant/5 space-y-2.5">
-            <p class="text-xs font-medium text-on-surface-variant">{m.fun_game_state_title()}</p>
-            <div class="bg-surface-container-high/40 p-3 rounded-xl border border-outline-variant/10 text-center flex flex-col justify-center min-w-0">
-              <span class="text-2xs text-on-surface-variant uppercase font-bold truncate">{m.fun_wordchain_last_word()}</span>
-              <p class="text-lg font-semibold text-sky-500 mt-0.5 truncate">{gameState.wordChainLastWord || m.fun_none()}</p>
-            </div>
-          </div>
-        </div>
-
-        <button
-          type="button"
-          onclick={handleResetWordChain}
-          disabled={actionState.state.loading}
-          use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''}
-          class="w-full py-3.5 bg-sky-500/10 hover:bg-sky-500/20 text-sky-600 rounded-lg text-body-sm font-medium transition-all duration-200 flex items-center justify-center gap-2 active:scale-95 disabled:opacity-40"
-        >
-          <Papicon icon="refresh-cw" size={14} />
-          {m.fun_reset_wordchain_btn()}
-        </button>
-      </section>
-
-      <!-- Emoji Riddle Card -->
-      <section class="bg-surface-container-low/40 border border-outline-variant/30 p-8 rounded-xl flex flex-col justify-between gap-6 hover:bg-surface-container-low/60 transition-all duration-300">
-        <div class="space-y-4">
-          <div class="flex items-center gap-3 pb-3 border-b border-outline-variant/15">
-            <div class="w-10 h-10 rounded-xl bg-error/10 text-error flex items-center justify-center">
-              <Papicon icon="Puzzle" size={20} />
-            </div>
-            <div>
-              <h3 class="text-lg font-semibold tracking-tight text-on-surface">{m.fun_emojiriddle_title()}</h3>
-              <p class="text-xs text-on-surface-variant/55 font-semibold">{m.fun_emojiriddle_subtitle()}</p>
-            </div>
-          </div>
-
-          <div class="space-y-1.5">
-            <label for="emojiRiddleChannel" class="text-xs font-semibold text-on-surface-variant ml-2">{m.fun_channel_label()}</label>
-            <SearchableSelect
-              id="emojiRiddleChannel"
-              bind:value={config.funEmojiRiddleChannelId}
-              options={availableChannels.map(c => ({ id: c.id, name: channelDisplayName(c) }))}
-              placeholder={m.fun_no_channel()}
-              className="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-error/30 transition-all"
-              disabled={!canManageSettings}
-            />
-          </div>
-
-          <div class="p-4 rounded-lg bg-surface-container-high/20 border border-outline-variant/5 space-y-2.5">
-            <p class="text-xs font-medium text-on-surface-variant">{m.fun_emojiriddle_current_clue()}</p>
-            <div class="bg-surface-container-high/40 p-3 rounded-xl border border-outline-variant/10 text-center">
-              <p class="text-2xl mt-0.5">{gameState.emojiRiddleEmojis || '❓'}</p>
-            </div>
-          </div>
-        </div>
-
-        <button
-          type="button"
-          onclick={handleResetEmojiRiddle}
-          disabled={actionState.state.loading}
-          use:explainDisabled={(!canManageSettings) ? m.common_reason_no_permission() : ''}
-          class="w-full py-3.5 bg-error/10 hover:bg-error/20 text-error rounded-lg text-body-sm font-medium transition-all duration-200 flex items-center justify-center gap-2 active:scale-95 disabled:opacity-40"
-        >
-          <Papicon icon="refresh-cw" size={14} />
-          {m.fun_reset_emojiriddle_btn()}
-        </button>
-      </section>
-
-      <!-- Never Say Yes/No Card -->
-      <section class="bg-surface-container-low/40 border border-outline-variant/30 p-8 rounded-xl flex flex-col justify-between gap-6 hover:bg-surface-container-low/60 transition-all duration-300">
-        <div class="space-y-4">
-          <div class="flex items-center gap-3 pb-3 border-b border-outline-variant/15">
-            <div class="w-10 h-10 rounded-xl bg-orange-500/10 text-orange-500 flex items-center justify-center">
-              <Papicon icon="MessageSquareOff" size={20} />
-            </div>
-            <div>
-              <h3 class="text-lg font-semibold tracking-tight text-on-surface">{m.fun_neversay_title()}</h3>
-              <p class="text-xs text-on-surface-variant/55 font-semibold">{m.fun_neversay_subtitle()}</p>
-            </div>
-          </div>
-
-          <div class="space-y-1.5">
-            <label for="neverSayChannel" class="text-xs font-semibold text-on-surface-variant ml-2">{m.fun_channel_label()}</label>
-            <SearchableSelect
-              id="neverSayChannel"
-              bind:value={config.funNeverSayChannelId}
-              options={availableChannels.map(c => ({ id: c.id, name: channelDisplayName(c) }))}
-              placeholder={m.fun_no_channel()}
-              className="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-orange-500/30 transition-all"
-              disabled={!canManageSettings}
-            />
-          </div>
-        </div>
-
-        <div class="text-2xs text-on-surface-variant/40 italic text-center py-2 leading-relaxed font-medium">
-          {m.fun_neversay_hint()}
-        </div>
-      </section>
-
-      <!-- Emoji Only Card -->
-      <section class="bg-surface-container-low/40 border border-outline-variant/30 p-8 rounded-xl flex flex-col justify-between gap-6 hover:bg-surface-container-low/60 transition-all duration-300">
-        <div class="space-y-4">
-          <div class="flex items-center gap-3 pb-3 border-b border-outline-variant/15">
-            <div class="w-10 h-10 rounded-xl bg-teal-500/10 text-teal-500 flex items-center justify-center">
-              <Papicon icon="Sticker" size={20} />
-            </div>
-            <div>
-              <h3 class="text-lg font-semibold tracking-tight text-on-surface">{m.fun_emojionly_title()}</h3>
-              <p class="text-xs text-on-surface-variant/55 font-semibold">{m.fun_emojionly_subtitle()}</p>
-            </div>
-          </div>
-
-          <div class="space-y-1.5">
-            <label for="emojiOnlyChannel" class="text-xs font-semibold text-on-surface-variant ml-2">{m.fun_channel_label()}</label>
-            <SearchableSelect
-              id="emojiOnlyChannel"
-              bind:value={config.funEmojiOnlyChannelId}
-              options={availableChannels.map(c => ({ id: c.id, name: channelDisplayName(c) }))}
-              placeholder={m.fun_no_channel()}
-              className="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-teal-500/30 transition-all"
-              disabled={!canManageSettings}
-            />
-          </div>
-        </div>
-
-        <div class="text-2xs text-on-surface-variant/40 italic text-center py-2 leading-relaxed font-medium">
-          {m.fun_emojionly_hint()}
-        </div>
-      </section>
-
-      <!-- Image du jour Card -->
-      <section class="bg-surface-container-low/40 border border-outline-variant/30 p-8 rounded-xl flex flex-col justify-between gap-6 hover:bg-surface-container-low/60 transition-all duration-300">
-        <div class="space-y-4">
-          <div class="flex items-center gap-3 pb-3 border-b border-outline-variant/15">
-            <div class="w-10 h-10 rounded-xl bg-pink-500/10 text-pink-500 flex items-center justify-center">
-              <Papicon icon="Image" size={20} />
-            </div>
-            <div>
-              <h3 class="text-lg font-semibold tracking-tight text-on-surface">{m.fun_imageofday_title()}</h3>
-              <p class="text-xs text-on-surface-variant/55 font-semibold">{m.fun_imageofday_subtitle()}</p>
-            </div>
-          </div>
-
-          <div class="space-y-1.5">
-            <label for="imageOfDayChannel" class="text-xs font-semibold text-on-surface-variant ml-2">{m.fun_channel_label()}</label>
-            <SearchableSelect
-              id="imageOfDayChannel"
-              bind:value={config.funImageOfDayChannelId}
-              options={availableChannels.map(c => ({ id: c.id, name: channelDisplayName(c) }))}
-              placeholder={m.fun_no_channel()}
-              className="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-pink-500/30 transition-all"
-              disabled={!canManageSettings}
-            />
-          </div>
-        </div>
-
-        <div class="text-2xs text-on-surface-variant/40 italic text-center py-2 leading-relaxed font-medium">
-          {m.fun_imageofday_hint()}
-        </div>
-      </section>
-
-      <!-- Confessions Card -->
-      <section class="bg-surface-container-low/40 border border-outline-variant/30 p-8 rounded-xl flex flex-col justify-between gap-6 hover:bg-surface-container-low/60 transition-all duration-300 md:col-span-2">
-        <div class="space-y-4">
-          <div class="flex items-center gap-3 pb-3 border-b border-outline-variant/15">
-            <div class="w-10 h-10 rounded-xl bg-violet-500/10 text-violet-500 flex items-center justify-center">
-              <Papicon icon="MessageCircle" size={20} />
-            </div>
-            <div>
-              <h3 class="text-lg font-semibold tracking-tight text-on-surface">{m.fun_confession_title()}</h3>
-              <p class="text-xs text-on-surface-variant/55 font-semibold">{m.fun_confession_subtitle()}</p>
-            </div>
-          </div>
-
-          <div class="grid gap-4 md:grid-cols-2">
-            <div class="space-y-1.5">
-              <label for="confessionChannel" class="text-xs font-semibold text-on-surface-variant ml-2">{m.fun_channel_label()}</label>
-              <SearchableSelect
-                id="confessionChannel"
-                bind:value={config.funConfessionChannelId}
-                options={availableChannels.map(c => ({ id: c.id, name: channelDisplayName(c) }))}
-                placeholder={m.fun_no_channel()}
-                className="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-violet-500/30 transition-all"
-                disabled={!canManageSettings}
-              />
-            </div>
-            <div class="space-y-1.5">
-              <label for="confessionLogChannel" class="text-xs font-semibold text-on-surface-variant ml-2">{m.fun_confession_log_label()}</label>
-              <SearchableSelect
-                id="confessionLogChannel"
-                bind:value={config.funConfessionLogChannelId}
-                options={availableChannels.map(c => ({ id: c.id, name: channelDisplayName(c) }))}
-                placeholder={m.fun_no_channel()}
-                className="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-violet-500/30 transition-all"
-                disabled={!canManageSettings}
-              />
-            </div>
-            <div class="space-y-1.5">
-              <label for="confessionCooldown" class="text-xs font-semibold text-on-surface-variant ml-2">{m.fun_confession_cooldown_label()}</label>
+        <div class="grid gap-5 md:grid-cols-3">
+          <Field label={m.fun_channel_label()}>
+            {#snippet children(id)}
+              <SearchableSelect {id} bind:value={config.funConfessionChannelId} options={channelOptions} placeholder={m.fun_no_channel()} disabled={!canManageSettings} />
+            {/snippet}
+          </Field>
+          <Field label={m.fun_confession_log_label()}>
+            {#snippet children(id)}
+              <SearchableSelect {id} bind:value={config.funConfessionLogChannelId} options={channelOptions} placeholder={m.fun_no_channel()} disabled={!canManageSettings} />
+            {/snippet}
+          </Field>
+          <Field label={m.fun_confession_cooldown_label()} hint={m.fun_confession_cooldown_hint()}>
+            {#snippet children(id, describedBy)}
               <input
-                id="confessionCooldown"
+                {id}
+                aria-describedby={describedBy}
                 type="number"
                 min="0"
                 max="86400"
                 step="1"
                 bind:value={config.funConfessionCooldownSeconds}
-                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm text-on-surface focus:ring-2 focus:ring-violet-500/30 transition-all"
+                class="input"
                 disabled={!canManageSettings}
               />
-              <p class="text-2xs text-on-surface-variant/55 ml-2">{m.fun_confession_cooldown_hint()}</p>
-            </div>
-          </div>
-
-          <div class="space-y-2">
-            <h4 class="text-xs font-semibold text-on-surface-variant ml-2">{m.fun_confession_recent_title()}</h4>
-            {#if confessions.length === 0}
-              <p class="text-xs text-on-surface-variant ml-2">{m.fun_confession_empty()}</p>
-            {:else}
-              <ul class="space-y-2 max-h-72 overflow-y-auto">
-                {#each confessions as c (c.number)}
-                  <li class="bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm">
-                    <div class="flex items-center justify-between text-2xs text-on-surface-variant/55 font-semibold mb-1">
-                      <span>#{c.number}</span>
-                      <span>{new Date(c.createdAt).toLocaleString()}{c.revealedAt ? ` · ${m.fun_confession_revealed()}` : ''}{c.deletedAt ? ` · ${m.fun_confession_deleted()}` : ''}</span>
-                    </div>
-                    <p class="text-on-surface whitespace-pre-wrap break-words">{c.content}</p>
-                  </li>
-                {/each}
-              </ul>
-            {/if}
-          </div>
+            {/snippet}
+          </Field>
         </div>
 
-        <div class="text-2xs text-on-surface-variant/40 italic text-center py-2 leading-relaxed font-medium">
-          {m.fun_confession_hint()}
-        </div>
+        <p class="flex items-start gap-2 text-xs text-on-surface-variant">
+          <Papicon icon="info" size={14} class="mt-0.5 shrink-0" />
+          <span>{m.fun_confession_hint()}</span>
+        </p>
+      </section>
+
+      <section class="space-y-4 rounded-xl border border-outline-variant/30 bg-surface-container-low/40 p-6">
+        <h3 class="text-base font-semibold flex items-center gap-2.5">
+          <Papicon icon="List" size={16} />
+          {m.fun_confession_recent_title()}
+        </h3>
+        {#if confessions.length === 0}
+          <EmptyState icon="MessageCircle" title={m.fun_confession_empty()} reason="accumulating" />
+        {:else}
+          <ul class="space-y-3">
+            {#each confessions as c (c.number)}
+              <li class="rounded-xl border border-outline-variant/10 bg-surface-container-high/20 p-4 {c.deletedAt ? 'opacity-60' : ''}">
+                <div class="mb-2 flex flex-wrap items-center gap-2 text-xs text-on-surface-variant">
+                  <span class="rounded-full bg-violet-500/10 px-2 py-0.5 font-semibold text-violet-500">#{c.number}</span>
+                  <span>{formatDate(c.createdAt)}</span>
+                  {#if c.revealedAt}
+                    <span class="rounded-full bg-warning/10 px-2 py-0.5 font-semibold text-warning">{m.fun_confession_revealed()}</span>
+                  {/if}
+                  {#if c.deletedAt}
+                    <span class="rounded-full bg-error/10 px-2 py-0.5 font-semibold text-error">{m.fun_confession_deleted()}</span>
+                  {/if}
+                </div>
+                <p class="whitespace-pre-wrap break-words text-sm text-on-surface {c.deletedAt ? 'line-through' : ''}">{c.content}</p>
+              </li>
+            {/each}
+          </ul>
+        {/if}
       </section>
     </div>
-
+  {:else}
     <EmojiRiddleEditor bind:useDefaults={config.funEmojiRiddleUseDefaults} canManage={canManageSettings} />
   {/if}
 </ModulePage>
