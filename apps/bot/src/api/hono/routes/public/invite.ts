@@ -156,6 +156,13 @@ export function createPublicInviteRouter(): OpenAPIHono {
       disable_guild_select: 'false',
     });
 
+    // Retour de Kotbo après la fin d'un bot perso : le lien vise ce serveur seul.
+    const guildId = c.req.query('guild_id') ?? '';
+    if (/^\d{17,20}$/.test(guildId)) {
+      params.set('guild_id', guildId);
+      params.set('disable_guild_select', 'true');
+    }
+
     return c.redirect(`https://discord.com/oauth2/authorize?${params.toString()}`, 302);
   });
 
