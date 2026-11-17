@@ -176,8 +176,8 @@
       <SectionCard title={m.nset_section_discord_title()} description={m.nset_section_discord_desc()} icon="discord">
         <div class="space-y-4">
           <Field label={m.nset_moderator_role_label()} hint={m.nset_moderator_role_hint()} id="moderator-role">
-            {#snippet children(id)}
-              <SearchableSelect {id} bind:value={notificationsDraft.moderatorRoleId} options={availableRoles.map(r => ({ id: r.id, name: `@${r.name}` }))} placeholder={m.nset_moderator_role_placeholder()} className="w-full" />
+            {#snippet children(id, describedBy)}
+              <SearchableSelect {describedBy} {id} bind:value={notificationsDraft.moderatorRoleId} options={availableRoles.map(r => ({ id: r.id, name: `@${r.name}` }))} placeholder={m.nset_moderator_role_placeholder()} className="w-full" />
             {/snippet}
           </Field>
 
@@ -188,8 +188,8 @@
           </Field>
 
           <Field label={m.nset_log_channel_label()} hint={m.nset_log_channel_hint()} id="log-channel">
-            {#snippet children(id)}
-              <SearchableSelect {id} bind:value={notificationsDraft.logChannelId} options={availableChannels.map(c => ({ id: c.id, name: channelDisplayName(c) }))} placeholder={m.nset_log_channel_placeholder()} className="w-full" />
+            {#snippet children(id, describedBy)}
+              <SearchableSelect {describedBy} {id} bind:value={notificationsDraft.logChannelId} options={availableChannels.map(c => ({ id: c.id, name: channelDisplayName(c) }))} placeholder={m.nset_log_channel_placeholder()} className="w-full" />
             {/snippet}
           </Field>
         </div>

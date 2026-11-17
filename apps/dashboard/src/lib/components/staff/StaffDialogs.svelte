@@ -211,8 +211,8 @@
       {@render presetMember(warnPreset, () => (staff.dialogs.warn = { userId: '' }))}
     {:else}
       <Field label={m.sm_field_target_member()} required error={warnTouched && !warnUserId ? m.sm_toast_select_member() : ''}>
-        {#snippet children()}
-          <DiscordMemberLookup guildId={staff.guildId} bind:query={warnQuery} bind:selectedId={warnUserId} staffOnly={true} placeholder={m.sm_placeholder_search_staff()} />
+        {#snippet children(id, describedBy)}
+          <DiscordMemberLookup {describedBy} {id} guildId={staff.guildId} bind:query={warnQuery} bind:selectedId={warnUserId} staffOnly={true} placeholder={m.sm_placeholder_search_staff()} />
         {/snippet}
       </Field>
     {/if}
@@ -256,8 +256,8 @@
       {@render presetMember(blPreset, () => (staff.dialogs.blacklist = { userId: '' }))}
     {:else}
       <Field label={m.sm_field_blacklist_target()} required error={blTouched && !blUserId ? m.sm_toast_select_member() : ''}>
-        {#snippet children()}
-          <DiscordMemberLookup guildId={staff.guildId} bind:query={blQuery} bind:selectedId={blUserId} placeholder={m.sm_placeholder_mention_or_id()} />
+        {#snippet children(id, describedBy)}
+          <DiscordMemberLookup {describedBy} {id} guildId={staff.guildId} bind:query={blQuery} bind:selectedId={blUserId} placeholder={m.sm_placeholder_mention_or_id()} />
         {/snippet}
       </Field>
     {/if}

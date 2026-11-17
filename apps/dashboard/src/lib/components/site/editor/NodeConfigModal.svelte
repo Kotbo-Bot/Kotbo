@@ -446,8 +446,9 @@
       </Field>
     {:else if request?.type === 'banner'}
       <Field label={m.ste_cfg_image()} hint={m.ste_cfg_banner_image_hint()}>
-        {#snippet children()}
-          <div class="flex items-center gap-3">
+        {#snippet children(_id, describedBy)}
+          <!-- Un groupe de boutons, pas un champ : le label de Field ne le vise pas, il est nomme ici. -->
+          <div class="flex items-center gap-3" role="group" aria-label={m.ste_cfg_image()} aria-describedby={describedBy}>
             {#if attrs.image}<img class="cfg-thumb cfg-thumb-wide" src={String(attrs.image)} alt="" />{/if}
             <Button size="sm" icon="image" onclick={() => pickAsset((src) => (attrs.image = src))}>{m.ste_cfg_image_choose()}</Button>
             {#if attrs.image}<Button size="sm" variant="ghost" onclick={() => (attrs.image = '')}>{m.ste_cover_remove()}</Button>{/if}

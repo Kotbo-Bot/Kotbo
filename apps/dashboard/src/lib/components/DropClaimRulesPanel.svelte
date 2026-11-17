@@ -98,8 +98,8 @@
 
       <div>
         <Field id="drop-claim-required-role" label={m.drop_claim_required_role_label()} hint={m.drop_claim_required_role_desc()}>
-          {#snippet children(id)}
-            <SearchableSelect
+          {#snippet children(id, describedBy)}
+            <SearchableSelect {describedBy}
               {id}
               bind:value={rules.requiredRoleId}
               options={[{ id: '', name: m.drop_option_none() }, ...roles.map((role) => ({ id: role.id, name: `@${role.name}` }))]}

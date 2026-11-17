@@ -764,8 +764,8 @@
             </div>
 
             <Field id="suggestions-channel" label={m.suggestions_channel_label()} hint={m.suggestions_channel_hint()}>
-              {#snippet children(id)}
-                <SearchableSelect
+              {#snippet children(id, describedBy)}
+                <SearchableSelect {describedBy}
                   {id}
                   bind:value={config.channelId}
                   options={[{ id: '', name: m.suggestions_channel_fallback() }, ...textChannels.map((channel) => ({ id: channel.id, name: `#${channel.name}` }))]}
@@ -993,8 +993,8 @@
               hint={m.suggestions_roles_hint()}
               error={rolesValid ? undefined : m.suggestions_roles_too_many({ max: SUGGESTION_ALLOWED_ROLES_MAX })}
             >
-              {#snippet children(id)}
-                <MultiSelect
+              {#snippet children(id, describedBy)}
+                <MultiSelect {describedBy}
                   {id}
                   bind:values={config.allowedRoleIds}
                   options={assignableRoles.map((role: { id: string; name: string }) => ({ id: role.id, name: `@${role.name}` }))}

@@ -1048,8 +1048,8 @@
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
               <Field id="drop-default-channel" label={m.drop_default_channel_label()} hint={m.drop_default_channel_desc()}>
-                {#snippet children(id)}
-                  <SearchableSelect
+                {#snippet children(id, describedBy)}
+                  <SearchableSelect {describedBy}
                     {id}
                     bind:value={globalSettings.dropChannelId}
                     options={[{ id: '', name: m.drop_option_none() }, ...availableChannels.map(c => ({ id: c.id, name: `#${c.name}` }))]}
@@ -1061,8 +1061,8 @@
 
               <div class="space-y-1.5">
                 <Field id="drop-mention-role" label={m.drop_mention_role_label()} hint={m.drop_mention_role_desc()}>
-                  {#snippet children(id)}
-                    <SearchableSelect
+                  {#snippet children(id, describedBy)}
+                    <SearchableSelect {describedBy}
                       {id}
                       bind:value={globalSettings.dropMentionRoleId}
                       options={[{ id: '', name: m.drop_option_none() }, ...availableRoles.map((r: { id: string; name: string }) => ({ id: r.id, name: `@${r.name}` }))]}
@@ -1469,8 +1469,8 @@
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
               <Field id="drop-channel-{type}" label={m.drop_channel_label()} hint={m.drop_channel_desc()}>
-                {#snippet children(id)}
-                  <SearchableSelect
+                {#snippet children(id, describedBy)}
+                  <SearchableSelect {describedBy}
                     {id}
                     bind:value={configs[type].channelId}
                     options={[{ id: '', name: m.drop_option_default_channel() }, ...availableChannels.map(c => ({ id: c.id, name: `#${c.name}` }))]}

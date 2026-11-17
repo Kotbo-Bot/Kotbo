@@ -7,6 +7,8 @@
   export let disabled: boolean = false;
   export let accentClass: string = 'bg-primary/20 text-primary border-primary/40'; // active pill style
   export let id: string = '';
+  /** Id de l'aide ou de l'erreur du champ (`describedBy` de Field, RGAA 11.2). */
+  export let describedBy: string | undefined = undefined;
 
   let query = '';
   let open = false;
@@ -104,10 +106,11 @@
     <input
       bind:this={inputEl}
       id={inputId}
+      aria-describedby={describedBy}
       type="text"
       role="combobox"
-      aria-expanded={open && !disabled}
-      aria-controls="{inputId}-listbox"
+      aria-expanded={open && !disabled && filtered.length > 0}
+      aria-controls={open && !disabled && filtered.length > 0 ? `${inputId}-listbox` : undefined}
       aria-autocomplete="list"
       aria-activedescendant={activeOption ? `${inputId}-opt-${activeOption.id}` : undefined}
       {disabled}
@@ -124,16 +127,17 @@
 
   <!-- Dropdown -->
   {#if open && !disabled}
-    <div
-      id="{inputId}-listbox"
-      role="listbox"
-      class="absolute left-0 right-0 mt-2 z-30 rounded-lg border border-outline-variant/20 bg-surface-container-high shadow-sm max-h-52 overflow-y-auto"
-    >
-      {#if filtered.length === 0}
-        <div class="px-4 py-3 text-xs text-on-surface-variant italic">
-          {query ? m.d4_no_result_for({ query }) : m.d4_all_selected()}
-        </div>
-      {:else}
+    {#if filtered.length === 0}
+      <!-- Hors du listbox, qui ne porte que des options ; annonce a la saisie. -->
+      <div role="status" class="absolute left-0 right-0 mt-2 z-30 rounded-lg border border-outline-variant/20 bg-surface-container-high shadow-sm max-h-52 overflow-y-auto px-4 py-3 text-xs text-on-surface-variant italic">
+        {query ? m.d4_no_result_for({ query }) : m.d4_all_selected()}
+      </div>
+    {:else}
+      <div
+        id="{inputId}-listbox"
+        role="listbox"
+        class="absolute left-0 right-0 mt-2 z-30 rounded-lg border border-outline-variant/20 bg-surface-container-high shadow-sm max-h-52 overflow-y-auto"
+      >
         <div class="p-1.5 space-y-0.5">
           {#each filtered as opt, i (opt.id)}
             <!-- Options hors de l'ordre de tabulation : le clavier reste dans le
@@ -153,7 +157,7 @@
             </div>
           {/each}
         </div>
-      {/if}
-    </div>
+      </div>
+    {/if}
   {/if}
 </div>

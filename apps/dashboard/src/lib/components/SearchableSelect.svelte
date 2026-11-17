@@ -4,6 +4,8 @@
   import Papicon from './Papicon.svelte';
 
   export let id: string = '';
+  /** Id de l'aide ou de l'erreur du champ (`describedBy` de Field, RGAA 11.2). */
+  export let describedBy: string | undefined = undefined;
   export let value: string | null = null;
   export let options: Array<{ id: string; name: string; color?: string | null; icon?: string }> = [];
   export let placeholder: string = '';
@@ -167,6 +169,7 @@
 
   <input
     {id}
+    aria-describedby={describedBy}
     type="text"
     placeholder={placeholder}
     bind:value={query}

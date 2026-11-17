@@ -170,8 +170,8 @@
       <div class="px-5 pb-5 grid gap-4 sm:grid-cols-2">
         <div class="sm:col-span-2">
           <Field label={m.ste_mode()} hint={m.ste_mode_hint()}>
-            {#snippet children()}
-              <FilterPills label={m.ste_mode()} options={modeOptions} value={resolved.mode} onchange={setMode} />
+            {#snippet children(id, describedBy)}
+              <FilterPills {describedBy} label={m.ste_mode()} options={modeOptions} value={resolved.mode} onchange={setMode} />
             {/snippet}
           </Field>
         </div>

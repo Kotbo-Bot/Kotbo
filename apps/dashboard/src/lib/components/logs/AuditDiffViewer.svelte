@@ -255,8 +255,8 @@
               {/snippet}
             </Field>
             <Field label={m.audit_ignored_users()} hint={m.audit_ignored_help()}>
-              {#snippet children(id)}
-                <MultiSelect
+              {#snippet children(id, describedBy)}
+                <MultiSelect {describedBy}
                   {id}
                   bind:values={form.ignoredUserIds}
                   options={availableRoles.map((r: any) => ({ id: r.id, name: `@${r.name}` }))}

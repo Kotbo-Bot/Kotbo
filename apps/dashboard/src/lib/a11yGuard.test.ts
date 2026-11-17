@@ -196,6 +196,32 @@ describe("garde-fou d'accessibilite", () => {
     expect(unlabeled).toEqual([]);
   });
 
+  test('l\'aide ou l\'erreur d\'un <Field> est reliee a son controle (RGAA 11.2)', () => {
+    // Field fournit `describedBy` a son contenu ; s'il n'est pas pose sur le
+    // controle, l'aide s'affiche mais un lecteur d'ecran ne la lit pas.
+    const offenders = sources.flatMap(({ file, text }) =>
+      openingTags(text, 'Field')
+        .filter((tag) => !tag.endsWith('/>') && /\b(hint|error)=/.test(tag))
+        .filter((tag) => {
+          const start = text.indexOf(tag) + tag.length;
+          const body = text.slice(start, text.indexOf('</Field>', start));
+          return !/aria-describedby|describedBy/.test(body);
+        })
+        .map(() => file),
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  test('la liste de MultiSelect ne contient que des options (RGAA 7.1)', () => {
+    // Un listbox ne porte que des role="option" : le message « aucun resultat »
+    // y etait lu comme un element de liste.
+    const text = sources.find(({ file }) => file.endsWith('components/MultiSelect.svelte'))?.text ?? '';
+    const start = text.indexOf('role="listbox"');
+    const listbox = text.slice(start, text.indexOf('{/each}', start));
+    expect(start).toBeGreaterThan(-1);
+    expect(listbox).not.toContain('d4_no_result_for');
+  });
+
   test('pas d\'aria-labelledby vers un id "modal-title" partage', () => {
     const offenders = sources.filter(({ text }) => /aria-labelledby="modal-title"/.test(text)).map(({ file }) => file);
     expect(offenders).toEqual([]);

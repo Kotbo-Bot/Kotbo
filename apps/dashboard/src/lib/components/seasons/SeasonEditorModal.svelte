@@ -225,8 +225,8 @@
       {/snippet}
     </Field>
     <Field id="season-{kind}-role-{index}" label={m.sea_reward_role_label()} error={refusal(row.roleId)}>
-      {#snippet children(id)}
-        <SearchableSelect
+      {#snippet children(id, describedBy)}
+        <SearchableSelect {describedBy}
           {id}
           bind:value={row.roleId}
           options={roles.map((role) => ({ id: role.id, name: `@${role.name}` }))}
@@ -291,8 +291,8 @@
     </Callout>
 
     <Field id="season-announce-channel" label={m.sea_announce_channel_label()} hint={m.sea_announce_channel_hint()}>
-      {#snippet children(id)}
-        <SearchableSelect
+      {#snippet children(id, describedBy)}
+        <SearchableSelect {describedBy}
           {id}
           bind:value={announceChannelId}
           options={channels.map((channel) => ({ id: channel.id, name: `#${channel.name}` }))}
@@ -313,8 +313,8 @@
       </div>
 
       <Field id="season-top-role" label={m.sea_top_role_label()} hint={m.sea_top_role_hint()} error={refusal(topRoleId)}>
-        {#snippet children(id)}
-          <SearchableSelect
+        {#snippet children(id, describedBy)}
+          <SearchableSelect {describedBy}
             {id}
             bind:value={topRoleId}
             options={roles.map((role) => ({ id: role.id, name: `@${role.name}` }))}
