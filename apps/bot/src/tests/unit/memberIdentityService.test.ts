@@ -109,6 +109,7 @@ describe('resolveMissingMemberIdentities', () => {
       displayName: 'Surnom kotbo',
       avatarUrl: 'https://cdn.example/user-1.png',
       serverTag: null,
+      boostingSince: null,
     });
     expect(usersFetch).not.toHaveBeenCalled();
   });

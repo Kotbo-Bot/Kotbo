@@ -30,6 +30,7 @@ import { visiblePresenceStatus } from '../../services/core/presencePrivacyServic
 import { getCrossServerSanctionSummary, type CrossServerSanctionSummary } from '../../services/moderation/crossServerSanctionService.js';
 import { getCrossServerLinkSummary, type CrossServerLinkSummary } from '../../services/moderation/crossServerLinkService.js';
 import { extractPrimaryGuildTag, guildTagBadgeUrl, resolveExternalGuild } from '../../services/core/serverTagService.js';
+import { getMemberBoostStats } from '../../services/analytics/boostService.js';
 import { extractMessageId, extractMessagePreview, fetchMemberConnections, mapGuildRolePermissions, parseInviteFromDetails, safeIsoDate } from './core.js';
 import type { AuthClaims } from './core.js';
 import { formatChannelName, renderMentionsAsText } from './markdown.js';
@@ -711,6 +712,7 @@ export async function buildMemberCaseData(client: Client, guildId: string, userI
           })
       ),
       verifications: await buildVerificationsPayload(guildId, actualUserId),
+      boost: await getMemberBoostStats(guildId, actualUserId, member?.premiumSince ?? null),
       serverTag: await (async () => {
         const liveTag = extractPrimaryGuildTag(user);
         const tagGuildId = liveTag?.guildId ?? profile?.primaryGuildId ?? null;

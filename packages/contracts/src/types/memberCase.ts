@@ -306,5 +306,15 @@ export type MemberCaseResponse = {
   /** Liens de double compte déjà posés sur d'autres serveurs de l'instance. */
   crossServerLinks: CrossServerLinkSummaryPayload;
   verifications: MemberCaseVerifications;
+  /** Boost en cours et historique reconstruit à partir des débuts/arrêts notés par le bot. */
+  boost?: MemberCaseBoost | null;
   serverTag?: MemberCaseServerTag | null;
+};
+
+export type MemberCaseBoost = {
+  boostingSince: string | null;
+  totalDays: number;
+  periodCount: number;
+  /** Plus récentes d'abord, 20 au plus. */
+  periods: Array<{ start: string; end: string | null; days: number }>;
 };

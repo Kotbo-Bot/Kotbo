@@ -43,6 +43,7 @@ import { handleFormTrigger } from '../../services/features/autoResponseService.j
 import { submitCustomForm } from '../../services/features/customFormService.js';
 import { sanitizeCustomCss, sanitizeFormTheme } from '../../utils/formCustomization.js';
 import { getMemberIdentities, resolveMemberAvatarUrl, resolveUserAvatarUrl } from '../../services/moderation/memberIdentityService.js';
+import { getMemberBoostStats } from '../../services/analytics/boostService.js';
 import { getGuildLadder } from '../../services/progression/ranked/rankedConfigService.js';
 import { getRankedLeaderboard } from '../../services/progression/ranked/rankedLeaderboardService.js';
 
@@ -780,6 +781,10 @@ export async function handlePublicRoutes(
         ? await resolveDashboardAccess(client, profile.guildId, authUser.userId).catch(() => null)
         : null;
       const canViewPrivate = !profile.isProfilePrivate || authUser?.userId === userId || !!viewerGuildAccess?.level && viewerGuildAccess.level !== 'none';
+      // Le badge de boost est public sur Discord ; l'historique suit la visibilité du profil.
+      const liveMember = client.guilds.cache.get(profile.guildId)?.members.cache.get(userId);
+      const storedBoost = (profile as { boostingSince?: Date | null }).boostingSince ?? null;
+      const boostingSince = liveMember ? liveMember.premiumSince : storedBoost;
 
       const response = canViewPrivate
         ? {
@@ -799,6 +804,8 @@ export async function handlePublicRoutes(
             lastSeenAt: profile.lastSeenAt,
             messageCount: profile.messageCount,
             voiceTimeSeconds: profile.voiceTimeSeconds,
+            boostingSince,
+            boost: await getMemberBoostStats(profile.guildId, userId, boostingSince).catch(() => null),
             invite: snapshot.invite,
             points: snapshot.dailyAlgoProfile?.totalPoints || 0,
             tier: snapshot.dailyAlgoProfile?.tier || 'Débutant',
@@ -836,6 +843,8 @@ export async function handlePublicRoutes(
             lastSeenAt: null,
             messageCount: null,
             voiceTimeSeconds: null,
+            boostingSince,
+            boost: null,
             invite: null,
             points: 0,
             tier: 'Débutant',

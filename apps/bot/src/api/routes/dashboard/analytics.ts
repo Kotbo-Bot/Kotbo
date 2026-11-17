@@ -478,6 +478,23 @@ export async function handleAnalyticsRoutes(
     return true;
   }
 
+  // GET …/analytics/boosts?days= : boosts du serveur, boosters et journal
+  if (parts.length === 6 && parts[5] === 'boosts') {
+    try {
+      const { getBoostAnalytics } = await import('../../../services/analytics/boostService.js');
+      const days = Math.min(365, Math.max(1, Number.parseInt(url.searchParams.get('days') ?? '', 10) || 30));
+      json(
+        res,
+        200,
+        await cache.wrap(`guild:${guildId}:analytics:boosts:${days}`, 120, () => getBoostAnalytics(client, guildId, days)),
+      );
+    } catch (err) {
+      logger.error('AnalyticsAPI', 'Erreur analytics (boosts):', err);
+      jsonFailure(res, err, 'Erreur lors du calcul des boosts', 'AnalyticsAPI');
+    }
+    return true;
+  }
+
   // GET …/analytics/servers/:targetGuildId : fiche detaillee d'un serveur
   if (parts.length === 7 && parts[5] === 'servers' && parts[6]) {
     const targetGuildId = parts[6];

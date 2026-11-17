@@ -21,6 +21,8 @@ export type MemberIdentity = {
   avatarUrl: string | null;
   /** Tag de serveur affiché à côté du pseudo, comme sur Discord. */
   serverTag: MemberServerTag | null;
+  /** Début du boost en cours (ISO), pour le badge d'ancienneté. */
+  boostingSince: string | null;
 };
 
 export type MemberServerTag = { guildId: string; tag: string; badgeUrl: string | null };
@@ -38,6 +40,12 @@ function serverTagOf(
     tag: stored.primaryGuildTag,
     badgeUrl: guildTagBadgeUrl(stored.primaryGuildId, stored.primaryGuildBadge),
   };
+}
+
+/** Boost lu sur le membre en cache, sinon le dernier connu en base. */
+function boostingSinceOf(member: GuildMember | undefined, stored: Date | null): string | null {
+  if (member) return member.premiumSince?.toISOString() ?? null;
+  return stored?.toISOString() ?? null;
 }
 
 /**
@@ -126,7 +134,7 @@ export async function getMemberIdentities(
       where: { guildId, userId: { in: unique } },
       select: {
         userId: true, username: true, displayName: true, globalName: true, avatarUrl: true,
-        primaryGuildId: true, primaryGuildTag: true, primaryGuildBadge: true,
+        primaryGuildId: true, primaryGuildTag: true, primaryGuildBadge: true, boostingSince: true,
       },
     })
     .catch(() => []);
@@ -142,6 +150,7 @@ export async function getMemberIdentities(
       displayName,
       avatarUrl: profile.avatarUrl,
       serverTag: serverTagOf(cached?.get(profile.userId)?.user, profile),
+      boostingSince: boostingSinceOf(cached?.get(profile.userId), profile.boostingSince),
     });
   }
 
@@ -242,6 +251,7 @@ export async function resolveMissingMemberIdentities(
         displayName: member.displayName ?? member.user.globalName ?? member.user.username,
         avatarUrl: resolveMemberAvatarUrl(member, 256),
         serverTag: serverTagOf(member.user),
+        boostingSince: member.premiumSince?.toISOString() ?? null,
       });
     }
   }
@@ -259,6 +269,8 @@ export async function resolveMissingMemberIdentities(
         displayName: user.globalName ?? user.username,
         avatarUrl: resolveUserAvatarUrl(user, 256),
         serverTag: serverTagOf(user),
+        // Parti du serveur : il ne le booste plus.
+        boostingSince: null,
       });
     }
   }

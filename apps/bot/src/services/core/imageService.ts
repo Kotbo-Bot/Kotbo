@@ -818,6 +818,8 @@ export async function generateProfileCard(options: {
   roles: string[];
   streak?: number;
   tier?: string;
+  /** Libellé du boost en cours (« Booster · 3 mois »), absent si le membre ne booste pas. */
+  booster?: string;
   isPrivate?: boolean;
   curve?: LevelCurve;
 }): Promise<Buffer> {
@@ -876,6 +878,13 @@ export async function generateProfileCard(options: {
     ctx.font = canvasFont(11, 'bold');
     ctx.fillText(options.tier, -12, 4);
     ctx.restore();
+  }
+
+  if (options.booster) {
+    ctx.font = canvasFont(12, 'bold');
+    roundRect(ctx, nameX, avatarCY + 26, ctx.measureText(options.booster).width + 20, 22, 6, BRAND.pink);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillText(options.booster, nameX + 10, avatarCY + 41);
   }
 
   // Rank (chalk, top right, circled)
