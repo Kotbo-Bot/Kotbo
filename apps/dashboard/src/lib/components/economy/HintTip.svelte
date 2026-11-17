@@ -1,7 +1,7 @@
 <script lang="ts">
   /** Aide d'un champ : s'ouvre au survol, au clavier et au toucher (mobile). */
   import Papicon from '../Papicon.svelte';
-  import { portal } from '$lib/actions/portal';
+  import { portal } from '../../actions/portal';
 
   const { text }: { text: string } = $props();
 
