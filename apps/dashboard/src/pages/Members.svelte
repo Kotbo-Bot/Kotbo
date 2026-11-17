@@ -345,7 +345,7 @@
               limit = Number((event.currentTarget as HTMLSelectElement).value);
               void search(true);
             }}
-            class="h-8 rounded-md border border-outline-variant/40 bg-surface-container-low px-2 text-xs text-on-surface outline-hidden"
+            class="h-8 rounded-md border border-outline-variant/40 bg-surface-container-low px-2 text-xs text-on-surface outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
           >
             <!-- Valeurs numeriques : avec des chaines, `limit` (number) ne
                  correspond a aucune option et le select s'affiche vide. -->

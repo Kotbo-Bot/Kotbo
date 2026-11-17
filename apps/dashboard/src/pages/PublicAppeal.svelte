@@ -601,14 +601,14 @@
             {:else if field.type === 'dropdown'}
               <select id={field.id} value={(answers[field.id] as string) || ''}
                 onchange={(e) => setAnswer(field.id, (e.target as HTMLSelectElement).value)}
-                class="w-full bg-surface-container rounded-xl px-4 py-3 text-sm outline-none border border-outline-variant/30">
+                class="w-full bg-surface-container rounded-xl px-4 py-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary border border-outline-variant/30">
                 <option value="" disabled>{m.pa_select()}</option>
                 {#each field.options || [] as opt}<option value={opt}>{opt}</option>{/each}
               </select>
             {:else if field.type === 'date'}
               <input id={field.id} type="date" value={(answers[field.id] as string) || ''}
                 onchange={(e) => setAnswer(field.id, (e.target as HTMLInputElement).value)}
-                class="w-full bg-surface-container rounded-xl px-4 py-3 text-sm outline-none border border-outline-variant/30" />
+                class="w-full bg-surface-container rounded-xl px-4 py-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary border border-outline-variant/30" />
             {:else}
               <input id={field.id} type={field.type === 'email' ? 'email' : field.type === 'number' ? 'number' : 'text'}
                 value={(answers[field.id] as string) || ''}

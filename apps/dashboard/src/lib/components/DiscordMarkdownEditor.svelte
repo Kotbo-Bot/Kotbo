@@ -318,7 +318,7 @@
         {disabled}
         {rows}
         onkeydown={handleKeydown}
-        class="w-full h-full min-h-[200px] bg-transparent px-4 py-3 text-sm text-on-surface font-mono leading-relaxed resize-y focus:outline-none placeholder:text-on-surface-variant/30 disabled:opacity-50 disabled:cursor-not-allowed"
+        class="w-full h-full min-h-[200px] bg-transparent px-4 py-3 text-sm text-on-surface font-mono leading-relaxed resize-y focus:outline-none focus-visible:ring-2 focus-visible:ring-primary placeholder:text-on-surface-variant/30 disabled:opacity-50 disabled:cursor-not-allowed"
         style="tab-size: 2;"
       ></textarea>
     {:else}

@@ -1189,7 +1189,7 @@
                       <select
                         id="autoArchive"
                         bind:value={threadConfig.autoArchiveMinutes}
-                        class="w-full bg-surface-container-high/45 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm text-on-surface focus:outline-none"
+                        class="w-full bg-surface-container-high/45 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm text-on-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                         disabled={!canManageSettings}
                       >
                         {#each autoArchiveOptions as opt}
@@ -1360,7 +1360,7 @@
                                 type="text"
                                 bind:value={threadConfig.embedColor}
                                 placeholder="#5865F2"
-                                class="flex-1 bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2 text-sm focus:outline-none font-mono"
+                                class="flex-1 bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary font-mono"
                                 disabled={!canManageSettings}
                               />
                             </div>
@@ -1372,7 +1372,7 @@
                               type="url"
                               bind:value={threadConfig.embedImageUrl}
                               placeholder="https://example.com/banner.png"
-                              class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none"
+                              class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                               disabled={!canManageSettings}
                             />
                           </div>
@@ -1384,7 +1384,7 @@
                             type="url"
                             bind:value={threadConfig.embedThumbnailUrl}
                             placeholder="https://example.com/thumb.png"
-                            class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none"
+                            class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                             disabled={!canManageSettings}
                           />
                         </div>
@@ -1498,7 +1498,7 @@
                             type="text"
                             bind:value={step.name}
                             placeholder={threadConfig.webhookName || 'Kotbo'}
-                            class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none"
+                            class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                             disabled={!canManageSettings}
                           />
                         </div>
@@ -1509,7 +1509,7 @@
                             type="url"
                             bind:value={step.avatarUrl}
                             placeholder="https://..."
-                            class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none"
+                            class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                             disabled={!canManageSettings}
                           />
                         </div>
@@ -1522,7 +1522,7 @@
                             max="120000"
                             step="250"
                             bind:value={step.delayMs}
-                            class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none"
+                            class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                             disabled={!canManageSettings}
                           />
                         </div>
@@ -1594,7 +1594,7 @@
                             bind:value={page.label}
                             maxlength="80"
                             placeholder={m.announcements_thread_page_label_placeholder()}
-                            class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none"
+                            class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                             disabled={!canManageSettings}
                           />
                         </div>
@@ -1610,7 +1610,7 @@
                             bind:value={page.summary}
                             maxlength="100"
                             placeholder={m.announcements_thread_page_summary_placeholder()}
-                            class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none"
+                            class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                             disabled={!canManageSettings}
                           />
                         </div>
@@ -1655,7 +1655,7 @@
                               type="text"
                               bind:value={page.embedTitle}
                               placeholder={m.announcements_thread_page_embed_title_ph()}
-                              class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none"
+                              class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                               disabled={!canManageSettings}
                             />
                           </div>
@@ -1664,7 +1664,7 @@
                             <textarea
                               id="page-embed-desc-{index}"
                               bind:value={page.embedDescription}
-                              class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none h-20 resize-none"
+                              class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary h-20 resize-none"
                               disabled={!canManageSettings}
                             ></textarea>
                           </div>
@@ -1674,16 +1674,16 @@
                               <span class="text-xs font-semibold text-on-surface-variant ml-1 block">{m.announcements_thread_embed_color_label()}</span>
                               <div class="flex gap-2">
                                 <input type="color" bind:value={page.embedColor} class="w-9 h-9 border-0 bg-transparent rounded-lg cursor-pointer shrink-0" disabled={!canManageSettings} aria-label={m.announcements_thread_embed_color_label()} />
-                                <input type="text" bind:value={page.embedColor} placeholder="#5865F2" class="flex-1 bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none font-mono" disabled={!canManageSettings} aria-label={m.announcements_thread_embed_color_label()} />
+                                <input type="text" bind:value={page.embedColor} placeholder="#5865F2" class="flex-1 bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary font-mono" disabled={!canManageSettings} aria-label={m.announcements_thread_embed_color_label()} />
                               </div>
                             </div>
                             <div class="space-y-1">
                               <label for="page-embed-image-{index}" class="text-xs font-semibold text-on-surface-variant ml-1">{m.announcements_thread_embed_image_label()}</label>
-                              <input id="page-embed-image-{index}" type="url" bind:value={page.embedImageUrl} placeholder="https://..." class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none" disabled={!canManageSettings} />
+                              <input id="page-embed-image-{index}" type="url" bind:value={page.embedImageUrl} placeholder="https://..." class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" disabled={!canManageSettings} />
                             </div>
                             <div class="space-y-1">
                               <label for="page-embed-thumbnail-{index}" class="text-xs font-semibold text-on-surface-variant ml-1">{m.announcements_thread_embed_thumb_label()}</label>
-                              <input id="page-embed-thumbnail-{index}" type="url" bind:value={page.embedThumbnailUrl} placeholder="https://..." class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none" disabled={!canManageSettings} />
+                              <input id="page-embed-thumbnail-{index}" type="url" bind:value={page.embedThumbnailUrl} placeholder="https://..." class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" disabled={!canManageSettings} />
                             </div>
                           </div>
                         </div>
@@ -1778,7 +1778,7 @@
                                 type="url"
                                 bind:value={page.linkUrl}
                                 placeholder="https://example.com"
-                                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none"
+                                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                                 disabled={!canManageSettings}
                               />
                             </div>

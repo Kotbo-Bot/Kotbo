@@ -396,7 +396,7 @@
             visionSourceFilter = e.currentTarget.value;
             void loadVisionImages();
           }}
-          class="h-8 px-2.5 rounded-lg bg-surface-container border border-outline-variant/30 text-xs text-on-surface focus:outline-none"
+          class="h-8 px-2.5 rounded-lg bg-surface-container border border-outline-variant/30 text-xs text-on-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         >
           <option value="ALL">Toutes les sources</option>
           <option value="HONEYPOT">Salon piège (Honeypot)</option>

@@ -766,7 +766,7 @@
       <div class="flex items-center gap-2">
         <Papicon icon="SlidersHorizontal" size={14} class="text-on-surface-variant/40" />
         <label for="threshold" class="text-xs font-bold text-on-surface-variant">{m.da_threshold()}</label>
-        <select id="threshold" bind:value={thresholdDays} class="bg-transparent border-none text-xs font-bold text-on-surface focus:outline-none cursor-pointer">
+        <select id="threshold" bind:value={thresholdDays} class="bg-transparent border-none text-xs font-bold text-on-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-primary cursor-pointer">
           {#each Array.from({ length: 30 }, (_, i) => i + 1) as day}
             <option value={day} class="bg-surface">{day > 1 ? m.da_day_other({ n: day }) : m.da_day_one({ n: day })}</option>
           {/each}

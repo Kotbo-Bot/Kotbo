@@ -379,7 +379,7 @@
                               id="config-{cfg.field}"
                               value={link[cfg.field] ?? ''}
                               onchange={(e) => handleConfigChange(link.id, cfg.field, (e.target as HTMLSelectElement).value || null)}
-                              class="w-full px-3 py-2 rounded-lg bg-surface-container border border-outline-variant/30 text-on-surface text-sm outline-none"
+                              class="w-full px-3 py-2 rounded-lg bg-surface-container border border-outline-variant/30 text-on-surface text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
                             >
                               <option value="">{m.common_none()}</option>
                               {#each staffChannels as ch}
@@ -396,7 +396,7 @@
                             id="recruitment-category"
                             value={link.staffRecruitmentCategoryId ?? ''}
                             onchange={(e) => handleConfigChange(link.id, 'staffRecruitmentCategoryId', (e.target as HTMLSelectElement).value || null)}
-                            class="w-full px-3 py-2 rounded-lg bg-surface-container border border-outline-variant/30 text-on-surface text-sm outline-none"
+                            class="w-full px-3 py-2 rounded-lg bg-surface-container border border-outline-variant/30 text-on-surface text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
                           >
                             <option value="">{m.common_none()}</option>
                             {#each staffCategories as cat}
@@ -468,7 +468,7 @@
             <select
               id="new-sync-mode"
               bind:value={newSyncMode}
-              class="w-full px-3 py-2 rounded-lg bg-surface-container border border-outline-variant/30 text-on-surface text-sm outline-none"
+              class="w-full px-3 py-2 rounded-lg bg-surface-container border border-outline-variant/30 text-on-surface text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
               <option value="MAIN_TO_STAFF">{m.staff_server_mode_main_to_staff()}</option>
               <option value="STAFF_TO_MAIN">{m.staff_server_mode_staff_to_main()}</option>
@@ -482,7 +482,7 @@
             <select
               id="new-simple-staff-role-id"
               bind:value={newSimpleStaffRoleId}
-              class="w-full px-3 py-2 rounded-lg bg-surface-container border border-outline-variant/30 text-on-surface text-sm outline-none"
+              class="w-full px-3 py-2 rounded-lg bg-surface-container border border-outline-variant/30 text-on-surface text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
               <option value="">{m.common_none()}</option>
               {#each roles as role}
@@ -496,7 +496,7 @@
             <select
               id="new-main-log-channel-id"
               bind:value={newMainLogChannelId}
-              class="w-full px-3 py-2 rounded-lg bg-surface-container border border-outline-variant/30 text-on-surface text-sm outline-none"
+              class="w-full px-3 py-2 rounded-lg bg-surface-container border border-outline-variant/30 text-on-surface text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
               <option value="">{m.common_none()}</option>
               {#each channels as ch}
@@ -523,7 +523,7 @@
             <select
               id="new-main-role-id"
               bind:value={newMainRoleId}
-              class="w-full px-3 py-2 rounded-lg bg-surface-container border border-outline-variant/30 text-on-surface text-sm outline-none"
+              class="w-full px-3 py-2 rounded-lg bg-surface-container border border-outline-variant/30 text-on-surface text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
               <option value="">{m.common_select()}</option>
               {#each roles as role}

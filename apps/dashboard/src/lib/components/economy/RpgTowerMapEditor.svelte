@@ -1372,19 +1372,19 @@
         <label for="floorName" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_tower_floor_name()} · {floorTitle(current)}</label>
         <input id="floorName" type="text" maxlength="40" bind:value={layout.name} disabled={disabled} oninput={() => { dirty = true; }}
           placeholder={m.eco_tower_floor_name_placeholder()}
-          class="w-56 bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none" />
+          class="w-56 bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
       </div>
       <div class="space-y-1">
         <label for="mapWidth" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_tower_map_width()}</label>
         <input id="mapWidth" type="number" min={sizeLimits.min} max={sizeLimits.max} value={layout.width} disabled={disabled}
           onchange={(e) => resize(Number((e.currentTarget as HTMLInputElement).value), layout.height)}
-          class="w-20 bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none" />
+          class="w-20 bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
       </div>
       <div class="space-y-1">
         <label for="mapHeight" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_tower_map_height()}</label>
         <input id="mapHeight" type="number" min={sizeLimits.min} max={sizeLimits.max} value={layout.height} disabled={disabled}
           onchange={(e) => resize(layout.width, Number((e.currentTarget as HTMLInputElement).value))}
-          class="w-20 bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none" />
+          class="w-20 bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
       </div>
       <button type="button" onclick={loadExample} disabled={disabled} class="px-3 py-2 bg-outline-variant/10 hover:bg-outline-variant/25 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 disabled:opacity-50">
         <Papicon icon="Sparkles" size={12} /> {m.eco_tower_map_example()}
@@ -1425,14 +1425,14 @@
           <label for="floorWeight" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_tower_floor_weight({ chance: floorTags[current].chance })}</label>
           <input id="floorWeight" type="number" min={WEIGHT.min} max={WEIGHT.max} value={layout.weight} disabled={disabled}
             onchange={(e) => { remember(); layout.weight = Math.min(WEIGHT.max, Math.max(WEIGHT.min, Math.trunc(Number((e.currentTarget as HTMLInputElement).value)) || WEIGHT.default)); dirty = true; }}
-            class="w-20 bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none" />
+            class="w-20 bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
         </div>
       {/if}
       <div class="space-y-1" title={m.eco_tower_modifier_tip()}>
         <label for="floorModifier" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_tower_modifier()}</label>
         <select id="floorModifier" value={layout.modifier} disabled={disabled}
           onchange={(e) => { remember(); layout.modifier = (e.currentTarget as HTMLSelectElement).value as Modifier; dirty = true; }}
-          class="bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none">
+          class="bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary">
           {#each MODIFIERS as modifier}<option value={modifier}>{modifierLabel(modifier)}</option>{/each}
         </select>
       </div>
@@ -1440,7 +1440,7 @@
         <label for="floorTheme" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_tower_theme()}</label>
         <select id="floorTheme" value={layout.theme} disabled={disabled}
           onchange={(e) => { remember(); layout.theme = (e.currentTarget as HTMLSelectElement).value as Theme; dirty = true; }}
-          class="bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none">
+          class="bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary">
           {#each THEMES as theme}<option value={theme}>{themeLabel(theme)}</option>{/each}
         </select>
       </div>
@@ -1577,7 +1577,7 @@
         <div class="flex items-center gap-1.5">
           <input type="number" min="1" max={floorCount} bind:value={jumpTo} placeholder={m.eco_tower_floor_jump_placeholder()} aria-label={m.eco_tower_floor_jump()}
             onkeydown={(event) => { if (event.key === 'Enter') jumpToFloor(); }}
-            class="w-20 bg-surface-container-high/40 border border-outline-variant/10 rounded-md px-2 py-1 text-2xs focus:outline-none" />
+            class="w-20 bg-surface-container-high/40 border border-outline-variant/10 rounded-md px-2 py-1 text-2xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
           <button type="button" onclick={jumpToFloor} class="px-2 py-1 rounded-md bg-outline-variant/10 hover:bg-outline-variant/25 text-2xs font-bold">{m.eco_tower_floor_jump()}</button>
           {#if invalidFloors > 0}
             <button type="button" onclick={nextInvalid} title={m.eco_tower_floor_next_invalid()} aria-label={m.eco_tower_floor_next_invalid()}
@@ -1825,7 +1825,7 @@
                 <label for="roomCollapse" class="text-xs font-semibold text-on-surface-variant">{m.eco_tower_map_collapse_steps()}</label>
                 <input id="roomCollapse" type="number" min="3" max="40" value={selected.collapseSteps} disabled={!canManage || disabled}
                   onchange={(e) => updateSelected({ collapseSteps: Math.min(40, Math.max(3, Number((e.currentTarget as HTMLInputElement).value) || 10)) })}
-                  class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none" />
+                  class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
                 <p class="text-2xs text-on-surface-variant">{m.eco_tower_map_collapse_hint({ shortest: bossDepth ?? 0 })}</p>
               </div>
               <p class="text-xs font-semibold pt-1">{m.eco_tower_map_collapse_guardian()}</p>
@@ -1871,7 +1871,7 @@
               <label for="roomToll" class="text-xs font-semibold text-on-surface-variant">{m.eco_tower_map_toll_gold()}</label>
               <input id="roomToll" type="number" min="1" max="10000" value={selected.tollGold} disabled={!canManage || disabled}
                 onchange={(e) => updateSelected({ tollGold: Math.min(10000, Math.max(1, Number((e.currentTarget as HTMLInputElement).value) || 60)) })}
-                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none" />
+                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
               <p class="text-2xs text-on-surface-variant">{m.eco_tower_map_toll_hint()}</p>
             </div>
           {:else if selected.type === 'TRIAL'}
@@ -1916,7 +1916,7 @@
               <label for="roomHeal" class="text-xs font-semibold text-on-surface-variant">{m.eco_tower_map_heal()}</label>
               <input id="roomHeal" type="number" min="5" max="100" value={selected.healPercent} disabled={!canManage || disabled}
                 onchange={(e) => updateSelected({ healPercent: Math.min(100, Math.max(5, Number((e.currentTarget as HTMLInputElement).value) || 35)) })}
-                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none" />
+                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
             </div>
           {:else if selected.type === 'MERCHANT'}
             <div class="space-y-2">
@@ -1932,7 +1932,7 @@
               <label for="roomPrice" class="text-xs font-semibold text-on-surface-variant">{m.eco_tower_map_price()}</label>
               <input id="roomPrice" type="number" min="10" max="500" value={selected.pricePercent} disabled={!canManage || disabled}
                 onchange={(e) => updateSelected({ pricePercent: Math.min(500, Math.max(10, Number((e.currentTarget as HTMLInputElement).value) || 100)) })}
-                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none" />
+                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
             </div>
           {:else}
             <p class="text-2xs text-on-surface-variant">{m.eco_tower_map_no_option()}</p>

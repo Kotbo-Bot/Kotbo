@@ -113,7 +113,7 @@
       {disabled}
       bind:value={query}
       {placeholder}
-      class="flex-1 min-w-[120px] bg-transparent text-sm text-on-surface placeholder:text-on-surface-variant/40 outline-none disabled:cursor-not-allowed"
+      class="flex-1 min-w-[120px] bg-transparent text-sm text-on-surface placeholder:text-on-surface-variant/40 outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed"
       oninput={() => { open = true; }}
       onfocus={() => { open = true; }}
       onblur={() => setTimeout(() => open = false, 180)}

@@ -146,7 +146,7 @@
     <select
       value={selected}
       onchange={(event) => pick(event.currentTarget.value)}
-      class="{chipClass} appearance-none pr-7 cursor-pointer focus:outline-none"
+      class="{chipClass} appearance-none pr-7 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
     >
       <option value="" disabled={!optional}>
         {optional && placeholder

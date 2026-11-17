@@ -243,7 +243,7 @@
           <select
             value={cooldownDuration.unit}
             onchange={(event) => setCooldown({ seconds: toSeconds(cooldownDuration.amount, event.currentTarget.value as DurationUnit) })}
-            class="px-2 py-1 rounded-lg text-xs bg-surface-container-highest border border-outline-variant/25 text-on-surface cursor-pointer focus:outline-none"
+            class="px-2 py-1 rounded-lg text-xs bg-surface-container-highest border border-outline-variant/25 text-on-surface cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             aria-label={m.wf_cooldown_unit()}
           >
             {#each DURATION_UNITS as entry (entry.unit)}
@@ -257,7 +257,7 @@
               const scope = event.currentTarget.value;
               if (isCooldownScope(scope)) setCooldown({ scope });
             }}
-            class="px-2 py-1 rounded-lg text-xs bg-surface-container-highest border border-outline-variant/25 text-on-surface cursor-pointer focus:outline-none"
+            class="px-2 py-1 rounded-lg text-xs bg-surface-container-highest border border-outline-variant/25 text-on-surface cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             aria-label={m.wf_cooldown_scope()}
           >
             {#each COOLDOWN_SCOPES as scope (scope)}
@@ -276,7 +276,7 @@
               <select
                 value={(step as ConditionStep).match}
                 onchange={(event) => onChange({ ...(step as ConditionStep), match: event.currentTarget.value as 'all' | 'any' })}
-                class="px-2 py-0.5 rounded-lg text-2xs bg-surface-container-highest border border-outline-variant/25 text-on-surface-variant cursor-pointer focus:outline-none"
+                class="px-2 py-0.5 rounded-lg text-2xs bg-surface-container-highest border border-outline-variant/25 text-on-surface-variant cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               >
                 <option value="all">{m.wf_match_all()}</option>
                 <option value="any">{m.wf_match_any()}</option>
@@ -295,7 +295,7 @@
                     <select
                       value={test.operator ?? def.defaultOperator}
                       onchange={(event) => updateTest(test.id, { operator: event.currentTarget.value })}
-                      class="px-2 py-1 rounded-lg text-xs bg-surface-container-highest border border-outline-variant/25 text-on-surface cursor-pointer focus:outline-none"
+                      class="px-2 py-1 rounded-lg text-xs bg-surface-container-highest border border-outline-variant/25 text-on-surface cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     >
                       {#each def.operators as operator (operator.value)}
                         <option value={operator.value}>{operator.label}</option>

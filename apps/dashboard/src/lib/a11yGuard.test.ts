@@ -142,6 +142,21 @@ describe("garde-fou d'accessibilite", () => {
     expect(offenders).toEqual([]);
   });
 
+  test('un champ qui retire son contour de focus en affiche un autre (RGAA 10.7)', () => {
+    // La regle globale de app.css couvre liens, boutons et roles, pas les
+    // champs : un `outline-none` sans remplacement laissait le champ focalise
+    // identique aux autres.
+    const REMOVES = /(?:^|[\s"'{`])(?:focus:)?outline-(?:none|hidden)\b/;
+    const REPLACES = /focus(?:-visible|-within)?:(?:ring|border|outline-(?!none|hidden)|shadow|bg)|class="(?:[^"]*\s)?input(?:\s[^"]*)?"/;
+    const offenders = sources.flatMap(({ file, text }) =>
+      ['input', 'textarea', 'select']
+        .flatMap((tag) => openingTags(text, tag))
+        .filter((tag) => !/type="hidden"/.test(tag) && REMOVES.test(tag) && !REPLACES.test(tag))
+        .map(() => file),
+    );
+    expect(offenders).toEqual([]);
+  });
+
   test('pas d\'aria-labelledby vers un id "modal-title" partage', () => {
     const offenders = sources.filter(({ text }) => /aria-labelledby="modal-title"/.test(text)).map(({ file }) => file);
     expect(offenders).toEqual([]);

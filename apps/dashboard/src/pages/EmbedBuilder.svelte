@@ -246,7 +246,7 @@
                 type="text"
                 bind:value={templateName}
                 placeholder={m.embed_builder_template_name_ph()}
-                class="flex-1 bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none"
+                class="flex-1 bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               />
               <button
                 type="button"
@@ -329,7 +329,7 @@
               id="msgContent"
               bind:value={content} 
               placeholder={m.embed_builder_content_ph()}
-              class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm focus:outline-none h-20 resize-none text-on-surface"
+              class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary h-20 resize-none text-on-surface"
               disabled={!canManageSettings}
             ></textarea>
           </div>
@@ -345,7 +345,7 @@
                 type="text" 
                 bind:value={embed.authorName} 
                 placeholder={m.embed_builder_author_name_ph()}
-                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none"
+                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 disabled={!canManageSettings}
               />
             </div>
@@ -356,7 +356,7 @@
                 type="url" 
                 bind:value={embed.authorIconUrl} 
                 placeholder="https://example.com/icon.png"
-                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none"
+                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 disabled={!canManageSettings}
               />
             </div>
@@ -367,7 +367,7 @@
                 type="url" 
                 bind:value={embed.authorUrl} 
                 placeholder="https://example.com/author"
-                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none"
+                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 disabled={!canManageSettings}
               />
             </div>
@@ -383,7 +383,7 @@
               type="text" 
               bind:value={embed.title} 
               placeholder={m.embed_builder_embed_title_ph()}
-              class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none"
+              class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               disabled={!canManageSettings}
             />
           </div>
@@ -395,7 +395,7 @@
               type="url" 
               bind:value={embed.url} 
               placeholder="https://example.com/details"
-              class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none"
+              class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               disabled={!canManageSettings}
             />
           </div>
@@ -406,7 +406,7 @@
               id="embedDesc"
               bind:value={embed.description} 
               placeholder={m.embed_builder_desc_ph()}
-              class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none h-24 resize-none"
+              class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary h-24 resize-none"
               disabled={!canManageSettings}
             ></textarea>
           </div>
@@ -426,7 +426,7 @@
                   type="text" 
                   bind:value={embed.color} 
                   placeholder="#5865F2"
-                  class="flex-1 bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-4 py-2 text-sm focus:outline-none font-mono"
+                  class="flex-1 bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-4 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary font-mono"
                   disabled={!canManageSettings}
                 />
               </div>
@@ -439,7 +439,7 @@
                 type="url" 
                 bind:value={embed.thumbnailUrl} 
                 placeholder="https://example.com/thumbnail.png"
-                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none"
+                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 disabled={!canManageSettings}
               />
             </div>
@@ -452,7 +452,7 @@
               type="url" 
               bind:value={embed.imageUrl} 
               placeholder="https://example.com/banner.png"
-              class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none"
+              class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               disabled={!canManageSettings}
             />
           </div>
@@ -484,7 +484,7 @@
                       type="text" 
                       bind:value={fld.name} 
                       placeholder={m.embed_builder_field_title_ph()} 
-                      class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-3 py-1.5 text-xs focus:outline-none"
+                      class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-3 py-1.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                       required
                       disabled={!canManageSettings}
                     />
@@ -507,7 +507,7 @@
                     id={`fldVal-${idx}`}
                     bind:value={fld.value} 
                     placeholder={m.embed_builder_field_val_ph()} 
-                    class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-3 py-1.5 text-xs focus:outline-none h-14 resize-none"
+                    class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-3 py-1.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary h-14 resize-none"
                     required
                     disabled={!canManageSettings}
                   ></textarea>
@@ -538,7 +538,7 @@
                 type="text" 
                 bind:value={embed.footerText} 
                 placeholder="Kotbo Bot © 2026"
-                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none"
+                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 disabled={!canManageSettings}
               />
             </div>
@@ -549,7 +549,7 @@
                 type="url" 
                 bind:value={embed.footerIconUrl} 
                 placeholder="https://example.com/footer.png"
-                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none"
+                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 disabled={!canManageSettings}
               />
             </div>

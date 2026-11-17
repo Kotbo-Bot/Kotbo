@@ -114,7 +114,7 @@
             max="999"
             aria-label={m.eco_inventory_quantity()}
             bind:value={grantQuantity}
-            class="w-full sm:w-24 bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none"
+            class="w-full sm:w-24 bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           />
           <button
             type="button"

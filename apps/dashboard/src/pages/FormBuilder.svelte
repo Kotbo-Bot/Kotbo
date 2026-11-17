@@ -404,7 +404,7 @@
                   {/each}
                 </div>
               {:else if field.type === 'dropdown'}
-                <select class="w-full bg-surface-container rounded-xl px-4 py-2.5 text-sm outline-none border border-outline-variant/30">
+                <select class="w-full bg-surface-container rounded-xl px-4 py-2.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary border border-outline-variant/30">
                   <option value="">{m.fb_select_placeholder()}</option>
                   {#each field.options || [] as opt}
                     <option>{opt}</option>
@@ -424,9 +424,9 @@
                   {#if field.scaleMaxLabel}<span class="text-xs text-on-surface-variant">{field.scaleMaxLabel}</span>{/if}
                 </div>
               {:else if field.type === 'date'}
-                <input type="date" class="w-full bg-surface-container rounded-xl px-4 py-2.5 text-sm outline-none border border-outline-variant/30" />
+                <input type="date" class="w-full bg-surface-container rounded-xl px-4 py-2.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary border border-outline-variant/30" />
               {:else if field.type === 'time'}
-                <input type="time" class="w-full bg-surface-container rounded-xl px-4 py-2.5 text-sm outline-none border border-outline-variant/30" />
+                <input type="time" class="w-full bg-surface-container rounded-xl px-4 py-2.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary border border-outline-variant/30" />
               {:else if field.type === 'multiple_choice_grid' || field.type === 'checkbox_grid'}
                 <div class="overflow-x-auto mt-2">
                   <table class="w-full text-sm">
@@ -619,7 +619,7 @@
                   <p class="text-2xs font-semibold text-on-surface-variant mb-1">{m.fb_font()}</p>
                   <select value={theme.fontFamily || ''}
                     onchange={(e) => { const v = (e.currentTarget as HTMLSelectElement).value; theme.fontFamily = v || undefined; if (v) loadGoogleFont(v); }}
-                    class="w-full bg-surface-container rounded-lg px-3 py-2 text-xs outline-none border border-outline-variant/20">
+                    class="w-full bg-surface-container rounded-lg px-3 py-2 text-xs outline-none focus-visible:ring-2 focus-visible:ring-primary border border-outline-variant/20">
                     <option value="">{m.fb_font_default()}</option>
                     {#each ALLOWED_FONTS as font}
                       <option value={font}>{font}</option>
@@ -870,21 +870,21 @@
                       {#if field.type === 'number'}
                         <div class="flex gap-2">
                           <input type="number" value={field.validation?.min ?? ''} oninput={(e) => updateField(field.id,'validation',{...field.validation,min:+(e.target as HTMLInputElement).value})}
-                            class="w-1/2 text-xs bg-surface-container rounded-lg px-3 py-2 outline-none" placeholder="Min" />
+                            class="w-1/2 text-xs bg-surface-container rounded-lg px-3 py-2 outline-none focus-visible:ring-2 focus-visible:ring-primary" placeholder="Min" />
                           <input type="number" value={field.validation?.max ?? ''} oninput={(e) => updateField(field.id,'validation',{...field.validation,max:+(e.target as HTMLInputElement).value})}
-                            class="w-1/2 text-xs bg-surface-container rounded-lg px-3 py-2 outline-none" placeholder="Max" />
+                            class="w-1/2 text-xs bg-surface-container rounded-lg px-3 py-2 outline-none focus-visible:ring-2 focus-visible:ring-primary" placeholder="Max" />
                         </div>
                       {/if}
                       {#if field.type === 'linear_scale'}
                         <div class="flex gap-2 flex-wrap">
                           <input type="number" min="0" max="10" value={field.scaleMin ?? 1} oninput={(e) => updateField(field.id,'scaleMin',+(e.target as HTMLInputElement).value)}
-                            class="w-20 text-xs bg-surface-container rounded-lg px-3 py-2 outline-none" placeholder="Min" />
+                            class="w-20 text-xs bg-surface-container rounded-lg px-3 py-2 outline-none focus-visible:ring-2 focus-visible:ring-primary" placeholder="Min" />
                           <input type="number" min="1" max="10" value={field.scaleMax ?? 5} oninput={(e) => updateField(field.id,'scaleMax',+(e.target as HTMLInputElement).value)}
-                            class="w-20 text-xs bg-surface-container rounded-lg px-3 py-2 outline-none" placeholder="Max" />
+                            class="w-20 text-xs bg-surface-container rounded-lg px-3 py-2 outline-none focus-visible:ring-2 focus-visible:ring-primary" placeholder="Max" />
                           <input value={field.scaleMinLabel || ''} oninput={(e) => updateField(field.id,'scaleMinLabel',(e.target as HTMLInputElement).value)}
-                            class="flex-1 text-xs bg-surface-container rounded-lg px-3 py-2 outline-none" placeholder="Label min" />
+                            class="flex-1 text-xs bg-surface-container rounded-lg px-3 py-2 outline-none focus-visible:ring-2 focus-visible:ring-primary" placeholder="Label min" />
                           <input value={field.scaleMaxLabel || ''} oninput={(e) => updateField(field.id,'scaleMaxLabel',(e.target as HTMLInputElement).value)}
-                            class="flex-1 text-xs bg-surface-container rounded-lg px-3 py-2 outline-none" placeholder="Label max" />
+                            class="flex-1 text-xs bg-surface-container rounded-lg px-3 py-2 outline-none focus-visible:ring-2 focus-visible:ring-primary" placeholder="Label max" />
                         </div>
                       {/if}
 
@@ -900,14 +900,14 @@
                             <div class="flex items-center gap-2 text-xs mb-2 flex-wrap">
                               <span class="text-on-surface-variant">{m.fb_if_answer_is()}</span>
                               <select value={rule.value} onchange={(e) => { const logic=[...(field.logic||[])]; logic[rIdx]={...rule,value:(e.target as HTMLSelectElement).value}; updateField(field.id,'logic',logic); }}
-                                class="bg-surface-container rounded-lg px-2 py-1 outline-none text-xs">
+                                class="bg-surface-container rounded-lg px-2 py-1 outline-none focus-visible:ring-2 focus-visible:ring-primary text-xs">
                                 {#each field.options || [] as opt}
                                   <option value={opt}>{opt}</option>
                                 {/each}
                               </select>
                               <span class="text-on-surface-variant">{m.fb_go_to_section()}</span>
                               <select value={rule.targetSectionIndex} onchange={(e) => { const logic=[...(field.logic||[])]; logic[rIdx]={...rule,targetSectionIndex:+(e.target as HTMLSelectElement).value}; updateField(field.id,'logic',logic); }}
-                                class="bg-surface-container rounded-lg px-2 py-1 outline-none text-xs">
+                                class="bg-surface-container rounded-lg px-2 py-1 outline-none focus-visible:ring-2 focus-visible:ring-primary text-xs">
                                 {#each sections as s, si}
                                   <option value={si}>{s.title || m.fb_section_default_title({ number: si + 1 })}</option>
                                 {/each}

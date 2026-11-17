@@ -398,7 +398,7 @@
           onkeydown={handleKeydown}
           type="text"
           placeholder={m.cp_search_ph()}
-          class="flex-1 bg-transparent text-sm text-on-surface placeholder-on-surface-variant/40 focus:outline-none"
+          class="flex-1 bg-transparent text-sm text-on-surface placeholder-on-surface-variant/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         />
         <kbd class="hidden sm:flex px-1.5 py-0.5 rounded bg-surface-container border border-outline-variant text-2xs font-medium text-on-surface-variant/40 leading-none">
           ESC

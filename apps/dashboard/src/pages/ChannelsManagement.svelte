@@ -2758,7 +2758,7 @@
                           <input 
                             type="text" 
                             bind:value={newChannelName}
-                            class="bg-surface-container-high/40 border border-outline-variant/20 rounded-md px-2.5 py-1 text-xs text-on-surface outline-none"
+                            class="bg-surface-container-high/40 border border-outline-variant/20 rounded-md px-2.5 py-1 text-xs text-on-surface outline-none focus-visible:ring-2 focus-visible:ring-primary"
                           />
                           <button
                             type="button"
