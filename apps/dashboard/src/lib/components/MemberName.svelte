@@ -7,6 +7,7 @@
   import { memberCaseModal } from '../stores/memberCaseModal.svelte';
   import { memberIdentities } from '../stores/memberIdentities.svelte';
   import ServerTagPill from './ServerTagPill.svelte';
+  import BoosterBadge from './BoosterBadge.svelte';
 
   let {
     userId,
@@ -43,5 +44,8 @@
   {/if}
   {#if shownTag}
     <ServerTagPill tag={shownTag.tag} badgeUrl={shownTag.badgeUrl} />
+  {/if}
+  {#if tag && known?.boostingSince}
+    <BoosterBadge since={known.boostingSince} />
   {/if}
 </span>

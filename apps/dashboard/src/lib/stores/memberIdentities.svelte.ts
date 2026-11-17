@@ -19,6 +19,8 @@ export type MemberIdentity = {
   displayName: string;
   avatarUrl: string | null;
   serverTag: MemberServerTag | null;
+  /** Début du boost en cours (ISO), null si le membre ne booste pas. */
+  boostingSince?: string | null;
 };
 
 /** Plafond de la route côté bot. */

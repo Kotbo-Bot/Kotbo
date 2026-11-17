@@ -13,6 +13,7 @@
   import { memberAvatarSrc } from '../discordMedia';
   import { memberIdentities } from '../stores/memberIdentities.svelte';
   import ServerTagPill from './ServerTagPill.svelte';
+  import BoosterBadge from './BoosterBadge.svelte';
 
   const {
     userId = null,
@@ -26,6 +27,7 @@
     avatar = true,
     handle = false,
     tag = true,
+    boost = true,
     resolve = true,
     onClick = null,
     class: className = '',
@@ -50,6 +52,8 @@
     handle?: boolean;
     /** Affiche le tag de serveur a cote du pseudo, comme Discord. */
     tag?: boolean;
+    /** Affiche le badge de booster quand le membre booste le serveur. */
+    boost?: boolean;
     /** Complete les champs manquants depuis le store ; false pour un rendu fige. */
     resolve?: boolean;
     /** Rend l'ensemble cliquable (ouverture de la fiche membre). */
@@ -85,6 +89,7 @@
   const avatarSrc = $derived(memberAvatarSrc(avatarUrl ?? known?.avatarUrl ?? null, label, userId));
   const at = $derived(username || known?.username || null);
   const shownTag = $derived(tag ? (serverTag === undefined ? known?.serverTag : serverTag) ?? null : null);
+  const boostingSince = $derived(boost ? known?.boostingSince ?? null : null);
   const secondLine = $derived([handle && at ? `@${at}` : null, subtitle].filter(Boolean).join(' · '));
   const clickable = $derived(!!onClick && !!userId);
 </script>
@@ -103,6 +108,9 @@
       <span class="{NAME_CLASSES[size]} font-semibold text-on-surface truncate">{prefix}{label}</span>
       {#if shownTag}
         <ServerTagPill tag={shownTag.tag} badgeUrl={shownTag.badgeUrl} />
+      {/if}
+      {#if boostingSince}
+        <BoosterBadge since={boostingSince} size={size === 'lg' ? 15 : 13} />
       {/if}
     </span>
     {#if secondLine}
