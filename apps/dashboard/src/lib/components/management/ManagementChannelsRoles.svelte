@@ -175,7 +175,7 @@
           type="text"
           bind:value={query}
           placeholder={m.ma_search_placeholder()}
-          class="bg-surface-container-high/40 border border-outline-variant/10 rounded-lg pl-9 pr-4 py-2 text-xs w-56 focus:ring-2 focus:ring-primary/30 transition-all outline-none"
+          class="bg-surface-container-high/40 border border-field-border rounded-lg pl-9 pr-4 py-2 text-xs w-56 focus:ring-2 focus:ring-primary/30 transition-all outline-none"
         />
       </label>
     {/snippet}
@@ -252,7 +252,7 @@
                             type="url"
                             placeholder="https://discord.com/api/webhooks/..."
                             bind:value={features[idx].metadata.webhookUrl}
-                            class="w-full md:w-72 bg-surface-container-high text-on-surface text-sm px-4 py-2.5 rounded-xl border border-outline-variant/10 outline-none focus:ring-2 focus:ring-primary/30 transition-all"
+                            class="w-full md:w-72 bg-surface-container-high text-on-surface text-sm px-4 py-2.5 rounded-xl border border-field-border outline-none focus:ring-2 focus:ring-primary/30 transition-all"
                           />
                         </SettingsRow>
 

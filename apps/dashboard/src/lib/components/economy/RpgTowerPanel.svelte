@@ -1664,7 +1664,7 @@
                 <div class="flex flex-wrap gap-1.5">
                   {#each SIM_HEATS as heat, index}
                     <button type="button" aria-pressed={(simHeat & (1 << index)) !== 0} onclick={() => { simHeat ^= 1 << index; }}
-                      class="px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors {(simHeat & (1 << index)) !== 0 ? 'border-error bg-error/15 text-error' : 'border-outline-variant hover:bg-surface-container-low'}">{heat.label()}</button>
+                      class="px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors {(simHeat & (1 << index)) !== 0 ? 'border-error bg-error/15 text-on-error-container' : 'border-outline-variant hover:bg-surface-container-low'}">{heat.label()}</button>
                   {/each}
                 </div>
               </div>

@@ -207,7 +207,7 @@
                 type="text"
                 bind:value={query}
                 placeholder={m.ma_search_placeholder()}
-                class="bg-surface-container-high/40 border border-outline-variant/10 rounded-lg pl-9 pr-4 py-2 text-xs w-56 focus:ring-2 focus:ring-primary/30 transition-all outline-none"
+                class="bg-surface-container-high/40 border border-field-border rounded-lg pl-9 pr-4 py-2 text-xs w-56 focus:ring-2 focus:ring-primary/30 transition-all outline-none"
               />
             </label>
           </div>

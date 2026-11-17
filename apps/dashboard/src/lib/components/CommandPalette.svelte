@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { dialogFocus } from '../actions/dialogFocus';
   import { m } from '../i18n';
   import { router } from 'tinro';
   import Papicon from './Papicon.svelte';
@@ -367,9 +368,10 @@
 {#if open}
   <div
     class="command-palette fixed inset-0 z-100 flex items-start justify-center pt-[15vh] px-4"
+    use:dialogFocus={{}}
     role="dialog"
     aria-modal="true"
-    aria-label="Palette de commandes"
+    aria-label={m.a11y_command_palette()}
     tabindex="-1"
     onkeydown={(e) => { if (e.key === 'Escape') close(); }}
   >
@@ -389,14 +391,14 @@
       <!-- Search input -->
       <div class="flex items-center gap-2.5 px-3 py-2.5 border-b border-outline-variant">
         <Papicon icon="Search" size={15} class="text-on-surface-variant/40 shrink-0" />
-        <input
+        <input aria-label={m.cp_search_ph()}
           bind:this={inputEl}
           bind:value={query}
           oninput={() => selectedIndex = 0}
           onkeydown={handleKeydown}
           type="text"
           placeholder={m.cp_search_ph()}
-          class="flex-1 bg-transparent text-sm text-on-surface placeholder-on-surface-variant/40 focus:outline-none"
+          class="flex-1 bg-transparent text-sm text-on-surface placeholder-on-surface-variant/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         />
         <kbd class="hidden sm:flex px-1.5 py-0.5 rounded bg-surface-container border border-outline-variant text-2xs font-medium text-on-surface-variant/40 leading-none">
           ESC

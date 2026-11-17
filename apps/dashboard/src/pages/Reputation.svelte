@@ -507,8 +507,8 @@
         <div class="space-y-6">
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {@render statTile('Heart', 'bg-primary/10 text-primary', data.stats.totalVotes, m.rep_total_votes())}
-            {@render statTile('Star', 'bg-warning/10 text-warning', data.stats.votesLast7Days, m.rep_votes_last_7_days())}
-            {@render statTile('Users', 'bg-success/10 text-success', data.stats.activeGivers7Days, m.rep_status_active_givers())}
+            {@render statTile('Star', 'bg-warning/10 text-on-warning-container', data.stats.votesLast7Days, m.rep_votes_last_7_days())}
+            {@render statTile('Users', 'bg-success/10 text-on-success-container', data.stats.activeGivers7Days, m.rep_status_active_givers())}
           </div>
 
           {#if data.config.tiers.length === 0}
@@ -755,8 +755,8 @@
 
           <section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl space-y-5">
             <Field id="rep-announce-channel" label={m.rep_announce_channel_label()} hint={m.rep_announce_channel_hint()}>
-              {#snippet children(id)}
-                <SearchableSelect
+              {#snippet children(id, describedBy)}
+                <SearchableSelect {describedBy}
                   {id}
                   bind:value={config.announceChannelId}
                   options={[{ id: '', name: m.rep_announce_channel_none() }, ...textChannels.map((channel) => ({ id: channel.id, name: `#${channel.name}` }))]}
@@ -861,8 +861,8 @@
                   hint={m.rep_guards_roles_hint()}
                   error={config.excludedRoleIds.length <= REPUTATION_EXCLUDED_MAX ? undefined : m.rep_guards_too_many({ max: REPUTATION_EXCLUDED_MAX })}
                 >
-                  {#snippet children(id)}
-                    <MultiSelect
+                  {#snippet children(id, describedBy)}
+                    <MultiSelect {describedBy}
                       {id}
                       bind:values={config.excludedRoleIds}
                       options={assignableRoles.map((role: { id: string; name: string }) => ({ id: role.id, name: `@${role.name}` }))}
@@ -877,8 +877,8 @@
                   hint={m.rep_guards_channels_hint()}
                   error={config.excludedChannelIds.length <= REPUTATION_EXCLUDED_MAX ? undefined : m.rep_guards_too_many({ max: REPUTATION_EXCLUDED_MAX })}
                 >
-                  {#snippet children(id)}
-                    <MultiSelect
+                  {#snippet children(id, describedBy)}
+                    <MultiSelect {describedBy}
                       {id}
                       bind:values={config.excludedChannelIds}
                       options={textChannels.map((channel) => ({ id: channel.id, name: `#${channel.name}` }))}
@@ -912,8 +912,8 @@
             hint={m.rep_reaction_emoji_hint()}
             error={reactionValid ? undefined : m.rep_reaction_emoji_required()}
           >
-            {#snippet children(id)}
-              <EmojiListInput
+            {#snippet children(id, describedBy)}
+              <EmojiListInput {describedBy}
                 {id}
                 max={1}
                 bind:values={() => (config.reactionEmoji ? [config.reactionEmoji] : []), (values) => config.reactionEmoji = values[0] ?? null}

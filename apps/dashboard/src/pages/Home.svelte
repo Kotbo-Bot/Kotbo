@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { dialogFocus } from '../lib/actions/dialogFocus';
   import { router } from 'tinro';
   import { authStore } from '../lib/stores/auth.svelte';
   import { dashboardStore } from '../lib/stores/dashboard.svelte';
@@ -1271,7 +1272,7 @@
                     </div>
                     <button
                       onclick={() => handleMarkAsRead(notif.id)}
-                      class="w-5 h-5 rounded bg-success/10 text-success hover:bg-success/20 transition-colors flex items-center justify-center shrink-0 cursor-pointer"
+                      class="w-5 h-5 rounded bg-success/10 text-on-success-container hover:bg-success/20 transition-colors flex items-center justify-center shrink-0 cursor-pointer"
                     >
                       <Papicon icon="check" size={10} />
                     </button>
@@ -1383,11 +1384,11 @@
             <div class="flex items-center gap-2.5 mb-2 shrink-0">
               <h3 class="text-sm font-medium text-on-surface">{m.home_team_notes()}</h3>
             </div>
-            <textarea
+            <textarea aria-label={m.home_team_notes()}
               value={staffNotes}
               oninput={saveStaffNotes}
               placeholder={m.home_notes_placeholder()}
-              class="w-full grow p-2.5 text-xs bg-surface-container border border-outline-variant rounded-lg outline-none resize-none focus:border-primary/50 text-on-surface min-h-[100px]"
+              class="w-full grow p-2.5 text-xs bg-surface-container border border-field-border rounded-lg outline-none resize-none focus:border-primary/50 text-on-surface min-h-[100px]"
             ></textarea>
           </div>
         {:else if item.id === 'serverInfo'}
@@ -1433,7 +1434,7 @@
                 <h3 class="text-sm font-medium text-on-surface">{m.home_mod_bothosting_title()}</h3>
               </div>
               {#if hosting}
-                <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-2xs bg-success/20 text-success font-medium">
+                <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-2xs bg-success/20 text-on-success-container font-medium">
                   <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> {m.home_online_label()}
                 </span>
               {/if}
@@ -1808,9 +1809,9 @@
   <!-- Add Module Modal -->
   {#if showAddModuleModal}
     <div class="modal-backdrop" onclick={() => showAddModuleModal = false} role="button" tabindex="-1" onkeydown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) showAddModuleModal = false; }}>
-      <div class="modal-panel modal-panel-lg" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="dialog" aria-modal="true" tabindex="-1">
+      <div class="modal-panel modal-panel-lg" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} use:dialogFocus={{ onEscape: () => (showAddModuleModal = false) }} role="dialog" aria-modal="true" aria-labelledby="home-module-library-title" tabindex="-1">
         <div class="flex items-center justify-between border-b border-outline-variant pb-3 mb-4">
-          <h2 class="text-base font-semibold text-on-surface flex items-center gap-2">
+          <h2 id="home-module-library-title" class="text-base font-semibold text-on-surface flex items-center gap-2">
             <Papicon icon="plus-circle" size={18} class="text-primary" /> {m.home_module_library()}
           </h2>
           <button
@@ -1841,7 +1842,7 @@
               
               <div class="flex justify-end pt-1">
                 {#if isVisible}
-                  <span class="inline-flex items-center gap-1 text-2xs text-success font-medium bg-success/10 px-2 py-1 rounded">
+                  <span class="inline-flex items-center gap-1 text-2xs text-on-success-container font-medium bg-success/10 px-2 py-1 rounded">
                     <Papicon icon="check" size={10} /> {m.home_already_visible()}
                   </span>
                 {:else}
@@ -1863,8 +1864,8 @@
   <!-- Reset Confirmation Modal -->
   {#if showResetConfirm}
     <div class="modal-backdrop" onclick={() => showResetConfirm = false} role="button" tabindex="-1" onkeydown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) showResetConfirm = false; }}>
-      <div class="modal-panel max-w-sm" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="dialog" aria-modal="true" tabindex="-1">
-        <h3 class="font-semibold text-base text-on-surface mb-2">{m.home_reset_layout_q()}</h3>
+      <div class="modal-panel max-w-sm" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} use:dialogFocus={{ onEscape: () => (showResetConfirm = false) }} role="dialog" aria-modal="true" aria-labelledby="home-reset-title" tabindex="-1">
+        <h3 id="home-reset-title" class="font-semibold text-base text-on-surface mb-2">{m.home_reset_layout_q()}</h3>
         <p class="text-sm text-on-surface-variant leading-normal mb-5">
           {m.home_reset_layout_warn()}
         </p>
@@ -1879,9 +1880,9 @@
   <!-- Presets Modal -->
   {#if showPresetsModal}
     <div class="modal-backdrop" onclick={() => showPresetsModal = false} role="button" tabindex="-1" onkeydown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) showPresetsModal = false; }}>
-      <div class="modal-panel modal-panel-lg" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="dialog" aria-modal="true" tabindex="-1">
+      <div class="modal-panel modal-panel-lg" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} use:dialogFocus={{ onEscape: () => (showPresetsModal = false) }} role="dialog" aria-modal="true" aria-labelledby="home-presets-title" tabindex="-1">
         <div class="flex items-center justify-between border-b border-outline-variant pb-3 mb-4">
-          <h2 class="text-base font-semibold text-on-surface flex items-center gap-2">
+          <h2 id="home-presets-title" class="text-base font-semibold text-on-surface flex items-center gap-2">
             <Papicon icon="layers" size={18} class="text-primary" /> {m.home_layout_presets()}
           </h2>
           <button
@@ -1898,17 +1899,17 @@
             <Papicon icon="save" size={14} class="text-primary" /> {m.home_save_current_layout()}
           </h3>
           <div class="flex gap-2">
-            <input
+            <input aria-label={m.home_preset_name_ph()}
               type="text"
               bind:value={presetName}
               placeholder={m.home_preset_name_ph()}
-              class="grow px-3 py-2 text-xs bg-surface-container border border-outline-variant rounded-lg outline-none focus:border-primary/50 text-on-surface"
+              class="grow px-3 py-2 text-xs bg-surface-container border border-field-border rounded-lg outline-none focus:border-primary/50 text-on-surface"
             />
-            <input
+            <input aria-label={m.home_preset_desc_ph()}
               type="text"
               bind:value={presetDescription}
               placeholder={m.home_preset_desc_ph()}
-              class="grow px-3 py-2 text-xs bg-surface-container border border-outline-variant rounded-lg outline-none focus:border-primary/50 text-on-surface"
+              class="grow px-3 py-2 text-xs bg-surface-container border border-field-border rounded-lg outline-none focus:border-primary/50 text-on-surface"
             />
             <button
               onclick={saveAsPreset}
@@ -1925,10 +1926,10 @@
             <Papicon icon="upload" size={14} class="text-secondary" /> {m.home_import_preset_json()}
           </h3>
           <div class="flex gap-2">
-            <textarea
+            <textarea aria-label={m.home_import_preset_json()}
               bind:value={presetImportJson}
               placeholder={m.home_paste_json_ph() + ' {"name": "...", "layout": [...]}'}
-              class="grow px-3 py-2 text-xs bg-surface-container border border-outline-variant rounded-lg outline-none focus:border-primary/50 text-on-surface min-h-[60px] resize-none"
+              class="grow px-3 py-2 text-xs bg-surface-container border border-field-border rounded-lg outline-none focus:border-primary/50 text-on-surface min-h-[60px] resize-none"
             ></textarea>
             <button
               onclick={importPresetFromJson}

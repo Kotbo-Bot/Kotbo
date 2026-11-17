@@ -324,7 +324,7 @@
     </div>
   {:else if !canManageSettings}
     <div class="mgmt__denied bg-error/5 border border-error/10">
-      <div class="w-16 h-16 bg-error/10 rounded-full flex items-center justify-center mx-auto text-error">
+      <div class="w-16 h-16 bg-error/10 rounded-full flex items-center justify-center mx-auto text-on-error-container">
         <Papicon icon="ShieldWarning" size={32} />
       </div>
       <div class="space-y-2">

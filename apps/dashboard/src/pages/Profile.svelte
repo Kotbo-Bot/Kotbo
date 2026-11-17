@@ -504,7 +504,7 @@
             </span>
           {/if}
           {#if isBlacklisted}
-            <span class="inline-flex items-center gap-1.5 rounded-md bg-error/10 px-2 py-0.5 text-xs font-medium text-error">
+            <span class="inline-flex items-center gap-1.5 rounded-md bg-error/10 px-2 py-0.5 text-xs font-medium text-on-error-container">
               <Papicon icon="Slash" size={13} />
               {m.pf_restricted_account()}
             </span>
@@ -714,7 +714,7 @@
 
               <div class="flex flex-col md:flex-row gap-3 md:items-end">
                 <div class="flex-1">
-                  <FormInput id="new-note" placeholder={m.pf_add_note_ph()} bind:value={newNoteContent} className="w-full" />
+                  <FormInput ariaLabel={m.pf_add_note_ph()} id="new-note" placeholder={m.pf_add_note_ph()} bind:value={newNoteContent} className="w-full" />
                 </div>
                 <Button variant="primary" onclick={submitManagerNote} loading={sendingNote} disabled={!newNoteContent.trim()}>
                   {m.pf_add_note()}
@@ -741,7 +741,7 @@
                       placeholder={m.pf_resignation_ph()}
                       maxlength={500}
                       rows={4}
-                      class="w-full rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-2 text-sm text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:border-primary resize-none"
+                      class="w-full rounded-lg border border-field-border bg-surface-container-lowest px-3 py-2 text-sm text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:border-primary resize-none"
                     ></textarea>
                     <p class="mt-1 text-right text-xs text-on-surface-variant">{resignationReason.length}/500</p>
                   </div>

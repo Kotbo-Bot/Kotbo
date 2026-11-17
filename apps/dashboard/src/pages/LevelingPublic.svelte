@@ -414,7 +414,7 @@
 
           <!-- Barre de recherche -->
           <div class="relative w-full sm:w-80">
-            <input
+            <input aria-label={m.leveling_public_search_placeholder()}
               type="text"
               id="leaderboard-search"
               placeholder={m.leveling_public_search_placeholder()}

@@ -761,7 +761,7 @@
       </div>
     {:else if missingPermissions.length > 0}
       <div class="flex flex-col sm:flex-row sm:items-center gap-4 bg-error/5 border border-error/20 rounded-xl px-6 py-5">
-        <div class="w-10 h-10 rounded-lg bg-error/10 text-error flex items-center justify-center shrink-0">
+        <div class="w-10 h-10 rounded-lg bg-error/10 text-on-error-container flex items-center justify-center shrink-0">
           <Papicon icon="Lock" size={20} />
         </div>
         <div class="space-y-0.5">
@@ -1222,11 +1222,11 @@
       {@const candidates = adoptCandidates(item)}
       {#if candidates.length > 0}
         <div class="pl-[26px] flex items-center gap-2">
-          <select
+          <select aria-label={m.stp_adopt_for({ name: item.name })}
             value={adopt[item.key] ?? ''}
             disabled={isTraced(item.key)}
             onchange={(event) => setAdopt(item.key, event.currentTarget.value)}
-            class="min-w-0 flex-1 rounded-lg border border-outline-variant/30 bg-surface-container-lowest/50 px-2.5 py-1.5
+            class="min-w-0 flex-1 rounded-lg border border-field-border bg-surface-container-lowest/50 px-2.5 py-1.5
                    text-xs text-on-surface-variant/85 disabled:opacity-50"
           >
             <option value="">Créer {item.kind === 'role' ? `@${item.name}` : item.name}</option>

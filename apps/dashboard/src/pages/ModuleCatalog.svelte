@@ -328,7 +328,7 @@
         type="search"
         bind:value={search}
         placeholder={m.mc_search_placeholder()}
-        class="w-full h-10 pl-9 pr-3 rounded-lg bg-surface-container-low border border-outline-variant/40 text-sm text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/40"
+        class="w-full h-10 pl-9 pr-3 rounded-lg bg-surface-container-low border border-field-border text-sm text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/40"
       />
     </label>
 
@@ -408,7 +408,7 @@
                           <Papicon icon="Lock" size={9} /> {planLabel(mod.requiredPlan)}
                         </span>
                       {:else if blocked}
-                        <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-semibold bg-warning/15 text-warning">
+                        <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-semibold bg-warning/15 text-on-warning-container">
                           {m.mc_badge_blocked()}
                         </span>
                       {/if}

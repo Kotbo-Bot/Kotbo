@@ -575,7 +575,7 @@
                     <span class="text-body-sm font-medium text-on-surface truncate">{step.title}</span>
                   </span>
                   <span class="shrink-0 px-2 py-0.5 rounded-md text-2xs font-medium
-                    {!step.available ? 'bg-surface-container-high text-on-surface-variant' : step.on ? 'bg-success/15 text-success' : 'bg-surface-container-high text-on-surface-variant'}">
+                    {!step.available ? 'bg-surface-container-high text-on-surface-variant' : step.on ? 'bg-success/15 text-on-success-container' : 'bg-surface-container-high text-on-surface-variant'}">
                     {!step.available ? m.regulation_step_unavailable() : step.on ? m.regulation_step_on() : m.regulation_step_off()}
                   </span>
                 </span>

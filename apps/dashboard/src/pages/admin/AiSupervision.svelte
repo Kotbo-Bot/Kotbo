@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { dialogFocus } from '../../lib/actions/dialogFocus';
   /**
    * Supervision des modules d'analyse : AegisAI (toxicite, emotions) et Kotbo
    * Vision (images, domaines et textes d'arnaque). On y lit si la file tient
@@ -389,13 +390,13 @@
           />
           <span>Avec aperçu uniquement</span>
         </label>
-        <select
+        <select aria-label="Filtrer par source"
           value={visionSourceFilter}
           onchange={(e) => {
             visionSourceFilter = e.currentTarget.value;
             void loadVisionImages();
           }}
-          class="h-8 px-2.5 rounded-lg bg-surface-container border border-outline-variant/30 text-xs text-on-surface focus:outline-none"
+          class="h-8 px-2.5 rounded-lg bg-surface-container border border-field-border text-xs text-on-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         >
           <option value="ALL">Toutes les sources</option>
           <option value="HONEYPOT">Salon piège (Honeypot)</option>
@@ -480,12 +481,15 @@
         class="bg-surface-container-high rounded-2xl border border-outline-variant/40 p-5 max-w-xl w-full space-y-4 shadow-2xl"
         onclick={(e) => e.stopPropagation()}
         onkeydown={(e) => e.stopPropagation()}
+        use:dialogFocus={{ onEscape: () => { selectedModalImage = null; } }}
         role="dialog"
+        aria-modal="true"
+        aria-labelledby="ai-image-title"
         tabindex="-1"
       >
         <div class="flex items-center justify-between border-b border-outline-variant/20 pb-3">
           <div class="min-w-0 pr-3">
-            <h3 class="text-sm font-semibold text-on-surface truncate">
+            <h3 id="ai-image-title" class="text-sm font-semibold text-on-surface truncate">
               {selectedModalImage.filename ?? 'Image d’arnaque'}
             </h3>
             <p class="text-xs text-on-surface-variant">
@@ -495,6 +499,7 @@
           <button
             type="button"
             onclick={() => { selectedModalImage = null; }}
+            aria-label="Fermer"
             class="w-8 h-8 rounded-lg bg-on-surface/8 hover:bg-on-surface/12 text-on-surface-variant flex items-center justify-center text-sm font-bold transition"
           >
             ✕

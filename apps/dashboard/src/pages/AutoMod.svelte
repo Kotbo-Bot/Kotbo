@@ -401,7 +401,7 @@
                     min="2"
                     max="20"
                     bind:value={config.spamLimit} 
-                    class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none"
+                    class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     disabled={!canManageSettings}
                   />
                 </div>
@@ -414,7 +414,7 @@
                     min="1"
                     max="30"
                     bind:value={config.spamIntervalSeconds} 
-                    class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none"
+                    class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     disabled={!canManageSettings}
                   />
                 </div>
@@ -424,7 +424,7 @@
                   <select 
                     id="spamAction"
                     bind:value={config.spamAction}
-                    class="w-full bg-surface-container-high/45 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm text-on-surface focus:outline-none"
+                    class="w-full bg-surface-container-high/45 border border-field-border rounded-lg px-4 py-3 text-sm text-on-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     disabled={!canManageSettings}
                   >
                     <option value="WARN">{m.am_action_warn()}</option>
@@ -453,7 +453,7 @@
                       min="1"
                       max="21600"
                       bind:value={config.spamGroupSlowmodeSeconds}
-                      class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none"
+                      class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                       disabled={!canManageSettings}
                     />
                   </div>
@@ -466,7 +466,7 @@
                       min="1"
                       max="1440"
                       bind:value={config.spamGroupSlowmodeMinutes}
-                      class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none"
+                      class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                       disabled={!canManageSettings}
                     />
                   </div>
@@ -493,7 +493,7 @@
                       min="3"
                       max="200"
                       bind:value={config.preventiveSlowmodeMsgThreshold}
-                      class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none"
+                      class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                       disabled={!canManageSettings}
                     />
                   </div>
@@ -506,7 +506,7 @@
                       min="2"
                       max="50"
                       bind:value={config.preventiveSlowmodeMinUsers}
-                      class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none"
+                      class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                       disabled={!canManageSettings}
                     />
                   </div>
@@ -519,7 +519,7 @@
                       min="2"
                       max="120"
                       bind:value={config.preventiveSlowmodeWindowSec}
-                      class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none"
+                      class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                       disabled={!canManageSettings}
                     />
                   </div>
@@ -532,7 +532,7 @@
                       min="1"
                       max="21600"
                       bind:value={config.preventiveSlowmodeSeconds}
-                      class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none"
+                      class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                       disabled={!canManageSettings}
                     />
                   </div>
@@ -545,7 +545,7 @@
                       min="1"
                       max="1440"
                       bind:value={config.preventiveSlowmodeMinutes}
-                      class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none"
+                      class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                       disabled={!canManageSettings}
                     />
                   </div>
@@ -578,7 +578,7 @@
                   <select 
                     id="linksAction"
                     bind:value={config.linksAction}
-                    class="w-full bg-surface-container-high/45 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm text-on-surface focus:outline-none"
+                    class="w-full bg-surface-container-high/45 border border-field-border rounded-lg px-4 py-3 text-sm text-on-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     disabled={!canManageSettings}
                   >
                     <option value="DELETE_AND_WARN">{m.am_action_delete_warn()}</option>
@@ -596,7 +596,7 @@
                     id="whitelist"
                     bind:value={whitelistInput} 
                     placeholder="github.com&#10;google.com"
-                    class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none h-24 resize-none font-mono"
+                    class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary h-24 resize-none font-mono"
                     disabled={!canManageSettings}
                   ></textarea>
                 </div>
@@ -631,7 +631,7 @@
                     min="20"
                     max="100"
                     bind:value={config.capsThresholdPercent} 
-                    class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none"
+                    class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     disabled={!canManageSettings}
                   />
                 </div>
@@ -643,7 +643,7 @@
                     type="number" 
                     min="4"
                     bind:value={config.capsMinLength} 
-                    class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none"
+                    class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     disabled={!canManageSettings}
                   />
                 </div>
@@ -681,7 +681,7 @@
                     type="number" 
                     min="1"
                     bind:value={config.emojisLimit} 
-                    class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none"
+                    class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     disabled={!canManageSettings}
                   />
                 </div>
@@ -715,7 +715,7 @@
                     type="number" 
                     min="1"
                     bind:value={config.mentionsLimit} 
-                    class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none"
+                    class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     disabled={!canManageSettings}
                   />
                 </div>
@@ -752,7 +752,7 @@
                   <select 
                     id="ghostPingAction"
                     bind:value={config.ghostPingAction}
-                    class="w-full bg-surface-container-high/45 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs text-on-surface focus:outline-none"
+                    class="w-full bg-surface-container-high/45 border border-field-border rounded-lg px-3 py-2 text-xs text-on-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     disabled={!canManageSettings}
                   >
                     <option value="ALERT">{m.am_ghostping_action_alert()}</option>
@@ -789,7 +789,7 @@
                   <select 
                     id="antiEveryoneAction"
                     bind:value={config.antiEveryoneAction}
-                    class="w-full bg-surface-container-high/45 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs text-on-surface focus:outline-none"
+                    class="w-full bg-surface-container-high/45 border border-field-border rounded-lg px-3 py-2 text-xs text-on-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     disabled={!canManageSettings}
                   >
                     <option value="DELETE_ONLY">{m.am_everyone_delete_only()}</option>
@@ -849,7 +849,7 @@
                   <select
                     id="customWordsAction"
                     bind:value={config.customWordsAction}
-                    class="w-full bg-surface-container-high/45 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm text-on-surface focus:outline-none"
+                    class="w-full bg-surface-container-high/45 border border-field-border rounded-lg px-4 py-3 text-sm text-on-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     disabled={!canManageSettings}
                   >
                     <option value="BLOCK">{m.am_action_block()}</option>
@@ -869,7 +869,7 @@
                       id="customWordsTimeout"
                       type="number" min="5" max="2419200"
                       bind:value={config.customWordsTimeoutSec}
-                      class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none"
+                      class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                       disabled={!canManageSettings}
                     />
                   </div>
@@ -881,7 +881,7 @@
                     id="customWords"
                     bind:value={customWordsInput}
                     placeholder={m.am_ph_words_example()}
-                    class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none h-32 resize-none font-mono"
+                    class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary h-32 resize-none font-mono"
                     disabled={!canManageSettings}
                   ></textarea>
                   <p class="text-2xs text-on-surface-variant ml-2">{m.am_customwords_wildcard_hint()}</p>
@@ -893,7 +893,7 @@
                     id="customWordsAllow"
                     bind:value={customWordsAllowInput}
                     placeholder="exception1&#10;exception2"
-                    class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none h-20 resize-none font-mono"
+                    class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary h-20 resize-none font-mono"
                     disabled={!canManageSettings}
                   ></textarea>
                 </div>
@@ -953,7 +953,7 @@
                   <select
                     id="profanityAction"
                     bind:value={config.profanityAction}
-                    class="w-full bg-surface-container-high/45 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm text-on-surface focus:outline-none"
+                    class="w-full bg-surface-container-high/45 border border-field-border rounded-lg px-4 py-3 text-sm text-on-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     disabled={!canManageSettings}
                   >
                     <option value="BLOCK">{m.am_action_block()}</option>
@@ -973,7 +973,7 @@
                       id="profanityTimeout"
                       type="number" min="5" max="2419200"
                       bind:value={config.profanityTimeoutSec}
-                      class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none"
+                      class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                       disabled={!canManageSettings}
                     />
                   </div>
@@ -985,7 +985,7 @@
                     id="profanityAllow"
                     bind:value={profanityAllowInput}
                     placeholder={m.am_ph_profanity_allow_example()}
-                    class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none h-20 resize-none font-mono"
+                    class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary h-20 resize-none font-mono"
                     disabled={!canManageSettings}
                   ></textarea>
                 </div>
@@ -1018,7 +1018,7 @@
                   <select
                     id="inviteFilterAction"
                     bind:value={config.inviteFilterAction}
-                    class="w-full bg-surface-container-high/45 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm text-on-surface focus:outline-none"
+                    class="w-full bg-surface-container-high/45 border border-field-border rounded-lg px-4 py-3 text-sm text-on-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     disabled={!canManageSettings}
                   >
                     <option value="BLOCK">{m.am_action_block()}</option>
@@ -1038,7 +1038,7 @@
                       id="inviteFilterTimeout"
                       type="number" min="5" max="2419200"
                       bind:value={config.inviteFilterTimeoutSec}
-                      class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none"
+                      class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                       disabled={!canManageSettings}
                     />
                   </div>
@@ -1050,7 +1050,7 @@
                     id="inviteAllowed"
                     bind:value={inviteAllowedGuildsInput}
                     placeholder={m.am_ph_invite_codes_example()}
-                    class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none h-20 resize-none font-mono"
+                    class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary h-20 resize-none font-mono"
                     disabled={!canManageSettings}
                   ></textarea>
                   <p class="text-2xs text-on-surface-variant ml-2">{m.am_invitefilter_allowed_hint()}</p>
@@ -1095,7 +1095,7 @@
             <p class="text-xs text-on-surface-variant ml-2">{m.amx_bot_roles_desc()}</p>
             <select
               aria-label={m.amx_add_bot_role()}
-              class="w-full bg-surface-container-high/45 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none"
+              class="w-full bg-surface-container-high/45 border border-field-border rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               value=""
               onchange={(e) => {
                 const id = e.currentTarget.value;
@@ -1125,7 +1125,7 @@
                 <select
                   id="antiBotAction"
                   bind:value={config.antiBotAction}
-                  class="w-full bg-surface-container-high/45 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm text-on-surface focus:outline-none"
+                  class="w-full bg-surface-container-high/45 border border-field-border rounded-lg px-4 py-3 text-sm text-on-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                   disabled={!isOwner}
                 >
                   <option value="KICK">{m.am_antibot_kick()}</option>
@@ -1139,11 +1139,11 @@
                 <p class="text-xs text-on-surface-variant ml-2">{m.am_antibot_bypass_desc()}</p>
                 {#if isOwner}
                   <div class="flex gap-2">
-                    <input
+                    <input aria-label={m.am_antibot_user_id_placeholder()}
                       type="text"
                       bind:value={antiBotBypassInput}
                       placeholder={m.am_antibot_user_id_placeholder()}
-                      class="flex-1 bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-primary/20 transition-all"
+                      class="flex-1 bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-primary/20 transition-all"
                       onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter') { e.preventDefault(); addAntiBotBypassUser(); } }}
                     />
                     <button
@@ -1260,7 +1260,7 @@
                 <select
                   id="adminLockNotifyChannel"
                   bind:value={config.adminLockNotifyChannelId}
-                  class="w-full bg-surface-container-high/45 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm text-on-surface focus:outline-none"
+                  class="w-full bg-surface-container-high/45 border border-field-border rounded-lg px-4 py-3 text-sm text-on-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                   disabled={!isOwner}
                 >
                   <option value={null}>{m.am_adminlock_default_log_channel()}</option>
@@ -1292,10 +1292,10 @@
                       <label for="burstFastLimit" class="text-xs font-semibold text-on-surface-variant ml-2">{m.am_burst_fast()}</label>
                       <div class="flex items-center gap-2">
                         <input id="burstFastLimit" type="number" min="1" max="100" bind:value={config.burstSuspendFastLimit} disabled={!isOwner}
-                          class="w-full bg-surface-container-high/45 border border-outline-variant/10 rounded-lg px-3 py-2.5 text-sm text-on-surface focus:outline-none" />
+                          class="w-full bg-surface-container-high/45 border border-field-border rounded-lg px-3 py-2.5 text-sm text-on-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
                         <span class="text-xs text-on-surface-variant whitespace-nowrap">{m.am_burst_act_per()}</span>
-                        <input type="number" min="1" max="3600" bind:value={config.burstSuspendFastWindowSec} disabled={!isOwner}
-                          class="w-20 bg-surface-container-high/45 border border-outline-variant/10 rounded-lg px-3 py-2.5 text-sm text-on-surface focus:outline-none" />
+                        <input aria-label={m.am_burst_window()} type="number" min="1" max="3600" bind:value={config.burstSuspendFastWindowSec} disabled={!isOwner}
+                          class="w-20 bg-surface-container-high/45 border border-field-border rounded-lg px-3 py-2.5 text-sm text-on-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
                         <span class="text-xs text-on-surface-variant">s</span>
                       </div>
                     </div>
@@ -1303,10 +1303,10 @@
                       <label for="burstSlowLimit" class="text-xs font-semibold text-on-surface-variant ml-2">{m.am_burst_slow()}</label>
                       <div class="flex items-center gap-2">
                         <input id="burstSlowLimit" type="number" min="1" max="500" bind:value={config.burstSuspendSlowLimit} disabled={!isOwner}
-                          class="w-full bg-surface-container-high/45 border border-outline-variant/10 rounded-lg px-3 py-2.5 text-sm text-on-surface focus:outline-none" />
+                          class="w-full bg-surface-container-high/45 border border-field-border rounded-lg px-3 py-2.5 text-sm text-on-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
                         <span class="text-xs text-on-surface-variant whitespace-nowrap">{m.am_burst_act_per()}</span>
-                        <input type="number" min="1" max="3600" bind:value={config.burstSuspendSlowWindowSec} disabled={!isOwner}
-                          class="w-20 bg-surface-container-high/45 border border-outline-variant/10 rounded-lg px-3 py-2.5 text-sm text-on-surface focus:outline-none" />
+                        <input aria-label={m.am_burst_window()} type="number" min="1" max="3600" bind:value={config.burstSuspendSlowWindowSec} disabled={!isOwner}
+                          class="w-20 bg-surface-container-high/45 border border-field-border rounded-lg px-3 py-2.5 text-sm text-on-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
                         <span class="text-xs text-on-surface-variant">s</span>
                       </div>
                     </div>

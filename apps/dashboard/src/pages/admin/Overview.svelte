@@ -169,10 +169,10 @@
   });
 
   const toneChip: Record<AdminTone, string> = {
-    danger: 'bg-error/12 text-error',
-    warning: 'bg-warning/12 text-warning',
+    danger: 'bg-error/12 text-on-error-container',
+    warning: 'bg-warning/12 text-on-warning-container',
     info: 'bg-sky-500/12 text-sky-500',
-    success: 'bg-success/12 text-success',
+    success: 'bg-success/12 text-on-success-container',
     primary: 'bg-primary/12 text-primary',
     neutral: 'bg-on-surface/8 text-on-surface-variant',
   };
@@ -269,7 +269,7 @@
     </AdminCard>
   {:else if health && guilds}
     <div class="flex items-center gap-3 rounded-[20px] bg-success/10 px-5 py-4">
-      <span class="w-9 h-9 shrink-0 rounded-[11px] bg-success/15 text-success flex items-center justify-center">
+      <span class="w-9 h-9 shrink-0 rounded-[11px] bg-success/15 text-on-success-container flex items-center justify-center">
         <Papicon icon="Check" size={17} />
       </span>
       <div>

@@ -275,9 +275,9 @@
 
   function getStatusClass(status: InviteStatus) {
     switch (status) {
-      case 'active': return 'bg-success/10 text-success';
-      case 'suspended': return 'bg-warning/10 text-warning';
-      case 'deleted': return 'bg-error/10 text-error';
+      case 'active': return 'bg-success/10 text-on-success-container';
+      case 'suspended': return 'bg-warning/10 text-on-warning-container';
+      case 'deleted': return 'bg-error/10 text-on-error-container';
       case 'expired': return 'bg-slate-500/10 text-on-surface-variant';
     }
   }
@@ -551,7 +551,7 @@
 
   <div class="space-y-6">
     {#if error}
-      <div class="p-4 rounded-lg bg-error/10 text-error text-sm font-bold">{error}</div>
+      <div class="p-4 rounded-lg bg-error/10 text-on-error-container text-sm font-bold">{error}</div>
     {/if}
 
     <!-- Stats compactes -->
@@ -607,20 +607,20 @@
               <div class="h-10 w-16 bg-surface-container-high/40 rounded-xl animate-pulse"></div>
             </div>
           {:else}
-            <FormInput
+            <FormInput ariaLabel={m.iv_search_placeholder()}
               placeholder={m.iv_search_placeholder()}
               bind:value={searchQuery}
-              className="w-full lg:w-80 px-4 py-2.5 rounded-xl bg-surface-container-high/30 border border-outline-variant/20 text-sm"
+              className="w-full lg:w-80 px-4 py-2.5 rounded-xl bg-surface-container-high/30 border border-field-border text-sm"
             />
             <div class="flex gap-2 flex-wrap">
-              <select bind:value={statusFilter} class="px-3 py-2 rounded-xl bg-surface-container-high/40 text-xs font-bold border border-outline-variant/20">
+              <select aria-label={m.iv_filter_status()} bind:value={statusFilter} class="px-3 py-2 rounded-xl bg-surface-container-high/40 text-xs font-bold border border-field-border">
                 <option value="all">{m.iv_all_statuses()}</option>
                 <option value="active">{m.iv_filter_active()}</option>
                 <option value="suspended">{m.iv_filter_suspended()}</option>
                 <option value="expired">{m.iv_filter_expired()}</option>
                 <option value="deleted">{m.iv_filter_deleted()}</option>
               </select>
-              <select bind:value={sortBy} class="px-3 py-2 rounded-xl bg-surface-container-high/40 text-xs font-bold border border-outline-variant/20">
+              <select aria-label={m.a11y_sort_by()} bind:value={sortBy} class="px-3 py-2 rounded-xl bg-surface-container-high/40 text-xs font-bold border border-field-border">
                 <option value="createdAt">{m.iv_col_creation()}</option>
                 <option value="uses">{m.iv_col_uses()}</option>
                 <option value="joins">{m.iv_col_joins()}</option>
@@ -726,7 +726,7 @@
                           {getStatusLabel(status)}
                         </span>
                         {#if invite.inviterSuspended}
-                          <span class="px-2 py-0.5 rounded-full text-2xs font-semibold bg-error/10 text-error">{m.iv_inviter_suspended_badge()}</span>
+                          <span class="px-2 py-0.5 rounded-full text-2xs font-semibold bg-error/10 text-on-error-container">{m.iv_inviter_suspended_badge()}</span>
                         {/if}
                         {#if isDormant(invite)}
                           <span class="px-2 py-0.5 rounded-full text-2xs font-semibold bg-slate-500/10 text-on-surface-variant">{m.iv_dormant()}</span>
@@ -855,7 +855,7 @@
                 maxlength="60"
                 placeholder={m.iv_source_input_placeholder()}
                 aria-label={m.iv_source_aria()}
-                class="flex-1 md:w-72 px-3 py-2.5 rounded-xl bg-surface border border-outline-variant/30 text-sm outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/15"
+                class="flex-1 md:w-72 px-3 py-2.5 rounded-xl bg-surface border border-field-border text-sm outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/15"
                 onkeydown={(event) => {
                   if (event.key === 'Enter') void saveSource(editingInvite);
                   if (event.key === 'Escape') cancelSourceEdit();
@@ -950,7 +950,7 @@
     {:else if activeTab === 'top'}
       <div class="premium-card p-6 rounded-xl space-y-4">
         <div class="flex items-center gap-3">
-          <div class="p-2 rounded-xl bg-success/10 text-success">
+          <div class="p-2 rounded-xl bg-success/10 text-on-success-container">
             <Papicon icon="Crown" size={18} />
           </div>
           <div>
@@ -1009,7 +1009,7 @@
         <!-- Formulaire de suspension -->
         <div class="premium-card p-6 rounded-xl space-y-4">
           <div class="flex items-center gap-3">
-            <div class="p-2 rounded-xl bg-warning/10 text-warning">
+            <div class="p-2 rounded-xl bg-warning/10 text-on-warning-container">
               <Papicon icon="UserMinus" size={18} />
             </div>
             <div>
@@ -1028,20 +1028,20 @@
             </div>
           {:else}
             <div class="space-y-3">
-              <FormInput
+              <FormInput ariaLabel={m.iv_user_id_placeholder()}
                 placeholder={m.iv_user_id_placeholder()}
                 bind:value={suspendUserId}
-                className="w-full px-4 py-2.5 rounded-xl bg-surface-container-high/30 border border-outline-variant/20 text-sm"
+                className="w-full px-4 py-2.5 rounded-xl bg-surface-container-high/30 border border-field-border text-sm"
               />
-              <FormInput
+              <FormInput ariaLabel={m.iv_user_tag_placeholder()}
                 placeholder={m.iv_user_tag_placeholder()}
                 bind:value={suspendUserTag}
-                className="w-full px-4 py-2.5 rounded-xl bg-surface-container-high/30 border border-outline-variant/20 text-sm"
+                className="w-full px-4 py-2.5 rounded-xl bg-surface-container-high/30 border border-field-border text-sm"
               />
-              <FormInput
+              <FormInput ariaLabel={m.iv_suspend_reason_placeholder()}
                 placeholder={m.iv_suspend_reason_placeholder()}
                 bind:value={suspendReason}
-                className="w-full px-4 py-2.5 rounded-xl bg-surface-container-high/30 border border-outline-variant/20 text-sm"
+                className="w-full px-4 py-2.5 rounded-xl bg-surface-container-high/30 border border-field-border text-sm"
               />
               <label class="flex items-center gap-2 text-sm font-bold text-on-surface-variant cursor-pointer">
                 <input type="checkbox" bind:checked={suspendCascade} class="rounded" />
@@ -1061,7 +1061,7 @@
         <!-- Liste des créateurs suspendus -->
         <div class="premium-card p-6 rounded-xl space-y-4">
           <div class="flex items-center gap-3">
-            <div class="p-2 rounded-xl bg-error/10 text-error">
+            <div class="p-2 rounded-xl bg-error/10 text-on-error-container">
               <Papicon icon="UserX" size={18} />
             </div>
             <div>

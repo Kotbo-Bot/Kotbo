@@ -129,7 +129,7 @@
               step="10"
               value={priceOf(item)}
               oninput={(event) => { prices = { ...prices, [item.key]: Number(event.currentTarget.value) || 0 }; }}
-              class="w-24 rounded-lg border border-outline-variant/40 bg-surface-container-lowest/60 px-2 py-1
+              class="w-24 rounded-lg border border-field-border bg-surface-container-lowest/60 px-2 py-1
                      text-xs tabular-nums text-on-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
             />
             <span class="text-xs text-on-surface-variant truncate"><EmojiText value={emoji} /> {currency}</span>

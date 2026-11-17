@@ -17,6 +17,7 @@
     value,
     onchange,
     label,
+    describedBy = undefined,
     disabled = false,
     class: className = '',
   }: {
@@ -25,12 +26,14 @@
     onchange: (value: T) => void;
     /** Ce que l'on filtre, pour les lecteurs d'ecran. */
     label: string;
+    /** Id de l'aide ou de l'erreur du champ (`describedBy` de Field, RGAA 11.2). */
+    describedBy?: string;
     disabled?: boolean;
     class?: string;
   } = $props();
 </script>
 
-<div role="group" aria-label={label} class="filter-pills {className}">
+<div role="group" aria-label={label} aria-describedby={describedBy} class="filter-pills {className}">
   {#each options as option (option.value)}
     <button
       type="button"

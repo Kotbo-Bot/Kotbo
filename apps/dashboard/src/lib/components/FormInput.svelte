@@ -14,6 +14,7 @@
     autocomplete,
     className = '',
     label = '',
+    ariaLabel,
     icon = '',
     required = false,
     oninput,
@@ -28,6 +29,8 @@
     autocomplete?: HTMLInputAttributes['autocomplete'];
     className?: string;
     label?: string;
+    /** Nom accessible quand aucun <label for> ne vise le champ (RGAA 11.1). */
+    ariaLabel?: string;
     icon?: string;
     required?: boolean;
     oninput?: (event: Event) => void;
@@ -58,6 +61,7 @@
 {:else}
   <input
     {id}
+    aria-label={ariaLabel}
     {type}
     bind:value
     {placeholder}

@@ -99,7 +99,7 @@
                 {#if t.channelName.startsWith('ticket-') || t.channelName.startsWith('fermer-')}
                   <span class="px-2 py-0.5 rounded-full text-2xs font-semibold uppercase bg-blue-500/10 text-blue-400 border border-blue-500/20">{m.e1_tickets_badge_ticket()}</span>
                 {:else}
-                  <span class="px-2 py-0.5 rounded-full text-2xs font-semibold uppercase bg-success/10 text-success border border-success/20">/transcript</span>
+                  <span class="px-2 py-0.5 rounded-full text-2xs font-semibold uppercase bg-success/10 text-on-success-container border border-success/20">/transcript</span>
                 {/if}
               </td>
               <td class="py-3 px-4 text-xs text-on-surface-variant">
@@ -135,7 +135,7 @@
             {#if t.channelName.startsWith('ticket-') || t.channelName.startsWith('fermer-')}
               <span class="px-2 py-0.5 rounded-full text-2xs font-semibold uppercase bg-blue-500/10 text-blue-400 border border-blue-500/20 shrink-0">{m.e1_tickets_badge_ticket()}</span>
             {:else}
-              <span class="px-2 py-0.5 rounded-full text-2xs font-semibold uppercase bg-success/10 text-success border border-success/20 shrink-0">/transcript</span>
+              <span class="px-2 py-0.5 rounded-full text-2xs font-semibold uppercase bg-success/10 text-on-success-container border border-success/20 shrink-0">/transcript</span>
             {/if}
           </div>
           <p class="text-2xs text-on-surface-variant mb-2">

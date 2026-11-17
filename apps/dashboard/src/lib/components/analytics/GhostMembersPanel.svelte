@@ -390,7 +390,7 @@
                 min={field.min}
                 max={field.max}
                 bind:value={form[field.key]}
-                class="w-full px-3 py-2 rounded-xl bg-surface-container-highest border border-outline-variant/20 text-sm text-on-surface focus:border-primary/50 focus:outline-none"
+                class="w-full px-3 py-2 rounded-xl bg-surface-container-highest border border-field-border text-sm text-on-surface focus:border-primary/50 focus:outline-none"
               />
               <p class="text-2xs text-on-surface-variant leading-snug">{field.help}</p>
             </div>
@@ -432,7 +432,7 @@
             type="text"
             maxlength="400"
             bind:value={form.pruneReason}
-            class="w-full px-3 py-2 rounded-xl bg-surface-container-highest border border-outline-variant/20 text-sm text-on-surface focus:border-primary/50 focus:outline-none"
+            class="w-full px-3 py-2 rounded-xl bg-surface-container-highest border border-field-border text-sm text-on-surface focus:border-primary/50 focus:outline-none"
           />
         </div>
 
@@ -469,12 +469,12 @@
               style={statusFilter === status ? `background: ${STATUS_META[status].color}` : ''}
             >{STATUS_META[status].label()}</button>
           {/each}
-          <input
+          <input aria-label={m.ghost_search_placeholder()}
             type="search"
             bind:value={search}
             oninput={onSearchInput}
             placeholder={m.ghost_search_placeholder()}
-            class="px-3 py-1.5 rounded-lg bg-surface-container-highest border border-outline-variant/20 text-xs text-on-surface w-48 focus:border-primary/50 focus:outline-none"
+            class="px-3 py-1.5 rounded-lg bg-surface-container-highest border border-field-border text-xs text-on-surface w-48 focus:border-primary/50 focus:outline-none"
           />
         </div>
       </div>
@@ -672,7 +672,7 @@
                     bind:value={confirmInput}
                     class="w-full px-3 py-2 rounded-xl bg-surface-container-highest border text-sm text-on-surface focus:outline-none {confirmInput && !confirmMatches
                       ? 'border-error/50'
-                      : 'border-outline-variant/20 focus:border-primary/50'}"
+                      : 'border-field-border focus:border-primary/50'}"
                   />
                   {#if confirmInput && !confirmMatches}
                     <p class="text-2xs text-error">{m.ghost_prune_confirm_mismatch()}</p>

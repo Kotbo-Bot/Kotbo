@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { dialogFocus } from '../lib/actions/dialogFocus';
   import { explainDisabled } from '../lib/actions/explainDisabled';
   import { m } from '../lib/i18n';
   import { onMount, onDestroy, untrack } from 'svelte';
@@ -1125,7 +1126,7 @@
               type="search"
               bind:value={searchQuery}
               placeholder={m.sc_search_ph()}
-              className="w-full rounded-xl border border-outline-variant bg-surface-container-low pl-10 pr-4 py-2.5 text-sm text-on-surface outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
+              className="w-full rounded-xl border border-field-border bg-surface-container-low pl-10 pr-4 py-2.5 text-sm text-on-surface outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
             />
           </label>
         </div>
@@ -1149,6 +1150,7 @@
         {/if}
         <div class="overflow-x-auto">
           <table class="w-full text-left border-collapse">
+            <caption class="sr-only">{m.sc_tab_history()}</caption>
             <thead>
         <tr class="bg-surface-container-low dark:bg-white/5">
           <th class="px-4 py-4 w-10">
@@ -1247,11 +1249,11 @@
               <td class="px-4 py-4 text-xs font-bold text-primary">
                 {typeLabel(entry.type)}
                 {#if entry.archivedAt}
-                  <span class="ml-1 inline-flex items-center rounded-full bg-success/10 px-2 py-0.5 text-2xs font-bold text-success"
+                  <span class="ml-1 inline-flex items-center rounded-full bg-success/10 px-2 py-0.5 text-2xs font-bold text-on-success-container"
                     title={entry.archiveReason || ''}>{m.sc_badge_archived()}</span>
                 {/if}
                 {#if entry.appealable === false}
-                  <span class="ml-1 inline-flex items-center rounded-full bg-error/10 px-2 py-0.5 text-2xs font-bold text-error"
+                  <span class="ml-1 inline-flex items-center rounded-full bg-error/10 px-2 py-0.5 text-2xs font-bold text-on-error-container"
                     title={entry.appealLockReason || ''}>{m.sc_badge_locked()}</span>
                 {/if}
               </td>
@@ -1451,7 +1453,7 @@
 
               {#if showAddTableField}
                 <div class="flex gap-2 p-2 bg-surface-container-high/40 rounded-lg border border-outline-variant/10">
-                  <FormInput 
+                  <FormInput ariaLabel={m.sc_scale_name_ph()} 
                     bind:value={newTableName} 
                     placeholder={m.sc_scale_name_ph()} 
                     className="flex-1 text-xs px-3 py-2 bg-transparent outline-none border-none text-on-surface"
@@ -1509,7 +1511,7 @@
                 {#if currentTable}
                   <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-outline-variant/10 pb-4">
                     <div class="flex items-center gap-4">
-                      <FormInput 
+                      <FormInput ariaLabel={m.sc_table_name()} 
                         bind:value={currentTable.name} 
                         className="text-lg font-semibold bg-transparent border-none text-on-surface focus:ring-0 px-0 py-0 w-60"
                       />
@@ -1554,6 +1556,7 @@
                   <div class="max-h-[500px] overflow-y-auto pr-2">
                     <div class="overflow-x-auto rounded-lg border border-outline-variant/10 bg-surface-container-low/20">
                       <table class="w-full text-left border-collapse font-inter text-xs">
+                        <caption class="sr-only">{currentTable.name || m.sc_scales_title()}</caption>
                         <thead>
                           <tr class="bg-surface-container-high/40 text-xs font-semibold text-on-surface-variant border-b border-outline-variant/15 select-none">
                             <th class="py-3 px-4 w-20 text-center border-r border-outline-variant/10">{m.sc_col_tier()}</th>
@@ -1602,7 +1605,7 @@
                                       type="number" 
                                       value={initialVal} 
                                       oninput={(e) => updateTierDuration(selectedTableIndex, tierIdx, Number((e.target as HTMLInputElement).value), initialUnit)}
-                                      class="w-16 text-center py-1 px-1.5 rounded-lg bg-surface-container-high/30 text-on-surface border border-outline-variant/10 focus:border-primary/40 focus:bg-surface-container-high/60 outline-hidden transition-all text-xs font-bold"
+                                      class="w-16 text-center py-1 px-1.5 rounded-lg bg-surface-container-high/30 text-on-surface border border-field-border focus:border-primary/40 focus:bg-surface-container-high/60 outline-hidden transition-all text-xs font-bold"
                                       min="1"
                                     />
                                     <select 
@@ -1803,11 +1806,11 @@
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div class="space-y-1.5">
                 <label for="report-incident-at" class="field-label">{m.sc_incident_datetime()}</label>
-                <input id="report-incident-at" type="datetime-local" bind:value={incidentAt} class="w-full rounded-lg bg-surface-container-high px-5 py-3 text-sm font-bold text-on-surface border border-outline-variant/10 focus:border-primary/50 outline-hidden transition-all" />
+                <input id="report-incident-at" type="datetime-local" bind:value={incidentAt} class="w-full rounded-lg bg-surface-container-high px-5 py-3 text-sm font-bold text-on-surface border border-field-border focus:border-primary/50 outline-hidden transition-all" />
               </div>
               <div class="space-y-1.5">
                 <label for="report-duration" class="field-label">{m.sc_applied_duration()}</label>
-                <input id="report-duration" type="text" bind:value={sanctionDurationLabel} placeholder={m.sc_duration_ph()} class="w-full rounded-lg bg-surface-container-high px-5 py-3 text-sm font-bold text-on-surface border border-outline-variant/10 focus:border-primary/50 outline-hidden transition-all" />
+                <input id="report-duration" type="text" bind:value={sanctionDurationLabel} placeholder={m.sc_duration_ph()} class="w-full rounded-lg bg-surface-container-high px-5 py-3 text-sm font-bold text-on-surface border border-field-border focus:border-primary/50 outline-hidden transition-all" />
               </div>
             </div>
 
@@ -1825,7 +1828,7 @@
 
             <div class="space-y-1.5">
               <label for="report-reason" class="field-label">{m.sc_detailed_reason()}</label>
-              <textarea id="report-reason" bind:value={detailedReason} rows={4} placeholder={m.sc_describe_facts_ph()} class="w-full rounded-xl bg-surface-container-high px-5 py-4 text-sm font-bold text-on-surface border border-outline-variant/10 focus:border-primary/50 outline-hidden transition-all resize-none"></textarea>
+              <textarea id="report-reason" bind:value={detailedReason} rows={4} placeholder={m.sc_describe_facts_ph()} class="w-full rounded-xl bg-surface-container-high px-5 py-4 text-sm font-bold text-on-surface border border-field-border focus:border-primary/50 outline-hidden transition-all resize-none"></textarea>
             </div>
 
             <div class="space-y-3">
@@ -1840,7 +1843,7 @@
 
             <div class="space-y-1.5">
               <label for="report-notes" class="field-label">{m.sc_context_notes()}</label>
-              <textarea id="report-notes" bind:value={additionalNotes} rows={2} placeholder={m.sc_context_ph()} class="w-full rounded-lg bg-surface-container-high px-5 py-3 text-sm font-bold text-on-surface border border-outline-variant/10 focus:border-primary/50 outline-hidden transition-all resize-none"></textarea>
+              <textarea id="report-notes" bind:value={additionalNotes} rows={2} placeholder={m.sc_context_ph()} class="w-full rounded-lg bg-surface-container-high px-5 py-3 text-sm font-bold text-on-surface border border-field-border focus:border-primary/50 outline-hidden transition-all resize-none"></textarea>
             </div>
 
             {#if reportMessage}
@@ -1895,6 +1898,7 @@
       class="modal-panel max-w-lg space-y-4 font-inter" 
       onclick={(e) => e.stopPropagation()}
       onkeydown={(e) => e.stopPropagation()}
+      use:dialogFocus={{ onEscape: closeDeleteModal }}
       role="dialog"
       aria-modal="true"
       aria-labelledby="delete-sanction-title"
@@ -1916,7 +1920,7 @@
           type="text"
           bind:value={deleteConfirmationText}
           autocomplete="off"
-          className="mt-1 w-full rounded-xl px-3 py-2.5 bg-surface-container-low border border-outline-variant text-sm focus:ring-2 focus:ring-error/40 focus:border-error transition-all"
+          className="mt-1 w-full rounded-xl px-3 py-2.5 bg-surface-container-low border border-field-border text-sm focus:ring-2 focus:ring-error/40 focus:border-error transition-all"
           placeholder={m.sc_delete_keyword()}
         />
       </div>

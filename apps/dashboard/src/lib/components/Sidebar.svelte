@@ -233,9 +233,9 @@
   {#if href === '/notifications' && unread > 0}
     <span
       class="min-w-4 h-4 px-1 rounded-full bg-primary text-on-primary text-2xs font-semibold leading-none flex items-center justify-center"
-      aria-label="{unread} notifications non lues"
     >
-      {unread > 99 ? '99+' : unread}
+      <span aria-hidden="true">{unread > 99 ? '99+' : unread}</span>
+      <span class="sr-only">{unread === 1 ? m.home_notifications_one() : m.home_notifications_count({ n: unread })}</span>
     </span>
   {/if}
 {/snippet}
@@ -262,7 +262,7 @@
       <span class="flex-1 min-w-0 truncate text-body-sm">{item.name}</span>
       {#if plan}
         {@const planLabel = plan === 'plus' ? m.nav_plan_plus() : m.nav_plan_freemium()}
-        <span title={planLabel} class="shrink-0 flex {plan === 'plus' ? 'text-warning' : 'text-on-surface-variant/70'}">
+        <span title={planLabel} class="shrink-0 flex {plan === 'plus' ? 'text-warning' : 'text-on-surface-variant'}">
           <Papicon icon="crown" size={12} class={plan === 'plus' ? 'fill-current' : ''} />
           <span class="sr-only">{planLabel}</span>
         </span>
@@ -272,7 +272,7 @@
     <button
       type="button"
       onclick={(e) => toggleFavorite(item.href, e)}
-      aria-label={favorites.includes(item.href) ? m.nav_unfavorite() : m.nav_favorite()}
+      aria-label={m.nav_favorite({ name: item.name })}
       aria-pressed={favorites.includes(item.href)}
       class="nav-row__pin mr-1 flex items-center justify-center w-6 h-6 rounded-md shrink-0 transition-opacity duration-150
         {favorites.includes(item.href) ? 'opacity-100 text-warning' : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100 text-on-surface-variant hover:text-warning'}"
@@ -406,7 +406,8 @@
       onclick={openSearch}
       onmouseenter={(e) => showTooltip(e, m.nav_search_pages())}
       onmouseleave={hideTooltip}
-      aria-label={m.nav_search_pages()}
+      aria-label={isCollapsed ? m.nav_search_pages() : undefined}
+      aria-keyshortcuts="Control+K"
       class="nav-search w-full flex items-center gap-2 h-9 rounded-lg border border-outline-variant bg-surface-container-low text-on-surface-variant hover:text-on-surface hover:border-outline transition-colors
         {isCollapsed ? 'lg:justify-center lg:px-0 px-3' : 'px-3'}"
     >
@@ -420,7 +421,7 @@
 
   <nav
     class="flex-1 overflow-y-auto overscroll-contain scrollbar-hide pb-3 {isCollapsed ? 'lg:px-2' : 'px-3'}"
-    aria-label="Navigation principale"
+    aria-label={m.a11y_main_nav()}
   >
     {#if isCollapsed}
       <div class="flex flex-col gap-1">

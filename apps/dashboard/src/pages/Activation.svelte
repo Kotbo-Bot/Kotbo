@@ -109,7 +109,7 @@
             <div class="relative mb-6">
               <div class="absolute inset-0 bg-primary/20 blur-2xl rounded-full scale-120 animate-pulse"></div>
               {#if guildIconUrl}
-                <img src={guildIconUrl} alt="Server Logo" class="relative w-24 h-24 rounded-xl object-cover shadow-sm border border-white/10" />
+                <img src={guildIconUrl} alt="" class="relative w-24 h-24 rounded-xl object-cover shadow-sm border border-white/10" />
               {:else}
                 <div class="relative w-24 h-24 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20">
                   <Papicon icon="shield" size={48} class="text-primary" />

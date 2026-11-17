@@ -25,6 +25,8 @@
     disabled = false,
     staffOnly = false,
     className = '',
+    id = '',
+    describedBy = undefined,
   }: {
     guildId: string | null;
     query?: string;
@@ -38,6 +40,10 @@
     disabled?: boolean;
     staffOnly?: boolean;
     className?: string;
+    /** Id du champ, vise par le <label for> de l'appelant (Field). */
+    id?: string;
+    /** Id de l'aide ou de l'erreur du champ (`describedBy` de Field, RGAA 11.2). */
+    describedBy?: string;
   } = $props();
 
   let suggestions = $state<DiscordMemberSuggestion[]>([]);
@@ -174,6 +180,9 @@
 
 <div class={`relative ${className}`.trim()}>
   <input
+    id={id || undefined}
+    aria-label={id ? undefined : placeholder}
+    aria-describedby={describedBy}
     type="text"
     value={query}
     placeholder={placeholder}

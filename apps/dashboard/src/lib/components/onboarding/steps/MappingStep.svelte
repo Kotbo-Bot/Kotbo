@@ -206,11 +206,11 @@
             {m.obx_mp_empty_category()}
           </p>
         {:else}
-          <select
+          <select aria-label={m.obx_mp_category()}
             value={valueOf(category.key)}
             disabled={locked}
             onchange={(event) => choose(category, event.currentTarget.value)}
-            class="w-full rounded-lg border border-outline-variant/40 bg-surface-container-lowest/60 px-3 py-2 text-body-sm text-on-surface disabled:opacity-50"
+            class="w-full rounded-lg border border-field-border bg-surface-container-lowest/60 px-3 py-2 text-body-sm text-on-surface disabled:opacity-50"
           >
             <optgroup label={m.obx_mp_server_categories()}>
               {#each candidatesFor(category) as option (option.id)}
@@ -265,11 +265,11 @@
               {/if}
             </div>
 
-            <select
+            <select aria-label={line.name}
               value={valueOf(line.key)}
               disabled={locked}
               onchange={(event) => choose(line, event.currentTarget.value)}
-              class="shrink-0 w-[15.5rem] max-w-[52%] rounded-lg border border-outline-variant/40 bg-surface-container-lowest/60 px-3 py-2 text-body-sm text-on-surface disabled:opacity-50"
+              class="shrink-0 w-[15.5rem] max-w-[52%] rounded-lg border border-field-border bg-surface-container-lowest/60 px-3 py-2 text-body-sm text-on-surface disabled:opacity-50"
             >
               <optgroup label={line.kind === 'role' ? m.obx_mp_server_roles() : m.obx_mp_server_channels()}>
                 {#each candidatesFor(line) as option (option.id)}

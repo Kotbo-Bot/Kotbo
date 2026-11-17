@@ -129,7 +129,7 @@
               value={emoji}
               maxlength="4"
               oninput={(event) => wizard.answer({ currencyEmoji: event.currentTarget.value })}
-              class="h-11 min-w-0 flex-1 rounded-xl border border-outline-variant/40 bg-surface-container-lowest/60 px-3
+              class="h-11 min-w-0 flex-1 rounded-xl border border-field-border bg-surface-container-lowest/60 px-3
                      text-center text-[20px] leading-none focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
             />
           {/if}
@@ -146,7 +146,7 @@
           value={name}
           maxlength="24"
           oninput={(event) => wizard.answer({ currencyName: event.currentTarget.value })}
-          class="w-full rounded-xl border border-outline-variant/40 bg-surface-container-lowest/60 px-3.5 py-2.5
+          class="w-full rounded-xl border border-field-border bg-surface-container-lowest/60 px-3.5 py-2.5
                  text-sm text-on-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
         />
       </div>

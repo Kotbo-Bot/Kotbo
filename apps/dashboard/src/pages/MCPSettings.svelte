@@ -348,8 +348,8 @@
   }
 
   const LOG_TONE = {
-    error: 'border-error/30 bg-error/5 text-error',
-    warn: 'border-warning/30 bg-warning/5 text-warning',
+    error: 'border-error/30 bg-error/5 text-on-error-container',
+    warn: 'border-warning/30 bg-warning/5 text-on-warning-container',
     info: 'border-outline-variant bg-surface-container-low text-on-surface',
   } as const;
 </script>
@@ -461,7 +461,7 @@
                   <!-- Une cle sans proprietaire survit au depart de celui qui
                        s'en sert : rien ne la relie a un compte, seule une
                        revocation a la main l'arrete. -->
-                  <span class="px-1.5 py-0.5 rounded text-2xs font-medium bg-warning/15 text-warning" title={m.mcp_key_orphan_hint()}>
+                  <span class="px-1.5 py-0.5 rounded text-2xs font-medium bg-warning/15 text-on-warning-container" title={m.mcp_key_orphan_hint()}>
                     {m.mcp_key_orphan()}
                   </span>
                 {/if}

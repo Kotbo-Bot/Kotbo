@@ -445,7 +445,7 @@
           {#each t.sections as section, index (index)}
             <div class="rounded-xl border border-outline-variant/15 p-4 space-y-3">
               <div class="flex items-center gap-2">
-                <input bind:value={section.h2} placeholder="Titre de la section (H2)" class={inputClass} />
+                <input aria-label="Titre de la section (H2)" bind:value={section.h2} placeholder="Titre de la section (H2)" class={inputClass} />
                 <button onclick={() => move(t.sections, index, -1)} disabled={index === 0} aria-label="Monter" class="p-2 rounded-lg text-on-surface-variant hover:bg-on-surface/5 disabled:opacity-30">
                   <Papicon icon="ChevronUp" size={15} />
                 </button>
@@ -456,7 +456,7 @@
                   <Papicon icon="Trash2" size={15} />
                 </button>
               </div>
-              <textarea bind:value={section.body} rows="3" placeholder="Texte de la section" class={inputClass}></textarea>
+              <textarea aria-label="Texte de la section" bind:value={section.body} rows="3" placeholder="Texte de la section" class={inputClass}></textarea>
               <label class="block space-y-1.5">
                 <span class={labelClass}>Liste à puces (facultative, une ligne par point)</span>
                 <textarea value={(section.points ?? []).join('\n')} onchange={(e) => setPoints(index, e.currentTarget.value)} rows="3" class={inputClass}></textarea>
@@ -478,12 +478,12 @@
           {#each t.faq as entry, index (index)}
             <div class="rounded-xl border border-outline-variant/15 p-4 space-y-3">
               <div class="flex items-center gap-2">
-                <input bind:value={entry.q} placeholder="Question" class={inputClass} />
+                <input aria-label="Question" bind:value={entry.q} placeholder="Question" class={inputClass} />
                 <button onclick={() => t.faq.splice(index, 1)} aria-label="Supprimer la question" class="p-2 rounded-lg text-on-surface-variant hover:text-error hover:bg-error/10">
                   <Papicon icon="Trash2" size={15} />
                 </button>
               </div>
-              <textarea bind:value={entry.a} rows="3" placeholder="Réponse" class={inputClass}></textarea>
+              <textarea aria-label="Réponse" bind:value={entry.a} rows="3" placeholder="Réponse" class={inputClass}></textarea>
             </div>
           {/each}
         </section>

@@ -523,7 +523,7 @@
         <span class="absolute inset-y-0 left-4 flex items-center text-slate-400 group-focus-within:text-slate-500 transition-colors">
           <Papicon icon="Search" size={16} />
         </span>
-        <input
+        <input aria-label={m.clan_public_search_placeholder()}
           type="text"
           bind:value={searchQuery}
           placeholder={m.clan_public_search_placeholder()}

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { dialogFocus } from '../actions/dialogFocus';
   import { fade, scale } from 'svelte/transition';
   import { router } from 'tinro';
   import Papicon from './Papicon.svelte';
@@ -143,6 +144,7 @@
 {#if open}
   <div
     class="server-switcher-modal fixed inset-0 z-100 flex items-start justify-center pt-[15vh] px-4"
+    use:dialogFocus={{}}
     role="dialog"
     aria-modal="true"
     aria-label={m.d7_server_switcher()}
@@ -164,14 +166,14 @@
     >
       <div class="flex items-center gap-2.5 px-3 py-2.5 border-b border-outline-variant">
         <Papicon icon="Search" size={15} class="text-on-surface-variant/40 shrink-0" />
-        <input
+        <input aria-label={m.d7_search_server()}
           bind:this={inputEl}
           bind:value={query}
           oninput={() => selectedIndex = 0}
           onkeydown={handleKeydown}
           type="text"
           placeholder={m.d7_search_server()}
-          class="flex-1 bg-transparent text-sm text-on-surface placeholder-on-surface-variant/40 focus:outline-none"
+          class="flex-1 bg-transparent text-sm text-on-surface placeholder-on-surface-variant/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         />
         <kbd class="hidden sm:flex px-1.5 py-0.5 rounded bg-surface-container border border-outline-variant text-2xs font-medium text-on-surface-variant/40 leading-none">
           ESC
@@ -219,12 +221,12 @@
               {#if iconUrl}
                 <img
                   src={iconUrl}
-                  alt={guild.name}
+                  alt=""
                   referrerpolicy="no-referrer"
                   class="w-6 h-6 rounded object-cover"
                 />
               {:else}
-                <div class="w-6 h-6 rounded bg-primary/10 flex items-center justify-center text-[10px] font-medium text-primary">
+                <div class="w-6 h-6 rounded bg-primary/10 flex items-center justify-center text-[10px] font-medium text-on-primary-container">
                   {guild.name.charAt(0)}
                 </div>
               {/if}
@@ -254,7 +256,7 @@
               <button
                 type="button"
                 onclick={(e) => toggleFavorite(guild.id, e)}
-                aria-label={isFav ? m.nav_unfavorite() : m.nav_favorite()}
+                aria-label={m.nav_favorite({ name: guild.name })}
                 aria-pressed={isFav}
                 class="w-6 h-6 shrink-0 flex items-center justify-center rounded-md transition-opacity duration-150
                   {isFav ? 'opacity-100 text-warning' : 'opacity-40 hover:opacity-100 focus-visible:opacity-100 text-on-surface-variant hover:text-warning'}"

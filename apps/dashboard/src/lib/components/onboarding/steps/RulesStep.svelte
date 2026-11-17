@@ -199,14 +199,14 @@
                 bind:value={rule.title}
                 maxlength="80"
                 aria-label={m.onb_rules_title_aria()}
-                class="mt-2 w-full rounded-lg border border-outline-variant/40 bg-surface-container-low/50 px-3 py-2 text-body-sm font-semibold text-on-surface
+                class="mt-2 w-full rounded-lg border border-field-border bg-surface-container-low/50 px-3 py-2 text-body-sm font-semibold text-on-surface
                        focus:outline-none focus:border-primary/50"
               />
               <textarea
                 bind:value={rule.description}
                 rows="3"
                 aria-label={m.onb_rules_text_aria()}
-                class="mt-2 w-full rounded-lg border border-outline-variant/40 bg-surface-container-low/50 px-3 py-2 text-body-sm text-on-surface
+                class="mt-2 w-full rounded-lg border border-field-border bg-surface-container-low/50 px-3 py-2 text-body-sm text-on-surface
                        focus:outline-none focus:border-primary/50 resize-none"
               ></textarea>
             {:else}

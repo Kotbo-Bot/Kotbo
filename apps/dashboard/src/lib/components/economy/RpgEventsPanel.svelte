@@ -241,7 +241,7 @@
                   type="button"
                   onclick={() => remove(event)}
                   disabled={disabled}
-                  class="px-3 py-1.5 bg-error/10 hover:bg-error/20 text-error text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                  class="px-3 py-1.5 bg-error/10 hover:bg-error/20 text-on-error-container text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Papicon icon={event.overridesGlobal ? 'RotateCcw' : 'trash'} size={12} />
                   {event.overridesGlobal ? m.eco_events_restore_btn() : m.eco_events_delete_btn()}
@@ -267,12 +267,12 @@
       <div class="grid grid-cols-3 gap-3">
         <div class="col-span-2 space-y-1">
           <label for="eventTitle" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_events_field_title()}</label>
-          <input id="eventTitle" type="text" maxlength={limits.titleMax} disabled={editing.titleLocked} bind:value={editing.title} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none disabled:opacity-60" />
+          <input id="eventTitle" type="text" maxlength={limits.titleMax} disabled={editing.titleLocked} bind:value={editing.title} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60" />
         </div>
         <div class="space-y-1">
           <label for="eventEmoji" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_item_emoji()}</label>
           <div class="flex gap-2">
-            <input id="eventEmoji" type="text" bind:value={editing.emoji} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none" />
+            <input id="eventEmoji" type="text" bind:value={editing.emoji} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
             <EmojiPicker bind:value={editing.emoji} />
           </div>
         </div>
@@ -280,7 +280,7 @@
 
       <div class="space-y-1">
         <label for="eventDesc" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_events_field_description()}</label>
-        <textarea id="eventDesc" maxlength={limits.descriptionMax} bind:value={editing.description} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none h-20 resize-none"></textarea>
+        <textarea id="eventDesc" maxlength={limits.descriptionMax} bind:value={editing.description} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary h-20 resize-none"></textarea>
       </div>
 
       <fieldset class="border border-outline-variant/10 p-4 rounded-lg space-y-4">
@@ -295,7 +295,7 @@
                 placeholder={m.eco_events_field_choice_text()}
                 maxlength={limits.choiceTextMax}
                 bind:value={choice.text}
-                class="flex-1 bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none"
+                class="flex-1 bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               />
               <button
                 type="button"
@@ -310,24 +310,24 @@
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
               <label class="space-y-1 text-xs font-semibold text-on-surface-variant">
                 {m.eco_events_field_hp()}
-                <input type="number" bind:value={choice.hpEffect} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs font-normal normal-case tracking-normal focus:outline-none" />
+                <input type="number" bind:value={choice.hpEffect} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-2 text-xs font-normal normal-case tracking-normal focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
               </label>
               <label class="space-y-1 text-xs font-semibold text-on-surface-variant">
                 {m.eco_events_field_coins()}
-                <input type="number" bind:value={choice.coinEffect} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs font-normal normal-case tracking-normal focus:outline-none" />
+                <input type="number" bind:value={choice.coinEffect} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-2 text-xs font-normal normal-case tracking-normal focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
               </label>
               <label class="space-y-1 text-xs font-semibold text-on-surface-variant">
                 XP
-                <input type="number" min="0" bind:value={choice.xpEffect} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs font-normal normal-case tracking-normal focus:outline-none" />
+                <input type="number" min="0" bind:value={choice.xpEffect} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-2 text-xs font-normal normal-case tracking-normal focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
               </label>
               <label class="space-y-1 text-xs font-semibold text-on-surface-variant">
                 {m.eco_events_field_min_level()}
-                <input type="number" min="0" bind:value={choice.minLevel} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs font-normal normal-case tracking-normal focus:outline-none" />
+                <input type="number" min="0" bind:value={choice.minLevel} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-2 text-xs font-normal normal-case tracking-normal focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
               </label>
             </div>
             <label class="block space-y-1 text-xs font-semibold text-on-surface-variant">
               {m.eco_events_field_reward_title()}
-              <select bind:value={choice.titleId} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs font-normal normal-case tracking-normal focus:outline-none">
+              <select bind:value={choice.titleId} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-2 text-xs font-normal normal-case tracking-normal focus:outline-none focus-visible:ring-2 focus-visible:ring-primary">
                 <option value={null}>{titles.length > 0 ? m.eco_bestiary_title_none() : m.eco_bestiary_title_empty()}</option>
                 {#each titles as title (title.id)}
                   <option value={title.id}>{title.name}</option>

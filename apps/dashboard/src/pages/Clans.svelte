@@ -317,8 +317,8 @@
 
   function betStatusClass(status: string): string {
     if (status === 'ACTIVE') return 'bg-primary/15 text-primary';
-    if (status === 'RESOLVED') return 'bg-success/15 text-success';
-    if (status === 'PENDING' || status === 'LOCKED') return 'bg-warning/15 text-warning';
+    if (status === 'RESOLVED') return 'bg-success/15 text-on-success-container';
+    if (status === 'PENDING' || status === 'LOCKED') return 'bg-warning/15 text-on-warning-container';
     return 'bg-surface-container-high/60 text-on-surface-variant';
   }
 
@@ -1196,7 +1196,7 @@ savedBetSettings = {
         <section class="bg-surface-container-low/40 border border-outline-variant/30 p-6 rounded-xl space-y-6">
           <div class="flex items-center justify-between border-b border-outline-variant/15 pb-2">
             <h3 class="text-lg font-semibold flex items-center gap-2"><Papicon icon="Calendar" size={18} /> {m.clan_current_season_heading()}</h3>
-            <span class="px-3 py-1 bg-warning/10 text-warning text-xs font-bold rounded-full">{m.clan_season_badge({ n: currentClanSeason })}</span>
+            <span class="px-3 py-1 bg-warning/10 text-on-warning-container text-xs font-bold rounded-full">{m.clan_season_badge({ n: currentClanSeason })}</span>
           </div>
 
           <div class="space-y-4">
@@ -1380,7 +1380,7 @@ savedBetSettings = {
                 <Papicon icon="calendar" size={16} class="text-primary" />
                 {m.clan_current_season_heading()}
               </h3>
-              <span class="px-3 py-1 bg-warning/10 text-warning text-xs font-bold rounded-full">{m.clan_season_badge({ n: currentClanSeason })}</span>
+              <span class="px-3 py-1 bg-warning/10 text-on-warning-container text-xs font-bold rounded-full">{m.clan_season_badge({ n: currentClanSeason })}</span>
             </div>
 
             <div class="space-y-4">
@@ -1443,16 +1443,16 @@ savedBetSettings = {
               <div class="space-y-2">
                 <span class="text-xs font-semibold text-on-surface-variant block ml-1">{m.clan_start_date_label()}</span>
                 <div class="grid grid-cols-3 gap-2">
-                  <input
+                  <input aria-label={m.clan_start_date_label()}
                     type="date"
                     bind:value={startDate}
-                    class="col-span-2 bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-medium"
+                    class="col-span-2 bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-medium"
                     disabled={!canManageSettings}
                   />
-                  <input
+                  <input aria-label={m.clan_start_time()}
                     type="time"
                     bind:value={startTime}
-                    class="col-span-1 bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-medium"
+                    class="col-span-1 bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-medium"
                     disabled={!canManageSettings}
                   />
                 </div>
@@ -1462,16 +1462,16 @@ savedBetSettings = {
               <div class="space-y-2">
                 <span class="text-xs font-semibold text-on-surface-variant block ml-1">{m.clan_end_date_label()}</span>
                 <div class="grid grid-cols-3 gap-2">
-                  <input
+                  <input aria-label={m.clan_end_date_label()}
                     type="date"
                     bind:value={endDate}
-                    class="col-span-2 bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-medium"
+                    class="col-span-2 bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-medium"
                     disabled={!canManageSettings}
                   />
-                  <input
+                  <input aria-label={m.clan_end_time()}
                     type="time"
                     bind:value={endTime}
-                    class="col-span-1 bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-medium"
+                    class="col-span-1 bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-medium"
                     disabled={!canManageSettings}
                   />
                 </div>
@@ -1544,7 +1544,7 @@ savedBetSettings = {
                       type="number"
                       bind:value={clanXpPerLevelUp}
                       min="0"
-                      class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
+                      class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
                       disabled={!canManageSettings}
                     />
                     <span class="text-xs text-on-surface-variant font-semibold shrink-0">{m.clan_xp_per_level_unit()}</span>
@@ -1569,7 +1569,7 @@ savedBetSettings = {
                         bind:value={clanXpReferenceLevel}
                         min={MIN_CLAN_REFERENCE_LEVEL}
                         max="1000"
-                        class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
+                        class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
                         disabled={!canManageSettings}
                       />
                       <p class="text-2xs text-on-surface-variant ml-1">{m.clan_reference_level_hint({ level: clanXpReferenceLevel, points: clanXpPerLevelUp })}</p>
@@ -1614,7 +1614,7 @@ savedBetSettings = {
                       type="number"
                       bind:value={clanXpPerBoost}
                       min="0"
-                      class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
+                      class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
                       disabled={!canManageSettings}
                     />
                     <span class="text-xs text-on-surface-variant font-semibold shrink-0">{m.clan_boost_points_unit()}</span>
@@ -1671,7 +1671,7 @@ savedBetSettings = {
                         max="100"
                         step="0.1"
                         bind:value={bridge.clanPointsFromDailyAlgoRate}
-                        class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
+                        class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
                         disabled={!canManageSettings}
                       />
                       <p class="text-2xs text-on-surface-variant ml-1">
@@ -1682,15 +1682,15 @@ savedBetSettings = {
                     <div class="grid grid-cols-3 gap-3">
                       <div class="space-y-1.5">
                         <label for="clan-da-top1" class="text-xs font-semibold text-on-surface-variant block ml-1">🥇 {m.clan_da_bonus_label()}</label>
-                        <input id="clan-da-top1" type="number" min="0" step="5" bind:value={bridge.clanPointsDailyAlgoTop1} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold" disabled={!canManageSettings} />
+                        <input id="clan-da-top1" type="number" min="0" step="5" bind:value={bridge.clanPointsDailyAlgoTop1} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold" disabled={!canManageSettings} />
                       </div>
                       <div class="space-y-1.5">
                         <label for="clan-da-top2" class="text-xs font-semibold text-on-surface-variant block ml-1">🥈 {m.clan_da_bonus_label()}</label>
-                        <input id="clan-da-top2" type="number" min="0" step="5" bind:value={bridge.clanPointsDailyAlgoTop2} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold" disabled={!canManageSettings} />
+                        <input id="clan-da-top2" type="number" min="0" step="5" bind:value={bridge.clanPointsDailyAlgoTop2} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold" disabled={!canManageSettings} />
                       </div>
                       <div class="space-y-1.5">
                         <label for="clan-da-top3" class="text-xs font-semibold text-on-surface-variant block ml-1">🥉 {m.clan_da_bonus_label()}</label>
-                        <input id="clan-da-top3" type="number" min="0" step="5" bind:value={bridge.clanPointsDailyAlgoTop3} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold" disabled={!canManageSettings} />
+                        <input id="clan-da-top3" type="number" min="0" step="5" bind:value={bridge.clanPointsDailyAlgoTop3} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold" disabled={!canManageSettings} />
                       </div>
                     </div>
                   </div>
@@ -1700,7 +1700,7 @@ savedBetSettings = {
                   <button
                     onclick={saveBridgeSettings}
                     disabled={bridgeAction.state.loading}
-                    class="w-full py-3 bg-warning/10 text-warning border border-warning/30 rounded-lg text-body-sm font-medium transition-colors hover:bg-warning/20 disabled:opacity-50"
+                    class="w-full py-3 bg-warning/10 text-on-warning-container border border-warning/30 rounded-lg text-body-sm font-medium transition-colors hover:bg-warning/20 disabled:opacity-50"
                   >
                     {bridgeAction.state.loading ? m.clan_da_saving_btn() : m.clan_da_save_btn()}
                   </button>
@@ -1742,7 +1742,7 @@ savedBetSettings = {
                   min="1"
                   max={MAX_MANUAL_POINTS}
                   bind:value={manualPointsAmountClan}
-                  class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
+                  class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
                   disabled={!canManageSettings}
                 />
               </div>
@@ -1760,7 +1760,7 @@ savedBetSettings = {
                   <button
                     type="button"
                     onclick={() => handleClanPoints(-1)}
-                    class="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-error/10 hover:bg-error/20 text-error border border-error/20 font-semibold text-xs rounded-lg transition-colors cursor-pointer"
+                    class="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-error/10 hover:bg-error/20 text-on-error-container border border-error/20 font-semibold text-xs rounded-lg transition-colors cursor-pointer"
                     disabled={!selectedClanIdForPoints}
                   >
                     <Papicon icon="Minus" size={14} /> {m.clan_remove_clan_points_btn()}
@@ -1797,7 +1797,7 @@ savedBetSettings = {
                   min="1"
                   max={MAX_MANUAL_POINTS}
                   bind:value={manualPointsAmountMember}
-                  class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
+                  class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
                   disabled={!canManageSettings}
                 />
               </div>
@@ -1815,7 +1815,7 @@ savedBetSettings = {
                   <button
                     type="button"
                     onclick={() => handleMemberPoints(-1)}
-                    class="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-error/10 hover:bg-error/20 text-error border border-error/20 font-semibold text-xs rounded-lg transition-colors cursor-pointer"
+                    class="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-error/10 hover:bg-error/20 text-on-error-container border border-error/20 font-semibold text-xs rounded-lg transition-colors cursor-pointer"
                     use:explainDisabled={(!manualPointsMemberUserId) ? m.common_reason_fill_field() : ''}
                   >
                     <Papicon icon="Minus" size={14} /> {m.clan_remove_member_points_btn()}
@@ -1841,7 +1841,7 @@ savedBetSettings = {
           </div>
 
           {#if !clansEnabled}
-            <p class="text-xs text-warning bg-warning/10 border border-warning/20 rounded-lg px-4 py-3">
+            <p class="text-xs text-on-warning-container bg-warning/10 border border-warning/20 rounded-lg px-4 py-3">
               {m.clan_bets_requires_clans()}
             </p>
           {/if}
@@ -1881,7 +1881,7 @@ savedBetSettings = {
                 bind:value={betSettings.betMinStake}
                 min={BET_STAKE_FLOOR}
                 max={BET_STAKE_CEILING}
-                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
                 disabled={!canManageSettings}
               />
             </div>
@@ -1893,7 +1893,7 @@ savedBetSettings = {
                 bind:value={betSettings.betMaxStake}
                 min={BET_STAKE_FLOOR}
                 max={BET_STAKE_CEILING}
-                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
                 disabled={!canManageSettings}
               />
             </div>
@@ -1905,7 +1905,7 @@ savedBetSettings = {
                 bind:value={betSettings.betMaxOpenPerMember}
                 min="1"
                 max={BET_OPEN_PER_MEMBER_CEILING}
-                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
                 disabled={!canManageSettings}
               />
             </div>
@@ -1917,7 +1917,7 @@ savedBetSettings = {
                 bind:value={betSettings.betAcceptWindowHours}
                 min={BET_ACCEPT_WINDOW_HOURS_MIN}
                 max={BET_ACCEPT_WINDOW_HOURS_MAX}
-                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
                 disabled={!canManageSettings}
               />
             </div>
@@ -1954,7 +1954,7 @@ savedBetSettings = {
               {/each}
             </div>
           {:else}
-            <p class="text-xs text-warning bg-warning/10 border border-warning/20 rounded-lg px-4 py-3">
+            <p class="text-xs text-on-warning-container bg-warning/10 border border-warning/20 rounded-lg px-4 py-3">
               {m.clan_bets_managers_empty()}
             </p>
           {/if}
@@ -2011,7 +2011,7 @@ savedBetSettings = {
             <select
               id="bet-stake-mode"
               bind:value={betSettings.betStakeMode}
-              class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all"
+              class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all"
               disabled={!canManageSettings}
             >
               <option value="PER_MEMBER">{m.clan_bets_stake_mode_per_member()}</option>
@@ -2029,7 +2029,7 @@ savedBetSettings = {
                 bind:value={betSettings.betMaxParticipants}
                 min={BET_PARTICIPANTS_MIN}
                 max={BET_PARTICIPANTS_CEILING}
-                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
                 disabled={!canManageSettings}
               />
               <p class="text-2xs text-on-surface-variant mt-1">{m.clan_bets_max_participants_desc()}</p>
@@ -2043,7 +2043,7 @@ savedBetSettings = {
                 bind:value={betSettings.betMaxSides}
                 min={BET_SIDES_MIN}
                 max={BET_SIDES_CEILING}
-                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
                 disabled={!canManageSettings || !betSettings.betAllowTeams}
               />
               <p class="text-2xs text-on-surface-variant mt-1">{m.clan_bets_max_sides_desc()}</p>
@@ -2081,7 +2081,7 @@ savedBetSettings = {
                 bind:value={betSettings.betRewardTop1}
                 min="0"
                 max={BET_SEASON_REWARD_CEILING}
-                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
                 disabled={!canManageSettings || !betSettings.betSeasonRewardEnabled}
               />
             </div>
@@ -2093,7 +2093,7 @@ savedBetSettings = {
                 bind:value={betSettings.betRewardTop2}
                 min="0"
                 max={BET_SEASON_REWARD_CEILING}
-                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
                 disabled={!canManageSettings || !betSettings.betSeasonRewardEnabled}
               />
             </div>
@@ -2105,7 +2105,7 @@ savedBetSettings = {
                 bind:value={betSettings.betRewardTop3}
                 min="0"
                 max={BET_SEASON_REWARD_CEILING}
-                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
                 disabled={!canManageSettings || !betSettings.betSeasonRewardEnabled}
               />
             </div>
@@ -2131,7 +2131,7 @@ savedBetSettings = {
                 bind:value={betSettings.betMaxDebt}
                 min="0"
                 max={BET_DEBT_CEILING}
-                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-bold"
                 disabled={!canManageSettings || !betSettings.betAllowDebt}
               />
               <p class="text-2xs text-on-surface-variant mt-1">{m.clan_bets_max_debt_desc()}</p>
@@ -2248,7 +2248,7 @@ savedBetSettings = {
                 {m.clan_reset_all_desc()}
               </p>
 
-              <div class="p-3 bg-error/10 rounded-lg border border-error/10 text-error text-xs flex gap-2">
+              <div class="p-3 bg-error/10 rounded-lg border border-error/10 text-on-error-container text-xs flex gap-2">
                 <Papicon icon="Info" size={16} class="shrink-0 mt-0.5" />
                 <span><strong>{m.clan_reset_all_warning_prefix()}</strong> {m.clan_reset_all_warning({ tab: m.clan_tab_seasons() })}</span>
               </div>
@@ -2308,7 +2308,7 @@ savedBetSettings = {
         type="text"
         bind:value={formName}
         placeholder={m.clan_name_placeholder()}
-        class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+        class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
         required
         disabled={!canManageSettings}
       />
@@ -2320,7 +2320,7 @@ savedBetSettings = {
         id="clan-desc"
         bind:value={formDescription}
         placeholder={m.clan_desc_placeholder()}
-        class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none h-20"
+        class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none h-20"
         disabled={!canManageSettings}
       ></textarea>
     </div>

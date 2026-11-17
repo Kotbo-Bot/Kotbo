@@ -563,11 +563,11 @@
       case 'PENDING': return 'bg-sky-500/10 text-sky-400 border-sky-500/20';
       // Même teinte que l'attente de validation : le ticket n'a pas encore de salon.
       case 'QUEUED': return 'bg-sky-500/10 text-sky-400 border-sky-500/20';
-      case 'OPEN': return 'bg-success/10 text-success border-success/20';
-      case 'CLAIMED': return 'bg-warning/10 text-warning border-warning/20';
-      case 'CLOSED': return 'bg-error/10 text-error border-error/20';
+      case 'OPEN': return 'bg-success/10 text-on-success-container border-success/20';
+      case 'CLAIMED': return 'bg-warning/10 text-on-warning-container border-warning/20';
+      case 'CLOSED': return 'bg-error/10 text-on-error-container border-error/20';
       case 'ARCHIVED': return 'bg-slate-500/10 text-on-surface-variant border-slate-500/20';
-      case 'REJECTED': return 'bg-error/10 text-error border-error/20';
+      case 'REJECTED': return 'bg-error/10 text-on-error-container border-error/20';
       // Orange et non rouge : ce n'est pas une decision du staff, c'est un accident.
       case 'ORPHANED': return 'bg-orange-500/10 text-orange-400 border-orange-500/20';
       default: return 'bg-outline-variant/10 text-on-surface-variant border-outline-variant/20';
@@ -577,8 +577,8 @@
   // Pastille affichée dans l'en-tête quand le panneau Détails est replié.
   const PRIORITY_CHIP = {
     LOW: { label: () => m.th_priority_low(), tone: 'bg-outline-variant/10 text-on-surface-variant border-outline-variant/20' },
-    HIGH: { label: () => m.th_priority_high(), tone: 'bg-warning/10 text-warning border-warning/20' },
-    URGENT: { label: () => m.th_priority_urgent(), tone: 'bg-error/10 text-error border-error/20' },
+    HIGH: { label: () => m.th_priority_high(), tone: 'bg-warning/10 text-on-warning-container border-warning/20' },
+    URGENT: { label: () => m.th_priority_urgent(), tone: 'bg-error/10 text-on-error-container border-error/20' },
   };
 
   onMount(async () => {
@@ -779,13 +779,13 @@
               {#if selectedTicketDetail?.status === 'OPEN' || selectedTicketDetail?.status === 'CLAIMED'}
                 {#if selectedTicketDetail.status === 'OPEN'}
                   <button onclick={claimTicket}
-                    class="px-3 py-1.5 bg-warning/10 text-warning border border-warning/20 rounded-lg text-xs font-semibold hover:bg-amber-500 hover:text-white transition-all flex items-center gap-1.5 shrink-0"
+                    class="px-3 py-1.5 bg-warning/10 text-on-warning-container border border-warning/20 rounded-lg text-xs font-semibold hover:bg-amber-500 hover:text-white transition-all flex items-center gap-1.5 shrink-0"
                   >
                     <Papicon icon="user-check" size={12} /> {m.e1_tickets_btn_claim()}
                   </button>
                 {/if}
                 <button onclick={() => showCloseModal = true}
-                  class="px-3 py-1.5 bg-error/10 text-error border border-error/20 rounded-lg text-xs font-semibold hover:bg-rose-500 hover:text-white transition-all flex items-center gap-1.5 shrink-0"
+                  class="px-3 py-1.5 bg-error/10 text-on-error-container border border-error/20 rounded-lg text-xs font-semibold hover:bg-rose-500 hover:text-white transition-all flex items-center gap-1.5 shrink-0"
                 >
                   <Papicon icon="x-circle" size={12} /> {m.e1_tickets_btn_close()}
                 </button>
@@ -793,7 +793,7 @@
 
               {#if selectedTicketDetail?.status === 'CLAIMED' && selectedTicketDetail.claimedById !== authStore.user?.id && (config.ticketAllowOverclaim ?? true) && config.ticketOverclaimPermission !== 'NONE'}
                 <button onclick={claimTicket}
-                  class="px-3 py-1.5 bg-warning/10 text-warning border border-warning/20 rounded-lg text-xs font-semibold hover:bg-amber-500 hover:text-white transition-all flex items-center gap-1.5 shrink-0"
+                  class="px-3 py-1.5 bg-warning/10 text-on-warning-container border border-warning/20 rounded-lg text-xs font-semibold hover:bg-amber-500 hover:text-white transition-all flex items-center gap-1.5 shrink-0"
                 >
                   <Papicon icon="user-check" size={12} /> {m.e1_tickets_btn_overclaim()}
                 </button>
@@ -802,7 +802,7 @@
               {#if selectedTicketDetail?.status === 'CLOSED' || selectedTicketDetail?.status === 'ARCHIVED'}
                 {#if selectedTicketDetail.channelId}
                   <button onclick={reopenTicket}
-                    class="px-3 py-1.5 bg-success/10 text-success border border-success/20 rounded-lg text-xs font-semibold hover:bg-emerald-500 hover:text-white transition-all flex items-center gap-1.5 shrink-0"
+                    class="px-3 py-1.5 bg-success/10 text-on-success-container border border-success/20 rounded-lg text-xs font-semibold hover:bg-emerald-500 hover:text-white transition-all flex items-center gap-1.5 shrink-0"
                   >
                     <Papicon icon="refresh" size={12} /> {m.e1_tickets_btn_reopen()}
                   </button>
@@ -826,7 +826,7 @@
 
                   {#if deletionLock}
                     <button onclick={unlockTicket}
-                      class="px-3 py-1.5 bg-warning/10 text-warning border border-warning/20 rounded-lg text-xs font-semibold hover:bg-amber-500 hover:text-white transition-all flex items-center gap-1.5 shrink-0"
+                      class="px-3 py-1.5 bg-warning/10 text-on-warning-container border border-warning/20 rounded-lg text-xs font-semibold hover:bg-amber-500 hover:text-white transition-all flex items-center gap-1.5 shrink-0"
                     >
                       <Papicon icon="unlock" size={12} /> {m.e1_tickets_btn_unlock()}
                     </button>
@@ -898,7 +898,7 @@
 
                 {#if selectedTicketDetail.channelId && selectedTicketDetail.mode !== 'DM'}
                   <div class="mt-3 flex gap-2 items-center">
-                    <FormInput type="text" bind:value={ticketRenameName} placeholder={m.e1_tickets_rename_ph()} className="flex-1" />
+                    <FormInput ariaLabel={m.e1_tickets_rename_ph()} type="text" bind:value={ticketRenameName} placeholder={m.e1_tickets_rename_ph()} className="flex-1" />
                     <button onclick={renameTicket} disabled={renameAction.state.loading} use:explainDisabled={(!ticketRenameName.trim()) ? m.common_reason_fill_field() : ''}
                       class="px-3 py-1.5 bg-primary/10 text-primary border border-primary/20 rounded-lg text-xs font-semibold hover:bg-primary hover:text-white transition-all disabled:opacity-50 disabled:pointer-events-none flex items-center gap-1.5 shrink-0"
                     >
@@ -933,7 +933,7 @@
                 <div class="flex items-start gap-2.5 lg:gap-4 p-2 rounded-xl hover:bg-white/5 transition-colors group">
                   <div class="shrink-0">
                     {#if msg.authorAvatar}
-                      <img src={msg.authorAvatar} alt="Avatar" class="h-8 w-8 lg:h-10 lg:w-10 rounded-full object-cover border border-white/10" />
+                      <img src={msg.authorAvatar} alt="" class="h-8 w-8 lg:h-10 lg:w-10 rounded-full object-cover border border-white/10" />
                     {:else}
                       <div class="h-8 w-8 lg:h-10 lg:w-10 rounded-full bg-white/10 flex items-center justify-center text-xs lg:text-sm font-semibold text-white/80">
                         {msg.authorName?.slice(0, 1).toUpperCase()}
@@ -1109,7 +1109,7 @@
               </button>
             </div>
           {:else}
-            <div class="p-3 lg:p-4 border-t border-outline-variant/10 bg-error/10 text-error flex items-center justify-center text-xs font-medium gap-2">
+            <div class="p-3 lg:p-4 border-t border-outline-variant/10 bg-error/10 text-on-error-container flex items-center justify-center text-xs font-medium gap-2">
               <Papicon icon="lock" size={14} /> {m.e1_tickets_closed_banner()}
             </div>
           {/if}

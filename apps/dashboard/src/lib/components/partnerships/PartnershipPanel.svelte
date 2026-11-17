@@ -313,9 +313,9 @@
   const toneOf: Record<string, string> = {
     neutral: 'bg-surface-container text-on-surface-variant',
     info: 'bg-primary/10 text-primary',
-    success: 'bg-success/10 text-success',
-    warning: 'bg-warning/10 text-warning',
-    danger: 'bg-error/10 text-error',
+    success: 'bg-success/10 text-on-success-container',
+    warning: 'bg-warning/10 text-on-warning-container',
+    danger: 'bg-error/10 text-on-error-container',
   };
 
   function onKeydown(event: KeyboardEvent) {
@@ -497,7 +497,7 @@
           />
         {/if}
         {#if otherStages.length > 0}
-          <FormSelect
+          <FormSelect ariaLabel={m.ppan_other_stage()}
             value=""
             className="text-xs"
             onchange={(event) => {
@@ -525,7 +525,7 @@
             <p class="text-2xs text-on-surface-variant">
               {m.ppan_break_desc()}
             </p>
-            <FormTextarea bind:value={breakReason} rows={2} placeholder={m.ppan_break_reason()} />
+            <FormTextarea ariaLabel={m.ppan_break_reason()} bind:value={breakReason} rows={2} placeholder={m.ppan_break_reason()} />
             <div class="flex gap-2">
               <ActionButton variant="danger" size="sm" label={m.ppan_break_confirm()} onclick={confirmBreak} />
               <ActionButton variant="neutral" size="sm" label={m.common_cancel()} onclick={() => (breaking = false)} />
@@ -627,17 +627,17 @@
 
             <div class="flex gap-1.5 items-end pt-1">
               <div class="flex-1">
-                <FormSelect bind:value={commitmentKind} className="w-full text-xs">
+                <FormSelect ariaLabel={m.ppan_commitment_kind()} bind:value={commitmentKind} className="w-full text-xs">
                   {#each catalog?.commitments ?? [] as item (item.key)}
                     <option value={item.key}>{item.label}</option>
                   {/each}
                 </FormSelect>
               </div>
               <div class="w-14">
-                <FormInput type="number" bind:value={commitmentCount} />
+                <FormInput ariaLabel={m.ppan_commitment_count()} type="number" bind:value={commitmentCount} />
               </div>
               <div class="w-24">
-                <FormSelect bind:value={commitmentPeriod} className="w-full text-xs">
+                <FormSelect ariaLabel={m.ppan_commitment_period()} bind:value={commitmentPeriod} className="w-full text-xs">
                   <option value="week">{m.ppan_per_week()}</option>
                   <option value="month">{m.ppan_per_month()}</option>
                   <option value="total">{m.ppan_in_total()}</option>
@@ -689,14 +689,14 @@
 
             <div class="flex gap-1.5 items-end pt-1">
               <div class="flex-1">
-                <FormSelect bind:value={benefitKind} className="w-full text-xs">
+                <FormSelect ariaLabel={m.ppan_benefit_kind()} bind:value={benefitKind} className="w-full text-xs">
                   {#each catalog?.benefits ?? [] as item (item.key)}
                     <option value={item.key}>{item.label}</option>
                   {/each}
                 </FormSelect>
               </div>
               <div class="flex-1">
-                <FormSelect bind:value={benefitTarget} className="w-full text-xs">
+                <FormSelect ariaLabel={m.ppan_benefit_target()} bind:value={benefitTarget} className="w-full text-xs">
                   <option value="">{m.ppan_default()}</option>
                   {#each roles as role (role.id)}
                     <option value={role.id}>@{role.name}</option>
@@ -751,9 +751,9 @@
 
         {#if openSection === 'promo'}
           <div class="px-3 pb-2 space-y-2">
-            <FormInput bind:value={promoTitle} placeholder={m.ppan_promo_title()} />
-            <FormTextarea bind:value={promoContent} rows={3} placeholder={m.ppan_promo_text()} />
-            <FormSelect bind:value={promoChannel} className="w-full text-xs">
+            <FormInput ariaLabel={m.ppan_promo_title()} bind:value={promoTitle} placeholder={m.ppan_promo_title()} />
+            <FormTextarea ariaLabel={m.ppan_promo_text()} bind:value={promoContent} rows={3} placeholder={m.ppan_promo_text()} />
+            <FormSelect ariaLabel={m.ppan_promo_channel()} bind:value={promoChannel} className="w-full text-xs">
               <option value="">{m.ppan_promo_channel()}</option>
               {#each channels as channel (channel.id)}
                 <option value={channel.id}>#{channel.name}</option>
@@ -845,7 +845,7 @@
                 </div>
               {/each}
 
-              <FormTextarea bind:value={agreementDraft} rows={2} placeholder={m.ppan_agreement_text()} />
+              <FormTextarea ariaLabel={m.ppan_agreement_text()} bind:value={agreementDraft} rows={2} placeholder={m.ppan_agreement_text()} />
               <ActionButton
                 variant="neutral"
                 size="sm"
@@ -882,10 +882,10 @@
 
                 <div class="flex gap-1.5 items-end">
                   <div class="flex-1">
-                    <FormInput bind:value={paymentAmount} placeholder={m.ppan_amount()} />
+                    <FormInput ariaLabel={m.ppan_amount()} bind:value={paymentAmount} placeholder={m.ppan_amount()} />
                   </div>
                   <div class="flex-1">
-                    <FormInput type="date" bind:value={paymentDue} />
+                    <FormInput ariaLabel={m.ppan_payment_due()} type="date" bind:value={paymentDue} />
                   </div>
                   <ActionButton
                     variant="neutral"
@@ -920,7 +920,7 @@
           <div class="px-3 pb-2 space-y-2">
             <div class="flex gap-1.5 items-end">
               <div class="flex-1">
-                <FormTextarea bind:value={noteDraft} rows={2} placeholder={m.ppan_note()} />
+                <FormTextarea ariaLabel={m.ppan_note()} bind:value={noteDraft} rows={2} placeholder={m.ppan_note()} />
               </div>
               <ActionButton
                 variant="neutral"

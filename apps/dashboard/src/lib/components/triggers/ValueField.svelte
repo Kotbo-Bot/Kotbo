@@ -16,6 +16,7 @@
     value,
     triggerType,
     placeholder = '',
+    label = '',
     optional = false,
     roles = [],
     channels = [],
@@ -25,6 +26,8 @@
     value?: ValueRef;
     triggerType: string;
     placeholder?: string;
+    /** Nom accessible du champ, souvent le libelle du champ d'action (RGAA 11.1). */
+    label?: string;
     optional?: boolean;
     roles?: { id: string; name: string }[];
     channels?: { id: string; name: string }[];
@@ -105,7 +108,7 @@
 
 {#if kind === 'richtext'}
   <span class="inline-flex flex-col gap-1 align-middle">
-    <input
+    <input aria-label={label || undefined}
       bind:this={input}
       type="text"
       value={value?.from === 'text' ? value.template : ''}
@@ -127,7 +130,7 @@
     {/if}
   </span>
 {:else if kind === 'number'}
-  <input
+  <input aria-label={label || undefined}
     type="number"
     value={value?.from === 'number' ? value.value : ''}
     placeholder={placeholder || '0'}
@@ -135,7 +138,7 @@
     class="{chipClass} w-24 focus:outline-none focus:border-primary/60"
   />
 {:else if kind === 'color'}
-  <input
+  <input aria-label={label || undefined}
     type="color"
     value={value?.from === 'text' ? value.template : '#5865F2'}
     oninput={(event) => onChange({ from: 'text', template: event.currentTarget.value })}
@@ -143,10 +146,10 @@
   />
 {:else}
   <span class="relative inline-flex">
-    <select
+    <select aria-label={label || undefined}
       value={selected}
       onchange={(event) => pick(event.currentTarget.value)}
-      class="{chipClass} appearance-none pr-7 cursor-pointer focus:outline-none"
+      class="{chipClass} appearance-none pr-7 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
     >
       <option value="" disabled={!optional}>
         {optional && placeholder

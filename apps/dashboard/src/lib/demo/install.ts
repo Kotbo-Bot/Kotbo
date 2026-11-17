@@ -14,6 +14,7 @@ import { router } from 'tinro';
 import { installDemoBackend } from './backend';
 import { DEMO_BASE, DEMO_GUILD_ID } from './mode';
 import { registerDemoRoutes } from './routes';
+import { installDemoLinks } from './demoLinks';
 
 const isDemoRuntime =
   import.meta.env.VITE_DEMO === '1' ||
@@ -33,6 +34,8 @@ if (isDemoRuntime) {
       const to = new URLSearchParams(window.location.search).get('to');
       const currentRel = window.location.pathname.replace(new RegExp(`^${DEMO_BASE}`), '') || '/';
       router.goto(to?.startsWith('/') && !to.startsWith('//') ? to : currentRel + window.location.search + window.location.hash, true);
+      // Nouvel onglet, copie du lien : le navigateur doit voir le prefixe.
+      installDemoLinks(DEMO_BASE);
     }
   }
 

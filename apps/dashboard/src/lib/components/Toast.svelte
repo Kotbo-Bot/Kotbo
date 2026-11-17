@@ -19,9 +19,9 @@
    * qu'un champ passait dessous.
    */
   const colorClass = $derived({
-    success: 'bg-success/10 dark:bg-surface-container-high dark:bg-linear-to-r dark:from-emerald-500/12 dark:to-emerald-500/12 text-success border-success/25',
-    error: 'bg-error/10 dark:bg-surface-container-high dark:bg-linear-to-r dark:from-red-500/12 dark:to-red-500/12 text-error border-error/25',
-    warning: 'bg-warning/10 dark:bg-surface-container-high dark:bg-linear-to-r dark:from-amber-500/12 dark:to-amber-500/12 text-warning border-warning/25',
+    success: 'bg-success/10 dark:bg-surface-container-high dark:bg-linear-to-r dark:from-emerald-500/12 dark:to-emerald-500/12 text-on-success-container border-success/25',
+    error: 'bg-error/10 dark:bg-surface-container-high dark:bg-linear-to-r dark:from-red-500/12 dark:to-red-500/12 text-on-error-container border-error/25',
+    warning: 'bg-warning/10 dark:bg-surface-container-high dark:bg-linear-to-r dark:from-amber-500/12 dark:to-amber-500/12 text-on-warning-container border-warning/25',
     info: 'bg-blue-50 dark:bg-surface-container-high dark:bg-linear-to-r dark:from-blue-500/12 dark:to-blue-500/12 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-500/30'
   }[item.type]);
 

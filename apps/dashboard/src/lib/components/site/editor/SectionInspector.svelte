@@ -148,8 +148,8 @@
   </Field>
 
   <Field label={m.ste_width()} hint={m.ste_width_hint()}>
-    {#snippet children()}
-      <FilterPills label={m.ste_width()} value={attrs.width} onchange={(v) => set({ width: v })} options={[
+    {#snippet children(id, describedBy)}
+      <FilterPills {describedBy} label={m.ste_width()} value={attrs.width} onchange={(v) => set({ width: v })} options={[
         { value: 'contained', label: m.ste_width_contained() },
         { value: 'full', label: m.ste_width_full_bg() },
         { value: 'edge', label: m.ste_width_edge() },
@@ -178,8 +178,8 @@
   </Field>
 
   <Field label={m.ste_animation()} hint={m.ste_animation_hint()}>
-    {#snippet children()}
-      <FilterPills label={m.ste_animation()} value={attrs.animation} onchange={(v) => set({ animation: v })} options={[
+    {#snippet children(id, describedBy)}
+      <FilterPills {describedBy} label={m.ste_animation()} value={attrs.animation} onchange={(v) => set({ animation: v })} options={[
         { value: 'none', label: m.ste_animation_none() },
         { value: 'fade', label: m.ste_animation_fade() },
         { value: 'slide-up', label: m.ste_animation_slide() },

@@ -288,8 +288,8 @@
               </Field>
               {#if config.autoAction === 'DELETE_AND_WARN'}
                 <Field label={m.aegis_warn_weight()} hint={m.aegis_warn_weight_hint()}>
-                  {#snippet children()}
-                    <FilterPills
+                  {#snippet children(id, describedBy)}
+                    <FilterPills {describedBy}
                       label={m.aegis_warn_weight()}
                       options={[
                         { value: '1', label: m.aegis_weight_1() },
@@ -316,8 +316,8 @@
                 </SettingsRow>
               </div>
               <Field label={m.aegis_review_channel()} hint={m.aegis_review_channel_hint()}>
-                {#snippet children(id)}
-                  <SearchableSelect {id} bind:value={config!.reviewChannelId} options={textChannels} placeholder={m.aegis_channel_placeholder()} disabled={!canEdit} />
+                {#snippet children(id, describedBy)}
+                  <SearchableSelect {describedBy} {id} bind:value={config!.reviewChannelId} options={textChannels} placeholder={m.aegis_channel_placeholder()} disabled={!canEdit} />
                 {/snippet}
               </Field>
             </div>
@@ -380,8 +380,8 @@
                 <li><Papicon icon="database" size={14} class="shrink-0 mt-0.5 text-on-surface-variant" /><span>{m.aegis_privacy_kept()}</span></li>
               </ul>
               <Field label={m.aegis_training_label()} hint={m.aegis_training_desc()}>
-                {#snippet children()}
-                  <FilterPills
+                {#snippet children(id, describedBy)}
+                  <FilterPills {describedBy}
                     label={m.aegis_training_label()}
                     options={[
                       { value: 'yes', label: m.aegis_training_yes() },
@@ -443,7 +443,7 @@
               {/snippet}
             </Field>
             <Field label={m.aegis_harassment_long_threshold()} hint={m.aegis_harassment_long_hint()}>
-              {#snippet children(id)}<input {id} class="input" type="number" min="3" max="100" bind:value={config!.harassmentLongThreshold} disabled={!canEdit} />{/snippet}
+              {#snippet children(id, describedBy)}<input aria-describedby={describedBy} {id} class="input" type="number" min="3" max="100" bind:value={config!.harassmentLongThreshold} disabled={!canEdit} />{/snippet}
             </Field>
             <Field label={m.aegis_harassment_long_days()}>
               {#snippet children(id)}<input {id} class="input" type="number" min="1" max="180" bind:value={config!.harassmentLongDays} disabled={!canEdit} />{/snippet}
@@ -465,8 +465,8 @@
               {/snippet}
             </Field>
             <Field label={m.aegis_distress_channel()} hint={m.aegis_distress_channel_hint()}>
-              {#snippet children(id)}
-                <SearchableSelect {id} bind:value={config!.distressChannelId} options={textChannels} placeholder={m.aegis_review_channel()} disabled={!canEdit} />
+              {#snippet children(id, describedBy)}
+                <SearchableSelect {describedBy} {id} bind:value={config!.distressChannelId} options={textChannels} placeholder={m.aegis_review_channel()} disabled={!canEdit} />
               {/snippet}
             </Field>
             <Field label={m.aegis_distress_cooldown()}>

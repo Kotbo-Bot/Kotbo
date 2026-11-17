@@ -235,7 +235,7 @@
    * Les quatre axes de présentation du panneau, en cartes-radio avec une aide
    * PAR OPTION : même forme que `NOTIFY_MODES` ci-dessus, et que la maquette de
    * référence (`blocMode`/`blocFormat`/`blocCouleurs`) : le choix et ce qu'il
-   * coûte se lisent ensemble, au lieu d'un `<select>` surmontant une aide
+   * coûte se lisent ensemble, au lieu d'une liste `select` surmontant une aide
    * partagée qui ne décrivait que l'option déjà sélectionnée.
    */
   const PANEL_COMPONENTS_MODES: Array<{ key: TempVoicePanelComponents; label: () => string; hints: Array<() => string> }> = [
@@ -1181,7 +1181,7 @@
       <LoadingHint context="config" />
     </div>
   {:else if loadError}
-    <div class="flex items-center gap-2 rounded-xl bg-error/10 border border-error/20 p-6 text-error text-sm font-semibold">
+    <div class="flex items-center gap-2 rounded-xl bg-error/10 border border-error/20 p-6 text-on-error-container text-sm font-semibold">
       <Papicon icon="alert-triangle" size={16} />
       <span>{loadError}</span>
     </div>
@@ -1204,11 +1204,11 @@
               <h3 class="text-sm font-semibold text-on-surface">{m.cm_bc_title()}</h3>
               <p class="text-body-sm text-on-surface-variant mt-0.5">{m.cm_bc_desc()}</p>
             </div>
-            <input
+            <input aria-label={m.cm_bc_filter_placeholder()}
               type="text"
               bind:value={byChannelQuery}
               placeholder={m.cm_bc_filter_placeholder()}
-              class="w-full sm:w-56 bg-surface-container-high text-sm px-4 py-2 rounded-xl border border-outline-variant/10 focus:ring-1 ring-primary/30 transition-all outline-none"
+              class="w-full sm:w-56 bg-surface-container-high text-sm px-4 py-2 rounded-xl border border-field-border focus:ring-1 ring-primary/30 transition-all outline-none"
             />
           </div>
 
@@ -1284,7 +1284,7 @@
                             maxlength="100"
                             autofocus
                             onkeydown={(e) => { if (e.key === 'Escape') renamingChannelId = null; }}
-                            class="flex-1 min-w-40 bg-surface-container-high/40 border border-outline-variant/20 rounded-lg px-3 py-1.5 text-xs text-on-surface outline-none focus:ring-1 focus:ring-primary/50"
+                            class="flex-1 min-w-40 bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-1.5 text-xs text-on-surface outline-none focus:ring-1 focus:ring-primary/50"
                           />
                           <button type="submit" class="px-3 py-1.5 bg-primary text-white text-xs font-medium rounded-lg">
                             {m.cm_validate()}
@@ -1314,7 +1314,7 @@
                         <button
                           type="button"
                           class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
-                          bg-error/10 text-error border border-error/30 hover:bg-error/20
+                          bg-error/10 text-on-error-container border border-error/30 hover:bg-error/20
                           disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                           disabled={!ch.manageable}
                           title={ch.manageable ? '' : m.cm_bc_cannot_delete()}
@@ -1423,7 +1423,7 @@
                           maxlength="80"
                           bind:value={sticky.webhookName}
                           placeholder={m.cm_sticky_webhook_name_placeholder()}
-                          class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm outline-none focus:ring-1 focus:ring-primary/30 transition-all"
+                          class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-sm outline-none focus:ring-1 focus:ring-primary/30 transition-all"
                         />
                       </div>
                       <div class="space-y-1.5">
@@ -1435,7 +1435,7 @@
                           bind:value={sticky.webhookAvatarUrl}
                           placeholder="https://"
                           aria-describedby="sticky-webhook-avatar-hint-{index}"
-                          class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm outline-none focus:ring-1 focus:ring-primary/30 transition-all"
+                          class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-sm outline-none focus:ring-1 focus:ring-primary/30 transition-all"
                         />
                         <p id="sticky-webhook-avatar-hint-{index}" class="text-2xs text-on-surface-variant/40">{m.cm_sticky_webhook_avatar_hint()}</p>
                       </div>
@@ -1463,7 +1463,7 @@
                         spellcheck="false"
                         placeholder={STICKY_JSON_EXAMPLE}
                         aria-describedby="sticky-json-hint-{index}"
-                        class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 font-mono text-sm text-on-surface outline-none focus:ring-1 focus:ring-primary/30 transition-all resize-y"
+                        class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 font-mono text-sm text-on-surface outline-none focus:ring-1 focus:ring-primary/30 transition-all resize-y"
                       ></textarea>
                       <p id="sticky-json-hint-{index}" class="text-2xs text-on-surface-variant/40">{m.cm_sticky_json_hint()} {m.cm_sticky_placeholders_hint({ server: '{server}', membres: '{membres}', salons: '{salons}', members: '{members}', channelCount: '{channelCount}', boosts: '{boosts}' })}</p>
                     </div>
@@ -1476,7 +1476,7 @@
                         rows="4"
                         maxlength="2000"
                         placeholder={m.cm_sticky_content_placeholder()}
-                        class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm text-on-surface outline-none focus:ring-1 focus:ring-primary/30 transition-all resize-y"
+                        class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm text-on-surface outline-none focus:ring-1 focus:ring-primary/30 transition-all resize-y"
                       ></textarea>
                       <p class="text-2xs text-on-surface-variant/40">{m.cm_sticky_placeholders_hint({ server: '{server}', membres: '{membres}', salons: '{salons}', members: '{members}', channelCount: '{channelCount}', boosts: '{boosts}' })}</p>
                     </div>
@@ -1492,7 +1492,7 @@
                         max="200"
                         disabled={sticky.idleRepostMinutes > 0}
                         bind:value={sticky.messageThreshold}
-                        class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm outline-none focus:ring-1 focus:ring-primary/30 transition-all disabled:opacity-50"
+                        class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-sm outline-none focus:ring-1 focus:ring-primary/30 transition-all disabled:opacity-50"
                       />
                       <p class="text-2xs text-on-surface-variant/40">{m.cm_sticky_threshold_hint()}</p>
                     </div>
@@ -1505,7 +1505,7 @@
                         min="0"
                         max="3600"
                         bind:value={sticky.cooldownSeconds}
-                        class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm outline-none focus:ring-1 focus:ring-primary/30 transition-all"
+                        class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-sm outline-none focus:ring-1 focus:ring-primary/30 transition-all"
                       />
                       <p class="text-2xs text-on-surface-variant/40">{m.cm_sticky_cooldown_hint()}</p>
                     </div>
@@ -1518,7 +1518,7 @@
                         min="0"
                         max="10080"
                         bind:value={sticky.idleRepostMinutes}
-                        class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm outline-none focus:ring-1 focus:ring-primary/30 transition-all"
+                        class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-sm outline-none focus:ring-1 focus:ring-primary/30 transition-all"
                       />
                       <p class="text-2xs text-on-surface-variant/40">{m.cm_sticky_idle_hint()}</p>
                     </div>
@@ -1548,7 +1548,7 @@
                           maxlength="256"
                           bind:value={sticky.embedTitle}
                           placeholder={m.cm_sticky_embed_title_placeholder()}
-                          class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm outline-none focus:ring-1 focus:ring-primary/30 transition-all"
+                          class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-sm outline-none focus:ring-1 focus:ring-primary/30 transition-all"
                         />
                       </div>
                       <div class="space-y-1.5">
@@ -1580,7 +1580,7 @@
                       type="button"
                       onclick={() => handleDeleteSticky(index)}
                       disabled={stickyBusy === sticky.channelId}
-                      class="px-3.5 py-2 bg-error/10 text-error border border-error/20 rounded-lg text-xs font-bold hover:bg-rose-500 hover:text-white transition-all inline-flex items-center gap-2 disabled:opacity-50"
+                      class="px-3.5 py-2 bg-error/10 text-on-error-container border border-error/20 rounded-lg text-xs font-bold hover:bg-rose-500 hover:text-white transition-all inline-flex items-center gap-2 disabled:opacity-50"
                     >
                       <Papicon icon="trash-2" size={13} />
                       {m.common_delete()}
@@ -1624,7 +1624,7 @@
             </div>
             
             <div class="flex items-center gap-2">
-              <input 
+              <input aria-label={m.a11y_enable({ name: m.cm_stats_channels_title() })} 
                 type="checkbox" 
                 bind:checked={config.statsEnabled} 
                 class="w-10 h-6 bg-surface-container-high rounded-full relative appearance-none cursor-pointer transition-all border border-outline-variant/20 checked:bg-primary before:content-[''] before:absolute before:h-4 before:w-4 before:rounded-full before:bg-white before:top-0.5 before:left-0.5 checked:before:translate-x-4 before:transition-all"
@@ -1689,7 +1689,7 @@
                     }
                   }}
                   disabled={rescanAction.state.loading || loading}
-                  class="px-5 py-3 bg-error/10 hover:bg-error/20 text-error border border-error/20 text-xs font-bold rounded-lg transition-all whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed flex-1 md:flex-none"
+                  class="px-5 py-3 bg-error/10 hover:bg-error/20 text-on-error-container border border-error/20 text-xs font-bold rounded-lg transition-all whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed flex-1 md:flex-none"
                 >
                   {m.cm_force_rescan()}
                 </button>
@@ -1701,7 +1701,7 @@
               <div class="space-y-3 p-5 bg-surface-container-high/20 border border-outline-variant/5 rounded-xl transition-all">
                 <div class="flex items-center justify-between">
                   <label for="stats-member-channel" class="text-xs font-bold text-on-surface/80 block">{m.cm_member_counter_label()}</label>
-                  <input 
+                  <input aria-label={m.a11y_enable({ name: m.cm_member_counter_label() })} 
                     type="checkbox" 
                     bind:checked={config.statsConfig.memberEnabled} 
                     class="w-8 h-5 bg-surface-container-high rounded-full relative appearance-none cursor-pointer transition-all border border-outline-variant/20 checked:bg-primary before:content-[''] before:absolute before:h-3.5 before:w-3.5 before:rounded-full before:bg-white before:top-0.5 before:left-0.5 checked:before:translate-x-3 before:transition-all"
@@ -1729,11 +1729,11 @@
                       {m.cm_create_channel()}
                     </button>
                   </div>
-                  <input 
+                  <input aria-label={m.cm_template_members_placeholder({ count: '{count}' })} 
                     type="text" 
                     bind:value={config.statsConfig.memberTemplate} 
                     placeholder={m.cm_template_members_placeholder({ count: '{count}' })} 
-                    class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-5 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
+                    class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-5 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
                   />
                 {/if}
               </div>
@@ -1742,7 +1742,7 @@
               <div class="space-y-3 p-5 bg-surface-container-high/20 border border-outline-variant/5 rounded-xl transition-all">
                 <div class="flex items-center justify-between">
                   <label for="stats-bot-channel" class="text-xs font-bold text-on-surface/80 block">{m.cm_bot_counter_label()}</label>
-                  <input 
+                  <input aria-label={m.a11y_enable({ name: m.cm_bot_counter_label() })} 
                     type="checkbox" 
                     bind:checked={config.statsConfig.botEnabled} 
                     class="w-8 h-5 bg-surface-container-high rounded-full relative appearance-none cursor-pointer transition-all border border-outline-variant/20 checked:bg-primary before:content-[''] before:absolute before:h-3.5 before:w-3.5 before:rounded-full before:bg-white before:top-0.5 before:left-0.5 checked:before:translate-x-3 before:transition-all"
@@ -1770,11 +1770,11 @@
                       {m.cm_create_channel()}
                     </button>
                   </div>
-                  <input 
+                  <input aria-label={m.cm_template_bots_placeholder({ count: '{count}' })} 
                     type="text" 
                     bind:value={config.statsConfig.botTemplate} 
                     placeholder={m.cm_template_bots_placeholder({ count: '{count}' })} 
-                    class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-5 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
+                    class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-5 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
                   />
                 {/if}
               </div>
@@ -1783,7 +1783,7 @@
               <div class="space-y-3 p-5 bg-surface-container-high/20 border border-outline-variant/5 rounded-xl transition-all">
                 <div class="flex items-center justify-between">
                   <label for="stats-role-channel" class="text-xs font-bold text-on-surface/80 block">{m.cm_role_counter_label()}</label>
-                  <input 
+                  <input aria-label={m.a11y_enable({ name: m.cm_role_counter_label() })} 
                     type="checkbox" 
                     bind:checked={config.statsConfig.roleEnabled} 
                     class="w-8 h-5 bg-surface-container-high rounded-full relative appearance-none cursor-pointer transition-all border border-outline-variant/20 checked:bg-primary before:content-[''] before:absolute before:h-3.5 before:w-3.5 before:rounded-full before:bg-white before:top-0.5 before:left-0.5 checked:before:translate-x-3 before:transition-all"
@@ -1816,11 +1816,11 @@
                     bind:value={config.statsConfig.roleTargetId} 
                     placeholder={m.cm_select_target_role_placeholder()}
                   />
-                  <input 
+                  <input aria-label={m.cm_template_staff_placeholder({ count: '{count}' })} 
                     type="text" 
                     bind:value={config.statsConfig.roleTemplate} 
                     placeholder={m.cm_template_staff_placeholder({ count: '{count}' })} 
-                    class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-5 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
+                    class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-5 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
                   />
                 {/if}
               </div>
@@ -1829,7 +1829,7 @@
               <div class="space-y-3 p-5 bg-surface-container-high/20 border border-outline-variant/5 rounded-xl transition-all">
                 <div class="flex items-center justify-between">
                   <label for="stats-channel-channel" class="text-xs font-bold text-on-surface/80 block">{m.cm_channel_counter_label()}</label>
-                  <input 
+                  <input aria-label={m.a11y_enable({ name: m.cm_channel_counter_label() })} 
                     type="checkbox" 
                     bind:checked={config.statsConfig.channelEnabled} 
                     class="w-8 h-5 bg-surface-container-high rounded-full relative appearance-none cursor-pointer transition-all border border-outline-variant/20 checked:bg-primary before:content-[''] before:absolute before:h-3.5 before:w-3.5 before:rounded-full before:bg-white before:top-0.5 before:left-0.5 checked:before:translate-x-3 before:transition-all"
@@ -1857,11 +1857,11 @@
                       {m.cm_create_channel()}
                     </button>
                   </div>
-                  <input 
+                  <input aria-label={m.cm_template_channels_placeholder({ count: '{count}' })} 
                     type="text" 
                     bind:value={config.statsConfig.channelTemplate} 
                     placeholder={m.cm_template_channels_placeholder({ count: '{count}' })} 
-                    class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-5 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
+                    class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-5 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
                   />
                 {/if}
               </div>
@@ -1870,7 +1870,7 @@
               <div class="space-y-3 p-5 bg-surface-container-high/20 border border-outline-variant/5 rounded-xl transition-all">
                 <div class="flex items-center justify-between">
                   <label for="stats-category-channel" class="text-xs font-bold text-on-surface/80 block">{m.cm_category_counter_label()}</label>
-                  <input 
+                  <input aria-label={m.a11y_enable({ name: m.cm_category_counter_label() })} 
                     type="checkbox" 
                     bind:checked={config.statsConfig.categoryEnabled} 
                     class="w-8 h-5 bg-surface-container-high rounded-full relative appearance-none cursor-pointer transition-all border border-outline-variant/20 checked:bg-primary before:content-[''] before:absolute before:h-3.5 before:w-3.5 before:rounded-full before:bg-white before:top-0.5 before:left-0.5 checked:before:translate-x-3 before:transition-all"
@@ -1898,11 +1898,11 @@
                       {m.cm_create_channel()}
                     </button>
                   </div>
-                  <input 
+                  <input aria-label={m.cm_template_categories_placeholder({ count: '{count}' })} 
                     type="text" 
                     bind:value={config.statsConfig.categoryTemplate} 
                     placeholder={m.cm_template_categories_placeholder({ count: '{count}' })} 
-                    class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-5 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
+                    class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-5 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
                   />
                 {/if}
               </div>
@@ -1911,7 +1911,7 @@
               <div class="space-y-3 p-5 bg-surface-container-high/20 border border-outline-variant/5 rounded-xl transition-all">
                 <div class="flex items-center justify-between">
                   <label for="stats-activity-channel" class="text-xs font-bold text-on-surface/80 block">{m.cm_activity_counter_label()}</label>
-                  <input 
+                  <input aria-label={m.a11y_enable({ name: m.cm_activity_counter_label() })} 
                     type="checkbox" 
                     bind:checked={config.statsConfig.activityEnabled} 
                     class="w-8 h-5 bg-surface-container-high rounded-full relative appearance-none cursor-pointer transition-all border border-outline-variant/20 checked:bg-primary before:content-[''] before:absolute before:h-3.5 before:w-3.5 before:rounded-full before:bg-white before:top-0.5 before:left-0.5 checked:before:translate-x-3 before:transition-all"
@@ -1939,11 +1939,11 @@
                       {m.cm_create_channel()}
                     </button>
                   </div>
-                  <input 
+                  <input aria-label={m.cm_template_activity_placeholder({ count: '{count}' })} 
                     type="text" 
                     bind:value={config.statsConfig.activityTemplate} 
                     placeholder={m.cm_template_activity_placeholder({ count: '{count}' })} 
-                    class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-5 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
+                    class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-5 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
                   />
                 {/if}
               </div>
@@ -1998,7 +1998,7 @@
                         <select
                           id="custom-type-{index}"
                           bind:value={custom.type}
-                          class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
+                          class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
                         >
                           <option value="members">{m.cm_opt_members_total()}</option>
                           <option value="bots">{m.cm_opt_bots_total()}</option>
@@ -2067,7 +2067,7 @@
                             type="number"
                             bind:value={custom.goalTarget}
                             placeholder={m.cm_goal_example_placeholder()}
-                            class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-5 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
+                            class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-5 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
                           />
                         </div>
                       {/if}
@@ -2080,7 +2080,7 @@
                           type="text" 
                           bind:value={custom.template} 
                           placeholder={custom.type === 'goal' ? m.cm_template_goal_placeholder({ count: '{count}', goal: '{goal}' }) : m.cm_template_name_placeholder({ count: '{count}' })} 
-                          class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-5 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
+                          class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-5 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
                         />
                         <p class="text-2xs text-on-surface-variant/40 mt-1">
                           {m.cm_count_placeholder_hint({ code: '{count}' })}
@@ -2217,7 +2217,7 @@
                   type="text" 
                   bind:value={config.tempVoiceNameTemplate} 
                   placeholder={m.cm_template_user_placeholder({ user: "{user}" })} 
-                  class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-5 py-3 text-sm outline-none focus:ring-2 focus:ring-primary/30 transition-all"
+                  class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-5 py-3 text-sm outline-none focus:ring-2 focus:ring-primary/30 transition-all"
                 />
                 <p class="text-2xs text-on-surface-variant/40 mt-1">{m.cm_user_placeholder_hint({ code: '{user}' })}</p>
               </div>
@@ -2330,7 +2330,7 @@
                       {id}
                       value={current ?? ''}
                       onchange={(e) => onSelect((e.currentTarget as HTMLSelectElement).value)}
-                      class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-2xs outline-none focus:ring-1 focus:ring-primary/30"
+                      class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-2 text-2xs outline-none focus:ring-1 focus:ring-primary/30"
                     >
                       <option value="">{m.cm_tv_panel_per_gen_inherit({ value: labelFor(serverValue, options) })}</option>
                       {#each options as opt (opt.key)}
@@ -2432,7 +2432,7 @@
                             type="text" 
                             bind:value={generator.nameTemplate} 
                             placeholder={m.cm_template_user_placeholder({ user: "{user}" })} 
-                            class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30 transition-all"
+                            class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30 transition-all"
                           />
                         </div>
 
@@ -2581,7 +2581,7 @@
               max={TEMP_VOICE_HANDOVER_DELAY_BOUNDS.max}
               disabled={!config.tempVoiceModPermissions.handoverDmEnabled}
               bind:value={config.tempVoiceModPermissions.handoverDelaySeconds}
-              class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm outline-none focus:ring-1 focus:ring-primary/30 transition-all disabled:opacity-40"
+              class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-sm outline-none focus:ring-1 focus:ring-primary/30 transition-all disabled:opacity-40"
             />
             <p class="text-2xs text-on-surface-variant/40">{m.cm_tv_own_delay_hint({ min: TEMP_VOICE_HANDOVER_DELAY_BOUNDS.min, max: TEMP_VOICE_HANDOVER_DELAY_BOUNDS.max })}</p>
           </div>
@@ -2665,10 +2665,10 @@
                         <td class="py-3 px-4">
                           {#if editingChannel === chan.id}
                             <div class="flex items-center gap-2">
-                              <input 
+                              <input aria-label={m.cm_col_channel_name()} 
                                 type="text" 
                                 bind:value={newChannelName}
-                                class="bg-surface-container-high/40 border border-outline-variant/20 rounded-md px-2.5 py-1 text-xs text-on-surface outline-none focus:ring-1 focus:ring-primary/50"
+                                class="bg-surface-container-high/40 border border-field-border rounded-md px-2.5 py-1 text-xs text-on-surface outline-none focus:ring-1 focus:ring-primary/50"
                               />
                               <button
                                 type="button"
@@ -2736,7 +2736,7 @@
                             type="button"
                             onclick={() => handleDeleteChannel(chan.id)}
                             disabled={actionInProgress}
-                            class="px-2.5 py-1.5 bg-error/10 text-error border border-error/20 rounded-lg text-xs font-semibold hover:bg-rose-500 hover:text-white transition-all inline-flex items-center gap-1"
+                            class="px-2.5 py-1.5 bg-error/10 text-on-error-container border border-error/20 rounded-lg text-xs font-semibold hover:bg-rose-500 hover:text-white transition-all inline-flex items-center gap-1"
                           >
                             <Papicon icon="trash-2" size={12} />
                             {m.common_close()}
@@ -2755,10 +2755,10 @@
                     <div class="flex items-center justify-between">
                       {#if editingChannel === chan.id}
                         <div class="flex items-center gap-2">
-                          <input 
+                          <input aria-label={m.cm_col_channel_name()} 
                             type="text" 
                             bind:value={newChannelName}
-                            class="bg-surface-container-high/40 border border-outline-variant/20 rounded-md px-2.5 py-1 text-xs text-on-surface outline-none"
+                            class="bg-surface-container-high/40 border border-field-border rounded-md px-2.5 py-1 text-xs text-on-surface outline-none focus-visible:ring-2 focus-visible:ring-primary"
                           />
                           <button
                             type="button"
@@ -2819,7 +2819,7 @@
                         type="button"
                         onclick={() => handleDeleteChannel(chan.id)}
                         disabled={actionInProgress}
-                        class="px-2.5 py-1.5 bg-error/10 text-error border border-error/20 rounded-lg text-xs font-semibold hover:bg-rose-500 hover:text-white transition-all inline-flex items-center gap-1"
+                        class="px-2.5 py-1.5 bg-error/10 text-on-error-container border border-error/20 rounded-lg text-xs font-semibold hover:bg-rose-500 hover:text-white transition-all inline-flex items-center gap-1"
                       >
                         <Papicon icon="trash-2" size={12} />
                         {m.cm_close_channel_full()}
@@ -3068,7 +3068,7 @@
                 <select
                   id="ar-responders-select"
                   bind:value={config.tempVoiceAccessRequest.responders}
-                  class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
+                  class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
                 >
                   <option value="OWNER">{m.cm_ar_responders_owner()}</option>
                   <option value="OWNER_AND_STAFF">{m.cm_ar_responders_owner_staff()}</option>
@@ -3126,7 +3126,7 @@
                     min="1"
                     max="1440"
                     bind:value={config.tempVoiceAccessRequest.requestExpiresMinutes}
-                    class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm outline-none focus:ring-1 focus:ring-primary/30 transition-all"
+                    class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-sm outline-none focus:ring-1 focus:ring-primary/30 transition-all"
                   />
                   <p class="text-2xs text-on-surface-variant/40">{m.cm_ar_expiry_hint()}</p>
                 </div>
@@ -3139,7 +3139,7 @@
                     min="1"
                     max="1440"
                     bind:value={config.tempVoiceAccessRequest.denyCooldownMinutes}
-                    class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm outline-none focus:ring-1 focus:ring-primary/30 transition-all"
+                    class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-sm outline-none focus:ring-1 focus:ring-primary/30 transition-all"
                   />
                   <p class="text-2xs text-on-surface-variant/40">{m.cm_ar_cooldown_hint()}</p>
                 </div>
@@ -3165,12 +3165,12 @@
             {#each ADMIN_PERMISSION_ROWS as row (row.key)}
               <div class="flex items-center justify-between gap-4 p-4 bg-surface-container-high/20 border border-outline-variant/5 rounded-xl">
                 <span class="text-xs font-bold text-on-surface/80">{row.label()}</span>
-                <select
+                <select aria-label={row.label()}
                   value={config.tempVoiceModPermissions[row.key] ? 'true' : 'false'}
                   onchange={(e) => {
                     config.tempVoiceModPermissions[row.key] = (e.currentTarget as HTMLSelectElement).value === 'true';
                   }}
-                  class="bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs outline-none focus:ring-1 focus:ring-primary/30"
+                  class="bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-2 text-xs outline-none focus:ring-1 focus:ring-primary/30"
                 >
                   <option value="true">{m.cm_ar_admin_opt_staff()}</option>
                   <option value="false">{m.cm_ar_admin_opt_admin_only()}</option>
@@ -3261,7 +3261,7 @@
                   onchange={(e) => {
                     config.tempVoiceModPermissions.reservationOverflow = (e.currentTarget as HTMLSelectElement).value as TempVoiceReservationOverflow;
                   }}
-                  class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
+                  class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
                 >
                   {#each RESERVATION_OVERFLOW_MODES as mode (mode.key)}
                     <option value={mode.key}>{mode.label()}</option>
@@ -3296,7 +3296,7 @@
               <select
                 id="tv-reservation-fallback-select"
                 bind:value={config.tempVoiceModPermissions.reservationFallbackMode}
-                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
               >
                 <option value="ANY_ROLE">{m.cm_tv_panel_reservation_fallback_any_role()}</option>
                 <option value="MEMBERS">{m.cm_tv_panel_reservation_fallback_members()}</option>
@@ -3385,7 +3385,7 @@
                 <select
                   id="honeypot-sanction-select"
                   bind:value={config.honeypotSanction}
-                  class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
+                  class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
                 >
                   <option value="TIMEOUT">{m.cm_opt_timeout_default()}</option>
                   <option value="BAN">{m.cm_opt_ban_perm()}</option>
@@ -3404,7 +3404,7 @@
                     id="honeypot-duration-select"
                     value={config.honeypotDurationMin === null ? '' : String(config.honeypotDurationMin)}
                     onchange={(e) => (config.honeypotDurationMin = e.currentTarget.value ? Number(e.currentTarget.value) : null)}
-                    class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
+                    class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
                   >
                     {#if config.honeypotSanction === 'TIMEOUT'}
                       <option value="">{m.cmx_hp_28d()}</option>
@@ -3424,7 +3424,7 @@
                 <select
                   id="honeypot-grace-select"
                   bind:value={config.honeypotGraceSeconds}
-                  class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
+                  class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs outline-none focus:ring-1 focus:ring-primary/30"
                 >
                   <option value={0}>{m.cmx_hp_immediate()}</option>
                   <option value={30}>{m.cmx_hp_ask_30s()}</option>
@@ -3467,7 +3467,7 @@
               {/if}
 
               <!-- Alert Warning Card -->
-              <div class="p-5 bg-error/10 border border-error/20 text-error rounded-xl space-y-3">
+              <div class="p-5 bg-error/10 border border-error/20 text-on-error-container rounded-xl space-y-3">
                 <h4 class="text-body-sm font-medium flex items-center gap-2">
                   <Papicon icon="alert-triangle" size={16} />
                   {m.cm_security_warning_title()}

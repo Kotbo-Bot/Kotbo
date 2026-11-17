@@ -496,8 +496,8 @@
                 </Field>
               {:else}
                 <Field label={m.tp_target_channel_label()} hint={m.tp_target_channel_hint()}>
-                  {#snippet children(id)}
-                    <SearchableSelect {id} options={channels} bind:value={button!.targetChannelId} placeholder={m.tp_target_channel_placeholder()} />
+                  {#snippet children(id, describedBy)}
+                    <SearchableSelect {describedBy} {id} options={channels} bind:value={button!.targetChannelId} placeholder={m.tp_target_channel_placeholder()} />
                   {/snippet}
                 </Field>
               {/if}
@@ -602,8 +602,8 @@
                   {/snippet}
                 </Field>
                 <Field label={m.tp_mention_roles_label()} hint={m.tp_mention_roles_hint()} class="sm:col-span-2">
-                  {#snippet children(id)}
-                    <MultiSelect {id} bind:values={button!.mentionRoleIds} options={roles} placeholder={m.tp_roles_placeholder()} />
+                  {#snippet children(id, describedBy)}
+                    <MultiSelect {describedBy} {id} bind:values={button!.mentionRoleIds} options={roles} placeholder={m.tp_roles_placeholder()} />
                   {/snippet}
                 </Field>
               </div>
@@ -636,8 +636,8 @@
                   {/snippet}
                 </Field>
                 <Field label={m.tp_allowed_roles_label()} hint={m.tp_allowed_roles_hint()} class="sm:col-span-3">
-                  {#snippet children(id)}
-                    <MultiSelect {id} bind:values={button!.allowedRoleIds} options={roles} placeholder={m.tp_roles_placeholder()} />
+                  {#snippet children(id, describedBy)}
+                    <MultiSelect {describedBy} {id} bind:values={button!.allowedRoleIds} options={roles} placeholder={m.tp_roles_placeholder()} />
                   {/snippet}
                 </Field>
               </div>
@@ -661,18 +661,18 @@
                 {:else}
                   <div class="grid gap-4 sm:grid-cols-2">
                     <Field label={m.tp_forced_tags_label()} hint={m.tp_forced_tags_hint()}>
-                      {#snippet children(id)}
-                        <MultiSelect {id} bind:values={button!.forumTagIds} options={tagOptions} placeholder={m.tp_tags_placeholder()} />
+                      {#snippet children(id, describedBy)}
+                        <MultiSelect {describedBy} {id} bind:values={button!.forumTagIds} options={tagOptions} placeholder={m.tp_tags_placeholder()} />
                       {/snippet}
                     </Field>
                     <Field label={m.tp_choice_tags_label()} hint={m.tp_choice_tags_hint()}>
-                      {#snippet children(id)}
-                        <MultiSelect {id} bind:values={button!.forumChoiceTagIds} options={tagOptions} placeholder={m.tp_tags_placeholder()} />
+                      {#snippet children(id, describedBy)}
+                        <MultiSelect {describedBy} {id} bind:values={button!.forumChoiceTagIds} options={tagOptions} placeholder={m.tp_tags_placeholder()} />
                       {/snippet}
                     </Field>
                     <Field label={m.tp_resolved_tag_label()} hint={m.tp_resolved_tag_hint()}>
-                      {#snippet children(id)}
-                        <SearchableSelect {id} options={tagOptions} bind:value={button!.resolvedTagId} placeholder={m.tp_resolved_tag_none()} />
+                      {#snippet children(id, describedBy)}
+                        <SearchableSelect {describedBy} {id} options={tagOptions} bind:value={button!.resolvedTagId} placeholder={m.tp_resolved_tag_none()} />
                       {/snippet}
                     </Field>
                   </div>

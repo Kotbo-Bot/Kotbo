@@ -1344,7 +1344,7 @@
                     {#if template.channelId}
                       <span class="px-2 py-1 rounded-lg bg-surface-container-high/40">{getChannelName(template.channelId)}</span>
                     {:else}
-                      <span class="px-2 py-1 rounded-lg bg-warning/10 text-warning">{m.giv_tpl_badge_no_channel()}</span>
+                      <span class="px-2 py-1 rounded-lg bg-warning/10 text-on-warning-container">{m.giv_tpl_badge_no_channel()}</span>
                     {/if}
                     {#if template.ignoreBonuses}
                       <span class="px-2 py-1 rounded-lg bg-surface-container-high/40">{m.giv_tpl_badge_no_bonus()}</span>
@@ -1477,7 +1477,7 @@
               min="0"
               max="3650"
               bind:value={config.minAccountAgeDays}
-              class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+              class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
             />
             <p class="field-hint">{m.giv_cfg_min_account_age_help()}</p>
           </div>
@@ -1490,7 +1490,7 @@
               min="0"
               max="3650"
               bind:value={config.minMemberAgeDays}
-              class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+              class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
             />
             <p class="field-hint">{m.giv_cfg_min_member_age_help()}</p>
           </div>
@@ -1503,7 +1503,7 @@
               min="0"
               max="1000"
               bind:value={config.minLevel}
-              class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+              class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
             />
             <p class="field-hint">{m.giv_cfg_min_level_help()}</p>
           </div>
@@ -1534,7 +1534,7 @@
                   min="2"
                   max="10"
                   bind:value={entry.weight}
-                  class="w-20 bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-sm text-on-surface focus:ring-2 focus:ring-primary/30 transition-all focus:outline-none"
+                  class="w-20 bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-2 text-sm text-on-surface focus:ring-2 focus:ring-primary/30 transition-all focus:outline-none"
                 />
               </label>
               <button
@@ -1591,7 +1591,7 @@
                 min="2"
                 max="10"
                 bind:value={config.clanBonusWeight}
-                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
               />
               <p class="field-hint">{m.giv_cfg_clan_bonus_weight_help()}</p>
             </div>
@@ -1671,12 +1671,12 @@
           </div>
           <div>
             <label for="giveaway-thumbnail" class="field-label">{m.giv_cfg_thumbnail_label()}</label>
-            <input id="giveaway-thumbnail" type="url" bind:value={config.thumbnailUrl} placeholder="https://" class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none" />
+            <input id="giveaway-thumbnail" type="url" bind:value={config.thumbnailUrl} placeholder="https://" class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none" />
             <p class="field-hint">{m.giv_cfg_thumbnail_help()}</p>
           </div>
           <div>
             <label for="giveaway-image" class="field-label">{m.giv_cfg_image_label()}</label>
-            <input id="giveaway-image" type="url" bind:value={config.imageUrl} placeholder="https://" class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none" />
+            <input id="giveaway-image" type="url" bind:value={config.imageUrl} placeholder="https://" class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none" />
             <p class="field-hint">{m.giv_cfg_image_help()}</p>
           </div>
         </div>
@@ -1691,7 +1691,7 @@
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div>
             <label for="giveaway-button-label" class="field-label">{m.giv_cfg_button_label()}</label>
-            <input id="giveaway-button-label" type="text" maxlength="80" bind:value={config.joinButtonLabel} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none" />
+            <input id="giveaway-button-label" type="text" maxlength="80" bind:value={config.joinButtonLabel} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none" />
             <p class="field-hint">{m.giv_cfg_button_label_help()}</p>
           </div>
           <div>
@@ -1716,7 +1716,7 @@
             <select
               id="giveaway-button-style"
               bind:value={config.joinButtonStyle}
-              class="w-full bg-surface-container-high/45 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm text-on-surface focus:ring-2 focus:ring-primary/30 transition-all focus:outline-none cursor-pointer"
+              class="w-full bg-surface-container-high/45 border border-field-border rounded-lg px-4 py-3 text-sm text-on-surface focus:ring-2 focus:ring-primary/30 transition-all focus:outline-none cursor-pointer"
             >
               {#each buttonStyles as style}
                 <option value={style}>{buttonStyleLabel(style)}</option>
@@ -1858,7 +1858,7 @@
                           if (e.key === 'Enter') { e.preventDefault(); handleRenamePreset(preset); }
                           if (e.key === 'Escape') renamingPresetId = null;
                         }}
-                        class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-1.5 text-sm text-on-surface focus:ring-2 focus:ring-primary/30 transition-all focus:outline-none"
+                        class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-1.5 text-sm text-on-surface focus:ring-2 focus:ring-primary/30 transition-all focus:outline-none"
                       />
                     {:else}
                       <p class="text-sm font-semibold text-on-surface truncate">{preset.name}</p>
@@ -1989,7 +1989,7 @@
                 <span class="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-xl bg-blue-500/10 text-blue-400 border border-blue-500/10">
                   <Papicon icon="Users" size={10} />{m.giv_participants_count({ count: giveaway.participants.length })}
                 </span>
-                <span class="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-xl bg-warning/10 text-warning border border-warning/10">
+                <span class="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-xl bg-warning/10 text-on-warning-container border border-warning/10">
                   <Papicon icon="Crown" size={10} />{m.giv_winners_count({ count: giveaway.winnerCount })}
                 </span>
               </div>
@@ -2155,7 +2155,7 @@
               type="text"
               bind:value={form.name}
               placeholder={defaultTemplateName()}
-              class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+              class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
               required
             />
             <p class="field-hint">{m.giv_tpl_name_help()}</p>
@@ -2170,7 +2170,7 @@
                 formTemplateId = (e.currentTarget as HTMLSelectElement).value;
                 applyTemplateToForm(templates.find((entry) => entry.id === formTemplateId) ?? null);
               }}
-              class="w-full bg-surface-container-high/45 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm text-on-surface focus:ring-2 focus:ring-primary/30 transition-all focus:outline-none cursor-pointer"
+              class="w-full bg-surface-container-high/45 border border-field-border rounded-lg px-4 py-3 text-sm text-on-surface focus:ring-2 focus:ring-primary/30 transition-all focus:outline-none cursor-pointer"
             >
               <option value="">{m.giv_tpl_none()}</option>
               {#each templates as template (template.id)}
@@ -2188,7 +2188,7 @@
             type="text"
             bind:value={form.prize}
             placeholder={m.giv_field_prize_placeholder()}
-            class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+            class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
             required
           />
         </div>
@@ -2199,7 +2199,7 @@
             id="modal-desc"
             bind:value={form.description}
             placeholder={m.giv_field_desc_placeholder()}
-            class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none h-20 resize-none"
+            class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none h-20 resize-none"
           ></textarea>
         </div>
 
@@ -2212,7 +2212,7 @@
               min="1"
               max="20"
               bind:value={form.winnerCount}
-              class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+              class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
               required
             />
           </div>
@@ -2240,7 +2240,7 @@
                 type="datetime-local"
                 bind:value={form.endsAt}
                 aria-label={m.giv_field_end_at_label()}
-                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
                 required
               />
               {#if durationIsValid}
@@ -2256,13 +2256,13 @@
                   min="1"
                   bind:value={form.durationValue}
                   aria-label={m.giv_field_duration_label()}
-                  class="w-2/3 bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+                  class="w-2/3 bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
                   required
                 />
                 <select
                   bind:value={form.durationUnit}
                   aria-label={m.giv_field_duration_label()}
-                  class="w-1/3 bg-surface-container-high/45 border border-outline-variant/10 rounded-lg px-3 py-3 text-sm text-on-surface focus:ring-2 focus:ring-primary/30 transition-all focus:outline-none cursor-pointer"
+                  class="w-1/3 bg-surface-container-high/45 border border-field-border rounded-lg px-3 py-3 text-sm text-on-surface focus:ring-2 focus:ring-primary/30 transition-all focus:outline-none cursor-pointer"
                 >
                   <option value="minutes">{m.giv_unit_minutes()}</option>
                   <option value="hours">{m.giv_unit_hours()}</option>
@@ -2358,11 +2358,11 @@
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div>
                     <label for="modal-xp" class="field-label">{m.giv_tpl_xp_label()}</label>
-                    <input id="modal-xp" type="number" min="0" bind:value={form.rpgXp} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none" />
+                    <input id="modal-xp" type="number" min="0" bind:value={form.rpgXp} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none" />
                   </div>
                   <div>
                     <label for="modal-coins" class="field-label">{m.giv_tpl_coins_label()}</label>
-                    <input id="modal-coins" type="number" min="0" bind:value={form.rpgCoins} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none" />
+                    <input id="modal-coins" type="number" min="0" bind:value={form.rpgCoins} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none" />
                   </div>
                   <div>
                     <label for="modal-item" class="field-label">{m.giv_tpl_item_label()}</label>
@@ -2455,18 +2455,18 @@
                   </div>
                   <div>
                     <label for="modal-style-thumbnail" class="field-label">{m.giv_cfg_thumbnail_label()}</label>
-                    <input id="modal-style-thumbnail" type="url" bind:value={formStyle.thumbnailUrl} placeholder="https://" class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none" />
+                    <input id="modal-style-thumbnail" type="url" bind:value={formStyle.thumbnailUrl} placeholder="https://" class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none" />
                   </div>
                   <div>
                     <label for="modal-style-image" class="field-label">{m.giv_cfg_image_label()}</label>
-                    <input id="modal-style-image" type="url" bind:value={formStyle.imageUrl} placeholder="https://" class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none" />
+                    <input id="modal-style-image" type="url" bind:value={formStyle.imageUrl} placeholder="https://" class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none" />
                   </div>
                 </div>
 
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div>
                     <label for="modal-style-button-label" class="field-label">{m.giv_cfg_button_label()}</label>
-                    <input id="modal-style-button-label" type="text" maxlength="80" bind:value={formStyle.joinButtonLabel} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none" />
+                    <input id="modal-style-button-label" type="text" maxlength="80" bind:value={formStyle.joinButtonLabel} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none" />
                   </div>
                   <div>
                     <span class="field-label">{m.giv_cfg_button_emoji()}</span>
@@ -2489,7 +2489,7 @@
                     <select
                       id="modal-style-button-style"
                       bind:value={formStyle.joinButtonStyle}
-                      class="w-full bg-surface-container-high/45 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm text-on-surface focus:ring-2 focus:ring-primary/30 transition-all focus:outline-none cursor-pointer"
+                      class="w-full bg-surface-container-high/45 border border-field-border rounded-lg px-4 py-3 text-sm text-on-surface focus:ring-2 focus:ring-primary/30 transition-all focus:outline-none cursor-pointer"
                     >
                       {#each buttonStyles as style}
                         <option value={style}>{buttonStyleLabel(style)}</option>
@@ -2566,7 +2566,7 @@
                 configPresetName = configPresets.find((preset) => preset.id === configPresetTargetId)?.name
                   ?? defaultPresetName();
               }}
-              class="w-full bg-surface-container-high/45 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm text-on-surface focus:ring-2 focus:ring-primary/30 transition-all focus:outline-none cursor-pointer"
+              class="w-full bg-surface-container-high/45 border border-field-border rounded-lg px-4 py-3 text-sm text-on-surface focus:ring-2 focus:ring-primary/30 transition-all focus:outline-none cursor-pointer"
             >
               <option value="">{m.giv_cfg_preset_target_new()}</option>
               {#each configPresets as preset (preset.id)}
@@ -2583,7 +2583,7 @@
             type="text"
             bind:value={configPresetName}
             placeholder={defaultPresetName()}
-            class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm text-on-surface focus:ring-2 focus:ring-primary/30 transition-all focus:outline-none"
+            class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm text-on-surface focus:ring-2 focus:ring-primary/30 transition-all focus:outline-none"
           />
         </div>
 

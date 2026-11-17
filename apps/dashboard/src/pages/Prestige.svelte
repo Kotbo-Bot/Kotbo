@@ -1056,9 +1056,9 @@
   }
 
   function statusClass(status: string): string {
-    if (status === 'RUNNING') return 'bg-success/10 text-success';
+    if (status === 'RUNNING') return 'bg-success/10 text-on-success-container';
     if (status === 'SCHEDULED') return 'bg-primary/10 text-primary';
-    if (status === 'CANCELLED') return 'bg-error/10 text-error';
+    if (status === 'CANCELLED') return 'bg-error/10 text-on-error-container';
     return 'bg-surface-container-high/40 text-on-surface-variant';
   }
 
@@ -1235,8 +1235,8 @@
       <div class="space-y-8 animate-in fade-in duration-300">
         <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
           <MetricCard label={m.prg_stat_ranked()} value={stats?.rankedMembers ?? 0} icon="users" />
-          <MetricCard label={m.prg_stat_streaks()} value={stats?.activeStreaks ?? 0} icon="activity" toneClass="bg-warning/10 text-warning" />
-          <MetricCard label={m.prg_stat_total_rp()} value={(stats?.totalRp ?? 0).toLocaleString()} icon="chart" toneClass="bg-success/10 text-success" />
+          <MetricCard label={m.prg_stat_streaks()} value={stats?.activeStreaks ?? 0} icon="activity" toneClass="bg-warning/10 text-on-warning-container" />
+          <MetricCard label={m.prg_stat_total_rp()} value={(stats?.totalRp ?? 0).toLocaleString()} icon="chart" toneClass="bg-success/10 text-on-success-container" />
           <MetricCard label={m.prg_stat_best_streak()} value={stats?.bestStreak ?? 0} icon="crown" toneClass="bg-pink-500/10 text-pink-500" />
         </div>
 
@@ -1653,7 +1653,7 @@
             </div>
 
             {#if ladderDirty}
-              <div class="p-3 bg-warning/10 border border-warning/20 rounded-lg text-2xs text-warning leading-relaxed flex items-start gap-2">
+              <div class="p-3 bg-warning/10 border border-warning/20 rounded-lg text-2xs text-on-warning-container leading-relaxed flex items-start gap-2">
                 <Papicon icon="AlertTriangle" size={13} class="shrink-0 mt-0.5" />
                 <div class="min-w-0 flex-1">
                   {#if impact && impact.changed > 0}
@@ -1723,7 +1723,7 @@
                   type="button"
                   onclick={handleDeleteRoles}
                   disabled={roleAction.state.loading || linkedRoleCount === 0}
-                  class="shrink-0 px-5 py-2.5 bg-error/10 text-error text-xs font-bold rounded-lg hover:bg-error/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  class="shrink-0 px-5 py-2.5 bg-error/10 text-on-error-container text-xs font-bold rounded-lg hover:bg-error/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                 >
                   <Papicon icon="Trash" size={15} />
                   {m.prg_roles_delete_action()}
@@ -1740,7 +1740,7 @@
                     <span class="text-2xs font-semibold text-on-surface-variant tabular-nums">
                       {m.prg_roles_sync_progress({ done: roleSync.done.toLocaleString(), total: roleSync.pending.toLocaleString() })}
                     </span>
-                    <button type="button" onclick={stopRoleSync} class="px-4 py-2 bg-error/10 text-error font-medium text-xs rounded-lg hover:bg-error/20 transition-all">
+                    <button type="button" onclick={stopRoleSync} class="px-4 py-2 bg-error/10 text-on-error-container font-medium text-xs rounded-lg hover:bg-error/20 transition-all">
                       {m.prg_roles_sync_stop()}
                     </button>
                   </div>
@@ -1779,7 +1779,7 @@
                       {/if}
                     </p>
                   </div>
-                  <select
+                  <select aria-label={m.prg_tier_role({ name: tier.name })}
                     value={missingRole ? '' : (linkedRoleId ?? '')}
                     onchange={(e) => bindRole(tier.key, (e.currentTarget as HTMLSelectElement).value)}
                     class="prestige-input mt-0! max-w-[45%]"
@@ -1949,7 +1949,7 @@
                 {m.prg_btn_preview_decay()}
               </button>
               {#if canManageSettings}
-                <button class="px-3 py-1.5 rounded-lg bg-error/10 text-error text-xs font-bold" onclick={handleRunDecay}>
+                <button class="px-3 py-1.5 rounded-lg bg-error/10 text-on-error-container text-xs font-bold" onclick={handleRunDecay}>
                   {m.prg_btn_run_decay()}
                 </button>
               {/if}
@@ -2229,7 +2229,7 @@
 
           {#if boardView === 'guild'}
             <div class="relative flex-1 min-w-[240px] max-w-sm">
-              <input
+              <input aria-label={m.prg_board_search_placeholder()}
                 type="search"
                 bind:value={boardSearch}
                 placeholder={m.prg_board_search_placeholder()}
@@ -2447,7 +2447,7 @@
                         type="button"
                         onclick={() => handleAdjust(1)}
                         disabled={!adjustDelta || adjustAction.state.loading}
-                        class="px-4 py-2.5 rounded-lg bg-success/10 text-success text-xs font-bold disabled:opacity-40"
+                        class="px-4 py-2.5 rounded-lg bg-success/10 text-on-success-container text-xs font-bold disabled:opacity-40"
                       >
                         {m.prg_member_adjust_add()}
                       </button>
@@ -2455,7 +2455,7 @@
                         type="button"
                         onclick={() => handleAdjust(-1)}
                         disabled={!adjustDelta || adjustAction.state.loading}
-                        class="px-4 py-2.5 rounded-lg bg-error/10 text-error text-xs font-bold disabled:opacity-40"
+                        class="px-4 py-2.5 rounded-lg bg-error/10 text-on-error-container text-xs font-bold disabled:opacity-40"
                       >
                         {m.prg_member_adjust_remove()}
                       </button>
@@ -2518,7 +2518,7 @@
     width: 100%;
     border-radius: 0.5rem;
     background: var(--surface-container, rgba(255, 255, 255, 0.04));
-    border: 1px solid rgb(from var(--outline-variant, #444) r g b / 40%);
+    border: 1px solid var(--field-border-color);
     padding: 0.5rem 0.75rem;
     font-size: 13px;
     color: var(--on-surface, inherit);

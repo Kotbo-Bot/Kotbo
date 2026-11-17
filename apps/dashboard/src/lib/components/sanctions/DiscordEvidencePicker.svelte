@@ -229,7 +229,7 @@
             max="200"
             step="1"
             bind:value={messageLimit}
-            class="min-w-0 flex-1 rounded-lg border border-outline-variant/15 bg-surface-container-lowest px-4 py-3 text-lg font-semibold tabular-nums text-on-surface outline-none transition-colors focus:border-primary/60 focus:ring-2 focus:ring-primary/15"
+            class="min-w-0 flex-1 rounded-lg border border-field-border bg-surface-container-lowest px-4 py-3 text-lg font-semibold tabular-nums text-on-surface outline-none transition-colors focus:border-primary/60 focus:ring-2 focus:ring-primary/15"
           />
           <span class="shrink-0 text-xs font-medium text-on-surface-variant">{m.sev_limit_max()}</span>
         </div>
@@ -247,7 +247,7 @@
       {/if}
 
       {#if messagesError}
-        <div class="rounded-lg border border-error/20 bg-error/10 p-4 text-xs font-semibold text-error" role="alert">
+        <div class="rounded-lg border border-error/20 bg-error/10 p-4 text-xs font-semibold text-on-error-container" role="alert">
           {messagesError}
         </div>
       {/if}
@@ -398,7 +398,7 @@
         </div>
 
         {#if failedChannelCount > 0 || truncatedChannelCount > 0}
-          <div class="border-t border-warning/15 bg-warning/5 px-5 py-2.5 text-2xs font-medium text-warning">
+          <div class="border-t border-warning/15 bg-warning/5 px-5 py-2.5 text-2xs font-medium text-on-warning-container">
             {#if failedChannelCount > 0}{failedChannelCount > 1 ? m.sev_failed_channels_other({ count: failedChannelCount }) : m.sev_failed_channels_one({ count: failedChannelCount })}{/if}
             {#if failedChannelCount > 0 && truncatedChannelCount > 0} · {/if}
             {#if truncatedChannelCount > 0}{truncatedChannelCount > 1 ? m.sev_truncated_other({ count: truncatedChannelCount }) : m.sev_truncated_one({ count: truncatedChannelCount })}{/if}
@@ -439,12 +439,12 @@
   {:else if step === 'done'}
     <div class="flex flex-col gap-4 p-6 sm:p-8">
       {#if generateSummary}
-        <div class="rounded-xl bg-success/10 p-4 text-xs font-semibold text-success">
+        <div class="rounded-xl bg-success/10 p-4 text-xs font-semibold text-on-success-container">
           {generateSummary}
         </div>
       {/if}
       {#each generateErrors as error}
-        <div class="rounded-xl bg-error/10 p-4 text-xs font-semibold text-error">
+        <div class="rounded-xl bg-error/10 p-4 text-xs font-semibold text-on-error-container">
           {error.error}
         </div>
       {/each}

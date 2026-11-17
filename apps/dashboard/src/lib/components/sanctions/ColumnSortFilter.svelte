@@ -138,11 +138,11 @@
       </div>
 
       {#if displaySearch}
-        <input
+        <input aria-label={m.csf_search_ph()}
           type="text"
           bind:value={searchTerm}
           placeholder={m.csf_search_ph()}
-          class="mb-2 w-full rounded-lg border border-outline-variant bg-white px-2.5 py-1.5 text-xs text-on-surface outline-none transition focus:border-primary"
+          class="mb-2 w-full rounded-lg border border-field-border bg-white px-2.5 py-1.5 text-xs text-on-surface outline-none transition focus:border-primary"
         />
       {/if}
 

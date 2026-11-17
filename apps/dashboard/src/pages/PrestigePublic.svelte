@@ -232,7 +232,7 @@
       <section class="clean-card rounded-xl overflow-hidden">
         <div class="p-4 border-b border-slate-200 dark:border-slate-800">
           <div class="relative">
-            <input
+            <input aria-label={m.prestige_public_search_placeholder()}
               type="search"
               bind:value={searchQuery}
               placeholder={m.prestige_public_search_placeholder()}

@@ -182,8 +182,8 @@
   }
 
   const SIGNAL_CLASS = {
-    danger: 'bg-error/10 text-error',
-    warning: 'bg-warning/10 text-warning',
+    danger: 'bg-error/10 text-on-error-container',
+    warning: 'bg-warning/10 text-on-warning-container',
     info: 'bg-surface-container text-on-surface-variant',
   } as const;
 
@@ -251,7 +251,7 @@
           <h2 class="text-xl font-semibold text-on-surface truncate">{displayName}</h2>
           <MemberTag {userId} />
           {#if profile?.isOnServer}
-            <span class="mp-chip bg-success/10 text-success">{m.mp_on_server()}</span>
+            <span class="mp-chip bg-success/10 text-on-success-container">{m.mp_on_server()}</span>
           {:else}
             <span class="mp-chip bg-surface-container text-on-surface-variant">{m.mp_left()}</span>
           {/if}

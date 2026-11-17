@@ -425,14 +425,16 @@
       <button
         onclick={() => { zoom = Math.min(zoom * 1.25, 3); }}
         class="graph-btn pointer-events-auto"
-        title="Zoom +"
+        title={m.d6_gig_zoom_in()}
+        aria-label={m.d6_gig_zoom_in()}
       >
         <Papicon icon="zoom-in" size={14} />
       </button>
       <button
         onclick={() => { zoom = Math.max(zoom / 1.25, 0.3); }}
         class="graph-btn pointer-events-auto"
-        title="Zoom -"
+        title={m.d6_gig_zoom_out()}
+        aria-label={m.d6_gig_zoom_out()}
       >
         <Papicon icon="zoom-out" size={14} />
       </button>
@@ -643,7 +645,7 @@
       <div class="absolute bottom-4 left-4 z-20 w-72 graph-detail-panel animate-fade-in-slide">
         <div class="flex items-center gap-2.5">
           {#if selectedNode.avatar}
-            <img src={selectedNode.avatar} alt="Avatar" class="w-9 h-9 rounded-full detail-avatar" />
+            <img src={selectedNode.avatar} alt="" class="w-9 h-9 rounded-full detail-avatar" />
           {:else}
             <div class="w-9 h-9 rounded-full detail-avatar-fallback flex items-center justify-center text-xs font-bold">
               {selectedNode.label.slice(0, 2).toUpperCase()}

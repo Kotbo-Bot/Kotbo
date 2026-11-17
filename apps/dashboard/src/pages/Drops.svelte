@@ -488,9 +488,9 @@
   }
 
   const STATUS_PILL: Record<'on' | 'off' | 'blocked', string> = {
-    on: 'bg-success/10 text-success border border-success/20',
+    on: 'bg-success/10 text-on-success-container border border-success/20',
     off: 'bg-surface-container-high/60 text-on-surface-variant',
-    blocked: 'bg-warning/10 text-warning border border-warning/20',
+    blocked: 'bg-warning/10 text-on-warning-container border border-warning/20',
   };
 
   const STATUS_LABEL: Record<'on' | 'off' | 'blocked', () => string> = {
@@ -1048,8 +1048,8 @@
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
               <Field id="drop-default-channel" label={m.drop_default_channel_label()} hint={m.drop_default_channel_desc()}>
-                {#snippet children(id)}
-                  <SearchableSelect
+                {#snippet children(id, describedBy)}
+                  <SearchableSelect {describedBy}
                     {id}
                     bind:value={globalSettings.dropChannelId}
                     options={[{ id: '', name: m.drop_option_none() }, ...availableChannels.map(c => ({ id: c.id, name: `#${c.name}` }))]}
@@ -1061,8 +1061,8 @@
 
               <div class="space-y-1.5">
                 <Field id="drop-mention-role" label={m.drop_mention_role_label()} hint={m.drop_mention_role_desc()}>
-                  {#snippet children(id)}
-                    <SearchableSelect
+                  {#snippet children(id, describedBy)}
+                    <SearchableSelect {describedBy}
                       {id}
                       bind:value={globalSettings.dropMentionRoleId}
                       options={[{ id: '', name: m.drop_option_none() }, ...availableRoles.map((r: { id: string; name: string }) => ({ id: r.id, name: `@${r.name}` }))]}
@@ -1241,7 +1241,7 @@
                         <td class="py-2.5 pr-4 text-on-surface-variant/80">{MODE_LABELS[drop.mode]?.() ?? drop.mode}</td>
                         <td class="py-2.5 pr-4 font-bold">
                           {#if drop.jackpot}
-                            <span class="text-2xs font-bold px-2 py-0.5 rounded-full bg-warning/10 text-warning border border-warning/20 mr-1">{m.drop_history_jackpot()}</span>
+                            <span class="text-2xs font-bold px-2 py-0.5 rounded-full bg-warning/10 text-on-warning-container border border-warning/20 mr-1">{m.drop_history_jackpot()}</span>
                           {/if}
                           {drop.amount.toLocaleString(dateLocale())}
                           {#if drop.item}<span class="font-normal"> <EmojiText value={drop.item.emoji} /> {drop.item.name}</span>{/if}
@@ -1469,8 +1469,8 @@
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
               <Field id="drop-channel-{type}" label={m.drop_channel_label()} hint={m.drop_channel_desc()}>
-                {#snippet children(id)}
-                  <SearchableSelect
+                {#snippet children(id, describedBy)}
+                  <SearchableSelect {describedBy}
                     {id}
                     bind:value={configs[type].channelId}
                     options={[{ id: '', name: m.drop_option_default_channel() }, ...availableChannels.map(c => ({ id: c.id, name: `#${c.name}` }))]}

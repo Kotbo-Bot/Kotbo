@@ -168,7 +168,7 @@
       {#each tags as tag (tag)}
         <span class="tp-tag">#{tag}<button type="button" aria-label={m.th_remove_tag({ tag })} onclick={() => saveTags(tags.filter((t) => t !== tag))}><Papicon icon="x" size={10} /></button></span>
       {/each}
-      <input
+      <input aria-label={m.th_add_tag()}
         class="tp-tag-input"
         list={tagListId}
         placeholder={tags.length ? '' : m.th_add_tag()}

@@ -285,7 +285,7 @@
       class="navsheet__pin"
       class:navsheet__pin--on={pinned}
       aria-pressed={pinned}
-      aria-label={pinned ? m.nav_unfavorite() : m.nav_favorite()}
+      aria-label={m.nav_favorite({ name: item.name })}
       onclick={(event) => toggleFavorite(event, item.href)}
     >
       <Papicon icon="star" size={16} class={pinned ? 'fill-current' : ''} />
@@ -339,7 +339,7 @@
     width: 100%;
     height: 2.75rem;
     padding: 0 2.75rem 0 2.5rem;
-    border: 1px solid var(--outline-variant);
+    border: 1px solid var(--field-border-color);
     border-radius: 0.75rem;
     background: var(--surface-container);
     color: var(--on-surface);

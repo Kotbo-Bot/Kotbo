@@ -188,7 +188,7 @@
             class="w-5 h-5 rounded object-cover"
           >
         {:else}
-          <div class="w-5 h-5 rounded bg-primary/10 flex items-center justify-center text-[10px] font-medium text-primary">
+          <div class="w-5 h-5 rounded bg-primary/10 flex items-center justify-center text-[10px] font-medium text-on-primary-container">
             {selectedGuild?.name?.charAt(0) || '?'}
           </div>
         {/if}
@@ -230,14 +230,14 @@
       <button
         onclick={toggleUserMenu}
         class="app-navbar__profile flex items-center gap-2 hover:bg-surface-container p-1 rounded-lg transition-colors group/avatar"
-        aria-label={m.nbx_open_profile()}
+        aria-label={authStore.user?.username ? m.nbx_open_profile_named({ name: authStore.user.username }) : m.nbx_open_profile()}
         aria-expanded={userMenuOpen}
       >
         <div class="w-8 h-8 shrink-0 rounded-md overflow-hidden ring-1 ring-outline-variant">
           {#if !authStore.user}
             <div class="w-full h-full bg-surface-container-high animate-pulse"></div>
           {:else}
-            <img class="w-full h-full object-cover" src={getUserAvatar()} alt="Avatar"/>
+            <img class="w-full h-full object-cover" src={getUserAvatar()} alt=""/>
           {/if}
         </div>
         <div class="hidden sm:flex flex-col items-start">

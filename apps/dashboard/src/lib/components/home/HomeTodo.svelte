@@ -103,8 +103,8 @@
   };
 
   const SEVERITY_CLASS: Record<HomeTask['severity'], { tile: string; badge: string; label: () => string }> = {
-    critical: { tile: 'bg-error/10 text-error', badge: 'bg-error/15 text-error', label: m.home_todo_sev_critical },
-    warning: { tile: 'bg-warning/10 text-warning', badge: 'bg-warning/15 text-warning', label: m.home_todo_sev_warning },
+    critical: { tile: 'bg-error/10 text-on-error-container', badge: 'bg-error/15 text-on-error-container', label: m.home_todo_sev_critical },
+    warning: { tile: 'bg-warning/10 text-on-warning-container', badge: 'bg-warning/15 text-on-warning-container', label: m.home_todo_sev_warning },
     info: { tile: 'bg-primary/10 text-primary', badge: 'bg-surface-container-highest text-on-surface-variant', label: m.home_todo_sev_info },
   };
 
@@ -330,7 +330,7 @@
       </div>
     {:else if tasks.length === 0}
       <div class="flex items-center gap-3 py-2">
-        <span class="w-9 h-9 rounded-lg bg-success/10 text-success flex items-center justify-center shrink-0">
+        <span class="w-9 h-9 rounded-lg bg-success/10 text-on-success-container flex items-center justify-center shrink-0">
           <Papicon icon="check-circle" size={18} />
         </span>
         <div>

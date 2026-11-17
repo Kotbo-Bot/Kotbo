@@ -89,8 +89,8 @@
   };
 
   const SIGNAL_CLASS = {
-    danger: 'bg-error/10 text-error',
-    warning: 'bg-warning/10 text-warning',
+    danger: 'bg-error/10 text-on-error-container',
+    warning: 'bg-warning/10 text-on-warning-container',
     info: 'bg-surface-container text-on-surface-variant',
   } as const;
 </script>

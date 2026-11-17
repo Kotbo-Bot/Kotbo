@@ -604,7 +604,7 @@
     <div class="flex flex-wrap items-center gap-2">
       <button
         onclick={() => (showTemplateModal = true)}
-        class="px-3.5 py-2 rounded-xl text-xs font-semibold bg-warning/15 text-warning border border-warning/30 hover:bg-warning/25 transition-all flex items-center gap-2 shadow-sm"
+        class="px-3.5 py-2 rounded-xl text-xs font-semibold bg-warning/15 text-on-warning-container border border-warning/30 hover:bg-warning/25 transition-all flex items-center gap-2 shadow-sm"
       >
         <Papicon icon="Sparkles" size={14} />
         <span>{m.wf_templates_button()}</span>
@@ -667,11 +667,11 @@
     <!-- Barre de recherche palette -->
     <div class="relative min-w-48">
       <Papicon icon="Search" size={13} class="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant" />
-      <input
+      <input aria-label={m.wf_search_block()}
         type="text"
         bind:value={searchQuery}
         placeholder={m.wf_search_block()}
-        class="w-full pl-8 pr-3 py-1.5 rounded-xl bg-surface-container-highest border border-outline-variant/20 text-xs text-on-surface focus:border-primary/50 focus:outline-none"
+        class="w-full pl-8 pr-3 py-1.5 rounded-xl bg-surface-container-highest border border-field-border text-xs text-on-surface focus:border-primary/50 focus:outline-none"
       />
     </div>
   </div>
@@ -771,7 +771,7 @@
             <h3 class="text-xs font-semibold text-on-surface-variant">{m.wf_edge_selected()}</h3>
             <button
               onclick={deleteSelectedEdge}
-              class="px-2 py-1 rounded-lg text-xs font-semibold text-error bg-error/10 hover:bg-error/20 transition-colors flex items-center gap-1"
+              class="px-2 py-1 rounded-lg text-xs font-semibold text-on-error-container bg-error/10 hover:bg-error/20 transition-colors flex items-center gap-1"
               title={m.wf_edge_delete_title()}
             >
               <Papicon icon="Trash" size={12} />
@@ -811,10 +811,10 @@
                 <div class="space-y-1">
                   {#each (currentConfig('cases') as string[]) ?? [] as caseValue, index}
                     <div class="flex gap-1">
-                      <input
+                      <input aria-label={m.wf_case_value({ n: index + 1 })}
                         value={caseValue}
                         oninput={(e) => updateCase(index, e.currentTarget.value)}
-                        class="flex-1 px-2 py-1 rounded-lg bg-surface-container-highest border border-outline-variant/20 text-2xs text-on-surface"
+                        class="flex-1 px-2 py-1 rounded-lg bg-surface-container-highest border border-field-border text-2xs text-on-surface"
                       />
                       <button onclick={() => removeCase(index)} class="px-1.5 rounded text-error hover:bg-error/10">
                         <Papicon icon="Cross" size={11} />
@@ -842,7 +842,7 @@
                   max={field.max}
                   value={Number(currentConfig(field.key) ?? field.defaultValue ?? 0)}
                   oninput={(e) => updateConfig(field.key, Number(e.currentTarget.value))}
-                  class="w-full px-2 py-1 rounded-lg bg-surface-container-highest border border-outline-variant/20 text-2xs text-on-surface"
+                  class="w-full px-2 py-1 rounded-lg bg-surface-container-highest border border-field-border text-2xs text-on-surface"
                 />
               {:else if field.type === 'channels'}
                 <ChannelFilterField
@@ -859,7 +859,7 @@
                   id="cfg-{field.key}"
                   value={String(currentConfig(field.key) ?? '')}
                   onchange={(e) => updateConfig(field.key, e.currentTarget.value)}
-                  class="w-full px-2 py-1 rounded-lg bg-surface-container-highest border border-outline-variant/20 text-2xs text-on-surface"
+                  class="w-full px-2 py-1 rounded-lg bg-surface-container-highest border border-field-border text-2xs text-on-surface"
                 >
                   <option value="">-</option>
                   {#each (field.type === 'role' ? availableRoles : availableChannels) as option}
@@ -871,7 +871,7 @@
                   id="cfg-{field.key}"
                   value={String(currentConfig(field.key) ?? field.defaultValue ?? '')}
                   onchange={(e) => updateConfig(field.key, e.currentTarget.value)}
-                  class="w-full px-2 py-1 rounded-lg bg-surface-container-highest border border-outline-variant/20 text-2xs text-on-surface"
+                  class="w-full px-2 py-1 rounded-lg bg-surface-container-highest border border-field-border text-2xs text-on-surface"
                 >
                   {#each field.options ?? [] as option}
                     <option value={option.value}>{option.label}</option>
@@ -884,7 +884,7 @@
                   value={String(currentConfig(field.key) ?? '')}
                   oninput={(e) => updateConfig(field.key, e.currentTarget.value)}
                   placeholder={field.placeholder}
-                  class="w-full px-2 py-1 rounded-lg bg-surface-container-highest border border-outline-variant/20 text-2xs text-on-surface"
+                  class="w-full px-2 py-1 rounded-lg bg-surface-container-highest border border-field-border text-2xs text-on-surface"
                 ></textarea>
               {:else}
                 <input
@@ -893,7 +893,7 @@
                   value={String(currentConfig(field.key) ?? '')}
                   oninput={(e) => updateConfig(field.key, e.currentTarget.value)}
                   placeholder={field.placeholder}
-                  class="w-full px-2 py-1 rounded-lg bg-surface-container-highest border border-outline-variant/20 text-2xs text-on-surface"
+                  class="w-full px-2 py-1 rounded-lg bg-surface-container-highest border border-field-border text-2xs text-on-surface"
                 />
               {/if}
             </div>
@@ -925,8 +925,8 @@
             {#each issues as issue}
               <li
                 class="px-2 py-1.5 rounded-lg text-2xs leading-snug {issue.severity === 'error'
-                  ? 'bg-error/10 text-error'
-                  : 'bg-warning/10 text-warning'}"
+                  ? 'bg-error/10 text-on-error-container'
+                  : 'bg-warning/10 text-on-warning-container'}"
               >{issue.message}</li>
             {/each}
           </ul>
@@ -944,7 +944,7 @@
       <!-- Header -->
       <div class="px-5 py-4 border-b border-outline-variant/15 flex items-center justify-between bg-surface-container-highest/40">
         <div class="flex items-center gap-2">
-          <div class="p-2 rounded-xl bg-warning/15 text-warning">
+          <div class="p-2 rounded-xl bg-warning/15 text-on-warning-container">
             <Papicon icon="Sparkles" size={18} />
           </div>
           <div>
@@ -970,7 +970,7 @@
           >
             <div class="flex items-center justify-between gap-2">
               <div class="flex items-center gap-2">
-                <span class="p-2 rounded-lg bg-warning/15 text-warning group-hover:bg-warning/25 transition-colors">
+                <span class="p-2 rounded-lg bg-warning/15 text-on-warning-container group-hover:bg-warning/25 transition-colors">
                   <Papicon icon={template.icon} size={16} />
                 </span>
                 <h4 class="text-xs font-bold text-on-surface group-hover:text-warning transition-colors">{template.name}</h4>

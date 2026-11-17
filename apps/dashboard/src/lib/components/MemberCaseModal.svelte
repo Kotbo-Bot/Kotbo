@@ -684,13 +684,13 @@
   // Icône Papicon + classes de couleur (statiques pour Tailwind) par type de sanction.
   function getSanctionTypeStyle(type: string): { icon: string; tile: string; dot: string } {
     switch (type.toUpperCase()) {
-      case 'WARN': return { icon: 'alert-triangle', tile: 'bg-warning/10 text-warning', dot: 'bg-warning' };
+      case 'WARN': return { icon: 'alert-triangle', tile: 'bg-warning/10 text-on-warning-container', dot: 'bg-warning' };
       case 'TIMEOUT': return { icon: 'clock', tile: 'bg-primary/10 text-primary', dot: 'bg-primary' };
-      case 'KICK': return { icon: 'log-out', tile: 'bg-warning/10 text-warning', dot: 'bg-warning' };
-      case 'TEMP_BAN': return { icon: 'ban', tile: 'bg-error/10 text-error', dot: 'bg-error' };
-      case 'BAN': return { icon: 'gavel', tile: 'bg-error/10 text-error', dot: 'bg-error' };
+      case 'KICK': return { icon: 'log-out', tile: 'bg-warning/10 text-on-warning-container', dot: 'bg-warning' };
+      case 'TEMP_BAN': return { icon: 'ban', tile: 'bg-error/10 text-on-error-container', dot: 'bg-error' };
+      case 'BAN': return { icon: 'gavel', tile: 'bg-error/10 text-on-error-container', dot: 'bg-error' };
       case 'SOFTBAN': return { icon: 'eraser', tile: 'bg-surface-container-high text-on-surface-variant', dot: 'bg-on-surface-variant' };
-      case 'JAIL': return { icon: 'lock', tile: 'bg-warning/10 text-warning', dot: 'bg-warning' };
+      case 'JAIL': return { icon: 'lock', tile: 'bg-warning/10 text-on-warning-container', dot: 'bg-warning' };
       default: return { icon: 'shield', tile: 'bg-surface-container-high text-on-surface-variant', dot: 'bg-on-surface-variant' };
     }
   }

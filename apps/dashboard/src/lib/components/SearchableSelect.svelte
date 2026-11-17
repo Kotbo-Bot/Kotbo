@@ -4,6 +4,8 @@
   import Papicon from './Papicon.svelte';
 
   export let id: string = '';
+  /** Id de l'aide ou de l'erreur du champ (`describedBy` de Field, RGAA 11.2). */
+  export let describedBy: string | undefined = undefined;
   export let value: string | null = null;
   export let options: Array<{ id: string; name: string; color?: string | null; icon?: string }> = [];
   export let placeholder: string = '';
@@ -167,6 +169,7 @@
 
   <input
     {id}
+    aria-describedby={describedBy}
     type="text"
     placeholder={placeholder}
     bind:value={query}
@@ -174,7 +177,7 @@
     on:focus={() => !disabled && (open = true)}
     on:blur={() => setTimeout(() => (open = false), 150)}
     on:keydown={handleKeydown}
-    class="w-full bg-surface-container-high text-on-surface text-sm {adorned ? 'pl-9 pr-4' : 'px-4'} py-2.5 rounded-xl border border-outline-variant/10 outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+    class="w-full bg-surface-container-high text-on-surface text-sm {adorned ? 'pl-9 pr-4' : 'px-4'} py-2.5 rounded-xl border border-field-border outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
     autocomplete="off"
     disabled={disabled}
   />

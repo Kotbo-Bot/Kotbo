@@ -556,7 +556,7 @@
         onClick={openMemberOnClick(entry.authorName)}
       />
       {#if entry.blocked}
-        <span class="text-2xs font-semibold px-2 py-0.5 rounded-full bg-error/10 text-error border border-error/20" title={m.starboard_entry_blocked_title()}>
+        <span class="text-2xs font-semibold px-2 py-0.5 rounded-full bg-error/10 text-on-error-container border border-error/20" title={m.starboard_entry_blocked_title()}>
           {m.starboard_entry_blocked()}
         </span>
       {:else if !entry.onBoard}
@@ -694,9 +694,9 @@
       {:else if activeTab === 'overview'}
         <div class="space-y-6">
           <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-            {@render statTile('Star', 'bg-warning/10 text-warning', String(data.stats.postedRecent), m.starboard_stat_posted({ days: STARBOARD_STATS_DAYS }))}
+            {@render statTile('Star', 'bg-warning/10 text-on-warning-container', String(data.stats.postedRecent), m.starboard_stat_posted({ days: STARBOARD_STATS_DAYS }))}
             {@render statTile('TrendingUp', 'bg-primary/10 text-primary', formatScore(data.stats.avgPeakRecent), m.starboard_stat_avg({ days: STARBOARD_STATS_DAYS }))}
-            {@render statTile('Trophy', 'bg-success/10 text-success', formatScore(data.stats.bestPeakRecent), m.starboard_stat_best({ days: STARBOARD_STATS_DAYS }))}
+            {@render statTile('Trophy', 'bg-success/10 text-on-success-container', formatScore(data.stats.bestPeakRecent), m.starboard_stat_best({ days: STARBOARD_STATS_DAYS }))}
             {@render statTile('Eye', 'bg-secondary/10 text-secondary', String(data.stats.onBoard), m.starboard_stat_on_board())}
           </div>
 
@@ -856,8 +856,8 @@
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div class="md:col-span-2">
                 <Field id="starboard-channel" label={m.starboard_channel_label()} hint={m.starboard_channel_hint()}>
-                  {#snippet children(id)}
-                    <SearchableSelect
+                  {#snippet children(id, describedBy)}
+                    <SearchableSelect {describedBy}
                       {id}
                       bind:value={config.channelId}
                       options={channels}
@@ -920,8 +920,8 @@
                 hint={m.starboard_upvotes_hint()}
                 error={upvotesValid ? undefined : m.starboard_upvotes_required()}
               >
-                {#snippet children(id)}
-                  <EmojiListInput
+                {#snippet children(id, describedBy)}
+                  <EmojiListInput {describedBy}
                     {id}
                     bind:values={config.upvoteEmojis}
                     accentClass="bg-success/10 border-success/25 hover:bg-success/20"
@@ -931,8 +931,8 @@
                 {/snippet}
               </Field>
               <Field id="starboard-downvotes" label={m.starboard_downvotes_label()} hint={m.starboard_downvotes_hint()}>
-                {#snippet children(id)}
-                  <EmojiListInput
+                {#snippet children(id, describedBy)}
+                  <EmojiListInput {describedBy}
                     {id}
                     bind:values={config.downvoteEmojis}
                     accentClass="bg-error/10 border-error/25 hover:bg-error/20"
@@ -991,17 +991,17 @@
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
               <Field id="starboard-watched" label={m.starboard_watched_label()} hint={m.starboard_watched_hint()}>
-                {#snippet children(id)}
-                  <MultiSelect {id} bind:values={config.watchedChannels} options={channels} disabled={!canConfigure} />
+                {#snippet children(id, describedBy)}
+                  <MultiSelect {describedBy} {id} bind:values={config.watchedChannels} options={channels} disabled={!canConfigure} />
                 {/snippet}
               </Field>
               <Field id="starboard-ignored" label={m.starboard_ignored_label()} hint={m.starboard_ignored_hint()}>
-                {#snippet children(id)}
-                  <MultiSelect
+                {#snippet children(id, describedBy)}
+                  <MultiSelect {describedBy}
                     {id}
                     bind:values={config.ignoredChannels}
                     options={channels}
-                    accentClass="bg-error/20 text-error border-error/40"
+                    accentClass="bg-error/20 text-on-error-container border-error/40"
                     disabled={!canConfigure}
                   />
                 {/snippet}
@@ -1250,8 +1250,8 @@
             </div>
 
             <Field id="starboard-autoreact-channels" label={m.starboard_autoreact_channels_label()} hint={m.starboard_autoreact_channels_hint()}>
-              {#snippet children(id)}
-                <MultiSelect {id} bind:values={config.autoReactChannels} options={channels} disabled={!canConfigure} />
+              {#snippet children(id, describedBy)}
+                <MultiSelect {describedBy} {id} bind:values={config.autoReactChannels} options={channels} disabled={!canConfigure} />
               {/snippet}
             </Field>
           </section>

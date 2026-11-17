@@ -397,8 +397,8 @@
       <div class="space-y-4">
         <p class="text-sm text-on-surface-variant">{texts.rule ?? m.fun_game_score_rule()}</p>
         <Field label={m.fun_channel_label()} hint={m.fun_game_channel_hint()}>
-          {#snippet children(id)}
-            <SearchableSelect {id} bind:value={config[game.channelKey]} options={channelOptions} placeholder={m.fun_no_channel()} />
+          {#snippet children(id, describedBy)}
+            <SearchableSelect {describedBy} {id} bind:value={config[game.channelKey]} options={channelOptions} placeholder={m.fun_no_channel()} />
           {/snippet}
         </Field>
       </div>
@@ -430,7 +430,7 @@
         <div class="space-y-6">
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {@render statTile('Gamepad2', 'bg-primary/10 text-primary', `${running.length} / ${FUN_GAMES.length}`, m.fun_active_summary())}
-            {@render statTile('Binary', 'bg-warning/10 text-warning', savedConfig.funCountingChannelId ? String(gameState.countingCurrent) : '-', m.fun_stat_counting())}
+            {@render statTile('Binary', 'bg-warning/10 text-on-warning-container', savedConfig.funCountingChannelId ? String(gameState.countingCurrent) : '-', m.fun_stat_counting())}
             {@render statTile('Shield', 'bg-secondary/10 text-secondary', savedConfig.funPunitiveMode ? m.fun_status_on() : m.fun_status_off(), m.fun_punitive_title())}
           </div>
 
@@ -503,10 +503,10 @@
                     <span class="font-semibold text-on-surface">#{c.number}</span>
                     <span>{formatDate(c.createdAt)}</span>
                     {#if c.revealedAt}
-                      <span class="rounded-full bg-warning/10 px-2 py-0.5 font-semibold text-warning">{m.fun_confession_revealed()}</span>
+                      <span class="rounded-full bg-warning/10 px-2 py-0.5 font-semibold text-on-warning-container">{m.fun_confession_revealed()}</span>
                     {/if}
                     {#if c.deletedAt}
-                      <span class="rounded-full bg-error/10 px-2 py-0.5 font-semibold text-error">{m.fun_confession_deleted()}</span>
+                      <span class="rounded-full bg-error/10 px-2 py-0.5 font-semibold text-on-error-container">{m.fun_confession_deleted()}</span>
                     {/if}
                   </div>
                   <p class="whitespace-pre-wrap break-words text-sm text-on-surface {c.deletedAt ? 'line-through' : ''}">{c.content}</p>

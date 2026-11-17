@@ -21,10 +21,10 @@ export interface FunGame {
 }
 
 export const FUN_GAMES: readonly FunGame[] = [
-  { id: 'counting', channelKey: 'funCountingChannelId', icon: 'Binary', tone: 'bg-warning/10 text-warning' },
-  { id: 'guess', channelKey: 'funGuessNumberChannelId', icon: 'Gamepad2', tone: 'bg-success/10 text-success' },
+  { id: 'counting', channelKey: 'funCountingChannelId', icon: 'Binary', tone: 'bg-warning/10 text-on-warning-container' },
+  { id: 'guess', channelKey: 'funGuessNumberChannelId', icon: 'Gamepad2', tone: 'bg-success/10 text-on-success-container' },
   { id: 'wordchain', channelKey: 'funWordChainChannelId', icon: 'Link', tone: 'bg-sky-500/10 text-sky-500' },
-  { id: 'emojiriddle', channelKey: 'funEmojiRiddleChannelId', icon: 'Puzzle', tone: 'bg-error/10 text-error' },
+  { id: 'emojiriddle', channelKey: 'funEmojiRiddleChannelId', icon: 'Puzzle', tone: 'bg-error/10 text-on-error-container' },
   { id: 'oneword', channelKey: 'funOneWordStoryChannelId', icon: 'BookOpen', tone: 'bg-purple-500/10 text-purple-500' },
   { id: 'neversay', channelKey: 'funNeverSayChannelId', icon: 'MessageSquareOff', tone: 'bg-orange-500/10 text-orange-500' },
   { id: 'emojionly', channelKey: 'funEmojiOnlyChannelId', icon: 'Sticker', tone: 'bg-teal-500/10 text-teal-500' },

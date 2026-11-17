@@ -130,7 +130,7 @@
       <select
         id="timezone"
         bind:value={timezone}
-        class="flex-1 min-w-0 rounded-xl border border-outline-variant/40 bg-surface-container-low/40 px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:border-primary/50"
+        class="flex-1 min-w-0 rounded-xl border border-field-border bg-surface-container-low/40 px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:border-primary/50"
       >
         {#each COMMON_TIMEZONES as zone (zone.value)}
           <option value={zone.value}>{zone.label}</option>

@@ -190,7 +190,7 @@
                 id="node-cfg-{id}-{field.key}"
                 value={String(data.config?.[field.key] ?? '')}
                 onchange={(e) => data.onUpdateConfig?.(field.key, e.currentTarget.value)}
-                class="nodrag w-full px-2 py-1 rounded bg-surface-container border border-outline-variant/30 text-xs text-on-surface focus:ring-1 focus:ring-primary/50 outline-none cursor-pointer"
+                class="nodrag w-full px-2 py-1 rounded bg-surface-container border border-field-border text-xs text-on-surface focus:ring-1 focus:ring-primary/50 outline-none cursor-pointer"
               >
                 <option value="">{m.wfn_pick_role()}</option>
                 {#each (data.availableRoles ?? []) as role}
@@ -217,7 +217,7 @@
                 id="node-cfg-{id}-{field.key}"
                 value={String(data.config?.[field.key] ?? '')}
                 onchange={(e) => data.onUpdateConfig?.(field.key, e.currentTarget.value)}
-                class="nodrag w-full px-2 py-1 rounded bg-surface-container border border-outline-variant/30 text-xs text-on-surface focus:ring-1 focus:ring-primary/50 outline-none cursor-pointer"
+                class="nodrag w-full px-2 py-1 rounded bg-surface-container border border-field-border text-xs text-on-surface focus:ring-1 focus:ring-primary/50 outline-none cursor-pointer"
               >
                 <option value="">{m.wfn_pick_channel()}</option>
                 {#each (data.availableChannels ?? []) as channel}
@@ -230,7 +230,7 @@
                 id="node-cfg-{id}-{field.key}"
                 value={String(data.config?.[field.key] ?? field.defaultValue ?? '')}
                 onchange={(e) => data.onUpdateConfig?.(field.key, e.currentTarget.value)}
-                class="nodrag w-full px-2 py-1 rounded bg-surface-container border border-outline-variant/30 text-xs text-on-surface focus:ring-1 focus:ring-primary/50 outline-none cursor-pointer"
+                class="nodrag w-full px-2 py-1 rounded bg-surface-container border border-field-border text-xs text-on-surface focus:ring-1 focus:ring-primary/50 outline-none cursor-pointer"
               >
                 {#each field.options ?? [] as option}
                   <option value={option.value}>{option.label}</option>
@@ -245,7 +245,7 @@
                 max={field.max}
                 value={Number(data.config?.[field.key] ?? field.defaultValue ?? 0)}
                 oninput={(e) => data.onUpdateConfig?.(field.key, Number(e.currentTarget.value))}
-                class="nodrag w-full px-2 py-1 rounded bg-surface-container border border-outline-variant/30 text-xs text-on-surface focus:ring-1 focus:ring-primary/50 outline-none"
+                class="nodrag w-full px-2 py-1 rounded bg-surface-container border border-field-border text-xs text-on-surface focus:ring-1 focus:ring-primary/50 outline-none"
               />
 
             {:else if field.type === 'boolean'}
@@ -267,7 +267,7 @@
                 value={String(data.config?.[field.key] ?? '')}
                 oninput={(e) => data.onUpdateConfig?.(field.key, e.currentTarget.value)}
                 placeholder={field.placeholder || m.wfn_text_ph()}
-                class="nodrag w-full px-2 py-1 rounded bg-surface-container border border-outline-variant/30 text-xs text-on-surface focus:ring-1 focus:ring-primary/50 outline-none resize-none"
+                class="nodrag w-full px-2 py-1 rounded bg-surface-container border border-field-border text-xs text-on-surface focus:ring-1 focus:ring-primary/50 outline-none resize-none"
               ></textarea>
 
             {:else if field.type === 'text'}
@@ -277,7 +277,7 @@
                 value={String(data.config?.[field.key] ?? '')}
                 oninput={(e) => data.onUpdateConfig?.(field.key, e.currentTarget.value)}
                 placeholder={field.placeholder || m.wfn_text_ph()}
-                class="nodrag w-full px-2 py-1 rounded bg-surface-container border border-outline-variant/30 text-xs text-on-surface focus:ring-1 focus:ring-primary/50 outline-none"
+                class="nodrag w-full px-2 py-1 rounded bg-surface-container border border-field-border text-xs text-on-surface focus:ring-1 focus:ring-primary/50 outline-none"
               />
             {/if}
           </div>
@@ -304,7 +304,7 @@
                     data.onUpdateConfig?.(inputPort.id, e.currentTarget.value);
                     data.onUpdateConfig?.('channelId', e.currentTarget.value);
                   }}
-                  class="nodrag w-full px-2 py-1 rounded bg-surface-container border border-outline-variant/30 text-xs text-on-surface focus:ring-1 focus:ring-primary/50 outline-none cursor-pointer"
+                  class="nodrag w-full px-2 py-1 rounded bg-surface-container border border-field-border text-xs text-on-surface focus:ring-1 focus:ring-primary/50 outline-none cursor-pointer"
                 >
                   <option value="">{m.wfn_pick_channel()}</option>
                   {#each (data.availableChannels ?? []) as channel}
@@ -320,7 +320,7 @@
                     data.onUpdateConfig?.(inputPort.id, e.currentTarget.value);
                     data.onUpdateConfig?.('roleId', e.currentTarget.value);
                   }}
-                  class="nodrag w-full px-2 py-1 rounded bg-surface-container border border-outline-variant/30 text-xs text-on-surface focus:ring-1 focus:ring-primary/50 outline-none cursor-pointer"
+                  class="nodrag w-full px-2 py-1 rounded bg-surface-container border border-field-border text-xs text-on-surface focus:ring-1 focus:ring-primary/50 outline-none cursor-pointer"
                 >
                   <option value="">{m.wfn_pick_role()}</option>
                   {#each (data.availableRoles ?? []) as role}
@@ -336,7 +336,7 @@
                     value={String(data.config?.[inputPort.id] ?? '')}
                     oninput={(e) => data.onUpdateConfig?.(inputPort.id, e.currentTarget.value)}
                     placeholder={m.wfn_write_ph()}
-                    class="nodrag w-full px-2 py-1 rounded bg-surface-container border border-outline-variant/30 text-xs text-on-surface focus:ring-1 focus:ring-primary/50 outline-none"
+                    class="nodrag w-full px-2 py-1 rounded bg-surface-container border border-field-border text-xs text-on-surface focus:ring-1 focus:ring-primary/50 outline-none"
                   />
                   <button
                     type="button"
@@ -355,7 +355,7 @@
                   value={String(data.config?.[inputPort.id] ?? '')}
                   oninput={(e) => data.onUpdateConfig?.(inputPort.id, e.currentTarget.value)}
                   placeholder="Valeur..."
-                  class="nodrag w-full px-2 py-1 rounded bg-surface-container border border-outline-variant/30 text-xs text-on-surface focus:ring-1 focus:ring-primary/50 outline-none"
+                  class="nodrag w-full px-2 py-1 rounded bg-surface-container border border-field-border text-xs text-on-surface focus:ring-1 focus:ring-primary/50 outline-none"
                 />
 
               {:else if inputPort.type === 'Number'}
@@ -364,7 +364,7 @@
                   type="number"
                   value={Number(data.config?.[inputPort.id] ?? 0)}
                   oninput={(e) => data.onUpdateConfig?.(inputPort.id, Number(e.currentTarget.value))}
-                  class="nodrag w-full px-2 py-1 rounded bg-surface-container border border-outline-variant/30 text-xs text-on-surface focus:ring-1 focus:ring-primary/50 outline-none"
+                  class="nodrag w-full px-2 py-1 rounded bg-surface-container border border-field-border text-xs text-on-surface focus:ring-1 focus:ring-primary/50 outline-none"
                 />
               {/if}
             </div>

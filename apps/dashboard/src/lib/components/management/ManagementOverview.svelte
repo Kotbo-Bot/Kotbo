@@ -41,10 +41,10 @@
   // par interpolation n'existerait pas dans la feuille finale.
   const healthTone = $derived(
     healthScore >= 80
-      ? { icon: 'bg-success/10 text-success', value: 'text-success' }
+      ? { icon: 'bg-success/10 text-on-success-container', value: 'text-success' }
       : healthScore >= 50
-        ? { icon: 'bg-warning/10 text-warning', value: 'text-warning' }
-        : { icon: 'bg-error/10 text-error', value: 'text-error' }
+        ? { icon: 'bg-warning/10 text-on-warning-container', value: 'text-warning' }
+        : { icon: 'bg-error/10 text-on-error-container', value: 'text-error' }
   );
 
   const groupedFeatures = $derived(groupByCategory(features));
@@ -77,7 +77,7 @@
       class="w-full flex items-start gap-4 p-5 rounded-xl bg-warning/5 border border-warning/20 text-left hover:bg-warning/10 transition-colors"
       onclick={() => onNavigate('salons')}
     >
-      <span class="bg-warning/10 p-2 rounded-lg text-warning shrink-0"><Papicon icon="Warning" size={18} /></span>
+      <span class="bg-warning/10 p-2 rounded-lg text-on-warning-container shrink-0"><Papicon icon="Warning" size={18} /></span>
       <span>
         <span class="block text-xs font-semibold text-warning">{m.mgmt_incomplete_config()}</span>
         <span class="block text-xs text-on-surface-variant mt-1">

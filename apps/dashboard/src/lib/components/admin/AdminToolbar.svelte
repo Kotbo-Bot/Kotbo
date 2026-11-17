@@ -51,7 +51,7 @@
         size={15}
         class="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant pointer-events-none"
       />
-      <input
+      <input aria-label={placeholder}
         bind:this={input}
         bind:value={search}
         type="search"

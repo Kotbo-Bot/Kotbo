@@ -1767,13 +1767,13 @@ import EmojiText from '../lib/components/EmojiText.svelte';
           <div class="grid grid-cols-2 gap-4">
             <div class="space-y-1.5">
               <label for="curName" class="text-xs font-semibold text-on-surface-variant">{m.eco_currency_name()}</label>
-              <input id="curName" type="text" bind:value={config.currencyName} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
+              <input id="curName" type="text" bind:value={config.currencyName} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
             </div>
 
             <div class="space-y-1.5">
               <label for="curEmoji" class="text-xs font-semibold text-on-surface-variant">{m.eco_currency_emoji()}</label>
               <div class="flex gap-2">
-                <input id="curEmoji" type="text" bind:value={config.currencyEmoji} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
+                <input id="curEmoji" type="text" bind:value={config.currencyEmoji} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
                 <EmojiPicker bind:value={config.currencyEmoji} disabled={!canManageSettings} />
               </div>
             </div>
@@ -1847,32 +1847,32 @@ import EmojiText from '../lib/components/EmojiText.svelte';
 
             <div class="space-y-1.5">
               <label for="dailyMin" class="text-xs font-semibold text-on-surface-variant">{m.eco_daily_min()}</label>
-              <input id="dailyMin" type="number" bind:value={config.dailyRewardMin} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
+              <input id="dailyMin" type="number" bind:value={config.dailyRewardMin} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
             </div>
 
             <div class="space-y-1.5">
               <label for="dailyMax" class="text-xs font-semibold text-on-surface-variant">{m.eco_daily_max()}</label>
-              <input id="dailyMax" type="number" bind:value={config.dailyRewardMax} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
+              <input id="dailyMax" type="number" bind:value={config.dailyRewardMax} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
             </div>
 
             <div class="space-y-1.5">
               <label for="dailyCd" class="text-xs font-semibold text-on-surface-variant">{m.eco_daily_cd()}</label>
-              <input id="dailyCd" type="number" bind:value={config.dailyCooldownHour} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
+              <input id="dailyCd" type="number" bind:value={config.dailyCooldownHour} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
             </div>
 
             <div class="space-y-1.5">
               <label for="advCd" class="text-xs font-semibold text-on-surface-variant">{m.eco_adv_cd()}</label>
-              <input id="advCd" type="number" bind:value={config.adventureCooldownMin} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
+              <input id="advCd" type="number" bind:value={config.adventureCooldownMin} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
             </div>
 
             <div class="space-y-1.5">
               <label for="maxEnergy" class="text-xs font-semibold text-on-surface-variant">{m.eco_max_energy()}</label>
-              <input id="maxEnergy" type="number" bind:value={config.maxEnergy} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
+              <input id="maxEnergy" type="number" bind:value={config.maxEnergy} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
             </div>
 
             <div class="space-y-1.5">
               <label for="energyRecovery" class="text-xs font-semibold text-on-surface-variant">{m.eco_energy_recovery()}</label>
-              <input id="energyRecovery" type="number" bind:value={config.energyRecoveryPerHour} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
+              <input id="energyRecovery" type="number" bind:value={config.energyRecoveryPerHour} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
             </div>
           </div>
         </div>
@@ -1925,30 +1925,30 @@ import EmojiText from '../lib/components/EmojiText.svelte';
           <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div class="space-y-1.5">
               <label for="maxBet" class="text-xs font-semibold text-on-surface-variant">{m.eco_max_bet()}</label>
-              <input id="maxBet" type="number" min="1" bind:value={config.maxBetAmount} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
+              <input id="maxBet" type="number" min="1" bind:value={config.maxBetAmount} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
               <p class="text-2xs text-on-surface-variant/40">{m.eco_max_bet_hint()}</p>
             </div>
 
             <div class="space-y-1.5">
               <label for="maxDailyBets" class="text-xs font-semibold text-on-surface-variant">{m.eco_max_daily_bets()}</label>
-              <input id="maxDailyBets" type="number" min="0" bind:value={config.maxDailyBets} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
+              <input id="maxDailyBets" type="number" min="0" bind:value={config.maxDailyBets} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
               <p class="text-2xs text-on-surface-variant/40">{m.eco_max_daily_bets_hint()}</p>
             </div>
 
             <div class="space-y-1.5">
               <label for="maxTransfer" class="text-xs font-semibold text-on-surface-variant">{m.eco_max_transfer()}</label>
-              <input id="maxTransfer" type="number" min="1" bind:value={config.maxTransferAmount} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
+              <input id="maxTransfer" type="number" min="1" bind:value={config.maxTransferAmount} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
               <p class="text-2xs text-on-surface-variant/40">{m.eco_max_transfer_hint()}</p>
             </div>
 
             <div class="space-y-1.5">
               <label for="transferCd" class="text-xs font-semibold text-on-surface-variant">{m.eco_transfer_cd()}</label>
-              <input id="transferCd" type="number" min="0" bind:value={config.transferCooldownMin} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
+              <input id="transferCd" type="number" min="0" bind:value={config.transferCooldownMin} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
             </div>
 
             <div class="space-y-1.5">
               <label for="marketTax" class="text-xs font-semibold text-on-surface-variant">{m.eco_market_tax()}</label>
-              <input id="marketTax" type="number" min="0" max="50" bind:value={config.marketplaceTaxPercent} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
+              <input id="marketTax" type="number" min="0" max="50" bind:value={config.marketplaceTaxPercent} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
               <p class="text-2xs text-on-surface-variant/40">{m.eco_market_tax_hint()}</p>
             </div>
           </div>
@@ -1963,25 +1963,25 @@ import EmojiText from '../lib/components/EmojiText.svelte';
           <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div class="space-y-1.5">
               <label for="fightCd" class="text-xs font-semibold text-on-surface-variant">{m.eco_fight_cd()}</label>
-              <input id="fightCd" type="number" min="0" max="3600" bind:value={config.fightCooldownSec} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
+              <input id="fightCd" type="number" min="0" max="3600" bind:value={config.fightCooldownSec} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
               <p class="text-2xs text-on-surface-variant/40">{m.eco_fight_cd_hint()}</p>
             </div>
 
             <div class="space-y-1.5">
               <label for="bossCd" class="text-xs font-semibold text-on-surface-variant">{m.eco_boss_cd()}</label>
-              <input id="bossCd" type="number" min="0" max="1440" bind:value={config.bossCooldownMin} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
+              <input id="bossCd" type="number" min="0" max="1440" bind:value={config.bossCooldownMin} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
               <p class="text-2xs text-on-surface-variant/40">{m.eco_boss_cd_hint()}</p>
             </div>
 
             <div class="space-y-1.5">
               <label for="huntEnergy" class="text-xs font-semibold text-on-surface-variant">{m.eco_hunt_energy()}</label>
-              <input id="huntEnergy" type="number" min="100" max="500" bind:value={config.huntEnergyPercent} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
+              <input id="huntEnergy" type="number" min="100" max="500" bind:value={config.huntEnergyPercent} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
               <p class="text-2xs text-on-surface-variant/40">{m.eco_hunt_energy_hint()}</p>
             </div>
 
             <div class="space-y-1.5">
               <label for="huntCd" class="text-xs font-semibold text-on-surface-variant">{m.eco_hunt_cd()}</label>
-              <input id="huntCd" type="number" min="100" max="1000" bind:value={config.huntCooldownPercent} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
+              <input id="huntCd" type="number" min="100" max="1000" bind:value={config.huntCooldownPercent} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
               <p class="text-2xs text-on-surface-variant/40">{m.eco_hunt_cd_hint()}</p>
             </div>
           </div>
@@ -1994,7 +1994,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
             <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
               <div class="space-y-1.5">
                 <label for="firstKillAnnounce" class="text-xs font-semibold text-on-surface-variant">{m.eco_bm_announce_mode()}</label>
-                <select id="firstKillAnnounce" bind:value={config.firstKillAnnounce} disabled={!canManageSettings} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50">
+                <select id="firstKillAnnounce" bind:value={config.firstKillAnnounce} disabled={!canManageSettings} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50">
                   <option value="NONE">{m.eco_first_kill_announce_none()}</option>
                   <option value="BOSSES">{m.eco_first_kill_announce_bosses()}</option>
                   <option value="ALL">{m.eco_first_kill_announce_all()}</option>
@@ -2048,7 +2048,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                 <button
                   type="button"
                   onclick={() => triggerReset('profiles')}
-                  class="px-5 py-4 bg-error/10 hover:bg-error/20 text-error text-xs font-bold rounded-lg transition-all border border-error/20 flex flex-col items-center justify-center text-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  class="px-5 py-4 bg-error/10 hover:bg-error/20 text-on-error-container text-xs font-bold rounded-lg transition-all border border-error/20 flex flex-col items-center justify-center text-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <span class="font-semibold flex items-center gap-1.5"><Papicon icon="users" size={14} /> {m.eco_reset_players_btn()}</span>
                   <span class="text-2xs text-on-surface-variant font-normal">{m.eco_reset_players_desc()}</span>
@@ -2057,7 +2057,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                 <button
                   type="button"
                   onclick={() => triggerReset('items')}
-                  class="px-5 py-4 bg-error/10 hover:bg-error/20 text-error text-xs font-bold rounded-lg transition-all border border-error/20 flex flex-col items-center justify-center text-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  class="px-5 py-4 bg-error/10 hover:bg-error/20 text-on-error-container text-xs font-bold rounded-lg transition-all border border-error/20 flex flex-col items-center justify-center text-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <span class="font-semibold flex items-center gap-1.5"><Papicon icon="package" size={14} /> {m.eco_reset_items_btn()}</span>
                   <span class="text-2xs text-on-surface-variant font-normal">{m.eco_reset_items_desc()}</span>
@@ -2066,7 +2066,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                 <button
                   type="button"
                   onclick={() => triggerReset('bestiary')}
-                  class="px-5 py-4 bg-error/10 hover:bg-error/20 text-error text-xs font-bold rounded-lg transition-all border border-error/20 flex flex-col items-center justify-center text-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  class="px-5 py-4 bg-error/10 hover:bg-error/20 text-on-error-container text-xs font-bold rounded-lg transition-all border border-error/20 flex flex-col items-center justify-center text-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <span class="font-semibold flex items-center gap-1.5"><Papicon icon="ghost" size={14} /> {m.eco_reset_bestiary_btn()}</span>
                   <span class="text-2xs text-on-surface-variant font-normal">{m.eco_reset_bestiary_desc()}</span>
@@ -2075,7 +2075,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                 <button
                   type="button"
                   onclick={() => triggerReset('guilds')}
-                  class="px-5 py-4 bg-error/10 hover:bg-error/20 text-error text-xs font-bold rounded-lg transition-all border border-error/20 flex flex-col items-center justify-center text-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  class="px-5 py-4 bg-error/10 hover:bg-error/20 text-on-error-container text-xs font-bold rounded-lg transition-all border border-error/20 flex flex-col items-center justify-center text-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <span class="font-semibold flex items-center gap-1.5"><Papicon icon="shield" size={14} /> {m.eco_reset_guilds_btn()}</span>
                   <span class="text-2xs text-on-surface-variant font-normal">{m.eco_reset_guilds_desc()}</span>
@@ -2084,7 +2084,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                 <button
                   type="button"
                   onclick={() => triggerReset('titles')}
-                  class="px-5 py-4 bg-error/10 hover:bg-error/20 text-error text-xs font-bold rounded-lg transition-all border border-error/20 flex flex-col items-center justify-center text-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  class="px-5 py-4 bg-error/10 hover:bg-error/20 text-on-error-container text-xs font-bold rounded-lg transition-all border border-error/20 flex flex-col items-center justify-center text-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <span class="font-semibold flex items-center gap-1.5"><Papicon icon="award" size={14} /> {m.eco_reset_titles_btn()}</span>
                   <span class="text-2xs text-on-surface-variant font-normal">{m.eco_reset_titles_desc()}</span>
@@ -2093,7 +2093,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                 <button
                   type="button"
                   onclick={() => triggerReset('config')}
-                  class="px-5 py-4 bg-error/10 hover:bg-error/20 text-error text-xs font-bold rounded-lg transition-all border border-error/20 flex flex-col items-center justify-center text-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  class="px-5 py-4 bg-error/10 hover:bg-error/20 text-on-error-container text-xs font-bold rounded-lg transition-all border border-error/20 flex flex-col items-center justify-center text-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <span class="font-semibold flex items-center gap-1.5"><Papicon icon="settings" size={14} /> {m.eco_reset_config_btn()}</span>
                   <span class="text-2xs text-on-surface-variant font-normal">{m.eco_reset_config_desc()}</span>
@@ -2202,18 +2202,18 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                   
                   <!-- Stat bonuses summary -->
                   <div class="flex flex-wrap gap-1.5 text-2xs font-bold">
-                    {#if item.atkBonus} <span class="bg-error/10 text-error px-2 py-0.5 rounded-lg flex items-center gap-1"><Papicon icon="zap" size={10} /> ATK +{item.atkBonus}</span> {/if}
+                    {#if item.atkBonus} <span class="bg-error/10 text-on-error-container px-2 py-0.5 rounded-lg flex items-center gap-1"><Papicon icon="zap" size={10} /> ATK +{item.atkBonus}</span> {/if}
                     {#if item.defBonus} <span class="bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded-lg flex items-center gap-1"><Papicon icon="shield" size={10} /> DEF +{item.defBonus}</span> {/if}
-                    {#if item.spdBonus} <span class="bg-warning/10 text-warning px-2 py-0.5 rounded-lg flex items-center gap-1"><Papicon icon="activity" size={10} /> SPD +{item.spdBonus}</span> {/if}
-                    {#if item.hpBonus} <span class="bg-error/10 text-error px-2 py-0.5 rounded-lg flex items-center gap-1"><Papicon icon="heart" size={10} /> {m.eco_item_hp_bonus_badge({ hp: item.hpBonus })}</span> {/if}
+                    {#if item.spdBonus} <span class="bg-warning/10 text-on-warning-container px-2 py-0.5 rounded-lg flex items-center gap-1"><Papicon icon="activity" size={10} /> SPD +{item.spdBonus}</span> {/if}
+                    {#if item.hpBonus} <span class="bg-error/10 text-on-error-container px-2 py-0.5 rounded-lg flex items-center gap-1"><Papicon icon="heart" size={10} /> {m.eco_item_hp_bonus_badge({ hp: item.hpBonus })}</span> {/if}
                     {#if item.levelRequired > 0} <span class="bg-outline-variant/15 text-on-surface-variant/80 px-2 py-0.5 rounded-lg">{m.eco_item_level_badge({ level: item.levelRequired })}</span> {/if}
                     {#if item.rarity && item.rarity !== 'COMMON'} <span class="bg-violet-500/10 text-violet-400 px-2 py-0.5 rounded-lg">{rpgRarityLabel(item.rarity)}</span> {/if}
                     {#if item.purchasable === false} <span class="bg-outline-variant/15 text-on-surface-variant px-2 py-0.5 rounded-lg">{m.eco_item_not_sold_badge()}</span> {/if}
-                    {#if item.hpRestore} <span class="bg-success/10 text-success px-2 py-0.5 rounded-lg flex items-center gap-1"><Papicon icon="heart" size={10} /> HP +{item.hpRestore}</span> {/if}
+                    {#if item.hpRestore} <span class="bg-success/10 text-on-success-container px-2 py-0.5 rounded-lg flex items-center gap-1"><Papicon icon="heart" size={10} /> HP +{item.hpRestore}</span> {/if}
                     {#if item.energyRestore} <span class="bg-purple-500/10 text-purple-400 px-2 py-0.5 rounded-lg flex items-center gap-1"><Papicon icon="zap" size={10} /> ÉNERGIE +{item.energyRestore}</span> {/if}
                     {#if item.levelXpReward} <span class="bg-sky-500/10 text-sky-400 px-2 py-0.5 rounded-lg flex items-center gap-1"><Papicon icon="star" size={10} /> XP +{item.levelXpReward}</span> {/if}
                     {#if item.clanPointsReward} <span class="bg-fuchsia-500/10 text-fuchsia-400 px-2 py-0.5 rounded-lg flex items-center gap-1"><Papicon icon="flag" size={10} /> {m.eco_item_clan_points_badge({ points: item.clanPointsReward })}</span> {/if}
-                    {#if item.raidAssaultBonus} <span class="bg-error/10 text-error px-2 py-0.5 rounded-lg flex items-center gap-1"><Papicon icon="Crown" size={10} /> {m.eco_item_raid_assaults_badge({ assaults: item.raidAssaultBonus })}</span> {/if}
+                    {#if item.raidAssaultBonus} <span class="bg-error/10 text-on-error-container px-2 py-0.5 rounded-lg flex items-center gap-1"><Papicon icon="Crown" size={10} /> {m.eco_item_raid_assaults_badge({ assaults: item.raidAssaultBonus })}</span> {/if}
                   </div>
 
                   {#if (item.levelXpReward && !config.levelingEnabled) || (item.clanPointsReward && !(config.clansEnabled && config.clanPointsFromRpg)) || (item.raidAssaultBonus && !config.raidEnabled)}
@@ -2447,17 +2447,17 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                       <div class="flex flex-wrap gap-1 mt-1.5">
                         <span class="text-xs font-semibold text-on-surface-variant bg-outline-variant/10 px-2 py-0.5 rounded-full">{m.eco_rpg_level()} {monster.level}</span>
                         {#if monster.isBoss}
-                          <span class="text-xs font-semibold text-warning bg-warning/10 px-2 py-0.5 rounded-full">{m.eco_bestiary_badge_boss()}</span>
+                          <span class="text-xs font-semibold text-on-warning-container bg-warning/10 px-2 py-0.5 rounded-full">{m.eco_bestiary_badge_boss()}</span>
                         {/if}
                         {#if monster.scope === 'GLOBAL'}
                           <span class="text-xs font-semibold text-on-surface-variant bg-outline-variant/10 px-2 py-0.5 rounded-full">{m.eco_bestiary_badge_default()}</span>
                         {:else if monster.overridesGlobal}
                           <span class="text-xs font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded-full">{m.eco_bestiary_badge_custom()}</span>
                         {:else}
-                          <span class="text-xs font-semibold text-success bg-success/10 px-2 py-0.5 rounded-full">{m.eco_bestiary_badge_local()}</span>
+                          <span class="text-xs font-semibold text-on-success-container bg-success/10 px-2 py-0.5 rounded-full">{m.eco_bestiary_badge_local()}</span>
                         {/if}
                         {#if !monster.enabled}
-                          <span class="text-xs font-semibold text-error bg-error/10 px-2 py-0.5 rounded-full">{m.eco_bestiary_badge_disabled()}</span>
+                          <span class="text-xs font-semibold text-on-error-container bg-error/10 px-2 py-0.5 rounded-full">{m.eco_bestiary_badge_disabled()}</span>
                         {/if}
                         <!-- Une fiche qui ne correspond plus au palier annonce a ete reglee a la
                              main : le prochain clic passera dessus comme sur les autres. -->
@@ -2471,10 +2471,10 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                   <p class="text-xs text-on-surface-variant leading-relaxed">{monster.description}</p>
 
                   <div class="flex flex-wrap gap-1.5 text-2xs font-bold">
-                    <span class="bg-success/10 text-success px-2 py-0.5 rounded-lg flex items-center gap-1"><Papicon icon="heart" size={10} /> {monster.health}</span>
-                    <span class="bg-error/10 text-error px-2 py-0.5 rounded-lg flex items-center gap-1"><Papicon icon="zap" size={10} /> {monster.attack}</span>
+                    <span class="bg-success/10 text-on-success-container px-2 py-0.5 rounded-lg flex items-center gap-1"><Papicon icon="heart" size={10} /> {monster.health}</span>
+                    <span class="bg-error/10 text-on-error-container px-2 py-0.5 rounded-lg flex items-center gap-1"><Papicon icon="zap" size={10} /> {monster.attack}</span>
                     <span class="bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded-lg flex items-center gap-1"><Papicon icon="shield" size={10} /> {monster.defense}</span>
-                    <span class="bg-warning/10 text-warning px-2 py-0.5 rounded-lg flex items-center gap-1"><Papicon icon="activity" size={10} /> {monster.speed}</span>
+                    <span class="bg-warning/10 text-on-warning-container px-2 py-0.5 rounded-lg flex items-center gap-1"><Papicon icon="activity" size={10} /> {monster.speed}</span>
                   </div>
 
                   <div class="text-2xs text-on-surface-variant flex flex-wrap gap-3">
@@ -2709,7 +2709,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                       <Papicon icon="edit" size={12} />
                       {m.eco_bestiary_btn_customize()}
                     </button>
-                    <button type="button" onclick={() => handleDeleteTitle(title)} class="px-3 py-2 bg-error/10 hover:bg-error/20 text-error rounded-lg text-2xs font-bold disabled:opacity-50">
+                    <button type="button" onclick={() => handleDeleteTitle(title)} class="px-3 py-2 bg-error/10 hover:bg-error/20 text-on-error-container rounded-lg text-2xs font-bold disabled:opacity-50">
                       <Papicon icon="trash" size={12} />
                     </button>
                   </div>
@@ -2768,7 +2768,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                           <span class="text-xs font-semibold text-tertiary bg-tertiary/10 px-2 py-0.5 rounded-full">{m.eco_quest_badge_repeatable()}</span>
                         {/if}
                         {#if !quest.enabled}
-                          <span class="text-xs font-semibold text-error bg-error/10 px-2 py-0.5 rounded-full">{m.eco_bestiary_badge_disabled()}</span>
+                          <span class="text-xs font-semibold text-on-error-container bg-error/10 px-2 py-0.5 rounded-full">{m.eco_bestiary_badge_disabled()}</span>
                         {/if}
                       </div>
                     </div>
@@ -2806,7 +2806,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                       <Papicon icon="edit" size={12} />
                       {m.eco_bestiary_btn_customize()}
                     </button>
-                    <button type="button" onclick={() => handleDeleteQuest(quest)} class="px-3 py-2 bg-error/10 hover:bg-error/20 text-error rounded-lg text-2xs font-bold disabled:opacity-50">
+                    <button type="button" onclick={() => handleDeleteQuest(quest)} class="px-3 py-2 bg-error/10 hover:bg-error/20 text-on-error-container rounded-lg text-2xs font-bold disabled:opacity-50">
                       <Papicon icon="trash" size={12} />
                     </button>
                   </div>
@@ -2909,7 +2909,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
             <div class="grid grid-cols-2 gap-3 {config.raidAutoSchedule ? '' : 'opacity-50'}">
               <div class="space-y-1.5">
                 <label for="raidWeekday" class="text-xs font-semibold text-on-surface-variant">{m.eco_raid_weekday()}</label>
-                <select id="raidWeekday" bind:value={config.raidWeekday} disabled={!canManageSettings || !config.raidEnabled || !config.raidAutoSchedule} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50">
+                <select id="raidWeekday" bind:value={config.raidWeekday} disabled={!canManageSettings || !config.raidEnabled || !config.raidAutoSchedule} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50">
                   {#each raidWeekdayLabels as label, index (label)}
                     <option value={index}>{label}</option>
                   {/each}
@@ -2917,19 +2917,19 @@ import EmojiText from '../lib/components/EmojiText.svelte';
               </div>
               <div class="space-y-1.5">
                 <label for="raidHour" class="text-xs font-semibold text-on-surface-variant">{m.eco_raid_hour()}</label>
-                <input id="raidHour" type="number" min="0" max="23" bind:value={config.raidHour} disabled={!canManageSettings || !config.raidEnabled || !config.raidAutoSchedule} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50" />
+                <input id="raidHour" type="number" min="0" max="23" bind:value={config.raidHour} disabled={!canManageSettings || !config.raidEnabled || !config.raidAutoSchedule} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50" />
               </div>
             </div>
 
             <div class="space-y-1.5">
               <label for="raidDuration" class="text-xs font-semibold text-on-surface-variant">{m.eco_raid_duration()}</label>
-              <input id="raidDuration" type="number" min="1" max="168" bind:value={config.raidDurationHours} disabled={!canManageSettings || !config.raidEnabled} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50" />
+              <input id="raidDuration" type="number" min="1" max="168" bind:value={config.raidDurationHours} disabled={!canManageSettings || !config.raidEnabled} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50" />
               <p class="text-2xs text-on-surface-variant">{m.eco_raid_window_hint()}</p>
             </div>
 
             <div class="space-y-1.5">
               <label for="raidBoss" class="text-xs font-semibold text-on-surface-variant">{m.eco_raid_boss_choice()}</label>
-              <select id="raidBoss" bind:value={config.raidBossName} disabled={!canManageSettings || !config.raidEnabled} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50">
+              <select id="raidBoss" bind:value={config.raidBossName} disabled={!canManageSettings || !config.raidEnabled} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50">
                 <option value={null}>{m.eco_raid_boss_random()}</option>
                 {#each selectableRaidBosses as boss (boss.id)}
                   <option value={boss.name}>{bossOptionLabel(boss)}</option>
@@ -2947,28 +2947,28 @@ import EmojiText from '../lib/components/EmojiText.svelte';
             <div class="grid grid-cols-2 gap-3">
               <div class="space-y-1.5">
                 <label for="raidPerMember" class="text-xs font-semibold text-on-surface-variant">{m.eco_raid_health_per_member()}</label>
-                <input id="raidPerMember" type="number" min="100" max="10000000" bind:value={config.raidHealthPerMember} disabled={!canManageSettings || !config.raidEnabled} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50" />
+                <input id="raidPerMember" type="number" min="100" max="10000000" bind:value={config.raidHealthPerMember} disabled={!canManageSettings || !config.raidEnabled} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50" />
               </div>
               <div class="space-y-1.5">
                 <label for="raidAssaults" class="text-xs font-semibold text-on-surface-variant">{m.eco_raid_assaults()}</label>
-                <input id="raidAssaults" type="number" min="1" max="20" bind:value={config.raidAssaultsPerMember} disabled={!canManageSettings || !config.raidEnabled} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50" />
+                <input id="raidAssaults" type="number" min="1" max="20" bind:value={config.raidAssaultsPerMember} disabled={!canManageSettings || !config.raidEnabled} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50" />
               </div>
               <div class="space-y-1.5">
                 <label for="raidBoughtAssaults" class="text-xs font-semibold text-on-surface-variant">{m.eco_raid_bought_assaults()}</label>
-                <input id="raidBoughtAssaults" type="number" min="0" max="20" bind:value={config.raidBoughtAssaultsMax} disabled={!canManageSettings || !config.raidEnabled} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50" />
+                <input id="raidBoughtAssaults" type="number" min="0" max="20" bind:value={config.raidBoughtAssaultsMax} disabled={!canManageSettings || !config.raidEnabled} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50" />
                 <p class="text-2xs text-on-surface-variant">{m.eco_raid_bought_assaults_hint()}</p>
               </div>
               <div class="space-y-1.5">
                 <label for="raidFloor" class="text-xs font-semibold text-on-surface-variant">{m.eco_raid_health_floor()}</label>
-                <input id="raidFloor" type="number" min="500" bind:value={config.raidHealthFloor} disabled={!canManageSettings || !config.raidEnabled} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50" />
+                <input id="raidFloor" type="number" min="500" bind:value={config.raidHealthFloor} disabled={!canManageSettings || !config.raidEnabled} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50" />
               </div>
               <div class="space-y-1.5">
                 <label for="raidCap" class="text-xs font-semibold text-on-surface-variant">{m.eco_raid_health_cap()}</label>
-                <input id="raidCap" type="number" min="500" bind:value={config.raidHealthCap} disabled={!canManageSettings || !config.raidEnabled} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50" />
+                <input id="raidCap" type="number" min="500" bind:value={config.raidHealthCap} disabled={!canManageSettings || !config.raidEnabled} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50" />
               </div>
               <div class="space-y-1.5 col-span-2">
                 <label for="raidEnergy" class="text-xs font-semibold text-on-surface-variant">{m.eco_raid_energy()}</label>
-                <input id="raidEnergy" type="number" min="0" max="100" bind:value={config.raidEnergyCost} disabled={!canManageSettings || !config.raidEnabled} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50" />
+                <input id="raidEnergy" type="number" min="0" max="100" bind:value={config.raidEnergyCost} disabled={!canManageSettings || !config.raidEnabled} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50" />
               </div>
             </div>
 
@@ -2991,22 +2991,22 @@ import EmojiText from '../lib/components/EmojiText.svelte';
             <div class="grid grid-cols-2 gap-3">
               <div class="space-y-1.5">
                 <label for="raidXp" class="text-xs font-semibold text-on-surface-variant">{m.eco_raid_reward_xp()}</label>
-                <input id="raidXp" type="number" min="0" bind:value={config.raidXpReward} disabled={!canManageSettings || !config.raidEnabled} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50" />
+                <input id="raidXp" type="number" min="0" bind:value={config.raidXpReward} disabled={!canManageSettings || !config.raidEnabled} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50" />
               </div>
               <div class="space-y-1.5">
                 <label for="raidCoins" class="text-xs font-semibold text-on-surface-variant">{m.eco_raid_reward_coins({ currency: config.currencyName })}</label>
-                <input id="raidCoins" type="number" min="0" bind:value={config.raidCoinReward} disabled={!canManageSettings || !config.raidEnabled} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50" />
+                <input id="raidCoins" type="number" min="0" bind:value={config.raidCoinReward} disabled={!canManageSettings || !config.raidEnabled} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50" />
               </div>
               <!-- Le meme reglage credite le clan ou la guilde du jeu selon le mode : ce
                    qui change, c'est qui encaisse au bout, pas le montant a saisir. -->
               <div class="space-y-1.5 col-span-2">
                 <label for="raidPoints" class="text-xs font-semibold text-on-surface-variant">{raidGuildMode ? m.eco_raid_reward_guild_xp() : m.eco_raid_reward_points()}</label>
-                <input id="raidPoints" type="number" min="0" bind:value={config.raidClanPoints} disabled={!canManageSettings || !config.raidEnabled || !(raidGuildMode ? config.guildsEnabled : config.clansEnabled)} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50" />
+                <input id="raidPoints" type="number" min="0" bind:value={config.raidClanPoints} disabled={!canManageSettings || !config.raidEnabled || !(raidGuildMode ? config.guildsEnabled : config.clansEnabled)} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50" />
                 <p class="text-2xs text-on-surface-variant">{raidGuildMode ? m.eco_raid_reward_guild_xp_hint() : m.eco_raid_reward_points_hint()}</p>
               </div>
               <div class="space-y-1.5 col-span-2">
                 <label for="raidConsolation" class="text-xs font-semibold text-on-surface-variant">{m.eco_raid_consolation()}</label>
-                <input id="raidConsolation" type="number" min="0" max="100" bind:value={config.raidConsolationShare} disabled={!canManageSettings || !config.raidEnabled} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50" />
+                <input id="raidConsolation" type="number" min="0" max="100" bind:value={config.raidConsolationShare} disabled={!canManageSettings || !config.raidEnabled} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50" />
                 <p class="text-2xs text-on-surface-variant">{m.eco_raid_consolation_hint()}</p>
               </div>
             </div>
@@ -3018,7 +3018,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
 
             <div class="space-y-1.5">
               <label for="raidAnnounce" class="text-xs font-semibold text-on-surface-variant">{m.eco_bm_announce_mode()}</label>
-              <select id="raidAnnounce" bind:value={config.raidAnnounce} disabled={!canManageSettings || !config.raidEnabled} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50">
+              <select id="raidAnnounce" bind:value={config.raidAnnounce} disabled={!canManageSettings || !config.raidEnabled} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50">
                 <option value="NONE" disabled={config.raidEnabled}>{m.eco_raid_announce_none()}</option>
                 <option value="CHANNEL">{m.eco_bm_announce_channel()}</option>
                 <option value="CHANNEL_ROLE">{m.eco_bm_announce_channel_role()}</option>
@@ -3183,7 +3183,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                         <div class="flex flex-wrap gap-1 mt-1.5">
                           <span class="text-xs font-semibold text-on-surface-variant bg-outline-variant/10 px-2 py-0.5 rounded-full">{m.eco_rpg_level()} {boss.level}</span>
                           {#if !boss.enabled}
-                            <span class="text-xs font-semibold text-error bg-error/10 px-2 py-0.5 rounded-full">{m.eco_bestiary_badge_disabled()}</span>
+                            <span class="text-xs font-semibold text-on-error-container bg-error/10 px-2 py-0.5 rounded-full">{m.eco_bestiary_badge_disabled()}</span>
                           {/if}
                         </div>
                       </div>
@@ -3192,9 +3192,9 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                     <p class="text-xs text-on-surface-variant leading-relaxed">{boss.description}</p>
 
                     <div class="flex flex-wrap gap-1.5 text-2xs font-bold">
-                      <span class="bg-error/10 text-error px-2 py-0.5 rounded-lg flex items-center gap-1"><Papicon icon="zap" size={10} /> {boss.attack}</span>
+                      <span class="bg-error/10 text-on-error-container px-2 py-0.5 rounded-lg flex items-center gap-1"><Papicon icon="zap" size={10} /> {boss.attack}</span>
                       <span class="bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded-lg flex items-center gap-1"><Papicon icon="shield" size={10} /> {boss.defense}</span>
-                      <span class="bg-warning/10 text-warning px-2 py-0.5 rounded-lg flex items-center gap-1"><Papicon icon="activity" size={10} /> {boss.speed}</span>
+                      <span class="bg-warning/10 text-on-warning-container px-2 py-0.5 rounded-lg flex items-center gap-1"><Papicon icon="activity" size={10} /> {boss.speed}</span>
                     </div>
 
                     <div class="border-t border-outline-variant/5 pt-3 space-y-1">
@@ -3216,7 +3216,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                         <Papicon icon="edit" size={12} />
                         {m.eco_bestiary_btn_customize()}
                       </button>
-                      <button type="button" onclick={() => handleDeleteRaidBoss(boss)} class="px-3 py-2 bg-error/10 hover:bg-error/20 text-error rounded-lg text-2xs font-bold disabled:opacity-50">
+                      <button type="button" onclick={() => handleDeleteRaidBoss(boss)} class="px-3 py-2 bg-error/10 hover:bg-error/20 text-on-error-container rounded-lg text-2xs font-bold disabled:opacity-50">
                         <Papicon icon="trash" size={12} />
                       </button>
                     </div>
@@ -3262,12 +3262,12 @@ import EmojiText from '../lib/components/EmojiText.svelte';
             <div class="grid grid-cols-2 gap-4">
               <div class="space-y-1.5">
                 <label for="bmInterval" class="text-xs font-semibold text-on-surface-variant">{m.eco_bm_interval()}</label>
-                <input id="bmInterval" type="number" min="1" max="365" bind:value={config.blackMarketIntervalDays} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings || !config.blackMarketEnabled} />
+                <input id="bmInterval" type="number" min="1" max="365" bind:value={config.blackMarketIntervalDays} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings || !config.blackMarketEnabled} />
                 <p class="text-2xs text-on-surface-variant/40">{m.eco_bm_interval_hint()}</p>
               </div>
               <div class="space-y-1.5">
                 <label for="bmDuration" class="text-xs font-semibold text-on-surface-variant">{m.eco_bm_duration()}</label>
-                <input id="bmDuration" type="number" min="15" max="1440" bind:value={config.blackMarketDurationMin} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings || !config.blackMarketEnabled} />
+                <input id="bmDuration" type="number" min="15" max="1440" bind:value={config.blackMarketDurationMin} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings || !config.blackMarketEnabled} />
                 <p class="text-2xs text-on-surface-variant/40">{m.eco_bm_duration_hint()}</p>
               </div>
             </div>
@@ -3280,19 +3280,19 @@ import EmojiText from '../lib/components/EmojiText.svelte';
           <div class="grid grid-cols-2 gap-4">
             <div class="space-y-1.5">
               <label for="bmOfferCount" class="text-xs font-semibold text-on-surface-variant">{m.eco_bm_offer_count()}</label>
-              <input id="bmOfferCount" type="number" min="1" max="25" bind:value={config.blackMarketOfferCount} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings || !config.blackMarketEnabled} />
+              <input id="bmOfferCount" type="number" min="1" max="25" bind:value={config.blackMarketOfferCount} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings || !config.blackMarketEnabled} />
             </div>
             <div class="space-y-1.5">
               <label for="bmMaxQty" class="text-xs font-semibold text-on-surface-variant">{m.eco_bm_max_quantity()}</label>
-              <input id="bmMaxQty" type="number" min="1" max="99" bind:value={config.blackMarketMaxQuantity} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings || !config.blackMarketEnabled} />
+              <input id="bmMaxQty" type="number" min="1" max="99" bind:value={config.blackMarketMaxQuantity} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings || !config.blackMarketEnabled} />
             </div>
             <div class="space-y-1.5">
               <label for="bmDiscountMin" class="text-xs font-semibold text-on-surface-variant">{m.eco_bm_discount_min()}</label>
-              <input id="bmDiscountMin" type="number" min="1" max="90" bind:value={config.blackMarketDiscountMin} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings || !config.blackMarketEnabled} />
+              <input id="bmDiscountMin" type="number" min="1" max="90" bind:value={config.blackMarketDiscountMin} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings || !config.blackMarketEnabled} />
             </div>
             <div class="space-y-1.5">
               <label for="bmDiscountMax" class="text-xs font-semibold text-on-surface-variant">{m.eco_bm_discount_max()}</label>
-              <input id="bmDiscountMax" type="number" min="1" max="90" bind:value={config.blackMarketDiscountMax} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings || !config.blackMarketEnabled} />
+              <input id="bmDiscountMax" type="number" min="1" max="90" bind:value={config.blackMarketDiscountMax} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings || !config.blackMarketEnabled} />
             </div>
           </div>
 
@@ -3301,7 +3301,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
 
             <div class="space-y-1.5">
               <label for="bmAnnounce" class="text-xs font-semibold text-on-surface-variant">{m.eco_bm_announce_mode()}</label>
-              <select id="bmAnnounce" bind:value={config.blackMarketAnnounce} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings || !config.blackMarketEnabled}>
+              <select id="bmAnnounce" bind:value={config.blackMarketAnnounce} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings || !config.blackMarketEnabled}>
                 <option value="NONE">{m.eco_bm_announce_none()}</option>
                 <option value="CHANNEL">{m.eco_bm_announce_channel()}</option>
                 <option value="CHANNEL_ROLE">{m.eco_bm_announce_channel_role()}</option>
@@ -3369,11 +3369,11 @@ import EmojiText from '../lib/components/EmojiText.svelte';
           <h3 class="text-lg font-semibold">{m.eco_players_title()}</h3>
           
           <div class="flex flex-col sm:flex-row sm:items-center gap-2 w-full md:w-auto">
-            <input 
+            <input aria-label={m.eco_search_players_ph()} 
               type="search" 
               placeholder={m.eco_search_players_ph()} 
               bind:value={searchQuery}
-              class="bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none w-full md:w-64"
+              class="bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary w-full md:w-64"
             />
 
             {#if canManageSettings}
@@ -3382,7 +3382,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                 onclick={() => triggerReset('profiles')}
                 disabled={players.length === 0}
                 title={m.eco_players_reset_all_hint()}
-                class="px-4 py-2.5 bg-error/10 hover:bg-error/20 text-error text-2xs font-bold rounded-lg border border-error/20 transition-all flex items-center justify-center gap-1.5 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+                class="px-4 py-2.5 bg-error/10 hover:bg-error/20 text-on-error-container text-2xs font-bold rounded-lg border border-error/20 transition-all flex items-center justify-center gap-1.5 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Papicon icon="trash" size={13} />
                 {m.eco_players_reset_all_btn()}
@@ -3419,7 +3419,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                       <!-- Avatar : doublon du pseudo pour la souris, hors du parcours clavier -->
                       <button type="button" tabindex="-1" aria-hidden="true" class="shrink-0" disabled={!memberCaseModal.canOpen} onclick={() => openMember(player)}>
                         {#if player.avatarUrl}
-                          <img src={player.avatarUrl} alt="Avatar" class="w-8 h-8 rounded-full border border-outline-variant/20" />
+                          <img src={player.avatarUrl} alt="" class="w-8 h-8 rounded-full border border-outline-variant/20" />
                         {:else}
                           <div class="w-8 h-8 rounded-full bg-primary/20 text-primary flex items-center justify-center font-bold">U</div>
                         {/if}
@@ -3429,9 +3429,9 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                         <div class="text-2xs text-on-surface-variant/40 font-mono mt-0.5">{player.userId}</div>
                         <!-- Bento mini-stats -->
                         <div class="flex items-center gap-2 mt-1 text-2xs font-bold text-on-surface-variant">
-                          <span class="bg-error/5 text-error px-1.5 py-0.5 rounded">⚔️ {player.attack} ATK</span>
+                          <span class="bg-error/5 text-on-error-container px-1.5 py-0.5 rounded">⚔️ {player.attack} ATK</span>
                           <span class="bg-blue-500/5 text-blue-400 px-1.5 py-0.5 rounded">🛡️ {player.defense} DEF</span>
-                          <span class="bg-warning/5 text-warning px-1.5 py-0.5 rounded">⚡ {player.speed} SPD</span>
+                          <span class="bg-warning/5 text-on-warning-container px-1.5 py-0.5 rounded">⚡ {player.speed} SPD</span>
                         </div>
                       </div>
                     </td>
@@ -3459,7 +3459,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                         {/if}
 
                         {#if player.armor}
-                          <div class="flex items-center gap-1.5 text-2xs bg-success/10 text-success px-2 py-0.5 rounded-lg w-fit font-bold">
+                          <div class="flex items-center gap-1.5 text-2xs bg-success/10 text-on-success-container px-2 py-0.5 rounded-lg w-fit font-bold">
                             <EmojiText value={player.armor.emoji || '🛡️'} />
                             <span class="truncate max-w-[120px]">{player.armor.name} (+{player.armor.defBonus} DEF)</span>
                           </div>
@@ -3555,7 +3555,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
   {#snippet hpBonusField()}
     <div class="space-y-1">
       <label for="itemHpBonus" class="text-xs font-semibold text-on-surface-variant">{m.eco_hp_bonus()}</label>
-      <input id="itemHpBonus" type="number" min="0" bind:value={editingItem.hpBonus} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-3 py-2 text-xs focus:outline-none" />
+      <input id="itemHpBonus" type="number" min="0" bind:value={editingItem.hpBonus} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
     </div>
   {/snippet}
   <div class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
@@ -3566,12 +3566,12 @@ import EmojiText from '../lib/components/EmojiText.svelte';
         <div class="grid grid-cols-3 gap-3">
           <div class="col-span-2 space-y-1">
             <label for="itemName" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_item_name()}</label>
-            <input id="itemName" type="text" bind:value={editingItem.name} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none" />
+            <input id="itemName" type="text" bind:value={editingItem.name} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
           </div>
           <div class="space-y-1">
             <label for="itemEmoji" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_item_emoji()}</label>
             <div class="flex gap-2">
-              <input id="itemEmoji" type="text" bind:value={editingItem.emoji} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none" />
+              <input id="itemEmoji" type="text" bind:value={editingItem.emoji} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
               <EmojiPicker bind:value={editingItem.emoji} />
             </div>
           </div>
@@ -3579,13 +3579,13 @@ import EmojiText from '../lib/components/EmojiText.svelte';
 
         <div class="space-y-1">
           <label for="itemDesc" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_item_desc()}</label>
-          <textarea id="itemDesc" bind:value={editingItem.description} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none h-16 resize-none"></textarea>
+          <textarea id="itemDesc" bind:value={editingItem.description} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary h-16 resize-none"></textarea>
         </div>
 
         <div class="grid grid-cols-2 gap-3">
           <div class="space-y-1">
             <label for="itemType" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_item_type()}</label>
-            <select id="itemType" bind:value={editingItem.type} class="w-full bg-surface-container-high/45 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none text-on-surface">
+            <select id="itemType" bind:value={editingItem.type} class="w-full bg-surface-container-high/45 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary text-on-surface">
               <option value="WEAPON">🗡️ WEAPON ({m.ecx_item_weapon()})</option>
               <option value="ARMOR">🦺 ARMOR ({m.ecx_item_armor()})</option>
               <option value="ACCESSORY">💍 ACCESSORY ({m.ecx_item_accessory()})</option>
@@ -3597,7 +3597,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
           </div>
           <div class="space-y-1">
             <label for="itemPrice" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_item_price({ currency: config.currencyName })}</label>
-            <input id="itemPrice" type="number" min="0" bind:value={editingItem.price} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none" />
+            <input id="itemPrice" type="number" min="0" bind:value={editingItem.price} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
           </div>
         </div>
 
@@ -3608,7 +3608,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
         <div class="grid grid-cols-2 gap-3">
           <div class="space-y-1">
             <label for="itemRarity" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_item_rarity()}</label>
-            <select id="itemRarity" bind:value={editingItem.rarity} class="w-full bg-surface-container-high/45 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none text-on-surface">
+            <select id="itemRarity" bind:value={editingItem.rarity} class="w-full bg-surface-container-high/45 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary text-on-surface">
               {#each RPG_ITEM_RARITIES as rarity (rarity)}
                 <option value={rarity}>{rpgRarityLabel(rarity)}</option>
               {/each}
@@ -3616,7 +3616,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
           </div>
           <div class="space-y-1">
             <label for="itemLevel" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_item_level_required()}</label>
-            <input id="itemLevel" type="number" min="0" bind:value={editingItem.levelRequired} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none" />
+            <input id="itemLevel" type="number" min="0" bind:value={editingItem.levelRequired} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
           </div>
         </div>
 
@@ -3637,13 +3637,13 @@ import EmojiText from '../lib/components/EmojiText.svelte';
           {#if editingItem.type === 'WEAPON'}
             <div class="space-y-1">
               <label for="itemAtk" class="text-xs font-semibold text-on-surface-variant">{m.eco_atk_bonus()}</label>
-              <input id="itemAtk" type="number" min="0" bind:value={editingItem.atkBonus} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-3 py-2 text-xs focus:outline-none" />
+              <input id="itemAtk" type="number" min="0" bind:value={editingItem.atkBonus} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
             </div>
             {@render hpBonusField()}
           {:else if editingItem.type === 'ARMOR'}
             <div class="space-y-1">
               <label for="itemDef" class="text-xs font-semibold text-on-surface-variant">{m.eco_def_bonus()}</label>
-              <input id="itemDef" type="number" min="0" bind:value={editingItem.defBonus} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-3 py-2 text-xs focus:outline-none" />
+              <input id="itemDef" type="number" min="0" bind:value={editingItem.defBonus} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
             </div>
             {@render hpBonusField()}
           {:else if editingItem.type === 'ACCESSORY'}
@@ -3652,15 +3652,15 @@ import EmojiText from '../lib/components/EmojiText.svelte';
             <div class="grid grid-cols-3 gap-3">
               <div class="space-y-1">
                 <label for="itemAccAtk" class="text-xs font-semibold text-on-surface-variant">{m.eco_atk_bonus()}</label>
-                <input id="itemAccAtk" type="number" bind:value={editingItem.atkBonus} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-3 py-2 text-xs focus:outline-none" />
+                <input id="itemAccAtk" type="number" bind:value={editingItem.atkBonus} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
               </div>
               <div class="space-y-1">
                 <label for="itemAccDef" class="text-xs font-semibold text-on-surface-variant">{m.eco_def_bonus()}</label>
-                <input id="itemAccDef" type="number" bind:value={editingItem.defBonus} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-3 py-2 text-xs focus:outline-none" />
+                <input id="itemAccDef" type="number" bind:value={editingItem.defBonus} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
               </div>
               <div class="space-y-1">
                 <label for="itemAccSpd" class="text-xs font-semibold text-on-surface-variant">{m.eco_spd_bonus()}</label>
-                <input id="itemAccSpd" type="number" bind:value={editingItem.spdBonus} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-3 py-2 text-xs focus:outline-none" />
+                <input id="itemAccSpd" type="number" bind:value={editingItem.spdBonus} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
               </div>
             </div>
             {@render hpBonusField()}
@@ -3671,7 +3671,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
             <div class="grid grid-cols-2 gap-3">
               <div class="space-y-1">
                 <label for="itemEnchant" class="text-xs font-semibold text-on-surface-variant">{m.eco_item_enchant()}</label>
-                <select id="itemEnchant" bind:value={editingItem.enchantId} class="w-full bg-surface-container-high/45 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none text-on-surface">
+                <select id="itemEnchant" bind:value={editingItem.enchantId} class="w-full bg-surface-container-high/45 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary text-on-surface">
                   <option value={null}>{m.eco_item_enchant_none()}</option>
                   {#each RPG_ENCHANTMENTS as entry (entry.id)}
                     <option value={entry.id}>{stripCustomEmoji(entry.emoji)} {entry.name}</option>
@@ -3687,7 +3687,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                   max={enchantment?.maxTier ?? 1}
                   disabled={!enchantment}
                   bind:value={editingItem.enchantTier}
-                  class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-3 py-2 text-xs focus:outline-none disabled:opacity-40"
+                  class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-40"
                 />
                 {#if enchantment}
                   <p class="text-2xs text-on-surface-variant leading-relaxed mt-1">{m.eco_item_enchant_tier_hint({ max: enchantment.maxTier })}</p>
@@ -3702,11 +3702,11 @@ import EmojiText from '../lib/components/EmojiText.svelte';
             <div class="grid grid-cols-2 gap-3">
               <div class="space-y-1">
                 <label for="itemHp" class="text-xs font-semibold text-on-surface-variant">{m.eco_hp_heal()}</label>
-                <input id="itemHp" type="number" bind:value={editingItem.hpRestore} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-3 py-2 text-xs focus:outline-none" />
+                <input id="itemHp" type="number" bind:value={editingItem.hpRestore} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
               </div>
               <div class="space-y-1">
                 <label for="itemEnergy" class="text-xs font-semibold text-on-surface-variant">{m.eco_energy_heal()}</label>
-                <input id="itemEnergy" type="number" bind:value={editingItem.energyRestore} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-3 py-2 text-xs focus:outline-none" />
+                <input id="itemEnergy" type="number" bind:value={editingItem.energyRestore} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
               </div>
             </div>
 
@@ -3717,13 +3717,13 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                   {#if config.levelingEnabled}
                     <div class="space-y-1">
                       <label for="itemLevelXp" class="text-xs font-semibold text-on-surface-variant">{m.eco_item_level_xp_reward()}</label>
-                      <input id="itemLevelXp" type="number" min="0" bind:value={editingItem.levelXpReward} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-3 py-2 text-xs focus:outline-none" />
+                      <input id="itemLevelXp" type="number" min="0" bind:value={editingItem.levelXpReward} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
                     </div>
                   {/if}
                   {#if config.clansEnabled}
                     <div class="space-y-1">
                       <label for="itemClanPoints" class="text-xs font-semibold text-on-surface-variant">{m.eco_item_clan_points_reward()}</label>
-                      <input id="itemClanPoints" type="number" min="0" bind:value={editingItem.clanPointsReward} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-3 py-2 text-xs focus:outline-none" />
+                      <input id="itemClanPoints" type="number" min="0" bind:value={editingItem.clanPointsReward} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
                       {#if !config.clanPointsFromRpg}
                         <p class="text-2xs text-on-surface-variant leading-relaxed mt-1">{m.eco_item_clan_points_bridge_off()}</p>
                       {/if}
@@ -3734,7 +3734,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                   {#if config.raidEnabled}
                     <div class="space-y-1">
                       <label for="itemRaidAssaults" class="text-xs font-semibold text-on-surface-variant">{m.eco_item_raid_assaults()}</label>
-                      <input id="itemRaidAssaults" type="number" min="0" bind:value={editingItem.raidAssaultBonus} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-3 py-2 text-xs focus:outline-none" />
+                      <input id="itemRaidAssaults" type="number" min="0" bind:value={editingItem.raidAssaultBonus} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
                       <p class="text-2xs text-on-surface-variant leading-relaxed mt-1">{m.eco_item_raid_assaults_hint({ max: config.raidBoughtAssaultsMax })}</p>
                     </div>
                   {/if}
@@ -3802,7 +3802,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
         <div class="grid grid-cols-3 gap-3">
           <div class="col-span-2 space-y-1">
             <label for="monsterName" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_bestiary_name()}</label>
-            <input id="monsterName" type="text" bind:value={editingMonster.name} disabled={nameLocked} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none disabled:opacity-60" />
+            <input id="monsterName" type="text" bind:value={editingMonster.name} disabled={nameLocked} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60" />
             {#if nameLocked}
               <p class="text-2xs text-on-surface-variant leading-relaxed ml-2 mt-1">{m.eco_bestiary_name_locked()}</p>
             {/if}
@@ -3810,7 +3810,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
           <div class="space-y-1">
             <label for="monsterEmoji" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_bestiary_emoji()}</label>
             <div class="flex gap-2">
-              <input id="monsterEmoji" type="text" bind:value={editingMonster.emoji} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none" />
+              <input id="monsterEmoji" type="text" bind:value={editingMonster.emoji} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
               <EmojiPicker bind:value={editingMonster.emoji} />
             </div>
           </div>
@@ -3818,7 +3818,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
 
         <div class="space-y-1">
           <label for="monsterDesc" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_bestiary_desc_field()}</label>
-          <textarea id="monsterDesc" bind:value={editingMonster.description} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none h-16 resize-none"></textarea>
+          <textarea id="monsterDesc" bind:value={editingMonster.description} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary h-16 resize-none"></textarea>
         </div>
 
         <fieldset class="border border-outline-variant/10 p-4 rounded-lg">
@@ -3826,31 +3826,31 @@ import EmojiText from '../lib/components/EmojiText.svelte';
           <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
             <div class="space-y-1">
               <label for="monsterLevel" class="text-xs font-semibold text-on-surface-variant">{m.eco_bestiary_level()}</label>
-              <input id="monsterLevel" type="number" min="1" bind:value={editingMonster.level} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-3 py-2 text-xs focus:outline-none" />
+              <input id="monsterLevel" type="number" min="1" bind:value={editingMonster.level} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
             </div>
             <div class="space-y-1">
               <label for="monsterHp" class="text-xs font-semibold text-on-surface-variant">{m.eco_bestiary_health()}</label>
-              <input id="monsterHp" type="number" min="1" bind:value={editingMonster.health} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-3 py-2 text-xs focus:outline-none" />
+              <input id="monsterHp" type="number" min="1" bind:value={editingMonster.health} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
             </div>
             <div class="space-y-1">
               <label for="monsterAtk" class="text-xs font-semibold text-on-surface-variant">{m.eco_atk()}</label>
-              <input id="monsterAtk" type="number" min="0" bind:value={editingMonster.attack} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-3 py-2 text-xs focus:outline-none" />
+              <input id="monsterAtk" type="number" min="0" bind:value={editingMonster.attack} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
             </div>
             <div class="space-y-1">
               <label for="monsterDef" class="text-xs font-semibold text-on-surface-variant">{m.eco_def()}</label>
-              <input id="monsterDef" type="number" min="0" bind:value={editingMonster.defense} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-3 py-2 text-xs focus:outline-none" />
+              <input id="monsterDef" type="number" min="0" bind:value={editingMonster.defense} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
             </div>
             <div class="space-y-1">
               <label for="monsterSpd" class="text-xs font-semibold text-on-surface-variant">{m.eco_spd()}</label>
-              <input id="monsterSpd" type="number" min="0" bind:value={editingMonster.speed} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-3 py-2 text-xs focus:outline-none" />
+              <input id="monsterSpd" type="number" min="0" bind:value={editingMonster.speed} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
             </div>
             <div class="space-y-1">
               <label for="monsterXp" class="text-xs font-semibold text-on-surface-variant">{m.eco_bestiary_xp_reward()}</label>
-              <input id="monsterXp" type="number" min="0" bind:value={editingMonster.xpReward} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-3 py-2 text-xs focus:outline-none" />
+              <input id="monsterXp" type="number" min="0" bind:value={editingMonster.xpReward} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
             </div>
             <div class="space-y-1 col-span-2 md:col-span-3">
               <label for="monsterCoins" class="text-xs font-semibold text-on-surface-variant">{m.eco_bestiary_coin_reward({ currency: config.currencyName })}</label>
-              <input id="monsterCoins" type="number" min="0" bind:value={editingMonster.coinReward} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-3 py-2 text-xs focus:outline-none" />
+              <input id="monsterCoins" type="number" min="0" bind:value={editingMonster.coinReward} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
             </div>
           </div>
         </fieldset>
@@ -3873,7 +3873,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
           {#if editingMonster.isBoss}
             <div class="space-y-1">
               <label for="monsterRespawn" class="text-xs font-semibold text-on-surface-variant">{m.eco_bestiary_respawn_hours()}</label>
-              <input id="monsterRespawn" type="number" min="1" max="720" bind:value={editingMonster.bossRespawnHours} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-3 py-2 text-xs focus:outline-none" />
+              <input id="monsterRespawn" type="number" min="1" max="720" bind:value={editingMonster.bossRespawnHours} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
             </div>
           {/if}
 
@@ -3882,7 +3882,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
           {#if raidGuildMode ? config.guildsEnabled : config.clansEnabled}
             <div class="space-y-1 pt-2 border-t border-outline-variant/5">
               <label for="monsterClanPoints" class="text-xs font-semibold text-on-surface-variant">{raidGuildMode ? m.eco_raid_reward_guild_xp() : m.eco_bestiary_clan_points()}</label>
-              <input id="monsterClanPoints" type="number" min="0" bind:value={editingMonster.clanPoints} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-3 py-2 text-xs focus:outline-none" />
+              <input id="monsterClanPoints" type="number" min="0" bind:value={editingMonster.clanPoints} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
               <p class="text-2xs text-on-surface-variant leading-relaxed mt-1">
                 {#if raidGuildMode}
                   {m.eco_bestiary_guild_xp_hint()}
@@ -3916,7 +3916,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
             </div>
 
             {#if editingMonster.firstKill}
-              <p class="text-xs bg-warning/10 text-warning rounded-lg px-3 py-2">
+              <p class="text-xs bg-warning/10 text-on-warning-container rounded-lg px-3 py-2">
                 {m.eco_bestiary_first_kill_holder({
                   name: editingMonster.firstKill.displayName ?? editingMonster.firstKill.userId,
                   date: new Date(editingMonster.firstKill.at).toLocaleDateString()
@@ -3928,16 +3928,16 @@ import EmojiText from '../lib/components/EmojiText.svelte';
               <div class="grid grid-cols-2 gap-3">
                 <div class="space-y-1">
                   <label for="monsterFirstKillCoins" class="text-xs font-semibold text-on-surface-variant">{m.eco_bestiary_coin_reward({ currency: config.currencyName })}</label>
-                  <input id="monsterFirstKillCoins" type="number" min="0" bind:value={editingMonster.firstKillCoinReward} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-3 py-2 text-xs focus:outline-none" />
+                  <input id="monsterFirstKillCoins" type="number" min="0" bind:value={editingMonster.firstKillCoinReward} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
                 </div>
                 <div class="space-y-1">
                   <label for="monsterFirstKillXp" class="text-xs font-semibold text-on-surface-variant">{m.eco_bestiary_xp_reward()}</label>
-                  <input id="monsterFirstKillXp" type="number" min="0" bind:value={editingMonster.firstKillXpReward} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-3 py-2 text-xs focus:outline-none" />
+                  <input id="monsterFirstKillXp" type="number" min="0" bind:value={editingMonster.firstKillXpReward} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
                 </div>
                 {#if raidGuildMode ? config.guildsEnabled : config.clansEnabled}
                   <div class="col-span-2 space-y-1">
                     <label for="monsterFirstKillClan" class="text-xs font-semibold text-on-surface-variant">{raidGuildMode ? m.eco_raid_reward_guild_xp() : m.eco_bestiary_clan_points()}</label>
-                    <input id="monsterFirstKillClan" type="number" min="0" bind:value={editingMonster.firstKillClanPoints} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-3 py-2 text-xs focus:outline-none" />
+                    <input id="monsterFirstKillClan" type="number" min="0" bind:value={editingMonster.firstKillClanPoints} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
                   </div>
                 {/if}
                 <div class="col-span-2 space-y-1">
@@ -4006,11 +4006,11 @@ import EmojiText from '../lib/components/EmojiText.svelte';
               </div>
               <div class="col-span-3 space-y-1">
                 <label for="drop-chance-{index}" class="text-xs font-semibold text-on-surface-variant">{m.eco_bestiary_drop_chance()}</label>
-                <input id="drop-chance-{index}" type="number" min="1" max="100" bind:value={drop.chancePercent} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-3 py-2 text-xs focus:outline-none" />
+                <input id="drop-chance-{index}" type="number" min="1" max="100" bind:value={drop.chancePercent} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
               </div>
               <div class="col-span-2 space-y-1">
                 <label for="drop-bonus-{index}" class="text-xs font-semibold text-on-surface-variant">{m.eco_bestiary_drop_bonus()}</label>
-                <input id="drop-bonus-{index}" type="number" min="0" bind:value={drop.coinBonus} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-3 py-2 text-xs focus:outline-none" />
+                <input id="drop-bonus-{index}" type="number" min="0" bind:value={drop.coinBonus} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
               </div>
               <button
                 type="button"
@@ -4067,7 +4067,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
         <div class="grid grid-cols-4 gap-3">
           <div class="col-span-3 space-y-1">
             <label for="titleName" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_title_name()}</label>
-            <input id="titleName" type="text" maxlength="24" bind:value={editingTitle.name} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none" />
+            <input id="titleName" type="text" maxlength="24" bind:value={editingTitle.name} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
             <p class="text-2xs text-on-surface-variant ml-2">{m.eco_title_name_hint({ count: editingTitle.name?.length ?? 0 })}</p>
           </div>
           <div class="space-y-1">
@@ -4078,7 +4078,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
 
         <div class="space-y-1">
           <label for="titleDesc" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_bestiary_desc_field()}</label>
-          <textarea id="titleDesc" maxlength="200" bind:value={editingTitle.description} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none h-16 resize-none"></textarea>
+          <textarea id="titleDesc" maxlength="200" bind:value={editingTitle.description} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary h-16 resize-none"></textarea>
         </div>
 
         <p class="text-center text-sm font-bold bg-[#161221] rounded-lg py-3" style="color: {editingTitle.color}">{editingTitle.name || m.eco_title_name()}</p>
@@ -4089,23 +4089,23 @@ import EmojiText from '../lib/components/EmojiText.svelte';
           <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
             <div class="space-y-1">
               <label for="titleAtk" class="text-xs font-semibold text-on-surface-variant">{m.eco_atk()}</label>
-              <input id="titleAtk" type="number" min="0" max="1000" bind:value={editingTitle.attackBonus} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-3 py-2 text-xs focus:outline-none" />
+              <input id="titleAtk" type="number" min="0" max="1000" bind:value={editingTitle.attackBonus} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
             </div>
             <div class="space-y-1">
               <label for="titleDef" class="text-xs font-semibold text-on-surface-variant">{m.eco_def()}</label>
-              <input id="titleDef" type="number" min="0" max="1000" bind:value={editingTitle.defenseBonus} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-3 py-2 text-xs focus:outline-none" />
+              <input id="titleDef" type="number" min="0" max="1000" bind:value={editingTitle.defenseBonus} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
             </div>
             <div class="space-y-1">
               <label for="titleSpd" class="text-xs font-semibold text-on-surface-variant">{m.eco_spd()}</label>
-              <input id="titleSpd" type="number" min="0" max="1000" bind:value={editingTitle.speedBonus} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-3 py-2 text-xs focus:outline-none" />
+              <input id="titleSpd" type="number" min="0" max="1000" bind:value={editingTitle.speedBonus} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
             </div>
             <div class="space-y-1">
               <label for="titleHp" class="text-xs font-semibold text-on-surface-variant">{m.eco_bestiary_health()}</label>
-              <input id="titleHp" type="number" min="0" max="10000" bind:value={editingTitle.healthBonus} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-3 py-2 text-xs focus:outline-none" />
+              <input id="titleHp" type="number" min="0" max="10000" bind:value={editingTitle.healthBonus} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
             </div>
             <div class="space-y-1">
               <label for="titleCrit" class="text-xs font-semibold text-on-surface-variant">{m.eco_title_crit()} (%)</label>
-              <input id="titleCrit" type="number" min="0" max="25" bind:value={editingTitle.critBonus} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-3 py-2 text-xs focus:outline-none" />
+              <input id="titleCrit" type="number" min="0" max="25" bind:value={editingTitle.critBonus} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
             </div>
           </div>
         </fieldset>
@@ -4132,7 +4132,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
 
       <div class="space-y-1">
         <label for="recipeResult" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_recipe_result()}</label>
-        <select id="recipeResult" bind:value={editingRecipe.resultItemId} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none">
+        <select id="recipeResult" bind:value={editingRecipe.resultItemId} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary">
           {#each guildItems as item (item.id)}
             <option value={item.id}>{stripCustomEmoji(item.emoji)} {item.name}</option>
           {/each}
@@ -4163,7 +4163,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
               className="flex-1 min-w-0"
               on:change={(e: any) => ingredient.itemName = e.detail?.value ?? ''}
             />
-            <input type="number" min="1" bind:value={ingredient.quantity} class="w-20 bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs text-right focus:outline-none" />
+            <input aria-label={m.eco_inventory_quantity()} type="number" min="1" bind:value={ingredient.quantity} class="w-20 bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-2 text-xs text-right focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
             <button
               type="button"
               onclick={() => removeRecipeIngredient(index)}
@@ -4179,11 +4179,11 @@ import EmojiText from '../lib/components/EmojiText.svelte';
       <div class="grid grid-cols-2 gap-3">
         <div class="space-y-1">
           <label for="recipeCost" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_recipe_coin_cost()}</label>
-          <input id="recipeCost" type="number" min="0" bind:value={editingRecipe.coinCost} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none" />
+          <input id="recipeCost" type="number" min="0" bind:value={editingRecipe.coinCost} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
         </div>
         <div class="space-y-1">
           <label for="recipeLevel" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_recipe_level()}</label>
-          <input id="recipeLevel" type="number" min="1" max="100" bind:value={editingRecipe.levelRequired} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none" />
+          <input id="recipeLevel" type="number" min="1" max="100" bind:value={editingRecipe.levelRequired} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
         </div>
       </div>
 
@@ -4210,12 +4210,12 @@ import EmojiText from '../lib/components/EmojiText.svelte';
         <div class="grid grid-cols-3 gap-3">
           <div class="col-span-2 space-y-1">
             <label for="questName" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_bestiary_name()}</label>
-            <input id="questName" type="text" bind:value={editingQuest.name} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none" />
+            <input id="questName" type="text" bind:value={editingQuest.name} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
           </div>
           <div class="space-y-1">
             <label for="questEmoji" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_bestiary_emoji()}</label>
             <div class="flex gap-2">
-              <input id="questEmoji" type="text" bind:value={editingQuest.emoji} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none" />
+              <input id="questEmoji" type="text" bind:value={editingQuest.emoji} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
               <EmojiPicker bind:value={editingQuest.emoji} />
             </div>
           </div>
@@ -4223,7 +4223,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
 
         <div class="space-y-1">
           <label for="questDesc" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_bestiary_desc_field()}</label>
-          <textarea id="questDesc" rows="2" bind:value={editingQuest.description} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none resize-none"></textarea>
+          <textarea id="questDesc" rows="2" bind:value={editingQuest.description} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary resize-none"></textarea>
         </div>
 
         <!-- Une quete personnelle se compte par membre et se reclame ; une quete d'equipe
@@ -4246,7 +4246,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
         {#if editingQuest.scope === 'TEAM'}
           <div class="space-y-1">
             <label for="questTeamMode" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_raid_team_mode_title()}</label>
-            <select id="questTeamMode" bind:value={editingQuest.teamMode} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none">
+            <select id="questTeamMode" bind:value={editingQuest.teamMode} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary">
               <option value="CLAN" disabled={!config.clansEnabled}>{m.eco_raid_mode_clan()}</option>
               <option value="RPG_GUILD" disabled={!config.guildsEnabled}>{m.eco_raid_mode_guild()}</option>
             </select>
@@ -4256,7 +4256,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
         <div class="grid grid-cols-3 gap-3">
           <div class="space-y-1">
             <label for="questObjective" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_quest_objective()}</label>
-            <select id="questObjective" bind:value={editingQuest.objective} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none">
+            <select id="questObjective" bind:value={editingQuest.objective} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary">
               {#each questObjectiveGroups as group (group.label)}
                 <optgroup label={group.label}>
                   {#each group.objectives as objective (objective)}
@@ -4268,11 +4268,11 @@ import EmojiText from '../lib/components/EmojiText.svelte';
           </div>
           <div class="space-y-1">
             <label for="questTarget" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_quest_target()}</label>
-            <input id="questTarget" type="number" min="1" bind:value={editingQuest.target} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none" />
+            <input id="questTarget" type="number" min="1" bind:value={editingQuest.target} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
           </div>
           <div class="space-y-1">
             <label for="questWindow" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_quest_window()}</label>
-            <input id="questWindow" type="number" min="1" max="720" bind:value={editingQuest.windowHours} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none" />
+            <input id="questWindow" type="number" min="1" max="720" bind:value={editingQuest.windowHours} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
           </div>
         </div>
         <p class="text-2xs text-on-surface-variant leading-relaxed ml-2">{m.eco_quest_window_hint()}</p>
@@ -4280,18 +4280,18 @@ import EmojiText from '../lib/components/EmojiText.svelte';
         <div class="grid grid-cols-3 gap-3">
           <div class="space-y-1">
             <label for="questXp" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_xp()}</label>
-            <input id="questXp" type="number" min="0" bind:value={editingQuest.rewardXp} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none" />
+            <input id="questXp" type="number" min="0" bind:value={editingQuest.rewardXp} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
           </div>
           <div class="space-y-1">
             <label for="questCoins" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_bestiary_coin_reward({ currency: config.currencyName })}</label>
-            <input id="questCoins" type="number" min="0" bind:value={editingQuest.rewardCoins} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none" />
+            <input id="questCoins" type="number" min="0" bind:value={editingQuest.rewardCoins} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
           </div>
           <!-- Une quete personnelle credite le clan de celui qui la termine, comme le fait
                deja un monstre vaincu ; une quete d'equipe credite l'equipe, clan ou guilde
                du jeu selon le mode choisi juste au-dessus. -->
           <div class="space-y-1">
             <label for="questPoints" class="text-xs font-semibold text-on-surface-variant ml-2">{questGuildMode ? m.eco_raid_reward_guild_xp() : m.eco_raid_reward_points()}</label>
-            <input id="questPoints" type="number" min="0" bind:value={editingQuest.rewardClanPoints} disabled={!(questGuildMode ? config.guildsEnabled : config.clansEnabled)} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none disabled:opacity-50" />
+            <input id="questPoints" type="number" min="0" bind:value={editingQuest.rewardClanPoints} disabled={!(questGuildMode ? config.guildsEnabled : config.clansEnabled)} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50" />
           </div>
         </div>
         <p class="text-2xs text-on-surface-variant leading-relaxed ml-2">
@@ -4346,12 +4346,12 @@ import EmojiText from '../lib/components/EmojiText.svelte';
         <div class="grid grid-cols-3 gap-3">
           <div class="col-span-2 space-y-1">
             <label for="raidBossName" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_bestiary_name()}</label>
-            <input id="raidBossName" type="text" bind:value={editingRaidBoss.name} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none" />
+            <input id="raidBossName" type="text" bind:value={editingRaidBoss.name} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
           </div>
           <div class="space-y-1">
             <label for="raidBossEmoji" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_bestiary_emoji()}</label>
             <div class="flex gap-2">
-              <input id="raidBossEmoji" type="text" bind:value={editingRaidBoss.emoji} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none" />
+              <input id="raidBossEmoji" type="text" bind:value={editingRaidBoss.emoji} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
               <EmojiPicker bind:value={editingRaidBoss.emoji} />
             </div>
           </div>
@@ -4359,25 +4359,25 @@ import EmojiText from '../lib/components/EmojiText.svelte';
 
         <div class="space-y-1">
           <label for="raidBossDesc" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_bestiary_desc_field()}</label>
-          <textarea id="raidBossDesc" rows="2" bind:value={editingRaidBoss.description} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none resize-none"></textarea>
+          <textarea id="raidBossDesc" rows="2" bind:value={editingRaidBoss.description} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary resize-none"></textarea>
         </div>
 
         <div class="grid grid-cols-4 gap-3">
           <div class="space-y-1">
             <label for="raidBossLevel" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_bestiary_level()}</label>
-            <input id="raidBossLevel" type="number" min="1" bind:value={editingRaidBoss.level} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none" />
+            <input id="raidBossLevel" type="number" min="1" bind:value={editingRaidBoss.level} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
           </div>
           <div class="space-y-1">
             <label for="raidBossAtk" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_atk()}</label>
-            <input id="raidBossAtk" type="number" min="1" bind:value={editingRaidBoss.attack} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none" />
+            <input id="raidBossAtk" type="number" min="1" bind:value={editingRaidBoss.attack} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
           </div>
           <div class="space-y-1">
             <label for="raidBossDef" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_def()}</label>
-            <input id="raidBossDef" type="number" min="1" bind:value={editingRaidBoss.defense} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none" />
+            <input id="raidBossDef" type="number" min="1" bind:value={editingRaidBoss.defense} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
           </div>
           <div class="space-y-1">
             <label for="raidBossSpd" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_spd()}</label>
-            <input id="raidBossSpd" type="number" min="1" bind:value={editingRaidBoss.speed} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none" />
+            <input id="raidBossSpd" type="number" min="1" bind:value={editingRaidBoss.speed} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
           </div>
         </div>
 
@@ -4403,7 +4403,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                   <Papicon icon={spell.icon} size={14} class={chosen ? 'text-primary' : 'text-on-surface-variant'} />
                   <span class="text-xs font-semibold">{spell.name}</span>
                   {#if spell.triggerBelowHealth !== undefined && spell.triggerBelowHealth !== null}
-                    <span class="ml-auto text-xs font-semibold text-warning bg-warning/10 px-1.5 py-0.5 rounded">
+                    <span class="ml-auto text-xs font-semibold text-on-warning-container bg-warning/10 px-1.5 py-0.5 rounded">
                       {m.eco_raid_spell_phase({ percent: Math.round(spell.triggerBelowHealth * 100) })}
                     </span>
                   {/if}
@@ -4445,57 +4445,57 @@ import EmojiText from '../lib/components/EmojiText.svelte';
       <div class="grid grid-cols-2 gap-4">
         <div class="space-y-1">
           <label for="pBalance" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_balance_currency({ currency: config.currencyName })}</label>
-          <input id="pBalance" type="number" bind:value={editingPlayer.balance} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none" />
+          <input id="pBalance" type="number" bind:value={editingPlayer.balance} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
         </div>
 
         <div class="space-y-1">
           <label for="pLevel" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_rpg_level()}</label>
-          <input id="pLevel" type="number" bind:value={editingPlayer.level} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none" />
+          <input id="pLevel" type="number" bind:value={editingPlayer.level} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
         </div>
 
         <div class="space-y-1">
           <label for="pXp" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_xp()}</label>
-          <input id="pXp" type="number" bind:value={editingPlayer.xp} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none" />
+          <input id="pXp" type="number" bind:value={editingPlayer.xp} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
         </div>
 
         <div class="space-y-1">
           <label for="pHp" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_hp()}</label>
-          <input id="pHp" type="number" bind:value={editingPlayer.health} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none" />
+          <input id="pHp" type="number" bind:value={editingPlayer.health} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
         </div>
 
         <div class="space-y-1">
           <label for="pEnergy" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_energy_pct()}</label>
-          <input id="pEnergy" type="number" bind:value={editingPlayer.energy} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none" />
+          <input id="pEnergy" type="number" bind:value={editingPlayer.energy} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
         </div>
 
         <div class="space-y-1">
           <label for="pAtk" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_atk()}</label>
-          <input id="pAtk" type="number" bind:value={editingPlayer.attack} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none" />
+          <input id="pAtk" type="number" bind:value={editingPlayer.attack} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
         </div>
 
         <div class="space-y-1">
           <label for="pDef" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_def()}</label>
-          <input id="pDef" type="number" bind:value={editingPlayer.defense} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none" />
+          <input id="pDef" type="number" bind:value={editingPlayer.defense} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
         </div>
 
         <div class="space-y-1">
           <label for="pSpd" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_spd()}</label>
-          <input id="pSpd" type="number" bind:value={editingPlayer.speed} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none" />
+          <input id="pSpd" type="number" bind:value={editingPlayer.speed} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
         </div>
 
         <div class="space-y-1">
           <label for="pMaxHp" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_max_hp()}</label>
-          <input id="pMaxHp" type="number" min="1" bind:value={editingPlayer.maxHealth} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none" />
+          <input id="pMaxHp" type="number" min="1" bind:value={editingPlayer.maxHealth} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
         </div>
 
         <div class="space-y-1">
           <label for="pStatPoints" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_stat_points()}</label>
-          <input id="pStatPoints" type="number" min="0" bind:value={editingPlayer.statPoints} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none" />
+          <input id="pStatPoints" type="number" min="0" bind:value={editingPlayer.statPoints} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
         </div>
 
         <div class="space-y-1">
           <label for="pSkillPoints" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_skill_points()}</label>
-          <input id="pSkillPoints" type="number" min="0" bind:value={editingPlayer.skillPoints} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none" />
+          <input id="pSkillPoints" type="number" min="0" bind:value={editingPlayer.skillPoints} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
         </div>
       </div>
       <p class="text-2xs text-on-surface-variant leading-relaxed">{m.eco_player_base_stats_hint()}</p>
@@ -4535,7 +4535,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
   <div class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
     <div class="bg-surface-container rounded-xl border border-outline-variant/30 p-8 w-full max-w-md space-y-6 max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200">
       <div class="text-center space-y-3 flex flex-col items-center">
-        <div class="w-16 h-16 bg-error/10 text-error rounded-full flex items-center justify-center mb-2">
+        <div class="w-16 h-16 bg-error/10 text-on-error-container rounded-full flex items-center justify-center mb-2">
           <Papicon icon="alert-triangle" size={32} />
         </div>
         <h3 class="text-xl font-semibold text-error">{m.eco_reset_modal_title()}</h3>
@@ -4555,7 +4555,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
           placeholder={m.eco_reset_confirm_word()}
           autocomplete="off"
           onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter' && resetConfirmed) confirmReset(); }}
-          class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm font-semibold text-center focus:outline-none focus:ring-2 focus:ring-error/30 transition-all"
+          class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-sm font-semibold text-center focus:outline-none focus:ring-2 focus:ring-error/30 transition-all"
         />
       </div>
 

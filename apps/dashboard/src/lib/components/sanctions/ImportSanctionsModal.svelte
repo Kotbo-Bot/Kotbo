@@ -131,7 +131,7 @@
     <div class="space-y-2">
       <p class="field-label">{m.sc_import_step_file()}</p>
       <div class="flex flex-wrap items-center gap-3">
-        <input
+        <input aria-label={m.sc_import_step_file()}
           type="file"
           bind:this={fileInput}
           onchange={onFileSelected}
@@ -153,11 +153,11 @@
 
       <div class="max-w-xs">
         <label for="import-source" class="field-label">{m.sc_import_source_label()}</label>
-        <FormInput id="import-source" type="text" bind:value={sourceLabel} placeholder={m.sc_import_source_ph()} className="mt-1 w-full rounded-lg px-3 py-2.5 bg-surface-container-high border border-outline-variant/10 text-sm" />
+        <FormInput id="import-source" type="text" bind:value={sourceLabel} placeholder={m.sc_import_source_ph()} className="mt-1 w-full rounded-lg px-3 py-2.5 bg-surface-container-high border border-field-border text-sm" />
       </div>
 
       {#if parseError}
-        <div class="rounded-lg bg-error/10 text-error text-xs font-medium p-3">{parseError}</div>
+        <div class="rounded-lg bg-error/10 text-on-error-container text-xs font-medium p-3">{parseError}</div>
       {/if}
     </div>
 
@@ -175,7 +175,7 @@
                 id="mapping-{field}"
                 value={mapping[field] ?? ''}
                 onchange={(e) => updateMapping(field, (e.currentTarget as HTMLSelectElement).value)}
-                className="w-full rounded-lg px-3 py-2 bg-surface-container-high border border-outline-variant/10 text-xs font-medium"
+                className="w-full rounded-lg px-3 py-2 bg-surface-container-high border border-field-border text-xs font-medium"
               >
                 <option value="">{m.sc_import_col_none()}</option>
                 {#each headers as header (header)}
@@ -196,7 +196,7 @@
         </div>
 
         {#if validRows.length === 0}
-          <div class="rounded-lg bg-warning/10 text-warning text-xs font-medium p-4">
+          <div class="rounded-lg bg-warning/10 text-on-warning-container text-xs font-medium p-4">
             {m.sc_import_no_valid_rows()}
           </div>
         {:else}

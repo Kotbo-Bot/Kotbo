@@ -695,7 +695,7 @@
       <div class="relative w-60 pointer-events-auto shadow-md">
         <div class="relative flex items-center">
           <Search class="absolute left-3 w-4 h-4 text-slate-400" />
-          <input
+          <input aria-label={m.d6_gig_search_placeholder()}
             type="text"
             bind:value={searchQuery}
             placeholder={m.d6_gig_search_placeholder()}

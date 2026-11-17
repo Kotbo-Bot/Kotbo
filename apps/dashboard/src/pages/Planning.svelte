@@ -2090,7 +2090,7 @@
               {#each formInviteeMemberIds as memberId (memberId)}
                 {@const member = selectedMembers.get(memberId)}
                 {#if member}
-                  <button type="button" class="pl-chip pl-chip--active" onclick={() => toggleMemberInvitee(member)} aria-label="{memberName(member)} ×">
+                  <button type="button" class="pl-chip pl-chip--active" onclick={() => toggleMemberInvitee(member)} aria-label={m.d4_remove_item({ name: memberName(member) })}>
                     {@render avatar(member.avatarUrl, memberName(member), 'w-4 h-4')}
                     {memberName(member)}
                     <Papicon icon="x" size={10} />
@@ -2339,7 +2339,7 @@
           <div class="flex flex-wrap gap-1.5 mb-2">
             {#each permUserIds as uid (uid)}
               {@const u = permSelectedUsersMap.get(uid)}
-              <button type="button" class="pl-chip pl-chip--active" onclick={() => togglePermUser({ id: uid, ...(u || {}) })} aria-label="{u ? memberName(u) : uid} ×">
+              <button type="button" class="pl-chip pl-chip--active" onclick={() => togglePermUser({ id: uid, ...(u || {}) })} aria-label={m.d4_remove_item({ name: u ? memberName(u) : uid })}>
                 {#if u}{@render avatar(u.avatarUrl, memberName(u), 'w-4 h-4')}{/if}
                 {u ? memberName(u) : uid}
                 <Papicon icon="x" size={10} />

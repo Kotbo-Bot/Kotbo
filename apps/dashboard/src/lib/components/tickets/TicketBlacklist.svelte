@@ -188,7 +188,7 @@
             </div>
             <button
               onclick={() => removeFromBlacklist(entry)}
-              class="p-2 rounded-lg bg-error/10 text-error hover:bg-rose-500 hover:text-white border border-error/15 transition-all shrink-0"
+              class="p-2 rounded-lg bg-error/10 text-on-error-container hover:bg-rose-500 hover:text-white border border-error/15 transition-all shrink-0"
               title={m.e1_tickets_bl_remove_confirm()}
             >
               <Papicon icon="trash-2" size={14} />

@@ -1,5 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
+  import { m, dateLocale } from '../../i18n';
+  import { chartTable, nearestHeadingText } from '../../chartTable';
   // `chart.js/auto` enregistre l'integralite des controleurs (radar, bubble,
   // scatter, polarArea, echelles temporelles...) et empeche toute elimination
   // de code mort. Ce composant est le seul point d'entree de chart.js du
@@ -70,7 +72,8 @@
     options = {}, 
     height = 300,
     width = null as number | null,
-    plugins = [] as any[]
+    plugins = [] as any[],
+    label = ''
   } = $props<{
     data: any;
     type?: keyof ChartTypeRegistry;
@@ -79,7 +82,19 @@
     width?: number | null;
     /** Plugins Chart.js propres à ce graphique (repères, annotations). */
     plugins?: any[];
+    /** Ce que montre le graphique : legende du tableau qui le remplace pour les lecteurs d'ecran. */
+    label?: string;
   }>();
+
+  const number = new Intl.NumberFormat(dateLocale());
+  const table = $derived(chartTable(data, (n) => number.format(n)));
+
+  // Sans `label`, le titre de la carte qui contient le graphique sert de legende.
+  let container = $state<HTMLDivElement | null>(null);
+  let headingLabel = $state('');
+  $effect(() => {
+    if (container) headingLabel = nearestHeadingText(container);
+  });
 
   let canvas = $state<HTMLCanvasElement | null>(null);
   let chart = $state<Chart | null>(null);
@@ -368,9 +383,28 @@
   });
 </script>
 
-<div class="chart-container" style="height: {height}px; width: {width ? width + 'px' : '100%'}">
-  <canvas bind:this={canvas}></canvas>
+<div bind:this={container} class="chart-container" style="height: {height}px; width: {width ? width + 'px' : '100%'}">
+  <canvas bind:this={canvas} aria-hidden="true"></canvas>
 </div>
+{#if table.rows.length > 0}
+  <table class="sr-only">
+    <caption>{label || headingLabel || m.chart_data_caption()}</caption>
+    <thead>
+      <tr>
+        <th scope="col">{m.chart_data_label()}</th>
+        {#each table.series as serie, i (i)}<th scope="col">{serie}</th>{/each}
+      </tr>
+    </thead>
+    <tbody>
+      {#each table.rows as row, r (r)}
+        <tr>
+          <th scope="row">{row.label}</th>
+          {#each row.values as value, i (i)}<td>{value}</td>{/each}
+        </tr>
+      {/each}
+    </tbody>
+  </table>
+{/if}
 
 <style>
   .chart-container {

@@ -121,9 +121,9 @@
   const toneClass: Record<string, string> = {
     neutral: 'bg-surface-container text-on-surface-variant',
     info: 'bg-primary/10 text-primary',
-    success: 'bg-success/10 text-success',
-    warning: 'bg-warning/10 text-warning',
-    danger: 'bg-error/10 text-error',
+    success: 'bg-success/10 text-on-success-container',
+    warning: 'bg-warning/10 text-on-warning-container',
+    danger: 'bg-error/10 text-on-error-container',
   };
 
   function healthClass(score: number): string {
@@ -282,8 +282,8 @@
     />
 
     {#if view === 'pipeline'}
-      <input
-        class="flex-1 min-w-[180px] max-w-xs rounded-lg border border-outline-variant/30 bg-surface-container-low px-3 py-1.5 text-xs text-on-surface"
+      <input aria-label={m.pship_search_ph()}
+        class="flex-1 min-w-[180px] max-w-xs rounded-lg border border-field-border bg-surface-container-low px-3 py-1.5 text-xs text-on-surface"
         placeholder={m.pship_search_ph()}
         bind:value={search}
       />
@@ -428,7 +428,7 @@
                         {m.pship_reject_reason()}
                       </span>
                       <textarea
-                        class="w-full rounded-lg border border-outline-variant/30 bg-surface-container-low px-3 py-2 text-xs text-on-surface"
+                        class="w-full rounded-lg border border-field-border bg-surface-container-low px-3 py-2 text-xs text-on-surface"
                         rows="2"
                         placeholder={m.pship_reject_reason_ph()}
                         bind:value={rejectReason}

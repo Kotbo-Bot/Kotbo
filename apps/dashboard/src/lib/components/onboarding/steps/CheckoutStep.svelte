@@ -246,7 +246,7 @@
           >
             {m.obx_co_yearly()}
             {#if yearlySavingPercent > 0}
-              <span class="text-2xs px-1.5 py-0.5 rounded bg-success/20 text-success font-semibold">
+              <span class="text-2xs px-1.5 py-0.5 rounded bg-success/20 text-on-success-container font-semibold">
                 −{yearlySavingPercent}%
               </span>
             {/if}
@@ -286,13 +286,13 @@
         <div class="rounded-2xl border border-outline-variant/30 bg-surface-container-low/30 p-4">
           <p class="text-body-sm font-semibold text-on-surface mb-2">{m.obx_co_code()}</p>
           <div class="flex items-center gap-2">
-            <input
+            <input aria-label={m.obx_co_code()}
               type="text"
               bind:value={codeValue}
               disabled={codeBusy}
               placeholder={m.obx_co_code_ph()}
               onkeydown={(event) => event.key === 'Enter' && redeemCode()}
-              class="min-w-0 flex-1 rounded-lg border border-outline-variant/40 bg-surface-container px-3 py-2 text-body-sm text-on-surface placeholder:text-on-surface-variant/40 focus:outline-none focus:ring-2 focus:ring-primary/40"
+              class="min-w-0 flex-1 rounded-lg border border-field-border bg-surface-container px-3 py-2 text-body-sm text-on-surface placeholder:text-on-surface-variant/40 focus:outline-none focus:ring-2 focus:ring-primary/40"
             />
             <button
               type="button"

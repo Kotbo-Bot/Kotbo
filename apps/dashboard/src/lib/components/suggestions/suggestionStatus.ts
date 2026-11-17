@@ -19,9 +19,9 @@ export function suggestionStatusLabel(status: SuggestionStatus): string {
 
 /** Pastille du statut, avec les teintes du thème plutôt que des couleurs en dur. */
 export const SUGGESTION_STATUS_TONE: Record<SuggestionStatus, string> = {
-  PENDING: 'bg-warning/10 text-warning border-warning/20',
-  APPROVED: 'bg-success/10 text-success border-success/20',
+  PENDING: 'bg-warning/10 text-on-warning-container border-warning/20',
+  APPROVED: 'bg-success/10 text-on-success-container border-success/20',
   IN_PROGRESS: 'bg-secondary/10 text-secondary border-secondary/20',
-  REJECTED: 'bg-error/10 text-error border-error/20',
+  REJECTED: 'bg-error/10 text-on-error-container border-error/20',
   IMPLEMENTED: 'bg-primary/10 text-primary border-primary/20',
 };

@@ -362,7 +362,7 @@
             </div>
           {/if}
 
-          <textarea bind:value={infoResponseText} rows="5" maxlength="2000"
+          <textarea aria-label={m.pa_response_placeholder()} bind:value={infoResponseText} rows="5" maxlength="2000"
             placeholder={m.pa_response_placeholder()}
             class="w-full bg-surface-container rounded-xl px-4 py-3 text-sm outline-none border-b-2 border-primary/20 focus:border-primary transition-colors resize-y"></textarea>
           {#if submitError}
@@ -551,7 +551,7 @@
                   </label>
 
                   {#if checked}
-                    <textarea rows="3" maxlength="1500"
+                    <textarea aria-label={m.pa_statement_placeholder()} rows="3" maxlength="1500"
                       value={statements[sanction.id] ?? ''}
                       oninput={(e) => { statements = { ...statements, [sanction.id]: (e.target as HTMLTextAreaElement).value }; }}
                       placeholder={m.pa_statement_placeholder()}
@@ -601,14 +601,14 @@
             {:else if field.type === 'dropdown'}
               <select id={field.id} value={(answers[field.id] as string) || ''}
                 onchange={(e) => setAnswer(field.id, (e.target as HTMLSelectElement).value)}
-                class="w-full bg-surface-container rounded-xl px-4 py-3 text-sm outline-none border border-outline-variant/30">
+                class="w-full bg-surface-container rounded-xl px-4 py-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary border border-field-border">
                 <option value="" disabled>{m.pa_select()}</option>
                 {#each field.options || [] as opt}<option value={opt}>{opt}</option>{/each}
               </select>
             {:else if field.type === 'date'}
               <input id={field.id} type="date" value={(answers[field.id] as string) || ''}
                 onchange={(e) => setAnswer(field.id, (e.target as HTMLInputElement).value)}
-                class="w-full bg-surface-container rounded-xl px-4 py-3 text-sm outline-none border border-outline-variant/30" />
+                class="w-full bg-surface-container rounded-xl px-4 py-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary border border-field-border" />
             {:else}
               <input id={field.id} type={field.type === 'email' ? 'email' : field.type === 'number' ? 'number' : 'text'}
                 value={(answers[field.id] as string) || ''}
@@ -624,7 +624,7 @@
         {/each}
 
         {#if submitError}
-          <div class="rounded-lg bg-error/10 border border-error/20 px-5 py-4 text-sm text-error font-medium">
+          <div class="rounded-lg bg-error/10 border border-error/20 px-5 py-4 text-sm text-on-error-container font-medium">
             {submitError}
           </div>
         {/if}

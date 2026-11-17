@@ -16,6 +16,7 @@
     accentClass = 'bg-primary/10 border-primary/25 hover:bg-primary/20',
     placeholder = '',
     id = '',
+    describedBy = undefined,
     max = Infinity,
   }: {
     values: string[];
@@ -23,6 +24,8 @@
     accentClass?: string;
     placeholder?: string;
     id?: string;
+    /** Id de l'aide ou de l'erreur du champ (`describedBy` de Field, RGAA 11.2). */
+    describedBy?: string;
     /** Nombre d'emojis au plus. À 1, un nouvel emoji remplace le précédent. */
     max?: number;
   } = $props();
@@ -99,12 +102,13 @@
 <div class="flex items-center gap-2 mt-2">
   <input
     {id}
+    aria-describedby={describedBy}
     type="text"
     bind:value={draft}
     onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commitDraft(); } }}
     {placeholder}
     {disabled}
-    class="flex-1 min-w-0 bg-surface-container border border-outline-variant rounded-lg px-3 py-2 text-sm text-on-surface focus:outline-none focus:border-primary/60 disabled:opacity-50"
+    class="flex-1 min-w-0 bg-surface-container border border-field-border rounded-lg px-3 py-2 text-sm text-on-surface focus:outline-none focus:border-primary/60 disabled:opacity-50"
   />
   <EmojiPicker bind:value={picked} {disabled} format="id" />
   <button type="button" class="btn btn-tonal btn-sm shrink-0" {disabled} onclick={commitDraft}>
