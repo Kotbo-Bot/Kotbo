@@ -495,6 +495,25 @@ export async function handleAnalyticsRoutes(
     return true;
   }
 
+  // GET …/analytics/servers/:targetGuildId/insights : ses porteurs chez nous,
+  // le recoupement en nombre et la moderation (onglets Membres et Moderation de la fiche)
+  if (parts.length === 8 && parts[5] === 'servers' && parts[7] === 'insights') {
+    const targetGuildId = parts[6] ?? '';
+    if (!/^\d{17,20}$/.test(targetGuildId)) {
+      json(res, 400, { error: 'Identifiant de serveur invalide.' });
+      return true;
+    }
+    try {
+      const { getServerMemberInsights } = await import('../../../services/analytics/serverMemberInsightsService.js');
+      json(res, 200, await cache.wrap(`guild:${guildId}:analytics:server-insights:${targetGuildId}`, 120, () =>
+        getServerMemberInsights(client, guildId, targetGuildId)));
+    } catch (err) {
+      logger.error('AnalyticsAPI', `Erreur analytics (servers/${targetGuildId}/insights):`, err);
+      jsonFailure(res, err, 'Erreur lors du chargement de la fiche serveur', 'AnalyticsAPI');
+    }
+    return true;
+  }
+
   // GET …/analytics/servers/:targetGuildId : fiche detaillee d'un serveur
   if (parts.length === 7 && parts[5] === 'servers' && parts[6]) {
     const targetGuildId = parts[6];
