@@ -72,6 +72,10 @@ export async function setGuildPlan(guildId: string, plan: PlanKey, reason: strin
   await prisma.guild.update({ where: { id: guildId }, data: { plan } });
   await invalidatePlan(guildId);
   logger.info('Plan', `Offre de ${guildId} passée à ${plan} (${reason}).`);
+
+  // Le bot perso est une fonctionnalité de l'offre Plus : il s'arrête avec elle.
+  const { retireCustomBotIfIneligible } = await import('./customBotRetire.js');
+  await retireCustomBotIfIneligible(guildId).catch((err) => logger.error('CustomBot', `Coupure du bot perso de ${guildId} impossible :`, err));
 }
 
 /** À appeler après toute écriture de `Guild.plan` faite hors de ce service. */
