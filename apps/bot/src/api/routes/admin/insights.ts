@@ -11,6 +11,7 @@ import type { Client } from 'discord.js';
 import { json } from '../../shared.js';
 import { jsonFailure } from '../../shared/failure.js';
 import { clampDays, getAiSupervision, getGlobalActivity, getGuildSheet } from '../../../services/analytics/adminInsightsService.js';
+import { getGuildMembersSheet, getSharedMembers } from '../../../services/analytics/adminGuildMembersService.js';
 import prisma from '../../../utils/db.js';
 
 const SNOWFLAKE = /^\d{15,25}$/;
@@ -80,6 +81,26 @@ export async function handleAdminInsightRoutes(
       }));
 
       json(res, 200, { images: enriched });
+      return true;
+    }
+
+    // GET /api/admin/insights/guilds/:id/members : cohortes, profil, staff, risques, sources, recoupement.
+    if (parts[3] === 'guilds' && parts.length === 6 && parts[5] === 'members') {
+      if (!SNOWFLAKE.test(parts[4])) {
+        json(res, 400, { error: 'Identifiant de serveur invalide.' });
+        return true;
+      }
+      json(res, 200, await getGuildMembersSheet(client, parts[4], days));
+      return true;
+    }
+
+    // GET /api/admin/insights/guilds/:id/overlap/:otherId : membres communs, nommément (console admin seulement).
+    if (parts[3] === 'guilds' && parts.length === 7 && parts[5] === 'overlap') {
+      if (!SNOWFLAKE.test(parts[4]) || !SNOWFLAKE.test(parts[6])) {
+        json(res, 400, { error: 'Identifiant de serveur invalide.' });
+        return true;
+      }
+      json(res, 200, { members: await getSharedMembers(parts[4], parts[6]) });
       return true;
     }
 
