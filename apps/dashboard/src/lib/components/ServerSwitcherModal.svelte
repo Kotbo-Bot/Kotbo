@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { dialogFocus } from '../actions/dialogFocus';
   import { fade, scale } from 'svelte/transition';
   import { router } from 'tinro';
   import Papicon from './Papicon.svelte';
@@ -143,6 +144,7 @@
 {#if open}
   <div
     class="server-switcher-modal fixed inset-0 z-100 flex items-start justify-center pt-[15vh] px-4"
+    use:dialogFocus={{}}
     role="dialog"
     aria-modal="true"
     aria-label={m.d7_server_switcher()}
@@ -254,7 +256,7 @@
               <button
                 type="button"
                 onclick={(e) => toggleFavorite(guild.id, e)}
-                aria-label={isFav ? m.nav_unfavorite() : m.nav_favorite()}
+                aria-label={m.nav_favorite({ name: guild.name })}
                 aria-pressed={isFav}
                 class="w-6 h-6 shrink-0 flex items-center justify-center rounded-md transition-opacity duration-150
                   {isFav ? 'opacity-100 text-warning' : 'opacity-40 hover:opacity-100 focus-visible:opacity-100 text-on-surface-variant hover:text-warning'}"

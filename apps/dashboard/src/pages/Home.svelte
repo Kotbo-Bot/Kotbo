@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { dialogFocus } from '../lib/actions/dialogFocus';
   import { router } from 'tinro';
   import { authStore } from '../lib/stores/auth.svelte';
   import { dashboardStore } from '../lib/stores/dashboard.svelte';
@@ -1808,9 +1809,9 @@
   <!-- Add Module Modal -->
   {#if showAddModuleModal}
     <div class="modal-backdrop" onclick={() => showAddModuleModal = false} role="button" tabindex="-1" onkeydown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) showAddModuleModal = false; }}>
-      <div class="modal-panel modal-panel-lg" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="dialog" aria-modal="true" tabindex="-1">
+      <div class="modal-panel modal-panel-lg" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} use:dialogFocus={{ onEscape: () => (showAddModuleModal = false) }} role="dialog" aria-modal="true" aria-labelledby="home-module-library-title" tabindex="-1">
         <div class="flex items-center justify-between border-b border-outline-variant pb-3 mb-4">
-          <h2 class="text-base font-semibold text-on-surface flex items-center gap-2">
+          <h2 id="home-module-library-title" class="text-base font-semibold text-on-surface flex items-center gap-2">
             <Papicon icon="plus-circle" size={18} class="text-primary" /> {m.home_module_library()}
           </h2>
           <button
@@ -1863,8 +1864,8 @@
   <!-- Reset Confirmation Modal -->
   {#if showResetConfirm}
     <div class="modal-backdrop" onclick={() => showResetConfirm = false} role="button" tabindex="-1" onkeydown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) showResetConfirm = false; }}>
-      <div class="modal-panel max-w-sm" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="dialog" aria-modal="true" tabindex="-1">
-        <h3 class="font-semibold text-base text-on-surface mb-2">{m.home_reset_layout_q()}</h3>
+      <div class="modal-panel max-w-sm" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} use:dialogFocus={{ onEscape: () => (showResetConfirm = false) }} role="dialog" aria-modal="true" aria-labelledby="home-reset-title" tabindex="-1">
+        <h3 id="home-reset-title" class="font-semibold text-base text-on-surface mb-2">{m.home_reset_layout_q()}</h3>
         <p class="text-sm text-on-surface-variant leading-normal mb-5">
           {m.home_reset_layout_warn()}
         </p>
@@ -1879,9 +1880,9 @@
   <!-- Presets Modal -->
   {#if showPresetsModal}
     <div class="modal-backdrop" onclick={() => showPresetsModal = false} role="button" tabindex="-1" onkeydown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) showPresetsModal = false; }}>
-      <div class="modal-panel modal-panel-lg" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="dialog" aria-modal="true" tabindex="-1">
+      <div class="modal-panel modal-panel-lg" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} use:dialogFocus={{ onEscape: () => (showPresetsModal = false) }} role="dialog" aria-modal="true" aria-labelledby="home-presets-title" tabindex="-1">
         <div class="flex items-center justify-between border-b border-outline-variant pb-3 mb-4">
-          <h2 class="text-base font-semibold text-on-surface flex items-center gap-2">
+          <h2 id="home-presets-title" class="text-base font-semibold text-on-surface flex items-center gap-2">
             <Papicon icon="layers" size={18} class="text-primary" /> {m.home_layout_presets()}
           </h2>
           <button

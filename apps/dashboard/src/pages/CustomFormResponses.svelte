@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { dialogFocus } from '../lib/actions/dialogFocus';
   import { m, dateLocale } from '../lib/i18n';
   import { Tabs } from '../lib/components/ui';
   import { onMount } from 'svelte';
@@ -405,7 +406,7 @@
 <!-- Detail modal -->
 {#if selectedResponse}
   <div class="fixed inset-0 z-50 flex items-center justify-center p-4"
-    role="dialog" aria-modal="true" tabindex="-1" onkeydown={(e) => { if (e.key === 'Escape') selectedResponse = null; }}>
+    use:dialogFocus={{}} role="dialog" aria-modal="true" aria-labelledby="cfr-detail-title" tabindex="-1" onkeydown={(e) => { if (e.key === 'Escape') selectedResponse = null; }}>
     <!-- Backdrop -->
     <button
       type="button"
@@ -418,7 +419,7 @@
     <div class="relative z-10 bg-surface rounded-xl shadow-sm max-w-lg w-full max-h-[80vh] overflow-y-auto">
       <div class="sticky top-0 bg-surface border-b border-outline-variant/10 px-6 py-4 flex items-start justify-between rounded-t-3xl">
         <div>
-          <h2 class="font-semibold text-on-surface text-lg font-sans">{m.cfr_detail()}</h2>
+          <h2 id="cfr-detail-title" class="font-semibold text-on-surface text-lg font-sans">{m.cfr_detail()}</h2>
           <p class="text-xs font-mono text-on-surface-variant/40 mt-0.5">{selectedResponse.id}</p>
         </div>
         <button onclick={() => selectedResponse = null}

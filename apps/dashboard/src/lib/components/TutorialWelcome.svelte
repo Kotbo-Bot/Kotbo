@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { dialogFocus } from '../actions/dialogFocus';
   import { onboardingStore } from '../stores/tutorial.svelte';
   import { fade, scale } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
@@ -38,9 +39,11 @@
 
     <div
       class="tutorial-welcome-panel relative w-full max-w-md max-h-[92dvh] overflow-y-auto bg-surface-container-lowest border border-outline-variant rounded-2xl shadow-xl p-6 sm:p-8"
+      use:dialogFocus={{ onEscape: later }}
       role="dialog"
       aria-modal="true"
       aria-labelledby="tutorial-welcome-title"
+      tabindex="-1"
       transition:scale={{ duration: 200, easing: cubicOut, start: 0.96 }}
     >
       <img src={brandingStore.logoUrl || '/favicon.svg'} alt="" class="w-10 h-10 rounded-xl mb-5" />

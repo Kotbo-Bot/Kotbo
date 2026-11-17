@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { dialogFocus } from '../actions/dialogFocus';
   import Papicon from './Papicon.svelte';
   import { m } from '../i18n';
 
@@ -41,6 +42,7 @@
 
 {#if isOpen}
   <div
+    use:dialogFocus={{}}
     role="dialog"
     aria-modal="true"
     aria-labelledby="keyboard-shortcuts-title"

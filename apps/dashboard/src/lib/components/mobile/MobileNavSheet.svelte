@@ -285,7 +285,7 @@
       class="navsheet__pin"
       class:navsheet__pin--on={pinned}
       aria-pressed={pinned}
-      aria-label={pinned ? m.nav_unfavorite() : m.nav_favorite()}
+      aria-label={m.nav_favorite({ name: item.name })}
       onclick={(event) => toggleFavorite(event, item.href)}
     >
       <Papicon icon="star" size={16} class={pinned ? 'fill-current' : ''} />

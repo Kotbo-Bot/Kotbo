@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { dialogFocus } from '../lib/actions/dialogFocus';
   import { explainDisabled } from '../lib/actions/explainDisabled';
   import { m } from '../lib/i18n';
   import { onMount, onDestroy, untrack } from 'svelte';
@@ -1895,6 +1896,7 @@
       class="modal-panel max-w-lg space-y-4 font-inter" 
       onclick={(e) => e.stopPropagation()}
       onkeydown={(e) => e.stopPropagation()}
+      use:dialogFocus={{ onEscape: closeDeleteModal }}
       role="dialog"
       aria-modal="true"
       aria-labelledby="delete-sanction-title"

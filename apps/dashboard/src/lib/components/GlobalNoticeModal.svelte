@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { dialogFocus } from '../actions/dialogFocus';
   import Papicon from './Papicon.svelte';
   import { portal } from '../actions/portal';
   import { globalNotice } from '../stores/globalNotice.svelte';
@@ -21,6 +22,7 @@
     class="global-notice-modal fixed inset-0 flex items-center justify-center p-4"
     onclick={close}
     onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') close(); }}
+    use:dialogFocus={{}}
     role="dialog"
     tabindex="-1"
     aria-modal="true"

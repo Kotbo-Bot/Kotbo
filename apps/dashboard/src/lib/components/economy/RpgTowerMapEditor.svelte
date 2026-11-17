@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { dialogFocus } from '../../actions/dialogFocus';
   import { stripCustomEmoji } from '../../emojiParser';
   import { explainDisabled } from '../../actions/explainDisabled';
   import { untrack } from 'svelte';
@@ -1971,7 +1972,7 @@
 {#if preview}
   <!-- Aperçu : l'image exacte que verront les joueurs en arrivant sur cet étage. -->
   <div class="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" role="presentation" onclick={() => { preview = null; }}>
-    <div class="bg-surface-container rounded-xl border border-outline-variant/30 p-4 max-w-4xl w-full space-y-3" role="dialog" aria-label={m.eco_tower_preview_btn()} tabindex="-1" onclick={(event) => event.stopPropagation()} onkeydown={(event) => { if (event.key === 'Escape') preview = null; }}>
+    <div class="bg-surface-container rounded-xl border border-outline-variant/30 p-4 max-w-4xl w-full space-y-3" use:dialogFocus={{}} role="dialog" aria-modal="true" aria-label={m.eco_tower_preview_btn()} tabindex="-1" onclick={(event) => event.stopPropagation()} onkeydown={(event) => { if (event.key === 'Escape') preview = null; }}>
       <div class="flex items-center justify-between">
         <p class="text-sm font-bold flex items-center gap-2"><Papicon icon="Image" size={14} /> {m.eco_tower_preview_title()}</p>
         <button type="button" onclick={() => { preview = null; }} class="px-3 py-1.5 bg-outline-variant/10 hover:bg-outline-variant/25 text-xs font-bold rounded-lg">{m.eco_btn_cancel()}</button>

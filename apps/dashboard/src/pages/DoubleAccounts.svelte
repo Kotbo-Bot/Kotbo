@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { dialogFocus } from '../lib/actions/dialogFocus';
   import { onMount, onDestroy, untrack } from 'svelte';
   import { router } from 'tinro';
   import { resolveTabFromUrl, gotoTab } from '../lib/tabRouting';
@@ -1345,7 +1346,7 @@
 <!-- Modal : activer le logging des messages (télémétrie pour la détection intelligente) -->
 {#if showLoggingModal}
   <div class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-    role="dialog" aria-modal="true" aria-labelledby="dc-logging-title"
+    use:dialogFocus={{}} role="dialog" aria-modal="true" aria-labelledby="dc-logging-title"
     onclick={(e) => { if (e.target === e.currentTarget) dismissLoggingModal(); }}
     onkeydown={(e) => { if (e.key === 'Escape') dismissLoggingModal(); }}
     tabindex="-1">

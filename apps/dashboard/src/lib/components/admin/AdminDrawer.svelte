@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { dialogFocus } from '../../actions/dialogFocus';
   /**
    * Panneau lateral de detail.
    *
@@ -63,9 +64,11 @@
     <div
       class="relative h-full w-full {widths[width]} bg-surface-container-lowest border-l border-outline-variant/25 shadow-2xl
         flex flex-col animate-in slide-in-from-right duration-200"
+      use:dialogFocus={{}}
       role="dialog"
       aria-modal="true"
       aria-label={title}
+      tabindex="-1"
     >
       <header class="shrink-0 flex items-start justify-between gap-3 px-5 py-4 border-b border-outline-variant/20">
         <div class="min-w-0">

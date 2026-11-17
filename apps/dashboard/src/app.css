@@ -282,8 +282,16 @@
 
 /* ── Shared UI Primitives ─────────────────────────────── */
 
-/* Anneau de focus clavier uniforme (navigation au clavier uniquement) */
-:where(a, button, [role="tab"], [role="button"]):focus-visible {
+/* Anneau de focus clavier uniforme (navigation au clavier uniquement, RGAA 10.7).
+   Tout element focalisable hors champ de saisie : les champs ont leur propre
+   style (.input). `[tabindex]` couvre les composants faits main ; les cibles
+   en tabindex="-1" (contenu principal, panneau de fenetre) recoivent le focus
+   par programme et ne doivent pas s'entourer d'un cadre. */
+:where(
+  a, button, summary, [tabindex]:not([tabindex="-1"]),
+  [role="tab"], [role="button"], [role="menuitem"], [role="option"],
+  [role="switch"], [role="checkbox"], [role="slider"], [role="combobox"]
+):focus-visible {
   outline: 2px solid var(--primary-color);
   outline-offset: 2px;
 }

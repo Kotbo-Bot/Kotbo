@@ -284,7 +284,7 @@
       <div class="stat-kpi flex items-center gap-2.5 !py-1.5 !px-3 !border-primary/20">
         <Papicon icon="Lock" size={14} class="text-primary" />
         <div class="flex flex-col">
-          <span class="section-label !text-2xs !text-primary/70">{m.commands_kpi_restrictions()}</span>
+          <span class="section-label !text-2xs !text-primary">{m.commands_kpi_restrictions()}</span>
           <span class="text-sm font-semibold text-primary">{restrictedCount}</span>
         </div>
       </div>

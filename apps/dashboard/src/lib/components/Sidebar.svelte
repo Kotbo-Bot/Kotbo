@@ -264,7 +264,7 @@
     <button
       type="button"
       onclick={(e) => toggleFavorite(item.href, e)}
-      aria-label={favorites.includes(item.href) ? m.nav_unfavorite() : m.nav_favorite()}
+      aria-label={m.nav_favorite({ name: item.name })}
       aria-pressed={favorites.includes(item.href)}
       class="nav-row__pin mr-1 flex items-center justify-center w-6 h-6 rounded-md shrink-0 transition-opacity duration-150
         {favorites.includes(item.href) ? 'opacity-100 text-warning' : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100 text-on-surface-variant hover:text-warning'}"
