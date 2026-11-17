@@ -765,6 +765,17 @@ export async function handleMembersRoutes(
           getVerificationHistory,
         } = await import('../../../services/moderation/securityVerificationService.js');
 
+        const { isVerificationRequestSpam, VERIFICATION_SPAM_MESSAGE } = await import('../../../services/moderation/verificationSpamGuard.js');
+        if (await isVerificationRequestSpam(client, {
+          guildId,
+          guildName: discordGuild.name,
+          moderatorId: moderator.id,
+          moderatorTag: moderator.tag,
+        })) {
+          json(res, 429, { error: VERIFICATION_SPAM_MESSAGE });
+          return true;
+        }
+
         // Anti-spam : chaque demande timeout le membre 28 jours et lui envoie un
         // MP. Deux modérateurs qui cliquent coup sur coup le harcèlent sans rien
         // apprendre de plus (issue #216).
