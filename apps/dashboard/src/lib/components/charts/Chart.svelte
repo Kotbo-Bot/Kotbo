@@ -387,7 +387,9 @@
   <canvas bind:this={canvas} aria-hidden="true"></canvas>
 </div>
 {#if table.rows.length > 0}
-  <table class="sr-only">
+  <!-- Le div porte le masquage : un <caption> echappe au clip d'une <table> sr-only et s'affichait en double sous le graphique. -->
+  <div class="sr-only">
+  <table>
     <caption>{label || headingLabel || m.chart_data_caption()}</caption>
     <thead>
       <tr>
@@ -404,6 +406,7 @@
       {/each}
     </tbody>
   </table>
+  </div>
 {/if}
 
 <style>
