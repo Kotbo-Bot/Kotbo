@@ -102,9 +102,23 @@ async function execute(interaction: ChatInputCommandInteraction) {
     return;
   }
 
+  // Le bot écrit à la place de l'auteur : celui-ci doit pouvoir écrire dans ce salon lui-même, et
+  // ne notifie @everyone / les rôles que s'il en a le droit.
+  const authorPerms = targetChannel.permissionsFor(interaction.user.id);
+  if (!authorPerms?.has([PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages])) {
+    await interaction.reply({
+      embeds: [errorEmbed(m.b2_say_invalid_channel_title({}, { locale }), 'Tu ne peux pas écrire dans ce salon.')],
+      flags: [MessageFlags.Ephemeral],
+    });
+    return;
+  }
+  const allowedMentions = authorPerms.has(PermissionFlagsBits.MentionEveryone)
+    ? undefined
+    : { parse: ['users' as const] };
+
   try {
-    // Mode embed : uniquement si un titre est fourni ou une couleur/anonymat est demandé
-    if (title || interaction.options.getString('couleur') || anonyme) {
+    // Mode embed : un titre, une couleur, l'anonymat, ou un texte trop long pour un message simple (2000)
+    if (title || message.length > 2000 || interaction.options.getString('couleur') || anonyme) {
       const color = COLOR_MAP[colorKey] ?? COLORS.primary;
 
       const embed = new EmbedBuilder()
@@ -123,10 +137,10 @@ async function execute(interaction: ChatInputCommandInteraction) {
         });
       }
 
-      await targetChannel.send({ embeds: [embed] });
+      await targetChannel.send({ embeds: [embed], allowedMentions });
     } else {
       // Mode message simple : texte brut
-      await targetChannel.send({ content: message });
+      await targetChannel.send({ content: message, allowedMentions });
     }
 
     await interaction.reply({
