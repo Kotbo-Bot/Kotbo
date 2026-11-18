@@ -6,6 +6,7 @@ import { CampaignStatus, CampaignStepStatus, Prisma } from '@prisma/client';
 import prisma from '../../../utils/db.js';
 import { logger } from '../../../utils/logger.js';
 import { pushAudit, getGuildName } from '../../shared.js';
+import { canManageGuild } from '../../../utils/guildAdmin.js';
 import { getCampaignReport, resolveAudience } from '../../../services/features/campaignService.js';
 
 import { auditUserOf, fail, guildRoute, readBody, send } from '../../hono/dashboard/kit.js';
@@ -28,6 +29,14 @@ function ids(value: unknown): string[] {
   return Array.isArray(value)
     ? value.filter((v): v is string => typeof v === 'string' && v.trim().length > 0).slice(0, 50)
     : [];
+}
+
+/** Une campagne ne diffuse que sur des serveurs que l'appelant administre : sinon, publier chez n'importe qui. */
+async function allTargetsManaged(client: Client, guildId: string, userId: string, value: unknown): Promise<boolean> {
+  for (const target of ids(value)) {
+    if (target !== guildId && !(await canManageGuild(client, target, userId))) return false;
+  }
+  return true;
 }
 
 function sanitizeEmbed(value: unknown): Prisma.InputJsonValue | typeof Prisma.JsonNull {
@@ -150,6 +159,10 @@ export function createCampaignsRouter(client: Client) {
         return send(c, { error: parsed.error }, 400);
       }
 
+      if (!(await allTargetsManaged(client, guildId, user.userId, body.targetGuildIds))) {
+        return send(c, { error: 'Vous devez être admin de chacun des serveurs ciblés.' }, 403);
+      }
+
       const campaign = await prisma.campaign.create({
         data: {
           guildId,
@@ -209,6 +222,10 @@ export function createCampaignsRouter(client: Client) {
       const parsed = wantsSteps ? parseSteps(body.steps) : null;
       if (parsed && 'error' in parsed) {
         return send(c, { error: parsed.error }, 400);
+      }
+
+      if (body.targetGuildIds !== undefined && !(await allTargetsManaged(client, guildId, user.userId, body.targetGuildIds))) {
+        return send(c, { error: 'Vous devez être admin de chacun des serveurs ciblés.' }, 403);
       }
 
       const campaign = await prisma.$transaction(async (tx) => {

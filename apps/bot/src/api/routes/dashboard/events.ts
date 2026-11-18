@@ -31,6 +31,15 @@ import {
   swapTournamentSeeds,
 } from '../../../services/features/tournament/tournamentService.js';
 import { UserFacingError } from '../../../utils/userFacingError.js';
+import { isGuildChannel } from '../../../utils/panelMessage.js';
+
+/** Un salon fourni doit appartenir au serveur de la requête (la garde d'événement ne vérifie que l'événement). */
+async function hasForeignChannel(guildId: string, ...ids: unknown[]): Promise<boolean> {
+  for (const id of ids) {
+    if (typeof id === 'string' && id && !(await isGuildChannel(guildId, id))) return true;
+  }
+  return false;
+}
 
 import { fail, guildRoute, readBody, send } from '../../hono/dashboard/kit.js';
 export function createEventsRouter(client: Client) {
@@ -115,6 +124,9 @@ export function createEventsRouter(client: Client) {
       const body = await readBody<Record<string, unknown>>(c);
       if (!body || typeof body.title !== 'string' || !body.title.trim()) {
         return send(c, { error: 'Le titre de l\'événement est requis.' }, 400);
+      }
+      if (await hasForeignChannel(guildId, body.channelId, body.announcementChannelId)) {
+        return send(c, { error: 'Salon introuvable sur ce serveur.' }, 400);
       }
 
       let event;
@@ -217,6 +229,9 @@ export function createEventsRouter(client: Client) {
       const body = await readBody<Record<string, unknown>>(c);
       if (!body) {
         return send(c, { error: 'Corps de requête invalide.' }, 400);
+      }
+      if (await hasForeignChannel(guildId, body.channelId, body.announcementChannelId)) {
+        return send(c, { error: 'Salon introuvable sur ce serveur.' }, 400);
       }
       const currentEvent = await prisma.event.findUnique({ where: { id: eventId } });
       const isLive = currentEvent?.status === 'ONGOING';
