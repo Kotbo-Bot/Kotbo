@@ -370,22 +370,19 @@
 >
 
   {#if isDesktop}
-    <!-- Poignée de redimensionnement et bouton de repli/dépli animé au survol -->
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <div
       role="separator"
       aria-orientation="vertical"
       aria-label={isCollapsed ? m.sbx_expand() : m.sbx_collapse()}
       tabindex="-1"
-      class="sidebar-edge-handle group/edge"
+      class="sidebar-edge-handle"
       class:is-resizing={sidebarStore.isResizing}
       onmousedown={onEdgeMouseDown}
       ondblclick={onEdgeDblClick}
     >
-      <!-- Ligne lumineuse qui apparaît doucement si le curseur approche lentement (5-10px) -->
       <div class="edge-bar" aria-hidden="true"></div>
 
-      <!-- Flèche de repli/dépli : apparaît avec la barre, grossit au survol direct -->
       <button
         type="button"
         class="edge-collapse-btn"
@@ -729,52 +726,46 @@
     background: var(--surface-container);
   }
 
-  /* Poignée de redimensionnement sur le bord droit */
   .sidebar-edge-handle {
     position: absolute;
     top: 0;
     right: -6px;
     bottom: 0;
-    width: 14px;
+    width: 12px;
     z-index: 50;
     cursor: col-resize;
     user-select: none;
-    display: flex;
-    align-items: center;
-    justify-content: center;
   }
 
-  /* Barre lumineuse fine (2px), centrée sur la bordure */
   .edge-bar {
     position: absolute;
-    left: 6px;
+    left: 5px;
     top: 0;
     bottom: 0;
-    width: 2px;
-    background: var(--primary-color);
+    width: 1px;
+    background: var(--outline);
     opacity: 0;
-    transform: scaleX(0.5);
-    /* Transition douce avec temporisation (90ms) : visible lors d'une approche lente (5-10px) */
-    transition: opacity 280ms cubic-bezier(0.16, 1, 0.3, 1) 90ms,
-                transform 280ms cubic-bezier(0.16, 1, 0.3, 1) 90ms;
+    transition: opacity 150ms ease, background-color 150ms ease;
     pointer-events: none;
-    box-shadow: 0 0 6px color-mix(in srgb, var(--primary-color) 40%, transparent);
   }
 
-  .sidebar-edge-handle:hover .edge-bar,
+  .sidebar-edge-handle:hover .edge-bar {
+    opacity: 1;
+  }
+
   .sidebar-edge-handle.is-resizing .edge-bar {
     opacity: 1;
-    transform: scaleX(1);
+    width: 2px;
+    background: var(--primary-color);
   }
 
-  /* Bouton de repli/dépli avec flèche */
   .edge-collapse-btn {
     position: absolute;
-    left: 7px;
-    top: 50%;
-    transform: translate(-50%, -50%) scale(0.85);
-    width: 22px;
-    height: 30px;
+    left: 6px;
+    top: 3.5rem;
+    transform: translate(-50%, 0);
+    width: 24px;
+    height: 24px;
     border-radius: 9999px;
     border: 1px solid var(--outline-variant);
     background: var(--surface-container-lowest);
@@ -784,34 +775,25 @@
     justify-content: center;
     opacity: 0;
     pointer-events: none;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
     cursor: pointer;
-    transition: opacity 240ms cubic-bezier(0.16, 1, 0.3, 1) 90ms,
-                transform 200ms cubic-bezier(0.34, 1.3, 0.64, 1),
+    transition: opacity 150ms ease,
                 background-color 150ms ease,
                 color 150ms ease,
-                border-color 150ms ease,
-                box-shadow 150ms ease;
+                border-color 150ms ease;
   }
 
   .sidebar-edge-handle:hover .edge-collapse-btn,
+  .sidebar-edge-handle:focus-within .edge-collapse-btn,
   .sidebar-edge-handle.is-resizing .edge-collapse-btn {
     opacity: 1;
     pointer-events: auto;
-    transform: translate(-50%, -50%) scale(1);
   }
 
-  /* Survol direct de la flèche : s'affiche plus grand */
   .edge-collapse-btn:hover {
-    transform: translate(-50%, -50%) scale(1.25);
-    background: var(--surface-container-high);
-    color: var(--primary-color);
-    border-color: color-mix(in srgb, var(--primary-color) 50%, var(--outline-variant));
-    box-shadow: 0 4px 12px color-mix(in srgb, var(--primary-color) 25%, rgba(0, 0, 0, 0.15));
-  }
-
-  .edge-collapse-btn:active {
-    transform: translate(-50%, -50%) scale(1.12);
+    background: var(--surface-container);
+    color: var(--on-surface);
+    border-color: var(--outline);
   }
 
   @media (prefers-reduced-motion: reduce) {
