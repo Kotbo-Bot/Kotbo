@@ -7,6 +7,7 @@
 import { Hono } from 'hono';
 import { compress } from 'hono/compress';
 import type { Client } from 'discord.js';
+import { createStarboardRouter } from '../../routes/dashboard/modules/starboard.js';
 import { createSettingsRouter } from '../../routes/dashboard/modules/settings.js';
 import { createNicknameModerationRouter } from '../../routes/dashboard/modules/nickname-moderation.js';
 import { createSocialFollowsRouter } from '../../routes/dashboard/modules/social-follows.js';
@@ -145,5 +146,6 @@ export function createDashboardRouter(client: Client) {
   router.route('/', createSocialFollowsRouter(client));
   router.route('/', createNicknameModerationRouter(client));
   router.route('/', createSettingsRouter(client));
+  router.route('/', createStarboardRouter(client));
   return router;
 }

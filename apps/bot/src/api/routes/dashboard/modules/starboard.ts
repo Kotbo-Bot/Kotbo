@@ -17,6 +17,7 @@
  * `/modules`, qui écrit les deux états (la pastille et `StarboardConfig`) et
  * propage les dépendances.
  */
+import { Hono } from 'hono';
 import type { Client } from 'discord.js';
 import type { StarboardEntry } from '@prisma/client';
 import {
@@ -50,10 +51,9 @@ import { starboardMessageLabels } from '../../../../services/features/starboardM
 import { blockStarboardEntry, removeHighlightsOfAuthors, unblockStarboardEntry } from '../../../../services/features/starboardService.js';
 import { getMemberIdentities } from '../../../../services/moderation/memberIdentityService.js';
 import { manageableRole } from '../../../../services/community/reputationTierService.js';
-import { getGuildName, json, pushAudit, readJsonBody, type DashboardAccess } from '../../../shared.js';
+import { getGuildName, pushAudit, type DashboardAccess } from '../../../shared.js';
 import { getCachedFeatureAccess } from '../featureGate.js';
-import { jsonFailure } from '../../../shared/failure.js';
-import { type ModuleRouteContext } from './_shared.js';
+import { auditUserOf, fail, guildRoute, readBody, send } from '../../../hono/dashboard/kit.js';
 
 /** Identifiant Discord : salon, rôle, membre ou emoji custom. */
 const SNOWFLAKE_RE = /^\d{17,20}$/;
@@ -261,11 +261,14 @@ async function presentEntries(client: Client, guildId: string, rows: StarboardEn
   }));
 }
 
-export async function handleStarboardRoutes(ctx: ModuleRouteContext): Promise<boolean> {
-  const { req, res, parts, url, client, user, guildId, method, auditUser, access } = ctx;
+export function createStarboardRouter(client: Client) {
+  const router = new Hono();
+  const base = '/api/dashboard/guilds/:guildId';
+  const gate = guildRoute(client);
 
-  // GET /starboard
-  if (parts.length === 5 && method === 'GET') {
+
+  router.get(`${base}/starboard`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
     try {
       const [config, overview] = await Promise.all([getStarboardSettings(guildId), getStarboardOverview(guildId)]);
       const guild = client.guilds.cache.get(guildId);
@@ -274,7 +277,7 @@ export async function handleStarboardRoutes(ctx: ModuleRouteContext): Promise<bo
         getMemberIdentities(client, guildId, config.blockedUserIds),
         getMemberIdentities(client, guildId, overview.topAuthors.map((row) => row.authorId)),
       ]);
-      json(res, 200, {
+      return send(c, {
         config,
         stats: overview.stats,
         topEntries: await presentEntries(client, guildId, overview.topEntries),
@@ -303,63 +306,55 @@ export async function handleStarboardRoutes(ctx: ModuleRouteContext): Promise<bo
       });
     } catch (err) {
       logger.error('StarboardAPI', 'GET starboard error:', err);
-      jsonFailure(res, err, 'Erreur lors de la récupération de Starlight', 'StarboardAPI');
+      return fail(c, err, 'Erreur lors de la récupération de Starlight', 'StarboardAPI');
     }
-    return true;
-  }
+  });
 
-  // GET /starboard/entries
-  if (parts.length === 6 && parts[5] === 'entries' && method === 'GET') {
-    const period = url.searchParams.get('period') || 'all';
-    const sort = url.searchParams.get('sort') || 'recent';
-    const channelId = url.searchParams.get('channelId') || undefined;
-    const authorId = url.searchParams.get('authorId') || undefined;
-    const cursor = url.searchParams.get('cursor') || undefined;
-
+  router.get(`${base}/starboard/entries`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const period = (c.req.query('period') ?? null) || 'all';
+    const sort = (c.req.query('sort') ?? null) || 'recent';
+    const channelId = (c.req.query('channelId') ?? null) || undefined;
+    const authorId = (c.req.query('authorId') ?? null) || undefined;
+    const cursor = (c.req.query('cursor') ?? null) || undefined;
     if (!isStarboardPeriod(period)) {
-      json(res, 400, { error: 'Période invalide' });
-      return true;
+      return send(c, { error: 'Période invalide' }, 400);
     }
     if (!isStarboardSort(sort)) {
-      json(res, 400, { error: 'Tri invalide' });
-      return true;
+      return send(c, { error: 'Tri invalide' }, 400);
     }
     if (channelId && !SNOWFLAKE_RE.test(channelId)) {
-      json(res, 400, { error: 'Identifiant de salon invalide' });
-      return true;
+      return send(c, { error: 'Identifiant de salon invalide' }, 400);
     }
     if (authorId && !SNOWFLAKE_RE.test(authorId)) {
-      json(res, 400, { error: 'Identifiant de membre invalide' });
-      return true;
+      return send(c, { error: 'Identifiant de membre invalide' }, 400);
     }
     // Le curseur suit le tri : un score pour `score`, une date pour `recent`.
     if (cursor && !(sort === 'score' ? decodeScoreCursor(cursor) : decodeTimeCursor(cursor))) {
-      json(res, 400, { error: 'Curseur invalide' });
-      return true;
+      return send(c, { error: 'Curseur invalide' }, 400);
     }
 
     try {
       const page = await listStarboardEntries(guildId, { period, sort, channelId, authorId, cursor });
-      json(res, 200, { entries: await presentEntries(client, guildId, page.entries), nextCursor: page.nextCursor });
+      return send(c, { entries: await presentEntries(client, guildId, page.entries), nextCursor: page.nextCursor });
     } catch (err) {
       logger.error('StarboardAPI', 'GET starboard entries error:', err);
-      jsonFailure(res, err, 'Erreur lors de la récupération des messages à la une', 'StarboardAPI');
+      return fail(c, err, 'Erreur lors de la récupération des messages à la une', 'StarboardAPI');
     }
-    return true;
-  }
+  });
 
-  // PATCH /starboard
-  if (parts.length === 5 && method === 'PATCH') {
+  router.patch(`${base}/starboard`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const access = c.var.effectiveAccess;
+    const auditUser = auditUserOf(c);
     if (!access.canManageSettings) {
-      json(res, 403, { error: 'Permissions insuffisantes' });
-      return true;
+      return send(c, { error: 'Permissions insuffisantes' }, 403);
     }
 
     try {
-      const parsed = parseStarboardConfigPatch(await readJsonBody<unknown>(req));
+      const parsed = parseStarboardConfigPatch(await readBody<unknown>(c));
       if ('error' in parsed) {
-        json(res, 400, { error: parsed.error });
-        return true;
+        return send(c, { error: parsed.error }, 400);
       }
 
       const before = parsed.patch.blockedUserIds ? await getStarboardSettings(guildId) : null;
@@ -382,25 +377,27 @@ export async function handleStarboardRoutes(ctx: ModuleRouteContext): Promise<bo
           : `Configuration Starlight mise à jour (seuil: ${config.threshold}).`,
         channelId: config.channelId,
       });
-      json(res, 200, { config });
+      return send(c, { config });
     } catch (err) {
       logger.error('StarboardAPI', 'PATCH starboard error:', err);
-      jsonFailure(res, err, 'Erreur lors de la mise à jour', 'StarboardAPI');
+      return fail(c, err, 'Erreur lors de la mise à jour', 'StarboardAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /starboard/entries/:id/block | /unblock
-  if (parts.length === 8 && parts[5] === 'entries' && (parts[7] === 'block' || parts[7] === 'unblock') && method === 'POST') {
-    const entryId = parts[6];
-    const block = parts[7] === 'block';
+  router.post(`${base}/starboard/entries/:entryId/:action`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const access = c.var.effectiveAccess;
+    const auditUser = auditUserOf(c);
+    const action = c.req.param('action');
+    if (action !== 'block' && action !== 'unblock') return send(c, { error: 'Route introuvable' }, 404);
+    const entryId = c.req.param('entryId');
+    const block = action === 'block';
     if (!CUID_RE.test(entryId)) {
-      json(res, 400, { error: 'Identifiant de message invalide' });
-      return true;
+      return send(c, { error: 'Identifiant de message invalide' }, 400);
     }
     if (!(await canModerate(client, guildId, access, user.userId))) {
-      json(res, 403, { error: 'Accès modérateur requis' });
-      return true;
+      return send(c, { error: 'Accès modérateur requis' }, 403);
     }
 
     try {
@@ -408,8 +405,7 @@ export async function handleStarboardRoutes(ctx: ModuleRouteContext): Promise<bo
         ? await blockStarboardEntry(client, guildId, entryId, user.userId)
         : await unblockStarboardEntry(client, guildId, entryId);
       if (!entry) {
-        json(res, 404, { error: 'Message introuvable' });
-        return true;
+        return send(c, { error: 'Message introuvable' }, 404);
       }
       await pushAudit(guildId, {
         user: auditUser,
@@ -423,13 +419,13 @@ export async function handleStarboardRoutes(ctx: ModuleRouteContext): Promise<bo
         channelId: entry.channelId,
       });
       const [presented] = await presentEntries(client, guildId, [entry]);
-      json(res, 200, { entry: presented });
+      return send(c, { entry: presented });
     } catch (err) {
       logger.error('StarboardAPI', `POST starboard entry ${block ? 'block' : 'unblock'} error:`, err);
-      jsonFailure(res, err, 'Erreur lors de la mise à jour du message', 'StarboardAPI');
+      return fail(c, err, 'Erreur lors de la mise à jour du message', 'StarboardAPI');
     }
-    return true;
-  }
+  });
 
-  return false;
+  return router;
 }
+
