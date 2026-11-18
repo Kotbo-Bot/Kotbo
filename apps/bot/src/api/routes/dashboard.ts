@@ -13,7 +13,6 @@ import { handleRecruitmentFormRoutes } from './dashboard/recruitmentForms.js';
 import { handleCustomFormRoutes } from './dashboard/customForms.js';
 import { handleBanAppealRoutes } from './dashboard/banAppeals.js';
 import { handleMembersRoutes } from './dashboard/members.js';
-import { handleMemberProfileRoutes } from './dashboard/memberProfile.js';
 import { handleLeadershipRoutes, handleGuildLeadershipRoutes } from './dashboard/leadership.js';
 import { handleModulesRoutes } from './dashboard/modules.js';
 import { handleEventsRoutes } from './dashboard/events.js';
@@ -22,10 +21,8 @@ import { handleBackupRoutes } from './dashboard/backups.js';
 import { handleScheduleRoutes } from './dashboard/schedules.js';
 import { handleMigrationRoutes } from './dashboard/migration.js';
 import { handleCampaignRoutes } from './dashboard/campaigns.js';
-import { handleSetupRoutes } from './dashboard/setup.js';
 import { handleOutgoingWebhookRoutes } from './dashboard/outgoingWebhooks.js';
 import { handleDoingListRoutes } from './dashboard/doingLists.js';
-import { handleAutomodSimulationRoute } from './dashboard/automodSimulation.js';
 import { handleWelcomeExperimentRoutes } from './dashboard/welcomeExperiments.js';
 import { handleAegisRoutes } from './dashboard/aegis.js';
 import { handleCustomBotRoutes } from './dashboard/customBot.js';
@@ -143,9 +140,6 @@ export async function handleDashboardRoutes(
       // remonter « peut configurer » sur chaque fonctionnalite sans regle de
       // role, et la lecture suivante relirait ce mensonge dans le cache.
       const featureAccess = await getCachedFeatureAccess(client, guildId, access, user.userId);
-      if (await handleMemberProfileRoutes(req, res, parts, url, guildId, effectiveAccess, featureAccess)) {
-        return true;
-      }
       if (await handleMembersRoutes(req, res, parts, url, client, user, guildId, effectiveAccess, featureAccess)) {
         if (method !== 'GET') await cache.invalidateGuild(guildId);
         return true;
@@ -163,9 +157,6 @@ export async function handleDashboardRoutes(
     // `access` et non `effectiveAccess` : la route doit savoir si le droit de
     // configurer vient d'un administrateur ou de la seule case « Configurer ».
     // Pas d'invalidation du cache derrière : une simulation n'écrit rien.
-    if (await handleAutomodSimulationRoute(req, res, parts, client, user, guildId, access)) {
-      return true;
-    }
     if (await handleGeneralistModulesRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
       if (method !== 'GET') await cache.invalidateGuild(guildId);
       return true;
@@ -188,9 +179,6 @@ export async function handleDashboardRoutes(
     }
     if (await handleCampaignRoutes(req, res, parts, url, client, user)) {
       if (method !== 'GET') await cache.invalidateGuild(guildId);
-      return true;
-    }
-    if (await handleSetupRoutes(req, res, parts, url, client, user)) {
       return true;
     }
     if (await handleAegisRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {

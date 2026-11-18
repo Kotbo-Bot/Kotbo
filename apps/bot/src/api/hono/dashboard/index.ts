@@ -7,6 +7,9 @@
 import { Hono } from 'hono';
 import { compress } from 'hono/compress';
 import type { Client } from 'discord.js';
+import { createMemberProfileRouter } from '../../routes/dashboard/memberProfile.js';
+import { createAutomodSimulationRouter } from '../../routes/dashboard/automodSimulation.js';
+import { createSetupRouter } from '../../routes/dashboard/setup.js';
 import { createLogsRouter } from '../../routes/dashboard/modules/logs.js';
 import { createNotificationsRouter } from '../../routes/dashboard/modules/notifications.js';
 import { createDailyAlgoWeeksRouter } from '../../routes/dashboard/modules/daily-algo-weeks.js';
@@ -62,5 +65,8 @@ export function createDashboardRouter(client: Client) {
   router.route('/', createDailyAlgoWeeksRouter(client));
   router.route('/', createNotificationsRouter(client));
   router.route('/', createLogsRouter(client));
+  router.route('/', createSetupRouter(client));
+  router.route('/', createAutomodSimulationRouter(client));
+  router.route('/', createMemberProfileRouter(client));
   return router;
 }
