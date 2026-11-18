@@ -309,6 +309,8 @@ export type MemberCaseResponse = {
   /** Boost en cours et historique reconstruit à partir des débuts/arrêts notés par le bot. */
   boost?: MemberCaseBoost | null;
   serverTag?: MemberCaseServerTag | null;
+  /** Historique des attributs d'identité : pseudos, descriptions, pseudos d'affichage, photos de profil, tags et pronoms. */
+  history?: MemberHistoryEntry[];
 };
 
 export type MemberCaseBoost = {
@@ -317,4 +319,14 @@ export type MemberCaseBoost = {
   periodCount: number;
   /** Plus récentes d'abord, 20 au plus. */
   periods: Array<{ start: string; end: string | null; days: number }>;
+};
+
+export type MemberHistoryField = 'username' | 'displayName' | 'avatar' | 'bio' | 'tag' | 'pronouns';
+
+export type MemberHistoryEntry = {
+  id: string;
+  field: MemberHistoryField;
+  oldValue: string | null;
+  newValue: string | null;
+  recordedAt: string;
 };

@@ -47,6 +47,8 @@ export type {
   MemberCaseVerificationEntry,
   MemberCaseVerifications,
   MemberCaseResponse,
+  MemberHistoryField,
+  MemberHistoryEntry,
 } from './types/memberCase.js';
 
 export {
