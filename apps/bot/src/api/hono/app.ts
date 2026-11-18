@@ -29,6 +29,7 @@ import { createUserRouter } from '../routes/user.js';
 import { createReportErrorRouter } from '../routes/error.js';
 import { createReportFeedbackRouter } from '../routes/feedback.js';
 import { createRestApiRouter } from '../mcp/restApi.js';
+import { createMcpServerRouter } from '../mcp/mcpServer.js';
 import { fail } from './dashboard/kit.js';
 
 /**
@@ -83,6 +84,7 @@ export function createHonoApp(client: Client): OpenAPIHono {
   app.route('/', createReportErrorRouter(client));
   app.route('/', createReportFeedbackRouter(client));
   app.route('/', createRestApiRouter(client));
+  app.route('/', createMcpServerRouter(client));
   app.route('/', createDashboardRouter(client));
 
   // ---------------------------------------------------------------------------

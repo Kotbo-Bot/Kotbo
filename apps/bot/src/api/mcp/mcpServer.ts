@@ -1,12 +1,14 @@
 import { IncomingMessage, ServerResponse } from 'node:http';
+import { Socket } from 'node:net';
 import crypto from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import { Client } from 'discord.js';
+import { Hono, type Context } from 'hono';
 import type { McpKeyPermission } from '@prisma/client';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { JWT_SECRET, json } from '../shared.js';
+import { JWT_SECRET, json, splitPath, BunServerResponse } from '../shared.js';
 import { getActiveMcpKeyById, verifyMcpKey, verifyMcpKeyByClientCredentials } from './mcpKeyService.js';
 import { registerMcpTools } from './mcpTools.js';
 import { getGuildPlan } from '../../services/system/planService.js';
@@ -1275,4 +1277,57 @@ export async function handleMCPRoutes(
   }
 
   return false;
+}
+
+export function createMcpServerRouter(client: Client): Hono {
+  const router = new Hono();
+
+  const handleMcp = async (c: Context) => {
+    const rawReq = c.req.raw;
+    const url = new URL(rawReq.url);
+    const parts = splitPath(url.pathname);
+
+    const socket = new Socket();
+    const req = new IncomingMessage(socket);
+    req.method = rawReq.method;
+    req.url = url.pathname + url.search;
+    req.headers = {};
+    rawReq.headers.forEach((value, key) => {
+      req.headers[key.toLowerCase()] = value;
+    });
+
+    let bodyText = '';
+    if (rawReq.method !== 'GET' && rawReq.method !== 'HEAD') {
+      try {
+        bodyText = await rawReq.text();
+      } catch {
+        /* corps illisible ou absent */
+      }
+    }
+    (req as IncomingMessage & { bodyText?: string }).bodyText = bodyText;
+    if (bodyText) {
+      req.push(Buffer.from(bodyText, 'utf8'));
+    }
+    req.push(null);
+
+    return new Promise<Response>((resolve) => {
+      const res = new BunServerResponse(req, resolve);
+      handleMCPRoutes(req as IncomingMessage & { bodyText?: string }, res, parts, url, client)
+        .then((handled) => {
+          if (!handled) {
+            json(res, 404, { error: 'Route introuvable' });
+          }
+        })
+        .catch((err) => {
+          logger.error('MCP', err);
+          json(res, 500, { error: 'Erreur interne MCP' });
+        });
+    });
+  };
+
+  router.all('/api/mcp', handleMcp);
+  router.all('/api/mcp/*', handleMcp);
+  router.all('/api/mcp-direct/*', handleMcp);
+
+  return router;
 }

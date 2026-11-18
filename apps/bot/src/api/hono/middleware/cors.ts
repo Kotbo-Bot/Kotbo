@@ -23,6 +23,7 @@ export function dashboardCors(): MiddlewareHandler {
   return async (c, next) => {
     const isMcpPath =
       c.req.path.startsWith('/api/mcp/') ||
+      c.req.path.startsWith('/api/mcp-direct/') ||
       c.req.path === '/.well-known/oauth-authorization-server' ||
       c.req.path.startsWith('/.well-known/oauth-protected-resource/') ||
       c.req.path.startsWith('/.well-known/oauth-authorization-server/');

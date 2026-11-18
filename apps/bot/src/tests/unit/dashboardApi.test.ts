@@ -212,7 +212,7 @@ import { createReportErrorRouter } from '../../api/routes/error.js';
 import { createUserRouter } from '../../api/routes/user.js';
 import { handleAdminRoutes } from '../../api/routes/admin.js';
 import { createDashboardRouter } from '../../api/hono/dashboard/index.js';
-import { getMcpConnectionLogs, handleMCPRoutes, makeMcpDirectToken } from '../../api/mcp/mcpServer.js';
+import { getMcpConnectionLogs, handleMCPRoutes, makeMcpDirectToken, createMcpServerRouter } from '../../api/mcp/mcpServer.js';
 
 // Helper mock req/res functions
 function createMockRequest(options: {
@@ -1157,6 +1157,20 @@ describe('Modular Routers Unit Tests', () => {
 
       const logs = getMcpConnectionLogs('112233445566778899', 30);
       expect(JSON.stringify(logs)).not.toContain(directToken);
+    });
+
+    test('createMcpServerRouter routes requests correctly through Hono', async () => {
+      const router = createMcpServerRouter(mockClient);
+      const res = await router.request('/api/mcp/112233445566778899/.well-known/oauth-protected-resource', {
+        headers: {
+          'x-forwarded-proto': 'https',
+          'x-forwarded-host': 'api-kotbo.example',
+        },
+      });
+      expect(res.status).toBe(200);
+      const data = await res.json() as { resource: string; authorization_servers: string[] };
+      expect(data.resource).toBe('https://api-kotbo.example/api/mcp/112233445566778899');
+      expect(data.authorization_servers).toEqual(['https://api-kotbo.example/api/mcp/112233445566778899']);
     });
   });
 
