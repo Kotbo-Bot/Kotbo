@@ -9,7 +9,6 @@ import { auditGlobalAdminWrite, evaluateGuildGate } from './dashboard/guildGate.
 import { handleGeneralRoutes, handleGuildGeneralRoutes } from './dashboard/general.js';
 import { handleAnalyticsRoutes } from './dashboard/analytics.js';
 import { handleRecruitmentWebhookRoute, handleRecruitmentRoutes } from './dashboard/recruitment.js';
-import { handleCustomFormRoutes } from './dashboard/customForms.js';
 import { handleBanAppealRoutes } from './dashboard/banAppeals.js';
 import { handleMembersRoutes } from './dashboard/members.js';
 import { handleLeadershipRoutes, handleGuildLeadershipRoutes } from './dashboard/leadership.js';
@@ -19,7 +18,6 @@ import { handleDoingListRoutes } from './dashboard/doingLists.js';
 import { handleAegisRoutes } from './dashboard/aegis.js';
 import { handleCustomBotRoutes } from './dashboard/customBot.js';
 import { handleChannelLinkRoutes } from './dashboard/channelLinks.js';
-import { handleStaffServerRoutes } from './dashboard/staffServer.js';
 import { handleHomeWidgetsRoutes } from './dashboard/homeWidgets.js';
 import { handleRankedRoutes } from './dashboard/ranked.js';
 import { handleRaidProtectionRoutes } from './dashboard/raidProtection.js';
@@ -90,10 +88,6 @@ export async function handleDashboardRoutes(
       if (method !== 'GET') await cache.invalidateGuild(guildId);
       return true;
     }
-    if (await handleCustomFormRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
-      if (method !== 'GET') await cache.invalidateGuild(guildId);
-      return true;
-    }
     if (await handleBanAppealRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
       if (method !== 'GET') await cache.invalidateGuild(guildId);
       return true;
@@ -141,10 +135,6 @@ export async function handleDashboardRoutes(
       return true;
     }
     if (await handleChannelLinkRoutes(req, res, parts, url, client, user, guildId)) {
-      if (method !== 'GET') await cache.invalidateGuild(guildId);
-      return true;
-    }
-    if (await handleStaffServerRoutes(req, res, parts, url, client, user, guildId)) {
       if (method !== 'GET') await cache.invalidateGuild(guildId);
       return true;
     }

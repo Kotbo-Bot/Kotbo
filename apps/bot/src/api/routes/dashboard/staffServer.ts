@@ -1,12 +1,7 @@
-import { IncomingMessage, ServerResponse } from 'node:http';
+import { Hono, type Context } from 'hono';
 import { Client, ChannelType } from 'discord.js';
 import prisma from '../../../utils/db.js';
 import { logger } from '../../../utils/logger.js';
-import {
-  json,
-  readJsonBody,
-  type AuthClaims,
-} from '../../shared.js';
 import {
   fullSyncStaffRoles,
   autoSetupRoleMappings,
@@ -17,22 +12,32 @@ import {
 import { reconcileStaffGuildActivation } from '../../../utils/activation.js';
 import { isModuleEnabled } from '../../../services/core/moduleGate.js';
 
-import { jsonFailure } from '../../shared/failure.js';
-export async function handleStaffServerRoutes(
-  req: IncomingMessage,
-  res: ServerResponse,
-  parts: string[],
-  url: URL,
-  client: Client,
-  user: AuthClaims,
-  guildId: string,
-): Promise<boolean> {
-  const method = req.method;
+import { fail, guildRoute, readBody, send } from '../../hono/dashboard/kit.js';
+export function createStaffServerRouter(client: Client) {
+  const router = new Hono();
+  const base = '/api/dashboard/guilds/:guildId';
+  const gate = guildRoute(client);
 
-  if (parts[4] !== 'staff-server') return false;
+  const helpers = (c: Context) => {
+    const guildId = c.req.param('guildId')!;
+    return {
+      /**
+       * Le lien doit relier le serveur ouvert, comme pour sa modification ou sa suppression :
+       * les correspondances de rôles et la synchronisation le prenaient par son seul
+       * identifiant, et le staff d'un autre serveur pouvait décider des rôles distribués ici.
+       */
+      ownsLink: async (linkId: string): Promise<boolean> => {
+        const link = await prisma.staffServerLink.findUnique({
+          where: { id: linkId },
+          select: { mainGuildId: true, staffGuildId: true },
+        });
+        return Boolean(link && (link.mainGuildId === guildId || link.staffGuildId === guildId));
+      },
+    };
+  };
 
-  // GET /api/dashboard/guilds/:guildId/staff-server
-  if (parts.length === 5 && method === 'GET') {
+  router.get(`${base}/staff-server`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
     try {
       const links = await prisma.staffServerLink.findMany({
         where: {
@@ -76,31 +81,29 @@ export async function handleStaffServerRoutes(
         };
       });
 
-      json(res, 200, enriched);
+      return send(c, enriched);
     } catch (err) {
       logger.error('StaffServerAPI', 'Erreur GET staff-server', err);
-      jsonFailure(res, err, 'Erreur serveur', 'StaffServerAPI');
+      return fail(c, err, 'Erreur serveur', 'StaffServerAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/staff-server
-  if (parts.length === 5 && method === 'POST') {
+  router.post(`${base}/staff-server`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
     try {
-      const body = await readJsonBody(req);
+      const body = await readBody(c);
       const staffGuildId = typeof body?.staffGuildId === 'string' ? body.staffGuildId : null;
       const syncMode = body?.syncMode;
       if (!staffGuildId || (syncMode !== 'BIDIRECTIONAL' && syncMode !== 'MAIN_TO_STAFF' && syncMode !== 'STAFF_TO_MAIN')) {
-        json(res, 400, { error: 'staffGuildId et syncMode requis' });
-        return true;
+        return send(c, { error: 'staffGuildId et syncMode requis' }, 400);
       }
 
       const optionalId = (value: unknown) => (typeof value === 'string' ? value : undefined);
 
       const staffGuild = client.guilds.cache.get(staffGuildId);
       if (!staffGuild) {
-        json(res, 400, { error: 'Le bot n\'est pas présent sur le serveur staff.' });
-        return true;
+        return send(c, { error: 'Le bot n\'est pas présent sur le serveur staff.' }, 400);
       }
 
       const linkResult = await createStaffServerLink({
@@ -115,8 +118,7 @@ export async function handleStaffServerRoutes(
       });
 
       if ('error' in linkResult) {
-        json(res, 400, { error: linkResult.error });
-        return true;
+        return send(c, { error: linkResult.error }, 400);
       }
 
       const link = linkResult;
@@ -128,23 +130,22 @@ export async function handleStaffServerRoutes(
         include: { roleMappings: true, hierarchy: true },
       });
 
-      json(res, 201, {
+      return send(c, {
         ...updatedLink,
         autoSetup: roleSetup,
         initialSync: syncResult,
-      });
+      }, 201);
     } catch (err) {
       logger.error('StaffServerAPI', 'Erreur POST staff-server', err);
-      jsonFailure(res, err, 'Erreur serveur', 'StaffServerAPI');
+      return fail(c, err, 'Erreur serveur', 'StaffServerAPI');
     }
-    return true;
-  }
+  });
 
-  // GET /api/dashboard/guilds/:guildId/staff-server/channels - salons du
   // serveur staff lié (mainGuildId = guildId), pour les sélecteurs de salon
   // cross-serveur (ex: notifications staff qui doivent vivre sur le serveur
   // staff dédié plutôt que sur le serveur communautaire).
-  if (parts.length === 6 && parts[5] === 'channels' && method === 'GET') {
+  router.get(`${base}/staff-server/channels`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
     try {
       // Ce selecteur est exempte de la garde des modules : les pages Staff,
       // Reunions et Tickets l'appellent a chaque ouverture, sur des serveurs
@@ -156,8 +157,7 @@ export async function handleStaffServerRoutes(
         })
         : null;
       if (!link) {
-        json(res, 200, { staffGuildId: null, staffGuildName: null, channels: [], voiceChannels: [], categories: [] });
-        return true;
+        return send(c, { staffGuildId: null, staffGuildName: null, channels: [], voiceChannels: [], categories: [] });
       }
 
       let staffGuild = client.guilds.cache.get(link.staffGuildId) ?? null;
@@ -184,7 +184,7 @@ export async function handleStaffServerRoutes(
         .map((c) => ({ id: c.id, name: c.name }))
         .sort(byName);
 
-      json(res, 200, {
+      return send(c, {
         staffGuildId: link.staffGuildId,
         staffGuildName: staffGuild?.name ?? link.staffGuildId,
         channels,
@@ -193,34 +193,19 @@ export async function handleStaffServerRoutes(
       });
     } catch (err) {
       logger.error('StaffServerAPI', 'Erreur GET staff-server/channels', err);
-      jsonFailure(res, err, 'Erreur serveur', 'StaffServerAPI');
+      return fail(c, err, 'Erreur serveur', 'StaffServerAPI');
     }
-    return true;
-  }
+  });
 
-  /**
-   * Le lien doit relier le serveur ouvert, comme pour sa modification ou sa suppression :
-   * les correspondances de rôles et la synchronisation le prenaient par son seul
-   * identifiant, et le staff d'un autre serveur pouvait décider des rôles distribués ici.
-   */
-  const ownsLink = async (linkId: string): Promise<boolean> => {
-    const link = await prisma.staffServerLink.findUnique({
-      where: { id: linkId },
-      select: { mainGuildId: true, staffGuildId: true },
-    });
-    return Boolean(link && (link.mainGuildId === guildId || link.staffGuildId === guildId));
-  };
-
-  // PATCH /api/dashboard/guilds/:guildId/staff-server/:linkId
-  if (parts.length === 6 && method === 'PATCH' && parts[5] !== 'mappings') {
+  router.patch(`${base}/staff-server/:linkId`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
     try {
-      const linkId = parts[5];
-      const body = await readJsonBody(req);
+      const linkId = c.req.param('linkId');
+      const body = await readBody(c);
 
       const link = await prisma.staffServerLink.findUnique({ where: { id: linkId } });
       if (!link || (link.mainGuildId !== guildId && link.staffGuildId !== guildId)) {
-        json(res, 404, { error: 'Lien introuvable' });
-        return true;
+        return send(c, { error: 'Lien introuvable' }, 404);
       }
 
       const allowedFields = [
@@ -246,42 +231,38 @@ export async function handleStaffServerRoutes(
         await reconcileStaffGuildActivation(updated.staffGuildId);
       }
 
-      json(res, 200, updated);
+      return send(c, updated);
     } catch (err) {
       logger.error('StaffServerAPI', 'Erreur PATCH staff-server', err);
-      jsonFailure(res, err, 'Erreur serveur', 'StaffServerAPI');
+      return fail(c, err, 'Erreur serveur', 'StaffServerAPI');
     }
-    return true;
-  }
+  });
 
-  // DELETE /api/dashboard/guilds/:guildId/staff-server/:linkId
-  if (parts.length === 6 && method === 'DELETE' && parts[5] !== 'mappings') {
+  router.delete(`${base}/staff-server/:linkId`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
     try {
-      const linkId = parts[5];
+      const linkId = c.req.param('linkId');
       const link = await prisma.staffServerLink.findUnique({ where: { id: linkId } });
       if (!link || (link.mainGuildId !== guildId && link.staffGuildId !== guildId)) {
-        json(res, 404, { error: 'Lien introuvable' });
-        return true;
+        return send(c, { error: 'Lien introuvable' }, 404);
       }
 
       await removeStaffServerLink(linkId);
-      json(res, 200, { ok: true });
+      return send(c, { ok: true });
     } catch (err) {
       logger.error('StaffServerAPI', 'Erreur DELETE staff-server', err);
-      jsonFailure(res, err, 'Erreur serveur', 'StaffServerAPI');
+      return fail(c, err, 'Erreur serveur', 'StaffServerAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/staff-server/:linkId/mappings
-  if (parts.length === 7 && parts[6] === 'mappings' && method === 'POST') {
+  router.post(`${base}/staff-server/:linkId/mappings`, ...gate, async (c) => {
+    const { ownsLink } = helpers(c);
     try {
-      const linkId = parts[5];
+      const linkId = c.req.param('linkId');
       if (!(await ownsLink(linkId))) {
-        json(res, 404, { error: 'Lien introuvable' });
-        return true;
+        return send(c, { error: 'Lien introuvable' }, 404);
       }
-      const body = await readJsonBody(req);
+      const body = await readBody(c);
 
       const mapping = await prisma.staffServerRoleMapping.create({
         data: {
@@ -292,53 +273,48 @@ export async function handleStaffServerRoutes(
         },
       });
 
-      json(res, 201, mapping);
+      return send(c, mapping, 201);
     } catch (err) {
       logger.error('StaffServerAPI', 'Erreur POST mapping', err);
-      jsonFailure(res, err, 'Erreur serveur', 'StaffServerAPI');
+      return fail(c, err, 'Erreur serveur', 'StaffServerAPI');
     }
-    return true;
-  }
+  });
 
-  // DELETE /api/dashboard/guilds/:guildId/staff-server/:linkId/mappings/:mappingId
-  if (parts.length === 8 && parts[6] === 'mappings' && method === 'DELETE') {
+  router.delete(`${base}/staff-server/:linkId/mappings/:mappingId`, ...gate, async (c) => {
+    const { ownsLink } = helpers(c);
     try {
-      const linkId = parts[5];
-      const mappingId = parts[7];
+      const linkId = c.req.param('linkId');
+      const mappingId = c.req.param('mappingId');
       if (!(await ownsLink(linkId))) {
-        json(res, 404, { error: 'Lien introuvable' });
-        return true;
+        return send(c, { error: 'Lien introuvable' }, 404);
       }
       // La correspondance doit aussi appartenir à ce lien, pas à celui d'un autre serveur.
       const removed = await prisma.staffServerRoleMapping.deleteMany({ where: { id: mappingId, staffServerLinkId: linkId } });
       if (removed.count === 0) {
-        json(res, 404, { error: 'Correspondance introuvable' });
-        return true;
+        return send(c, { error: 'Correspondance introuvable' }, 404);
       }
-      json(res, 200, { ok: true });
+      return send(c, { ok: true });
     } catch (err) {
       logger.error('StaffServerAPI', 'Erreur DELETE mapping', err);
-      jsonFailure(res, err, 'Erreur serveur', 'StaffServerAPI');
+      return fail(c, err, 'Erreur serveur', 'StaffServerAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/staff-server/:linkId/sync
-  if (parts.length === 7 && parts[6] === 'sync' && method === 'POST') {
+  router.post(`${base}/staff-server/:linkId/sync`, ...gate, async (c) => {
+    const { ownsLink } = helpers(c);
     try {
-      const linkId = parts[5];
+      const linkId = c.req.param('linkId');
       if (!(await ownsLink(linkId))) {
-        json(res, 404, { error: 'Lien introuvable' });
-        return true;
+        return send(c, { error: 'Lien introuvable' }, 404);
       }
       const result = await fullSyncStaffRoles(linkId, client);
-      json(res, 200, result);
+      return send(c, result);
     } catch (err) {
       logger.error('StaffServerAPI', 'Erreur sync', err);
-      jsonFailure(res, err, 'Erreur serveur', 'StaffServerAPI');
+      return fail(c, err, 'Erreur serveur', 'StaffServerAPI');
     }
-    return true;
-  }
+  });
 
-  return false;
+  return router;
 }
+

@@ -90,7 +90,7 @@ for (const ext of ['ts', 'js']) {
 }
 
 const { createEventsRouter } = await import('../../api/routes/dashboard/events.js');
-const { handleStaffServerRoutes } = await import('../../api/routes/dashboard/staffServer.js');
+const { createStaffServerRouter } = await import('../../api/routes/dashboard/staffServer.js');
 const { handleInvitationsRoutes } = await import('../../api/routes/dashboard/modules/invitations.js');
 
 function request(method: string, body: unknown = {}): any {
@@ -141,9 +141,12 @@ describe('accès entre serveurs', () => {
       ['DELETE', ['api', 'dashboard', 'guilds', HERE, 'staff-server', 'link-1', 'mappings', 'map-1']],
       ['POST', ['api', 'dashboard', 'guilds', HERE, 'staff-server', 'link-1', 'sync']],
     ] as const) {
-      const res = response();
-      await handleStaffServerRoutes(request(method, { staffRoleId: 'r1' }), res, [...parts], new URL('http://localhost/'), client, user, HERE);
-      expect(res.statusCode).toBe(404);
+      const res = await createStaffServerRouter(client).request(`/${parts.join('/')}`, {
+        method,
+        headers: { cookie: 'kotbo_session=x', 'content-type': 'application/json' },
+        body: JSON.stringify({ staffRoleId: 'r1' }),
+      });
+      expect(res.status).toBe(404);
     }
     expect(writes).toEqual([]);
   });
