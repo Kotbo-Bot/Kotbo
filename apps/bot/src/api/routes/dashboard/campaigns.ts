@@ -204,6 +204,7 @@ export function createCampaignsRouter(client: Client) {
   router.patch(`${base}/campaigns/:campaignId`, ...gate, async (c) => {
     const campaignId = c.req.param('campaignId');
     const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
     try {
       const existing = await prisma.campaign.findFirst({ where: { id: campaignId, guildId } });
       if (!existing) {

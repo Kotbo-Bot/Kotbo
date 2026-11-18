@@ -627,6 +627,7 @@ async function purgeDeletedDropMessages(client: Client): Promise<void> {
     take: 50,
     select: {
       id: true,
+      guildId: true,
       channelId: true,
       messageId: true,
       closedAt: true,
