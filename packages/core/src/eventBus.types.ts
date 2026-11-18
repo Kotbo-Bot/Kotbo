@@ -566,8 +566,6 @@ export interface GiveawayEndedEvent {
   timestamp: number;
 }
 
-// ── Partenariats ────────────────────────────────────────────────
-
 // ── Mapping type → payload ──────────────────────────────────────
 export interface KotboEventMap {
   'message:new': MessageNewEvent;

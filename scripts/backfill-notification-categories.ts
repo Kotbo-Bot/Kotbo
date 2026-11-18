@@ -19,7 +19,6 @@ const BY_LINK: [string, string[]][] = [
   ['moderation', ['/security/sanctions', '/sanctions', '/appeals']],
   ['security', ['/security', '/admin-lock', '/members']],
   ['tickets', ['/tickets', '/transcripts']],
-  ['partnerships', ['/partner']],
   ['staff', ['/procedures', '/staff-management', '/evaluations', '/profile', '/news', '/polls']],
 ];
 
