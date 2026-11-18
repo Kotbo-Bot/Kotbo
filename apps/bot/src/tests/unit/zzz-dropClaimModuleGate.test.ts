@@ -102,8 +102,10 @@ function mockerModule(relatif: string, overrides: Record<string, unknown>): void
   }
 }
 
+const realI18n = await import('../../utils/i18n.js');
+
 mockerModule('../../utils/db', { default: fauxPrisma, prisma: fauxPrisma, prismaRead: fauxPrisma });
-mockerModule('../../utils/i18n', { resolveGuildLocale: mock(async () => 'fr') });
+mockerModule('../../utils/i18n', { ...realI18n, resolveGuildLocale: mock(async () => 'fr') });
 mockerModule('../../services/core/moduleGate', {
   isModuleEnabled: mock(async (_guildId: string, moduleKey: string) => moduleKey !== 'leveling' || levelingActif),
 });
@@ -360,10 +362,10 @@ describe('messages récents d\'un salon, pour l\'attente d\'activité', () => {
     const { client, fetchMessages } = salon([]);
     const since = new Date(now - 15 * 60 * 1000);
     await countRecentMemberMessages(client, 'salon-1', since, 'guild-1');
-    expect(fetchMessages).toHaveBeenCalledWith({
-      limit: 100,
-      after: SnowflakeUtil.generate({ timestamp: since.getTime() }).toString(),
-    });
+    expect(fetchMessages).toHaveBeenCalledTimes(1);
+    const [options] = fetchMessages.mock.calls[0]!;
+    expect(options.limit).toBe(100);
+    expect(SnowflakeUtil.timestampFrom(options.after!)).toBe(since.getTime());
   });
 
   test('salon injoignable : zéro, le drop attend son plafond de retard', async () => {

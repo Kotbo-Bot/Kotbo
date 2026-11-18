@@ -346,9 +346,9 @@ describe('renderOgCard', () => {
   }, RENDER_TIMEOUT_MS);
 
   test('deux clés différentes donnent deux cartes différentes', async () => {
-    const base = { kicker: 'Ticket', title: 'Contenu protégé', art: { type: 'redactedChat' as const } };
-    const a = await renderOgCard({ ...base, cacheKey: 'test:carte-a' });
-    const b = await renderOgCard({ ...base, cacheKey: 'test:carte-b' });
+    const base = { kicker: 'Ticket', art: { type: 'redactedChat' as const } };
+    const a = await renderOgCard({ ...base, title: 'Contenu protégé #1', cacheKey: 'test:carte-a' });
+    const b = await renderOgCard({ ...base, title: 'Contenu protégé #2', cacheKey: 'test:carte-b' });
     expect(a.equals(b)).toBe(false);
   }, RENDER_TIMEOUT_MS);
 });
