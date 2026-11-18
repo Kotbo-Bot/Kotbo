@@ -51,3 +51,44 @@ export async function dashboardCall(router: Hono, method: string, url: string, b
   try { json = text ? JSON.parse(text) : null; } catch { json = text; }
   return { status: res.status, body: json, res };
 }
+
+/** Contexte des anciens tests de sous-routeurs `modules/` (forme de `ModuleRouteContext`). */
+export interface LegacyModuleContext {
+  req: AsyncIterable<unknown> & { bodyText?: string };
+  res: { writeHead?: (status: number) => unknown; end: (chunk?: string) => unknown; statusCode?: number };
+  parts: string[];
+  url?: URL;
+  method?: string;
+  user: AuthClaims;
+  access: DashboardAccess;
+  /** guildId, auditUser, moduleKey… : portés par les anciens tests, ignorés ici. */
+  [extra: string]: unknown;
+}
+
+/**
+ * Rejoue un appel écrit pour l'ancien sous-routeur sur sa version Hono : le corps
+ * est lu dans la fausse requête, le statut et la réponse écrits dans la fausse
+ * réponse. Les assertions des tests restent celles d'origine.
+ */
+export async function legacyModuleCall(router: Hono, ctx: LegacyModuleContext): Promise<boolean> {
+  // `auditUser` du contexte d'origine = nom de session côté Hono (`auditUserOf`).
+  const auditUser = typeof ctx.auditUser === 'string' ? ctx.auditUser : undefined;
+  setDashboardAccess(ctx.access, auditUser ? { ...ctx.user, username: auditUser } : ctx.user);
+  let body = ctx.req.bodyText ?? '';
+  if (!body) {
+    const chunks: string[] = [];
+    for await (const chunk of ctx.req) chunks.push(String(chunk));
+    body = chunks.join('');
+  }
+  const method = ctx.method ?? 'GET';
+  const response = await router.request(`/${ctx.parts.join('/')}${ctx.url?.search ?? ''}`, {
+    method,
+    headers: { cookie: 'kotbo_session=test', 'content-type': 'application/json' },
+    ...(method === 'GET' || method === 'HEAD' || !body ? {} : { body }),
+  });
+  const text = await response.text();
+  ctx.res.statusCode = response.status;
+  ctx.res.writeHead?.(response.status);
+  ctx.res.end(text);
+  return response.status !== 404;
+}
