@@ -85,14 +85,9 @@ import { getStaffProfileSnapshot } from '../../../services/progression/profileSe
 import { canViewFeatureSection, getCachedFeatureAccess } from './featureGate.js';
 import { handleAbsenceRoutes } from './leadership/absences.js';
 import { handleMeetingRoutes } from './leadership/meetings.js';
-import { handleTaskRoutes } from './leadership/tasks.js';
 import { handleCallRoutes } from './leadership/calls.js';
-import { handleApiKeyRoutes } from './leadership/apiKeys.js';
 import { handleStaffRoutes } from './leadership/staff.js';
-import { handleTestingPeriodRoutes } from './leadership/testingPeriods.js';
-import { handleMentorReportRoutes } from './leadership/mentorReports.js';
 import { handleTutoringRoutes } from './leadership/tutoring.js';
-import { handleReminderRoutes } from './leadership/reminders.js';
 
 import { jsonFailure } from '../../shared/failure.js';
 /**
@@ -299,14 +294,9 @@ const LEADERSHIP_ROUTE_HANDLERS: Record<string, (
 ) => Promise<boolean>> = {
   'absences': handleAbsenceRoutes,
   'meetings': handleMeetingRoutes,
-  'tasks': handleTaskRoutes,
   'calls': handleCallRoutes,
-  'api-keys': handleApiKeyRoutes,
   'staff': handleStaffRoutes,
-  'testing-periods': handleTestingPeriodRoutes,
-  'mentor-reports': handleMentorReportRoutes,
   'tutoring': handleTutoringRoutes,
-  'reminders': handleReminderRoutes,
 };
 
 export async function handleGuildLeadershipRoutes(

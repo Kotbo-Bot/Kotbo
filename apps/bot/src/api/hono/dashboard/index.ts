@@ -7,6 +7,11 @@
 import { Hono } from 'hono';
 import { compress } from 'hono/compress';
 import type { Client } from 'discord.js';
+import { createTasksRouter } from '../../routes/dashboard/leadership/tasks.js';
+import { createTestingPeriodsRouter } from '../../routes/dashboard/leadership/testingPeriods.js';
+import { createApiKeysRouter } from '../../routes/dashboard/leadership/apiKeys.js';
+import { createMentorReportsRouter } from '../../routes/dashboard/leadership/mentorReports.js';
+import { createRemindersRouter } from '../../routes/dashboard/leadership/reminders.js';
 import { createEventsRouter } from '../../routes/dashboard/events.js';
 import { createWorkflowsRouter } from '../../routes/dashboard/workflows.js';
 import { createOutgoingWebhooksRouter } from '../../routes/dashboard/outgoingWebhooks.js';
@@ -93,5 +98,10 @@ export function createDashboardRouter(client: Client) {
   router.route('/', createOutgoingWebhooksRouter(client));
   router.route('/', createWorkflowsRouter(client));
   router.route('/', createEventsRouter(client));
+  router.route('/', createRemindersRouter(client));
+  router.route('/', createMentorReportsRouter(client));
+  router.route('/', createApiKeysRouter(client));
+  router.route('/', createTestingPeriodsRouter(client));
+  router.route('/', createTasksRouter(client));
   return router;
 }

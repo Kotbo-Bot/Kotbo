@@ -1,20 +1,9 @@
-import type { IncomingMessage, ServerResponse } from 'node:http';
+import { Hono } from 'hono';
 import type { Client } from 'discord.js';
-import type { AuthClaims, DashboardAccess } from '../../../shared.js';
 import prisma from '../../../../utils/db.js';
 import { logger } from '../../../../utils/logger.js';
-import { jsonFailure } from '../../../shared/failure.js';
-import {
-  json,
-  readJsonBody,
-  getGuildName,
-  
-  pushAudit,
-  
-  
-  
-  
-} from '../../../shared.js';
+import { fail, guildRoute, readBody, send } from '../../../hono/dashboard/kit.js';
+import { getGuildName, pushAudit } from '../../../shared.js';
 import {
   getStaffMember,
   
@@ -48,112 +37,103 @@ import {
   
 } from '../../../../services/staff/staffManagementService.js';
 
-export async function handleApiKeyRoutes(
-  req: IncomingMessage,
-  res: ServerResponse,
-  parts: string[],
-  url: URL,
-  client: Client,
-  user: AuthClaims,
-  guildId: string,
-  access: DashboardAccess
-): Promise<boolean> {
-  const method = req.method;
+export function createApiKeysRouter(client: Client) {
+  const router = new Hono();
+  const base = '/api/dashboard/guilds/:guildId';
+  const gate = guildRoute(client);
 
-    // 4. API Keys routes
-    if (parts[4] === 'api-keys') {
-      // POST /api/dashboard/guilds/:guildId/api-keys
-      if (method === 'POST' && !parts[5]) {
-        try {
-          const body = await readJsonBody<{
-            name?: string;
-            permissions?: string[];
-          }>(req);
 
-          const { fullKey, displayKey } = generateAPIKey();
-          const keyHash = hashAPIKey(fullKey);
+  router.post(`${base}/api-keys`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    try {
+      const body = await readBody<{
+        name?: string;
+        permissions?: string[];
+      }>(c);
 
-          const apiKey = await createAPIKey(
-            guildId,
-            user.userId,
-            keyHash,
-            displayKey,
-            body?.name || 'Mon clé API',
-            body?.permissions || ['daily_algo:create_exercise']
-          );
+      const { fullKey, displayKey } = generateAPIKey();
+      const keyHash = hashAPIKey(fullKey);
 
-          await pushAudit(guildId, {
-            user: user.username ?? `User${user.userId}`,
-            action: 'Création clé API',
-            context: getGuildName(client, guildId),
-            module: 'Staff Management',
-            eventType: 'Manuel',
-            details: `Clé API créée: ${displayKey}`,
-            channelId: null
-          });
+      const apiKey = await createAPIKey(
+        guildId,
+        user.userId,
+        keyHash,
+        displayKey,
+        body?.name || 'Mon clé API',
+        body?.permissions || ['daily_algo:create_exercise']
+      );
 
-          json(res, 201, {
-            id: apiKey.id,
-            fullKey,
-            displayKey: apiKey.displayKey,
-            name: apiKey.name,
-            permissions: apiKey.permissions,
-          });
-        } catch (err) {
-          logger.error('StaffAPI', 'Error creating API key:', err);
-          jsonFailure(res, err, 'Erreur lors de la création de la clé API', 'StaffAPI');
-        }
-        return true;
-      }
+      await pushAudit(guildId, {
+        user: user.username ?? `User${user.userId}`,
+        action: 'Création clé API',
+        context: getGuildName(client, guildId),
+        module: 'Staff Management',
+        eventType: 'Manuel',
+        details: `Clé API créée: ${displayKey}`,
+        channelId: null
+      });
 
-      // GET /api/dashboard/guilds/:guildId/api-keys
-      if (method === 'GET' && !parts[5]) {
-        try {
-          const keys = await getAPIKeys(guildId, user.userId);
-          json(res, 200, { keys });
-        } catch (err) {
-          logger.error('StaffAPI', 'Error getting API keys:', err);
-          jsonFailure(res, err, 'Erreur lors de la récupération des clés API', 'StaffAPI');
-        }
-        return true;
-      }
-
-      // DELETE /api/dashboard/guilds/:guildId/api-keys/:keyId
-      if (method === 'DELETE' && parts[5]) {
-        const keyId = parts[5];
-        try {
-          // Filtrée par serveur : un admin d'ici supprimait sinon la clé d'un autre serveur.
-          const key = await prisma.aPIKey.findFirst({ where: { id: keyId, guildId } });
-          if (!key) {
-            json(res, 404, { error: 'Clé API introuvable' });
-            return true;
-          }
-          const requesterStaff = await getStaffMember(guildId, user.userId);
-          if (!requesterStaff || (key.createdByUserId !== requesterStaff.id && access.level !== 'admin')) {
-            json(res, 403, { error: 'Non autorisé à supprimer cette clé API' });
-            return true;
-          }
-
-          await deleteAPIKey(guildId, keyId);
-
-          await pushAudit(guildId, {
-            user: user.username ?? `User${user.userId}`,
-            action: 'Suppression clé API',
-            context: getGuildName(client, guildId),
-            module: 'Staff Management',
-            eventType: 'Manuel',
-            details: `Clé API supprimée: ${keyId}`,
-            channelId: null
-          });
-
-          json(res, 200, { ok: true });
-        } catch (err) {
-          logger.error('StaffAPI', 'Error deleting API key:', err);
-          jsonFailure(res, err, 'Erreur lors de la suppression de la clé API', 'StaffAPI');
-        }
-        return true;
-      }
+      return send(c, {
+        id: apiKey.id,
+        fullKey,
+        displayKey: apiKey.displayKey,
+        name: apiKey.name,
+        permissions: apiKey.permissions,
+      }, 201);
+    } catch (err) {
+      logger.error('StaffAPI', 'Error creating API key:', err);
+      return fail(c, err, 'Erreur lors de la création de la clé API', 'StaffAPI');
     }
+  });
 
-  return false;
+  router.get(`${base}/api-keys`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    try {
+      const keys = await getAPIKeys(guildId, user.userId);
+      return send(c, { keys });
+    } catch (err) {
+      logger.error('StaffAPI', 'Error getting API keys:', err);
+      return fail(c, err, 'Erreur lors de la récupération des clés API', 'StaffAPI');
+    }
+  });
+
+  router.delete(`${base}/api-keys/:keyId`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const access = c.var.effectiveAccess;
+    const keyId = c.req.param('keyId');
+    try {
+      // Filtrée par serveur : un admin d'ici supprimait sinon la clé d'un autre serveur.
+      const key = await prisma.aPIKey.findFirst({ where: { id: keyId, guildId } });
+      if (!key) {
+        return send(c, { error: 'Clé API introuvable' }, 404);
+      }
+      const requesterStaff = await getStaffMember(guildId, user.userId);
+      if (!requesterStaff || (key.createdByUserId !== requesterStaff.id && access.level !== 'admin')) {
+        return send(c, { error: 'Non autorisé à supprimer cette clé API' }, 403);
+      }
+
+      await deleteAPIKey(guildId, keyId);
+
+      await pushAudit(guildId, {
+        user: user.username ?? `User${user.userId}`,
+        action: 'Suppression clé API',
+        context: getGuildName(client, guildId),
+        module: 'Staff Management',
+        eventType: 'Manuel',
+        details: `Clé API supprimée: ${keyId}`,
+        channelId: null
+      });
+
+      return send(c, { ok: true });
+    } catch (err) {
+      logger.error('StaffAPI', 'Error deleting API key:', err);
+      return fail(c, err, 'Erreur lors de la suppression de la clé API', 'StaffAPI');
+    }
+  });
+
+  return router;
 }
+
