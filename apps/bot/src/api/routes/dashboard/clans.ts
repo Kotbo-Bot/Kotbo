@@ -1,15 +1,15 @@
-import { IncomingMessage, ServerResponse } from 'node:http';
-import { Client } from 'discord.js';
+import { Hono } from 'hono';
+import type { Client } from 'discord.js';
 import prisma from '../../../utils/db.js';
 import { upsertRetryingRace } from '../../../utils/upsertRetry.js';
 import { logger } from '../../../utils/logger.js';
-import { json, readJsonBody, getGuildName, pushAudit, broadcastDashboardStateChange, type AuthClaims, type DashboardAccess } from '../../shared.js';
+import { getGuildName, pushAudit, broadcastDashboardStateChange } from '../../shared.js';
 import { clanTasks, runDistribution, runClear, runClanArtifactCleanup, handleEndSeason, settleRaidBeforeSeasonEnd } from '../../../services/community/clanService.js';
 import { previewRebalance, runRebalance, RebalanceInputError } from '../../../services/community/clanRebalanceService.js';
 import { REBALANCE_MODES } from '../../../services/community/clanRebalancePolicy.js';
 import { memberProfileIdentity } from '../../../services/moderation/memberIdentityService.js';
 import { setDashboardModuleStatus } from '../../../services/core/moduleActivationService.js';
-import { jsonFailure } from '../../shared/failure.js';
+import { fail, guildRoute, readBody, send } from '../../hono/dashboard/kit.js';
 import { BET_ACCEPT_WINDOW_HOURS_MAX, BET_ACCEPT_WINDOW_HOURS_MIN, BET_DEBT_CEILING, BET_OPEN_PER_MEMBER_CEILING, BET_PARTICIPANTS_CEILING, BET_PARTICIPANTS_MIN, BET_SEASON_REWARD_CEILING, BET_SIDES_CEILING, BET_SIDES_MIN, BET_STAKE_MODES, CLAN_BET_SETTINGS_SELECT, MAX_CLAN_POINTS_PER_LEVEL_UP, MIN_CLAN_REFERENCE_LEVEL, errorMessage, firmDebtOf, normalizeClanBetSettings, type BetStakeMode } from '@kotbo/shared';
 import { publicErrorMessage } from '../../../utils/publicError.js';
 
@@ -34,23 +34,14 @@ const RESERVED_SUBACTIONS = new Set([
   'bets',
 ]);
 
-export async function handleClansRoutes(
-  req: IncomingMessage,
-  res: ServerResponse,
-  parts: string[],
-  client: Client,
-  user: AuthClaims,
-  guildId: string,
-  _access: DashboardAccess
-): Promise<boolean> {
-  const method = req.method;
-  const auditUser = `${user.username} (${user.userId})`;
+export function createClansRouter(client: Client) {
+  const router = new Hono();
+  const base = '/api/dashboard/guilds/:guildId';
+  const gate = guildRoute(client);
 
-  // Path matches: /api/dashboard/guilds/:guildId/clans/...
-  const subAction = parts[5]; // undefined | id | distribute | clear | reset-season
 
-  // GET /api/dashboard/guilds/:guildId/clans
-  if (!subAction && method === 'GET') {
+  router.get(`${base}/clans`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
     try {
       const guildData = await prisma.guild.findUnique({
         where: { id: guildId },
@@ -79,8 +70,7 @@ export async function handleClansRoutes(
       });
 
       if (!guildData) {
-        json(res, 404, { error: 'Serveur non trouvé en base de données.' });
-        return true;
+        return send(c, { error: 'Serveur non trouvé en base de données.' }, 404);
       }
 
       const clans = await prisma.clan.findMany({
@@ -116,7 +106,7 @@ export async function handleClansRoutes(
 
       const taskInProgress = clanTasks.get(guildId) || null;
 
-      json(res, 200, {
+      return send(c, {
         clansEnabled: guildData.clansEnabled,
         clanAutoAssignOnJoin: guildData.clanAutoAssignOnJoin,
         clanWeeklyDigest: guildData.clanWeeklyDigest,
@@ -142,14 +132,16 @@ export async function handleClansRoutes(
       });
     } catch (err) {
       logger.error('ClansAPI', 'Error fetching clans data:', err);
-      jsonFailure(res, err, 'Erreur lors de la récupération des clans.', 'ClansAPI');
+      return fail(c, err, 'Erreur lors de la récupération des clans.', 'ClansAPI');
     }
-    return true;
-  }
+  });
 
-  if (!subAction && method === 'PATCH') {
+  router.patch(`${base}/clans`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const auditUser = `${user.username} (${user.userId})`;
     try {
-      const body = await readJsonBody<{
+      const body = await readBody<{
         clansEnabled?: boolean;
         clanAutoAssignOnJoin?: boolean;
         clanWeeklyDigest?: boolean;
@@ -189,7 +181,7 @@ export async function handleClansRoutes(
         betRewardTop1?: number;
         betRewardTop2?: number;
         betRewardTop3?: number;
-      }>(req);
+      }>(c);
 
       const updateData: Record<string, any> = {};
       if (body?.clanAutoAssignOnJoin !== undefined) updateData.clanAutoAssignOnJoin = body.clanAutoAssignOnJoin;
@@ -197,24 +189,21 @@ export async function handleClansRoutes(
       if (body?.clanXpFromLevelUp !== undefined) updateData.clanXpFromLevelUp = body.clanXpFromLevelUp;
       if (body?.clanXpPerLevelUp !== undefined) {
         if (typeof body.clanXpPerLevelUp !== 'number' || body.clanXpPerLevelUp < 0) {
-          json(res, 400, { error: 'Le nombre de points par passage de niveau doit être un entier positif.' });
-          return true;
+          return send(c, { error: 'Le nombre de points par passage de niveau doit être un entier positif.' }, 400);
         }
         updateData.clanXpPerLevelUp = Math.min(MAX_CLAN_POINTS_PER_LEVEL_UP, Math.floor(body.clanXpPerLevelUp));
       }
       if (body?.clanXpLevelUpProportional !== undefined) updateData.clanXpLevelUpProportional = body.clanXpLevelUpProportional;
       if (body?.clanXpReferenceLevel !== undefined) {
         if (typeof body.clanXpReferenceLevel !== 'number' || body.clanXpReferenceLevel < MIN_CLAN_REFERENCE_LEVEL) {
-          json(res, 400, { error: `Le niveau de référence doit être un entier supérieur ou égal à ${MIN_CLAN_REFERENCE_LEVEL}.` });
-          return true;
+          return send(c, { error: `Le niveau de référence doit être un entier supérieur ou égal à ${MIN_CLAN_REFERENCE_LEVEL}.` }, 400);
         }
         updateData.clanXpReferenceLevel = Math.min(1_000, Math.floor(body.clanXpReferenceLevel));
       }
       if (body?.clanXpFromBoost !== undefined) updateData.clanXpFromBoost = body.clanXpFromBoost;
       if (body?.clanXpPerBoost !== undefined) {
         if (typeof body.clanXpPerBoost !== 'number' || body.clanXpPerBoost < 0) {
-          json(res, 400, { error: 'Le nombre de points par boost doit être un entier positif.' });
-          return true;
+          return send(c, { error: 'Le nombre de points par boost doit être un entier positif.' }, 400);
         }
         updateData.clanXpPerBoost = Math.min(MAX_CLAN_POINTS_PER_LEVEL_UP, Math.floor(body.clanXpPerBoost));
       }
@@ -224,8 +213,7 @@ export async function handleClansRoutes(
       if (body?.clanRewardXpBoost !== undefined) updateData.clanRewardXpBoost = body.clanRewardXpBoost;
       if (body?.clanRewardXpBoostRate !== undefined) {
         if (typeof body.clanRewardXpBoostRate !== 'number' || body.clanRewardXpBoostRate < 1.0) {
-          json(res, 400, { error: "Le taux de boost d'XP doit être supérieur ou égal à 1.0." });
-          return true;
+          return send(c, { error: "Le taux de boost d'XP doit être supérieur ou égal à 1.0." }, 400);
         }
         updateData.clanRewardXpBoostRate = body.clanRewardXpBoostRate;
       }
@@ -233,16 +221,14 @@ export async function handleClansRoutes(
       if (body?.clanSeasonStartsAt !== undefined) {
         const startsAt = body.clanSeasonStartsAt ? new Date(body.clanSeasonStartsAt) : null;
         if (startsAt && Number.isNaN(startsAt.getTime())) {
-          json(res, 400, { error: 'La date de début de saison est invalide.' });
-          return true;
+          return send(c, { error: 'La date de début de saison est invalide.' }, 400);
         }
         updateData.clanSeasonStartsAt = startsAt;
       }
       if (body?.clanSeasonEndsAt !== undefined) {
         const endsAt = body.clanSeasonEndsAt ? new Date(body.clanSeasonEndsAt) : null;
         if (endsAt && Number.isNaN(endsAt.getTime())) {
-          json(res, 400, { error: 'La date de fin de saison est invalide.' });
-          return true;
+          return send(c, { error: 'La date de fin de saison est invalide.' }, 400);
         }
         updateData.clanSeasonEndsAt = endsAt;
       }
@@ -250,8 +236,7 @@ export async function handleClansRoutes(
       // antérieure au début enchaînerait des saisons déjà expirées.
       if (updateData.clanSeasonStartsAt && updateData.clanSeasonEndsAt
         && updateData.clanSeasonEndsAt.getTime() <= updateData.clanSeasonStartsAt.getTime()) {
-        json(res, 400, { error: 'La date de fin de saison doit être postérieure à la date de début.' });
-        return true;
+        return send(c, { error: 'La date de fin de saison doit être postérieure à la date de début.' }, 400);
       }
 
       // Réglages de l'onglet Paris. Les bornes viennent de `@kotbo/shared` pour
@@ -263,8 +248,7 @@ export async function handleClansRoutes(
       if (body?.betAnnouncementChannelId !== undefined) updateData.betAnnouncementChannelId = body.betAnnouncementChannelId || null;
       if (body?.betResolverRoleIds !== undefined) {
         if (!Array.isArray(body.betResolverRoleIds)) {
-          json(res, 400, { error: 'La liste des rôles arbitres est invalide.' });
-          return true;
+          return send(c, { error: 'La liste des rôles arbitres est invalide.' }, 400);
         }
         updateData.betResolverRoleIds = [...new Set(
           body.betResolverRoleIds.filter((id): id is string => typeof id === 'string' && /^\d{17,20}$/.test(id)),
@@ -288,22 +272,19 @@ export async function handleClansRoutes(
 
       if (body?.betMaxOpenPerMember !== undefined) {
         if (typeof body.betMaxOpenPerMember !== 'number' || body.betMaxOpenPerMember < 1) {
-          json(res, 400, { error: 'Le nombre de paris simultanés doit être un entier supérieur ou égal à 1.' });
-          return true;
+          return send(c, { error: 'Le nombre de paris simultanés doit être un entier supérieur ou égal à 1.' }, 400);
         }
         updateData.betMaxOpenPerMember = Math.min(BET_OPEN_PER_MEMBER_CEILING, Math.floor(body.betMaxOpenPerMember));
       }
       if (body?.betAcceptWindowHours !== undefined) {
         if (typeof body.betAcceptWindowHours !== 'number' || body.betAcceptWindowHours < BET_ACCEPT_WINDOW_HOURS_MIN) {
-          json(res, 400, { error: `Le délai d'acceptation doit être d'au moins ${BET_ACCEPT_WINDOW_HOURS_MIN} heure.` });
-          return true;
+          return send(c, { error: `Le délai d'acceptation doit être d'au moins ${BET_ACCEPT_WINDOW_HOURS_MIN} heure.` }, 400);
         }
         updateData.betAcceptWindowHours = Math.min(BET_ACCEPT_WINDOW_HOURS_MAX, Math.floor(body.betAcceptWindowHours));
       }
       if (body?.betMaxDebt !== undefined) {
         if (typeof body.betMaxDebt !== 'number' || body.betMaxDebt < 0) {
-          json(res, 400, { error: 'Le plafond de dette doit être un entier positif.' });
-          return true;
+          return send(c, { error: 'Le plafond de dette doit être un entier positif.' }, 400);
         }
         updateData.betMaxDebt = Math.min(BET_DEBT_CEILING, Math.floor(body.betMaxDebt));
       }
@@ -311,8 +292,7 @@ export async function handleClansRoutes(
       for (const flag of ['betAllowPool', 'betAllowTeams', 'betAllowOpen'] as const) {
         if (body?.[flag] !== undefined) {
           if (typeof body[flag] !== 'boolean') {
-            json(res, 400, { error: `Le réglage ${flag} doit être un booléen.` });
-            return true;
+            return send(c, { error: `Le réglage ${flag} doit être un booléen.` }, 400);
           }
           updateData[flag] = body[flag];
         }
@@ -323,32 +303,28 @@ export async function handleClansRoutes(
       // pari, où le nombre de places est connu.
       if (body?.betStakeMode !== undefined) {
         if (!BET_STAKE_MODES.includes(body.betStakeMode)) {
-          json(res, 400, { error: 'Le mode de mise doit valoir PER_MEMBER ou PER_SIDE.' });
-          return true;
+          return send(c, { error: 'Le mode de mise doit valoir PER_MEMBER ou PER_SIDE.' }, 400);
         }
         updateData.betStakeMode = body.betStakeMode;
       }
 
       if (body?.betMaxParticipants !== undefined) {
         if (typeof body.betMaxParticipants !== 'number' || body.betMaxParticipants < BET_PARTICIPANTS_MIN) {
-          json(res, 400, { error: `Un pari doit accepter au moins ${BET_PARTICIPANTS_MIN} participants.` });
-          return true;
+          return send(c, { error: `Un pari doit accepter au moins ${BET_PARTICIPANTS_MIN} participants.` }, 400);
         }
         updateData.betMaxParticipants = Math.min(BET_PARTICIPANTS_CEILING, Math.floor(body.betMaxParticipants));
       }
 
       if (body?.betMaxSides !== undefined) {
         if (typeof body.betMaxSides !== 'number' || body.betMaxSides < BET_SIDES_MIN) {
-          json(res, 400, { error: `Un pari doit compter au moins ${BET_SIDES_MIN} camps.` });
-          return true;
+          return send(c, { error: `Un pari doit compter au moins ${BET_SIDES_MIN} camps.` }, 400);
         }
         updateData.betMaxSides = Math.min(BET_SIDES_CEILING, Math.floor(body.betMaxSides));
       }
 
       if (body?.betSeasonRewardEnabled !== undefined) {
         if (typeof body.betSeasonRewardEnabled !== 'boolean') {
-          json(res, 400, { error: 'Le réglage betSeasonRewardEnabled doit être un booléen.' });
-          return true;
+          return send(c, { error: 'Le réglage betSeasonRewardEnabled doit être un booléen.' }, 400);
         }
         updateData.betSeasonRewardEnabled = body.betSeasonRewardEnabled;
       }
@@ -361,15 +337,13 @@ export async function handleClansRoutes(
       for (const key of ['betRewardTop1', 'betRewardTop2', 'betRewardTop3'] as const) {
         if (body?.[key] === undefined) continue;
         if (typeof body[key] !== 'number' || body[key] < 0) {
-          json(res, 400, { error: 'Une prime de fin de saison doit être un entier positif ou nul.' });
-          return true;
+          return send(c, { error: 'Une prime de fin de saison doit être un entier positif ou nul.' }, 400);
         }
         updateData[key] = Math.min(BET_SEASON_REWARD_CEILING, Math.floor(body[key]));
       }
 
       if (Object.keys(updateData).length === 0 && body?.clansEnabled === undefined) {
-        json(res, 400, { error: 'Aucune donnée valide à mettre à jour.' });
-        return true;
+        return send(c, { error: 'Aucune donnée valide à mettre à jour.' }, 400);
       }
 
       // L'interrupteur de la page passe par la bascule de module plutôt que par
@@ -403,7 +377,7 @@ export async function handleClansRoutes(
 
       broadcastDashboardStateChange(guildId, 'clans_updated');
 
-      json(res, 200, {
+      return send(c, {
         clansEnabled: updatedGuild.clansEnabled,
         clanAutoAssignOnJoin: updatedGuild.clanAutoAssignOnJoin,
         clanWeeklyDigest: updatedGuild.clanWeeklyDigest,
@@ -425,38 +399,36 @@ export async function handleClansRoutes(
       });
     } catch (err) {
       logger.error('ClansAPI', 'Error updating clan settings:', err);
-      jsonFailure(res, err, 'Erreur lors de la mise à jour de la configuration des clans.', 'ClansAPI');
+      return fail(c, err, 'Erreur lors de la mise à jour de la configuration des clans.', 'ClansAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/clans (Create Clan)
-  if (!subAction && method === 'POST') {
+  router.post(`${base}/clans`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const auditUser = `${user.username} (${user.userId})`;
     try {
-      const body = await readJsonBody<{
+      const body = await readBody<{
         name: string;
         description?: string;
         roleId: string;
         generalChannelId?: string | null;
         leaderRoleId?: string | null;
-      }>(req);
+      }>(c);
 
       if (!body?.name || !body?.roleId) {
-        json(res, 400, { error: 'Le nom et le rôle du clan sont requis.' });
-        return true;
+        return send(c, { error: 'Le nom et le rôle du clan sont requis.' }, 400);
       }
 
       // Vérifier si le rôle existe sur Discord
       const discordGuild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
       if (!discordGuild) {
-        json(res, 400, { error: 'Serveur introuvable sur Discord.' });
-        return true;
+        return send(c, { error: 'Serveur introuvable sur Discord.' }, 400);
       }
 
       const roleExists = discordGuild.roles.cache.has(body.roleId);
       if (!roleExists) {
-        json(res, 400, { error: "Le rôle sélectionné n'existe pas sur ce serveur Discord." });
-        return true;
+        return send(c, { error: "Le rôle sélectionné n'existe pas sur ce serveur Discord." }, 400);
       }
 
       // Vérifier l'unicité du rôle
@@ -464,8 +436,7 @@ export async function handleClansRoutes(
         where: { roleId: body.roleId },
       });
       if (existingRoleClan) {
-        json(res, 400, { error: 'Ce rôle est déjà assigné à un autre clan.' });
-        return true;
+        return send(c, { error: 'Ce rôle est déjà assigné à un autre clan.' }, 400);
       }
 
       // Créer le clan
@@ -492,36 +463,37 @@ export async function handleClansRoutes(
 
       broadcastDashboardStateChange(guildId, 'clans_updated');
 
-      json(res, 201, { clan });
+      return send(c, { clan }, 201);
     } catch (err) {
       logger.error('ClansAPI', 'Error creating clan:', err);
-      jsonFailure(res, err, 'Erreur lors de la création du clan.', 'ClansAPI');
+      return fail(c, err, 'Erreur lors de la création du clan.', 'ClansAPI');
     }
-    return true;
-  }
+  });
 
-  // PUT /api/dashboard/guilds/:guildId/clans/:id
-  if (subAction && !RESERVED_SUBACTIONS.has(subAction) && method === 'PUT') {
+  router.put(`${base}/clans/:subAction`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const auditUser = `${user.username} (${user.userId})`;
+    const subAction = c.req.param('subAction');
+    if (RESERVED_SUBACTIONS.has(subAction)) return send(c, { error: 'Route introuvable' }, 404);
     try {
       const clanId = subAction;
-      const body = await readJsonBody<{
+      const body = await readBody<{
         name: string;
         description?: string;
         roleId: string;
         generalChannelId?: string | null;
         leaderRoleId?: string | null;
-      }>(req);
+      }>(c);
 
       if (!body?.name || !body?.roleId) {
-        json(res, 400, { error: 'Le nom et le rôle du clan sont requis.' });
-        return true;
+        return send(c, { error: 'Le nom et le rôle du clan sont requis.' }, 400);
       }
 
       // Vérifier l'existence du rôle sur Discord
       const discordGuild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
       if (discordGuild && !discordGuild.roles.cache.has(body.roleId)) {
-        json(res, 400, { error: "Le rôle sélectionné n'existe pas sur Discord." });
-        return true;
+        return send(c, { error: "Le rôle sélectionné n'existe pas sur Discord." }, 400);
       }
 
       // Vérifier l'unicité du rôle
@@ -529,8 +501,7 @@ export async function handleClansRoutes(
         where: { roleId: body.roleId, id: { not: clanId } },
       });
       if (existingRoleClan) {
-        json(res, 400, { error: 'Ce rôle est déjà attribué à un autre clan.' });
-        return true;
+        return send(c, { error: 'Ce rôle est déjà attribué à un autre clan.' }, 400);
       }
 
       const updatedClan = await prisma.clan.update({
@@ -556,16 +527,19 @@ export async function handleClansRoutes(
 
       broadcastDashboardStateChange(guildId, 'clans_updated');
 
-      json(res, 200, { clan: updatedClan });
+      return send(c, { clan: updatedClan });
     } catch (err) {
       logger.error('ClansAPI', 'Error updating clan:', err);
-      jsonFailure(res, err, 'Erreur lors de la modification du clan.', 'ClansAPI');
+      return fail(c, err, 'Erreur lors de la modification du clan.', 'ClansAPI');
     }
-    return true;
-  }
+  });
 
-  // DELETE /api/dashboard/guilds/:guildId/clans/:id
-  if (subAction && !RESERVED_SUBACTIONS.has(subAction) && method === 'DELETE') {
+  router.delete(`${base}/clans/:subAction`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const auditUser = `${user.username} (${user.userId})`;
+    const subAction = c.req.param('subAction');
+    if (RESERVED_SUBACTIONS.has(subAction)) return send(c, { error: 'Route introuvable' }, 404);
     try {
       const clanId = subAction;
 
@@ -585,51 +559,50 @@ export async function handleClansRoutes(
 
       broadcastDashboardStateChange(guildId, 'clans_updated');
 
-      json(res, 200, { success: true });
+      return send(c, { success: true });
     } catch (err) {
       logger.error('ClansAPI', 'Error deleting clan:', err);
-      jsonFailure(res, err, 'Erreur lors de la suppression du clan.', 'ClansAPI');
+      return fail(c, err, 'Erreur lors de la suppression du clan.', 'ClansAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/clans/distribute (Bulk Random Distribution)
-  if (subAction === 'distribute' && method === 'POST') {
+  router.post(`${base}/clans/distribute`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const auditUser = `${user.username} (${user.userId})`;
     try {
       const message = await runDistribution(guildId, client, auditUser);
-      json(res, 200, { message });
+      return send(c, { message });
     } catch (err) {
       logger.error('ClansAPI', 'Error launching distribution:', err);
-      json(res, errorMessage(err).includes('en cours') || errorMessage(err).includes('configurer') ? 400 : 500, { error: publicErrorMessage(err) });
+      return send(c, { error: publicErrorMessage(err) }, errorMessage(err).includes('en cours') || errorMessage(err).includes('configurer') ? 400 : 500);
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/clans/clear (Bulk Remove Clan Roles)
-  if (subAction === 'clear' && method === 'POST') {
+  router.post(`${base}/clans/clear`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const auditUser = `${user.username} (${user.userId})`;
     try {
       const message = await runClear(guildId, client, auditUser);
-      json(res, 200, { message });
+      return send(c, { message });
     } catch (err) {
       logger.error('ClansAPI', 'Error launching clear:', err);
-      json(res, errorMessage(err).includes('en cours') || errorMessage(err).includes('Aucun clan') ? 400 : 500, { error: publicErrorMessage(err) });
+      return send(c, { error: publicErrorMessage(err) }, errorMessage(err).includes('en cours') || errorMessage(err).includes('Aucun clan') ? 400 : 500);
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/clans/rebalance/preview
   // POST /api/dashboard/guilds/:guildId/clans/rebalance
   //
   // L'aperçu ne touche à rien ; l'application reçoit la liste relue dans l'aperçu et
   // revérifie chaque transfert avant de le faire.
-  if (subAction === 'rebalance' && method === 'POST') {
-    const isPreview = parts[6] === 'preview';
-    if (parts[6] && !isPreview) {
-      json(res, 404, { error: 'Route introuvable.' });
-      return true;
-    }
+  router.on('POST', [`${base}/clans/rebalance`, `${base}/clans/rebalance/preview`], ...gate, async (c) => {
+    const guildId = c.req.param('guildId')!;
+    const user = c.var.dashboardUser;
+    const auditUser = `${user.username} (${user.userId})`;
+    const isPreview = c.req.path.endsWith('/preview');
     try {
-      const body = await readJsonBody<{
+      const body = await readBody<{
         targetClanIds?: unknown;
         targetSize?: unknown;
         protectAbove?: unknown;
@@ -637,7 +610,7 @@ export async function handleClansRoutes(
         mode?: unknown;
         seed?: unknown;
         moves?: unknown;
-      }>(req);
+      }>(c);
 
       const stringList = (value: unknown) => Array.isArray(value)
         ? value.filter((entry): entry is string => typeof entry === 'string')
@@ -656,8 +629,7 @@ export async function handleClansRoutes(
       };
 
       if (isPreview) {
-        json(res, 200, await previewRebalance(guildId, client, request));
-        return true;
+        return send(c, await previewRebalance(guildId, client, request));
       }
 
       const rawMoves: unknown = body?.moves;
@@ -670,17 +642,18 @@ export async function handleClansRoutes(
         : [];
 
       const message = await runRebalance(guildId, client, auditUser, { ...request, moves });
-      json(res, 200, { message });
+      return send(c, { message });
     } catch (err) {
       logger.error('ClansAPI', `Error during rebalance${isPreview ? ' preview' : ''}:`, err);
       const isInputError = err instanceof RebalanceInputError || errorMessage(err).includes('en cours');
-      json(res, isInputError ? 400 : 500, { error: publicErrorMessage(err, 'Erreur lors du rééquilibrage.') });
+      return send(c, { error: publicErrorMessage(err, 'Erreur lors du rééquilibrage.') }, isInputError ? 400 : 500);
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/clans/reset-season (New Season / Reset)
-  if (subAction === 'reset-season' && method === 'POST') {
+  router.post(`${base}/clans/reset-season`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const auditUser = `${user.username} (${user.userId})`;
     try {
       const guild = await prisma.guild.findUnique({
         where: { id: guildId },
@@ -688,8 +661,7 @@ export async function handleClansRoutes(
       });
 
       if (!guild) {
-        json(res, 404, { error: 'Serveur introuvable.' });
-        return true;
+        return send(c, { error: 'Serveur introuvable.' }, 404);
       }
 
       const nextSeason = guild.currentClanSeason + 1;
@@ -739,16 +711,17 @@ export async function handleClansRoutes(
 
       broadcastDashboardStateChange(guildId, 'clans_updated');
 
-      json(res, 200, { currentClanSeason: nextSeason });
+      return send(c, { currentClanSeason: nextSeason });
     } catch (err) {
       logger.error('ClansAPI', 'Error resetting clan season:', err);
-      jsonFailure(res, err, 'Erreur lors de la réinitialisation de la saison.', 'ClansAPI');
+      return fail(c, err, 'Erreur lors de la réinitialisation de la saison.', 'ClansAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/clans/reset-all (Reset All Data)
-  if (subAction === 'reset-all' && method === 'POST') {
+  router.post(`${base}/clans/reset-all`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const auditUser = `${user.username} (${user.userId})`;
     try {
       // 0. Le nettoyage des QG a besoin des clans avant que la base ne soit
       // vidée. Les rôles des membres ne sont pas touchés : un reset des données
@@ -808,16 +781,17 @@ export async function handleClansRoutes(
 
       broadcastDashboardStateChange(guildId, 'clans_updated');
 
-      json(res, 200, { success: true });
+      return send(c, { success: true });
     } catch (err) {
       logger.error('ClansAPI', 'Error resetting all clan data:', err);
-      json(res, 500, { error: 'Erreur lors de la réinitialisation des données de clans.' });
+      return send(c, { error: 'Erreur lors de la réinitialisation des données de clans.' }, 500);
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/clans/rollback-season (Rollback Last Season)
-  if (subAction === 'rollback-season' && method === 'POST') {
+  router.post(`${base}/clans/rollback-season`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const auditUser = `${user.username} (${user.userId})`;
     try {
       const guild = await prisma.guild.findUnique({
         where: { id: guildId },
@@ -825,14 +799,12 @@ export async function handleClansRoutes(
       });
 
       if (!guild) {
-        json(res, 404, { error: 'Serveur introuvable.' });
-        return true;
+        return send(c, { error: 'Serveur introuvable.' }, 404);
       }
 
       const currentSeason = guild.currentClanSeason;
       if (currentSeason <= 1) {
-        json(res, 400, { error: 'Impossible de retourner en arrière de la saison 1.' });
-        return true;
+        return send(c, { error: 'Impossible de retourner en arrière de la saison 1.' }, 400);
       }
 
       const targetSeason = currentSeason - 1;
@@ -973,21 +945,19 @@ export async function handleClansRoutes(
 
       broadcastDashboardStateChange(guildId, 'clans_updated');
 
-      json(res, 200, { currentClanSeason: targetSeason });
+      return send(c, { currentClanSeason: targetSeason });
     } catch (err) {
       logger.error('ClansAPI', 'Error rolling back clan season:', err);
-      json(res, 500, { error: 'Erreur lors de l\'annulation de la saison.' });
+      return send(c, { error: 'Erreur lors de l\'annulation de la saison.' }, 500);
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/clans/points (Adjust points manually on a clan or a member, positive or negative)
-  // GET /api/dashboard/guilds/:guildId/clans/bets
   //
   // Alimente l'onglet Paris : les paris récents et les dettes ouvertes. Les
   // dettes vivent hors saison, elles sont donc listées telles quelles et pas
   // filtrées sur la saison en cours.
-  if (subAction === 'bets' && method === 'GET') {
+  router.get(`${base}/clans/bets`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
     try {
       // Les totaux sont comptés par la base, pas déduits des lignes lues : celles-ci
       // s'arrêtent à 50, et l'onglet afficherait un historique tronqué sans que rien
@@ -1047,7 +1017,7 @@ export async function handleClansRoutes(
         .sort((a, b) => b.firm - a.firm || b.amount - a.amount)
         .slice(0, 50);
 
-      json(res, 200, {
+      return send(c, {
         betCount,
         debtCount,
         bets: bets.map((bet) => {
@@ -1090,12 +1060,10 @@ export async function handleClansRoutes(
       });
     } catch (err) {
       logger.error('ClansAPI', 'Error fetching bets:', err);
-      jsonFailure(res, err, 'Erreur lors de la récupération des paris.', 'ClansAPI');
+      return fail(c, err, 'Erreur lors de la récupération des paris.', 'ClansAPI');
     }
-    return true;
-  }
+  });
 
-  // DELETE /api/dashboard/guilds/:guildId/clans/bets/debts/:userId[?engaged=1]
   //
   // Efface une dette à la main. Utile après un incident : sans ce geste, un
   // membre endetté par erreur voit tous ses gains partir en remboursement.
@@ -1104,17 +1072,19 @@ export async function handleClansRoutes(
   // paris non tranchés a été misé en connaissance de cause, et l'effacer
   // rendrait gratuits des paris toujours en jeu. `engaged=1` l'emporte quand
   // même, pour les incidents où le pari lui-même est en cause.
-  if (subAction === 'bets' && parts[6] === 'debts' && parts[7] && method === 'DELETE') {
-    const userId = parts[7];
-    const includeEngaged = new URL(req.url ?? '', 'http://localhost').searchParams.get('engaged') === '1';
+  router.delete(`${base}/clans/bets/debts/:userId`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const auditUser = `${user.username} (${user.userId})`;
+    const userId = c.req.param('userId');
+    const includeEngaged = c.req.query('engaged') === '1';
     try {
       const existing = await prisma.clanPointDebt.findUnique({
         where: { guildId_userId: { guildId, userId } },
         select: { amount: true },
       });
       if (!existing) {
-        json(res, 200, { success: true, remaining: 0, cleared: 0 });
-        return true;
+        return send(c, { success: true, remaining: 0, cleared: 0 });
       }
 
       let engaged = 0;
@@ -1127,8 +1097,7 @@ export async function handleClansRoutes(
       // et une ligne d'audit annonçant zéro point ferait croire à un geste.
       const cleared = existing.amount - engaged;
       if (cleared <= 0) {
-        json(res, 200, { success: true, remaining: engaged, cleared: 0 });
-        return true;
+        return send(c, { success: true, remaining: engaged, cleared: 0 });
       }
 
       if (engaged > 0) {
@@ -1152,36 +1121,35 @@ export async function handleClansRoutes(
         channelId: null,
       });
       broadcastDashboardStateChange(guildId, 'clans_updated');
-      json(res, 200, { success: true, remaining: engaged, cleared });
+      return send(c, { success: true, remaining: engaged, cleared });
     } catch (err) {
       logger.error('ClansAPI', 'Error clearing clan point debt:', err);
-      jsonFailure(res, err, 'Erreur lors de l\'effacement de la dette.', 'ClansAPI');
+      return fail(c, err, 'Erreur lors de l\'effacement de la dette.', 'ClansAPI');
     }
-    return true;
-  }
+  });
 
-  if (subAction === 'points' && method === 'POST') {
+  router.post(`${base}/clans/points`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const auditUser = `${user.username} (${user.userId})`;
     try {
-      const body = await readJsonBody<{
+      const body = await readBody<{
         clanId?: string | null;
         userId?: string | null;
         amount: number;
-      }>(req);
+      }>(c);
 
       if (typeof body?.amount !== 'number') {
-        json(res, 400, { error: 'Le paramètre amount (nombre) est requis.' });
-        return true;
+        return send(c, { error: 'Le paramètre amount (nombre) est requis.' }, 400);
       }
 
       // La base ne stocke pas de décimale, et un montant nul n'ajuste rien.
       // Le signe porte le sens : positif pour un ajout, négatif pour un retrait.
       if (!Number.isInteger(body.amount) || body.amount === 0) {
-        json(res, 400, { error: 'Le montant doit être un nombre entier non nul (pas de décimale).' });
-        return true;
+        return send(c, { error: 'Le montant doit être un nombre entier non nul (pas de décimale).' }, 400);
       }
       if (Math.abs(body.amount) > MAX_MANUAL_POINTS) {
-        json(res, 400, { error: `Le montant ne peut pas dépasser ${MAX_MANUAL_POINTS.toLocaleString('fr-FR')} points.` });
-        return true;
+        return send(c, { error: `Le montant ne peut pas dépasser ${MAX_MANUAL_POINTS.toLocaleString('fr-FR')} points.` }, 400);
       }
 
       // 1. Récupérer la saison en cours
@@ -1190,8 +1158,7 @@ export async function handleClansRoutes(
         select: { currentClanSeason: true }
       });
       if (!guild) {
-        json(res, 404, { error: 'Serveur introuvable.' });
-        return true;
+        return send(c, { error: 'Serveur introuvable.' }, 404);
       }
       const season = guild.currentClanSeason;
 
@@ -1205,14 +1172,12 @@ export async function handleClansRoutes(
         // Récupérer le membre Discord et ses rôles
         const discordGuild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
         if (!discordGuild) {
-          json(res, 500, { error: "Impossible d'accéder au serveur Discord." });
-          return true;
+          return send(c, { error: "Impossible d'accéder au serveur Discord." }, 500);
         }
 
         const member = discordGuild.members.cache.get(userId) || await discordGuild.members.fetch(userId).catch(() => null);
         if (!member) {
-          json(res, 404, { error: "L'utilisateur est introuvable sur le serveur Discord." });
-          return true;
+          return send(c, { error: "L'utilisateur est introuvable sur le serveur Discord." }, 404);
         }
 
         // S'assurer que le profil membre existe en base de données. Le membre
@@ -1226,8 +1191,7 @@ export async function handleClansRoutes(
         const clans = await prisma.clan.findMany({ where: { guildId } });
         const memberClan = clans.find(c => member.roles.cache.has(c.roleId));
         if (!memberClan) {
-          json(res, 400, { error: "Ce membre n'appartient à aucun clan configuré sur Discord." });
-          return true;
+          return send(c, { error: "Ce membre n'appartient à aucun clan configuré sur Discord." }, 400);
         }
 
         resolvedClanId = memberClan.id;
@@ -1239,8 +1203,7 @@ export async function handleClansRoutes(
         targetUserId = linkedIds.sort()[0];
       } else {
         if (!body.clanId) {
-          json(res, 400, { error: 'Le paramètre clanId est requis si aucun utilisateur n\'est spécifié.' });
-          return true;
+          return send(c, { error: 'Le paramètre clanId est requis si aucun utilisateur n\'est spécifié.' }, 400);
         }
 
         // Vérifier si le clan existe
@@ -1248,8 +1211,7 @@ export async function handleClansRoutes(
           where: { id: body.clanId }
         });
         if (!clan || clan.guildId !== guildId) {
-          json(res, 404, { error: 'Clan introuvable pour ce serveur.' });
-          return true;
+          return send(c, { error: 'Clan introuvable pour ce serveur.' }, 404);
         }
 
         resolvedClanId = clan.id;
@@ -1280,12 +1242,11 @@ export async function handleClansRoutes(
             }))?.xp ?? 0;
 
         if (available <= 0) {
-          json(res, 400, {
+          return send(c, {
             error: isClanWide
               ? "Ce clan n'a aucun point à retirer sur la saison en cours."
               : "Ce membre n'a aucun point à retirer sur la saison en cours.",
-          });
-          return true;
+          }, 400);
         }
 
         effectiveAmount = Math.max(body.amount, -available);
@@ -1370,13 +1331,13 @@ export async function handleClansRoutes(
       // `granted` reste le net inscrit au classement ; `debtRepaid` explique
       // l'écart avec le montant demandé, sans quoi la page annoncerait « 30
       // points ajoutés » à qui en a saisi 100.
-      json(res, 200, { success: true, granted: appliedAmount, debtRepaid, contribution: appliedContribution });
+      return send(c, { success: true, granted: appliedAmount, debtRepaid, contribution: appliedContribution });
     } catch (err) {
       logger.error('ClansAPI', 'Error adjusting manual points:', err);
-      jsonFailure(res, err, 'Erreur lors de l\'ajustement manuel de points.', 'ClansAPI');
+      return fail(c, err, 'Erreur lors de l\'ajustement manuel de points.', 'ClansAPI');
     }
-    return true;
-  }
+  });
 
-  return false;
+  return router;
 }
+

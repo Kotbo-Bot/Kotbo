@@ -7,7 +7,6 @@ import { auditGlobalAdminWrite, evaluateGuildGate } from './dashboard/guildGate.
 
 // Sub-routers imports
 import { handleAnalyticsRoutes } from './dashboard/analytics.js';
-import { handleClansRoutes } from './dashboard/clans.js';
 
 export async function handleDashboardRoutes(
   req: IncomingMessage,
@@ -49,12 +48,6 @@ export async function handleDashboardRoutes(
     if (await handleAnalyticsRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
       if (method !== 'GET') await cache.invalidateGuild(guildId);
       return true;
-    }
-    if (parts[4] === 'clans') {
-      if (await handleClansRoutes(req, res, parts, client, user, guildId, effectiveAccess)) {
-        if (method !== 'GET') await cache.invalidateGuild(guildId);
-        return true;
-      }
     }
   }
 
