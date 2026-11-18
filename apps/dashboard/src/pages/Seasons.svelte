@@ -380,6 +380,7 @@
     <svelte:element
       this={open ? 'button' : 'div'}
       type={open ? 'button' : undefined}
+      role={open ? 'button' : undefined}
       title={open ? m.sx_open_member({ name }) : undefined}
       onclick={open ? () => open(userId) : undefined}
       class="w-full text-left rounded-lg text-sm transition-colors {open ? 'cursor-pointer hover:bg-surface-container-high/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30' : ''} {cls}"

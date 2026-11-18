@@ -87,8 +87,6 @@
     role="presentation"
   >
     <!-- Au clavier, on annule avec Echap ou le bouton Annuler. -->
-    <!-- svelte-ignore a11y_click_events_have_key_events -->
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div class="absolute inset-0 bg-black/40 animate-in fade-in duration-150" onclick={handleCancel} aria-hidden="true"></div>
 
     <!--

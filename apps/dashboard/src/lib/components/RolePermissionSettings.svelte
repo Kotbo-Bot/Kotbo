@@ -7,7 +7,17 @@
   import ActionButton from './ActionButton.svelte';
   import { m } from '../i18n';
 
-  const { featureKey = '', roleAccess = [], title, description } = $props();
+  const {
+    featureKey = '',
+    roleAccess = [],
+    title = undefined,
+    description = undefined,
+  }: {
+    featureKey?: string;
+    roleAccess?: any[];
+    title?: string;
+    description?: string;
+  } = $props();
 
   const saveAction = createAsyncActionState();
   const availableRoles = $derived(dashboardStore.state.discordRoles || []);

@@ -981,6 +981,7 @@
               <svelte:element
                 this={clickable ? 'button' : 'div'}
                 type={clickable ? 'button' : undefined}
+                role={clickable ? 'button' : undefined}
                 title={clickable ? m.sx_open_member({ name: inviter.inviterTag }) : undefined}
                 onclick={clickable ? () => memberCaseModal.show(inviter.inviterId, inviter.inviterTag) : undefined}
                 class="w-full text-left p-4 rounded-lg bg-surface-container-high/20 border border-outline-variant/10 flex items-center justify-between {clickable ? 'cursor-pointer hover:bg-surface-container-high/40 hover:border-primary/30 transition-colors focus-visible:outline-2 focus-visible:outline-primary' : ''}"

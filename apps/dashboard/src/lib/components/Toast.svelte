@@ -36,7 +36,6 @@
 </script>
 
 <!-- Une erreur interrompt le lecteur d'ecran ; le reste passe par la zone polie du conteneur. -->
-<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   class="relative overflow-hidden flex items-center gap-2.5 px-3.5 py-2.5 rounded-lg border shadow-lg shadow-black/10 dark:shadow-black/40 animate-in slide-in-from-right fade-in duration-200 {colorClass}"
   role={item.type === 'error' ? 'alert' : undefined}
