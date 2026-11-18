@@ -1304,22 +1304,17 @@ describe('Modular Routers Unit Tests', () => {
         },
       };
 
-      const req = createMockRequest({
-        method: 'POST',
-        url: '/api/dashboard/guilds/1122334455667788/embed-builder',
-        headers: authenticatedHeaders({ 'content-type': 'application/json' }),
-        body: JSON.stringify(payload),
-      });
+      const res = await createDashboardRouter(mockClient).request(
+        '/api/dashboard/guilds/1122334455667788/embed-builder',
+        {
+          method: 'POST',
+          headers: authenticatedHeaders({ 'content-type': 'application/json' }),
+          body: JSON.stringify(payload),
+        },
+      );
+      expect(res.status).toBe(200);
 
-      const res = createMockResponse();
-      const parts = splitPath(req.url!);
-      const url = new URL(req.url!, 'http://localhost');
-
-      const handled = await handleDashboardRoutes(req, res, parts, url, mockClient);
-      expect(handled).toBeTrue();
-      expect(res.statusCode).toBe(200);
-
-      const data = JSON.parse(res.body);
+      const data = await res.json() as { ok?: boolean; messageId?: string };
       expect(data.ok).toBeTrue();
       expect(data.messageId).toBe('sent-msg-id');
     });

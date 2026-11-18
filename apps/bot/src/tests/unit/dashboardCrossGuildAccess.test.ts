@@ -181,8 +181,8 @@ describe('accès entre serveurs', () => {
     const read = readRouteSource;
 
     const triggers = read('generalistModules.ts');
-    expect(triggers).toContain('prisma.autoResponse.findFirst({\n          where: { id, guildId },');
-    expect(triggers).toContain('prisma.autoResponse.deleteMany({\n          where: { id, guildId },');
+    expect(triggers).toMatch(/prisma\.autoResponse\.findFirst\(\{\s*where: \{ id, guildId \},/);
+    expect(triggers).toMatch(/prisma\.autoResponse\.deleteMany\(\{\s*where: \{ id, guildId \},/);
 
     expect(read('leadership/apiKeys.ts')).toContain('prisma.aPIKey.findFirst({ where: { id: keyId, guildId } })');
 
