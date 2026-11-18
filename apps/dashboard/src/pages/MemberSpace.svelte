@@ -10,6 +10,7 @@
    */
   import { authStore } from '../lib/stores/auth.svelte';
   import { API_BASE_URL, authorizedFetch } from '../lib/api/client';
+  import { fetchDiscordClientId } from '../lib/api';
   import { toast } from '../lib/stores/toast.svelte';
   import { m } from '../lib/i18n';
   import { Button, Callout, SectionCard, ToggleSwitch } from '../lib/components/ui';
@@ -17,6 +18,8 @@
   import ServerSwitcherModal from '../lib/components/ServerSwitcherModal.svelte';
   import RankCardCustomizer from '../lib/components/RankCardCustomizer.svelte';
   import SiteEditorSpace from '../lib/components/site/SiteEditorSpace.svelte';
+  import BotInviteModal from '../lib/components/onboarding/BotInviteModal.svelte';
+  import Papicon from '../lib/components/Papicon.svelte';
 
   const BIO_MAX = 500;
 
@@ -29,8 +32,20 @@
   let bio = $state('');
   let isPublic = $state(false);
   let saved = $state({ bio: '', isPublic: false });
+  let clientId = $state('');
+  let inviteModalOpen = $state(false);
 
   const dirty = $derived(bio.trim() !== saved.bio || isPublic !== saved.isPublic);
+
+  $effect(() => {
+    void fetchDiscordClientId().then((id) => {
+      clientId = id;
+    });
+  });
+
+  function openInviteModal() {
+    inviteModalOpen = true;
+  }
 
   $effect(() => {
     if (userId) void load(userId);
@@ -94,7 +109,7 @@
         <p class="mt-1 max-w-prose text-sm text-on-surface-variant">{m.me_subtitle()}</p>
       </div>
       <div class="flex items-center flex-wrap gap-2 shrink-0">
-        <Button href="/servers" size="sm" variant="primary" icon="Plus">{m.srv_add_to_server()}</Button>
+        <Button href="/servers" size="sm" variant="secondary" icon="Server">{m.srv_title()}</Button>
         {#if hasDashboard}
           <Button href="/" size="sm" icon="arrow-left">{m.me_back_dashboard()}</Button>
         {:else}
@@ -102,6 +117,64 @@
         {/if}
       </div>
     </header>
+
+    <!-- Mise en valeur forte de l'ajout de Kotbo sur son propre serveur -->
+    <section
+      class="relative overflow-hidden rounded-2xl border border-primary/30 bg-surface-container-low/60 p-6 sm:p-7 shadow-xs"
+      aria-labelledby="me-invite-heading"
+    >
+      <div
+        class="pointer-events-none absolute -right-12 -top-12 h-52 w-52 rounded-full bg-primary/10 blur-3xl"
+        aria-hidden="true"
+      ></div>
+
+      <div class="relative z-10 space-y-4">
+        <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-2xs font-semibold bg-primary/15 text-primary">
+          <Papicon icon="Sparkles" size={12} />
+          <span>{m.me_server_badge()}</span>
+        </div>
+
+        <div>
+          <h2 id="me-invite-heading" class="text-xl sm:text-2xl font-bold font-headline text-on-surface tracking-tight leading-snug">
+            {m.me_manage_server()}
+          </h2>
+          <p class="mt-1.5 text-sm text-on-surface-variant max-w-xl leading-relaxed">
+            {m.me_manage_server_desc()}
+          </p>
+        </div>
+
+        <div class="flex flex-wrap gap-x-5 gap-y-2 text-xs text-on-surface-variant font-medium pt-1">
+          <span class="inline-flex items-center gap-1.5">
+            <Papicon icon="check" size={13} class="text-primary shrink-0" />
+            {m.me_feature_tickets()}
+          </span>
+          <span class="inline-flex items-center gap-1.5">
+            <Papicon icon="check" size={13} class="text-primary shrink-0" />
+            {m.me_feature_moderation()}
+          </span>
+          <span class="inline-flex items-center gap-1.5">
+            <Papicon icon="check" size={13} class="text-primary shrink-0" />
+            {m.me_feature_rank()}
+          </span>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-3 pt-2">
+          <Button
+            size="md"
+            variant="primary"
+            icon="Plus"
+            onclick={openInviteModal}
+            class="shadow-sm font-semibold"
+          >
+            {m.me_add_kotbo_cta()}
+          </Button>
+
+          <Button href="/servers" size="md" variant="secondary" icon="Server">
+            {m.srv_title()}
+          </Button>
+        </div>
+      </div>
+    </section>
 
     <SectionCard title={m.me_profile_title()} description={m.me_profile_desc()}>
       {#snippet actions()}
@@ -157,4 +230,9 @@
       <RankCardCustomizer />
     </section>
   </div>
+
+  <BotInviteModal
+    bind:open={inviteModalOpen}
+    {clientId}
+  />
 </main>
