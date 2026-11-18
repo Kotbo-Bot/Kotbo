@@ -724,17 +724,6 @@ model Guild {
   staffServerLinksAsMain  StaffServerLink[] @relation("GuildStaffServerMain")
   staffServerLinksAsStaff StaffServerLink[] @relation("GuildStaffServerStaff")
 
-  // Partenariats (cf. partnerships.prisma)
-  partnershipSettings          PartnershipSettings?
-  partners                     Partner[]
-  partnerships                 Partnership[]
-  partnerApplications          PartnerApplication[]
-  partnershipDirectoryListing  PartnershipDirectoryListing?
-  partnershipProposalsSent     PartnershipProposal[]        @relation("PartnershipProposalsSent")
-  partnershipProposalsReceived PartnershipProposal[]        @relation("PartnershipProposalsReceived")
-  partnershipMatchSuggestions  PartnershipMatchSuggestion[]
-  partnerReputationReports     PartnerReputationReport[]
-  partnerBlocklistEntries      PartnerBlocklistEntry[]
 
   // Security Verification (anti-DC via dashboard OAuth)
   verificationEnabled       Boolean            @default(false)

@@ -562,7 +562,7 @@ client.once(Events.ClientReady, async (c) => {
   // Chaque écouteur rattaché à un module reçoit une vue du client filtrée par
   // `scopeClientToModule` : ses abonnements ne se déclenchent que sur les
   // serveurs où le module est allumé. Les écouteurs sans module (avertissement
-  // code source, rôle de tag serveur, partenariats) gardent le client brut.
+  // code source, rôle de tag serveur) gardent le client brut.
   client.setMaxListeners(30);
   registerCodePoliceListener(scopeClientToModule(client, 'codepolice'));
   registerAdvancedLogsListener(scopeClientToModule(client, 'logs'));
