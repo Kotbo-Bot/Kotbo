@@ -9,13 +9,12 @@
  *
  * Authentification : `Authorization: Bearer mcp_…` ou `X-API-Key: mcp_…`.
  */
-import type { IncomingMessage, ServerResponse } from 'node:http';
+import { Hono } from 'hono';
 import type { Client } from 'discord.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
-import { json } from '../shared.js';
 import { verifyMcpKey } from './mcpKeyService.js';
 import { registerMcpTools } from './mcpTools.js';
 import { checkRateLimit, isValidMcpGuildId } from './mcpServer.js';
@@ -83,88 +82,78 @@ export function statutOutil(result: Pick<CallToolResult, 'isError' | '_meta'>): 
   return result._meta?.[PANNE_INTERNE_META] ? 500 : 400;
 }
 
-export async function handleRestApiRoutes(
-  req: IncomingMessage,
-  res: ServerResponse,
-  parts: string[],
-  url: URL,
-  client: Client
-): Promise<boolean> {
-  if (parts[0] !== 'api' || parts[1] !== 'v1') return false;
+export function createRestApiRouter(client: Client) {
+  const router = new Hono();
 
-  const guildId = parts[2];
-  if (!guildId || !isValidMcpGuildId(guildId)) {
-    json(res, 400, { error: 'invalid_guild_id', error_description: 'Chemin attendu : /api/v1/:guildId/:outil' });
-    return true;
-  }
-  if (req.method !== 'GET') {
-    json(res, 405, { error: 'method_not_allowed', error_description: "L'API REST est en lecture seule (GET)." });
-    return true;
-  }
-
-  if ((await getGuildPlan(guildId)) === 'FREE') {
-    json(res, 402, {
-      error: 'plan_required',
-      error_description: "L'API Kotbo fait partie de l'offre complète. Abonne le serveur depuis la page Facturation du dashboard.",
-    });
-    return true;
-  }
-
-  const authHeader = req.headers.authorization;
-  const headerKey = req.headers['x-api-key'];
-  const rawKey = (typeof authHeader === 'string' && authHeader.startsWith('Bearer ')
-    ? authHeader.slice(7)
-    : Array.isArray(headerKey) ? headerKey[0] : headerKey)?.trim();
-  const key = rawKey?.startsWith('mcp_') ? await verifyMcpKey(rawKey, guildId, client) : null;
-  if (!key) {
-    json(res, 401, { error: 'invalid_api_key', error_description: 'Clé API absente, invalide ou inactive pour ce serveur.' });
-    return true;
-  }
-  if (!checkRateLimit(key.id)) {
-    json(res, 429, { error: 'rate_limited', error_description: 'Trop de requêtes (100 req/min max).' });
-    return true;
-  }
-
-  const tools = collectTools(guildId, key.permissions, client, key.ownerId ?? null);
-  const toolName = parts[3];
-
-  if (!toolName) {
-    json(res, 200, {
-      permissions: key.permissions,
-      tools: [...tools].map(([name, { config }]) => ({
-        name,
-        description: config.description ?? null,
-        params: zodToJsonSchema(inputSchemaOf(config)),
-      })),
-    });
-    return true;
-  }
-
-  const tool = tools.get(toolName);
-  if (!tool) {
-    json(res, 404, { error: 'unknown_tool', error_description: `Outil « ${toolName} » introuvable ou non autorisé pour cette clé.` });
-    return true;
-  }
-
-  const parsed = argsFromQuery(inputSchemaOf(tool.config), url.searchParams);
-  if (!parsed.success) {
-    json(res, 400, { error: 'invalid_params', issues: parsed.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })) });
-    return true;
-  }
-
-  try {
-    const result = await tool.handler(parsed.data);
-    const text = result.content?.find((c) => c.type === 'text')?.text ?? 'null';
-    let data: unknown;
-    try {
-      data = JSON.parse(text);
-    } catch {
-      data = { text };
+  router.on(['GET', 'POST', 'PUT', 'DELETE', 'PATCH'], '/api/v1/:guildId/:toolName?', async (c) => {
+    const guildId = c.req.param('guildId');
+    if (!guildId || !isValidMcpGuildId(guildId)) {
+      return c.json({ error: 'invalid_guild_id', error_description: 'Chemin attendu : /api/v1/:guildId/:outil' }, 400);
     }
-    json(res, statutOutil(result), data);
-  } catch (e) {
-    logger.error('RestApi', `Outil ${toolName} en échec :`, e);
-    json(res, 500, { error: publicErrorMessage(e, GENERIC_ERROR_MESSAGE, 'RestApi') });
-  }
-  return true;
+    if (c.req.method !== 'GET') {
+      return c.json({ error: 'method_not_allowed', error_description: "L'API REST est en lecture seule (GET)." }, 405);
+    }
+
+    if ((await getGuildPlan(guildId)) === 'FREE') {
+      return c.json({
+        error: 'plan_required',
+        error_description: "L'API Kotbo fait partie de l'offre complète. Abonne le serveur depuis la page Facturation du dashboard.",
+      }, 402);
+    }
+
+    const authHeader = c.req.header('authorization');
+    const headerKey = c.req.header('x-api-key');
+    const rawKey = (typeof authHeader === 'string' && authHeader.startsWith('Bearer ')
+      ? authHeader.slice(7)
+      : headerKey)?.trim();
+    const key = rawKey?.startsWith('mcp_') ? await verifyMcpKey(rawKey, guildId, client) : null;
+    if (!key) {
+      return c.json({ error: 'invalid_api_key', error_description: 'Clé API absente, invalide ou inactive pour ce serveur.' }, 401);
+    }
+    if (!checkRateLimit(key.id)) {
+      return c.json({ error: 'rate_limited', error_description: 'Trop de requêtes (100 req/min max).' }, 429);
+    }
+
+    const tools = collectTools(guildId, key.permissions, client, key.ownerId ?? null);
+    const toolName = c.req.param('toolName');
+
+    if (!toolName) {
+      return c.json({
+        permissions: key.permissions,
+        tools: [...tools].map(([name, { config }]) => ({
+          name,
+          description: config.description ?? null,
+          params: zodToJsonSchema(inputSchemaOf(config)),
+        })),
+      }, 200);
+    }
+
+    const tool = tools.get(toolName);
+    if (!tool) {
+      return c.json({ error: 'unknown_tool', error_description: `Outil « ${toolName} » introuvable ou non autorisé pour cette clé.` }, 404);
+    }
+
+    const url = new URL(c.req.url);
+    const parsed = argsFromQuery(inputSchemaOf(tool.config), url.searchParams);
+    if (!parsed.success) {
+      return c.json({ error: 'invalid_params', issues: parsed.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })) }, 400);
+    }
+
+    try {
+      const result = await tool.handler(parsed.data);
+      const text = result.content?.find((item) => item.type === 'text')?.text ?? 'null';
+      let data: unknown;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { text };
+      }
+      return c.json(data, statutOutil(result) as 200);
+    } catch (e) {
+      logger.error('RestApi', `Outil ${toolName} en échec :`, e);
+      return c.json({ error: publicErrorMessage(e, GENERIC_ERROR_MESSAGE, 'RestApi') }, 500);
+    }
+  });
+
+  return router;
 }

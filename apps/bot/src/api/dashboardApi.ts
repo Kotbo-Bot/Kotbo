@@ -399,7 +399,6 @@ export const startDashboardApi = async (client: Client) => {
           if (await handlePublicRoutes(req, res, parts, url, client)) return;
           if (await handleAdminRoutes(req, res, parts, url, client)) return;
           if (await handleMCPRoutes(req, res, parts, url, client)) return;
-          if (await handleRestApiRoutes(req, res, parts, url, client)) return;
 
           json(res, 404, { error: 'Route introuvable' });
         } catch (error) {
