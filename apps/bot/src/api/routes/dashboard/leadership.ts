@@ -83,9 +83,6 @@ import {
 } from '../../../services/staff/staffManagementService.js';
 import { getStaffProfileSnapshot } from '../../../services/progression/profileService.js';
 import { canViewFeatureSection, getCachedFeatureAccess } from './featureGate.js';
-import { handleAbsenceRoutes } from './leadership/absences.js';
-import { handleMeetingRoutes } from './leadership/meetings.js';
-import { handleCallRoutes } from './leadership/calls.js';
 import { handleStaffRoutes } from './leadership/staff.js';
 import { handleTutoringRoutes } from './leadership/tutoring.js';
 
@@ -292,9 +289,6 @@ const LEADERSHIP_ROUTE_HANDLERS: Record<string, (
   guildId: string,
   access: DashboardAccess
 ) => Promise<boolean>> = {
-  'absences': handleAbsenceRoutes,
-  'meetings': handleMeetingRoutes,
-  'calls': handleCallRoutes,
   'staff': handleStaffRoutes,
   'tutoring': handleTutoringRoutes,
 };

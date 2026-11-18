@@ -7,6 +7,9 @@
 import { Hono } from 'hono';
 import { compress } from 'hono/compress';
 import type { Client } from 'discord.js';
+import { createAbsencesRouter } from '../../routes/dashboard/leadership/absences.js';
+import { createMeetingsRouter } from '../../routes/dashboard/leadership/meetings.js';
+import { createCallsRouter } from '../../routes/dashboard/leadership/calls.js';
 import { createTasksRouter } from '../../routes/dashboard/leadership/tasks.js';
 import { createTestingPeriodsRouter } from '../../routes/dashboard/leadership/testingPeriods.js';
 import { createApiKeysRouter } from '../../routes/dashboard/leadership/apiKeys.js';
@@ -103,5 +106,8 @@ export function createDashboardRouter(client: Client) {
   router.route('/', createApiKeysRouter(client));
   router.route('/', createTestingPeriodsRouter(client));
   router.route('/', createTasksRouter(client));
+  router.route('/', createCallsRouter(client));
+  router.route('/', createMeetingsRouter(client));
+  router.route('/', createAbsencesRouter(client));
   return router;
 }
