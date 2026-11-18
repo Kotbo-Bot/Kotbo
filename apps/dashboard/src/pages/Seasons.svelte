@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy, onMount } from 'svelte';
+  import { onDestroy, onMount, type Snippet } from 'svelte';
   import { MediaQuery } from 'svelte/reactivity';
   import { isRewardOutcomeComplete, seasonProgress, type SeasonRewardOutcome, type SeasonStats } from '@kotbo/shared';
   import {
@@ -373,14 +373,30 @@
   <span class="text-2xs font-semibold px-2 py-0.5 rounded-full border {STATUS[status].cls}">{STATUS[status].label()}</span>
 {/snippet}
 
+<!-- Toute la ligne ouvre la fiche membre : viser le seul pseudo etait trop fin. -->
+{#snippet memberRow(userId: string, name: string, cls: string, content: Snippet)}
+  {@const open = memberCaseModal.opener(name)}
+  <li>
+    <svelte:element
+      this={open ? 'button' : 'div'}
+      type={open ? 'button' : undefined}
+      title={open ? m.sx_open_member({ name }) : undefined}
+      onclick={open ? () => open(userId) : undefined}
+      class="w-full text-left rounded-lg text-sm transition-colors {open ? 'cursor-pointer hover:bg-surface-container-high/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30' : ''} {cls}"
+    >
+      {@render content()}
+    </svelte:element>
+  </li>
+{/snippet}
+
 {#snippet standingsList(entries: SeasonStanding[], scale: number)}
   <ol class="space-y-1">
     {#each entries as entry, i (entry.userId)}
-      <li class="season-row grid items-center gap-2 px-2.5 py-2 rounded-lg text-sm transition-colors hover:bg-surface-container-high/20 {i < 3 ? 'bg-surface-container-high/10' : ''}">
+      {#snippet row()}
         <span class="flex h-6 w-6 items-center justify-center rounded-full text-2xs font-bold {PODIUM[i] ?? 'text-on-surface-variant'}">
           {#if i === 0}<Papicon icon="Crown" size={13} />{:else}{entry.rank}{/if}
         </span>
-        <UserDisplay userId={entry.userId} name={entry.displayName} avatarUrl={entry.avatarUrl} size="xs" class="min-w-0" onClick={memberCaseModal.opener(entry.displayName)} />
+        <UserDisplay userId={entry.userId} name={entry.displayName} avatarUrl={entry.avatarUrl} size="xs" class="min-w-0" />
         <div class="season-row-bar h-2 bg-surface-container-high rounded-full overflow-hidden">
           <div class="h-2 rounded-full bg-primary transition-all duration-500" style="width: {Math.min(100, (entry.xp / scale) * 100)}%"></div>
         </div>
@@ -388,7 +404,8 @@
           {m.sea_row_activity({ level: entry.level, messages: entry.messagesCount.toLocaleString(dateLocale()), voice: entry.voiceMinutes.toLocaleString(dateLocale()) })}
         </span>
         <span class="font-bold text-primary text-right text-xs whitespace-nowrap">+{entry.xp.toLocaleString(dateLocale())} XP</span>
-      </li>
+      {/snippet}
+      {@render memberRow(entry.userId, entry.displayName, `season-row grid items-center gap-2 px-2.5 py-2 ${i < 3 ? 'bg-surface-container-high/10' : ''}`, row)}
     {/each}
   </ol>
 {/snippet}
@@ -396,14 +413,15 @@
 {#snippet rankedList(entries: RankedStanding[])}
   <ol class="space-y-1">
     {#each entries as entry, i (entry.userId)}
-      <li class="flex items-center gap-2 px-2.5 py-2 rounded-lg text-sm {i < 3 ? 'bg-surface-container-high/10' : ''}">
+      {#snippet row()}
         <span class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-2xs font-bold {PODIUM[i] ?? 'text-on-surface-variant'}">{entry.rank}</span>
-        <UserDisplay userId={entry.userId} name={entry.displayName} avatarUrl={entry.avatarUrl} size="xs" class="min-w-0 flex-1" onClick={memberCaseModal.opener(entry.displayName)} />
+        <UserDisplay userId={entry.userId} name={entry.displayName} avatarUrl={entry.avatarUrl} size="xs" class="min-w-0 flex-1" />
         {#if entry.tier}
           <span class="text-xs font-medium truncate" style="color:{entry.tier.color}">{entry.tier.name}</span>
         {/if}
         <span class="text-xs text-on-surface-variant whitespace-nowrap">{entry.rp.toLocaleString(dateLocale())} RP</span>
-      </li>
+      {/snippet}
+      {@render memberRow(entry.userId, entry.displayName, `flex items-center gap-2 px-2.5 py-2 ${i < 3 ? 'bg-surface-container-high/10' : ''}`, row)}
     {/each}
   </ol>
 {/snippet}
