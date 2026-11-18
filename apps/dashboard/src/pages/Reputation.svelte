@@ -545,7 +545,14 @@
             {:else}
               <ol class="space-y-1">
                 {#each data.leaderboard.entries as entry, i (entry.userId)}
-                  <li class="reputation-leaderboard-row grid items-center gap-2 px-2.5 py-2 rounded-lg text-sm transition-colors hover:bg-surface-container-high/20 {i < 3 ? 'bg-surface-container-high/10' : ''}">
+                  {@const openMember = openMemberOnClick(entry.displayName)}
+                  <!-- Le fond de la ligne ouvre la fiche ; le clavier passe deja par le pseudo, et les boutons gardent leur action. -->
+                  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+                  <li
+                    class="reputation-leaderboard-row grid items-center gap-2 px-2.5 py-2 rounded-lg text-sm transition-colors hover:bg-surface-container-high/20 {openMember ? 'cursor-pointer' : ''} {i < 3 ? 'bg-surface-container-high/10' : ''}"
+                    title={openMember ? m.sx_open_member({ name: entry.displayName || entry.userId }) : undefined}
+                    onclick={openMember ? (event) => { if (!(event.target as HTMLElement).closest('button, a')) openMember(entry.userId); } : undefined}
+                  >
                     <span class="flex h-6 w-6 items-center justify-center rounded-full {PODIUM[i] ?? ''}" aria-hidden="true">
                       {#if i === 0}<Papicon icon="Crown" size={13} />{/if}
                     </span>
@@ -554,7 +561,7 @@
                       userId={entry.userId}
                       name={entry.displayName}
                       avatarUrl={entry.avatarUrl}
-                      onClick={openMemberOnClick(entry.displayName)}
+                      onClick={openMember}
                       size="xs"
                     />
                     <div class="h-2 bg-surface-container-high rounded-full overflow-hidden">
