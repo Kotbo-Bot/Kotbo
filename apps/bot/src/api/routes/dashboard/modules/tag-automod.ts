@@ -12,10 +12,11 @@
  *   POST   /tag-automod/rescan          application à tout le serveur
  */
 import { Prisma } from '@prisma/client';
-import type { Guild } from 'discord.js';
+import { Hono, type Context } from 'hono';
+import type { Client, Guild } from 'discord.js';
 import prisma from '../../../../utils/db.js';
-import { broadcastDashboardStateChange, getGuildName, json, pushAudit, readJsonBody } from '../../../shared.js';
-import { jsonFailure } from '../../../shared/failure.js';
+import { broadcastDashboardStateChange, getGuildName, pushAudit } from '../../../shared.js';
+import { auditUserOf, fail, guildRoute, readBody, send } from '../../../hono/dashboard/kit.js';
 import { guildIconUrl, guildTagBadgeUrl } from '../../../../services/core/serverTagService.js';
 import { isJailConfigured } from '../../../../services/moderation/jailService.js';
 import {
@@ -26,7 +27,6 @@ import {
   scanTagMembers,
 } from '../../../../services/moderation/tagAutomod/tagAutomodService.js';
 import { normalizeTagAction, type RuleLike } from '../../../../services/moderation/tagAutomod/tagRules.js';
-import { type ModuleRouteContext } from './_shared.js';
 
 const MAX_RULES = 100;
 const SNOWFLAKE = /^\d{17,20}$/;
@@ -200,180 +200,155 @@ function draftRule(body: Body): RuleLike | null {
   };
 }
 
-function guildOf(ctx: ModuleRouteContext): Guild | null {
-  return ctx.client.guilds.cache.get(ctx.guildId) ?? null;
-}
+export function createTagAutomodRouter(client: Client) {
+  const router = new Hono();
+  const base = '/api/dashboard/guilds/:guildId/tag-automod';
+  const gate = guildRoute(client);
 
-export async function handleTagAutomodRoutes(ctx: ModuleRouteContext): Promise<boolean> {
-  const { req, res, parts, url, client, guildId, method, auditUser, moduleKey } = ctx;
-  if (moduleKey !== 'tag-automod') return false;
-  const sub = parts[5];
-  const id = parts[6];
-
-  const audit = (action: string, details: string) => pushAudit(guildId, {
-    user: auditUser,
-    action,
-    context: getGuildName(client, guildId),
-    module: 'Automod des tags',
-    eventType: 'Manuel',
-    details,
-    channelId: null,
-  });
-  const changed = () => {
+  const guildOf = (guildId: string): Guild | null => client.guilds.cache.get(guildId) ?? null;
+  const audit = (c: Context, action: string, details: string) => {
+    const guildId = c.req.param('guildId')!;
+    return pushAudit(guildId, {
+      user: auditUserOf(c),
+      action,
+      context: getGuildName(client, guildId),
+      module: 'Automod des tags',
+      eventType: 'Manuel',
+      details,
+      channelId: null,
+    });
+  };
+  const changed = (guildId: string) => {
     invalidateTagAutomod(guildId);
     broadcastDashboardStateChange(guildId, 'tag_automod_updated');
   };
 
-  try {
-    if (!sub && method === 'GET') {
-      const guild = guildOf(ctx);
-      const since = new Date(Date.now() - 7 * 86_400_000);
-      const [config, rules, own, holders, events7d, waves, byAction] = await Promise.all([
-        prisma.tagAutomodConfig.findUnique({ where: { guildId } }),
-        prisma.tagAutomodRule.findMany({ where: { guildId }, orderBy: { createdAt: 'asc' } }),
-        prisma.discordExternalGuild.findUnique({ where: { guildId }, select: { tag: true, badge: true } }),
-        prisma.memberProfile.count({ where: { guildId, guildLeftAt: null, primaryGuildId: { not: null, notIn: [guildId] } } }),
-        prisma.tagAutomodEvent.count({ where: { guildId, createdAt: { gte: since } } }),
-        prisma.tagWave.findMany({ where: { guildId }, orderBy: { createdAt: 'desc' }, take: 5 }),
-        prisma.tagAutomodEvent.groupBy({ by: ['status'], where: { guildId, createdAt: { gte: since } }, _count: { _all: true } }),
-      ]);
-      const fleet = await getFleetTagCounts();
-      json(res, 200, {
-        config: { ...DEFAULT_CONFIG, ...(config ?? {}) },
-        configured: Boolean(config),
-        rules: rules.map((r) => ({ ...r, fleetBlocks: r.targetGuildId ? fleet.get(r.targetGuildId) ?? 0 : 0 })),
-        maxRules: MAX_RULES,
-        ownTag: own?.tag ?? null,
-        ownBadgeUrl: guildTagBadgeUrl(guildId, own?.badge),
-        jailConfigured: guild ? await isJailConfigured(guild) : false,
-        fleetMinReporters: FLEET_MIN_REPORTERS,
-        stats: {
-          membersWithOtherTag: holders,
-          events7d,
-          byStatus: Object.fromEntries(byAction.map((b) => [b.status, b._count._all])),
-        },
-        waves,
-      });
-      return true;
-    }
+  router.onError((err, c) => fail(c, err, 'Erreur de l\'automod des tags', 'TagAutomodAPI'));
 
-    if (!sub && method === 'PATCH') {
-      const body = await readJsonBody<Body>(req);
-      if (!body || typeof body !== 'object' || Array.isArray(body)) {
-        json(res, 400, { error: 'Payload invalide' });
-        return true;
-      }
-      const data = parseConfig(body);
-      const config = await prisma.tagAutomodConfig.upsert({
-        where: { guildId },
-        create: { ...(data as Prisma.TagAutomodConfigUncheckedCreateInput), guildId },
-        update: data,
-      });
-      await audit('Réglages de l\'automod des tags', `Champs : ${Object.keys(data).join(', ')}`);
-      changed();
-      json(res, 200, { config: { ...DEFAULT_CONFIG, ...config } });
-      return true;
-    }
+  router.get(base, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const guild = guildOf(guildId);
+    const since = new Date(Date.now() - 7 * 86_400_000);
+    const [config, rules, own, holders, events7d, waves, byAction] = await Promise.all([
+      prisma.tagAutomodConfig.findUnique({ where: { guildId } }),
+      prisma.tagAutomodRule.findMany({ where: { guildId }, orderBy: { createdAt: 'asc' } }),
+      prisma.discordExternalGuild.findUnique({ where: { guildId }, select: { tag: true, badge: true } }),
+      prisma.memberProfile.count({ where: { guildId, guildLeftAt: null, primaryGuildId: { not: null, notIn: [guildId] } } }),
+      prisma.tagAutomodEvent.count({ where: { guildId, createdAt: { gte: since } } }),
+      prisma.tagWave.findMany({ where: { guildId }, orderBy: { createdAt: 'desc' }, take: 5 }),
+      prisma.tagAutomodEvent.groupBy({ by: ['status'], where: { guildId, createdAt: { gte: since } }, _count: { _all: true } }),
+    ]);
+    const fleet = await getFleetTagCounts();
+    return send(c, {
+      config: { ...DEFAULT_CONFIG, ...(config ?? {}) },
+      configured: Boolean(config),
+      rules: rules.map((r) => ({ ...r, fleetBlocks: r.targetGuildId ? fleet.get(r.targetGuildId) ?? 0 : 0 })),
+      maxRules: MAX_RULES,
+      ownTag: own?.tag ?? null,
+      ownBadgeUrl: guildTagBadgeUrl(guildId, own?.badge),
+      jailConfigured: guild ? await isJailConfigured(guild) : false,
+      fleetMinReporters: FLEET_MIN_REPORTERS,
+      stats: {
+        membersWithOtherTag: holders,
+        events7d,
+        byStatus: Object.fromEntries(byAction.map((b) => [b.status, b._count._all])),
+      },
+      waves,
+    });
+  });
 
-    if (sub === 'search' && method === 'GET') {
-      const q = (url.searchParams.get('q') ?? '').trim().slice(0, 100);
-      json(res, 200, { servers: await searchServers(guildId, q) });
-      return true;
-    }
+  router.patch(base, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const body = await readBody<Body>(c);
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return send(c, { error: 'Payload invalide' }, 400);
+    const data = parseConfig(body);
+    const config = await prisma.tagAutomodConfig.upsert({
+      where: { guildId },
+      create: { ...(data as Prisma.TagAutomodConfigUncheckedCreateInput), guildId },
+      update: data,
+    });
+    await audit(c, 'Réglages de l\'automod des tags', `Champs : ${Object.keys(data).join(', ')}`);
+    changed(guildId);
+    return send(c, { config: { ...DEFAULT_CONFIG, ...config } });
+  });
 
-    if (sub === 'rules' && !id && method === 'POST') {
-      const body = await readJsonBody<Body>(req);
-      const parsed = parseRule(body ?? {});
-      if ('error' in parsed) {
-        json(res, 400, { error: parsed.error });
-        return true;
-      }
-      const count = await prisma.tagAutomodRule.count({ where: { guildId } });
-      if (count >= MAX_RULES) {
-        json(res, 400, { error: `${MAX_RULES} règles au plus par serveur.` });
-        return true;
-      }
-      const rule = await prisma.tagAutomodRule.create({
-        data: { ...(parsed.rule as RuleInput), guildId, createdBy: ctx.user.userId ?? null },
-      });
-      await audit('Nouvelle règle de l\'automod des tags', `${rule.name} (${rule.effect} ${rule.targetType} → ${rule.action})`);
-      changed();
-      json(res, 201, { rule });
-      return true;
-    }
+  router.get(`${base}/search`, ...gate, async (c) => {
+    const q = (c.req.query('q') ?? '').trim().slice(0, 100);
+    return send(c, { servers: await searchServers(c.req.param('guildId'), q) });
+  });
 
-    if (sub === 'rules' && id && (method === 'PATCH' || method === 'DELETE')) {
-      const existing = await prisma.tagAutomodRule.findFirst({ where: { id, guildId } });
-      if (!existing) {
-        json(res, 404, { error: 'Règle introuvable' });
-        return true;
-      }
-      if (method === 'DELETE') {
-        await prisma.tagAutomodRule.delete({ where: { id } });
-        await audit('Règle de l\'automod des tags supprimée', existing.name);
-        changed();
-        json(res, 200, { ok: true });
-        return true;
-      }
-      const body = await readJsonBody<Body>(req);
-      const parsed = parseRule(body ?? {}, true);
-      if ('error' in parsed) {
-        json(res, 400, { error: parsed.error });
-        return true;
-      }
-      // Une règle de vague modifiée à la main devient permanente.
-      const rule = await prisma.tagAutomodRule.update({
-        where: { id },
-        data: { ...parsed.rule, ...(existing.source === 'WAVE' && body?.permanent === true ? { source: 'MANUAL', expiresAt: null } : {}) },
-      });
-      await audit('Règle de l\'automod des tags modifiée', rule.name);
-      changed();
-      json(res, 200, { rule });
-      return true;
-    }
+  router.post(`${base}/rules`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const body = await readBody<Body>(c);
+    const parsed = parseRule(body ?? {});
+    if ('error' in parsed) return send(c, { error: parsed.error }, 400);
+    const count = await prisma.tagAutomodRule.count({ where: { guildId } });
+    if (count >= MAX_RULES) return send(c, { error: `${MAX_RULES} règles au plus par serveur.` }, 400);
+    const rule = await prisma.tagAutomodRule.create({
+      data: { ...(parsed.rule as RuleInput), guildId, createdBy: c.var.dashboardUser.userId ?? null },
+    });
+    await audit(c, 'Nouvelle règle de l\'automod des tags', `${rule.name} (${rule.effect} ${rule.targetType} → ${rule.action})`);
+    changed(guildId);
+    return send(c, { rule }, 201);
+  });
 
-    if (sub === 'events' && method === 'GET') {
-      const limit = Math.min(100, Math.max(1, Number(url.searchParams.get('limit')) || 50));
-      const before = url.searchParams.get('before');
-      const tagGuildId = url.searchParams.get('tagGuildId');
-      const events = await prisma.tagAutomodEvent.findMany({
-        where: {
-          guildId,
-          ...(before ? { createdAt: { lt: new Date(before) } } : {}),
-          ...(tagGuildId && SNOWFLAKE.test(tagGuildId) ? { tagGuildId } : {}),
-        },
-        orderBy: { createdAt: 'desc' },
-        take: limit,
-      });
-      json(res, 200, { events, hasMore: events.length === limit });
-      return true;
+  router.on(['PATCH', 'DELETE'], `${base}/rules/:id`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const id = c.req.param('id');
+    const existing = await prisma.tagAutomodRule.findFirst({ where: { id, guildId } });
+    if (!existing) return send(c, { error: 'Règle introuvable' }, 404);
+    if (c.req.method === 'DELETE') {
+      await prisma.tagAutomodRule.delete({ where: { id } });
+      await audit(c, 'Règle de l\'automod des tags supprimée', existing.name);
+      changed(guildId);
+      return send(c, { ok: true });
     }
+    const body = await readBody<Body>(c);
+    const parsed = parseRule(body ?? {}, true);
+    if ('error' in parsed) return send(c, { error: parsed.error }, 400);
+    // Une règle de vague modifiée à la main devient permanente.
+    const rule = await prisma.tagAutomodRule.update({
+      where: { id },
+      data: { ...parsed.rule, ...(existing.source === 'WAVE' && body?.permanent === true ? { source: 'MANUAL', expiresAt: null } : {}) },
+    });
+    await audit(c, 'Règle de l\'automod des tags modifiée', rule.name);
+    changed(guildId);
+    return send(c, { rule });
+  });
 
-    if ((sub === 'scan' || sub === 'rescan') && method === 'POST') {
-      const guild = guildOf(ctx);
-      if (!guild) {
-        json(res, 404, { error: 'Kotbo n\'est pas sur ce serveur.' });
-        return true;
-      }
-      if (sub === 'rescan') {
-        const count = await applyTagRescan(guild);
-        await audit('Analyse des tags du serveur', `${count} membre(s) concerné(s)`);
-        json(res, 200, { started: true, count });
-        return true;
-      }
-      const body = await readJsonBody<Body>(req);
-      const draft = body?.draft && typeof body.draft === 'object' ? draftRule(body.draft as Body) : undefined;
-      if (body?.draft && !draft) {
-        json(res, 400, { error: 'Règle incomplète' });
-        return true;
-      }
-      const result = await scanTagMembers(guild, draft ?? undefined);
-      json(res, 200, { ...result, matches: result.matches.slice(0, 200), total: result.matches.length });
-      return true;
-    }
-  } catch (err) {
-    jsonFailure(res, err, 'Erreur de l\'automod des tags', 'TagAutomodAPI');
-    return true;
-  }
-  return false;
+  router.get(`${base}/events`, ...gate, async (c) => {
+    const limit = Math.min(100, Math.max(1, Number(c.req.query('limit')) || 50));
+    const before = c.req.query('before');
+    const tagGuildId = c.req.query('tagGuildId');
+    const events = await prisma.tagAutomodEvent.findMany({
+      where: {
+        guildId: c.req.param('guildId'),
+        ...(before ? { createdAt: { lt: new Date(before) } } : {}),
+        ...(tagGuildId && SNOWFLAKE.test(tagGuildId) ? { tagGuildId } : {}),
+      },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    });
+    return send(c, { events, hasMore: events.length === limit });
+  });
+
+  router.post(`${base}/rescan`, ...gate, async (c) => {
+    const guild = guildOf(c.req.param('guildId'));
+    if (!guild) return send(c, { error: 'Kotbo n\'est pas sur ce serveur.' }, 404);
+    const count = await applyTagRescan(guild);
+    await audit(c, 'Analyse des tags du serveur', `${count} membre(s) concerné(s)`);
+    return send(c, { started: true, count });
+  });
+
+  router.post(`${base}/scan`, ...gate, async (c) => {
+    const guild = guildOf(c.req.param('guildId'));
+    if (!guild) return send(c, { error: 'Kotbo n\'est pas sur ce serveur.' }, 404);
+    const body = await readBody<Body>(c);
+    const draft = body?.draft && typeof body.draft === 'object' ? draftRule(body.draft as Body) : undefined;
+    if (body?.draft && !draft) return send(c, { error: 'Règle incomplète' }, 400);
+    const result = await scanTagMembers(guild, draft ?? undefined);
+    return send(c, { ...result, matches: result.matches.slice(0, 200), total: result.matches.length });
+  });
+
+  return router;
 }
