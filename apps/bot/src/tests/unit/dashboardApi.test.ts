@@ -1245,20 +1245,16 @@ describe('Modular Routers Unit Tests', () => {
 
   describe('6. Dashboard Router dispatcher', () => {
     test('Bypasses auth for recruitment webhook', async () => {
-      const req = createMockRequest({
+      // Route servie par Hono : sans session ni clé, c'est le webhook qui refuse.
+      const res = await createDashboardRouter(mockClient).request('/api/dashboard/guilds/1122334455667788/recruitment/candidatures', {
         method: 'POST',
-        url: '/api/dashboard/guilds/1122334455667788/recruitment/candidatures',
+        headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ data: { name: 'Applicant' } }),
       });
-      const res = createMockResponse();
-      const parts = splitPath(req.url!);
-      const url = new URL(req.url!, 'http://localhost');
-
-      const handled = await handleDashboardRoutes(req, res, parts, url, mockClient);
-      expect(handled).toBeTrue();
-      expect(res.statusCode).toBe(401);
-      const data = JSON.parse(res.body);
+      expect(res.status).toBe(401);
+      const data = await res.json() as { error?: string; reason?: string };
       expect(data.error).toBe('Non authentifié');
+      expect(data.reason).toBe('missing_credentials');
     });
 
     test('Requires user authentication for general guild settings', async () => {

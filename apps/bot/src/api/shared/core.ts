@@ -865,7 +865,7 @@ export type RecruitmentWebhookAuthResult = {
   reason: 'ok_jwt' | 'ok_api_key' | 'missing_credentials' | 'invalid_jwt' | 'invalid_api_key' | 'insufficient_permissions';
 };
 
-export const verifyRecruitmentWebhookAuth = async (req: IncomingMessage, guildId: string): Promise<RecruitmentWebhookAuthResult> => {
+export const verifyRecruitmentWebhookAuth = async (req: Pick<IncomingMessage, 'headers'>, guildId: string): Promise<RecruitmentWebhookAuthResult> => {
   const authHeader = req.headers.authorization;
   let bearerToken: string | undefined;
 

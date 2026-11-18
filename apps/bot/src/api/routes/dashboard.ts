@@ -8,7 +8,6 @@ import { auditGlobalAdminWrite, evaluateGuildGate } from './dashboard/guildGate.
 // Sub-routers imports
 import { handleGeneralRoutes, handleGuildGeneralRoutes } from './dashboard/general.js';
 import { handleAnalyticsRoutes } from './dashboard/analytics.js';
-import { handleRecruitmentWebhookRoute, handleRecruitmentRoutes } from './dashboard/recruitment.js';
 import { handleMembersRoutes } from './dashboard/members.js';
 import { handleLeadershipRoutes, handleGuildLeadershipRoutes } from './dashboard/leadership.js';
 import { handleGeneralistModulesRoutes } from './dashboard/generalistModules.js';
@@ -28,13 +27,6 @@ export async function handleDashboardRoutes(
   // 1. Check if the path belongs to api/dashboard
   if (parts[0] !== 'api' || parts[1] !== 'dashboard') {
     return false;
-  }
-
-  // 2. Bypass authentication for recruitment webhook (POST /api/dashboard/guilds/:guildId/recruitment/candidatures)
-  if (parts.length === 6 && parts[2] === 'guilds' && parts[4] === 'recruitment' && parts[5] === 'candidatures' && method === 'POST') {
-    if (await handleRecruitmentWebhookRoute(req, res, parts, client)) {
-      return true;
-    }
   }
 
   // 3. Enforce authentication for all other dashboard routes
@@ -72,10 +64,6 @@ export async function handleDashboardRoutes(
       return true;
     }
     if (await handleAnalyticsRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
-      if (method !== 'GET') await cache.invalidateGuild(guildId);
-      return true;
-    }
-    if (await handleRecruitmentRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
       if (method !== 'GET') await cache.invalidateGuild(guildId);
       return true;
     }
