@@ -126,7 +126,10 @@
 
 <svelte:window />
 
-<header class="app-navbar flex items-center justify-between px-6 bg-surface-container-lowest border-b border-outline-variant h-14 fixed top-0 right-0 z-40 transition-all duration-200 {$isMobile || standalone ? 'w-full' : collapsed ? 'w-[calc(100%-4.5rem)]' : 'w-[calc(100%-15rem)]'}">
+<header
+  class="app-navbar flex items-center justify-between px-6 bg-surface-container-lowest border-b border-outline-variant h-14 fixed top-0 right-0 z-40 {$isMobile || standalone ? 'w-full' : ''} {sidebarStore.isResizing ? 'transition-none' : 'transition-[width] duration-200'}"
+  style={!$isMobile && !standalone ? `width: calc(100% - ${collapsed ? '4.5rem' : `${sidebarStore.width}px`});` : ''}
+>
   <div class="app-navbar__leading flex min-w-0 items-center gap-4 server-selector-container relative">
     {#if $isMobile}
       {#if !standalone}
