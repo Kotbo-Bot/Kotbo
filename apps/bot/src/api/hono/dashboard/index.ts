@@ -7,6 +7,7 @@
 import { Hono } from 'hono';
 import { compress } from 'hono/compress';
 import type { Client } from 'discord.js';
+import { createBanAppealsRouter } from '../../routes/dashboard/banAppeals.js';
 import { createVisionRouter } from '../../routes/dashboard/visionRoutes.js';
 import { createRaidProtectionRouter } from '../../routes/dashboard/raidProtection.js';
 import { createChannelsManagementRouter } from '../../routes/dashboard/modules/channels-management.js';
@@ -159,5 +160,6 @@ export function createDashboardRouter(client: Client) {
   router.route('/', createChannelsManagementRouter(client));
   router.route('/', createRaidProtectionRouter(client));
   router.route('/', createVisionRouter(client));
+  router.route('/', createBanAppealsRouter(client));
   return router;
 }
