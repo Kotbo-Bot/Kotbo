@@ -80,6 +80,10 @@ export function fail(c: Context, err: unknown, fallbackMessage: string, scope = 
   return c.json(body, status as 500);
 }
 
+/** Nom inscrit dans le journal par les routes de `modules/`. */
+export const auditUserOf = (c: Context): string =>
+  c.var.dashboardUser.username ?? `User${c.var.dashboardUser.userId}`;
+
 export const requestIp = (c: Context): string | null =>
   c.req.header('x-forwarded-for')?.split(',')[0].trim() || null;
 

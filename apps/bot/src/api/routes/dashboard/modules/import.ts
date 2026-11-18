@@ -1,21 +1,19 @@
 /** Routes dashboard du module `import`. */
+import { Hono } from 'hono';
+import type { Client } from 'discord.js';
 import prisma from '../../../../utils/db.js';
 import { logger } from '../../../../utils/logger.js';
-import { getGuildName, getOrCreateRuntime, json, pushAudit, readJsonBody } from '../../../shared.js';
-import { type ModuleRouteContext } from './_shared.js';
+import { getGuildName, getOrCreateRuntime, pushAudit } from '../../../shared.js';
+import { auditUserOf, fail, guildRoute, readBody, send } from '../../../hono/dashboard/kit.js';
 
-import { jsonFailure } from '../../../shared/failure.js';
-export async function handleImportRoutes(ctx: ModuleRouteContext): Promise<boolean> {
-  const { req, res, parts, client, guildId, method, auditUser, moduleKey } = ctx;
+export function createImportRouter(client: Client) {
+  const router = new Hono();
 
-  // POST /api/dashboard/guilds/:guildId/import
-  if (moduleKey === 'import' && parts.length === 5 && method === 'POST') {
+  router.post('/api/dashboard/guilds/:guildId/import', ...guildRoute(client), async (c) => {
+    const guildId = c.req.param('guildId');
     try {
-      const body = await readJsonBody<Record<string, unknown>>(req);
-      if (!body) {
-        json(res, 400, { error: 'Payload import invalide' });
-        return true;
-      }
+      const body = await readBody(c);
+      if (!body) return send(c, { error: 'Payload import invalide' }, 400);
 
       // Bloc `notifications` du fichier d'import : structure connue, mais le
       // fichier vient de l'utilisateur donc tous les champs sont optionnels.
@@ -43,7 +41,7 @@ export async function handleImportRoutes(ctx: ModuleRouteContext): Promise<boole
       });
 
       await pushAudit(guildId, {
-        user: auditUser,
+        user: auditUserOf(c),
         action: 'Import dashboard',
         context: getGuildName(client, guildId),
         module: 'Dashboard',
@@ -52,13 +50,12 @@ export async function handleImportRoutes(ctx: ModuleRouteContext): Promise<boole
         channelId: null
       });
 
-      json(res, 200, { ok: true });
+      return send(c, { ok: true });
     } catch (err) {
       logger.error('ImportAPI', 'Error importing state:', err);
-      jsonFailure(res, err, "Erreur lors de l'importation de la configuration", 'ImportAPI');
+      return fail(c, err, "Erreur lors de l'importation de la configuration", 'ImportAPI');
     }
-    return true;
-  }
+  });
 
-  return false;
+  return router;
 }

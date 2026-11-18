@@ -1,49 +1,46 @@
 /** Routes dashboard du module `daily-algo-runs`. */
+import { Hono } from 'hono';
+import type { Client } from 'discord.js';
 import { logger } from '../../../../utils/logger.js';
-import { broadcastDashboardStateChange, json, readJsonBody } from '../../../shared.js';
-import { type ModuleRouteContext, ensureDailyAlgoScheduleRuns, getDailyAlgoScheduleRuns } from './_shared.js';
+import { broadcastDashboardStateChange } from '../../../shared.js';
+import { ensureDailyAlgoScheduleRuns, getDailyAlgoScheduleRuns } from './_shared.js';
+import { fail, guildRoute, readBody, send } from '../../../hono/dashboard/kit.js';
 
-import { jsonFailure } from '../../../shared/failure.js';
-export async function handleDailyAlgoRunsRoutes(ctx: ModuleRouteContext): Promise<boolean> {
-  const { req, res, parts, url, guildId, method, moduleKey } = ctx;
+export function createDailyAlgoRunsRouter(client: Client) {
+  const router = new Hono();
+  const base = '/api/dashboard/guilds/:guildId/daily-algo-runs/schedule';
 
-  // Daily-algo runs routes
-  if (moduleKey === 'daily-algo-runs') {
-    // GET /api/dashboard/guilds/:guildId/daily-algo-runs/schedule
-    if (parts.length === 6 && parts[5] === 'schedule' && method === 'GET') {
-      try {
-        const daysBack = Number(url.searchParams.get('daysBack') ?? '7');
-        const daysForward = Number(url.searchParams.get('daysForward') ?? '21');
-        const runs = await getDailyAlgoScheduleRuns(guildId, daysBack, daysForward);
-        json(res, 200, { runs });
-      } catch (err) {
-        logger.error('DailyAlgoAPI', 'Erreur lors de la récupération du planning Daily Algo:', err);
-        jsonFailure(res, err, 'Erreur lors de la récupération du planning Daily Algo', 'DailyAlgoAPI');
-      }
-      return true;
+  router.get(base, ...guildRoute(client), async (c) => {
+    try {
+      const daysBack = Number(c.req.query('daysBack') ?? '7');
+      const daysForward = Number(c.req.query('daysForward') ?? '21');
+      const runs = await getDailyAlgoScheduleRuns(c.req.param('guildId'), daysBack, daysForward);
+      return send(c, { runs });
+    } catch (err) {
+      logger.error('DailyAlgoAPI', 'Erreur lors de la récupération du planning Daily Algo:', err);
+      return fail(c, err, 'Erreur lors de la récupération du planning Daily Algo', 'DailyAlgoAPI');
     }
+  });
 
-    // POST /api/dashboard/guilds/:guildId/daily-algo-runs/schedule/ensure
-    if (parts.length === 7 && parts[5] === 'schedule' && parts[6] === 'ensure' && method === 'POST') {
-      try {
-        const body = await readJsonBody<{ daysForward?: unknown }>(req);
-        const parsedDaysForward = Number(body?.daysForward ?? url.searchParams.get('daysForward') ?? '21');
-        const daysForward = Number.isFinite(parsedDaysForward) ? parsedDaysForward : 21;
-        const result = await ensureDailyAlgoScheduleRuns(guildId, daysForward);
-        // Uniquement si le planning a reellement bouge : cette route est appelee
-        // automatiquement a l'ouverture de la page, et prevenir les clients d'un
-        // appel qui n'a rien cree ne ferait que les faire rappeler cette route.
-        if (result.createdCount > 0) {
-          broadcastDashboardStateChange(guildId, 'daily_algo_schedule_updated');
-        }
-        json(res, 200, { ok: true, ...result });
-      } catch (err) {
-        logger.error('DailyAlgoAPI', 'Erreur lors de la génération du planning Daily Algo:', err);
-        jsonFailure(res, err, 'Erreur lors de la génération du planning Daily Algo', 'DailyAlgoAPI');
+  router.post(`${base}/ensure`, ...guildRoute(client), async (c) => {
+    const guildId = c.req.param('guildId');
+    try {
+      const body = await readBody<{ daysForward?: unknown }>(c);
+      const parsedDaysForward = Number(body?.daysForward ?? c.req.query('daysForward') ?? '21');
+      const daysForward = Number.isFinite(parsedDaysForward) ? parsedDaysForward : 21;
+      const result = await ensureDailyAlgoScheduleRuns(guildId, daysForward);
+      // Uniquement si le planning a reellement bouge : cette route est appelee
+      // automatiquement a l'ouverture de la page, et prevenir les clients d'un
+      // appel qui n'a rien cree ne ferait que les faire rappeler cette route.
+      if (result.createdCount > 0) {
+        broadcastDashboardStateChange(guildId, 'daily_algo_schedule_updated');
       }
-      return true;
+      return send(c, { ok: true, ...result });
+    } catch (err) {
+      logger.error('DailyAlgoAPI', 'Erreur lors de la génération du planning Daily Algo:', err);
+      return fail(c, err, 'Erreur lors de la génération du planning Daily Algo', 'DailyAlgoAPI');
     }
-  }
+  });
 
-  return false;
+  return router;
 }
