@@ -1,6 +1,4 @@
 import { errorCode } from '../utils/errors.js';
-import { IncomingMessage } from 'node:http';
-import { Socket } from 'node:net';
 import { Client } from 'discord.js';
 
 import prisma from '../utils/db.js';
@@ -16,7 +14,6 @@ import {
 } from '../services/system/customDomain.js';
 import { logger } from '../utils/logger.js';
 import {
-  json,
   getDiscordClientId,
   getDashboardOrigin,
   CORS_EXTRA_ORIGINS,
@@ -33,7 +30,6 @@ import {
   resolveDashboardAccess,
   type DashboardEvent,
   type DashboardSanctionType,
-  BunServerResponse,
 } from './shared.js';
 import { getDashboardSession, sessionIdFromCookieHeader } from './auth/sessionStore.js';
 import { getCurrentInstance } from '../utils/instanceContext.js';
@@ -43,10 +39,8 @@ import { getAllInstances } from '../utils/instanceResolver.js';
 import { startBroadcastScheduler } from '../services/system/broadcastService.js';
 import { mcpRateLimiter } from './mcp/mcpServer.js';
 
-// Hono - nouveau routeur typé (migration progressive)
+// Hono - nouveau routeur typé
 import { createHonoApp } from './hono/app.js';
-
-import { jsonFailure } from './shared/failure.js';
 import { canViewFeatureSection } from './routes/dashboard/featureGate.js';
 import { closeCollabConnection, handleCollabMessage, openCollabConnection } from '../services/site/siteCollabService.js';
 import { canEditKind, resolveSiteRights } from '../services/site/siteRights.js';
@@ -259,17 +253,10 @@ export const startDashboardApi = async (client: Client) => {
     }
 
     // -----------------------------------------------------------------------
-    // 1. Routeur Hono (routes migrées vers Zod + OpenAPI)
-    //    Si Hono retourne 404, on tombe dans le fallback legacy.
-    //    On clone le request pour que le body reste lisible par le legacy handler.
+    // Routeur Hono (toutes les routes API passent désormais par Hono)
     // -----------------------------------------------------------------------
     try {
-      const honoResponse = await honoApp.fetch(request.clone());
-      // `X-Kotbo-Unrouted` vient du notFound de Hono : tout autre 404 est une
-      // vraie réponse de route (site absent, page supprimée).
-      if (honoResponse.headers.get('X-Kotbo-Unrouted') !== '1') {
-        return honoResponse;
-      }
+      return await honoApp.fetch(request);
     } catch (honoErr) {
       logger.error('DashboardAPI', 'Erreur Hono non gérée:', honoErr);
       return new Response(JSON.stringify({ error: 'Erreur interne API' }), {
@@ -277,126 +264,6 @@ export const startDashboardApi = async (client: Client) => {
         headers: { 'Content-Type': 'application/json' },
       });
     }
-
-    // -----------------------------------------------------------------------
-    // 2. Fallback legacy - handlers non encore migrés vers Hono
-    //    Conservé pendant la période de migration progressive.
-    // -----------------------------------------------------------------------
-
-    // Convert request standard to IncomingMessage
-    const socket = new Socket();
-    const req = new IncomingMessage(socket);
-    req.method = request.method;
-    req.url = url.pathname + url.search;
-    req.headers = {};
-    request.headers.forEach((value, key) => {
-      req.headers[key.toLowerCase()] = value;
-    });
-
-    const logMsg = (msg: string) => {
-      if (process.env.NODE_ENV !== 'production') {
-        logger.debug('LegacyAPI', msg);
-      }
-    };
-
-    const sanitizedPath = url.pathname.replace(/mcp_[a-f0-9]+/gi, 'mcp_[REDACTED]')
-      .replace(/kotbo_ac_[A-Za-z0-9_-]+/gi, 'kotbo_ac_[REDACTED]')
-      .replace(/kotbo_rt_[A-Za-z0-9_-]+/gi, 'kotbo_rt_[REDACTED]');
-    logMsg(`[Legacy] Request: ${request.method} ${sanitizedPath}`);
-
-    let bodyText = '';
-    if (request.method !== 'GET' && request.method !== 'HEAD') {
-      try {
-        bodyText = await request.text();
-      } catch (err) {
-        const errMsg = err instanceof Error ? err.stack || err.message : String(err);
-        logMsg(`Body read error: ${errMsg}`);
-      }
-    }
-    req.bodyText = bodyText;
-
-    if (bodyText) {
-      req.push(Buffer.from(bodyText, 'utf8'));
-    }
-    req.push(null);
-
-    return new Promise<Response>((resolve) => {
-      const res = new BunServerResponse(req, resolve);
-
-      void (async () => {
-        // CORS + sécurité (legacy - géré par Hono middleware pour les routes migrées)
-        const isMcpPath = url.pathname.startsWith('/api/mcp/')
-          || url.pathname === '/.well-known/oauth-authorization-server'
-          || url.pathname.startsWith('/.well-known/oauth-protected-resource/')
-          || url.pathname.startsWith('/.well-known/oauth-authorization-server/');
-
-        if (isMcpPath) {
-          res.setHeader('Access-Control-Allow-Origin', '*');
-        } else {
-          const dashboardOrigin = getDashboardOrigin();
-          const wlOrigins = getAllInstances().map(i => i.dashboardOrigin);
-          const allowedOrigins = new Set([
-            dashboardOrigin,
-            ...CORS_EXTRA_ORIGINS,
-            ...wlOrigins,
-            'http://localhost:5173',
-            'http://localhost:3000'
-          ]);
-          const isAllowedDevOrigin = (candidate: string) => {
-            try {
-              const parsed = new URL(candidate);
-              if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
-              return parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
-            } catch { return false; }
-          };
-          const origin = req.headers.origin;
-          const originStr = Array.isArray(origin) ? origin[0] : origin;
-          if (originStr) {
-            let normalizedOrigin: string;
-            try { normalizedOrigin = new URL(originStr).origin; } catch { normalizedOrigin = originStr.replace(/\/$/, ''); }
-            if (allowedOrigins.has(normalizedOrigin) || isAllowedDevOrigin(originStr) || isKotboPublicOrigin(originStr) || isCustomDomainOrigin(originStr)) {
-              res.setHeader('Access-Control-Allow-Origin', originStr);
-              res.setHeader('Access-Control-Allow-Credentials', 'true');
-            } else {
-              // Origine non autorisée : ne pas refléter l'origin ni les credentials.
-              res.statusCode = 403;
-              res.setHeader('Vary', 'Origin');
-              res.setHeader('Content-Type', 'application/json; charset=utf-8');
-              res.end(JSON.stringify({ error: 'Origine refusée' }));
-              return;
-            }
-          } else {
-            res.setHeader('Access-Control-Allow-Origin', dashboardOrigin);
-          }
-          res.setHeader('Vary', 'Origin');
-        }
-        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, Origin, X-Requested-With, Cache-Control, Pragma, If-None-Match, X-Kotbo-API-Key, X-API-Key');
-        res.setHeader('Access-Control-Max-Age', '86400');
-        // Reponses binaires : sans exposition explicite, le dashboard ne peut
-        // pas lire l en-tete qui accompagne l image (aperçu de carte de rang).
-        res.setHeader('Access-Control-Expose-Headers', 'X-Rank-Card-Preview, ETag');
-        res.setHeader('Content-Security-Policy', "default-src 'self';");
-        res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
-        res.setHeader('X-Frame-Options', 'DENY');
-        res.setHeader('X-Content-Type-Options', 'nosniff');
-        res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-        res.setHeader('Permissions-Policy', 'geolocation=(), camera=(), microphone=()');
-
-        try {
-          if (req.method === 'OPTIONS') {
-            res.statusCode = 204;
-            res.end();
-            return;
-          }
-
-          json(res, 404, { error: 'Route introuvable' });
-        } catch (error) {
-          logger.error('DashboardAPI', error);
-          jsonFailure(res, error, 'Erreur interne API dashboard', 'DashboardAPI');
-        }
-      })();
-    });
   };
 
   const startServer = (listenPort: number) => Bun.serve<WebSocketData>({
