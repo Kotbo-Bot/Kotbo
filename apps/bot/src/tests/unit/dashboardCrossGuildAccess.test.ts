@@ -184,16 +184,6 @@ describe('accès entre serveurs', () => {
 
   });
 
-  test('un sous-élément de partenariat doit appartenir au dossier du serveur', () => {
-    const source = readRouteSource('partnerships.ts');
-    for (const model of ['partnershipAgreement', 'partnershipCommitment', 'partnershipPromotion', 'partnershipGuestAccess', 'partnershipPayment']) {
-      expect(source).toContain(`prisma.${model}.count({ where: scoped })`);
-    }
-    // Un pont ne se confirme que depuis le dossier distant.
-    expect(source).toContain("subAction === 'confirm'\n        ? { remotePartnershipId: partnershipId }");
-    expect(source).toContain('prisma.partnerContact.count({ where: { id: parts[7], partnerId } })');
-  });
-
   test('une alerte de santé d\'un autre serveur ne se résout pas', async () => {
     const { resolveHealthAlert } = await import('../../services/analytics/channelHealthService.js');
     // Le mock ne trouve rien pour ce serveur : l'écriture filtrée ne touche aucune ligne.

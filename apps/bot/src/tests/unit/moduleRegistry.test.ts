@@ -93,10 +93,6 @@ describe('registre des modules', () => {
 });
 
 describe('modules en pause', () => {
-  test('les partenariats sont en pause', () => {
-    expect(isModulePaused('partnerships')).toBeTrue();
-  });
-
   test('un module ordinaire ou inconnu n est pas en pause', () => {
     expect(isModulePaused('tickets')).toBeFalse();
     expect(isModulePaused('module-inexistant')).toBeFalse();
@@ -107,12 +103,6 @@ describe('modules en pause', () => {
     for (const mod of MODULE_REGISTRY.filter((entry) => entry.core)) {
       expect(isModulePaused(mod.key)).toBeFalse();
     }
-  });
-
-  test('les permissions d un module en pause ne sont plus accordees', () => {
-    expect(
-      withoutPausedModulePermissions(['partnerships:manage', 'recruitment:forms']),
-    ).toEqual(['recruitment:forms']);
   });
 
   test('une permission sans module connu est conservee', () => {

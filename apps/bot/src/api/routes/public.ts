@@ -3,7 +3,6 @@ import { promisify } from 'node:util';
 import { gzip } from 'node:zlib';
 import { Client, type Guild } from 'discord.js';
 import { LinkedAccountStatus, Prisma } from '@prisma/client';
-import { isModulePaused } from '@kotbo/contracts';
 import { buildBettorStandings, buildSeasonLaureates, firmDebtOf, normalizeLevelCurve } from '@kotbo/shared';
 import { getRaidRecap, RAID_RECAP_PUBLIC_WINDOW_MS } from '../../services/features/rpg/rpgRaidService.js';
 import { getEngagedBetCredit, getEngagedBetCreditTotal } from '../../services/community/clanBetService.js';
@@ -24,7 +23,6 @@ import {
   readJsonBody,
   configRateLimiter,
   checkRateLimit,
-  partnerPortalRateLimiter,
   getClientIp,
   getMissingOAuthConfig,
   getDiscordClientId,
@@ -451,115 +449,6 @@ export async function handlePublicRoutes(
   // GET /health
   if (url.pathname === '/health' && method === 'GET') {
     json(res, 200, { ok: true, service: 'kotbo-dashboard-api' });
-    return true;
-  }
-
-  // ── Portail partenaire ────────────────────────────────────────────────────
-  //
-  // GET  /api/public/partner-portal/:token  - le dossier, tel que le partenaire
-  //                                            peut le voir
-  // POST /api/public/partner-portal/:token/accept - acceptation de l'accord
-  //
-  // Volontairement non authentifiee : le partenaire n'a pas de compte chez
-  // nous, et lui en demander un tuerait l'usage. Le jeton de 32 octets est le
-  // secret ; il est stocke en empreinte, expire, et ne donne acces qu'a ce
-  // dossier. Les notes internes ne sortent jamais par cette porte.
-  if (parts[1] === 'public' && parts[2] === 'partner-portal' && parts[3]) {
-    // Partenariats en pause : les liens déjà envoyés ne mènent plus à rien.
-    if (isModulePaused('partnerships')) {
-      json(res, 404, { error: 'Lien invalide' });
-      return true;
-    }
-    const token = parts[3];
-    if (!/^[A-Za-z0-9_-]{20,64}$/.test(token)) {
-      json(res, 400, { error: 'Lien invalide' });
-      return true;
-    }
-
-    if (!checkRateLimit(partnerPortalRateLimiter, getClientIp(req), 20, 60_000)) {
-      json(res, 429, { error: 'Trop de requetes. Veuillez reessayer plus tard.' });
-      return true;
-    }
-
-    const { resolveGuestAccess, acceptAgreement } = await import(
-      '../../services/partnerships/partnershipAgreementService.js'
-    );
-
-    const access = await resolveGuestAccess(token);
-    // Inconnu, revoque ou expire : meme reponse. Distinguer renseignerait qui
-    // essaie des jetons au hasard.
-    if (!access) {
-      json(res, 404, { error: "Ce lien n'est plus valide." });
-      return true;
-    }
-
-    const partnership = access.partnership;
-    const agreement = partnership.agreements[0] ?? null;
-
-    if (method === 'GET') {
-      const guild = client.guilds.cache.get(partnership.guildId ?? '')
-        ?? (partnership.guildId ? await client.guilds.fetch(partnership.guildId).catch(() => null) : null);
-
-      json(res, 200, {
-        capability: access.capability,
-        expiresAt: access.expiresAt,
-        host: { name: guild?.name ?? 'Ce serveur', icon: guild?.iconURL({ size: 128 }) ?? null },
-        partner: { displayName: partnership.partner.displayName, iconUrl: partnership.partner.iconUrl },
-        partnership: {
-          type: partnership.type,
-          stage: partnership.stage,
-          title: partnership.title,
-          summary: partnership.summary,
-          terms: partnership.terms,
-          startAt: partnership.startAt,
-          endAt: partnership.endAt,
-        },
-        commitments: partnership.commitments.map((commitment) => ({
-          party: commitment.party,
-          kind: commitment.kind,
-          label: commitment.label,
-          targetCount: commitment.targetCount,
-          targetPeriod: commitment.targetPeriod,
-          state: commitment.state,
-        })),
-        agreement: agreement
-          ? {
-              id: agreement.id,
-              version: agreement.version,
-              state: agreement.state,
-              body: agreement.body,
-              acceptedByUs: agreement.acceptedByUs,
-              acceptedByPartner: agreement.acceptedByPartner,
-            }
-          : null,
-        documents: partnership.documents.map((document) => ({ label: document.label, url: document.url })),
-      });
-      return true;
-    }
-
-    if (method === 'POST' && parts[4] === 'accept') {
-      if (access.capability !== 'sign') {
-        json(res, 403, { error: 'Ce lien permet de consulter, pas de signer.' });
-        return true;
-      }
-      if (!agreement || agreement.state !== 'PROPOSED') {
-        json(res, 409, { error: 'Aucun accord en attente de signature.' });
-        return true;
-      }
-
-      try {
-        // La reference conservee est l'identifiant de l'acces invite, pas une
-        // identite : c'est ce lien-la qui a signe, et c'est tout ce qu'on sait.
-        await acceptAgreement(agreement.id, 'partner', `guest:${access.id}`);
-        json(res, 200, { ok: true });
-      } catch (error) {
-        logger.warn('PortailPartenaire', `Acceptation refusee: ${String(error)}`);
-        json(res, 400, { error: "L'accord n'a pas pu etre accepte." });
-      }
-      return true;
-    }
-
-    json(res, 405, { error: 'Methode non autorisee' });
     return true;
   }
 

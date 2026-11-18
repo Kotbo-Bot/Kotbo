@@ -14,7 +14,6 @@ export const NOTIFICATION_CATEGORIES = [
   'moderation',
   'security',
   'tickets',
-  'partnerships',
   'community',
   'system',
 ] as const;
@@ -94,8 +93,6 @@ export const NOTIFICATION_KINDS = {
   'tickets.queue': { category: 'tickets' },
 
   // Partenariats
-  'partnerships.alert': { category: 'partnerships' },
-  'partnerships.application_decided': { category: 'partnerships', mandatory: true },
 
   // Communauté
   'community.level_up': { category: 'community' },

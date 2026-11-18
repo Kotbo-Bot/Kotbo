@@ -448,29 +448,6 @@ export async function buildTriggerOutputs(
       return member && role ? { member, role } : null;
     }
 
-    case 'OnPartnershipStage':
-      return {
-        partnerName: String(payload.partnerName ?? ''),
-        stage: String(payload.toStage ?? ''),
-        previousStage: String(payload.fromStage ?? ''),
-        partnershipType: String(payload.type ?? ''),
-        reason: String(payload.reason ?? ''),
-      };
-
-    case 'OnPartnershipCommitmentFailed':
-      return {
-        partnerName: String(payload.partnerName ?? ''),
-        commitment: String(payload.label ?? payload.kind ?? ''),
-        failureStreak: typeof payload.failureStreak === 'number' ? payload.failureStreak : 0,
-      };
-
-    case 'OnPartnershipReferral': {
-      const member = await memberOf(payload.userId);
-      // Sans le membre, le graphe n'a rien a manipuler : mieux vaut ne pas
-      // declencher que declencher avec un membre vide.
-      return member ? { member, partnerName: String(payload.partnerName ?? '') } : null;
-    }
-
     case 'OnMessageSend': {
       const member = await memberOf(payload.authorId);
       const channel = channelOf(payload.channelId);

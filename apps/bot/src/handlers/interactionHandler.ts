@@ -503,13 +503,6 @@ export async function handleButton(interaction: Interaction, client: Client): Pr
     return;
   }
 
-  // ── Partenariats : decisions sur une candidature ────────────────────
-  if (customId.startsWith('partnership:')) {
-    const { handlePartnershipButton } = await import('../services/partnerships/partnershipInteractionService.js');
-    await handlePartnershipButton(interaction);
-    return;
-  }
-
   // ── Reaction Role buttons ───────────────────────────────────────────
   if (customId.startsWith('role_toggle:')) {
     const { handleRoleToggleInteraction } = await import('../services/features/reactionRoleService.js');
@@ -1503,13 +1496,6 @@ export async function handleSelectMenu(interaction: AnySelectMenuInteraction, cl
 
 export async function handleModalSubmit(interaction: ModalSubmitInteraction, client: Client): Promise<void> {
   const { customId, guildId } = interaction;
-
-  // Candidature de partenariat, envoyee par /partenariat proposer.
-  if (customId.startsWith('partnership:')) {
-    const { handlePartnershipModal } = await import('../services/partnerships/partnershipInteractionService.js');
-    await handlePartnershipModal(interaction, client);
-    return;
-  }
 
   if (customId.startsWith('help_')) {
     const { handleHelpInteraction } = await import('../commands/utility/help.js');

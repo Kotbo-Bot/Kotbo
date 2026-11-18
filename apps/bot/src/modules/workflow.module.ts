@@ -103,20 +103,6 @@ export function registerWorkflowBusSubscribers(client: Client): void {
     await dispatchEvent(client, payload.guildId, 'thread:create', payload as never);
   }, MODULE_NAME);
 
-  // Partenariats : trois declencheurs. Le module « workflows » suffit a les
-  // garder - si le module Partenariats est eteint, plus rien n'est publie.
-  subscribeForModule('workflows', 'partnership:stage', async (payload) => {
-    await dispatchEvent(client, payload.guildId, 'partnership:stage', payload as never);
-  }, MODULE_NAME);
-
-  subscribeForModule('workflows', 'partnership:commitment-failed', async (payload) => {
-    await dispatchEvent(client, payload.guildId, 'partnership:commitment-failed', payload as never);
-  }, MODULE_NAME);
-
-  subscribeForModule('workflows', 'partnership:referral', async (payload) => {
-    await dispatchEvent(client, payload.guildId, 'partnership:referral', payload as never);
-  }, MODULE_NAME);
-
   subscribeForModule('workflows', 'giveaway:entry', async (payload) => {
     await dispatchEvent(client, payload.guildId, 'giveaway:entry', payload as never);
   }, MODULE_NAME);

@@ -485,55 +485,6 @@ const TRIGGERS: NodeDef[] = [
     ],
   },
   {
-    type: 'OnPartnershipStage',
-    label: "Partenariat : changement d'étape",
-    category: 'trigger',
-    description:
-      "Se déclenche quand un dossier de partenariat change d'étape. L'événement part après l'application des avantages : le rôle partenaire est déjà posé.",
-    event: 'partnership:stage',
-    module: 'partnerships',
-    inputs: [],
-    outputs: [
-      EXEC_OUT,
-      { id: 'partnerName', label: 'Partenaire', type: 'String' },
-      { id: 'stage', label: 'Nouvelle étape', type: 'String' },
-      { id: 'previousStage', label: 'Étape précédente', type: 'String' },
-      { id: 'partnershipType', label: 'Type', type: 'String' },
-      { id: 'reason', label: 'Motif', type: 'String' },
-    ],
-  },
-  {
-    type: 'OnPartnershipCommitmentFailed',
-    label: 'Partenariat : engagement non tenu',
-    category: 'trigger',
-    description:
-      "Se déclenche au constat d'un manquement. « Périodes manquées » permet de ne réagir qu'à partir de la deuxième ou de la troisième fois.",
-    event: 'partnership:commitment-failed',
-    module: 'partnerships',
-    inputs: [],
-    outputs: [
-      EXEC_OUT,
-      { id: 'partnerName', label: 'Partenaire', type: 'String' },
-      { id: 'commitment', label: 'Engagement', type: 'String' },
-      { id: 'failureStreak', label: 'Périodes manquées', type: 'Number' },
-    ],
-  },
-  {
-    type: 'OnPartnershipReferral',
-    label: 'Partenariat : arrivée attribuée',
-    category: 'trigger',
-    description:
-      "Se déclenche quand un membre arrive par l'invitation d'un partenariat. Ne part que pour les arrivées réellement attribuées, pas pour toutes les arrivées.",
-    event: 'partnership:referral',
-    module: 'partnerships',
-    inputs: [],
-    outputs: [
-      EXEC_OUT,
-      { id: 'member', label: 'Membre', type: 'Member' },
-      { id: 'partnerName', label: 'Partenaire', type: 'String' },
-    ],
-  },
-  {
     type: 'OnGiveawayEntry',
     label: 'Participation à un concours',
     category: 'trigger',

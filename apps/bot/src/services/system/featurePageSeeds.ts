@@ -291,11 +291,6 @@ const MODULE_SEO: Record<string, { slug: { fr: string; en: string }; nameFr?: st
     nameEn: 'Channel links',
     descriptionEn: 'Message synchronization between channels on several servers.',
   },
-  partnerships: {
-    slug: { fr: 'partenariats', en: 'partnerships' },
-    nameEn: 'Partnerships',
-    descriptionEn: 'Partners, agreements, granted perks, cross-promotion and measured results.',
-  },
   staff_server: {
     slug: { fr: 'serveur-staff', en: 'staff-server' },
     nameEn: 'Staff server',

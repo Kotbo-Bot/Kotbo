@@ -164,7 +164,6 @@ const STATIC_SOURCES: GdprSource[] = [
   { category: 'content', key: 'suggestion', label: 'Suggestions écrites ou votées', model: 'suggestion', where: ({ discordId }) => ({ OR: [{ userId: discordId }, { upvoters: { has: discordId } }, { downvoters: { has: discordId } }] }), project: projectListMembership({ upvoters: 'votedUp', downvoters: 'votedDown' }) },
   { category: 'content', key: 'reputationVote', label: 'Votes de réputation', model: 'reputationVote', where: ({ discordId }) => ({ OR: [{ giverId: discordId }, { receiverId: discordId }] }) },
   { category: 'content', key: 'customFormSubmission', label: 'Soumissions de formulaires', model: 'customFormSubmission', where: ({ discordId }) => ({ userId: discordId }) },
-  { category: 'content', key: 'partnershipApplication', label: 'Candidatures de partenariat', model: 'partnershipApplication', where: ({ discordId }) => ({ userId: discordId }) },
   { category: 'content', key: 'recruitmentCandidature', label: 'Candidatures de recrutement', model: 'recruitmentCandidature', where: ({ discordId }) => ({ discordId }) },
   { category: 'content', key: 'newsArticle', label: 'Articles rédigés', model: 'newsArticle', where: ({ discordId }) => ({ authorId: discordId }) },
   { category: 'content', key: 'analyticsAnnotation', label: 'Repères Analytics', model: 'analyticsAnnotation', where: ({ discordId }) => ({ authorId: discordId }) },
@@ -177,11 +176,7 @@ const STATIC_SOURCES: GdprSource[] = [
   { category: 'content', key: 'sitePage', label: 'Pages du site rédigées', model: 'sitePage', where: ({ discordId }) => ({ authorId: discordId }) },
   { category: 'content', key: 'sitePageRevision', label: 'Révisions de pages du site', model: 'sitePageRevision', where: ({ discordId }) => ({ authorId: discordId }) },
   { category: 'content', key: 'siteComment', label: 'Commentaires sur le site', model: 'siteComment', where: ({ discordId }) => ({ authorId: discordId }) },
-  { category: 'content', key: 'partnerContact', label: 'Contacts de partenariat', model: 'partnerContact', where: ({ discordId }) => ({ userId: discordId }) },
-  { category: 'content', key: 'partnershipReferral', label: 'Parrainages de partenariat', model: 'partnershipReferral', where: ({ discordId }) => ({ userId: discordId }) },
-  { category: 'content', key: 'partnership', label: 'Partenariats gérés', model: 'partnership', where: ({ discordId }) => ({ ownerUserId: discordId }) },
   { category: 'content', key: 'siteTemplate', label: 'Modèles de site signalés', model: 'siteTemplate', where: ({ discordId }) => ({ reporterIds: { has: discordId } }), project: projectListMembership({ reporterIds: 'reported' }) },
-  { category: 'content', key: 'partnerApplication', label: 'Candidatures de partenaire', model: 'partnerApplication', where: ({ discordId }) => ({ applicantUserId: discordId }) },
 
   // ── Économie & marketplace ─────────────────────────────────────
   { category: 'economy', key: 'rpgProfile', label: 'Profils RPG', model: 'rpgProfile', where: ({ discordId }) => ({ userId: discordId }) },

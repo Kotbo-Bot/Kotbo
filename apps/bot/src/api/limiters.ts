@@ -22,14 +22,8 @@ export const publicLevelingRateLimiter = new Map<string, number[]>();
 export const levelImportLlmRateLimiter = new Map<string, number[]>();
 /** Page publique d'un tournoi : elle se rafraîchit seule toutes les 20 s pendant le direct. */
 export const publicTournamentsRateLimiter = new Map<string, number[]>();
-/**
- * Portail partenaire. Serre : le jeton est le seul secret de la route, et un
- * limiteur large laisserait tout le loisir d'en essayer au hasard.
- */
-export const partnerPortalRateLimiter = new Map<string, number[]>();
 export const errorReportRateLimiter = new Map<string, number[]>();
 export const feedbackReportRateLimiter = new Map<string, number[]>();
-export const partnershipRateLimiter = new Map<string, number[]>();
 /**
  * Mesure d'audience de la landing. Son propre seau plutot qu'un seau partage :
  * une page qui part en boucle ne doit pas empecher un visiteur d'installer le

@@ -175,8 +175,6 @@ export const INVITE_SOURCE = {
   honeypot: () => buildInviteSourceLabel('Honeypot', 'Réinvitation'),
   /** Retour d'un membre dont l'appel de bannissement a été accepté. */
   banAppeal: () => buildInviteSourceLabel('Appel', 'Ban'),
-  /** Candidature partenariat / bêta-test acceptée. */
-  partnership: () => buildInviteSourceLabel('Partenariat'),
   /** Invitation recréée après validation staff (garde-invitations). */
   inviteApproval: () => buildInviteSourceLabel('Validation', 'Staff'),
   /** Invitation générée depuis le panneau d'administration Kotbo. */

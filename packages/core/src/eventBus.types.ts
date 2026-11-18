@@ -568,50 +568,6 @@ export interface GiveawayEndedEvent {
 
 // ── Partenariats ────────────────────────────────────────────────
 
-/**
- * Un partenariat vient de changer d'etape.
- *
- * Publie apres l'ecriture et apres l'application des avantages : un workflow
- * qui reagit a l'activation trouve donc le role deja pose, et non une seconde
- * avant.
- */
-export interface PartnershipStageEvent {
-  guildId: string;
-  partnershipId: string;
-  partnerId: string;
-  partnerName: string;
-  /** Serveur du partenaire, quand il s'agit d'une communaute Discord. */
-  partnerGuildId: string | null;
-  type: string;
-  fromStage: string;
-  toStage: string;
-  reason: string | null;
-  timestamp: number;
-}
-
-/** Un engagement n'a pas ete tenu sur la periode ecoulee. */
-export interface PartnershipCommitmentEvent {
-  guildId: string;
-  partnershipId: string;
-  partnerName: string;
-  commitmentId: string;
-  kind: string;
-  label: string | null;
-  /** Nombre de periodes manquees d'affilee. */
-  failureStreak: number;
-  timestamp: number;
-}
-
-/** Une arrivee vient d'etre attribuee a un partenariat. */
-export interface PartnershipReferralEvent {
-  guildId: string;
-  userId: string;
-  partnershipId: string;
-  partnerId: string;
-  partnerName: string;
-  timestamp: number;
-}
-
 // ── Mapping type → payload ──────────────────────────────────────
 export interface KotboEventMap {
   'message:new': MessageNewEvent;
@@ -622,9 +578,6 @@ export interface KotboEventMap {
   'voice:move': VoiceMoveEvent;
   'member:join': MemberJoinEvent;
   'member:join:invite': MemberJoinInviteEvent;
-  'partnership:stage': PartnershipStageEvent;
-  'partnership:commitment-failed': PartnershipCommitmentEvent;
-  'partnership:referral': PartnershipReferralEvent;
   'member:leave': MemberLeaveEvent;
   'member:update': MemberUpdateEvent;
   'member:tag': MemberTagEvent;

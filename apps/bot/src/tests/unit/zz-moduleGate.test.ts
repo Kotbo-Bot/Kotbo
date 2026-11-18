@@ -111,7 +111,7 @@ for (const suffix of ['../../services/analytics/moduleStatsService.ts', '../../s
 
 const { getModuleStates, isModuleEnabled, invalidateModuleStates, filterGuildsWithModule } =
   await import('../../services/core/moduleGate.js');
-const { setDashboardModuleStatus, CoreModuleError, PlanLockedError, PausedModuleError } =
+const { setDashboardModuleStatus, CoreModuleError, PlanLockedError } =
   await import('../../services/core/moduleActivationService.js');
 
 const GUILD = 'guild-1';
@@ -367,43 +367,6 @@ describe('setDashboardModuleStatus', () => {
     featureRows = [{ guildId: GUILD, featureKey: 'tutoring', enabled: true }];
 
     const result = await setDashboardModuleStatus(GUILD, 'tutoring', false);
-
-    expect(result.enabled).toBeFalse();
-  });
-});
-
-/**
- * Modules en pause : retires du produit sans que leurs donnees soient
- * supprimees. Ni une ligne en base, ni une colonne historique, ni l offre ne
- * doivent pouvoir les rallumer.
- */
-describe('module en pause', () => {
-  test('est eteint malgre une ligne et une colonne qui l activent', async () => {
-    guildRow = guild();
-    featureRows = [{ guildId: GUILD, featureKey: 'partnerships', enabled: true }];
-
-    expect(await isModuleEnabled(GUILD, 'partnerships')).toBeFalse();
-    expect((await getModuleStates(GUILD)).partnerships).toBeFalse();
-  });
-
-  test('refuse d etre rallume, sans rien ecrire', async () => {
-    const err = await setDashboardModuleStatus(GUILD, 'partnerships', true).catch((e) => e);
-
-    expect(err).toBeInstanceOf(PausedModuleError);
-    expect(err.moduleKey).toBe('partnerships');
-    expect(featureRows.find((row) => row.featureKey === 'partnerships')).toBeUndefined();
-  });
-
-  test('refuse aussi la mise en place guidee', async () => {
-    await expect(
-      setDashboardModuleStatus(GUILD, 'partnerships', true, undefined, { recordIntentWhenLocked: true }),
-    ).rejects.toThrow(PausedModuleError);
-  });
-
-  test('laisse ecrire l extinction', async () => {
-    featureRows = [{ guildId: GUILD, featureKey: 'partnerships', enabled: true }];
-
-    const result = await setDashboardModuleStatus(GUILD, 'partnerships', false);
 
     expect(result.enabled).toBeFalse();
   });

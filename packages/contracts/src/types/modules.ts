@@ -874,19 +874,6 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
     paths: ['/channel-links'],
   },
   {
-    key: 'partnerships',
-    name: 'Partenariats',
-    description:
-      'Partenaires, accords, avantages accordés, publicités croisées et retombées mesurées.',
-    category: 'cross_server',
-    icon: 'Handshake',
-    defaultEnabled: false,
-    paused: true,
-    apiSegments: ['partnerships', 'partners', 'partner-applications', 'partnership-directory'],
-    paths: ['/partnerships', '/partnerships/directory'],
-    interactionPrefixes: ['partnership:', 'partnership_modal:'],
-  },
-  {
     key: 'staff_server',
     name: 'Serveur staff',
     description: "Serveur dédié à l'équipe, hiérarchie et rôles synchronisés.",

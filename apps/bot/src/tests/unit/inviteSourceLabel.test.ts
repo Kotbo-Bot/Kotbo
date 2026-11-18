@@ -94,7 +94,7 @@ describe('tagInviteSource', () => {
     upsert.mockImplementationOnce(() => Promise.reject(new Error('db down')));
 
     await expect(
-      tagInviteSource({ guildId: '111', code: 'abc123', sourceLabel: INVITE_SOURCE.partnership() }),
+      tagInviteSource({ guildId: '111', code: 'abc123', sourceLabel: INVITE_SOURCE.banAppeal() }),
     ).resolves.toBeUndefined();
   });
 });
