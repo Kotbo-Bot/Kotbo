@@ -48,7 +48,6 @@ import { handleReportFeedbackRoute } from './routes/feedback.js';
 import { handleUserRoutes } from './routes/user.js';
 import { handleAdminRoutes } from './routes/admin.js';
 import { startBroadcastScheduler } from '../services/system/broadcastService.js';
-import { handleDashboardRoutes } from './routes/dashboard.js';
 import { handleVerifyRoutes } from './routes/verify.js';
 import { handleMCPRoutes, mcpRateLimiter } from './mcp/mcpServer.js';
 import { handleRestApiRoutes } from './mcp/restApi.js';
@@ -412,7 +411,6 @@ export const startDashboardApi = async (client: Client) => {
             if (await handleAdminRoutes(req, res, parts, url, client)) return;
             if (await handleMCPRoutes(req, res, parts, url, client)) return;
             if (await handleRestApiRoutes(req, res, parts, url, client)) return;
-            if (await handleDashboardRoutes(req, res, parts, url, client)) return;
 
             json(res, 404, { error: 'Route introuvable' });
           } catch (error) {

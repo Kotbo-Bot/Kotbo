@@ -11,6 +11,7 @@ import { createMembersRouter } from '../../routes/dashboard/members.js';
 import { createGeneralistModulesRouter } from '../../routes/dashboard/generalistModules.js';
 import { createEconomyRouter } from '../../routes/dashboard/economy.js';
 import { createClansRouter } from '../../routes/dashboard/clans.js';
+import { createAnalyticsRouter } from '../../routes/dashboard/analytics.js';
 import { createGeneralRouter, createGuildGeneralRouter } from '../../routes/dashboard/general.js';
 import { createLeadershipRouter } from '../../routes/dashboard/leadership.js';
 import { createStaffRouter } from '../../routes/dashboard/leadership/staff.js';
@@ -188,5 +189,6 @@ export function createDashboardRouter(client: Client) {
   router.route('/', createGeneralistModulesRouter(client));
   router.route('/', createEconomyRouter(client));
   router.route('/', createClansRouter(client));
+  router.route('/', createAnalyticsRouter(client));
   return router;
 }

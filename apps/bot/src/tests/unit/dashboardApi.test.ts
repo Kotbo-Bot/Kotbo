@@ -211,7 +211,6 @@ import { handleAuthRoutes } from '../../api/routes/auth.js';
 import { handleReportErrorRoute } from '../../api/routes/error.js';
 import { handleUserRoutes } from '../../api/routes/user.js';
 import { handleAdminRoutes } from '../../api/routes/admin.js';
-import { handleDashboardRoutes } from '../../api/routes/dashboard.js';
 import { createDashboardRouter } from '../../api/hono/dashboard/index.js';
 import { getMcpConnectionLogs, handleMCPRoutes, makeMcpDirectToken } from '../../api/mcp/mcpServer.js';
 
@@ -1258,17 +1257,8 @@ describe('Modular Routers Unit Tests', () => {
     });
 
     test('Requires user authentication for general guild settings', async () => {
-      const req = createMockRequest({
-        method: 'GET',
-        url: '/api/dashboard/guilds/1122334455667788/state',
-      });
-      const res = createMockResponse();
-      const parts = splitPath(req.url!);
-      const url = new URL(req.url!, 'http://localhost');
-
-      const handled = await handleDashboardRoutes(req, res, parts, url, mockClient);
-      expect(handled).toBeTrue();
-      expect(res.statusCode).toBe(401);
+      const res = await createDashboardRouter(mockClient).request('/api/dashboard/guilds/1122334455667788/state');
+      expect(res.status).toBe(401);
     });
 
     test('GET /api/dashboard/guilds/:guildId/notifications/features returns 200', async () => {
