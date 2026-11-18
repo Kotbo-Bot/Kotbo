@@ -41,6 +41,11 @@ async function hasForeignChannel(guildId: string, ...ids: unknown[]): Promise<bo
   return false;
 }
 
+// Une étape de quiz par événement à la fois : l'édition du message Discord peut traîner,
+// et un second clic pendant ce temps faisait sauter une question de plus.
+// shortcut: verrou en mémoire, valable tant que seul le shard 0 sert l'API.
+const stepsInProgress = new Set<string>();
+
 import { fail, guildRoute, readBody, send } from '../../hono/dashboard/kit.js';
 export function createEventsRouter(client: Client) {
   const router = new Hono();
@@ -186,6 +191,11 @@ export function createEventsRouter(client: Client) {
   router.post(`${base}/events/:eventId/next`, ...gate, async (c) => {
     const guildId = c.req.param('guildId');
     const eventId = c.req.param('eventId');
+    if (stepsInProgress.has(eventId)) {
+      return send(c, { error: 'Une question est déjà en train de changer, patiente quelques secondes.' }, 409);
+    }
+    stepsInProgress.add(eventId);
+    const startedAt = Date.now();
     try {
       const result = await nextQuestion(client, eventId);
       broadcastDashboardStateChange(guildId, 'events_updated');
@@ -193,12 +203,21 @@ export function createEventsRouter(client: Client) {
     } catch (err) {
       logger.error('EventsAPI', err);
       return fail(c, err, "Impossible de passer à l'étape suivante.", 'EventsAPI');
+    } finally {
+      stepsInProgress.delete(eventId);
+      const ms = Date.now() - startedAt;
+      if (ms > 5000) logger.warn('EventsAPI', `Étape next de l'événement ${eventId} lente : ${ms} ms`);
     }
   });
 
   router.post(`${base}/events/:eventId/prev`, ...gate, async (c) => {
     const guildId = c.req.param('guildId');
     const eventId = c.req.param('eventId');
+    if (stepsInProgress.has(eventId)) {
+      return send(c, { error: 'Une question est déjà en train de changer, patiente quelques secondes.' }, 409);
+    }
+    stepsInProgress.add(eventId);
+    const startedAt = Date.now();
     try {
       const result = await prevQuestion(client, eventId);
       broadcastDashboardStateChange(guildId, 'events_updated');
@@ -206,6 +225,10 @@ export function createEventsRouter(client: Client) {
     } catch (err) {
       logger.error('EventsAPI', err);
       return fail(c, err, "Impossible de revenir à l'étape précédente.", 'EventsAPI');
+    } finally {
+      stepsInProgress.delete(eventId);
+      const ms = Date.now() - startedAt;
+      if (ms > 5000) logger.warn('EventsAPI', `Étape prev de l'événement ${eventId} lente : ${ms} ms`);
     }
   });
 
@@ -235,6 +258,8 @@ export function createEventsRouter(client: Client) {
       }
       const currentEvent = await prisma.event.findUnique({ where: { id: eventId } });
       const isLive = currentEvent?.status === 'ONGOING';
+      // Le champ « nombre de membres » du dashboard envoie un nombre ; la colonne est un String.
+      if (typeof body.triggerValue === 'number') body.triggerValue = String(body.triggerValue);
 
       // Le corps vient du dashboard : on ne recopie que les champs presents,
       // et les listes imbriquees ne sont acceptees que dans leur forme attendue.
