@@ -602,8 +602,13 @@ export async function completeVerification(params: {
 
       const member = await guild.members.fetch(verifiedDiscordId).catch(() => null);
       if (member) {
-        // Remove Timeout
-        if (member.communicationDisabledUntilTimestamp && member.communicationDisabledUntilTimestamp > Date.now()) {
+        // Remove Timeout, mais seulement celui de la vérification : un timeout posé par un modérateur
+        // (sanction active au casier) ou un double compte détecté le garde.
+        const moderatorTimeout = await prisma.sanction.findFirst({
+          where: { guildId: verification.guildId, targetUserId: verifiedDiscordId, type: 'TIMEOUT', status: 'ACTIVE' },
+          select: { id: true },
+        });
+        if (!moderatorTimeout && !duplicateDetected && member.communicationDisabledUntilTimestamp && member.communicationDisabledUntilTimestamp > Date.now()) {
           await member.timeout(null, 'Vérification de sécurité réussie (OAuth)').catch(() => null);
           logger.info('SecurityVerif', `Timeout retiré pour ${verifiedDiscordId} après vérification.`);
         }
