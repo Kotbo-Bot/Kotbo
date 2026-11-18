@@ -7,6 +7,7 @@
 import { Hono } from 'hono';
 import { compress } from 'hono/compress';
 import type { Client } from 'discord.js';
+import { createChannelsManagementRouter } from '../../routes/dashboard/modules/channels-management.js';
 import { createTicketHelpdeskRouter } from '../../routes/dashboard/modules/ticketHelpdesk.js';
 import { createTicketsRouter } from '../../routes/dashboard/modules/tickets.js';
 import { createSanctionsRouter } from '../../routes/dashboard/modules/sanctions.js';
@@ -153,5 +154,6 @@ export function createDashboardRouter(client: Client) {
   router.route('/', createSanctionsRouter(client));
   router.route('/', createTicketHelpdeskRouter(client));
   router.route('/', createTicketsRouter(client));
+  router.route('/', createChannelsManagementRouter(client));
   return router;
 }

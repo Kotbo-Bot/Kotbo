@@ -15,6 +15,12 @@ import {
   suivreEcouteurs,
   type AppelRest,
 } from '../helpers/bancDiscord.js';
+import { legacyModuleCall, mockDashboardGate, type LegacyModuleContext } from '../helpers/honoDashboard.js';
+// Session et garde serveur simulées : la route est servie par Hono.
+mockDashboardGate(
+  { level: 'admin', canViewDashboard: true, canModerateContent: true, canManageSettings: true, canManageTutoring: true },
+  { userId: 'user-1', username: 'Admin' },
+);
 
 // ─── Base de données et cache simulés, au temps virtuel du monde courant ───
 
@@ -855,7 +861,9 @@ describe('Réglages enregistrés — chaque cible à part, bloqués absents, mes
 async function patchDashboard(sc: Scene, corps: Record<string, unknown>) {
   const { IncomingMessage, ServerResponse } = await import('node:http');
   const { Socket } = await import('node:net');
-  const { handleChannelsManagementRoutes } = await import('../../api/routes/dashboard/modules/channels-management.js');
+  const { createChannelsManagementRouter } = await import('../../api/routes/dashboard/modules/channels-management.js');
+  const handleChannelsManagementRoutes = (ctx: LegacyModuleContext & { client: unknown }) =>
+    legacyModuleCall(createChannelsManagementRouter(ctx.client as never), ctx);
   const { DASHBOARD_ACCESS_ADMIN } = await import('../../api/shared.js');
   const req = new IncomingMessage(new Socket());
   req.method = 'PATCH';

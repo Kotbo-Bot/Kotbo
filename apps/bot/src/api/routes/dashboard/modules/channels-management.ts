@@ -1,11 +1,13 @@
 /** Routes dashboard du module `channels-management`. */
+import { Hono, type Context } from 'hono';
+import type { Client } from 'discord.js';
 import { updateGuildStats } from '../../../../events/stats.js';
 import { readStatsConfig } from '../../../../services/analytics/statsConfig.js';
 import { cache } from '../../../../utils/cache.js';
 import prisma from '../../../../utils/db.js';
 import { logger } from '../../../../utils/logger.js';
 import { RENAME_TIMEOUT_MS, settleWithin } from '../../../../utils/discord.js';
-import { getGuildName, json, pushAudit, readJsonBody } from '../../../shared.js';
+import { getGuildName, pushAudit } from '../../../shared.js';
 import { isDeepStrictEqual } from 'node:util';
 import { ChannelType, PermissionFlagsBits, type Guild, type VoiceChannel } from 'discord.js';
 import { sendLogEmbed } from '../../../../utils/logDispatch.js';
@@ -23,7 +25,7 @@ import {
   normalizeTempVoicePolicy,
   dispositionNative,
 } from '../../../../services/features/tempVoiceService.js';
-import { readWordStatsEnabled, startWordStatsBackfillIfTurnedOn, type ModuleRouteContext } from './_shared.js';
+import { readWordStatsEnabled, startWordStatsBackfillIfTurnedOn } from './_shared.js';
 import type { Prisma } from '@prisma/client';
 import {
   TEMP_VOICE_CLAIM_WHO,
@@ -42,7 +44,7 @@ import {
   type TempVoiceOwnershipSettings,
 } from '@kotbo/shared';
 
-import { jsonFailure } from '../../../shared/failure.js';
+import { auditUserOf, fail, guildRoute, readBody, send } from '../../../hono/dashboard/kit.js';
 
 // Une liste d'identifiants se compare comme un ensemble, un objet vide vaut une absence :
 // la page renvoie l'un ou l'autre sans que la valeur ait changé.
@@ -402,8 +404,8 @@ export interface TvFailure {
 }
 
 /** Réponse d'erreur de cette route : même forme partout, `code` toujours présent. */
-function tvError(res: ModuleRouteContext['res'], status: number, failure: TvFailure | string, code?: string): void {
-  json(res, status, typeof failure === 'string' ? { error: failure, code } : failure);
+function tvError(c: Context, status: number, failure: TvFailure | string, code?: string): Response {
+  return send(c, typeof failure === 'string' ? { error: failure, code } : failure, status);
 }
 
 /** Valeur hors liste fermée. `expected` est la liste, séparée par « | ». */
@@ -926,21 +928,24 @@ export function explainDroppedGenerators(
   return notices;
 }
 
-export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): Promise<boolean> {
-  const { req, res, parts, client, guildId, method, auditUser, moduleKey } = ctx;
+export function createChannelsManagementRouter(client: Client) {
+  const router = new Hono();
+  const base = '/api/dashboard/guilds/:guildId';
+  const gate = guildRoute(client);
 
-  // GET /api/dashboard/guilds/:guildId/channels-management/by-channel
+
+
   //
   // Renvoie la liste des salons du serveur avec, pour chacun, les
   // fonctionnalites qui y sont actives. La page les reglait auparavant module
   // par module : savoir ce qui touchait un salon donne demandait de parcourir
   // cinq onglets.
-  if (moduleKey === 'channels-management' && parts.length === 6 && parts[5] === 'by-channel' && method === 'GET') {
+  router.get(`${base}/channels-management/by-channel`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
     try {
       const guild = client.guilds.cache.get(guildId) ?? (await client.guilds.fetch(guildId).catch(() => null));
       if (!guild) {
-        tvError(res, 404, 'Serveur Discord introuvable', 'tv_guild_not_found');
-        return true;
+        return tvError(c, 404, 'Serveur Discord introuvable', 'tv_guild_not_found');
       }
       if (guild.channels.cache.size === 0) await guild.channels.fetch().catch(() => null);
 
@@ -998,28 +1003,27 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
         }))
         .sort((a, b) => (a.categoryName ?? '').localeCompare(b.categoryName ?? '') || a.position - b.position);
 
-      json(res, 200, {
+      return send(c, {
         channels,
         features: Object.fromEntries(CHANNEL_FEATURE_KEYS.map((k) => [k, CHANNEL_FEATURES[k].label])),
       });
     } catch (err) {
       logger.error('ChannelsManagementAPI', 'Erreur GET by-channel:', err);
-      jsonFailure(res, err, 'Erreur lors de la récupération des salons', 'ChannelsManagementAPI');
+      return fail(c, err, 'Erreur lors de la récupération des salons', 'ChannelsManagementAPI');
     }
-    return true;
-  }
+  });
 
-  // PATCH /api/dashboard/guilds/:guildId/channels-management/by-channel/:channelId
   // { feature, enabled }
-  if (moduleKey === 'channels-management' && parts.length === 7 && parts[5] === 'by-channel' && method === 'PATCH') {
+  router.patch(`${base}/channels-management/by-channel/:channelId`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const auditUser = auditUserOf(c);
     try {
-      const channelId = parts[6];
-      const body = await readJsonBody<{ feature?: string; enabled?: boolean }>(req);
+      const channelId = c.req.param('channelId');
+      const body = await readBody<{ feature?: string; enabled?: boolean }>(c);
       const feature = body?.feature as ChannelFeatureKey | undefined;
 
       if (!feature || !CHANNEL_FEATURE_KEYS.includes(feature)) {
-        tvError(res, 400, 'Fonctionnalité inconnue', 'tv_feature_unknown');
-        return true;
+        return tvError(c, 400, 'Fonctionnalité inconnue', 'tv_feature_unknown');
       }
 
       const { kind, field, label } = CHANNEL_FEATURES[feature];
@@ -1058,34 +1062,32 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
         details: `Salon ${channelId} · ${label} ${enabled ? 'activé' : 'désactivé'}`,
       });
 
-      json(res, 200, { success: true });
+      return send(c, { success: true });
     } catch (err) {
       logger.error('ChannelsManagementAPI', 'Erreur PATCH by-channel:', err);
-      jsonFailure(res, err, 'Erreur lors de la mise à jour du salon', 'ChannelsManagementAPI');
+      return fail(c, err, 'Erreur lors de la mise à jour du salon', 'ChannelsManagementAPI');
     }
-    return true;
-  }
+  });
 
-  // PATCH /api/dashboard/guilds/:guildId/channels-management/channel/:channelId
   // { name } - renomme le salon Discord
-  if (moduleKey === 'channels-management' && parts.length === 7 && parts[5] === 'channel' && method === 'PATCH') {
+  router.patch(`${base}/channels-management/channel/:channelId`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const auditUser = auditUserOf(c);
+    const channelId = c.req.param('channelId');
     try {
       const guild = client.guilds.cache.get(guildId) ?? (await client.guilds.fetch(guildId).catch(() => null));
-      const channel = await guild?.channels.fetch(parts[6]).catch(() => null);
+      const channel = await guild?.channels.fetch(channelId).catch(() => null);
       if (!guild || !channel) {
-        tvError(res, 404, 'Salon introuvable', 'tv_channel_not_found');
-        return true;
+        return tvError(c, 404, 'Salon introuvable', 'tv_channel_not_found');
       }
       if (!channel.manageable) {
-        tvError(res, 403, 'Le bot ne peut pas modifier ce salon (permissions ou hiérarchie).', 'tv_channel_not_editable');
-        return true;
+        return tvError(c, 403, 'Le bot ne peut pas modifier ce salon (permissions ou hiérarchie).', 'tv_channel_not_editable');
       }
 
-      const body = await readJsonBody<{ name?: string }>(req);
+      const body = await readBody<{ name?: string }>(c);
       const name = typeof body?.name === 'string' ? body.name.trim().slice(0, 100) : '';
       if (!name) {
-        tvError(res, 400, 'Nom de salon invalide', 'tv_channel_name_invalid');
-        return true;
+        return tvError(c, 400, 'Nom de salon invalide', 'tv_channel_name_invalid');
       }
 
       const previous = channel.name;
@@ -1101,26 +1103,25 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
         details: `#${previous} → #${name}`,
       });
 
-      json(res, 200, { success: true, name });
+      return send(c, { success: true, name });
     } catch (err) {
       logger.error('ChannelsManagementAPI', 'Erreur PATCH channel:', err);
-      jsonFailure(res, err, 'Erreur lors du renommage du salon', 'ChannelsManagementAPI');
+      return fail(c, err, 'Erreur lors du renommage du salon', 'ChannelsManagementAPI');
     }
-    return true;
-  }
+  });
 
-  // DELETE /api/dashboard/guilds/:guildId/channels-management/channel/:channelId
-  if (moduleKey === 'channels-management' && parts.length === 7 && parts[5] === 'channel' && method === 'DELETE') {
+  router.delete(`${base}/channels-management/channel/:channelId`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const auditUser = auditUserOf(c);
+    const channelId = c.req.param('channelId');
     try {
       const guild = client.guilds.cache.get(guildId) ?? (await client.guilds.fetch(guildId).catch(() => null));
-      const channel = await guild?.channels.fetch(parts[6]).catch(() => null);
+      const channel = await guild?.channels.fetch(channelId).catch(() => null);
       if (!guild || !channel) {
-        tvError(res, 404, 'Salon introuvable', 'tv_channel_not_found');
-        return true;
+        return tvError(c, 404, 'Salon introuvable', 'tv_channel_not_found');
       }
       if (!channel.manageable) {
-        tvError(res, 403, 'Le bot ne peut pas supprimer ce salon (permissions ou hiérarchie).', 'tv_channel_not_deletable');
-        return true;
+        return tvError(c, 403, 'Le bot ne peut pas supprimer ce salon (permissions ou hiérarchie).', 'tv_channel_not_deletable');
       }
 
       const name = channel.name;
@@ -1133,55 +1134,52 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
         context: getGuildName(client, guildId),
         module: 'Salons',
         eventType: 'Manuel',
-        details: `#${name} (${parts[6]})`,
+        details: `#${name} (${channelId})`,
       });
 
-      json(res, 200, { success: true });
+      return send(c, { success: true });
     } catch (err) {
       logger.error('ChannelsManagementAPI', 'Erreur DELETE channel:', err);
-      jsonFailure(res, err, 'Erreur lors de la suppression du salon', 'ChannelsManagementAPI');
+      return fail(c, err, 'Erreur lors de la suppression du salon', 'ChannelsManagementAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/channels-management/rescan-stats
-  if (moduleKey === 'channels-management' && parts.length === 6 && parts[5] === 'rescan-stats' && method === 'POST') {
+  router.post(`${base}/channels-management/rescan-stats`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
     try {
-      const body = await readJsonBody<{ force?: boolean; forcer?: boolean }>(req);
+      const body = await readBody<{ force?: boolean; forcer?: boolean }>(c);
       const force = !!(body?.force || body?.forcer);
 
       const { startHistoricalScraping } = await import('../../../../services/analytics/messageScraperService.js');
       await startHistoricalScraping(client, guildId, force);
 
-      json(res, 200, { ok: true, message: 'Scraping historique lancé avec succès.' });
+      return send(c, { ok: true, message: 'Scraping historique lancé avec succès.' });
     } catch (err) {
       logger.error('ChannelsManagementAPI', 'POST rescan-stats error:', err);
-      jsonFailure(res, err, 'Erreur lors du lancement du scraping', 'ChannelsManagementAPI');
+      return fail(c, err, 'Erreur lors du lancement du scraping', 'ChannelsManagementAPI');
     }
-    return true;
-  }
+  });
 
-  // ── Sticky bot ─────────────────────────────────────────────────────────────
-  // GET /api/dashboard/guilds/:guildId/channels-management/sticky
-  if (moduleKey === 'channels-management' && parts.length === 6 && parts[5] === 'sticky' && method === 'GET') {
+  router.get(`${base}/channels-management/sticky`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
     try {
       const stickies = await prisma.stickyMessage.findMany({
         where: { guildId },
         orderBy: { createdAt: 'asc' },
         omit: { webhookToken: true },
       });
-      json(res, 200, { stickies });
+      return send(c, { stickies });
     } catch (err) {
       logger.error('ChannelsManagementAPI', 'GET sticky error:', err);
-      jsonFailure(res, err, 'Erreur lors du chargement des messages sticky', 'ChannelsManagementAPI');
+      return fail(c, err, 'Erreur lors du chargement des messages sticky', 'ChannelsManagementAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/channels-management/sticky (upsert par salon)
-  if (moduleKey === 'channels-management' && parts.length === 6 && parts[5] === 'sticky' && method === 'POST') {
+  router.post(`${base}/channels-management/sticky`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const auditUser = auditUserOf(c);
     try {
-      const body = await readJsonBody<{
+      const body = await readBody<{
         channelId?: string;
         enabled?: boolean;
         content?: string;
@@ -1196,19 +1194,17 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
         webhookEnabled?: boolean;
         webhookName?: string | null;
         webhookAvatarUrl?: string | null;
-      }>(req);
+      }>(c);
 
       const channelId = (body?.channelId || '').trim();
       if (!channelId) {
-        tvError(res, 400, 'Salon manquant', 'tv_sticky_channel_missing');
-        return true;
+        return tvError(c, 400, 'Salon manquant', 'tv_sticky_channel_missing');
       }
 
       const discordGuild = client.guilds.cache.get(guildId);
       const channel = discordGuild?.channels.cache.get(channelId);
       if (!channel || (channel.type !== ChannelType.GuildText && channel.type !== ChannelType.GuildAnnouncement)) {
-        tvError(res, 400, 'Salon textuel introuvable sur ce serveur', 'tv_sticky_channel_invalid');
-        return true;
+        return tvError(c, 400, 'Salon textuel introuvable sur ce serveur', 'tv_sticky_channel_invalid');
       }
 
       const { parseStickyJsonPayload, STICKY_JSON_MAX_LENGTH } =
@@ -1220,25 +1216,21 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
       if (jsonEnabled) {
         const parsed = parseStickyJsonPayload(jsonPayload);
         if (!parsed.ok) {
-          tvError(res, 400, { error: parsed.error, code: 'tv_sticky_json_invalid', params: { detail: parsed.error } });
-          return true;
+          return tvError(c, 400, { error: parsed.error, code: 'tv_sticky_json_invalid', params: { detail: parsed.error } });
         }
       } else if (!content.trim()) {
-        tvError(res, 400, 'Le message sticky ne peut pas être vide', 'tv_sticky_empty');
-        return true;
+        return tvError(c, 400, 'Le message sticky ne peut pas être vide', 'tv_sticky_empty');
       }
 
       // Discord refuse un nom de webhook qui contient « discord » ou « clyde ».
       const webhookEnabled = !!body?.webhookEnabled;
       const webhookName = (body?.webhookName ?? '').trim().slice(0, 80) || null;
       if (webhookName && /discord|clyde/i.test(webhookName)) {
-        tvError(res, 400, 'Le nom du webhook ne peut pas contenir « discord » ni « clyde ».', 'tv_sticky_webhook_name');
-        return true;
+        return tvError(c, 400, 'Le nom du webhook ne peut pas contenir « discord » ni « clyde ».', 'tv_sticky_webhook_name');
       }
       const avatarRaw = (body?.webhookAvatarUrl ?? '').trim();
       if (avatarRaw && (!/^https:\/\/\S+$/i.test(avatarRaw) || avatarRaw.length > 512)) {
-        tvError(res, 400, 'L’avatar doit être une adresse https (512 caractères au maximum).', 'tv_sticky_avatar_invalid');
-        return true;
+        return tvError(c, 400, 'L’avatar doit être une adresse https (512 caractères au maximum).', 'tv_sticky_avatar_invalid');
       }
       const webhookAvatarUrl = avatarRaw || null;
 
@@ -1328,24 +1320,23 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
       });
 
       const { webhookToken: _token, ...publicSticky } = current;
-      json(res, 200, { ok: true, sticky: publicSticky });
+      return send(c, { ok: true, sticky: publicSticky });
     } catch (err) {
       logger.error('ChannelsManagementAPI', 'POST sticky error:', err);
-      jsonFailure(res, err, 'Erreur lors de l\'enregistrement du message sticky', 'ChannelsManagementAPI');
+      return fail(c, err, 'Erreur lors de l\'enregistrement du message sticky', 'ChannelsManagementAPI');
     }
-    return true;
-  }
+  });
 
-  // DELETE /api/dashboard/guilds/:guildId/channels-management/sticky/:channelId
-  if (moduleKey === 'channels-management' && parts.length === 7 && parts[5] === 'sticky' && method === 'DELETE') {
-    const channelId = parts[6];
+  router.delete(`${base}/channels-management/sticky/:channelId`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const auditUser = auditUserOf(c);
+    const channelId = c.req.param('channelId');
     try {
       const sticky = await prisma.stickyMessage.findUnique({
         where: { guildId_channelId: { guildId, channelId } },
       });
       if (!sticky) {
-        tvError(res, 404, 'Sticky introuvable', 'tv_sticky_not_found');
-        return true;
+        return tvError(c, 404, 'Sticky introuvable', 'tv_sticky_not_found');
       }
 
       const { clearStickyMessage, deleteStickyWebhook, invalidateStickyCache } =
@@ -1365,43 +1356,39 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
         channelId,
       });
 
-      json(res, 200, { ok: true });
+      return send(c, { ok: true });
     } catch (err) {
       logger.error('ChannelsManagementAPI', 'DELETE sticky error:', err);
-      jsonFailure(res, err, 'Erreur lors de la suppression du message sticky', 'ChannelsManagementAPI');
+      return fail(c, err, 'Erreur lors de la suppression du message sticky', 'ChannelsManagementAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/channels-management/sticky/:channelId/repost
-  if (moduleKey === 'channels-management' && parts.length === 8 && parts[5] === 'sticky' && parts[7] === 'repost' && method === 'POST') {
-    const channelId = parts[6];
+  router.post(`${base}/channels-management/sticky/:channelId/repost`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const channelId = c.req.param('channelId');
     try {
       const sticky = await prisma.stickyMessage.findUnique({
         where: { guildId_channelId: { guildId, channelId } },
       });
       if (!sticky || !sticky.enabled) {
-        tvError(res, 404, 'Sticky introuvable ou désactivé', 'tv_sticky_not_found_or_off');
-        return true;
+        return tvError(c, 404, 'Sticky introuvable ou désactivé', 'tv_sticky_not_found_or_off');
       }
 
       const { repostSticky } = await import('../../../../services/features/stickyMessageService.js');
       const messageId = await repostSticky(client, sticky, { force: true });
       if (!messageId) {
-        tvError(res, 502, 'Renvoi impossible (salon ou permissions).', 'tv_sticky_repost_failed');
-        return true;
+        return tvError(c, 502, 'Renvoi impossible (salon ou permissions).', 'tv_sticky_repost_failed');
       }
 
-      json(res, 200, { ok: true, messageId });
+      return send(c, { ok: true, messageId });
     } catch (err) {
       logger.error('ChannelsManagementAPI', 'POST sticky repost error:', err);
-      jsonFailure(res, err, 'Erreur lors du renvoi du message sticky', 'ChannelsManagementAPI');
+      return fail(c, err, 'Erreur lors du renvoi du message sticky', 'ChannelsManagementAPI');
     }
-    return true;
-  }
+  });
 
-  // GET /api/dashboard/guilds/:guildId/channels-management/temp-voice/channels
-  if (moduleKey === 'channels-management' && parts.length === 7 && parts[5] === 'temp-voice' && parts[6] === 'channels' && method === 'GET') {
+  router.get(`${base}/channels-management/temp-voice/channels`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
     try {
       const dbChannels = await prisma.tempVoiceChannel.findMany({
         where: { guildId }
@@ -1414,8 +1401,7 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
       // sont bien vivants - plus rien ne les référencerait ensuite. Même règle
       // que le balayage au démarrage.
       if (!discordGuild || discordGuild.available === false) {
-        json(res, 200, []);
-        return true;
+        return send(c, []);
       }
 
       const activeChannels = [];
@@ -1440,25 +1426,24 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
         }
       }
 
-      json(res, 200, activeChannels);
+      return send(c, activeChannels);
     } catch (err) {
       logger.error('ChannelsManagementAPI', 'GET active channels error:', err);
-      jsonFailure(res, err, 'Erreur lors du chargement des salons actifs.', 'ChannelsManagementAPI');
+      return fail(c, err, 'Erreur lors du chargement des salons actifs.', 'ChannelsManagementAPI');
     }
-    return true;
-  }
+  });
 
-  // PATCH /api/dashboard/guilds/:guildId/channels-management/temp-voice/channels/:channelId
-  if (moduleKey === 'channels-management' && parts.length === 8 && parts[5] === 'temp-voice' && parts[6] === 'channels' && method === 'PATCH') {
-    const channelId = parts[7];
+  router.patch(`${base}/channels-management/temp-voice/channels/:channelId`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const auditUser = auditUserOf(c);
+    const channelId = c.req.param('channelId');
     try {
-      const body = await readJsonBody<{ name?: string; roleId?: string | null; action?: 'DELETE' }>(req);
+      const body = await readBody<{ name?: string; roleId?: string | null; action?: 'DELETE' }>(c);
       const discordGuild = client.guilds.cache.get(guildId);
       const channel = discordGuild?.channels.cache.get(channelId);
 
       if (!channel || channel.type !== ChannelType.GuildVoice) {
-        tvError(res, 404, 'Salon introuvable.', 'tv_channel_not_found');
-        return true;
+        return tvError(c, 404, 'Salon introuvable.', 'tv_channel_not_found');
       }
 
       const dbChan = await prisma.tempVoiceChannel.findUnique({
@@ -1466,8 +1451,7 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
       });
 
       if (!dbChan) {
-        tvError(res, 404, 'Salon non enregistré.', 'tv_temp_channel_unregistered');
-        return true;
+        return tvError(c, 404, 'Salon non enregistré.', 'tv_temp_channel_unregistered');
       }
 
       // 1. Action Delete
@@ -1488,8 +1472,7 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
         });
 
         if (!deleted) {
-          tvError(res, 409, 'Discord a refusé la suppression du salon.', 'tv_discord_delete_refused');
-          return true;
+          return tvError(c, 409, 'Discord a refusé la suppression du salon.', 'tv_discord_delete_refused');
         }
 
         await prisma.tempVoiceChannel.delete({ where: { id: channelId } }).catch((err: unknown) => {
@@ -1512,8 +1495,7 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
           channelId,
         });
 
-        json(res, 200, { ok: true, message: 'Salon fermé avec succès.' });
-        return true;
+        return send(c, { ok: true, message: 'Salon fermé avec succès.' });
       }
 
       // 2. Action Update (Rename/Reserve)
@@ -1536,16 +1518,14 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
 
         if (renamed.status === 'failed') {
           logger.warn('ChannelsManagementAPI', `Impossible de renommer le salon ${channelId} :`, renamed.error);
-          tvError(res, 409, "Discord a refusé le renommage du salon.", 'tv_discord_rename_refused');
-          return true;
+          return tvError(c, 409, "Discord a refusé le renommage du salon.", 'tv_discord_rename_refused');
         }
 
         if (renamed.status === 'pending') {
-          json(res, 202, {
+          return send(c, {
             ok: true,
             message: "Discord n'a pas confirmé le renommage : un salon ne peut changer de nom que deux fois par tranche de dix minutes. Le nouveau nom s'appliquera peut-être d'ici quelques minutes.",
-          });
-          return true;
+          }, 202);
         }
 
         await pushAudit(guildId, {
@@ -1568,8 +1548,7 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
           : null;
 
         if (body.roleId && !newRoleId) {
-          tvError(res, 400, 'Rôle de réservation invalide', 'tv_reservation_role_invalid');
-          return true;
+          return tvError(c, 400, 'Rôle de réservation invalide', 'tv_reservation_role_invalid');
         }
 
         // La catégorie fait foi : accorder sans la consulter ouvrirait le salon
@@ -1578,8 +1557,7 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
           ? categoryTrustPatch(channel, channel.guild.roles.cache.get(newRoleId) ?? null)
           : null;
         if (newRoleId && !rolePatch) {
-          tvError(res, 409, "La catégorie du salon refuse l'accès à ce rôle", 'tv_reservation_category_refused');
-          return true;
+          return tvError(c, 409, "La catégorie du salon refuse l'accès à ce rôle", 'tv_reservation_category_refused');
         }
 
         // Sans ce retrait, les surcharges des rôles réservés s'accumulent, et
@@ -1654,767 +1632,756 @@ export async function handleChannelsManagementRoutes(ctx: ModuleRouteContext): P
         // plutôt que de laisser la page afficher une exclusivité qui n'existe
         // pas.
         if (!previousCleared) {
-          json(res, 200, {
+          return send(c, {
             ok: true,
             message: "Salon mis à jour, mais la réservation précédente n'a pas pu être levée : l'ancien rôle garde l'accès.",
           });
-          return true;
         }
       }
 
-      json(res, 200, { ok: true, message: 'Salon mis à jour avec succès.' });
+      return send(c, { ok: true, message: 'Salon mis à jour avec succès.' });
     } catch (err) {
       logger.error('ChannelsManagementAPI', 'PATCH active channel error:', err);
-      jsonFailure(res, err, 'Erreur lors de la mise à jour du salon.', 'ChannelsManagementAPI');
+      return fail(c, err, 'Erreur lors de la mise à jour du salon.', 'ChannelsManagementAPI');
     }
-    return true;
-  }
+  });
 
-  // GET/PATCH /api/dashboard/guilds/:guildId/channels-management
-  if (moduleKey === 'channels-management' && parts.length === 5) {
-    if (method === 'GET') {
-      try {
-        const [guild, tempVoiceAccessRequestConfig, tempVoiceModPermissionsConfig] = await Promise.all([
-          prisma.guild.findUnique({
-            where: { id: guildId },
-            select: {
-              autoThreadEnabled: true,
-              autoThreadChannels: true,
-              autoThreadBotsEnabled: true,
-              statsEnabled: true,
-              statsConfig: true,
-              tempVoiceEnabled: true,
-              tempVoiceChannelId: true,
-              tempVoiceCategoryId: true,
-              tempVoiceNameTemplate: true,
-              tempVoiceRequiredRoleId: true,
-              tempVoiceDefaults: true,
-              tempVoiceGenerators: true,
-              honeypotEnabled: true,
-              honeypotChannelId: true,
-              honeypotSanction: true,
-              honeypotReinvite: true,
-              honeypotGraceSeconds: true,
-              honeypotDurationMin: true,
-              honeypotShowCount: true,
-              honeypotCatchCount: true,
-              wordStatsEnabled: true,
-            },
-          }),
-          // Table séparée, une ligne par serveur : cf. `viewTempVoiceAccessRequestConfig`
-          // pour ce que l'absence de ligne veut dire.
-          prisma.tempVoiceAccessRequestConfig.findUnique({ where: { guildId } }),
-          prisma.tempVoiceModPermissionsConfig.findUnique({ where: { guildId } }),
-        ]);
-        if (!guild) {
-          tvError(res, 404, 'Serveur introuvable', 'tv_guild_not_found');
-          return true;
-        }
-        json(res, 200, {
-          autoThreadEnabled: guild.autoThreadEnabled,
-          autoThreadChannels: guild.autoThreadChannels,
-          autoThreadBotsEnabled: guild.autoThreadBotsEnabled,
-          statsEnabled: guild.statsEnabled,
-          statsConfig: guild.statsConfig,
-          tempVoiceEnabled: guild.tempVoiceEnabled,
-          tempVoiceChannelId: guild.tempVoiceChannelId,
-          tempVoiceCategoryId: guild.tempVoiceCategoryId,
-          tempVoiceNameTemplate: guild.tempVoiceNameTemplate,
-          tempVoiceRequiredRoleId: guild.tempVoiceRequiredRoleId,
-          // Toujours renvoyer une politique complète : la page n'a pas a
-          // connaître les valeurs par défaut ni à gérer le cas « jamais
-          // configuré », qui afficherait des cases vides au lieu de l'état réel.
-          tempVoiceDefaults: normalizeTempVoicePolicy(guild.tempVoiceDefaults, guildId),
-          // Même normalisation qu'à l'écriture, salon du principal compris : un
-          // générateur enregistré avant ce réglage n'a aucune clé de politique,
-          // et la page doit montrer ce que la sauvegarde gardera.
-          tempVoiceGenerators: normalizeTempVoiceGeneratorsInput(
-            guild.tempVoiceGenerators,
-            guildId,
-            guild.tempVoiceChannelId,
-          ),
-          honeypotEnabled: guild.honeypotEnabled,
-          honeypotChannelId: guild.honeypotChannelId,
-          honeypotSanction: guild.honeypotSanction,
-          honeypotReinvite: guild.honeypotReinvite,
-          honeypotGraceSeconds: guild.honeypotGraceSeconds,
-          honeypotDurationMin: guild.honeypotDurationMin,
-          honeypotShowCount: guild.honeypotShowCount,
-          honeypotCatchCount: guild.honeypotCatchCount,
-          wordStatsEnabled: guild.wordStatsEnabled,
-          // Toujours les défauts du schéma quand la ligne n'existe pas encore :
-          // le formulaire d'accès du dashboard n'a pas à savoir ce que « jamais
-          // configuré » veut dire.
-          tempVoiceAccessRequest: viewTempVoiceAccessRequestConfig(tempVoiceAccessRequestConfig),
-          tempVoiceModPermissions: viewTempVoiceModPermissionsConfig(tempVoiceModPermissionsConfig),
-        });
-      } catch (err) {
-        logger.error('ChannelsManagementAPI', 'GET config error:', err);
-        jsonFailure(res, err, 'Erreur lors de la récupération de la configuration', 'ChannelsManagementAPI');
+  router.get(`${base}/channels-management`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    try {
+      const [guild, tempVoiceAccessRequestConfig, tempVoiceModPermissionsConfig] = await Promise.all([
+        prisma.guild.findUnique({
+          where: { id: guildId },
+          select: {
+            autoThreadEnabled: true,
+            autoThreadChannels: true,
+            autoThreadBotsEnabled: true,
+            statsEnabled: true,
+            statsConfig: true,
+            tempVoiceEnabled: true,
+            tempVoiceChannelId: true,
+            tempVoiceCategoryId: true,
+            tempVoiceNameTemplate: true,
+            tempVoiceRequiredRoleId: true,
+            tempVoiceDefaults: true,
+            tempVoiceGenerators: true,
+            honeypotEnabled: true,
+            honeypotChannelId: true,
+            honeypotSanction: true,
+            honeypotReinvite: true,
+            honeypotGraceSeconds: true,
+            honeypotDurationMin: true,
+            honeypotShowCount: true,
+            honeypotCatchCount: true,
+            wordStatsEnabled: true,
+          },
+        }),
+        // Table séparée, une ligne par serveur : cf. `viewTempVoiceAccessRequestConfig`
+        // pour ce que l'absence de ligne veut dire.
+        prisma.tempVoiceAccessRequestConfig.findUnique({ where: { guildId } }),
+        prisma.tempVoiceModPermissionsConfig.findUnique({ where: { guildId } }),
+      ]);
+      if (!guild) {
+        return tvError(c, 404, 'Serveur introuvable', 'tv_guild_not_found');
       }
-      return true;
+      return send(c, {
+        autoThreadEnabled: guild.autoThreadEnabled,
+        autoThreadChannels: guild.autoThreadChannels,
+        autoThreadBotsEnabled: guild.autoThreadBotsEnabled,
+        statsEnabled: guild.statsEnabled,
+        statsConfig: guild.statsConfig,
+        tempVoiceEnabled: guild.tempVoiceEnabled,
+        tempVoiceChannelId: guild.tempVoiceChannelId,
+        tempVoiceCategoryId: guild.tempVoiceCategoryId,
+        tempVoiceNameTemplate: guild.tempVoiceNameTemplate,
+        tempVoiceRequiredRoleId: guild.tempVoiceRequiredRoleId,
+        // Toujours renvoyer une politique complète : la page n'a pas a
+        // connaître les valeurs par défaut ni à gérer le cas « jamais
+        // configuré », qui afficherait des cases vides au lieu de l'état réel.
+        tempVoiceDefaults: normalizeTempVoicePolicy(guild.tempVoiceDefaults, guildId),
+        // Même normalisation qu'à l'écriture, salon du principal compris : un
+        // générateur enregistré avant ce réglage n'a aucune clé de politique,
+        // et la page doit montrer ce que la sauvegarde gardera.
+        tempVoiceGenerators: normalizeTempVoiceGeneratorsInput(
+          guild.tempVoiceGenerators,
+          guildId,
+          guild.tempVoiceChannelId,
+        ),
+        honeypotEnabled: guild.honeypotEnabled,
+        honeypotChannelId: guild.honeypotChannelId,
+        honeypotSanction: guild.honeypotSanction,
+        honeypotReinvite: guild.honeypotReinvite,
+        honeypotGraceSeconds: guild.honeypotGraceSeconds,
+        honeypotDurationMin: guild.honeypotDurationMin,
+        honeypotShowCount: guild.honeypotShowCount,
+        honeypotCatchCount: guild.honeypotCatchCount,
+        wordStatsEnabled: guild.wordStatsEnabled,
+        // Toujours les défauts du schéma quand la ligne n'existe pas encore :
+        // le formulaire d'accès du dashboard n'a pas à savoir ce que « jamais
+        // configuré » veut dire.
+        tempVoiceAccessRequest: viewTempVoiceAccessRequestConfig(tempVoiceAccessRequestConfig),
+        tempVoiceModPermissions: viewTempVoiceModPermissionsConfig(tempVoiceModPermissionsConfig),
+      });
+    } catch (err) {
+      logger.error('ChannelsManagementAPI', 'GET config error:', err);
+      return fail(c, err, 'Erreur lors de la récupération de la configuration', 'ChannelsManagementAPI');
     }
+  });
 
-    if (method === 'PATCH') {
-      try {
-        const body = await readJsonBody<{
-          autoThreadEnabled?: boolean;
-          autoThreadChannels?: string[];
-          autoThreadBotsEnabled?: boolean;
-          statsEnabled?: boolean;
-          statsConfig?: unknown;
-          tempVoiceEnabled?: boolean;
-          tempVoiceChannelId?: string | null;
-          tempVoiceCategoryId?: string | null;
-          // `unknown` : le corps vient d'un appelant quelconque, validé plus bas.
-          tempVoiceNameTemplate?: unknown;
-          tempVoiceRequiredRoleId?: string | null;
-          tempVoiceDefaults?: unknown;
-          tempVoiceGenerators?: unknown;
-          tempVoiceAccessRequest?: unknown;
-          tempVoiceModPermissions?: unknown;
-          honeypotEnabled?: boolean;
-          /** Demande au dashboard de creer le salon piege automatiquement. */
-          createHoneypotChannel?: boolean;
-          honeypotChannelId?: string | null;
-          honeypotSanction?: string;
-          honeypotReinvite?: boolean;
-          honeypotGraceSeconds?: number;
-          honeypotDurationMin?: number | null;
-          honeypotShowCount?: boolean;
-          wordStatsEnabled?: boolean;
-        }>(req);
+  router.patch(`${base}/channels-management`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const auditUser = auditUserOf(c);
+    try {
+      const body = await readBody<{
+        autoThreadEnabled?: boolean;
+        autoThreadChannels?: string[];
+        autoThreadBotsEnabled?: boolean;
+        statsEnabled?: boolean;
+        statsConfig?: unknown;
+        tempVoiceEnabled?: boolean;
+        tempVoiceChannelId?: string | null;
+        tempVoiceCategoryId?: string | null;
+        // `unknown` : le corps vient d'un appelant quelconque, validé plus bas.
+        tempVoiceNameTemplate?: unknown;
+        tempVoiceRequiredRoleId?: string | null;
+        tempVoiceDefaults?: unknown;
+        tempVoiceGenerators?: unknown;
+        tempVoiceAccessRequest?: unknown;
+        tempVoiceModPermissions?: unknown;
+        honeypotEnabled?: boolean;
+        /** Demande au dashboard de creer le salon piege automatiquement. */
+        createHoneypotChannel?: boolean;
+        honeypotChannelId?: string | null;
+        honeypotSanction?: string;
+        honeypotReinvite?: boolean;
+        honeypotGraceSeconds?: number;
+        honeypotDurationMin?: number | null;
+        honeypotShowCount?: boolean;
+        wordStatsEnabled?: boolean;
+      }>(c);
 
-        if (!body) {
-          tvError(res, 400, 'Payload invalide', 'tv_payload_invalid');
-          return true;
+      if (!body) {
+        return tvError(c, 400, 'Payload invalide', 'tv_payload_invalid');
+      }
+
+      const data: Record<string, unknown> = {};
+      if (Object.prototype.hasOwnProperty.call(body, 'autoThreadEnabled')) {
+        data.autoThreadEnabled = !!body.autoThreadEnabled;
+      }
+      if (Array.isArray(body.autoThreadChannels)) {
+        // Les salons armés sont portés par les configurations Auto-Thread :
+        // la liste n'est que leur miroir, le service la recalcule.
+        const { reconcileAutoThreadChannels } = await import('../../../../services/features/autoThreadService.js');
+        const discordGuild = client.guilds.cache.get(guildId);
+        await reconcileAutoThreadChannels(
+          guildId,
+          body.autoThreadChannels.filter((id): id is string => typeof id === 'string'),
+          (id) => {
+            const ch = discordGuild?.channels.cache.get(id);
+            return !!ch && (ch.type === ChannelType.GuildText || ch.type === ChannelType.GuildAnnouncement);
+          },
+        );
+      }
+      if (Object.prototype.hasOwnProperty.call(body, 'autoThreadBotsEnabled')) {
+        data.autoThreadBotsEnabled = !!body.autoThreadBotsEnabled;
+      }
+      if (Object.prototype.hasOwnProperty.call(body, 'statsEnabled')) {
+        data.statsEnabled = !!body.statsEnabled;
+      }
+      if (Object.prototype.hasOwnProperty.call(body, 'statsConfig')) {
+        data.statsConfig = body.statsConfig;
+      }
+      if (Object.prototype.hasOwnProperty.call(body, 'tempVoiceEnabled')) {
+        data.tempVoiceEnabled = !!body.tempVoiceEnabled;
+      }
+      // Identifiants et gabarit validés ici, avant toute écriture : un `null`
+      // ou un nombre dans `tempVoiceNameTemplate` faisait échouer l'update en
+      // 500, et un identifiant quelconque était enregistré tel quel puis
+      // relu comme un salon par le bot.
+      for (const [key, label] of [
+        ['tempVoiceChannelId', 'Salon générateur'],
+        ['tempVoiceCategoryId', 'Catégorie des salons créés'],
+        ['tempVoiceRequiredRoleId', 'Rôle requis'],
+      ] as const) {
+        if (!Object.prototype.hasOwnProperty.call(body, key)) continue;
+        const parsed = readOptionalSnowflake(body[key], label, key);
+        if ('error' in parsed) {
+          return tvError(c, 400, parsed);
         }
-
-        const data: Record<string, unknown> = {};
-        if (Object.prototype.hasOwnProperty.call(body, 'autoThreadEnabled')) {
-          data.autoThreadEnabled = !!body.autoThreadEnabled;
+        data[key] = parsed.value;
+      }
+      if (Object.prototype.hasOwnProperty.call(body, 'tempVoiceNameTemplate')) {
+        const template = body.tempVoiceNameTemplate;
+        if (typeof template !== 'string') {
+          return tvError(c, 400, {
+            error: `Modèle de nom (tempVoiceNameTemplate) : « ${String(template).slice(0, 40)} » n'est pas un texte. Rien n'a été enregistré.`,
+            code: 'tv_name_template_invalid',
+            params: { value: String(template).slice(0, 40) },
+          });
         }
-        if (Array.isArray(body.autoThreadChannels)) {
-          // Les salons armés sont portés par les configurations Auto-Thread :
-          // la liste n'est que leur miroir, le service la recalcule.
-          const { reconcileAutoThreadChannels } = await import('../../../../services/features/autoThreadService.js');
-          const discordGuild = client.guilds.cache.get(guildId);
-          await reconcileAutoThreadChannels(
-            guildId,
-            body.autoThreadChannels.filter((id): id is string => typeof id === 'string'),
-            (id) => {
-              const ch = discordGuild?.channels.cache.get(id);
-              return !!ch && (ch.type === ChannelType.GuildText || ch.type === ChannelType.GuildAnnouncement);
-            },
-          );
+        // Même plafond que le modèle des générateurs additionnels.
+        data.tempVoiceNameTemplate = template.trim().slice(0, 100);
+      }
+      if (Object.prototype.hasOwnProperty.call(body, 'tempVoiceDefaults')) {
+        data.tempVoiceDefaults = normalizeTempVoicePolicy(body.tempVoiceDefaults, guildId) as unknown as Prisma.InputJsonValue;
+      }
+      if (Object.prototype.hasOwnProperty.call(body, 'tempVoiceGenerators')) {
+        // Rejet AVANT normalisation : `normalizeTempVoiceGeneratorsInput`
+        // (tempVoiceService.ts) traite une surcharge de présentation hors
+        // énumération comme absente, ce qui écrirait « enregistré » côté page
+        // sans que rien n'ait changé. Voir la doc de
+        // `validateGeneratorPresentationOverrides` pour la divergence assumée
+        // avec la lecture (rendu du panneau), qui reste tolérante.
+        const presentationError = validateGeneratorPresentationOverrides(body.tempVoiceGenerators);
+        if (presentationError) {
+          return tvError(c, 400, presentationError);
         }
-        if (Object.prototype.hasOwnProperty.call(body, 'autoThreadBotsEnabled')) {
-          data.autoThreadBotsEnabled = !!body.autoThreadBotsEnabled;
+        // La page n'est qu'un client parmi d'autres (outils MCP, appels
+        // directs) : sans validation ici, une limite de places aberrante ou un
+        // identifiant de rôle invente descendrait jusqu'à l'appel Discord.
+        data.tempVoiceGenerators = normalizeTempVoiceGeneratorsInput(
+          body.tempVoiceGenerators,
+          guildId,
+          body.tempVoiceChannelId,
+        ) as unknown as Prisma.InputJsonValue;
+      }
+
+      // Tables séparées (une ligne par serveur) : la validation se fait ici,
+      // comme pour tempVoiceDefaults/tempVoiceGenerators juste au-dessus,
+      // mais l'écriture est un upsert à part puisque `data` ne vise que
+      // `Guild`. `null` = champ absent du corps, rien à écrire dessus.
+      let tempVoiceAccessRequestData: Partial<TempVoiceAccessRequestConfigView> | null = null;
+      if (Object.prototype.hasOwnProperty.call(body, 'tempVoiceAccessRequest')) {
+        const parsed = normalizeTempVoiceAccessRequestInput(body.tempVoiceAccessRequest);
+        if ('error' in parsed) {
+          return tvError(c, 400, parsed);
         }
-        if (Object.prototype.hasOwnProperty.call(body, 'statsEnabled')) {
-          data.statsEnabled = !!body.statsEnabled;
+        tempVoiceAccessRequestData = parsed.data;
+      }
+
+      /**
+       * Réglages acceptés ET enregistrés, mais dont l'effet est nul dans la
+       * combinaison obtenue. Ni une erreur (rien à corriger, la valeur est
+       * valide) ni un silence (sinon le réglage paraît perdu) : la réponse les
+       * porte, en français comme les erreurs, à côté de `ok: true`. Champ absent
+       * quand il n'y a rien à dire, pour ne pas changer la forme de la réponse
+       * dans le cas courant.
+       */
+      const notices: NoticeVocale[] = [];
+
+      let tempVoiceModPermissionsData: Partial<TempVoiceModPermissionsConfigView> | null = null;
+      if (Object.prototype.hasOwnProperty.call(body, 'tempVoiceModPermissions')) {
+        const parsed = normalizeTempVoiceModPermissionsInput(body.tempVoiceModPermissions);
+        if ('error' in parsed) {
+          return tvError(c, 400, parsed);
         }
-        if (Object.prototype.hasOwnProperty.call(body, 'statsConfig')) {
-          data.statsConfig = body.statsConfig;
+        tempVoiceModPermissionsData = parsed.data;
+      }
+
+      if (Object.prototype.hasOwnProperty.call(body, 'honeypotEnabled')) {
+        data.honeypotEnabled = !!body.honeypotEnabled;
+      }
+      if (Object.prototype.hasOwnProperty.call(body, 'honeypotChannelId')) {
+        data.honeypotChannelId = body.honeypotChannelId;
+      }
+      if (Object.prototype.hasOwnProperty.call(body, 'honeypotSanction')) {
+        if (['WARN', 'KICK', 'TIMEOUT', 'BAN', 'SOFTBAN', 'JAIL'].includes(body.honeypotSanction as string)) {
+          data.honeypotSanction = body.honeypotSanction;
+        } else {
+          return tvError(c, 400, 'Type de sanction honeypot invalide', 'tv_honeypot_sanction_invalid');
         }
-        if (Object.prototype.hasOwnProperty.call(body, 'tempVoiceEnabled')) {
-          data.tempVoiceEnabled = !!body.tempVoiceEnabled;
-        }
-        // Identifiants et gabarit validés ici, avant toute écriture : un `null`
-        // ou un nombre dans `tempVoiceNameTemplate` faisait échouer l'update en
-        // 500, et un identifiant quelconque était enregistré tel quel puis
-        // relu comme un salon par le bot.
-        for (const [key, label] of [
-          ['tempVoiceChannelId', 'Salon générateur'],
-          ['tempVoiceCategoryId', 'Catégorie des salons créés'],
-          ['tempVoiceRequiredRoleId', 'Rôle requis'],
-        ] as const) {
-          if (!Object.prototype.hasOwnProperty.call(body, key)) continue;
-          const parsed = readOptionalSnowflake(body[key], label, key);
-          if ('error' in parsed) {
-            tvError(res, 400, parsed);
-            return true;
-          }
-          data[key] = parsed.value;
-        }
-        if (Object.prototype.hasOwnProperty.call(body, 'tempVoiceNameTemplate')) {
-          const template = body.tempVoiceNameTemplate;
-          if (typeof template !== 'string') {
-            tvError(res, 400, {
-              error: `Modèle de nom (tempVoiceNameTemplate) : « ${String(template).slice(0, 40)} » n'est pas un texte. Rien n'a été enregistré.`,
-              code: 'tv_name_template_invalid',
-              params: { value: String(template).slice(0, 40) },
-            });
-            return true;
-          }
-          // Même plafond que le modèle des générateurs additionnels.
-          data.tempVoiceNameTemplate = template.trim().slice(0, 100);
-        }
-        if (Object.prototype.hasOwnProperty.call(body, 'tempVoiceDefaults')) {
-          data.tempVoiceDefaults = normalizeTempVoicePolicy(body.tempVoiceDefaults, guildId) as unknown as Prisma.InputJsonValue;
-        }
-        if (Object.prototype.hasOwnProperty.call(body, 'tempVoiceGenerators')) {
-          // Rejet AVANT normalisation : `normalizeTempVoiceGeneratorsInput`
-          // (tempVoiceService.ts) traite une surcharge de présentation hors
-          // énumération comme absente, ce qui écrirait « enregistré » côté page
-          // sans que rien n'ait changé. Voir la doc de
-          // `validateGeneratorPresentationOverrides` pour la divergence assumée
-          // avec la lecture (rendu du panneau), qui reste tolérante.
-          const presentationError = validateGeneratorPresentationOverrides(body.tempVoiceGenerators);
-          if (presentationError) {
-            tvError(res, 400, presentationError);
-            return true;
-          }
-          // La page n'est qu'un client parmi d'autres (outils MCP, appels
-          // directs) : sans validation ici, une limite de places aberrante ou un
-          // identifiant de rôle invente descendrait jusqu'à l'appel Discord.
-          data.tempVoiceGenerators = normalizeTempVoiceGeneratorsInput(
-            body.tempVoiceGenerators,
-            guildId,
-            body.tempVoiceChannelId,
-          ) as unknown as Prisma.InputJsonValue;
-        }
+      }
+      if (Object.prototype.hasOwnProperty.call(body, 'honeypotReinvite')) {
+        data.honeypotReinvite = !!body.honeypotReinvite;
+      }
+      if (Object.prototype.hasOwnProperty.call(body, 'honeypotGraceSeconds')) {
+        // 0, 30 s, 1, 2 ou 5 minutes : au-delà, un robot a tout le temps de nuire.
+        const seconds = Math.floor(Number(body.honeypotGraceSeconds) || 0);
+        data.honeypotGraceSeconds = [0, 30, 60, 120, 300].includes(seconds) ? seconds : 0;
+      }
+      if (Object.prototype.hasOwnProperty.call(body, 'honeypotDurationMin')) {
+        const minutes = body.honeypotDurationMin === null ? null : Math.floor(Number(body.honeypotDurationMin));
+        data.honeypotDurationMin = minutes && minutes >= 1 ? Math.min(minutes, 365 * 24 * 60) : null;
+      }
+      if (Object.prototype.hasOwnProperty.call(body, 'honeypotShowCount')) {
+        data.honeypotShowCount = !!body.honeypotShowCount;
+      }
+      if (Object.prototype.hasOwnProperty.call(body, 'wordStatsEnabled')) {
+        data.wordStatsEnabled = !!body.wordStatsEnabled;
+      }
 
-        // Tables séparées (une ligne par serveur) : la validation se fait ici,
-        // comme pour tempVoiceDefaults/tempVoiceGenerators juste au-dessus,
-        // mais l'écriture est un upsert à part puisque `data` ne vise que
-        // `Guild`. `null` = champ absent du corps, rien à écrire dessus.
-        let tempVoiceAccessRequestData: Partial<TempVoiceAccessRequestConfigView> | null = null;
-        if (Object.prototype.hasOwnProperty.call(body, 'tempVoiceAccessRequest')) {
-          const parsed = normalizeTempVoiceAccessRequestInput(body.tempVoiceAccessRequest);
-          if ('error' in parsed) {
-            tvError(res, 400, parsed);
-            return true;
-          }
-          tempVoiceAccessRequestData = parsed.data;
-        }
+      // Capturé avant l'update : sert à détecter la bascule off → on plus bas.
+      const wordStatsWasEnabled = Object.prototype.hasOwnProperty.call(body, 'wordStatsEnabled')
+        ? await readWordStatsEnabled(guildId)
+        : null;
 
-        /**
-         * Réglages acceptés ET enregistrés, mais dont l'effet est nul dans la
-         * combinaison obtenue. Ni une erreur (rien à corriger, la valeur est
-         * valide) ni un silence (sinon le réglage paraît perdu) : la réponse les
-         * porte, en français comme les erreurs, à côté de `ok: true`. Champ absent
-         * quand il n'y a rien à dire, pour ne pas changer la forme de la réponse
-         * dans le cas courant.
-         */
-        const notices: NoticeVocale[] = [];
+      // État vocal d'AVANT l'écriture, pour le journal des changements. Lu
+      // seulement quand le corps touche un réglage vocal.
+      const touchesVoice = VOICE_KEYS.some((key) => Object.prototype.hasOwnProperty.call(body, key));
+      const voiceBefore = touchesVoice
+        ? await (async () => {
+            const [guildRow, accessRow, modRow] = await Promise.all([
+              prisma.guild.findUnique({
+                where: { id: guildId },
+                select: {
+                  tempVoiceEnabled: true,
+                  tempVoiceChannelId: true,
+                  tempVoiceCategoryId: true,
+                  tempVoiceNameTemplate: true,
+                  tempVoiceRequiredRoleId: true,
+                  tempVoiceDefaults: true,
+                  tempVoiceGenerators: true,
+                },
+              }),
+              prisma.tempVoiceAccessRequestConfig.findUnique({ where: { guildId } }),
+              prisma.tempVoiceModPermissionsConfig.findUnique({ where: { guildId } }),
+            ]);
+            return snapshotReglagesVocaux(guildId, guildRow, accessRow, modRow);
+          })()
+        : null;
 
-        let tempVoiceModPermissionsData: Partial<TempVoiceModPermissionsConfigView> | null = null;
-        if (Object.prototype.hasOwnProperty.call(body, 'tempVoiceModPermissions')) {
-          const parsed = normalizeTempVoiceModPermissionsInput(body.tempVoiceModPermissions);
-          if ('error' in parsed) {
-            tvError(res, 400, parsed);
-            return true;
-          }
-          tempVoiceModPermissionsData = parsed.data;
-        }
+      // État non vocal d'AVANT l'écriture : la ligne générique du journal ne
+      // part que si une de ces valeurs a réellement changé.
+      const touchesAutre = Object.keys(body).some((key) => !(VOICE_KEYS as readonly string[]).includes(key));
+      const nonVocalAvant = touchesAutre
+        ? await prisma.guild.findUnique({
+          where: { id: guildId },
+          select: Object.fromEntries(CLES_NON_VOCALES.map((key) => [key, true])),
+        }).catch(() => null) as Record<string, unknown> | null
+        : null;
 
-        if (Object.prototype.hasOwnProperty.call(body, 'honeypotEnabled')) {
-          data.honeypotEnabled = !!body.honeypotEnabled;
-        }
-        if (Object.prototype.hasOwnProperty.call(body, 'honeypotChannelId')) {
-          data.honeypotChannelId = body.honeypotChannelId;
-        }
-        if (Object.prototype.hasOwnProperty.call(body, 'honeypotSanction')) {
-          if (['WARN', 'KICK', 'TIMEOUT', 'BAN', 'SOFTBAN', 'JAIL'].includes(body.honeypotSanction as string)) {
-            data.honeypotSanction = body.honeypotSanction;
-          } else {
-            tvError(res, 400, 'Type de sanction honeypot invalide', 'tv_honeypot_sanction_invalid');
-            return true;
-          }
-        }
-        if (Object.prototype.hasOwnProperty.call(body, 'honeypotReinvite')) {
-          data.honeypotReinvite = !!body.honeypotReinvite;
-        }
-        if (Object.prototype.hasOwnProperty.call(body, 'honeypotGraceSeconds')) {
-          // 0, 30 s, 1, 2 ou 5 minutes : au-delà, un robot a tout le temps de nuire.
-          const seconds = Math.floor(Number(body.honeypotGraceSeconds) || 0);
-          data.honeypotGraceSeconds = [0, 30, 60, 120, 300].includes(seconds) ? seconds : 0;
-        }
-        if (Object.prototype.hasOwnProperty.call(body, 'honeypotDurationMin')) {
-          const minutes = body.honeypotDurationMin === null ? null : Math.floor(Number(body.honeypotDurationMin));
-          data.honeypotDurationMin = minutes && minutes >= 1 ? Math.min(minutes, 365 * 24 * 60) : null;
-        }
-        if (Object.prototype.hasOwnProperty.call(body, 'honeypotShowCount')) {
-          data.honeypotShowCount = !!body.honeypotShowCount;
-        }
-        if (Object.prototype.hasOwnProperty.call(body, 'wordStatsEnabled')) {
-          data.wordStatsEnabled = !!body.wordStatsEnabled;
-        }
+      const discordGuild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
 
-        // Capturé avant l'update : sert à détecter la bascule off → on plus bas.
-        const wordStatsWasEnabled = Object.prototype.hasOwnProperty.call(body, 'wordStatsEnabled')
-          ? await readWordStatsEnabled(guildId)
-          : null;
+      // Ce que le serveur a réellement tenté d'enregistrer, pour dire ce qu'il
+      // écarte : la liste du corps, ou celle d'après création des salons vides.
+      let generatorsTried: unknown = body.tempVoiceGenerators;
 
-        // État vocal d'AVANT l'écriture, pour le journal des changements. Lu
-        // seulement quand le corps touche un réglage vocal.
-        const touchesVoice = VOICE_KEYS.some((key) => Object.prototype.hasOwnProperty.call(body, key));
-        const voiceBefore = touchesVoice
-          ? await (async () => {
-              const [guildRow, accessRow, modRow] = await Promise.all([
-                prisma.guild.findUnique({
-                  where: { id: guildId },
-                  select: {
-                    tempVoiceEnabled: true,
-                    tempVoiceChannelId: true,
-                    tempVoiceCategoryId: true,
-                    tempVoiceNameTemplate: true,
-                    tempVoiceRequiredRoleId: true,
-                    tempVoiceDefaults: true,
-                    tempVoiceGenerators: true,
-                  },
-                }),
-                prisma.tempVoiceAccessRequestConfig.findUnique({ where: { guildId } }),
-                prisma.tempVoiceModPermissionsConfig.findUnique({ where: { guildId } }),
-              ]);
-              return snapshotReglagesVocaux(guildId, guildRow, accessRow, modRow);
-            })()
-          : null;
-
-        // État non vocal d'AVANT l'écriture : la ligne générique du journal ne
-        // part que si une de ces valeurs a réellement changé.
-        const touchesAutre = Object.keys(body).some((key) => !(VOICE_KEYS as readonly string[]).includes(key));
-        const nonVocalAvant = touchesAutre
-          ? await prisma.guild.findUnique({
-            where: { id: guildId },
-            select: Object.fromEntries(CLES_NON_VOCALES.map((key) => [key, true])),
-          }).catch(() => null) as Record<string, unknown> | null
-          : null;
-
-        const discordGuild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
-
-        // Ce que le serveur a réellement tenté d'enregistrer, pour dire ce qu'il
-        // écarte : la liste du corps, ou celle d'après création des salons vides.
-        let generatorsTried: unknown = body.tempVoiceGenerators;
-
-        if (discordGuild) {
-          if (body.tempVoiceEnabled) {
-            // Catégorie d'accueil partagee par tous les générateurs qui n'en
-            // designent pas : une par générateur en laisserait autant que de
-            // sauvegardes.
-            const ensureDefaultCategory = async (): Promise<string | undefined> => {
-              const existing = discordGuild.channels.cache.find(
-                c => c.type === ChannelType.GuildCategory && c.name === '🔊 Salons Vocaux'
-              );
-              if (existing) return existing.id;
-              const created = await discordGuild.channels.create({
-                name: '🔊 Salons Vocaux',
-                type: ChannelType.GuildCategory,
-              }).catch(() => null);
-              return created?.id;
-            };
-
-            if (!body.tempVoiceCategoryId) {
-              const categoryId = await ensureDefaultCategory();
-              if (categoryId) data.tempVoiceCategoryId = categoryId;
-            }
-            // Salon générateur : réutilisé avant d'être créé, comme la
-            // catégorie juste au-dessus, sinon chaque sauvegarde en ajoute un.
-            const ensureGeneratorChannel = async (parentId: string | undefined): Promise<string | undefined> => {
-              const existing = discordGuild.channels.cache.find(
-                c => c.type === ChannelType.GuildVoice
-                  && c.name === '➕ Créer un salon'
-                  && (!parentId || c.parentId === parentId)
-              );
-              if (existing) return existing.id;
-              const created = await discordGuild.channels.create({
-                name: '➕ Créer un salon',
-                type: ChannelType.GuildVoice,
-                parent: parentId,
-              }).catch(() => null);
-              return created?.id;
-            };
-
-            if (!body.tempVoiceChannelId) {
-              const parentId = (data.tempVoiceCategoryId as string | undefined) || body.tempVoiceCategoryId || undefined;
-              const channelId = await ensureGeneratorChannel(parentId);
-              if (channelId) data.tempVoiceChannelId = channelId;
-            }
-
-            // Générateurs additionnels : la page peut laisser le salon vide
-            // pour demander au bot de le créer.
-            if (Array.isArray(body.tempVoiceGenerators)) {
-              const resolvedGenerators: Array<Record<string, unknown>> = [];
-
-              // Le plafond s'applique AVANT la création : appliqué au seul
-              // enregistrement, il laisse créer autant de salons que d'entrées.
-              for (const entry of body.tempVoiceGenerators.slice(0, MAX_ADDITIONAL_GENERATORS)) {
-                if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
-                const resolved: Record<string, unknown> = { ...(entry as Record<string, unknown>) };
-
-                if (!resolved.categoryId) {
-                  const categoryId = await ensureDefaultCategory();
-                  if (categoryId) resolved.categoryId = categoryId;
-                }
-
-                if (!resolved.channelId) {
-                  // Un générateur additionnel ne peut pas reprendre le salon du
-                  // principal : le dedoublonnage l'ecarterait ensuite.
-                  const parentId = typeof resolved.categoryId === 'string' ? resolved.categoryId : undefined;
-                  const alreadyUsed = new Set(
-                    [(data.tempVoiceChannelId as string | undefined) ?? body.tempVoiceChannelId, ...resolvedGenerators.map(g => g.channelId)]
-                      .filter((id): id is string => typeof id === 'string'),
-                  );
-                  const existing = discordGuild.channels.cache.find(
-                    c => c.type === ChannelType.GuildVoice
-                      && c.name === '➕ Créer un salon'
-                      && (!parentId || c.parentId === parentId)
-                      && !alreadyUsed.has(c.id)
-                  );
-                  if (existing) {
-                    resolved.channelId = existing.id;
-                  } else {
-                    const newVoice = await discordGuild.channels.create({
-                      name: '➕ Créer un salon',
-                      type: ChannelType.GuildVoice,
-                      parent: parentId,
-                    }).catch(() => null);
-                    if (newVoice) resolved.channelId = newVoice.id;
-                  }
-                }
-
-                resolvedGenerators.push(resolved);
-              }
-
-              generatorsTried = [...resolvedGenerators, ...body.tempVoiceGenerators.slice(MAX_ADDITIONAL_GENERATORS)];
-
-              // La validation vient après la création, et non avant : un
-              // générateur que la page laisse vide pour que le bot le crée n'a
-              // pas encore d'identifiant, et serait écarté comme invalide.
-              data.tempVoiceGenerators = normalizeTempVoiceGeneratorsInput(
-                resolvedGenerators,
-                guildId,
-                (data.tempVoiceChannelId as string | undefined) ?? body.tempVoiceChannelId,
-              ) as unknown as Prisma.InputJsonValue;
-            }
-          }
-
-          if (body.honeypotEnabled && body.createHoneypotChannel) {
-            const locale = await resolveGuildLocale(guildId, discordGuild.preferredLocale);
-            const newHoneypot = await provisionHoneypotChannel(discordGuild, {
-              name: honeypotChannelName(locale),
+      if (discordGuild) {
+        if (body.tempVoiceEnabled) {
+          // Catégorie d'accueil partagee par tous les générateurs qui n'en
+          // designent pas : une par générateur en laisserait autant que de
+          // sauvegardes.
+          const ensureDefaultCategory = async (): Promise<string | undefined> => {
+            const existing = discordGuild.channels.cache.find(
+              c => c.type === ChannelType.GuildCategory && c.name === '🔊 Salons Vocaux'
+            );
+            if (existing) return existing.id;
+            const created = await discordGuild.channels.create({
+              name: '🔊 Salons Vocaux',
+              type: ChannelType.GuildCategory,
             }).catch(() => null);
-            if (newHoneypot) {
-              data.honeypotChannelId = newHoneypot.id;
-            }
+            return created?.id;
+          };
+
+          if (!body.tempVoiceCategoryId) {
+            const categoryId = await ensureDefaultCategory();
+            if (categoryId) data.tempVoiceCategoryId = categoryId;
+          }
+          // Salon générateur : réutilisé avant d'être créé, comme la
+          // catégorie juste au-dessus, sinon chaque sauvegarde en ajoute un.
+          const ensureGeneratorChannel = async (parentId: string | undefined): Promise<string | undefined> => {
+            const existing = discordGuild.channels.cache.find(
+              c => c.type === ChannelType.GuildVoice
+                && c.name === '➕ Créer un salon'
+                && (!parentId || c.parentId === parentId)
+            );
+            if (existing) return existing.id;
+            const created = await discordGuild.channels.create({
+              name: '➕ Créer un salon',
+              type: ChannelType.GuildVoice,
+              parent: parentId,
+            }).catch(() => null);
+            return created?.id;
+          };
+
+          if (!body.tempVoiceChannelId) {
+            const parentId = (data.tempVoiceCategoryId as string | undefined) || body.tempVoiceCategoryId || undefined;
+            const channelId = await ensureGeneratorChannel(parentId);
+            if (channelId) data.tempVoiceChannelId = channelId;
           }
 
-          if (body.statsEnabled && body.statsConfig) {
-            const sc = readStatsConfig(body.statsConfig);
+          // Générateurs additionnels : la page peut laisser le salon vide
+          // pour demander au bot de le créer.
+          if (Array.isArray(body.tempVoiceGenerators)) {
+            const resolvedGenerators: Array<Record<string, unknown>> = [];
 
-            const needsMember = sc.memberChannelId === '' || sc.memberChannelId === null;
-            const needsBot = sc.botChannelId === '' || sc.botChannelId === null;
-            const needsRole = sc.roleChannelId === '' || sc.roleChannelId === null;
-            const needsChannel = sc.channelChannelId === '' || sc.channelChannelId === null;
-            const needsCategory = sc.categoryChannelId === '' || sc.categoryChannelId === null;
-            const needsActivity = sc.activityChannelId === '' || sc.activityChannelId === null;
-            const needsCustomStats = Array.isArray(sc.customStats) && sc.customStats.some((c) => c.enabled && !c.channelId);
+            // Le plafond s'applique AVANT la création : appliqué au seul
+            // enregistrement, il laisse créer autant de salons que d'entrées.
+            for (const entry of body.tempVoiceGenerators.slice(0, MAX_ADDITIONAL_GENERATORS)) {
+              if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+              const resolved: Record<string, unknown> = { ...(entry as Record<string, unknown>) };
 
-            if (needsMember || needsBot || needsRole || needsChannel || needsCategory || needsActivity || needsCustomStats || !sc.categoryId) {
-              let statsCatId: string | undefined = sc.categoryId || undefined;
-              
-              if (!statsCatId) {
-                const existingStatsCat = discordGuild.channels.cache.find(
-                  c => c.type === ChannelType.GuildCategory && c.name === '📊 Statistiques'
+              if (!resolved.categoryId) {
+                const categoryId = await ensureDefaultCategory();
+                if (categoryId) resolved.categoryId = categoryId;
+              }
+
+              if (!resolved.channelId) {
+                // Un générateur additionnel ne peut pas reprendre le salon du
+                // principal : le dedoublonnage l'ecarterait ensuite.
+                const parentId = typeof resolved.categoryId === 'string' ? resolved.categoryId : undefined;
+                const alreadyUsed = new Set(
+                  [(data.tempVoiceChannelId as string | undefined) ?? body.tempVoiceChannelId, ...resolvedGenerators.map(g => g.channelId)]
+                    .filter((id): id is string => typeof id === 'string'),
                 );
-                if (existingStatsCat) {
-                  statsCatId = existingStatsCat.id;
+                const existing = discordGuild.channels.cache.find(
+                  c => c.type === ChannelType.GuildVoice
+                    && c.name === '➕ Créer un salon'
+                    && (!parentId || c.parentId === parentId)
+                    && !alreadyUsed.has(c.id)
+                );
+                if (existing) {
+                  resolved.channelId = existing.id;
                 } else {
-                  const newCat = await discordGuild.channels.create({
-                    name: '📊 Statistiques',
-                    type: ChannelType.GuildCategory,
-                    permissionOverwrites: [
-                      {
-                        id: discordGuild.roles.everyone.id,
-                        deny: [PermissionFlagsBits.Connect, PermissionFlagsBits.SendMessages],
-                      },
-                    ],
+                  const newVoice = await discordGuild.channels.create({
+                    name: '➕ Créer un salon',
+                    type: ChannelType.GuildVoice,
+                    parent: parentId,
                   }).catch(() => null);
-                  if (newCat) statsCatId = newCat.id;
+                  if (newVoice) resolved.channelId = newVoice.id;
                 }
               }
 
-              const createStatChannel = async (defaultName: string, asCategory = false): Promise<string | undefined> => {
-                if (asCategory) {
-                  const ch = await discordGuild.channels.create({
-                    name: defaultName,
-                    type: ChannelType.GuildCategory,
-                    permissionOverwrites: [
-                      {
-                        id: discordGuild.roles.everyone.id,
-                        deny: [PermissionFlagsBits.SendMessages],
-                      },
-                    ],
-                  }).catch(() => null);
-                  return ch?.id;
-                }
-                const ch = await discordGuild.channels.create({
-                  name: defaultName,
-                  type: ChannelType.GuildVoice,
-                  parent: statsCatId,
+              resolvedGenerators.push(resolved);
+            }
+
+            generatorsTried = [...resolvedGenerators, ...body.tempVoiceGenerators.slice(MAX_ADDITIONAL_GENERATORS)];
+
+            // La validation vient après la création, et non avant : un
+            // générateur que la page laisse vide pour que le bot le crée n'a
+            // pas encore d'identifiant, et serait écarté comme invalide.
+            data.tempVoiceGenerators = normalizeTempVoiceGeneratorsInput(
+              resolvedGenerators,
+              guildId,
+              (data.tempVoiceChannelId as string | undefined) ?? body.tempVoiceChannelId,
+            ) as unknown as Prisma.InputJsonValue;
+          }
+        }
+
+        if (body.honeypotEnabled && body.createHoneypotChannel) {
+          const locale = await resolveGuildLocale(guildId, discordGuild.preferredLocale);
+          const newHoneypot = await provisionHoneypotChannel(discordGuild, {
+            name: honeypotChannelName(locale),
+          }).catch(() => null);
+          if (newHoneypot) {
+            data.honeypotChannelId = newHoneypot.id;
+          }
+        }
+
+        if (body.statsEnabled && body.statsConfig) {
+          const sc = readStatsConfig(body.statsConfig);
+
+          const needsMember = sc.memberChannelId === '' || sc.memberChannelId === null;
+          const needsBot = sc.botChannelId === '' || sc.botChannelId === null;
+          const needsRole = sc.roleChannelId === '' || sc.roleChannelId === null;
+          const needsChannel = sc.channelChannelId === '' || sc.channelChannelId === null;
+          const needsCategory = sc.categoryChannelId === '' || sc.categoryChannelId === null;
+          const needsActivity = sc.activityChannelId === '' || sc.activityChannelId === null;
+          const needsCustomStats = Array.isArray(sc.customStats) && sc.customStats.some((c) => c.enabled && !c.channelId);
+
+          if (needsMember || needsBot || needsRole || needsChannel || needsCategory || needsActivity || needsCustomStats || !sc.categoryId) {
+            let statsCatId: string | undefined = sc.categoryId || undefined;
+            
+            if (!statsCatId) {
+              const existingStatsCat = discordGuild.channels.cache.find(
+                c => c.type === ChannelType.GuildCategory && c.name === '📊 Statistiques'
+              );
+              if (existingStatsCat) {
+                statsCatId = existingStatsCat.id;
+              } else {
+                const newCat = await discordGuild.channels.create({
+                  name: '📊 Statistiques',
+                  type: ChannelType.GuildCategory,
                   permissionOverwrites: [
                     {
                       id: discordGuild.roles.everyone.id,
-                      deny: [PermissionFlagsBits.Connect],
+                      deny: [PermissionFlagsBits.Connect, PermissionFlagsBits.SendMessages],
+                    },
+                  ],
+                }).catch(() => null);
+                if (newCat) statsCatId = newCat.id;
+              }
+            }
+
+            const createStatChannel = async (defaultName: string, asCategory = false): Promise<string | undefined> => {
+              if (asCategory) {
+                const ch = await discordGuild.channels.create({
+                  name: defaultName,
+                  type: ChannelType.GuildCategory,
+                  permissionOverwrites: [
+                    {
+                      id: discordGuild.roles.everyone.id,
+                      deny: [PermissionFlagsBits.SendMessages],
                     },
                   ],
                 }).catch(() => null);
                 return ch?.id;
-              };
+              }
+              const ch = await discordGuild.channels.create({
+                name: defaultName,
+                type: ChannelType.GuildVoice,
+                parent: statsCatId,
+                permissionOverwrites: [
+                  {
+                    id: discordGuild.roles.everyone.id,
+                    deny: [PermissionFlagsBits.Connect],
+                  },
+                ],
+              }).catch(() => null);
+              return ch?.id;
+            };
 
-              const newSc = { ...sc };
-              if (statsCatId) {
-                newSc.categoryId = statsCatId;
-              }
-
-              if (needsMember) {
-                const tpl = sc.memberTemplate || '👤 Members: {count}';
-                newSc.memberChannelId = await createStatChannel(tpl.replace('{count}', '…')) ?? sc.memberChannelId;
-              }
-              if (needsBot) {
-                const tpl = sc.botTemplate || '🤖 Bots: {count}';
-                newSc.botChannelId = await createStatChannel(tpl.replace('{count}', '…')) ?? sc.botChannelId;
-              }
-              if (needsRole) {
-                const tpl = sc.roleTemplate || '👑 Staff: {count}';
-                newSc.roleChannelId = await createStatChannel(tpl.replace('{count}', '…')) ?? sc.roleChannelId;
-              }
-              if (needsChannel) {
-                const tpl = sc.channelTemplate || '💬 Channels: {count}';
-                newSc.channelChannelId = await createStatChannel(tpl.replace('{count}', '…')) ?? sc.channelChannelId;
-              }
-              if (needsCategory) {
-                const tpl = sc.categoryTemplate || '📁 Categories: {count}';
-                newSc.categoryChannelId = await createStatChannel(tpl.replace('{count}', '…')) ?? sc.categoryChannelId;
-              }
-              if (needsActivity) {
-                const tpl = sc.activityTemplate || '📈 Active 24h: {count}';
-                newSc.activityChannelId = await createStatChannel(tpl.replace('{count}', '…')) ?? sc.activityChannelId;
-              }
-
-              if (Array.isArray(sc.customStats)) {
-                const updatedCustomStats = [];
-                for (const custom of sc.customStats) {
-                  const item = { ...custom };
-                  if (item.enabled && !item.channelId) {
-                    const tpl = item.template || 'Stat : {count}';
-                    let initialName = tpl.replace('{count}', '…');
-                    if (item.type === 'goal' && item.goalTarget) {
-                      initialName = initialName.replace('{goal}', item.goalTarget.toString());
-                    }
-                    item.channelId = await createStatChannel(initialName, item.channelType === 'category') ?? '';
-                  }
-                  updatedCustomStats.push(item);
-                }
-                newSc.customStats = updatedCustomStats;
-              }
-
-              data.statsConfig = newSc;
+            const newSc = { ...sc };
+            if (statsCatId) {
+              newSc.categoryId = statsCatId;
             }
+
+            if (needsMember) {
+              const tpl = sc.memberTemplate || '👤 Members: {count}';
+              newSc.memberChannelId = await createStatChannel(tpl.replace('{count}', '…')) ?? sc.memberChannelId;
+            }
+            if (needsBot) {
+              const tpl = sc.botTemplate || '🤖 Bots: {count}';
+              newSc.botChannelId = await createStatChannel(tpl.replace('{count}', '…')) ?? sc.botChannelId;
+            }
+            if (needsRole) {
+              const tpl = sc.roleTemplate || '👑 Staff: {count}';
+              newSc.roleChannelId = await createStatChannel(tpl.replace('{count}', '…')) ?? sc.roleChannelId;
+            }
+            if (needsChannel) {
+              const tpl = sc.channelTemplate || '💬 Channels: {count}';
+              newSc.channelChannelId = await createStatChannel(tpl.replace('{count}', '…')) ?? sc.channelChannelId;
+            }
+            if (needsCategory) {
+              const tpl = sc.categoryTemplate || '📁 Categories: {count}';
+              newSc.categoryChannelId = await createStatChannel(tpl.replace('{count}', '…')) ?? sc.categoryChannelId;
+            }
+            if (needsActivity) {
+              const tpl = sc.activityTemplate || '📈 Active 24h: {count}';
+              newSc.activityChannelId = await createStatChannel(tpl.replace('{count}', '…')) ?? sc.activityChannelId;
+            }
+
+            if (Array.isArray(sc.customStats)) {
+              const updatedCustomStats = [];
+              for (const custom of sc.customStats) {
+                const item = { ...custom };
+                if (item.enabled && !item.channelId) {
+                  const tpl = item.template || 'Stat : {count}';
+                  let initialName = tpl.replace('{count}', '…');
+                  if (item.type === 'goal' && item.goalTarget) {
+                    initialName = initialName.replace('{goal}', item.goalTarget.toString());
+                  }
+                  item.channelId = await createStatChannel(initialName, item.channelType === 'category') ?? '';
+                }
+                updatedCustomStats.push(item);
+              }
+              newSc.customStats = updatedCustomStats;
+            }
+
+            data.statsConfig = newSc;
           }
         }
+      }
 
-        await prisma.guild.update({
-          where: { id: guildId },
-          data,
+      await prisma.guild.update({
+        where: { id: guildId },
+        data,
+      });
+
+      // Tables séparées : un `upsert` par table, un serveur qui n'a jamais
+      // ouvert l'onglet « Demandes d'accès » n'a pas de ligne. Le `create`
+      // part des défauts du schéma pour que les champs non envoyés dans ce
+      // PATCH (payload partiel) prennent la même valeur qu'une ligne jamais
+      // configurée, pas un zéro.
+      if (tempVoiceAccessRequestData) {
+        await prisma.tempVoiceAccessRequestConfig.upsert({
+          where: { guildId },
+          create: { guildId, ...TEMP_VOICE_ACCESS_REQUEST_DEFAULTS, ...tempVoiceAccessRequestData },
+          update: tempVoiceAccessRequestData,
         });
-
-        // Tables séparées : un `upsert` par table, un serveur qui n'a jamais
-        // ouvert l'onglet « Demandes d'accès » n'a pas de ligne. Le `create`
-        // part des défauts du schéma pour que les champs non envoyés dans ce
-        // PATCH (payload partiel) prennent la même valeur qu'une ligne jamais
-        // configurée, pas un zéro.
-        if (tempVoiceAccessRequestData) {
-          await prisma.tempVoiceAccessRequestConfig.upsert({
-            where: { guildId },
-            create: { guildId, ...TEMP_VOICE_ACCESS_REQUEST_DEFAULTS, ...tempVoiceAccessRequestData },
-            update: tempVoiceAccessRequestData,
-          });
+      }
+      if (tempVoiceModPermissionsData) {
+        const savedModPermissions = await prisma.tempVoiceModPermissionsConfig.upsert({
+          where: { guildId },
+          create: { guildId, ...TEMP_VOICE_MOD_PERMISSIONS_DEFAULTS, ...tempVoiceModPermissionsData },
+          update: tempVoiceModPermissionsData,
+        });
+        // `stateColors` ne teinte que l'image d'état, et GRID3 en V1 n'en
+        // produit aucune (embed natif Discord). La valeur est enregistrée
+        // quand même — la refuser en 400 casserait les appels API déjà en
+        // place, et ce n'est pas une valeur invalide — mais la réponse le dit.
+        // La protection n'existait que dans la page (le sélecteur est grisé
+        // sur cette combinaison), donc tout autre appelant l'enregistrait en
+        // silence et croyait avoir changé la teinte.
+        //
+        // Comparé au DÉFAUT, pas à `NEUTRAL` en dur : c'est ce qui distingue
+        // une teinte CHOISIE d'une teinte jamais touchée. Sans ça, tout
+        // enregistrement en GRID3 + V1 porterait le message, y compris celui
+        // d'un serveur qui n'a jamais ouvert ce sélecteur.
+        //
+        // L'état LU est celui que l'upsert renvoie, pas le payload : un PATCH
+        // partiel (juste `panelComponents: 'V1'`, par exemple) rend une teinte
+        // inerte sans jamais nommer `stateColors`. Même règle que le rendu
+        // (`dispositionNative`) et même normalisation que le GET
+        // (`viewTempVoiceModPermissionsConfig`), pour qu'un message ne puisse
+        // pas contredire ce que le panneau affiche.
+        const effectif = viewTempVoiceModPermissionsConfig(savedModPermissions);
+        if (
+          dispositionNative({ disposition: effectif.stateLayout, composants: effectif.panelComponents })
+          && effectif.stateColors !== TEMP_VOICE_MOD_PERMISSIONS_DEFAULTS.stateColors
+        ) {
+          notices.push(avisVocal(
+            'notice_tv_state_colors_inert',
+            { colors: effectif.stateColors },
+            `stateColors="${effectif.stateColors}" a été enregistré mais n'a aucun effet visible : stateLayout=GRID3 avec panelComponents=V1 affiche l'embed natif de Discord, qui n'a pas d'image d'état à teinter. Passez panelComponents en V2, ou choisissez un autre stateLayout, pour que la palette s'applique.`,
+          ));
         }
-        if (tempVoiceModPermissionsData) {
-          const savedModPermissions = await prisma.tempVoiceModPermissionsConfig.upsert({
-            where: { guildId },
-            create: { guildId, ...TEMP_VOICE_MOD_PERMISSIONS_DEFAULTS, ...tempVoiceModPermissionsData },
-            update: tempVoiceModPermissionsData,
-          });
-          // `stateColors` ne teinte que l'image d'état, et GRID3 en V1 n'en
-          // produit aucune (embed natif Discord). La valeur est enregistrée
-          // quand même — la refuser en 400 casserait les appels API déjà en
-          // place, et ce n'est pas une valeur invalide — mais la réponse le dit.
-          // La protection n'existait que dans la page (le sélecteur est grisé
-          // sur cette combinaison), donc tout autre appelant l'enregistrait en
-          // silence et croyait avoir changé la teinte.
-          //
-          // Comparé au DÉFAUT, pas à `NEUTRAL` en dur : c'est ce qui distingue
-          // une teinte CHOISIE d'une teinte jamais touchée. Sans ça, tout
-          // enregistrement en GRID3 + V1 porterait le message, y compris celui
-          // d'un serveur qui n'a jamais ouvert ce sélecteur.
-          //
-          // L'état LU est celui que l'upsert renvoie, pas le payload : un PATCH
-          // partiel (juste `panelComponents: 'V1'`, par exemple) rend une teinte
-          // inerte sans jamais nommer `stateColors`. Même règle que le rendu
-          // (`dispositionNative`) et même normalisation que le GET
-          // (`viewTempVoiceModPermissionsConfig`), pour qu'un message ne puisse
-          // pas contredire ce que le panneau affiche.
-          const effectif = viewTempVoiceModPermissionsConfig(savedModPermissions);
-          if (
-            dispositionNative({ disposition: effectif.stateLayout, composants: effectif.panelComponents })
-            && effectif.stateColors !== TEMP_VOICE_MOD_PERMISSIONS_DEFAULTS.stateColors
-          ) {
-            notices.push(avisVocal(
-              'notice_tv_state_colors_inert',
-              { colors: effectif.stateColors },
-              `stateColors="${effectif.stateColors}" a été enregistré mais n'a aucun effet visible : stateLayout=GRID3 avec panelComponents=V1 affiche l'embed natif de Discord, qui n'a pas d'image d'état à teinter. Passez panelComponents en V2, ou choisissez un autre stateLayout, pour que la palette s'applique.`,
-            ));
-          }
-        }
+      }
 
-        // Générateurs que la normalisation a écartés : le dire, sinon la carte de
-        // la page disparaît à l'enregistrement sans explication.
-        const nomSalon = (id: string): string | undefined => {
+      // Générateurs que la normalisation a écartés : le dire, sinon la carte de
+      // la page disparaît à l'enregistrement sans explication.
+      const nomSalon = (id: string): string | undefined => {
+        try {
+          return discordGuild?.channels?.cache?.get(id)?.name;
+        } catch {
+          return undefined;
+        }
+      };
+      if (Array.isArray(generatorsTried) && Array.isArray(data.tempVoiceGenerators)) {
+        notices.push(
+          ...explainDroppedGenerators(
+            generatorsTried,
+            data.tempVoiceGenerators as unknown as Array<{ channelId: string }>,
+            ('tempVoiceChannelId' in data ? data.tempVoiceChannelId : voiceBefore?.tempVoiceChannelId) as string | null | undefined,
+            nomSalon,
+          ),
+        );
+      }
+
+      // Purge les caches préfixés guild:<id>: - config du bot (getCachedGuild)
+      // et payloads d'analytics avancées, qui embarquent les toggles (ex.
+      // wordStatsEnabled). Couvre aussi les deux upserts juste au-dessus :
+      // sans ça, le dashboard continue d'afficher l'ancien état pendant toute
+      // la durée du TTL.
+      await cache.invalidateGuild(guildId);
+
+      startWordStatsBackfillIfTurnedOn(guildId, wordStatsWasEnabled, data.wordStatsEnabled, 'ChannelsManagementAPI');
+
+      // Journal des changements vocaux : UNE ligne d'audit, un champ par ligne
+      // « champ : avant → après ». Rien quand aucun champ vocal n'a bougé.
+      if (voiceBefore) {
+        const voiceAfter: ReglagesVocaux = {
+          ...voiceBefore,
+          ...Object.fromEntries(VOICE_KEYS.filter((key) => key in data).map((key) => [key, data[key]])),
+          ...(tempVoiceModPermissionsData
+            ? { tempVoiceModPermissions: { ...(voiceBefore.tempVoiceModPermissions as object), ...tempVoiceModPermissionsData } }
+            : {}),
+          ...(tempVoiceAccessRequestData
+            ? { tempVoiceAccessRequest: { ...(voiceBefore.tempVoiceAccessRequest as object), ...tempVoiceAccessRequestData } }
+            : {}),
+        };
+        const nomRole = (id: string): string | undefined => {
           try {
-            return discordGuild?.channels?.cache?.get(id)?.name;
+            return discordGuild?.roles?.cache?.get(id)?.name;
           } catch {
             return undefined;
           }
         };
-        if (Array.isArray(generatorsTried) && Array.isArray(data.tempVoiceGenerators)) {
-          notices.push(
-            ...explainDroppedGenerators(
-              generatorsTried,
-              data.tempVoiceGenerators as unknown as Array<{ channelId: string }>,
-              ('tempVoiceChannelId' in data ? data.tempVoiceChannelId : voiceBefore?.tempVoiceChannelId) as string | null | undefined,
-              nomSalon,
-            ),
-          );
-        }
-
-        // Purge les caches préfixés guild:<id>: - config du bot (getCachedGuild)
-        // et payloads d'analytics avancées, qui embarquent les toggles (ex.
-        // wordStatsEnabled). Couvre aussi les deux upserts juste au-dessus :
-        // sans ça, le dashboard continue d'afficher l'ancien état pendant toute
-        // la durée du TTL.
-        await cache.invalidateGuild(guildId);
-
-        startWordStatsBackfillIfTurnedOn(guildId, wordStatsWasEnabled, data.wordStatsEnabled, 'ChannelsManagementAPI');
-
-        // Journal des changements vocaux : UNE ligne d'audit, un champ par ligne
-        // « champ : avant → après ». Rien quand aucun champ vocal n'a bougé.
-        if (voiceBefore) {
-          const voiceAfter: ReglagesVocaux = {
-            ...voiceBefore,
-            ...Object.fromEntries(VOICE_KEYS.filter((key) => key in data).map((key) => [key, data[key]])),
-            ...(tempVoiceModPermissionsData
-              ? { tempVoiceModPermissions: { ...(voiceBefore.tempVoiceModPermissions as object), ...tempVoiceModPermissionsData } }
-              : {}),
-            ...(tempVoiceAccessRequestData
-              ? { tempVoiceAccessRequest: { ...(voiceBefore.tempVoiceAccessRequest as object), ...tempVoiceAccessRequestData } }
-              : {}),
-          };
-          const nomRole = (id: string): string | undefined => {
-            try {
-              return discordGuild?.roles?.cache?.get(id)?.name;
-            } catch {
-              return undefined;
-            }
-          };
-          const noms: NomsLisibles = { salon: nomSalon, role: nomRole };
-          const changes = diffReglagesVocaux(voiceBefore, voiceAfter, noms);
-          if (changes.length > 0) {
-            await pushAudit(guildId, {
-              user: auditUser,
-              action: `Réglages vocaux modifiés (${changes.length})`,
-              context: getGuildName(client, guildId),
-              module: 'Gestion des salons',
-              eventType: 'Manuel',
-              details: lignesDiffReglages(changes).join('\n').slice(0, 4000),
-              channelId: null,
-            });
-            await envoyerEmbedReglagesVocaux(discordGuild, guildId, auditUser, (langue) => diffReglagesVocaux(voiceBefore, voiceAfter, noms, langue));
-          }
-        }
-        // Le reste du corps (fils auto, stats, honeypot...) garde la ligne générique,
-        // quand une de ses valeurs a bougé : la page renvoie tout le corps à chaque
-        // enregistrement, un réglage vocal seul ne doit pas la doubler. Une base
-        // illisible avant l'écriture compte pour un changement.
-        const apres: Record<string, unknown> = { ...data };
-        if (Array.isArray(body.autoThreadChannels)) apres.autoThreadChannels = body.autoThreadChannels;
-        const nonVocalChange = touchesAutre && (!nonVocalAvant
-          || CLES_NON_VOCALES.some((key) => key in apres && !memeValeur(nonVocalAvant[key], apres[key])));
-        if (nonVocalChange) {
+        const noms: NomsLisibles = { salon: nomSalon, role: nomRole };
+        const changes = diffReglagesVocaux(voiceBefore, voiceAfter, noms);
+        if (changes.length > 0) {
           await pushAudit(guildId, {
             user: auditUser,
-            action: 'Sauvegarde configuration Gestion des salons',
+            action: `Réglages vocaux modifiés (${changes.length})`,
             context: getGuildName(client, guildId),
             module: 'Gestion des salons',
             eventType: 'Manuel',
-            details: 'Configuration de la gestion des salons mise à jour.',
+            details: lignesDiffReglages(changes).join('\n').slice(0, 4000),
             channelId: null,
           });
+          await envoyerEmbedReglagesVocaux(discordGuild, guildId, auditUser, (langue) => diffReglagesVocaux(voiceBefore, voiceAfter, noms, langue));
         }
+      }
+      // Le reste du corps (fils auto, stats, honeypot...) garde la ligne générique,
+      // quand une de ses valeurs a bougé : la page renvoie tout le corps à chaque
+      // enregistrement, un réglage vocal seul ne doit pas la doubler. Une base
+      // illisible avant l'écriture compte pour un changement.
+      const apres: Record<string, unknown> = { ...data };
+      if (Array.isArray(body.autoThreadChannels)) apres.autoThreadChannels = body.autoThreadChannels;
+      const nonVocalChange = touchesAutre && (!nonVocalAvant
+        || CLES_NON_VOCALES.some((key) => key in apres && !memeValeur(nonVocalAvant[key], apres[key])));
+      if (nonVocalChange) {
+        await pushAudit(guildId, {
+          user: auditUser,
+          action: 'Sauvegarde configuration Gestion des salons',
+          context: getGuildName(client, guildId),
+          module: 'Gestion des salons',
+          eventType: 'Manuel',
+          details: 'Configuration de la gestion des salons mise à jour.',
+          channelId: null,
+        });
+      }
 
-        // L'avertissement du salon piège redit la sanction et le compteur à jour.
-        if (discordGuild && data.honeypotEnabled !== false && Object.keys(data).some((key) => key.startsWith('honeypot'))) {
-          await refreshHoneypotNotice(discordGuild, { createIfMissing: true }).catch((err) =>
-            logger.error('ChannelsManagementAPI', `Avertissement du salon piège non mis à jour (${guildId}) :`, err)
-          );
-        }
+      // L'avertissement du salon piège redit la sanction et le compteur à jour.
+      if (discordGuild && data.honeypotEnabled !== false && Object.keys(data).some((key) => key.startsWith('honeypot'))) {
+        await refreshHoneypotNotice(discordGuild, { createIfMissing: true }).catch((err) =>
+          logger.error('ChannelsManagementAPI', `Avertissement du salon piège non mis à jour (${guildId}) :`, err)
+        );
+      }
 
-        if (body.statsEnabled) {
-          updateGuildStats(client, guildId).catch((err) =>
-            logger.error('ChannelsManagementAPI', `Erreur lors de la mise à jour des stats pour la guilde ${guildId} :`, err)
-          );
-        }
+      if (body.statsEnabled) {
+        updateGuildStats(client, guildId).catch((err) =>
+          logger.error('ChannelsManagementAPI', `Erreur lors de la mise à jour des stats pour la guilde ${guildId} :`, err)
+        );
+      }
 
-        if (Object.prototype.hasOwnProperty.call(body, 'autoThreadEnabled')) {
-          await prisma.dashboardFeatureConfig.upsert({
-            where: { guildId_featureKey: { guildId, featureKey: 'auto_thread' } },
-            create: {
-              guildId,
-              featureKey: 'auto_thread',
-              featureName: 'Gestion des salons',
-              enabled: !!body.autoThreadEnabled,
-              loggingEnabled: true,
-              userActivityTracking: true,
-              notifyViaDiscordChannel: true,
-            },
-            update: {
-              enabled: !!body.autoThreadEnabled
-            }
-          });
-        }
-
-        json(res, 200, {
-          ok: true,
-          ...(notices.length ? { notices } : {}),
-          resolved: {
-            tempVoiceChannelId: data.tempVoiceChannelId,
-            tempVoiceCategoryId: data.tempVoiceCategoryId,
-            tempVoiceGenerators: data.tempVoiceGenerators,
-            honeypotChannelId: data.honeypotChannelId,
-            honeypotSanction: data.honeypotSanction,
-            honeypotReinvite: data.honeypotReinvite,
-            statsConfig: data.statsConfig,
-            // Ce que le serveur a normalisé et gardé : la page le réapplique au
-            // lieu de garder ce qu'elle a envoyé (un plafond de places ramené à
-            // 99, un délai ramené dans ses bornes...).
-            tempVoiceDefaults: data.tempVoiceDefaults,
-            tempVoiceModPermissions: tempVoiceModPermissionsData
-              ? { ...(voiceBefore?.tempVoiceModPermissions as object), ...tempVoiceModPermissionsData }
-              : undefined,
-            tempVoiceAccessRequest: tempVoiceAccessRequestData
-              ? { ...(voiceBefore?.tempVoiceAccessRequest as object), ...tempVoiceAccessRequestData }
-              : undefined,
+      if (Object.prototype.hasOwnProperty.call(body, 'autoThreadEnabled')) {
+        await prisma.dashboardFeatureConfig.upsert({
+          where: { guildId_featureKey: { guildId, featureKey: 'auto_thread' } },
+          create: {
+            guildId,
+            featureKey: 'auto_thread',
+            featureName: 'Gestion des salons',
+            enabled: !!body.autoThreadEnabled,
+            loggingEnabled: true,
+            userActivityTracking: true,
+            notifyViaDiscordChannel: true,
+          },
+          update: {
+            enabled: !!body.autoThreadEnabled
           }
         });
-      } catch (err) {
-        logger.error('ChannelsManagementAPI', 'PATCH config error:', err);
-        jsonFailure(res, err, 'Erreur lors de la mise à jour', 'ChannelsManagementAPI');
       }
-      return true;
-    }
-  }
 
-  return false;
+      return send(c, {
+        ok: true,
+        ...(notices.length ? { notices } : {}),
+        resolved: {
+          tempVoiceChannelId: data.tempVoiceChannelId,
+          tempVoiceCategoryId: data.tempVoiceCategoryId,
+          tempVoiceGenerators: data.tempVoiceGenerators,
+          honeypotChannelId: data.honeypotChannelId,
+          honeypotSanction: data.honeypotSanction,
+          honeypotReinvite: data.honeypotReinvite,
+          statsConfig: data.statsConfig,
+          // Ce que le serveur a normalisé et gardé : la page le réapplique au
+          // lieu de garder ce qu'elle a envoyé (un plafond de places ramené à
+          // 99, un délai ramené dans ses bornes...).
+          tempVoiceDefaults: data.tempVoiceDefaults,
+          tempVoiceModPermissions: tempVoiceModPermissionsData
+            ? { ...(voiceBefore?.tempVoiceModPermissions as object), ...tempVoiceModPermissionsData }
+            : undefined,
+          tempVoiceAccessRequest: tempVoiceAccessRequestData
+            ? { ...(voiceBefore?.tempVoiceAccessRequest as object), ...tempVoiceAccessRequestData }
+            : undefined,
+        }
+      });
+    } catch (err) {
+      logger.error('ChannelsManagementAPI', 'PATCH config error:', err);
+      return fail(c, err, 'Erreur lors de la mise à jour', 'ChannelsManagementAPI');
+    }
+  });
+
+  return router;
 }
+

@@ -4,6 +4,12 @@ import { Socket } from 'node:net';
 import path from 'node:path';
 import { PermissionFlagsBits, type Client } from 'discord.js';
 import { DASHBOARD_ACCESS_ADMIN, type AuthClaims, type DashboardAccess } from '../../api/shared.js';
+import { legacyModuleCall, mockDashboardGate, type LegacyModuleContext } from '../helpers/honoDashboard.js';
+// Session et garde serveur simulées : la route est servie par Hono.
+mockDashboardGate(
+  { level: 'admin', canViewDashboard: true, canModerateContent: true, canManageSettings: true, canManageTutoring: true },
+  { userId: 'user-1', username: 'Admin' },
+);
 
 /**
  * Réservation et renommage d'un salon temporaire depuis le dashboard.
@@ -62,7 +68,9 @@ for (const dbPath of ['../../utils/db.ts', '../../utils/db.js']) {
 }
 
 // Import après les mocks
-const { handleChannelsManagementRoutes } = await import('../../api/routes/dashboard/modules/channels-management.js');
+const { createChannelsManagementRouter } = await import('../../api/routes/dashboard/modules/channels-management.js');
+const handleChannelsManagementRoutes = (ctx: LegacyModuleContext & { client: unknown }) =>
+  legacyModuleCall(createChannelsManagementRouter(ctx.client as never), ctx);
 const { MAX_ADDITIONAL_GENERATORS } = await import('../../services/features/tempVoiceService.js');
 
 function createMockRequest(body: Record<string, unknown>): IncomingMessage {

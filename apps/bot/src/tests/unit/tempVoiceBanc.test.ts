@@ -26,6 +26,12 @@ import {
   textesVisibles,
   type AppelRest,
 } from '../helpers/bancDiscord.js';
+import { legacyModuleCall, mockDashboardGate, type LegacyModuleContext } from '../helpers/honoDashboard.js';
+// Session et garde serveur simulées : la route est servie par Hono.
+mockDashboardGate(
+  { level: 'admin', canViewDashboard: true, canModerateContent: true, canManageSettings: true, canManageTutoring: true },
+  { userId: 'user-1', username: 'Admin' },
+);
 
 // ─── Base de données et cache simulés, au temps virtuel du monde courant ───
 
@@ -1255,7 +1261,9 @@ describe('B — mention du propriétaire : du PATCH du dashboard au salon créé
       // Ligne en base SANS mention : seul le PATCH réel peut poser le réglage.
       reglerBase({ langue: 'fr', format, mode: 'CLASSIC' });
       base.reglages = { ...base.reglages, ownerMentionPlacement: mention === 'panel' ? 'message' : 'panel' };
-      const { handleChannelsManagementRoutes } = await import('../../api/routes/dashboard/modules/channels-management.js');
+      const { createChannelsManagementRouter } = await import('../../api/routes/dashboard/modules/channels-management.js');
+      const handleChannelsManagementRoutes = (ctx: LegacyModuleContext & { client: unknown }) =>
+        legacyModuleCall(createChannelsManagementRouter(ctx.client as never), ctx);
       const { IncomingMessage, ServerResponse } = await import('node:http');
       const { Socket } = await import('node:net');
       const req = new IncomingMessage(new Socket());

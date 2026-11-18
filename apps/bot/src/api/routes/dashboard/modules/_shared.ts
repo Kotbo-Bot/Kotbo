@@ -8,24 +8,6 @@ import { logger } from '../../../../utils/logger.js';
 import { type CommandAccessLevel, type DashboardPresetKey, parseDiscordMarkdown, type SeverityLevel } from '../../../shared.js';
 import { SanctionType } from '@prisma/client';
 import { type Embed, type Guild } from 'discord.js';
-import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { Client } from 'discord.js';
-import type { AuthClaims, DashboardAccess } from '../../../shared.js';
-
-/** Tout ce qu un sous-routeur recoit du repartiteur. */
-export type ModuleRouteContext = {
-  req: IncomingMessage;
-  res: ServerResponse;
-  parts: string[];
-  url: URL;
-  client: Client;
-  user: AuthClaims;
-  guildId: string;
-  access: DashboardAccess;
-  method: string | undefined;
-  auditUser: string;
-  moduleKey: string | undefined;
-};
 
 export const PRESET_LABELS: Record<DashboardPresetKey, string> = {
   general: 'Communauté générale',

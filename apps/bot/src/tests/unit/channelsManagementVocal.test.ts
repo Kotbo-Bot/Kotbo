@@ -7,6 +7,12 @@ import { completeModuleMock } from '../helpers/moduleMock.js';
 import { readFileSync } from 'node:fs';
 import { TEMP_VOICE_OWNER_MENTION_DEFAULT, TEMP_VOICE_OWNERSHIP_DEFAULTS } from '@kotbo/shared';
 import { DASHBOARD_ACCESS_ADMIN, type AuthClaims, type DashboardAccess } from '../../api/shared.js';
+import { legacyModuleCall, mockDashboardGate, type LegacyModuleContext } from '../helpers/honoDashboard.js';
+// Session et garde serveur simulées : la route est servie par Hono.
+mockDashboardGate(
+  { level: 'admin', canViewDashboard: true, canModerateContent: true, canManageSettings: true, canManageTutoring: true },
+  { userId: 'user-1', username: 'Admin' },
+);
 
 /**
  * Route `channels-management`, volet vocal : journal des changements, mention du
@@ -68,8 +74,9 @@ for (const logPath of ['../../utils/logDispatch.ts', '../../utils/logDispatch.js
   }));
 }
 
-const { handleChannelsManagementRoutes, explainDroppedGenerators } =
-  await import('../../api/routes/dashboard/modules/channels-management.js');
+const { createChannelsManagementRouter, explainDroppedGenerators } = await import('../../api/routes/dashboard/modules/channels-management.js');
+const handleChannelsManagementRoutes = (ctx: LegacyModuleContext & { client: unknown }) =>
+  legacyModuleCall(createChannelsManagementRouter(ctx.client as never), ctx);
 const { construireEmbedReglagesVocaux } = await import('../../utils/tempVoiceReglagesLog.js');
 const { lirePlacementMention, normaliserReglagesPropriete } = await import('../../services/features/tempVoiceService.js');
 
