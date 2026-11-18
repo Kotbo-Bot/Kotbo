@@ -1,7 +1,6 @@
 import { Hono } from 'hono';
 import type { Client } from 'discord.js';
 /** Routes dashboard du module `settings`. */
-import { isModulePaused } from '@kotbo/contracts';
 import { applyRegulationLock } from '../../../../services/staff/regulationService.js';
 import { cache } from '../../../../utils/cache.js';
 import prisma from '../../../../utils/db.js';
@@ -34,37 +33,14 @@ export function createSettingsRouter(client: Client) {
         publicChannelId?: string | null;
         newsChannelId?: string | null;
         digestChannelId?: string | null;
-        dailyAlgoChannelId?: string | null;
         meetingAnnouncementChannelId?: string | null;
         meetingVoiceChannelId?: string | null;
         baseStaffRoleId?: string | null;
         testStaffRoleId?: string | null;
         translationEnabled?: boolean;
         codePoliceEnabled?: boolean;
-        dailyAlgoEnabled?: boolean;
         analyticsEnabled?: boolean;
         // ── Daily Algo v2 : barème, semaine, sanctions, pont clans ──
-        dailyAlgoTimezone?: string;
-        dailyAlgoParticipationPoints?: number;
-        dailyAlgoWeekendMultiplier?: number;
-        dailyAlgoWeeklyRewardsEnabled?: boolean;
-        dailyAlgoWeekRole1Id?: string | null;
-        dailyAlgoWeekRole2Id?: string | null;
-        dailyAlgoWeekRole3Id?: string | null;
-        dailyAlgoWeekRoleRotate?: boolean;
-        dailyAlgoWeekXp1?: number;
-        dailyAlgoWeekXp2?: number;
-        dailyAlgoWeekXp3?: number;
-        dailyAlgoWeekParticipationXp?: number;
-        dailyAlgoWeekAnnouncementChannelId?: string | null;
-        dailyAlgoSanctionType?: string;
-        dailyAlgoSanctionWeight?: number;
-        dailyAlgoSanctionDurationMinutes?: number;
-        clanPointsFromDailyAlgo?: boolean;
-        clanPointsFromDailyAlgoRate?: number;
-        clanPointsDailyAlgoTop1?: number;
-        clanPointsDailyAlgoTop2?: number;
-        clanPointsDailyAlgoTop3?: number;
         githubReleasesEnabled?: boolean;
         digestEnabled?: boolean;
         youtubeEnabled?: boolean;
@@ -93,7 +69,6 @@ export function createSettingsRouter(client: Client) {
       });
 
       const data: Record<string, unknown> = {};
-      const dailyAlgoPaused = isModulePaused('daily_algo');
       let applyLockChanged = false;
       if (Object.prototype.hasOwnProperty.call(body, 'discordChannel')) {
         data.statusCheckChannelId = extractDiscordSnowflake(body.discordChannel);
@@ -164,9 +139,6 @@ export function createSettingsRouter(client: Client) {
       if (Object.prototype.hasOwnProperty.call(body, 'digestChannelId')) {
         data.digestChannelId = extractDiscordSnowflake(body.digestChannelId);
       }
-      if (Object.prototype.hasOwnProperty.call(body, 'dailyAlgoChannelId')) {
-        data.dailyAlgoChannelId = extractDiscordSnowflake(body.dailyAlgoChannelId);
-      }
 
       // ── Daily Algo v2 ────────────────────────────────────────────────────────
       // Toutes ces valeurs sont réglables depuis le panel : rien n'est codé en dur
@@ -184,91 +156,6 @@ export function createSettingsRouter(client: Client) {
         return Math.min(max, Math.max(min, parsed));
       };
 
-      if (Object.prototype.hasOwnProperty.call(body, 'dailyAlgoTimezone')) {
-        const candidate = typeof body.dailyAlgoTimezone === 'string' ? body.dailyAlgoTimezone.trim() : '';
-        // Un fuseau invalide ferait échouer tous les calculs de semaine : on le
-        // vérifie ici plutôt que de le découvrir à la clôture du lundi.
-        let isValidTimeZone = false;
-        if (candidate) {
-          try {
-            new Intl.DateTimeFormat('en-US', { timeZone: candidate });
-            isValidTimeZone = true;
-          } catch {
-            isValidTimeZone = false;
-          }
-        }
-
-        if (!isValidTimeZone) {
-          return send(c, { error: `Fuseau horaire invalide : « ${candidate} ».` }, 400);
-        }
-
-        data.dailyAlgoTimezone = candidate;
-      }
-      if (Object.prototype.hasOwnProperty.call(body, 'dailyAlgoParticipationPoints')) {
-        data.dailyAlgoParticipationPoints = readClampedInt(body.dailyAlgoParticipationPoints, 0, 50, 1);
-      }
-      if (Object.prototype.hasOwnProperty.call(body, 'dailyAlgoWeekendMultiplier')) {
-        data.dailyAlgoWeekendMultiplier = readClampedFloat(body.dailyAlgoWeekendMultiplier, 1, 10, 1.5);
-      }
-      if (Object.prototype.hasOwnProperty.call(body, 'dailyAlgoWeeklyRewardsEnabled')) {
-        data.dailyAlgoWeeklyRewardsEnabled = !!body.dailyAlgoWeeklyRewardsEnabled;
-      }
-      // Rôles du podium : facultatifs. Vider le champ = aucun rôle attribué, le
-      // reste des récompenses continue de fonctionner.
-      if (Object.prototype.hasOwnProperty.call(body, 'dailyAlgoWeekRole1Id')) {
-        data.dailyAlgoWeekRole1Id = extractDiscordSnowflake(body.dailyAlgoWeekRole1Id);
-      }
-      if (Object.prototype.hasOwnProperty.call(body, 'dailyAlgoWeekRole2Id')) {
-        data.dailyAlgoWeekRole2Id = extractDiscordSnowflake(body.dailyAlgoWeekRole2Id);
-      }
-      if (Object.prototype.hasOwnProperty.call(body, 'dailyAlgoWeekRole3Id')) {
-        data.dailyAlgoWeekRole3Id = extractDiscordSnowflake(body.dailyAlgoWeekRole3Id);
-      }
-      if (Object.prototype.hasOwnProperty.call(body, 'dailyAlgoWeekRoleRotate')) {
-        data.dailyAlgoWeekRoleRotate = !!body.dailyAlgoWeekRoleRotate;
-      }
-      if (Object.prototype.hasOwnProperty.call(body, 'dailyAlgoWeekXp1')) {
-        data.dailyAlgoWeekXp1 = readClampedInt(body.dailyAlgoWeekXp1, 0, 1_000_000, 500);
-      }
-      if (Object.prototype.hasOwnProperty.call(body, 'dailyAlgoWeekXp2')) {
-        data.dailyAlgoWeekXp2 = readClampedInt(body.dailyAlgoWeekXp2, 0, 1_000_000, 300);
-      }
-      if (Object.prototype.hasOwnProperty.call(body, 'dailyAlgoWeekXp3')) {
-        data.dailyAlgoWeekXp3 = readClampedInt(body.dailyAlgoWeekXp3, 0, 1_000_000, 150);
-      }
-      if (Object.prototype.hasOwnProperty.call(body, 'dailyAlgoWeekParticipationXp')) {
-        data.dailyAlgoWeekParticipationXp = readClampedInt(body.dailyAlgoWeekParticipationXp, 0, 1_000_000, 100);
-      }
-      if (Object.prototype.hasOwnProperty.call(body, 'dailyAlgoWeekAnnouncementChannelId')) {
-        data.dailyAlgoWeekAnnouncementChannelId = extractDiscordSnowflake(body.dailyAlgoWeekAnnouncementChannelId);
-      }
-      if (Object.prototype.hasOwnProperty.call(body, 'dailyAlgoSanctionType')) {
-        data.dailyAlgoSanctionType = body.dailyAlgoSanctionType === 'TIMEOUT' ? 'TIMEOUT' : 'WARN';
-      }
-      if (Object.prototype.hasOwnProperty.call(body, 'dailyAlgoSanctionWeight')) {
-        data.dailyAlgoSanctionWeight = readClampedInt(body.dailyAlgoSanctionWeight, 1, 3, 1);
-      }
-      if (Object.prototype.hasOwnProperty.call(body, 'dailyAlgoSanctionDurationMinutes')) {
-        data.dailyAlgoSanctionDurationMinutes = readClampedInt(body.dailyAlgoSanctionDurationMinutes, 1, 40_320, 60);
-      }
-      // Pont Daily Algo → Clans : troisième interrupteur, indépendant de
-      // `clansEnabled` et `dailyAlgoEnabled`.
-      // Daily Algo en pause : ni lui ni son pont vers les clans ne se rallument.
-      if (Object.prototype.hasOwnProperty.call(body, 'clanPointsFromDailyAlgo')) {
-        data.clanPointsFromDailyAlgo = !!body.clanPointsFromDailyAlgo && !dailyAlgoPaused;
-      }
-      if (Object.prototype.hasOwnProperty.call(body, 'clanPointsFromDailyAlgoRate')) {
-        data.clanPointsFromDailyAlgoRate = readClampedFloat(body.clanPointsFromDailyAlgoRate, 0.1, 100, 1);
-      }
-      if (Object.prototype.hasOwnProperty.call(body, 'clanPointsDailyAlgoTop1')) {
-        data.clanPointsDailyAlgoTop1 = readClampedInt(body.clanPointsDailyAlgoTop1, 0, 100_000, 30);
-      }
-      if (Object.prototype.hasOwnProperty.call(body, 'clanPointsDailyAlgoTop2')) {
-        data.clanPointsDailyAlgoTop2 = readClampedInt(body.clanPointsDailyAlgoTop2, 0, 100_000, 20);
-      }
-      if (Object.prototype.hasOwnProperty.call(body, 'clanPointsDailyAlgoTop3')) {
-        data.clanPointsDailyAlgoTop3 = readClampedInt(body.clanPointsDailyAlgoTop3, 0, 100_000, 10);
-      }
       if (Object.prototype.hasOwnProperty.call(body, 'meetingAnnouncementChannelId')) {
         data.meetingAnnouncementChannelId = extractDiscordSnowflake(body.meetingAnnouncementChannelId);
       }
@@ -286,9 +173,6 @@ export function createSettingsRouter(client: Client) {
       }
       if (Object.prototype.hasOwnProperty.call(body, 'codePoliceEnabled')) {
         data.codePoliceEnabled = !!body.codePoliceEnabled;
-      }
-      if (Object.prototype.hasOwnProperty.call(body, 'dailyAlgoEnabled')) {
-        data.dailyAlgoEnabled = !!body.dailyAlgoEnabled && !dailyAlgoPaused;
       }
       if (Object.prototype.hasOwnProperty.call(body, 'githubReleasesEnabled')) {
         data.githubReleasesEnabled = !!body.githubReleasesEnabled;
@@ -396,7 +280,6 @@ export function createSettingsRouter(client: Client) {
         }
       };
 
-      await syncFeature('daily_algo', 'Daily Algo', data.dailyAlgoEnabled, data.dailyAlgoChannelId, undefined);
       await syncFeature('digest', 'Digest', data.digestEnabled, data.digestChannelId, undefined);
       await syncFeature('translation', 'Translation', data.translationEnabled, undefined, undefined);
       await syncFeature('codepolice', 'Code Police', data.codePoliceEnabled, undefined, undefined);

@@ -98,17 +98,14 @@ export async function resolveFeatureAccessMap(
     const hasFeatureRoleOverrides = (feature.roleAccessByRole?.length ?? 0) > 0;
     
     if (!hasFeatureRoleOverrides) {
-      const isDailyAlgo = feature.featureKey === 'daily_algo';
       const isModeration = moderationFeatureKeys.has(feature.featureKey);
       const isStaff = staffFeatureKeys.has(feature.featureKey);
 
       featureAccess[feature.featureKey] = {
         canView: access.canViewDashboard,
-        canModerate: isDailyAlgo
-          ? access.canModerateDailyAlgo
-          : isModeration || isStaff
-            ? access.canModerateContent
-            : false,
+        canModerate: isModeration || isStaff
+          ? access.canModerateContent
+          : false,
         canConfigure: access.canManageSettings,
         canDelete: access.canManageSettings,
       };
@@ -244,7 +241,6 @@ const COMMAND_CATEGORIES: Record<string, string> = {
 
   // Fun / Autre
   excuse: 'Fun',
-  dailyAlgo: 'Fun',
   ctf: 'Fun',
   say: 'Fun'
 };
@@ -269,7 +265,6 @@ export function buildRichCommandCatalog(): CommandCatalogEntry[] {
     
     // Titre/label convivial
     let label = staticMeta?.label || (name.charAt(0).toUpperCase() + name.slice(1));
-    if (name === 'dailyAlgo') label = 'Daily Algo';
     if (name === 'devutils') label = 'Outils Dev';
     if (name === 'serverstats') label = 'Stats Serveur';
     if (name === 'suggestionConfig') label = 'Config Suggestions';
@@ -316,28 +311,6 @@ export function buildRichCommandCatalog(): CommandCatalogEntry[] {
   return richCommandCatalog;
 }
 
-/**
- * Nombre total de soumissions Daily Algo du serveur.
- *
- * Ce compteur ne sert qu a afficher un nombre d interactions sur la page des
- * modules, mais il se compte par jointure sur une table qui grossit sans borne :
- * le recalculer a chaque lecture d etat coutait de plus en plus cher a mesure
- * que le serveur vieillissait. Une minute de retard sur un compteur d affichage
- * est sans consequence, et `cache.invalidateGuild` le purge comme le reste
- * grace au prefixe `guild:<id>:`.
- */
-const DAILY_ALGO_COUNT_TTL_SECONDS = 60;
-
-async function countDailyAlgoSubmissions(guildId: string): Promise<number> {
-  const cacheKey = `guild:${guildId}:daily-algo-submission-count`;
-  const cached = await cache.get<number>(cacheKey);
-  if (typeof cached === 'number') return cached;
-
-  const count = await prisma.dailyAlgoSubmission.count({ where: { run: { guildId } } });
-  await cache.set(cacheKey, count, DAILY_ALGO_COUNT_TTL_SECONDS);
-  return count;
-}
-
 export const getGuildState = async (
   client: Client,
   guildId: string,
@@ -378,7 +351,6 @@ export const getGuildState = async (
   }
 
   const [
-    dailyAlgoSubmissionCount,
     runtime,
     persistedDashboardAudit,
     persistedDiscordAudit,
@@ -389,7 +361,6 @@ export const getGuildState = async (
     sanctionTables,
     declaredStaffRoles,
   ] = await Promise.all([
-    countDailyAlgoSubmissions(guildId),
     getOrCreateRuntime(guildId),
     prisma.dashboardAuditLog.findMany({
       where: { guildId, eventType: { not: 'Discord' } },
@@ -519,7 +490,6 @@ export const getGuildState = async (
 
   // Compteurs propres a quelques modules, faute de mesure generique.
   const interactionsByModule: Record<string, number> = {
-    daily_algo: dailyAlgoSubmissionCount,
     sanctions: sanctions.length,
     activity: auditTrailFromDb.length,
   };
@@ -752,7 +722,6 @@ export const getGuildState = async (
     publicChannelId: guild.publicChannelId ?? '',
     newsChannelId: guild.newsChannelId ?? '',
     digestChannelId: guild.digestChannelId ?? '',
-    dailyAlgoChannelId: guild.dailyAlgoChannelId ?? '',
     baseStaffRoleId: guild.baseStaffRoleId ?? '',
     testStaffRoleId: guild.testStaffRoleId ?? '',
     propagateSanctions: guild.propagateSanctions,
@@ -761,29 +730,7 @@ export const getGuildState = async (
     sanctionReportSkipBots: guild.sanctionReportSkipBots,
     translationEnabled: guild.translationEnabled,
     codePoliceEnabled: guild.codePoliceEnabled,
-    dailyAlgoEnabled: guild.dailyAlgoEnabled,
     analyticsEnabled: guild.analyticsEnabled,
-    dailyAlgoTimezone: guild.dailyAlgoTimezone,
-    dailyAlgoParticipationPoints: guild.dailyAlgoParticipationPoints,
-    dailyAlgoWeekendMultiplier: guild.dailyAlgoWeekendMultiplier,
-    dailyAlgoWeeklyRewardsEnabled: guild.dailyAlgoWeeklyRewardsEnabled,
-    dailyAlgoWeekRole1Id: guild.dailyAlgoWeekRole1Id ?? '',
-    dailyAlgoWeekRole2Id: guild.dailyAlgoWeekRole2Id ?? '',
-    dailyAlgoWeekRole3Id: guild.dailyAlgoWeekRole3Id ?? '',
-    dailyAlgoWeekRoleRotate: guild.dailyAlgoWeekRoleRotate,
-    dailyAlgoWeekXp1: guild.dailyAlgoWeekXp1,
-    dailyAlgoWeekXp2: guild.dailyAlgoWeekXp2,
-    dailyAlgoWeekXp3: guild.dailyAlgoWeekXp3,
-    dailyAlgoWeekParticipationXp: guild.dailyAlgoWeekParticipationXp,
-    dailyAlgoWeekAnnouncementChannelId: guild.dailyAlgoWeekAnnouncementChannelId ?? '',
-    dailyAlgoSanctionType: guild.dailyAlgoSanctionType,
-    dailyAlgoSanctionWeight: guild.dailyAlgoSanctionWeight,
-    dailyAlgoSanctionDurationMinutes: guild.dailyAlgoSanctionDurationMinutes,
-    clanPointsFromDailyAlgo: guild.clanPointsFromDailyAlgo,
-    clanPointsFromDailyAlgoRate: guild.clanPointsFromDailyAlgoRate,
-    clanPointsDailyAlgoTop1: guild.clanPointsDailyAlgoTop1,
-    clanPointsDailyAlgoTop2: guild.clanPointsDailyAlgoTop2,
-    clanPointsDailyAlgoTop3: guild.clanPointsDailyAlgoTop3,
     githubReleasesEnabled: guild.githubReleasesEnabled,
     digestEnabled: guild.digestEnabled,
     autoThreadEnabled: guild.autoThreadEnabled,
@@ -826,7 +773,6 @@ export const getGuildState = async (
     access: {
       level: access.level === 'admin' ? 'admin' : 'moderator',
       canModerateContent: access.canModerateContent,
-      canModerateDailyAlgo: access.canModerateDailyAlgo,
       // Ce drapeau vaut "administrateur", pas "configure quelque chose quelque
       // part". Le relever des qu'une fonctionnalite est configurable annulait
       // tout le systeme de droits par role : les pages le lisent en `||` apres

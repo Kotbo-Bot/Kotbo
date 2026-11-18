@@ -205,10 +205,6 @@ export async function evaluateGuildGate(
     && parts[5] === 'reports'
     && (method === 'POST' || method === 'PATCH');
 
-  const isDailyAlgoReviewAction = parts.length === 6
-    && parts[4] === 'daily-algo-submissions'
-    && method === 'PATCH';
-
   const isStaffAbsenceAction = parts.length === 5
     && parts[4] === 'absences'
     && method === 'POST';
@@ -345,7 +341,7 @@ export async function evaluateGuildGate(
     ? { ...access, canManageSettings: true }
     : access;
 
-  if (!access.canManageSettings && method !== 'GET' && !hasFeatureWriteRight && !isSanctionAction && !isDailyAlgoReviewAction && !isStaffAbsenceAction && !isStaffResignationAction && !isNotificationAction && !isMeetingAction && !isNewsAction && !isMemberModerationAction && !isGiveawayManagerAction && !isAnalyticsAnnotationAction && !isAegisReviewAction && !isDoingListAction && !isTutoringAction && !isSuggestionDecisionAction && !isStarboardModerationAction) {
+  if (!access.canManageSettings && method !== 'GET' && !hasFeatureWriteRight && !isSanctionAction && !isStaffAbsenceAction && !isStaffResignationAction && !isNotificationAction && !isMeetingAction && !isNewsAction && !isMemberModerationAction && !isGiveawayManagerAction && !isAnalyticsAnnotationAction && !isAegisReviewAction && !isDoingListAction && !isTutoringAction && !isSuggestionDecisionAction && !isStarboardModerationAction) {
     return deny(403, { error: 'Action réservée aux administrateurs du dashboard.' });
   }
 
@@ -357,14 +353,10 @@ export async function evaluateGuildGate(
     return deny(403, { error: 'Action de gestion des actualités non autorisée.' });
   }
 
-  if (isDailyAlgoReviewAction && !access.canModerateDailyAlgo) {
-    return deny(403, { error: 'Action de modération Daily Algo non autorisée.' });
-  }
-
   // Rate limiting des écritures.
   //
   // Point de passage unique : toutes les routes de guilde transitent par ici,
-  // donc un seul garde-fou couvre les réglages, les clans, le Daily Algo et le
+  // donc un seul garde-fou couvre les réglages, les clans et le
   // reste, sans avoir à y penser route par route.
   //
   // La clé est « membre + serveur » et non l'IP : deux administrateurs derrière
@@ -378,12 +370,10 @@ export async function evaluateGuildGate(
       return deny(429, { error: 'Trop de modifications en peu de temps. Réessayez dans une minute.' });
     }
 
-    // Actions coûteuses ou irréversibles : enregistrement de réglages, clôture
-    // de semaine Daily Algo, mise en route d'un module (qui crée des salons
+    // Actions coûteuses ou irréversibles : enregistrement de réglages, mise en route d'un module (qui crée des salons
     // Discord), remises à zéro et distributions de clans.
     const isSensitiveWrite =
       (parts[4] === 'settings' && (method === 'PATCH' || method === 'PUT'))
-      || (parts[4] === 'daily-algo-weeks' && parts[5] === 'close')
       || (parts[4] === 'tickets' && parts[5] === 'config' && parts[6] === 'setup')
       || (parts[4] === 'leveling' && parts[5] === 'level-up-channel')
       // Créer un emoji ajoute un asset permanent au serveur Discord :
