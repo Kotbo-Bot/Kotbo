@@ -364,7 +364,7 @@
         <h3 class="text-sm font-semibold text-on-surface">Stripe & essai gratuit</h3>
         <dl class="space-y-2 text-body-sm">
           <div class="flex justify-between gap-3">
-            <dt class="text-on-surface-variant">Statut Stripe</dt>
+            <dt class="text-on-surface-variant shrink-0">Statut Stripe</dt>
             <dd class="font-medium text-on-surface">
               {selectedGuild.stripeSubscriptionStatus ?? 'Aucun abonnement'}
               {selectedGuild.stripeCancelAtPeriodEnd ? ' · résiliation programmée' : ''}
@@ -372,16 +372,16 @@
           </div>
           {#if selectedGuild.stripeSubscriptionId}
             <div class="flex justify-between gap-3">
-              <dt class="text-on-surface-variant">Abonnement</dt>
+              <dt class="text-on-surface-variant shrink-0">Abonnement</dt>
               <dd class="font-mono text-xs text-on-surface select-all">{selectedGuild.stripeSubscriptionId}</dd>
             </div>
             <div class="flex justify-between gap-3">
-              <dt class="text-on-surface-variant">Fin de période</dt>
+              <dt class="text-on-surface-variant shrink-0">Fin de période</dt>
               <dd class="text-on-surface">{formatDateShort(selectedGuild.stripeCurrentPeriodEnd)}</dd>
             </div>
           {/if}
           <div class="flex justify-between gap-3">
-            <dt class="text-on-surface-variant">Essai</dt>
+            <dt class="text-on-surface-variant shrink-0">Essai</dt>
             <dd class="text-on-surface">
               {selectedGuild.trial
                 ? selectedGuild.trial.consumed

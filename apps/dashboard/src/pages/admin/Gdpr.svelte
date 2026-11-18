@@ -156,7 +156,7 @@
                 <dl class="px-5 pb-4 pt-1 space-y-1.5">
                   {#each cat.tables as t (t.label)}
                     <div class="flex items-center justify-between text-body-sm">
-                      <dt class="text-on-surface-variant">{t.label}</dt>
+                      <dt class="text-on-surface-variant shrink-0">{t.label}</dt>
                       <dd class="font-mono tabular-nums text-on-surface">{t.count}</dd>
                     </div>
                   {/each}

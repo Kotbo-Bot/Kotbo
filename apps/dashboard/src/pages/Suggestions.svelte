@@ -428,35 +428,35 @@
   {:else}
     <dl class="space-y-2 text-sm">
       <div class="flex items-center justify-between gap-3">
-        <dt class="text-on-surface-variant">{m.suggestions_status_channel()}</dt>
+        <dt class="text-on-surface-variant shrink-0">{m.suggestions_status_channel()}</dt>
         <dd class="font-semibold text-right truncate">{channelName(data.config.channelId)}</dd>
       </div>
       <div class="flex items-center justify-between gap-3">
-        <dt class="text-on-surface-variant">{m.suggestions_status_pending_label()}</dt>
+        <dt class="text-on-surface-variant shrink-0">{m.suggestions_status_pending_label()}</dt>
         <dd class="font-semibold">{data.stats.pending}</dd>
       </div>
       <div class="flex items-center justify-between gap-3">
-        <dt class="text-on-surface-variant">{m.suggestions_status_comment()}</dt>
+        <dt class="text-on-surface-variant shrink-0">{m.suggestions_status_comment()}</dt>
         <dd class="font-semibold">{data.config.requireComment ? m.suggestions_status_required() : m.suggestions_status_optional()}</dd>
       </div>
       <div class="flex items-center justify-between gap-3">
-        <dt class="text-on-surface-variant">{m.suggestions_status_votes_after()}</dt>
+        <dt class="text-on-surface-variant shrink-0">{m.suggestions_status_votes_after()}</dt>
         <dd class="font-semibold">{data.config.voteWhileApproved ? m.suggestions_status_open() : m.suggestions_status_closed()}</dd>
       </div>
       <div class="flex items-center justify-between gap-3">
-        <dt class="text-on-surface-variant">{m.suggestions_status_who()}</dt>
+        <dt class="text-on-surface-variant shrink-0">{m.suggestions_status_who()}</dt>
         <dd class="font-semibold text-right">{data.config.allowedRoleIds.length > 0 ? m.suggestions_status_roles({ count: data.config.allowedRoleIds.length }) : m.suggestions_status_everyone()}</dd>
       </div>
       <div class="flex items-center justify-between gap-3">
-        <dt class="text-on-surface-variant">{m.suggestions_status_threshold()}</dt>
+        <dt class="text-on-surface-variant shrink-0">{m.suggestions_status_threshold()}</dt>
         <dd class="font-semibold">{data.config.voteThreshold ? m.suggestions_status_threshold_value({ count: data.config.voteThreshold }) : m.suggestions_status_none()}</dd>
       </div>
       <div class="flex items-center justify-between gap-3">
-        <dt class="text-on-surface-variant">{m.suggestions_status_guards()}</dt>
+        <dt class="text-on-surface-variant shrink-0">{m.suggestions_status_guards()}</dt>
         <dd class="font-semibold">{activeGuards(data.config) > 0 ? m.suggestions_guards_summary({ count: activeGuards(data.config) }) : m.suggestions_status_none()}</dd>
       </div>
       <div class="flex items-center justify-between gap-3">
-        <dt class="text-on-surface-variant">{m.suggestions_status_last()}</dt>
+        <dt class="text-on-surface-variant shrink-0">{m.suggestions_status_last()}</dt>
         <dd class="font-semibold text-right">{data.stats.lastCreatedAt ? formatDate(data.stats.lastCreatedAt) : m.suggestions_status_never()}</dd>
       </div>
     </dl>

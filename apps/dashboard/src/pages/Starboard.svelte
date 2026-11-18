@@ -485,45 +485,45 @@
   {:else}
     <dl class="space-y-2 text-sm">
       <div class="flex items-center justify-between gap-3">
-        <dt class="text-on-surface-variant">{m.starboard_status_channel()}</dt>
+        <dt class="text-on-surface-variant shrink-0">{m.starboard_status_channel()}</dt>
         <dd class="font-semibold text-right truncate">{channelName(data.config.channelId)}</dd>
       </div>
       <div class="flex items-center justify-between gap-3">
-        <dt class="text-on-surface-variant">{m.starboard_status_threshold()}</dt>
+        <dt class="text-on-surface-variant shrink-0">{m.starboard_status_threshold()}</dt>
         <dd class="font-semibold">{m.starboard_status_threshold_value({ count: data.config.threshold })}</dd>
       </div>
       <div class="flex items-center justify-between gap-3">
-        <dt class="text-on-surface-variant">{m.starboard_status_votes()}</dt>
+        <dt class="text-on-surface-variant shrink-0">{m.starboard_status_votes()}</dt>
         <dd class="font-semibold text-right">
           {data.config.downvoteEmojis.length > 0 ? m.starboard_status_votes_both() : m.starboard_status_votes_up_only()}
         </dd>
       </div>
       <div class="flex items-center justify-between gap-3">
-        <dt class="text-on-surface-variant">{m.starboard_status_scope()}</dt>
+        <dt class="text-on-surface-variant shrink-0">{m.starboard_status_scope()}</dt>
         <dd class="font-semibold text-right">
           {data.config.watchedChannels.length > 0 ? m.starboard_status_scope_some({ count: data.config.watchedChannels.length }) : m.starboard_status_scope_all()}
         </dd>
       </div>
       <div class="flex items-center justify-between gap-3">
-        <dt class="text-on-surface-variant">{m.starboard_status_reward()}</dt>
+        <dt class="text-on-surface-variant shrink-0">{m.starboard_status_reward()}</dt>
         <dd class="font-semibold text-right">
           {rewardSummary(data.config) ?? m.starboard_status_none()}
         </dd>
       </div>
       <div class="flex items-center justify-between gap-3">
-        <dt class="text-on-surface-variant">{m.starboard_status_tiers()}</dt>
+        <dt class="text-on-surface-variant shrink-0">{m.starboard_status_tiers()}</dt>
         <dd class="font-semibold">{data.config.tiers.length}</dd>
       </div>
       <div class="flex items-center justify-between gap-3">
-        <dt class="text-on-surface-variant">{m.starboard_status_guards()}</dt>
+        <dt class="text-on-surface-variant shrink-0">{m.starboard_status_guards()}</dt>
         <dd class="font-semibold">{activeGuards(data.config) > 0 ? m.starboard_guards_summary({ count: activeGuards(data.config) }) : m.starboard_status_none()}</dd>
       </div>
       <div class="flex items-center justify-between gap-3">
-        <dt class="text-on-surface-variant">{m.starboard_status_on_board()}</dt>
+        <dt class="text-on-surface-variant shrink-0">{m.starboard_status_on_board()}</dt>
         <dd class="font-semibold">{data.stats.onBoard}</dd>
       </div>
       <div class="flex items-center justify-between gap-3">
-        <dt class="text-on-surface-variant">{m.starboard_status_last()}</dt>
+        <dt class="text-on-surface-variant shrink-0">{m.starboard_status_last()}</dt>
         <dd class="font-semibold text-right">{data.stats.lastPostedAt ? formatDate(data.stats.lastPostedAt) : m.starboard_status_never()}</dd>
       </div>
     </dl>

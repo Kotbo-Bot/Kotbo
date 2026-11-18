@@ -437,27 +437,27 @@
   {:else}
     <dl class="space-y-2 text-sm">
       <div class="flex items-center justify-between gap-3">
-        <dt class="text-on-surface-variant">{m.rep_status_daily_limit()}</dt>
+        <dt class="text-on-surface-variant shrink-0">{m.rep_status_daily_limit()}</dt>
         <dd class="font-semibold">{m.rep_status_daily_limit_value({ count: data.config.dailyLimit })}</dd>
       </div>
       <div class="flex items-center justify-between gap-3">
-        <dt class="text-on-surface-variant">{m.rep_votes_last_7_days()}</dt>
+        <dt class="text-on-surface-variant shrink-0">{m.rep_votes_last_7_days()}</dt>
         <dd class="font-semibold">{data.stats.votesLast7Days}</dd>
       </div>
       <div class="flex items-center justify-between gap-3">
-        <dt class="text-on-surface-variant">{m.rep_status_active_givers()}</dt>
+        <dt class="text-on-surface-variant shrink-0">{m.rep_status_active_givers()}</dt>
         <dd class="font-semibold">{data.stats.activeGivers7Days}</dd>
       </div>
       <div class="flex items-center justify-between gap-3">
-        <dt class="text-on-surface-variant">{m.rep_status_tiers()}</dt>
+        <dt class="text-on-surface-variant shrink-0">{m.rep_status_tiers()}</dt>
         <dd class="font-semibold">{data.config.tiers.length}</dd>
       </div>
       <div class="flex items-center justify-between gap-3">
-        <dt class="text-on-surface-variant">{m.rep_status_guards()}</dt>
+        <dt class="text-on-surface-variant shrink-0">{m.rep_status_guards()}</dt>
         <dd class="font-semibold">{activeGuards(data.config) > 0 ? m.rep_guards_summary({ count: activeGuards(data.config) }) : m.rep_guards_off()}</dd>
       </div>
       <div class="flex items-center justify-between gap-3">
-        <dt class="text-on-surface-variant">{m.rep_status_last_vote()}</dt>
+        <dt class="text-on-surface-variant shrink-0">{m.rep_status_last_vote()}</dt>
         <dd class="font-semibold text-right">{data.stats.lastVoteAt ? formatDate(data.stats.lastVoteAt) : m.rep_status_never()}</dd>
       </div>
     </dl>
