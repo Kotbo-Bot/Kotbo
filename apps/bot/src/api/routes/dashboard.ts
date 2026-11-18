@@ -7,8 +7,6 @@ import { auditGlobalAdminWrite, evaluateGuildGate } from './dashboard/guildGate.
 
 // Sub-routers imports
 import { handleAnalyticsRoutes } from './dashboard/analytics.js';
-import { handleEconomyRoutes } from './dashboard/economy.js';
-import { resolveMemberFeatureAccess } from '../shared.js';
 import { handleClansRoutes } from './dashboard/clans.js';
 
 export async function handleDashboardRoutes(
@@ -51,19 +49,6 @@ export async function handleDashboardRoutes(
     if (await handleAnalyticsRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
       if (method !== 'GET') await cache.invalidateGuild(guildId);
       return true;
-    }
-    if (parts[4] === 'economy') {
-      // Masquer la section dans la navigation ne suffit pas : l'API doit aussi
-      // refuser un staff à qui le rôle interdit la page.
-      const featureAccess = await resolveMemberFeatureAccess(client, guildId, effectiveAccess, user.userId);
-      if (!featureAccess.economy?.canView) {
-        json(res, 403, { error: 'Accès refusé. Votre rôle ne donne pas accès à cette section.' });
-        return true;
-      }
-      if (await handleEconomyRoutes(req, res, parts, client, user, guildId, effectiveAccess)) {
-        if (method !== 'GET') await cache.invalidateGuild(guildId);
-        return true;
-      }
     }
     if (parts[4] === 'clans') {
       if (await handleClansRoutes(req, res, parts, client, user, guildId, effectiveAccess)) {
