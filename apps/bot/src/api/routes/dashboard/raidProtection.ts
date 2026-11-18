@@ -443,7 +443,7 @@ export async function handleRaidProtectionRoutes(
   if (sub === 'reports' && parts[6] && parts[7] === 'decision' && method === 'POST') {
     try {
       const body = await readJsonBody<{ resolved?: boolean }>(req);
-      const report = await handleReportDecision(parts[6], user.userId, Boolean(body?.resolved));
+      const report = await handleReportDecision(guildId, parts[6], user.userId, Boolean(body?.resolved));
       if (!report) {
         json(res, 404, { error: 'Signalement introuvable ou déjà traité' });
         return true;
@@ -477,8 +477,8 @@ export async function handleRaidProtectionRoutes(
     try {
       const body = await readJsonBody<{ approved?: boolean }>(req);
       const request = body?.approved
-        ? await approveInviteRequest(client, parts[6], user.userId)
-        : await rejectInviteRequest(client, parts[6], user.userId);
+        ? await approveInviteRequest(client, guildId, parts[6], user.userId)
+        : await rejectInviteRequest(client, guildId, parts[6], user.userId);
       if (!request) {
         json(res, 404, { error: 'Demande introuvable ou déjà traitée' });
         return true;

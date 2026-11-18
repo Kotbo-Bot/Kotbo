@@ -678,9 +678,13 @@ export async function handleGeneralistModulesRoutes(
     if (parts.length === 7 && parts[5] === 'rewards' && method === 'DELETE') {
       const rewardId = parts[6];
       try {
-        await prisma.levelRoleReward.delete({
-          where: { id: rewardId },
+        const removed = await prisma.levelRoleReward.deleteMany({
+          where: { id: rewardId, guildId },
         });
+        if (removed.count === 0) {
+          json(res, 404, { error: 'Récompense introuvable' });
+          return true;
+        }
         await invalidateLevelRewardsCache(guildId);
         json(res, 200, { success: true });
       } catch (err) {

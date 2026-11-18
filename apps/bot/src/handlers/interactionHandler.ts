@@ -959,8 +959,8 @@ export async function handleButton(interaction: Interaction, client: Client): Pr
       const { approveInviteRequest, rejectInviteRequest } = await import('../services/moderation/inviteGuardService.js');
       const approved = action === 'invite_approve';
       const request = approved
-        ? await approveInviteRequest(client, entityId, user.id)
-        : await rejectInviteRequest(client, entityId, user.id);
+        ? await approveInviteRequest(client, interaction.guildId ?? '', entityId, user.id)
+        : await rejectInviteRequest(client, interaction.guildId ?? '', entityId, user.id);
       if (!request) {
         await interaction.editReply({ content: 'ℹ️ Cette demande a déjà été traitée.' });
         return;
@@ -987,7 +987,7 @@ export async function handleButton(interaction: Interaction, client: Client): Pr
       await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
       const { handleReportDecision } = await import('../services/moderation/reportService.js');
       const resolved = action === 'report_resolve';
-      const report = await handleReportDecision(entityId, user.id, resolved);
+      const report = await handleReportDecision(interaction.guildId ?? '', entityId, user.id, resolved);
       if (!report) {
         await interaction.editReply({ content: 'ℹ️ Ce signalement a déjà été traité.' });
         return;

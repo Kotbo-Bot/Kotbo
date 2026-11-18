@@ -88,8 +88,8 @@ async function postReportToStaffChannel(client: Client, guild: Guild, channelId:
 }
 
 /** Marque un report comme traité ou rejeté (boutons staff). */
-export async function handleReportDecision(reportId: string, handledById: string, resolved: boolean): Promise<MemberReport | null> {
-  const report = await prisma.memberReport.findUnique({ where: { id: reportId } });
+export async function handleReportDecision(guildId: string, reportId: string, handledById: string, resolved: boolean): Promise<MemberReport | null> {
+  const report = await prisma.memberReport.findFirst({ where: { id: reportId, guildId } });
   if (!report || report.status !== 'PENDING') return null;
 
   return prisma.memberReport.update({

@@ -188,8 +188,8 @@ export async function disableInviteEmergency(guild: Guild): Promise<void> {
 
 // ── Validation staff (boutons) ────────────────────────────────────────────────
 
-export async function approveInviteRequest(client: Client, requestId: string, staffId: string): Promise<InviteApprovalRequest | null> {
-  const request = await prisma.inviteApprovalRequest.findUnique({ where: { id: requestId } });
+export async function approveInviteRequest(client: Client, guildId: string, requestId: string, staffId: string): Promise<InviteApprovalRequest | null> {
+  const request = await prisma.inviteApprovalRequest.findFirst({ where: { id: requestId, guildId } });
   if (!request || request.status !== 'PENDING') return null;
 
   const guild = client.guilds.cache.get(request.guildId);
@@ -228,8 +228,8 @@ export async function approveInviteRequest(client: Client, requestId: string, st
   return updated;
 }
 
-export async function rejectInviteRequest(client: Client, requestId: string, staffId: string): Promise<InviteApprovalRequest | null> {
-  const request = await prisma.inviteApprovalRequest.findUnique({ where: { id: requestId } });
+export async function rejectInviteRequest(client: Client, guildId: string, requestId: string, staffId: string): Promise<InviteApprovalRequest | null> {
+  const request = await prisma.inviteApprovalRequest.findFirst({ where: { id: requestId, guildId } });
   if (!request || request.status !== 'PENDING') return null;
 
   const updated = await prisma.inviteApprovalRequest.update({
