@@ -215,6 +215,7 @@ import { handleReportErrorRoute } from '../../api/routes/error.js';
 import { handleUserRoutes } from '../../api/routes/user.js';
 import { handleAdminRoutes } from '../../api/routes/admin.js';
 import { handleDashboardRoutes } from '../../api/routes/dashboard.js';
+import { createDashboardRouter } from '../../api/hono/dashboard/index.js';
 import { getMcpConnectionLogs, handleMCPRoutes, makeMcpDirectToken } from '../../api/mcp/mcpServer.js';
 
 // Helper mock req/res functions
@@ -1283,19 +1284,13 @@ describe('Modular Routers Unit Tests', () => {
       mockDb.guild.findUnique.mockResolvedValue({ id: '1122334455667788', dailyAlgoEnabled: true });
       mockDb.dashboardFeatureConfig.findMany.mockResolvedValue([]);
       
-      const req = createMockRequest({
-        method: 'GET',
-        url: '/api/dashboard/guilds/1122334455667788/notifications/features',
-        headers: authenticatedHeaders(),
-      });
-      const res = createMockResponse();
-      const parts = splitPath(req.url!);
-      const url = new URL(req.url!, 'http://localhost');
-
-      const handled = await handleDashboardRoutes(req, res, parts, url, mockClient);
-      expect(handled).toBeTrue();
-      expect(res.statusCode).toBe(200);
-      const data = JSON.parse(res.body);
+      // Route servie par Hono depuis la migration.
+      const res = await createDashboardRouter(mockClient).request(
+        '/api/dashboard/guilds/1122334455667788/notifications/features',
+        { headers: authenticatedHeaders() },
+      );
+      expect(res.status).toBe(200);
+      const data = await res.json() as { features?: unknown };
       expect(data.features).toBeDefined();
     });
 
