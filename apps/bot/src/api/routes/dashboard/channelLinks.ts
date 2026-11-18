@@ -448,7 +448,7 @@ export function createChannelLinksRouter(client: Client) {
       if (body?.relayMode !== undefined) data.relayMode = readRelayMode(body.relayMode);
       if (typeof body?.enabled === 'boolean') data.enabled = body.enabled;
 
-      const updated = await updateGroupMemberConfig(groupId, c.req.param('memberId')!, data);
+      const updated = await updateGroupMemberConfig(groupId, memberId, data);
       if (!updated) {
         return send(c, { error: 'Salon introuvable dans ce pont' }, 404);
       }
@@ -466,7 +466,7 @@ export function createChannelLinksRouter(client: Client) {
     const user = c.var.dashboardUser;
     const groupId = c.req.param('groupId');
     try {
-      const memberId = c.req.param('memberId')!;
+      const memberId = memberId;
       const member = group.members.find((m) => m.id === memberId);
       if (!member) {
         return send(c, { error: 'Salon introuvable dans ce pont' }, 404);
