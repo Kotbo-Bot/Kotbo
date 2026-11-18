@@ -747,6 +747,11 @@ export function validerMessage(corps: Brut | null | undefined, cible: Brut | nul
   if (cible && cible.flags & V2 && corps.flags !== undefined && !(Number(corps.flags) & V2)) {
     v.push('édition qui retire IS_COMPONENTS_V2 (refusé par Discord)');
   }
+  // Un message classique édité en V2 garde ce que l'édition ne vide pas : ses embeds ou son texte le font refuser.
+  if (cible && !(cible.flags & V2) && estV2) {
+    const garde = (cle: string) => !(cle in corps) && (cle === 'content' ? Boolean(cible.content) : (cible.embeds ?? []).length > 0);
+    if (garde('content') || garde('embeds')) v.push('édition qui passe un message classique en V2 sans vider son texte ou ses embeds (refusé par Discord)');
+  }
   const composants = (corps.components ?? []) as Brut[];
   const tous = aplatir(composants);
   for (const c of tous) validerComposant(c, v);
