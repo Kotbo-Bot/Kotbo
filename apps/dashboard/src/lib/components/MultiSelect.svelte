@@ -95,9 +95,15 @@
 
   <!-- Dropdown -->
   {#if open && !disabled}
+    <!-- mousedown sans effet par défaut : le champ garde le focus. Sinon un appui
+         un peu long sur une option, ou un clic sur la barre de défilement (la
+         liste en overflow-y-auto prend le focus dans Firefox), fermait la liste
+         180 ms plus tard, avant que le click de l'option n'arrive. -->
     <div
       id="{id}-listbox"
       role="listbox"
+      tabindex="-1"
+      onmousedown={(e) => e.preventDefault()}
       class="absolute left-0 right-0 mt-2 z-30 rounded-lg border border-outline-variant/20 bg-surface-container-high shadow-sm max-h-52 overflow-y-auto"
     >
       {#if filtered.length === 0}
