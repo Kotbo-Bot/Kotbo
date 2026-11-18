@@ -189,7 +189,7 @@
 
   // ── Dossier détaillé ───────────────────────────────────
   let modalOpen = $state(false);
-  let modalTab = $state<'resume' | 'notes' | 'messages' | 'sanctions'>('resume');
+  let modalTab = $state<'resume' | 'notes' | 'messages' | 'sanctions' | 'identite'>('resume');
 
   function openCase(tab: typeof modalTab) {
     modalTab = tab;
@@ -226,6 +226,18 @@
   const trend = $derived(stats?.activity.dailyTrend ?? []);
   const maxMessages = $derived(Math.max(1, ...trend.map((day) => day.messages)));
   const voiceHours = $derived(Math.round((stats?.activity.totalVoiceMinutes ?? 0) / 6) / 10);
+
+  function historyIcon(field: string): string {
+    switch (field) {
+      case 'username': return 'user';
+      case 'displayName': return 'badge-check';
+      case 'avatar': return 'image';
+      case 'bio': return 'align-left';
+      case 'tag': return 'tag';
+      case 'pronouns': return 'heart';
+      default: return 'edit';
+    }
+  }
 </script>
 
 {#if caseLoading && !caseData}
@@ -277,6 +289,7 @@
     </div>
     <div class="flex flex-wrap gap-2 shrink-0">
       <Button variant="ghost" size="sm" icon="arrow-left" href="/members">{m.mp_back()}</Button>
+      <Button size="sm" icon="history" onclick={() => openCase('identite')}>{m.mcm_identity_history()}</Button>
       <Button size="sm" icon="message-square" onclick={() => openCase('messages')}>{m.mp_messages()}</Button>
       <Button size="sm" icon="folder" onclick={() => openCase('resume')}>{m.mp_open_case()}</Button>
       {#if canModerateMembers}
@@ -347,6 +360,31 @@
             {#each caseData.roles.slice(0, 30) as role (role.id)}
               <span class="mp-role"><span class="w-2 h-2 rounded-full" style="background: {role.color && role.color !== '#000000' ? role.color : 'var(--outline-variant)'}"></span>{role.name}</span>
             {/each}
+          </div>
+        </SectionCard>
+      {/if}
+
+      {#if caseData.history && caseData.history.length > 0}
+        <SectionCard title={m.mcm_identity_history()} description={m.mcm_identity_history_desc()}>
+          <div class="px-5 pb-4 pt-3 space-y-2.5">
+            {#each caseData.history.slice(0, 4) as item (item.id)}
+              <div class="flex items-center justify-between gap-2 text-xs">
+                <span class="flex items-center gap-1.5 min-w-0 text-on-surface truncate">
+                  <Papicon icon={historyIcon(item.field)} size={12} class="text-on-surface-variant shrink-0" />
+                  {#if item.field === 'avatar'}
+                    <span class="truncate">{m.mcm_history_avatar()}</span>
+                  {:else if item.field === 'username'}
+                    <span class="truncate">@{item.newValue ?? item.oldValue ?? '—'}</span>
+                  {:else}
+                    <span class="truncate">{item.newValue ?? item.oldValue ?? '—'}</span>
+                  {/if}
+                </span>
+                <span class="text-2xs text-on-surface-variant shrink-0">{relativeDays(item.recordedAt)}</span>
+              </div>
+            {/each}
+            <div class="pt-2 border-t border-outline-variant">
+              <Button size="sm" variant="ghost" class="w-full justify-center" onclick={() => openCase('identite')}>{m.mcm_see_more()}</Button>
+            </div>
           </div>
         </SectionCard>
       {/if}

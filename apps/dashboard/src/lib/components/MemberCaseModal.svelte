@@ -122,6 +122,55 @@
   let messagesLoading = $state(false);
   let messagesChannels = $state<any[]>([]);
 
+  // --- FILTRES DE L'HISTORIQUE D'IDENTITÉ ---
+  let historyFilter = $state<string>('all');
+  const historyList = $derived(caseData?.history ?? []);
+  const filteredHistory = $derived.by(() => {
+    if (historyFilter === 'all') return historyList;
+    return historyList.filter((item) => item.field === historyFilter);
+  });
+  const historyCounts = $derived.by(() => {
+    const counts: Record<string, number> = {
+      all: historyList.length,
+      username: 0,
+      displayName: 0,
+      avatar: 0,
+      bio: 0,
+      tag: 0,
+      pronouns: 0,
+    };
+    for (const item of historyList) {
+      if (item.field in counts) {
+        counts[item.field] = (counts[item.field] ?? 0) + 1;
+      }
+    }
+    return counts;
+  });
+
+  function historyFieldIcon(field: string): string {
+    switch (field) {
+      case 'username': return 'user';
+      case 'displayName': return 'badge-check';
+      case 'avatar': return 'image';
+      case 'bio': return 'align-left';
+      case 'tag': return 'tag';
+      case 'pronouns': return 'heart';
+      default: return 'edit';
+    }
+  }
+
+  function historyFieldLabel(field: string): string {
+    switch (field) {
+      case 'username': return m.mcm_history_username();
+      case 'displayName': return m.mcm_history_displayName();
+      case 'avatar': return m.mcm_history_avatar();
+      case 'bio': return m.mcm_history_bio();
+      case 'tag': return m.mcm_history_tag();
+      case 'pronouns': return m.mcm_history_pronouns();
+      default: return field;
+    }
+  }
+
   // --- FILTRES DE L'ONGLET LOGS ---
   // Les logs arrivent deja entiers dans caseData (le serveur en plafonne le
   // nombre), le filtrage est donc local et instantane : pas d'aller-retour.
@@ -1405,6 +1454,110 @@
                       </div>
                     {:else}
                       <p class="text-sm text-on-surface-variant">{m.mcm_no_role()}</p>
+                    {/if}
+                  </SectionCard>
+                </div>
+
+                <div class="md:col-span-2">
+                  <SectionCard title={m.mcm_identity_history()} description={m.mcm_identity_history_desc()}>
+                    <!-- Filtres -->
+                    <div class="mb-4 flex flex-wrap items-center gap-1.5 border-b border-outline-variant pb-3">
+                      {#each [
+                        { id: 'all', label: m.mcm_history_all(), icon: 'history', count: historyCounts.all },
+                        { id: 'username', label: m.mcm_history_username(), icon: 'user', count: historyCounts.username },
+                        { id: 'displayName', label: m.mcm_history_displayName(), icon: 'badge-check', count: historyCounts.displayName },
+                        { id: 'avatar', label: m.mcm_history_avatar(), icon: 'image', count: historyCounts.avatar },
+                        { id: 'bio', label: m.mcm_history_bio(), icon: 'align-left', count: historyCounts.bio },
+                        { id: 'tag', label: m.mcm_history_tag(), icon: 'tag', count: historyCounts.tag },
+                        { id: 'pronouns', label: m.mcm_history_pronouns(), icon: 'heart', count: historyCounts.pronouns },
+                      ] as filter (filter.id)}
+                        <button
+                          type="button"
+                          class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors {historyFilter === filter.id ? 'bg-primary text-on-primary' : 'bg-surface-container text-on-surface hover:bg-surface-container-high'}"
+                          onclick={() => (historyFilter = filter.id)}
+                        >
+                          <Papicon icon={filter.icon} size={12} />
+                          <span>{filter.label}</span>
+                          {#if filter.count > 0}
+                            <span class="rounded-full px-1.5 py-0.2 text-2xs {historyFilter === filter.id ? 'bg-white/20 text-white' : 'bg-surface-container-high text-on-surface-variant'}">{filter.count}</span>
+                          {/if}
+                        </button>
+                      {/each}
+                    </div>
+
+                    {#if filteredHistory.length === 0}
+                      <EmptyState
+                        icon="history"
+                        title={m.mcm_history_empty()}
+                        description={m.mcm_history_empty_desc()}
+                      />
+                    {:else}
+                      <ul class="space-y-3">
+                        {#each filteredHistory as item (item.id)}
+                          <li class="flex flex-col gap-2 rounded-xl border border-outline-variant bg-surface-container-low p-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div class="flex items-start gap-3 min-w-0 flex-1">
+                              <span class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-surface-container text-on-surface-variant">
+                                <Papicon icon={historyFieldIcon(item.field)} size={14} />
+                              </span>
+                              <div class="min-w-0 flex-1">
+                                <div class="flex items-center gap-2">
+                                  <span class="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">{historyFieldLabel(item.field)}</span>
+                                  <span class="text-2xs text-on-surface-variant">·</span>
+                                  <time class="text-xs text-on-surface-variant" datetime={item.recordedAt}>{formatDateTime(item.recordedAt)}</time>
+                                </div>
+                                <div class="mt-1.5 flex flex-wrap items-center gap-2 text-sm text-on-surface">
+                                  {#if item.field === 'avatar'}
+                                    <div class="flex items-center gap-3">
+                                      {#if item.oldValue}
+                                        <div class="flex flex-col items-center gap-1">
+                                          <img src={item.oldValue} alt="" class="h-10 w-10 rounded-full border border-outline-variant object-cover" />
+                                          <span class="text-2xs text-on-surface-variant">{m.mcm_history_old_value()}</span>
+                                        </div>
+                                      {:else}
+                                        <span class="text-xs italic text-on-surface-variant">{m.mcm_history_old_value()} : —</span>
+                                      {/if}
+                                      <Papicon icon="arrow-right" size={14} class="text-on-surface-variant shrink-0" />
+                                      {#if item.newValue}
+                                        <div class="flex flex-col items-center gap-1">
+                                          <img src={item.newValue} alt="" class="h-10 w-10 rounded-full border border-primary/40 object-cover" />
+                                          <span class="text-2xs text-primary font-medium">{m.mcm_history_new_value()}</span>
+                                        </div>
+                                      {:else}
+                                        <span class="text-xs italic text-on-surface-variant">{m.mcm_history_new_value()} : —</span>
+                                      {/if}
+                                    </div>
+                                  {:else if item.field === 'username'}
+                                    <span class="line-through text-on-surface-variant">@{item.oldValue ?? '—'}</span>
+                                    <Papicon icon="arrow-right" size={12} class="text-on-surface-variant shrink-0" />
+                                    <span class="font-medium text-primary">@{item.newValue ?? '—'}</span>
+                                  {:else if item.field === 'bio'}
+                                    <div class="w-full space-y-1">
+                                      {#if item.oldValue}
+                                        <p class="text-xs text-on-surface-variant line-through italic">« {item.oldValue} »</p>
+                                      {/if}
+                                      {#if item.newValue}
+                                        <p class="text-xs text-on-surface font-medium italic">« {item.newValue} »</p>
+                                      {/if}
+                                    </div>
+                                  {:else if item.field === 'tag'}
+                                    <span class="inline-flex items-center gap-1 rounded bg-surface-container px-2 py-0.5 text-xs text-on-surface-variant line-through">{item.oldValue ?? '—'}</span>
+                                    <Papicon icon="arrow-right" size={12} class="text-on-surface-variant shrink-0" />
+                                    <span class="inline-flex items-center gap-1 rounded bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">{item.newValue ?? '—'}</span>
+                                  {:else if item.field === 'pronouns'}
+                                    <span class="inline-flex rounded-full bg-surface-container px-2.5 py-0.5 text-xs text-on-surface-variant line-through">{item.oldValue ?? '—'}</span>
+                                    <Papicon icon="arrow-right" size={12} class="text-on-surface-variant shrink-0" />
+                                    <span class="inline-flex rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary">{item.newValue ?? '—'}</span>
+                                  {:else}
+                                    <span class="line-through text-on-surface-variant">{item.oldValue ?? '—'}</span>
+                                    <Papicon icon="arrow-right" size={12} class="text-on-surface-variant shrink-0" />
+                                    <span class="font-medium text-primary">{item.newValue ?? '—'}</span>
+                                  {/if}
+                                </div>
+                              </div>
+                            </div>
+                          </li>
+                        {/each}
+                      </ul>
                     {/if}
                   </SectionCard>
                 </div>

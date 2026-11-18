@@ -104,6 +104,39 @@ function candidaturesOf(person: DemoPerson): MemberCaseResponse['candidatures'] 
   return [];
 }
 
+function historyOf(person: DemoPerson): NonNullable<MemberCaseResponse['history']> {
+  const list: NonNullable<MemberCaseResponse['history']> = [];
+  if (person.username === 'arka') {
+    list.push(
+      { id: 'h-arka-1', field: 'username', oldValue: 'arka_old', newValue: 'arka', recordedAt: ago(45 * DAY) },
+      { id: 'h-arka-2', field: 'displayName', oldValue: 'Arka Dev', newValue: 'Arka', recordedAt: ago(30 * DAY) },
+      { id: 'h-arka-3', field: 'avatar', oldValue: 'https://cdn.discordapp.com/embed/avatars/0.png', newValue: 'https://cdn.discordapp.com/embed/avatars/1.png', recordedAt: ago(25 * DAY) },
+      { id: 'h-arka-4', field: 'bio', oldValue: 'Dev passionné', newValue: 'Dev TypeScript & bot Discord', recordedAt: ago(20 * DAY) },
+      { id: 'h-arka-5', field: 'tag', oldValue: 'DEV', newValue: 'KODA', recordedAt: ago(15 * DAY) },
+      { id: 'h-arka-6', field: 'pronouns', oldValue: 'il', newValue: 'il/lui', recordedAt: ago(10 * DAY) },
+    );
+  } else if (person.username === 'lena') {
+    list.push(
+      { id: 'h-lena-1', field: 'displayName', oldValue: 'Helena', newValue: 'Lena', recordedAt: ago(60 * DAY) },
+      { id: 'h-lena-2', field: 'avatar', oldValue: 'https://cdn.discordapp.com/embed/avatars/2.png', newValue: 'https://cdn.discordapp.com/embed/avatars/3.png', recordedAt: ago(35 * DAY) },
+      { id: 'h-lena-3', field: 'pronouns', oldValue: 'she/her', newValue: 'elle', recordedAt: ago(20 * DAY) },
+      { id: 'h-lena-4', field: 'bio', oldValue: null, newValue: 'Animatrice & modératrice', recordedAt: ago(12 * DAY) },
+    );
+  } else if (person.username === 'vantar') {
+    list.push(
+      { id: 'h-van-1', field: 'username', oldValue: 'shadow_vantar', newValue: 'vantar', recordedAt: ago(90 * DAY) },
+      { id: 'h-van-2', field: 'displayName', oldValue: 'Shadow', newValue: 'Vantar', recordedAt: ago(50 * DAY) },
+      { id: 'h-van-3', field: 'tag', oldValue: 'NONE', newValue: 'DEVH', recordedAt: ago(25 * DAY) },
+      { id: 'h-van-4', field: 'avatar', oldValue: 'https://cdn.discordapp.com/embed/avatars/4.png', newValue: 'https://cdn.discordapp.com/embed/avatars/5.png', recordedAt: ago(10 * DAY) },
+    );
+  } else {
+    list.push(
+      { id: `h-${person.id}-1`, field: 'displayName', oldValue: `${person.displayName} [Ancien]`, newValue: person.displayName, recordedAt: ago(40 * DAY) },
+    );
+  }
+  return list;
+}
+
 function reportsFor(sanctions: SanctionItem[]): SanctionReportItem[] {
   return sanctions
     .filter((s) => s.type !== 'WARN' || s.id.endsWith('501'))
@@ -324,6 +357,7 @@ export function registerMembersRoutes(): void {
           cooldownUntil: null,
         }
         : { entries: [], total: 0, lastRequestedAt: null, lastVerifiedAt: null, hasPending: false, cooldownUntil: null },
+      history: historyOf(person),
     };
 
     return response;
