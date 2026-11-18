@@ -9,7 +9,6 @@ import { auditGlobalAdminWrite, evaluateGuildGate } from './dashboard/guildGate.
 import { handleGeneralRoutes, handleGuildGeneralRoutes } from './dashboard/general.js';
 import { handleAnalyticsRoutes } from './dashboard/analytics.js';
 import { handleMembersRoutes } from './dashboard/members.js';
-import { handleLeadershipRoutes, handleGuildLeadershipRoutes } from './dashboard/leadership.js';
 import { handleGeneralistModulesRoutes } from './dashboard/generalistModules.js';
 import { handleClansRoutes } from './dashboard/clans.js';
 import { getCachedFeatureAccess } from './dashboard/featureGate.js';
@@ -40,9 +39,6 @@ export async function handleDashboardRoutes(
 
   // 4. Try general, non-guild-specific routes first (translate, list guilds, staff profile snapshots)
   if (await handleGeneralRoutes(req, res, parts, url, client, user)) {
-    return true;
-  }
-  if (await handleLeadershipRoutes(req, res, parts, url, client, user)) {
     return true;
   }
 
@@ -77,10 +73,6 @@ export async function handleDashboardRoutes(
         if (method !== 'GET') await cache.invalidateGuild(guildId);
         return true;
       }
-    }
-    if (await handleGuildLeadershipRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
-      if (method !== 'GET') await cache.invalidateGuild(guildId);
-      return true;
     }
     // Avant les modules généralistes, qui portent le reste du segment `automod`.
     // `access` et non `effectiveAccess` : la route doit savoir si le droit de

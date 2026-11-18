@@ -7,6 +7,7 @@
 import { Hono } from 'hono';
 import { compress } from 'hono/compress';
 import type { Client } from 'discord.js';
+import { createLeadershipRouter } from '../../routes/dashboard/leadership.js';
 import { createStaffRouter } from '../../routes/dashboard/leadership/staff.js';
 import { createTutoringRouter } from '../../routes/dashboard/leadership/tutoring.js';
 import { createDoingListsRouter } from '../../routes/dashboard/doingLists.js';
@@ -177,5 +178,6 @@ export function createDashboardRouter(client: Client) {
   router.route('/', createDoingListsRouter(client));
   router.route('/', createTutoringRouter(client));
   router.route('/', createStaffRouter(client));
+  router.route('/', createLeadershipRouter(client));
   return router;
 }
