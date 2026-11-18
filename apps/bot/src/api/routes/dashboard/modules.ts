@@ -10,7 +10,6 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Client } from 'discord.js';
 import type { AuthClaims, DashboardAccess } from '../../shared.js';
 import type { ModuleRouteContext } from './modules/_shared.js';
-import { handleSanctionsRoutes } from './modules/sanctions.js';
 import { handleChannelsManagementRoutes } from './modules/channels-management.js';
 import { handleTicketsRoutes } from './modules/tickets.js';
 
@@ -31,7 +30,6 @@ export async function handleModulesRoutes(
   const ctx: ModuleRouteContext = { req, res, parts, url, client, user, guildId, access, method, auditUser, moduleKey };
 
   switch (moduleKey) {
-    case 'sanctions': return handleSanctionsRoutes(ctx);
     case 'channels-management': return handleChannelsManagementRoutes(ctx);
     case 'tickets': return handleTicketsRoutes(ctx);
     default: return false;

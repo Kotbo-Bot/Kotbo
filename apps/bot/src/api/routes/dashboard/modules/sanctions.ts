@@ -1,4 +1,6 @@
 /** Routes dashboard du module `sanctions`. */
+import { Hono, type Context } from 'hono';
+import type { Client } from 'discord.js';
 import { generateTranscriptFromMessages } from '../../../../services/features/transcriptService.js';
 import { formatSanctionDurationLabel, registerImportedSanction } from '../../../../services/moderation/sanctionService.js';
 import {
@@ -10,44 +12,49 @@ import {
 import prisma from '../../../../utils/db.js';
 import { logger } from '../../../../utils/logger.js';
 import { EVIDENCE_CHANNEL_CONCURRENCY, type FetchedEvidenceChannel, fetchUserMessagesInChannel, MAX_EVIDENCE_MESSAGES, parseEvidenceLinks, resolveEvidenceChannel, serializeEvidenceMessage } from '../../../evidence.js';
-import { getAuditActor, getGuildName, json, pushAudit, readJsonBody, resolveMemberFeatureAccess } from '../../../shared.js';
+import { getAuditActor, getGuildName, pushAudit, resolveMemberFeatureAccess } from '../../../shared.js';
 import { SanctionType } from '@prisma/client';
 import { ChannelType, type Message, PermissionFlagsBits, TextChannel } from 'discord.js';
 import pLimit from 'p-limit';
-import { type DashboardSanctionType, type ModuleRouteContext, normalizeBrokenRulesPayload, toSanctionType, verifyMagicBytes } from './_shared.js';
+import { type DashboardSanctionType, normalizeBrokenRulesPayload, toSanctionType, verifyMagicBytes } from './_shared.js';
 
-import { jsonFailure } from '../../../shared/failure.js';
-export async function handleSanctionsRoutes(ctx: ModuleRouteContext): Promise<boolean> {
-  const { req, res, parts, url, client, user, guildId, access, method, auditUser, moduleKey } = ctx;
+import { auditUserOf, fail, guildRoute, readBody, send } from '../../../hono/dashboard/kit.js';
+export function createSanctionsRouter(client: Client) {
+  const router = new Hono();
+  const base = '/api/dashboard/guilds/:guildId';
+  const gate = guildRoute(client);
 
-  /**
-   * Ecrire un rapport de sanction demande le droit de moderer « Sanctions ».
-   *
-   * La regle d avant ne regardait que l auteur du rapport : un compte a qui le
-   * centre de gestion n accorde que la lecture pouvait encore creer un rapport
-   * et modifier les siens, depuis la page Sanctions comme depuis le dossier
-   * membre. `!== false` laisse la moderation Discord trancher quand le serveur
-   * n a pose aucune regle de role sur la fonctionnalite.
-   */
-  const canModerateSanctions = async (): Promise<boolean> => {
-    if (access.canManageSettings) return true;
-    const featureAccess = await resolveMemberFeatureAccess(client, guildId, access, user.userId);
-    if (featureAccess.sanctions?.canModerate === true) return true;
-    return access.canModerateContent && featureAccess.sanctions?.canModerate !== false;
-  };
+  const helpers = (c: Context) => ({
+    /**
+     * Ecrire un rapport de sanction demande le droit de moderer « Sanctions ».
+     *
+     * La regle d avant ne regardait que l auteur du rapport : un compte a qui le
+     * centre de gestion n accorde que la lecture pouvait encore creer un rapport
+     * et modifier les siens, depuis la page Sanctions comme depuis le dossier
+     * membre. `!== false` laisse la moderation Discord trancher quand le serveur
+     * n a pose aucune regle de role sur la fonctionnalite.
+     */
+    canModerateSanctions: async (): Promise<boolean> => {
+      const access = c.var.effectiveAccess;
+      if (access.canManageSettings) return true;
+      const featureAccess = await resolveMemberFeatureAccess(client, c.req.param('guildId')!, access, c.var.dashboardUser.userId);
+      if (featureAccess.sanctions?.canModerate === true) return true;
+      return access.canModerateContent && featureAccess.sanctions?.canModerate !== false;
+    },
+  });
 
-  // PUT /api/dashboard/guilds/:guildId/sanctions/tables
-  if (moduleKey === 'sanctions' && parts.length === 6 && parts[5] === 'tables' && method === 'PUT') {
+  router.put(`${base}/sanctions/tables`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const access = c.var.effectiveAccess;
+    const auditUser = auditUserOf(c);
     try {
-      const tables = await readJsonBody<Record<string, unknown>[]>(req);
+      const tables = await readBody<Record<string, unknown>[]>(c);
       if (!Array.isArray(tables)) {
-        json(res, 400, { error: 'Payload invalide. Doit être un tableau.' });
-        return true;
+        return send(c, { error: 'Payload invalide. Doit être un tableau.' }, 400);
       }
 
       if (!access.canManageSettings) {
-        json(res, 403, { error: 'Permissions insuffisantes pour modifier la configuration.' });
-        return true;
+        return send(c, { error: 'Permissions insuffisantes pour modifier la configuration.' }, 403);
       }
 
       // La validation ci-dessous produit une structure typee reutilisee plus bas :
@@ -65,21 +72,18 @@ export async function handleSanctionsRoutes(ctx: ModuleRouteContext): Promise<bo
 
       for (const table of tables) {
         if (typeof table.name !== 'string' || !table.name.trim()) {
-          json(res, 400, { error: 'Chaque tableau doit avoir un nom valide.' });
-          return true;
+          return send(c, { error: 'Chaque tableau doit avoir un nom valide.' }, 400);
         }
         const tableName = table.name;
         if (!Array.isArray(table.tiers)) {
-          json(res, 400, { error: `Le tableau "${tableName}" doit avoir une liste de paliers.` });
-          return true;
+          return send(c, { error: `Le tableau "${tableName}" doit avoir une liste de paliers.` }, 400);
         }
         const rawTiers = table.tiers as Record<string, unknown>[];
         const levels = rawTiers.map((t) => Number(t.level));
         levels.sort((a, b) => a - b);
         for (let i = 0; i < levels.length; i++) {
           if (levels[i] !== i + 1) {
-            json(res, 400, { error: `Les paliers du tableau "${tableName}" doivent être séquentiels et commencer par le niveau 1.` });
-            return true;
+            return send(c, { error: `Les paliers du tableau "${tableName}" doivent être séquentiels et commencer par le niveau 1.` }, 400);
           }
         }
 
@@ -87,15 +91,13 @@ export async function handleSanctionsRoutes(ctx: ModuleRouteContext): Promise<bo
         for (const tier of rawTiers) {
           const action = String(tier.action) as SanctionType;
           if (!['WARN', 'KICK', 'TIMEOUT', 'TEMP_BAN', 'BAN', 'SOFTBAN'].includes(action)) {
-            json(res, 400, { error: `Action invalide "${action}" dans le tableau "${tableName}".` });
-            return true;
+            return send(c, { error: `Action invalide "${action}" dans le tableau "${tableName}".` }, 400);
           }
           let durationSeconds: number | null = null;
           if (['TIMEOUT', 'TEMP_BAN'].includes(action)) {
             const secs = Number(tier.durationSeconds);
             if (Number.isNaN(secs) || secs <= 0) {
-              json(res, 400, { error: `Le palier de niveau ${tier.level} (${action}) du tableau "${tableName}" requiert une durée positive valide.` });
-              return true;
+              return send(c, { error: `Le palier de niveau ${tier.level} (${action}) du tableau "${tableName}" requiert une durée positive valide.` }, 400);
             }
             durationSeconds = secs;
           }
@@ -179,50 +181,47 @@ export async function handleSanctionsRoutes(ctx: ModuleRouteContext): Promise<bo
         channelId: null,
       });
 
-      json(res, 200, { ok: true });
+      return send(c, { ok: true });
     } catch (err) {
       logger.error('SanctionsAPI', 'Error updating sanction tables:', err);
-      jsonFailure(res, err, 'Erreur lors de la mise à jour des tableaux de sanction', 'SanctionsAPI');
+      return fail(c, err, 'Erreur lors de la mise à jour des tableaux de sanction', 'SanctionsAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/sanctions/bulk
   //
   // Actions groupées sur une sélection de sanctions :
   //   archive / unarchive : désactiver (ou réactiver) en gardant la trace
   //   lock / unlock       : retirer (ou rendre) le droit de contester
   //   delete              : purger définitivement (administrateurs seulement)
-  if (moduleKey === 'sanctions' && parts.length === 6 && parts[5] === 'bulk' && method === 'POST') {
+  router.post(`${base}/sanctions/bulk`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const access = c.var.effectiveAccess;
+    const auditUser = auditUserOf(c);
     if (!access.canModerateContent) {
-      json(res, 403, { error: 'Permissions insuffisantes pour gérer les infractions.' });
-      return true;
+      return send(c, { error: 'Permissions insuffisantes pour gérer les infractions.' }, 403);
     }
 
     try {
-      const body = await readJsonBody<{ action?: string; sanctionIds?: unknown; reason?: string }>(req);
+      const body = await readBody<{ action?: string; sanctionIds?: unknown; reason?: string }>(c);
       const action = body?.action;
       const ids = Array.isArray(body?.sanctionIds)
         ? (body.sanctionIds as unknown[]).filter((id): id is string => typeof id === 'string' && id.length > 0)
         : [];
 
       if (!action || !['archive', 'unarchive', 'lock', 'unlock', 'delete'].includes(action)) {
-        json(res, 400, { error: 'Action invalide.' });
-        return true;
+        return send(c, { error: 'Action invalide.' }, 400);
       }
       if (ids.length === 0) {
-        json(res, 400, { error: 'Aucune infraction sélectionnée.' });
-        return true;
+        return send(c, { error: 'Aucune infraction sélectionnée.' }, 400);
       }
       if (ids.length > 200) {
-        json(res, 400, { error: 'Sélection trop large (200 infractions maximum).' });
-        return true;
+        return send(c, { error: 'Sélection trop large (200 infractions maximum).' }, 400);
       }
       // La suppression est irréversible : elle reste réservée aux admins, comme
       // la suppression unitaire existante.
       if (action === 'delete' && access.level !== 'admin') {
-        json(res, 403, { error: 'Seuls les administrateurs peuvent supprimer une infraction.' });
-        return true;
+        return send(c, { error: 'Seuls les administrateurs peuvent supprimer une infraction.' }, 403);
       }
 
       const actor = { userId: user.userId, tag: auditUser };
@@ -253,22 +252,22 @@ export async function handleSanctionsRoutes(ctx: ModuleRouteContext): Promise<bo
         channelId: null,
       });
 
-      json(res, 200, { ok: true, count: result.count });
+      return send(c, { ok: true, count: result.count });
     } catch (err) {
       logger.error('SanctionsAPI', 'Error running bulk sanction action:', err);
-      jsonFailure(res, err, "Erreur lors de l'action groupée", 'SanctionsAPI');
+      return fail(c, err, "Erreur lors de l'action groupée", 'SanctionsAPI');
     }
-    return true;
-  }
+  });
 
-  // DELETE /api/dashboard/guilds/:guildId/sanctions/:sanctionId
-  if (moduleKey === 'sanctions' && parts.length === 6 && method === 'DELETE' && parts[5] !== 'reports') {
+  router.delete(`${base}/sanctions/:sanctionId`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const access = c.var.effectiveAccess;
+    const auditUser = auditUserOf(c);
     if (access.level !== 'admin') {
-      json(res, 403, { error: 'Seuls les administrateurs peuvent supprimer une infraction.' });
-      return true;
+      return send(c, { error: 'Seuls les administrateurs peuvent supprimer une infraction.' }, 403);
     }
 
-    const sanctionId = parts[5];
+    const sanctionId = c.req.param('sanctionId');
     try {
       const sanction = await prisma.sanction.findFirst({
         where: { id: sanctionId, guildId },
@@ -281,8 +280,7 @@ export async function handleSanctionsRoutes(ctx: ModuleRouteContext): Promise<bo
       });
 
       if (!sanction) {
-        json(res, 404, { error: 'Infraction introuvable sur ce serveur.' });
-        return true;
+        return send(c, { error: 'Infraction introuvable sur ce serveur.' }, 404);
       }
 
       await prisma.sanction.delete({ where: { id: sanction.id } });
@@ -297,23 +295,24 @@ export async function handleSanctionsRoutes(ctx: ModuleRouteContext): Promise<bo
         channelId: null
       });
 
-      json(res, 200, { ok: true });
+      return send(c, { ok: true });
     } catch (err) {
       logger.error('SanctionsAPI', 'Error deleting sanction:', err);
-      jsonFailure(res, err, "Erreur lors de la suppression de l'infraction", 'SanctionsAPI');
+      return fail(c, err, "Erreur lors de la suppression de l'infraction", 'SanctionsAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/sanctions/import
-  if (moduleKey === 'sanctions' && parts.length === 6 && parts[5] === 'import' && method === 'POST') {
+  router.post(`${base}/sanctions/import`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const access = c.var.effectiveAccess;
+    const auditUser = auditUserOf(c);
     if (!access.canModerateContent) {
-      json(res, 403, { error: 'Permissions insuffisantes pour importer des sanctions.' });
-      return true;
+      return send(c, { error: 'Permissions insuffisantes pour importer des sanctions.' }, 403);
     }
 
     try {
-      const body = await readJsonBody<{
+      const body = await readBody<{
         source?: string;
         rows?: Array<{
           type?: string;
@@ -325,16 +324,14 @@ export async function handleSanctionsRoutes(ctx: ModuleRouteContext): Promise<bo
           createdAt?: string;
           durationSeconds?: number | null;
         }>;
-      }>(req);
+      }>(c);
 
       const rows = Array.isArray(body?.rows) ? body!.rows! : null;
       if (!rows || rows.length === 0) {
-        json(res, 400, { error: 'Aucune ligne à importer.' });
-        return true;
+        return send(c, { error: 'Aucune ligne à importer.' }, 400);
       }
       if (rows.length > 1000) {
-        json(res, 400, { error: 'Maximum 1000 sanctions par import. Divisez votre fichier en plusieurs lots.' });
-        return true;
+        return send(c, { error: 'Maximum 1000 sanctions par import. Divisez votre fichier en plusieurs lots.' }, 400);
       }
 
       const sourceLabel = body?.source?.trim() || undefined;
@@ -417,27 +414,27 @@ export async function handleSanctionsRoutes(ctx: ModuleRouteContext): Promise<bo
         channelId: null
       });
 
-      json(res, 200, { ok: true, imported, skippedDuplicates, errors });
+      return send(c, { ok: true, imported, skippedDuplicates, errors });
     } catch (err) {
       logger.error('SanctionsAPI', 'Error importing sanctions:', err);
-      jsonFailure(res, err, "Erreur lors de l'import des sanctions.", 'SanctionsAPI');
+      return fail(c, err, "Erreur lors de l'import des sanctions.", 'SanctionsAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/sanctions/evidence-files
-  if (moduleKey === 'sanctions' && parts.length === 6 && parts[5] === 'evidence-files' && method === 'POST') {
+  router.post(`${base}/sanctions/evidence-files`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const { canModerateSanctions } = helpers(c);
     if (!(await canModerateSanctions())) {
-      json(res, 403, { error: 'Action non autorisée. Modération des sanctions requise.' });
-      return true;
+      return send(c, { error: 'Action non autorisée. Modération des sanctions requise.' }, 403);
     }
     try {
-      const body = await readJsonBody<{
+      const body = await readBody<{
         sanctionId?: string | null;
         fileName?: string;
         mimeType?: string;
         data?: string; // base64 encoded
-      }>(req);
+      }>(c);
 
       const sanctionId = body?.sanctionId?.trim() || null;
       const fileName = body?.fileName?.trim() || 'unnamed_file';
@@ -445,8 +442,7 @@ export async function handleSanctionsRoutes(ctx: ModuleRouteContext): Promise<bo
       const dataStr = body?.data || '';
 
       if (!mimeType || !dataStr) {
-        json(res, 400, { error: 'mimeType et data sont requis.' });
-        return true;
+        return send(c, { error: 'mimeType et data sont requis.' }, 400);
       }
 
       // Valider le type MIME
@@ -456,8 +452,7 @@ export async function handleSanctionsRoutes(ctx: ModuleRouteContext): Promise<bo
         'video/mp4', 'video/webm', 'video/quicktime'
       ];
       if (!allowedMimes.includes(mimeType)) {
-        json(res, 400, { error: `Type de fichier non autorisé : ${mimeType}. Veuillez utiliser une image (PNG, JPEG, GIF, WEBP), un PDF ou une vidéo (MP4, WEBM, MOV).` });
-        return true;
+        return send(c, { error: `Type de fichier non autorisé : ${mimeType}. Veuillez utiliser une image (PNG, JPEG, GIF, WEBP), un PDF ou une vidéo (MP4, WEBM, MOV).` }, 400);
       }
 
       // Convertir base64 en buffer et valider la taille
@@ -465,20 +460,17 @@ export async function handleSanctionsRoutes(ctx: ModuleRouteContext): Promise<bo
       try {
         buffer = Buffer.from(dataStr, 'base64');
       } catch {
-        json(res, 400, { error: 'Données de fichier encodées en base64 invalides.' });
-        return true;
+        return send(c, { error: 'Données de fichier encodées en base64 invalides.' }, 400);
       }
 
       const fileSize = buffer.length;
       if (fileSize > 10 * 1024 * 1024) {
-        json(res, 400, { error: 'La taille maximale par fichier est de 10 Mo.' });
-        return true;
+        return send(c, { error: 'La taille maximale par fichier est de 10 Mo.' }, 400);
       }
 
       // Vérifier les magic bytes
       if (!verifyMagicBytes(buffer, mimeType)) {
-        json(res, 400, { error: `La signature du fichier ne correspond pas au type MIME déclaré (${mimeType}).` });
-        return true;
+        return send(c, { error: `La signature du fichier ne correspond pas au type MIME déclaré (${mimeType}).` }, 400);
       }
 
       // Si sanctionId est fourni, vérifier qu'elle existe
@@ -487,8 +479,7 @@ export async function handleSanctionsRoutes(ctx: ModuleRouteContext): Promise<bo
           where: { id: sanctionId, guildId }
         });
         if (!sanction) {
-          json(res, 404, { error: 'Sanction liée introuvable.' });
-          return true;
+          return send(c, { error: 'Sanction liée introuvable.' }, 404);
         }
 
         // Limite de 6 fichiers max par sanction
@@ -496,8 +487,7 @@ export async function handleSanctionsRoutes(ctx: ModuleRouteContext): Promise<bo
           where: { sanctionId }
         });
         if (existingCount >= 6) {
-          json(res, 400, { error: 'Limite de 6 fichiers de preuve par sanction atteinte.' });
-          return true;
+          return send(c, { error: 'Limite de 6 fichiers de preuve par sanction atteinte.' }, 400);
         }
       }
 
@@ -509,11 +499,10 @@ export async function handleSanctionsRoutes(ctx: ModuleRouteContext): Promise<bo
       const totalExistingSize = totalExistingSizeResult._sum.size ?? 0;
       const limitBytes = 50 * 1024 * 1024; // 50 Mo
       if (totalExistingSize + fileSize > limitBytes) {
-        json(res, 400, {
+        return send(c, {
           error: "Quota de stockage de preuves dépassé (50 Mo maximum par serveur). Veuillez passer à une offre payante/premium pour augmenter cette limite.",
           quotaExceeded: true
-        });
-        return true;
+        }, 400);
       }
 
       // Création de l'enregistrement en base
@@ -529,20 +518,19 @@ export async function handleSanctionsRoutes(ctx: ModuleRouteContext): Promise<bo
         }
       });
 
-      json(res, 201, { ok: true, id: file.id });
+      return send(c, { ok: true, id: file.id }, 201);
     } catch (err: unknown) {
       logger.error('SanctionsAPI', 'Error uploading evidence file:', err);
-      json(res, 500, { error: "Erreur lors de l'upload du fichier de preuve." });
+      return send(c, { error: "Erreur lors de l'upload du fichier de preuve." }, 500);
     }
-    return true;
-  }
+  });
 
-  // GET /api/dashboard/guilds/:guildId/sanctions/evidence-files/:fileId/signed-url
-  if (moduleKey === 'sanctions' && parts.length === 8 && parts[5] === 'evidence-files' && parts[7] === 'signed-url' && method === 'GET') {
-    const fileId = parts[6];
+  router.get(`${base}/sanctions/evidence-files/:reportId/signed-url`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const reportId = c.req.param('reportId');
+    const fileId = reportId;
     if (!/^[a-zA-Z0-9_-]+$/.test(fileId)) {
-      json(res, 400, { error: 'ID de fichier invalide' });
-      return true;
+      return send(c, { error: 'ID de fichier invalide' }, 400);
     }
     try {
       const file = await prisma.sanctionEvidenceFile.findFirst({
@@ -550,52 +538,51 @@ export async function handleSanctionsRoutes(ctx: ModuleRouteContext): Promise<bo
         select: { id: true }
       });
       if (!file) {
-        json(res, 404, { error: 'Fichier introuvable.' });
-        return true;
+        return send(c, { error: 'Fichier introuvable.' }, 404);
       }
       const { generateEvidenceFileSignature } = await import('@kotbo/core');
       const { expires, signature } = generateEvidenceFileSignature(fileId, 3600);
       const signedUrl = `/api/public/sanction-evidence/${fileId}?expires=${expires}&sig=${signature}`;
-      json(res, 200, { signedUrl });
+      return send(c, { signedUrl });
     } catch (err: unknown) {
       logger.error('SanctionsAPI', `Error generating signed evidence URL: ${(err as Error).message}`);
-      json(res, 500, { error: 'Erreur lors de la génération du lien signé.' });
+      return send(c, { error: 'Erreur lors de la génération du lien signé.' }, 500);
     }
-    return true;
-  }
+  });
 
-  // DELETE /api/dashboard/guilds/:guildId/sanctions/evidence-files/:fileId
-  if (moduleKey === 'sanctions' && parts.length === 7 && parts[5] === 'evidence-files' && method === 'DELETE') {
-    const fileId = parts[6];
+  router.delete(`${base}/sanctions/evidence-files/:reportId`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const reportId = c.req.param('reportId');
+    const { canModerateSanctions } = helpers(c);
+    const fileId = reportId;
     if (!(await canModerateSanctions())) {
-      json(res, 403, { error: 'Action non autorisée. Modération des sanctions requise.' });
-      return true;
+      return send(c, { error: 'Action non autorisée. Modération des sanctions requise.' }, 403);
     }
     try {
       const file = await prisma.sanctionEvidenceFile.findFirst({
         where: { id: fileId, guildId }
       });
       if (!file) {
-        json(res, 404, { error: 'Fichier introuvable.' });
-        return true;
+        return send(c, { error: 'Fichier introuvable.' }, 404);
       }
       await prisma.sanctionEvidenceFile.delete({ where: { id: fileId } });
-      json(res, 200, { ok: true });
+      return send(c, { ok: true });
     } catch (err: unknown) {
       logger.error('SanctionsAPI', 'Error deleting evidence file:', err);
-      json(res, 500, { error: 'Erreur lors de la suppression du fichier.' });
+      return send(c, { error: 'Erreur lors de la suppression du fichier.' }, 500);
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/sanctions/reports
-  if (moduleKey === 'sanctions' && parts.length === 6 && parts[5] === 'reports' && method === 'POST') {
+  router.post(`${base}/sanctions/reports`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const auditUser = auditUserOf(c);
+    const { canModerateSanctions } = helpers(c);
     if (!(await canModerateSanctions())) {
-      json(res, 403, { error: 'Action non autorisée. Modération des sanctions requise.' });
-      return true;
+      return send(c, { error: 'Action non autorisée. Modération des sanctions requise.' }, 403);
     }
     try {
-      const body = await readJsonBody<{
+      const body = await readBody<{
         sanctionId?: string | null;
         staffPseudo?: string;
         incidentAt?: string;
@@ -607,7 +594,7 @@ export async function handleSanctionsRoutes(ctx: ModuleRouteContext): Promise<bo
         detailedReason?: string;
         evidenceLinks?: unknown;
         additionalNotes?: string | null;
-      }>(req);
+      }>(c);
 
       const sanctionId = body?.sanctionId?.trim() ?? '';
       const brokenRules = normalizeBrokenRulesPayload(body?.brokenRules?.trim() ?? '');
@@ -616,35 +603,29 @@ export async function handleSanctionsRoutes(ctx: ModuleRouteContext): Promise<bo
       const incidentAt = body?.incidentAt ? new Date(body.incidentAt) : null;
 
       if (!sanctionId) {
-        json(res, 400, { error: 'La sanction liée est obligatoire pour créer un rapport.' });
-        return true;
+        return send(c, { error: 'La sanction liée est obligatoire pour créer un rapport.' }, 400);
       }
 
       if (!incidentAt || Number.isNaN(incidentAt.getTime())) {
-        json(res, 400, { error: "Date/heure de l'incident invalide." });
-        return true;
+        return send(c, { error: "Date/heure de l'incident invalide." }, 400);
       }
 
       if (evidenceLinks.length === 0) {
-        json(res, 400, { error: 'Au moins un lien de preuve valide est obligatoire.' });
-        return true;
+        return send(c, { error: 'Au moins un lien de preuve valide est obligatoire.' }, 400);
       }
 
       const sanction = await prisma.sanction.findFirst({ where: { id: sanctionId, guildId } });
       if (!sanction) {
-        json(res, 404, { error: 'Sanction liée introuvable sur ce serveur.' });
-        return true;
+        return send(c, { error: 'Sanction liée introuvable sur ce serveur.' }, 404);
       }
 
       if (sanction.moderatorUserId !== user.userId) {
-        json(res, 403, { error: 'Seule la personne qui a appliqué la sanction peut créer ce rapport.' });
-        return true;
+        return send(c, { error: 'Seule la personne qui a appliqué la sanction peut créer ce rapport.' }, 403);
       }
 
       const existingReport = await prisma.sanctionReport.findFirst({ where: { guildId, sanctionId } });
       if (existingReport) {
-        json(res, 409, { error: 'Un rapport existe déjà pour cette sanction.' });
-        return true;
+        return send(c, { error: 'Un rapport existe déjà pour cette sanction.' }, 409);
       }
 
       const staffPseudo = sanction.moderatorTag?.trim() || body?.staffPseudo?.trim() || getAuditActor(user);
@@ -657,8 +638,7 @@ export async function handleSanctionsRoutes(ctx: ModuleRouteContext): Promise<bo
       const finalDetailedReason = detailedReason || sanction.reason;
 
       if (!finalBrokenRules || !finalDetailedReason) {
-        json(res, 400, { error: 'Les champs de contenu du rapport sont obligatoires.' });
-        return true;
+        return send(c, { error: 'Les champs de contenu du rapport sont obligatoires.' }, 400);
       }
 
       const report = await prisma.sanctionReport.create({
@@ -701,20 +681,22 @@ export async function handleSanctionsRoutes(ctx: ModuleRouteContext): Promise<bo
         channelId: null
       });
 
-      json(res, 201, { ok: true, reportId: report.id });
+      return send(c, { ok: true, reportId: report.id }, 201);
     } catch (err) {
       logger.error('SanctionsAPI', 'Error creating report:', err);
-      jsonFailure(res, err, 'Erreur lors de la création du rapport', 'SanctionsAPI');
+      return fail(c, err, 'Erreur lors de la création du rapport', 'SanctionsAPI');
     }
-    return true;
-  }
+  });
 
-  // PATCH /api/dashboard/guilds/:guildId/sanctions/reports/:reportId
-  if (moduleKey === 'sanctions' && parts.length === 7 && parts[5] === 'reports' && method === 'PATCH') {
-    const reportId = parts[6];
+  router.patch(`${base}/sanctions/reports/:reportId`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const access = c.var.effectiveAccess;
+    const auditUser = auditUserOf(c);
+    const { canModerateSanctions } = helpers(c);
+    const reportId = c.req.param('reportId');
     if (!(await canModerateSanctions())) {
-      json(res, 403, { error: 'Action non autorisée. Modération des sanctions requise.' });
-      return true;
+      return send(c, { error: 'Action non autorisée. Modération des sanctions requise.' }, 403);
     }
     try {
       const existingReport = await prisma.sanctionReport.findFirst({
@@ -722,21 +704,19 @@ export async function handleSanctionsRoutes(ctx: ModuleRouteContext): Promise<bo
       });
 
       if (!existingReport) {
-        json(res, 404, { error: 'Rapport introuvable.' });
-        return true;
+        return send(c, { error: 'Rapport introuvable.' }, 404);
       }
 
       if (existingReport.createdByUserId !== user.userId && access.level !== 'admin') {
-        json(res, 403, { error: "Seul l'auteur du rapport ou un administrateur peut le modifier." });
-        return true;
+        return send(c, { error: "Seul l'auteur du rapport ou un administrateur peut le modifier." }, 403);
       }
 
-      const body = await readJsonBody<{
+      const body = await readBody<{
         brokenRules?: string;
         detailedReason?: string;
         evidenceLinks?: unknown;
         additionalNotes?: string | null;
-      }>(req);
+      }>(c);
 
       const updatedBrokenRules = body?.brokenRules !== undefined 
         ? normalizeBrokenRulesPayload(body.brokenRules.trim()) 
@@ -755,13 +735,11 @@ export async function handleSanctionsRoutes(ctx: ModuleRouteContext): Promise<bo
         : existingReport.additionalNotes;
 
       if (!updatedBrokenRules || !updatedDetailedReason) {
-        json(res, 400, { error: 'Les champs de contenu du rapport sont obligatoires.' });
-        return true;
+        return send(c, { error: 'Les champs de contenu du rapport sont obligatoires.' }, 400);
       }
 
       if (Array.isArray(updatedEvidenceLinks) && updatedEvidenceLinks.length === 0) {
-        json(res, 400, { error: 'Au moins un lien de preuve valide est obligatoire.' });
-        return true;
+        return send(c, { error: 'Au moins un lien de preuve valide est obligatoire.' }, 400);
       }
 
       const updatedReport = await prisma.sanctionReport.update({
@@ -792,43 +770,40 @@ export async function handleSanctionsRoutes(ctx: ModuleRouteContext): Promise<bo
         channelId: null
       });
 
-      json(res, 200, { ok: true });
+      return send(c, { ok: true });
     } catch (err) {
       logger.error('SanctionsAPI', 'Error patching report:', err);
-      jsonFailure(res, err, 'Erreur lors de la modification du rapport', 'SanctionsAPI');
+      return fail(c, err, 'Erreur lors de la modification du rapport', 'SanctionsAPI');
     }
-    return true;
-  }
+  });
 
-  // GET /api/dashboard/guilds/:guildId/sanctions/reports/discord-messages
-  if (moduleKey === 'sanctions' && parts.length === 7 && parts[5] === 'reports' && parts[6] === 'discord-messages' && method === 'GET') {
+  router.get(`${base}/sanctions/reports/discord-messages`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const access = c.var.effectiveAccess;
     try {
-      const sanctionId = url.searchParams.get('sanctionId')?.trim() ?? '';
-      const requestedLimit = Number.parseInt(url.searchParams.get('limit') ?? '', 10);
+      const sanctionId = (c.req.query('sanctionId') ?? null)?.trim() ?? '';
+      const requestedLimit = Number.parseInt(c.req.query('limit') ?? '', 10);
       const messageLimit = Number.isFinite(requestedLimit)
         ? Math.min(Math.max(requestedLimit, 1), MAX_EVIDENCE_MESSAGES)
         : 50;
 
       if (!sanctionId) {
-        json(res, 400, { error: 'sanctionId est obligatoire.' });
-        return true;
+        return send(c, { error: 'sanctionId est obligatoire.' }, 400);
       }
 
       const sanction = await prisma.sanction.findFirst({ where: { id: sanctionId, guildId } });
       if (!sanction) {
-        json(res, 404, { error: 'Sanction introuvable sur ce serveur.' });
-        return true;
+        return send(c, { error: 'Sanction introuvable sur ce serveur.' }, 404);
       }
 
       if (sanction.moderatorUserId !== user.userId && access.level !== 'admin') {
-        json(res, 403, { error: 'Seule la personne qui a appliqué la sanction peut importer des preuves.' });
-        return true;
+        return send(c, { error: 'Seule la personne qui a appliqué la sanction peut importer des preuves.' }, 403);
       }
 
       const guild = client.guilds.cache.get(guildId);
       if (!guild) {
-        json(res, 404, { error: 'Serveur Discord introuvable.' });
-        return true;
+        return send(c, { error: 'Serveur Discord introuvable.' }, 404);
       }
 
       const me = guild.members.me;
@@ -885,7 +860,7 @@ export async function handleSanctionsRoutes(ctx: ModuleRouteContext): Promise<bo
         .filter((channel) => channel.messages.length > 0)
         .sort((a, b) => a.channelName.localeCompare(b.channelName, 'fr'));
 
-      json(res, 200, {
+      return send(c, {
         targetTag: sanction.targetTag,
         channels,
         messageCount: newestMessages.length,
@@ -895,52 +870,49 @@ export async function handleSanctionsRoutes(ctx: ModuleRouteContext): Promise<bo
       });
     } catch (err) {
       logger.error('SanctionsAPI', 'Error listing discord evidence messages:', err);
-      jsonFailure(res, err, 'Erreur lors de la récupération des messages Discord', 'SanctionsAPI');
+      return fail(c, err, 'Erreur lors de la récupération des messages Discord', 'SanctionsAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/sanctions/reports/discord-transcripts
-  if (moduleKey === 'sanctions' && parts.length === 7 && parts[5] === 'reports' && parts[6] === 'discord-transcripts' && method === 'POST') {
+  router.post(`${base}/sanctions/reports/discord-transcripts`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const access = c.var.effectiveAccess;
+    const auditUser = auditUserOf(c);
+    const { canModerateSanctions } = helpers(c);
     if (!(await canModerateSanctions())) {
-      json(res, 403, { error: 'Action non autorisée. Modération des sanctions requise.' });
-      return true;
+      return send(c, { error: 'Action non autorisée. Modération des sanctions requise.' }, 403);
     }
     try {
-      const body = await readJsonBody<{
+      const body = await readBody<{
         sanctionId?: string;
         selections?: Array<{ channelId?: string; messageIds?: string[] }>;
-      }>(req);
+      }>(c);
 
       const sanctionId = body?.sanctionId?.trim() ?? '';
       if (!sanctionId) {
-        json(res, 400, { error: 'sanctionId est obligatoire.' });
-        return true;
+        return send(c, { error: 'sanctionId est obligatoire.' }, 400);
       }
 
       const selections = Array.isArray(body?.selections) ? body.selections : [];
       if (selections.length === 0) {
-        json(res, 400, { error: 'Aucun message sélectionné.' });
-        return true;
+        return send(c, { error: 'Aucun message sélectionné.' }, 400);
       }
 
       const totalSelectedMessages = selections.reduce((total, selection) => (
         total + (Array.isArray(selection?.messageIds) ? selection.messageIds.length : 0)
       ), 0);
       if (totalSelectedMessages > MAX_EVIDENCE_MESSAGES) {
-        json(res, 400, { error: `Maximum ${MAX_EVIDENCE_MESSAGES} messages par transcription.` });
-        return true;
+        return send(c, { error: `Maximum ${MAX_EVIDENCE_MESSAGES} messages par transcription.` }, 400);
       }
 
       const sanction = await prisma.sanction.findFirst({ where: { id: sanctionId, guildId } });
       if (!sanction) {
-        json(res, 404, { error: 'Sanction introuvable sur ce serveur.' });
-        return true;
+        return send(c, { error: 'Sanction introuvable sur ce serveur.' }, 404);
       }
 
       if (sanction.moderatorUserId !== user.userId && access.level !== 'admin') {
-        json(res, 403, { error: 'Seule la personne qui a appliqué la sanction peut importer des preuves.' });
-        return true;
+        return send(c, { error: 'Seule la personne qui a appliqué la sanction peut importer des preuves.' }, 403);
       }
 
       const dashboardUrl = process.env.DASHBOARD_URL || 'http://localhost:5173';
@@ -997,13 +969,13 @@ export async function handleSanctionsRoutes(ctx: ModuleRouteContext): Promise<bo
         }
       }));
 
-      json(res, 200, { results, errors });
+      return send(c, { results, errors });
     } catch (err) {
       logger.error('SanctionsAPI', 'Error generating discord evidence transcripts:', err);
-      jsonFailure(res, err, 'Erreur lors de la génération des transcriptions', 'SanctionsAPI');
+      return fail(c, err, 'Erreur lors de la génération des transcriptions', 'SanctionsAPI');
     }
-    return true;
-  }
+  });
 
-  return false;
+  return router;
 }
+
