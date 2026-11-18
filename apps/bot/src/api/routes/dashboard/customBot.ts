@@ -1,4 +1,5 @@
-import { IncomingMessage, ServerResponse } from 'node:http';
+import { Hono } from 'hono';
+import { createMiddleware } from 'hono/factory';
 import { Client, PermissionFlagsBits } from 'discord.js';
 import type { CustomBotConfig } from '@prisma/client';
 import { comparePlans, normalizePlanKey } from '@kotbo/contracts';
@@ -9,7 +10,7 @@ import { fetchExternal } from '../../../utils/http.js';
 import { SecretBoxUnavailableError, openSecret, sealSecret } from '../../../utils/secretBox.js';
 import { getDefaultInstance } from '../../../utils/instanceResolver.js';
 import { refreshGuildOwnership } from '../../../utils/guildOwnership.js';
-import { jsonFailure } from '../../shared/failure.js';
+import { fail, guildRoute, readBody, send } from '../../hono/dashboard/kit.js';
 import { cloudflareSaasEnabled, removeCloudflareHostname } from '../../../services/system/cloudflareHostnames.js';
 import {
   checkCustomDomainDns,
@@ -31,13 +32,7 @@ import {
   leaveGuild,
   provisionCustomInstance,
 } from '../../../services/system/customBotInstance.js';
-import {
-  json,
-  readJsonBody,
-  resolveDashboardAccess,
-  pushAudit,
-  type AuthClaims,
-} from '../../shared.js';
+import { pushAudit, type AuthClaims } from '../../shared.js';
 
 /** Préfixe des secrets masqués renvoyés au dashboard. */
 const MASK = '••••';
@@ -156,50 +151,38 @@ function audit(guildId: string, user: AuthClaims, action: string, details: strin
   });
 }
 
-export async function handleCustomBotRoutes(
-  req: IncomingMessage,
-  res: ServerResponse,
-  parts: string[],
-  url: URL,
-  client: Client,
-  user: AuthClaims
-): Promise<boolean> {
-  const method = req.method;
+export function createCustomBotRouter(client: Client) {
+  const router = new Hono();
+  const base = '/api/dashboard/guilds/:guildId';
+  const customBotAccess = createMiddleware(async (c, next) => {
+    if (!c.var.access.canManageSettings) {
+      return send(c, { error: 'Accès refusé - droits administrateur requis' }, 403);
+    }
+    // Arrêter et revenir à Kotbo restent permis sans l'offre : un serveur repassé
+    // sur une autre offre doit pouvoir couper un bot lancé du temps où il y avait droit.
+    const method = c.req.method;
+    const isStop = method === 'POST' && /\/custom-bot\/(stop|revert)$/.test(c.req.path);
+    const isRead = method === 'GET' && c.req.path.endsWith('/custom-bot');
+    if (!isRead && !isStop && !(await hasCustomPlan(c.req.param('guildId')!))) {
+      return send(c, {
+        error: 'L\'identité du bot est réservée à l\'offre Plus (ou sur mesure).',
+        code: 'plan_required',
+      }, 403);
+    }
+    await next();
+  });
+  const gate = [...guildRoute(client, { invalidateCache: false }), customBotAccess] as const;
 
-  if (parts[4] !== 'custom-bot') {
-    return false;
-  }
 
-  const guildId = parts[3];
-
-  const access = await resolveDashboardAccess(client, guildId, user.userId);
-  if (!access.canManageSettings) {
-    json(res, 403, { error: 'Accès refusé - droits administrateur requis' });
-    return true;
-  }
-
-  // Arrêter et revenir à Kotbo restent permis sans l'offre : un serveur repassé
-  // sur une autre offre doit pouvoir couper un bot lancé du temps où il y avait droit.
-  const isStop = parts.length === 6 && (parts[5] === 'stop' || parts[5] === 'revert') && method === 'POST';
-  const allowed = await hasCustomPlan(guildId);
-
-  if (!allowed && !(parts.length === 5 && method === 'GET') && !isStop) {
-    json(res, 403, {
-      error: 'L\'identité du bot est réservée à l\'offre Plus (ou sur mesure).',
-      code: 'plan_required',
-    });
-    return true;
-  }
-
-  // GET /api/dashboard/guilds/:guildId/custom-bot
-  if (parts.length === 5 && method === 'GET') {
+  router.get(`${base}/custom-bot`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
     try {
       // Sans l'offre, rien n'est créé : la page, verrouillée, s'ouvrait sinon en
       // écrivant une ligne vide pour chaque serveur qui la visitait.
+      const allowed = await hasCustomPlan(guildId);
       if (!allowed) {
         const running = await prisma.customBotConfig.findUnique({ where: { guildId }, select: { isRunning: true } });
-        json(res, 200, { allowed: false, config: null, isRunning: running?.isRunning ?? false });
-        return true;
+        return send(c, { allowed: false, config: null, isRunning: running?.isRunning ?? false });
       }
 
       const config = await upsertRetryingRace(() => prisma.customBotConfig.upsert({
@@ -208,19 +191,19 @@ export async function handleCustomBotRoutes(
         create: { guildId },
       }));
 
-      json(res, 200, { allowed: true, config: serializeConfig(config), ownBot: await ownBotState(guildId, config) });
+      return send(c, { allowed: true, config: serializeConfig(config), ownBot: await ownBotState(guildId, config) });
     } catch (err) {
       logger.error('CustomBot', 'GET config error:', err);
-      jsonFailure(res, err, 'Erreur lors de la récupération de la config', 'CustomBot');
+      return fail(c, err, 'Erreur lors de la récupération de la config', 'CustomBot');
     }
-    return true;
-  }
+  });
 
-  // PATCH /api/dashboard/guilds/:guildId/custom-bot
-  if (parts.length === 5 && method === 'PATCH') {
+  router.patch(`${base}/custom-bot`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
     try {
-      const body = await readJsonBody(req);
-      if (!body) { json(res, 400, { error: 'Body JSON requis' }); return true; }
+      const body = await readBody(c);
+      if (!body) { return send(c, { error: 'Body JSON requis' }, 400); }
 
       const allowedFields = [
         'enabled', 'botToken', 'botClientId', 'botClientSecret',
@@ -241,8 +224,7 @@ export async function handleCustomBotRoutes(
         }
 
         if (value !== null && typeof value !== 'string') {
-          json(res, 400, { error: `Champ ${field} invalide` });
-          return true;
+          return send(c, { error: `Champ ${field} invalide` }, 400);
         }
         const text = typeof value === 'string' ? value.trim() : '';
 
@@ -257,8 +239,7 @@ export async function handleCustomBotRoutes(
           }
           const host = normalizeCustomDomain(text);
           if (!host) {
-            json(res, 400, { error: 'Domaine invalide : saisis un nom de domaine comme panel.monserveur.fr.' });
-            return true;
+            return send(c, { error: 'Domaine invalide : saisis un nom de domaine comme panel.monserveur.fr.' }, 400);
           }
           updateData[field] = host;
           continue;
@@ -272,8 +253,7 @@ export async function handleCustomBotRoutes(
           }
           const isData = text.startsWith('data:');
           if (isData ? text.length > MAX_IMAGE_FIELD_LENGTH || !parseDataImage(text) : !/^https:\/\//i.test(text) || text.length > MAX_TEXT_LENGTH) {
-            json(res, 400, { error: 'Image invalide : un lien https ou un fichier PNG, JPEG, GIF ou WebP de 8 Mo maximum.' });
-            return true;
+            return send(c, { error: 'Image invalide : un lien https ou un fichier PNG, JPEG, GIF ou WebP de 8 Mo maximum.' }, 400);
           }
           updateData[field] = text;
           continue;
@@ -288,16 +268,14 @@ export async function handleCustomBotRoutes(
             continue;
           }
           if (text.length > MAX_SECRET_LENGTH) {
-            json(res, 400, { error: `Champ ${field} trop long` });
-            return true;
+            return send(c, { error: `Champ ${field} trop long` }, 400);
           }
           updateData[field] = sealSecret(text);
           continue;
         }
 
         if (text.length > MAX_TEXT_LENGTH) {
-          json(res, 400, { error: `Champ ${field} trop long` });
-          return true;
+          return send(c, { error: `Champ ${field} trop long` }, 400);
         }
         updateData[field] = field === 'botBio' ? text.slice(0, 190) || null : text || null;
       }
@@ -308,16 +286,14 @@ export async function handleCustomBotRoutes(
         && (typeof updateData.botStatus !== 'string'
           || !['ONLINE', 'IDLE', 'DND', 'INVISIBLE'].includes(updateData.botStatus))
       ) {
-        json(res, 400, { error: 'Statut invalide' });
-        return true;
+        return send(c, { error: 'Statut invalide' }, 400);
       }
       if (
         updateData.activityType != null
         && (typeof updateData.activityType !== 'string'
           || !['NONE', 'PLAYING', 'STREAMING', 'LISTENING', 'WATCHING', 'COMPETING'].includes(updateData.activityType))
       ) {
-        json(res, 400, { error: 'Type d\'activité invalide' });
-        return true;
+        return send(c, { error: 'Type d\'activité invalide' }, 400);
       }
 
       const before = await prisma.customBotConfig.findUnique({ where: { guildId } });
@@ -328,8 +304,7 @@ export async function handleCustomBotRoutes(
         const instance = await findCustomInstance(guildId);
         const guild = await prisma.guild.findUnique({ where: { id: guildId }, select: { instanceId: true } });
         if (instance && guild?.instanceId === instance.id) {
-          json(res, 409, { error: 'Ton bot sert ce serveur : reviens d\'abord à Kotbo avant de le désactiver.' });
-          return true;
+          return send(c, { error: 'Ton bot sert ce serveur : reviens d\'abord à Kotbo avant de le désactiver.' }, 409);
         }
       }
 
@@ -347,8 +322,7 @@ export async function handleCustomBotRoutes(
         });
       } catch (err) {
         if ((err as { code?: string })?.code === 'P2002') {
-          json(res, 409, { error: 'Ce domaine est déjà utilisé par un autre serveur.' });
-          return true;
+          return send(c, { error: 'Ce domaine est déjà utilisé par un autre serveur.' }, 409);
         }
         throw err;
       }
@@ -380,30 +354,27 @@ export async function handleCustomBotRoutes(
       }
 
       audit(guildId, user, 'Mise à jour Custom Bot', 'Mise à jour de la configuration du bot personnalisé.');
-      json(res, 200, { allowed: true, config: serializeConfig(config), profileErrors });
+      return send(c, { allowed: true, config: serializeConfig(config), profileErrors });
     } catch (err) {
       if (err instanceof SecretBoxUnavailableError) {
         logger.error('CustomBot', err.message);
-        json(res, 503, { error: 'Le stockage sécurisé des secrets n\'est pas configuré sur ce serveur Kotbo.' });
-        return true;
+        return send(c, { error: 'Le stockage sécurisé des secrets n\'est pas configuré sur ce serveur Kotbo.' }, 503);
       }
       logger.error('CustomBot', 'PATCH config error:', err);
-      jsonFailure(res, err, 'Erreur lors de la mise à jour', 'CustomBot');
+      return fail(c, err, 'Erreur lors de la mise à jour', 'CustomBot');
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/custom-bot/domain/verify - Contrôle DNS du domaine perso
-  if (parts.length === 7 && parts[5] === 'domain' && parts[6] === 'verify' && method === 'POST') {
+  router.post(`${base}/custom-bot/domain/verify`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
     try {
       const current = await prisma.customBotConfig.findUnique({ where: { guildId } });
       if (!current?.customDashboardUrl) {
-        json(res, 400, { error: "Enregistre d'abord un domaine." });
-        return true;
+        return send(c, { error: "Enregistre d'abord un domaine." }, 400);
       }
       if (!customDomainTarget()) {
-        json(res, 503, { error: 'Les domaines perso ne sont pas encore ouverts sur cette instance Kotbo.' });
-        return true;
+        return send(c, { error: 'Les domaines perso ne sont pas encore ouverts sur cette instance Kotbo.' }, 503);
       }
       const checks = await checkCustomDomainDns(current.customDashboardUrl, guildId);
       const verified = checks.txt && checks.pointing;
@@ -415,23 +386,20 @@ export async function handleCustomBotRoutes(
       if (verified && !current.customDomainVerifiedAt) {
         audit(guildId, user, 'Domaine perso vérifié', `Domaine ${current.customDashboardUrl} vérifié.`);
       }
-      json(res, 200, { checks, verified, config: serializeConfig(config) });
+      return send(c, { checks, verified, config: serializeConfig(config) });
     } catch (err) {
       logger.error('CustomBot', 'Domain verify error:', err);
-      jsonFailure(res, err, 'Erreur lors de la vérification du domaine', 'CustomBot');
+      return fail(c, err, 'Erreur lors de la vérification du domaine', 'CustomBot');
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/custom-bot/validate - Test token validity
-  if (parts.length === 6 && parts[5] === 'validate' && method === 'POST') {
+  router.post(`${base}/custom-bot/validate`, ...gate, async (c) => {
     try {
-      const body = await readJsonBody(req);
+      const body = await readBody(c);
       const token = typeof body?.botToken === 'string' ? body.botToken.trim() : '';
 
       if (!token || token.length > MAX_SECRET_LENGTH) {
-        json(res, 400, { error: 'Token requis' });
-        return true;
+        return send(c, { error: 'Token requis' }, 400);
       }
 
       const response = await fetchExternal('https://discord.com/api/v10/users/@me', {
@@ -439,12 +407,11 @@ export async function handleCustomBotRoutes(
       });
 
       if (!response.ok) {
-        json(res, 200, { valid: false, error: 'Token invalide ou expiré' });
-        return true;
+        return send(c, { valid: false, error: 'Token invalide ou expiré' });
       }
 
       const botUser = await response.json() as { id: string; username: string; avatar: string | null; discriminator: string };
-      json(res, 200, {
+      return send(c, {
         valid: true,
         bot: {
           id: botUser.id,
@@ -456,28 +423,25 @@ export async function handleCustomBotRoutes(
       });
     } catch (err) {
       logger.error('CustomBot', 'Token validation error:', err);
-      json(res, 200, { valid: false, error: 'Erreur de validation' });
+      return send(c, { valid: false, error: 'Erreur de validation' });
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/custom-bot/start - Lance (ou relance) l'instance du bot du serveur
-  if (parts.length === 6 && parts[5] === 'start' && method === 'POST') {
+  router.post(`${base}/custom-bot/start`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
     try {
       const config = await prisma.customBotConfig.findUnique({ where: { guildId } });
       if (!config?.botToken || !config.enabled) {
-        json(res, 400, { error: 'Active d\'abord ton bot et connecte-le avec son token.' });
-        return true;
+        return send(c, { error: 'Active d\'abord ton bot et connecte-le avec son token.' }, 400);
       }
       if (!plainToken(config)) {
-        json(res, 400, { error: 'Le token enregistré est illisible : ressaisis-le puis relance.' });
-        return true;
+        return send(c, { error: 'Le token enregistré est illisible : ressaisis-le puis relance.' }, 400);
       }
       // Hors gestionnaire de shards, personne ne recevrait la demande : le bot
       // était pourtant marqué en ligne.
       if (!client.shard) {
-        json(res, 503, { error: 'Démarrage impossible : le bot ne tourne pas sous le gestionnaire de shards.' });
-        return true;
+        return send(c, { error: 'Démarrage impossible : le bot ne tourne pas sous le gestionnaire de shards.' }, 503);
       }
 
       const instance = await provisionCustomInstance(guildId, user.userId);
@@ -486,27 +450,25 @@ export async function handleCustomBotRoutes(
       await prisma.customBotConfig.update({ where: { guildId }, data: { lastError: null } });
 
       audit(guildId, user, 'Démarrage Custom Bot', 'Démarrage du bot personnalisé demandé.', 'Système');
-      json(res, 200, { ok: true, message: 'Démarrage en cours...' });
+      return send(c, { ok: true, message: 'Démarrage en cours...' });
     } catch (err) {
       if (err instanceof SecretBoxUnavailableError) {
         logger.error('CustomBot', err.message);
-        json(res, 503, { error: 'Le stockage sécurisé des secrets n\'est pas configuré sur ce serveur Kotbo.' });
-        return true;
+        return send(c, { error: 'Le stockage sécurisé des secrets n\'est pas configuré sur ce serveur Kotbo.' }, 503);
       }
       logger.error('CustomBot', 'Start error:', err);
-      jsonFailure(res, err, 'Erreur lors du démarrage', 'CustomBot');
+      return fail(c, err, 'Erreur lors du démarrage', 'CustomBot');
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/custom-bot/stop - Arrête l'instance
-  if (parts.length === 6 && parts[5] === 'stop' && method === 'POST') {
+  router.post(`${base}/custom-bot/stop`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
     try {
       const instance = await findCustomInstance(guildId);
       const guild = await prisma.guild.findUnique({ where: { id: guildId }, select: { instanceId: true } });
       if (instance && guild?.instanceId === instance.id) {
-        json(res, 409, { error: 'Ton bot sert ce serveur : reviens d\'abord à Kotbo avant de l\'arrêter.' });
-        return true;
+        return send(c, { error: 'Ton bot sert ce serveur : reviens d\'abord à Kotbo avant de l\'arrêter.' }, 409);
       }
       if (instance) {
         await prisma.whiteLabelInstance.update({ where: { id: instance.id }, data: { enabled: false } });
@@ -515,26 +477,24 @@ export async function handleCustomBotRoutes(
       await prisma.customBotConfig.updateMany({ where: { guildId }, data: { isRunning: false } });
 
       audit(guildId, user, 'Arrêt Custom Bot', 'Arrêt du bot personnalisé demandé.', 'Système');
-      json(res, 200, { ok: true });
+      return send(c, { ok: true });
     } catch (err) {
       logger.error('CustomBot', 'Stop error:', err);
-      jsonFailure(res, err, 'Erreur lors de l\'arrêt', 'CustomBot');
+      return fail(c, err, 'Erreur lors de l\'arrêt', 'CustomBot');
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/custom-bot/switch - Le bot du serveur prend le relais, Kotbo s'en va
-  if (parts.length === 6 && parts[5] === 'switch' && method === 'POST') {
+  router.post(`${base}/custom-bot/switch`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
     try {
       const config = await prisma.customBotConfig.findUnique({ where: { guildId } });
       const instance = await findCustomInstance(guildId);
       if (!config?.enabled || !config.isRunning || !instance) {
-        json(res, 400, { error: 'Démarre d\'abord ton bot.' });
-        return true;
+        return send(c, { error: 'Démarre d\'abord ton bot.' }, 400);
       }
       if (!(await botIsMember(plainToken(config), guildId))) {
-        json(res, 400, { error: 'Ton bot n\'est pas encore sur le serveur : invite-le d\'abord.' });
-        return true;
+        return send(c, { error: 'Ton bot n\'est pas encore sur le serveur : invite-le d\'abord.' }, 400);
       }
       // Le domaine est optionnel : sans lui, le serveur n'a plus de dashboard après la bascule (dashboardUrl null).
       const servedHost = config.customDashboardUrl && customDomainForHost(config.customDashboardUrl)?.guildId === guildId
@@ -546,16 +506,16 @@ export async function handleCustomBotRoutes(
       await leaveGuild(getDefaultInstance().discordToken, guildId);
 
       audit(guildId, user, 'Bascule vers le bot perso', 'Le bot du serveur prend le relais, Kotbo a quitté le serveur.', 'Système');
-      json(res, 200, { ok: true, dashboardUrl: servedHost ? `https://${servedHost}` : null });
+      return send(c, { ok: true, dashboardUrl: servedHost ? `https://${servedHost}` : null });
     } catch (err) {
       logger.error('CustomBot', 'Switch error:', err);
-      jsonFailure(res, err, 'Erreur lors de la bascule', 'CustomBot');
+      return fail(c, err, 'Erreur lors de la bascule', 'CustomBot');
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/custom-bot/revert - Kotbo reprend le serveur
-  if (parts.length === 6 && parts[5] === 'revert' && method === 'POST') {
+  router.post(`${base}/custom-bot/revert`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
     try {
       await prisma.guild.updateMany({ where: { id: guildId }, data: { instanceId: null } });
       const instance = await findCustomInstance(guildId);
@@ -567,13 +527,13 @@ export async function handleCustomBotRoutes(
       await Promise.all([refreshGuildOwnership(), refreshCustomDomains()]);
 
       audit(guildId, user, 'Retour à Kotbo', 'Kotbo reprend le serveur, le bot perso est arrêté.', 'Système');
-      json(res, 200, { ok: true });
+      return send(c, { ok: true });
     } catch (err) {
       logger.error('CustomBot', 'Revert error:', err);
-      jsonFailure(res, err, 'Erreur lors du retour à Kotbo', 'CustomBot');
+      return fail(c, err, 'Erreur lors du retour à Kotbo', 'CustomBot');
     }
-    return true;
-  }
+  });
 
-  return false;
+  return router;
 }
+
