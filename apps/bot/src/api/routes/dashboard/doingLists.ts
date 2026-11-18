@@ -30,7 +30,6 @@ import {
   type DoingListEventKind,
 } from '../../../services/staff/doingListBoard.js';
 
-const SEGMENT = 'doing-lists';
 const LOG = 'DoingListsAPI';
 const NAME_MAX = 80;
 const DESCRIPTION_MAX = 500;
