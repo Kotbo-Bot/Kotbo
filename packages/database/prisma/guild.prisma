@@ -85,41 +85,6 @@ model Guild {
   nickModDiscordAutoModSync    Boolean   @default(false)
   bannedWords              BannedWord[]
 
-  dailyAlgoEnabled         Boolean @default(false)
-  dailyAlgoChannelId       String?
-  dailyAlgoValidationChannelId String?
-  dailyAlgoTime            String  @default("09:00") // HH:MM
-  // Fuseau de référence du module : détermine la journée, la semaine ISO et
-  // quels jours comptent comme week-end. `dailyAlgoTime` reste interprété en UTC
-  // pour l'heure d'envoi, comme avant.
-  dailyAlgoTimezone        String  @default("Europe/Paris")
-
-  // ── Barème de points ───────────────────────────────────────────────────────
-  // Points garantis pour toute soumission approuvée, même mal notée.
-  dailyAlgoParticipationPoints Int   @default(1)
-  dailyAlgoWeekendMultiplier   Float @default(1.5)
-
-  // ── Semaine compétitive & podium ───────────────────────────────────────────
-  dailyAlgoWeeklyRewardsEnabled Boolean @default(false)
-  // Rôles du podium : facultatifs. Laisser vide = aucun rôle attribué, les
-  // autres récompenses de la semaine fonctionnent quand même.
-  dailyAlgoWeekRole1Id          String?
-  dailyAlgoWeekRole2Id          String?
-  dailyAlgoWeekRole3Id          String?
-  // Retire les rôles du podium précédent à chaque clôture.
-  dailyAlgoWeekRoleRotate       Boolean @default(true)
-  dailyAlgoWeekXp1              Int @default(500)
-  dailyAlgoWeekXp2              Int @default(300)
-  dailyAlgoWeekXp3              Int @default(150)
-  // XP versée à tout membre ayant au moins une soumission approuvée dans la semaine.
-  dailyAlgoWeekParticipationXp  Int @default(100)
-  dailyAlgoWeekAnnouncementChannelId String?
-
-  // ── Sanction depuis la notation ────────────────────────────────────────────
-  dailyAlgoSanctionType            String @default("WARN") // WARN | TIMEOUT
-  dailyAlgoSanctionWeight          Int    @default(1)
-  dailyAlgoSanctionDurationMinutes Int    @default(60)
-
   githubReleasesEnabled    Boolean @default(false)
   githubReleasesChannelId  String?
   githubRepositories       String[] @default(["facebook/react", "docker/compose", "microsoft/typescript", "vercel/next.js", "sveltejs/svelte"])
@@ -353,18 +318,6 @@ model Guild {
   clanRewardXpBoostRate Float @default(1.2)
   clanRewardLeaderRole Boolean @default(false)
 
-  // ── Pont Daily Algo → Clans ────────────────────────────────────────────────
-  // Troisième interrupteur, indépendant de `clansEnabled` et `dailyAlgoEnabled` :
-  // les deux modules fonctionnent seuls, ce réglage ne fait que les relier.
-  // À la clôture hebdomadaire, chaque participant convertit ses points de la
-  // semaine en points de clan (1 pour 1 par défaut).
-  clanPointsFromDailyAlgo     Boolean @default(false)
-  clanPointsFromDailyAlgoRate Float   @default(1.0)
-  // Bonus forfaitaires versés au clan du podium, en plus de la conversion.
-  clanPointsDailyAlgoTop1     Int @default(30)
-  clanPointsDailyAlgoTop2     Int @default(20)
-  clanPointsDailyAlgoTop3     Int @default(10)
-
   // ── Pont RPG → Clans ───────────────────────────────────────────────────────
   // Même logique que le pont Daily Algo : un interrupteur à part, pour qu'un
   // serveur puisse couper l'apport du RPG au classement des clans sans avoir à
@@ -429,9 +382,6 @@ model Guild {
 
   newsArticles NewsArticle[]
   newsCategoryConfigs NewsCategoryConfig[]
-  dailyAlgoRuns DailyAlgoRun[]
-  dailyAlgoWeeks DailyAlgoWeek[]
-  dailyAlgoBonusPoints DailyAlgoBonusPoint[]
   dashboardSettings DashboardSettings?
   dashboardAuditLogs DashboardAuditLog[]
   sanctions Sanction[]
