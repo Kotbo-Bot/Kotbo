@@ -538,6 +538,7 @@ export function createMembersRouter(client: Client) {
         guildJoinedAt: string | null;
         guildLeftAt: string | null;
         isOnServer: boolean;
+        presenceStatus?: string | null;
       };
 
       // Certaines lignes de profil sont créées sans identité (détection de
@@ -553,9 +554,15 @@ export function createMembersRouter(client: Client) {
         return new Map<string, { username: string; displayName: string; avatarUrl: string }>();
       });
 
+      // Même statut que la fiche membre : null si le suivi est refusé ou inconnu.
+      const presenceOptOuts = await findPresenceOptOuts(guildId, result.members.map((m) => m.userId));
+      const livePresence = (userId: string) =>
+        presenceOptOuts.has(userId) ? null : discordGuild?.members.cache.get(userId)?.presence?.status ?? null;
+
       let members: MemberListEntry[] = result.members.map((m) => {
         const identity = m.username ? undefined : identities.get(m.userId);
         return {
+          presenceStatus: m.guildLeftAt ? 'left' : livePresence(m.userId),
           id: m.userId,
           username: m.username ?? identity?.username ?? 'Utilisateur inconnu',
           displayName: m.displayName ?? identity?.displayName ?? m.username ?? 'Utilisateur inconnu',
@@ -573,6 +580,7 @@ export function createMembersRouter(client: Client) {
       if (members.length === 0 && searchQuery && discordGuild && serverStatus !== 'left') {
         const discordResults = await discordGuild.members.search({ query: searchQuery, limit }).catch(() => null);
         if (discordResults && discordResults.size > 0) {
+          const fallbackOptOuts = await findPresenceOptOuts(guildId, [...discordResults.keys()]);
           members = discordResults.map((dm) => ({
             id: dm.id,
             username: dm.user.username,
@@ -584,6 +592,7 @@ export function createMembersRouter(client: Client) {
             guildJoinedAt: dm.joinedAt?.toISOString() ?? null,
             guildLeftAt: null,
             isOnServer: true,
+            presenceStatus: fallbackOptOuts.has(dm.id) ? null : dm.presence?.status ?? null,
           }));
         }
       }
