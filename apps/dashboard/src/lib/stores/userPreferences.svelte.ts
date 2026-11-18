@@ -5,7 +5,8 @@
 
 import { sidebarStore } from './sidebar.svelte';
 import { themeStore, type ThemeId, type AccentColorId } from './theme.svelte';
-import { applyLocale, getLocale } from '../i18n';
+import { getLocale } from '../i18n';
+import { applyLocale } from '../liveLocale.svelte';
 
 type Language = 'fr' | 'en';
 type DateFormat = 'relative' | 'absolute' | 'both';

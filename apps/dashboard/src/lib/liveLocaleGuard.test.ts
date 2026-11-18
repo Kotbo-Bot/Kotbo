@@ -192,6 +192,11 @@ describe('changement de langue sans rechargement', () => {
     expect(frozenSites()).toEqual([]);
   });
 
+  test('i18n.ts reste importable par les tests Bun, qui ne compilent pas les runes', () => {
+    const code = readFileSync(join(SRC, 'lib', 'i18n.ts'), 'utf-8');
+    expect(/from\s*['"][^'"]*\.svelte(?:\.[jt]s)?['"]/.test(code)).toBe(false);
+  });
+
   test('la langue change sans recharger la page', () => {
     const calls = sourceFiles(SRC).flatMap((path) => {
       const code = readFileSync(path, 'utf-8');
