@@ -158,30 +158,52 @@
 {/snippet}
 
 {#snippet row(item: ActivityRankingItem, rank: number, scale: number)}
-  <button
-    type="button"
-    class="top-row"
-    style="--fill: {Math.max(1.5, (item.value / scale) * 100)}%; --row-color: {color};"
-    onclick={() => onselect?.(item)}
-    disabled={!onselect}
-  >
-    <span class="top-row__rank">{rank}</span>
-    <span class="top-row__ident">
-      {#if kind === 'members'}
-        <UserDisplay userId={item.id} name={item.name} avatarUrl={item.avatarUrl} size="sm" class="min-w-0" />
-      {:else}
+  {#if kind === 'members'}
+    <div
+      class="top-row"
+      style="--fill: {Math.max(1.5, (item.value / scale) * 100)}%; --row-color: {color};"
+    >
+      <span class="top-row__rank">{rank}</span>
+      <span class="top-row__ident">
+        <UserDisplay
+          userId={item.id}
+          name={item.name}
+          avatarUrl={item.avatarUrl}
+          size="sm"
+          class="min-w-0"
+          onClick={onselect ? () => onselect(item) : undefined}
+        />
+      </span>
+      {#if item.spark.length > 1}
+        <span class="top-row__spark"><Sparkline values={item.spark} {color} width={56} height={18} fill={false} /></span>
+      {/if}
+      <span class="top-row__value">{format(item.value)}</span>
+      {#if compare}
+        <span class="top-row__delta text-on-surface-variant" title={m.anx_delta_title()}>{format(item.previous)}</span>
+      {/if}
+    </div>
+  {:else}
+    <button
+      type="button"
+      class="top-row"
+      style="--fill: {Math.max(1.5, (item.value / scale) * 100)}%; --row-color: {color};"
+      onclick={() => onselect?.(item)}
+      disabled={!onselect}
+    >
+      <span class="top-row__rank">{rank}</span>
+      <span class="top-row__ident">
         {@render identity(item)}
         <span class="top-row__name">{displayName(item)}</span>
+      </span>
+      {#if item.spark.length > 1}
+        <span class="top-row__spark"><Sparkline values={item.spark} {color} width={56} height={18} fill={false} /></span>
       {/if}
-    </span>
-    {#if item.spark.length > 1}
-      <span class="top-row__spark"><Sparkline values={item.spark} {color} width={56} height={18} fill={false} /></span>
-    {/if}
-    <span class="top-row__value">{format(item.value)}</span>
-    {#if compare}
-      <span class="top-row__delta text-on-surface-variant" title={m.anx_delta_title()}>{format(item.previous)}</span>
-    {/if}
-  </button>
+      <span class="top-row__value">{format(item.value)}</span>
+      {#if compare}
+        <span class="top-row__delta text-on-surface-variant" title={m.anx_delta_title()}>{format(item.previous)}</span>
+      {/if}
+    </button>
+  {/if}
 {/snippet}
 
 <section class="top-list" class:top-list--bare={bare}>
@@ -386,7 +408,7 @@
     z-index: -1;
   }
 
-  .top-row:not(:disabled):hover {
+  button.top-row:not(:disabled):hover {
     background: var(--color-surface-container);
   }
 
