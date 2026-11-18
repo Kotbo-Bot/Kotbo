@@ -1,70 +1,47 @@
-import { IncomingMessage, ServerResponse } from 'node:http';
-import { Client } from 'discord.js';
+import { Hono } from 'hono';
+import { createMiddleware } from 'hono/factory';
+import type { Client } from 'discord.js';
 import { Prisma } from '@prisma/client';
 import prisma from '../../../utils/db.js';
 import { logger } from '../../../utils/logger.js';
 import { createBackup } from '../../../services/system/backupService.js';
 import { parseBackupImport } from '../../../services/system/backupImportValidation.js';
-import { jsonFailure } from '../../shared/failure.js';
+import { fail, guildRoute, readBody, send } from '../../hono/dashboard/kit.js';
 import { assertFreeQuota } from '../../../services/system/freeQuota.js';
-import {
-  json,
-  readJsonBody,
-  resolveDashboardAccess,
-  pushAudit,
-  type AuthClaims,
-} from '../../shared.js';
+import { pushAudit } from '../../shared.js';
 import { publicErrorMessage } from '../../../utils/publicError.js';
 
-export async function handleBackupRoutes(
-  req: IncomingMessage,
-  res: ServerResponse,
-  parts: string[],
-  url: URL,
-  client: Client,
-  user: AuthClaims
-): Promise<boolean> {
-  const method = req.method;
+export function createBackupsRouter(client: Client) {
+  const router = new Hono();
+  const base = '/api/dashboard/guilds/:guildId';
+  // Administrateur seulement, sur un serveur présent dans le cache du bot.
+  const adminAccess = createMiddleware(async (c, next) => {
+    if (!c.var.access.canManageSettings) return send(c, { error: 'Accès refusé' }, 403);
+    if (!client.guilds.cache.get(c.req.param('guildId')!)) return send(c, { error: 'Serveur non trouvé' }, 404);
+    await next();
+  });
+  const gate = [...guildRoute(client), adminAccess] as const;
 
-  // check if path starts with backups
-  if (parts[4] !== 'backups') {
-    return false;
-  }
 
-  const guildId = parts[3];
-
-  // Vérifier l'accès au dashboard
-  const access = await resolveDashboardAccess(client, guildId, user.userId);
-  if (!access.canManageSettings) {
-    json(res, 403, { error: 'Accès refusé' });
-    return true;
-  }
-
-  const guild = client.guilds.cache.get(guildId);
-  if (!guild) {
-    json(res, 404, { error: 'Serveur non trouvé' });
-    return true;
-  }
-
-  // GET /api/dashboard/guilds/:guildId/backups
-  if (parts.length === 5 && method === 'GET') {
+  router.get(`${base}/backups`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
     try {
       const backups = await prisma.serverBackup.findMany({
         where: { guildId },
         orderBy: { createdAt: 'desc' },
       });
-      json(res, 200, backups);
+      return send(c, backups);
     } catch (error) {
       logger.error('BackupAPI', 'Error fetching backups:', error);
-      jsonFailure(res, error, 'Erreur lors de la récupération des sauvegardes', 'BackupAPI');
+      return fail(c, error, 'Erreur lors de la récupération des sauvegardes', 'BackupAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/backups
-  if (parts.length === 5 && method === 'POST') {
+  router.post(`${base}/backups`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
     try {
-      const body = await readJsonBody<{
+      const body = await readBody<{
         name?: string;
         description?: string;
         includeMessages?: boolean;
@@ -73,13 +50,14 @@ export async function handleBackupRoutes(
         includeChannels?: boolean;
         includeEmojis?: boolean;
         includeStickers?: boolean;
-      }>(req);
+      }>(c);
 
       if (!body) {
-        json(res, 400, { error: 'Corps de la requête invalide' });
-        return true;
+        return send(c, { error: 'Corps de la requête invalide' }, 400);
       }
 
+      // Présence garantie par la garde du routeur.
+      const guild = client.guilds.cache.get(guildId)!;
       const backup = await createBackup(guild, {
         name: body.name || '',
         description: body.description || '',
@@ -104,30 +82,28 @@ export async function handleBackupRoutes(
         details: `Nom: ${body.name || 'Sans nom'} | Description: ${body.description || 'Aucune'} | Messages: ${body.includeMessages ?? false} | Membres: ${body.includeMembers ?? true} | Rôles: ${body.includeRoles ?? true} | Salons: ${body.includeChannels ?? true} | Émojis: ${body.includeEmojis ?? true} | Stickers: ${body.includeStickers ?? true}`,
       });
 
-      json(res, 200, backup);
+      return send(c, backup);
     } catch (error) {
       logger.error('BackupAPI', 'Error creating backup:', error);
-      jsonFailure(res, error, 'Erreur lors de la création de la sauvegarde', 'BackupAPI');
+      return fail(c, error, 'Erreur lors de la création de la sauvegarde', 'BackupAPI');
     }
-    return true;
-  }
+  });
 
-  // DELETE /api/dashboard/guilds/:guildId/backups/:backupId
-  if (parts.length === 6 && method === 'DELETE') {
+  router.delete(`${base}/backups/:backupId`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
     try {
-      const backupId = parts[5];
+      const backupId = c.req.param('backupId');
       const backup = await prisma.serverBackup.findUnique({
         where: { id: backupId },
       });
 
       if (!backup) {
-        json(res, 404, { error: 'Sauvegarde non trouvée' });
-        return true;
+        return send(c, { error: 'Sauvegarde non trouvée' }, 404);
       }
 
       if (backup.guildId !== guildId) {
-        json(res, 403, { error: "Cette sauvegarde n'appartient pas à ce serveur" });
-        return true;
+        return send(c, { error: "Cette sauvegarde n'appartient pas à ce serveur" }, 403);
       }
 
       await prisma.serverBackup.delete({
@@ -144,30 +120,28 @@ export async function handleBackupRoutes(
         details: `Nom: ${backup.name} | Créé par: ${backup.createdByUsername} | Date création: ${backup.createdAt.toISOString()}`,
       });
 
-      json(res, 200, { success: true });
+      return send(c, { success: true });
     } catch (error) {
       logger.error('BackupAPI', 'Error deleting backup:', error);
-      jsonFailure(res, error, 'Erreur lors de la suppression de la sauvegarde', 'BackupAPI');
+      return fail(c, error, 'Erreur lors de la suppression de la sauvegarde', 'BackupAPI');
     }
-    return true;
-  }
+  });
 
-  // GET /api/dashboard/guilds/:guildId/backups/:backupId/export
-  if (parts.length === 7 && parts[6] === 'export' && method === 'GET') {
+  router.get(`${base}/backups/:backupId/export`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
     try {
-      const backupId = parts[5];
+      const backupId = c.req.param('backupId');
       const backup = await prisma.serverBackup.findUnique({
         where: { id: backupId },
       });
 
       if (!backup) {
-        json(res, 404, { error: 'Sauvegarde non trouvée' });
-        return true;
+        return send(c, { error: 'Sauvegarde non trouvée' }, 404);
       }
 
       if (backup.guildId !== guildId) {
-        json(res, 403, { error: "Cette sauvegarde n'appartient pas à ce serveur" });
-        return true;
+        return send(c, { error: "Cette sauvegarde n'appartient pas à ce serveur" }, 403);
       }
 
       // Créer l'objet JSON à exporter
@@ -217,44 +191,40 @@ export async function handleBackupRoutes(
         details: `Nom: ${backup.name} | Taille: ${backup.sizeBytes || 0} bytes | Rôles: ${backup.rolesCount} | Salons: ${backup.channelsCount} | Membres: ${backup.membersCount}`,
       });
 
-      res.setHeader('Content-Type', 'application/json');
-      res.setHeader('Content-Disposition', `attachment; filename="${backup.name.replace(/[^a-zA-Z0-9]/g, '_')}_backup.json"`);
-      res.setHeader('Content-Length', buffer.length);
-      res.writeHead(200);
-      res.end(buffer);
+      return c.body(buffer, 200, {
+        'Content-Type': 'application/json',
+        'Content-Disposition': `attachment; filename="${backup.name.replace(/[^a-zA-Z0-9]/g, '_')}_backup.json"`,
+        'Content-Length': String(buffer.length),
+      });
     } catch (error) {
       logger.error('BackupAPI', 'Error exporting backup:', error);
-      jsonFailure(res, error, "Erreur lors de l'export de la sauvegarde", 'BackupAPI');
+      return fail(c, error, "Erreur lors de l'export de la sauvegarde", 'BackupAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/backups/import
-  if (parts.length === 6 && parts[5] === 'import' && method === 'POST') {
+  router.post(`${base}/backups/import`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
     try {
-      const body = await readJsonBody<{ file?: string; name?: string }>(req);
+      const body = await readBody<{ file?: string; name?: string }>(c);
 
       if (!body?.file) {
-        json(res, 400, { error: 'Fichier requis' });
-        return true;
+        return send(c, { error: 'Fichier requis' }, 400);
       }
       if (typeof body.file !== 'string') {
-        json(res, 400, { error: 'Le fichier doit être envoyé sous forme de texte JSON' });
-        return true;
+        return send(c, { error: 'Le fichier doit être envoyé sous forme de texte JSON' }, 400);
       }
       if (body.name !== undefined && (typeof body.name !== 'string' || !body.name.trim() || body.name.trim().length > 100)) {
-        json(res, 400, { error: 'Le nom doit contenir entre 1 et 100 caractères' });
-        return true;
+        return send(c, { error: 'Le nom doit contenir entre 1 et 100 caractères' }, 400);
       }
 
       let backupData;
       try {
         backupData = parseBackupImport(body.file);
       } catch (error) {
-        json(res, 400, {
+        return send(c, {
           error: publicErrorMessage(error, 'Le fichier de sauvegarde est invalide'),
-        });
-        return true;
+        }, 400);
       }
 
       // Vérifier le nombre de backups existants
@@ -265,8 +235,7 @@ export async function handleBackupRoutes(
       await assertFreeQuota(guildId, 'backups', async () => existingBackups);
       const MAX_BACKUPS_PER_GUILD = 3;
       if (existingBackups >= MAX_BACKUPS_PER_GUILD) {
-        json(res, 400, { error: 'Limite de sauvegardes atteinte' });
-        return true;
+        return send(c, { error: 'Limite de sauvegardes atteinte' }, 400);
       }
 
       // Générer le nom du backup
@@ -311,13 +280,13 @@ export async function handleBackupRoutes(
         details: `Nom: ${backupName} | Taille: ${backupData.stats.sizeBytes} bytes | Rôles: ${backupData.stats.rolesCount} | Salons: ${backupData.stats.channelsCount} | Membres: ${backupData.stats.membersCount}`,
       });
 
-      json(res, 200, newBackup);
+      return send(c, newBackup);
     } catch (error) {
       logger.error('BackupAPI', 'Error importing backup:', error);
-      jsonFailure(res, error, "Erreur lors de l'import de la sauvegarde", 'BackupAPI');
+      return fail(c, error, "Erreur lors de l'import de la sauvegarde", 'BackupAPI');
     }
-    return true;
-  }
+  });
 
-  return false;
+  return router;
 }
+

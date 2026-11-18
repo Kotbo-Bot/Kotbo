@@ -1,13 +1,14 @@
-import { IncomingMessage, ServerResponse } from 'node:http';
-import { Client } from 'discord.js';
+import { Hono } from 'hono';
+import { createMiddleware } from 'hono/factory';
+import type { Client } from 'discord.js';
 import cron from 'node-cron';
 import prisma from '../../../utils/db.js';
 import { Prisma } from '@prisma/client';
 import { logger } from '../../../utils/logger.js';
-import { json, readJsonBody, resolveDashboardAccess, pushAudit, type AuthClaims } from '../../shared.js';
+import { pushAudit } from '../../shared.js';
 import { reloadSchedule, stopSchedule, executeSchedule } from '../../../services/system/scheduleService.js';
 
-import { jsonFailure } from '../../shared/failure.js';
+import { fail, guildRoute, readBody, send } from '../../hono/dashboard/kit.js';
 import { assertFreeQuota } from '../../../services/system/freeQuota.js';
 /** Texte du message programme. Vide = pas de texte, l'embed peut suffire. */
 function messageText(value: unknown): string | null {
@@ -34,53 +35,37 @@ function sanitizeScheduledEmbed(value: unknown): Prisma.InputJsonValue | typeof 
   return Object.keys(embed).length > 0 ? embed : Prisma.JsonNull;
 }
 
-export async function handleScheduleRoutes(
-  req: IncomingMessage,
-  res: ServerResponse,
-  parts: string[],
-  _url: URL,
-  client: Client,
-  user: AuthClaims
-): Promise<boolean> {
-  const method = req.method;
+export function createSchedulesRouter(client: Client) {
+  const router = new Hono();
+  const base = '/api/dashboard/guilds/:guildId';
+  // Administrateur seulement, sur un serveur présent dans le cache du bot.
+  const scheduleAccess = createMiddleware(async (c, next) => {
+    if (!c.var.access.canManageSettings) return send(c, { error: 'Accès refusé' }, 403);
+    if (!client.guilds.cache.get(c.req.param('guildId')!)) return send(c, { error: 'Serveur non trouvé' }, 404);
+    await next();
+  });
+  const gate = [...guildRoute(client), scheduleAccess] as const;
 
-  if (parts[4] !== 'schedules') {
-    return false;
-  }
 
-  const guildId = parts[3];
-
-  const access = await resolveDashboardAccess(client, guildId, user.userId);
-  if (!access.canManageSettings) {
-    json(res, 403, { error: 'Accès refusé' });
-    return true;
-  }
-
-  const guild = client.guilds.cache.get(guildId);
-  if (!guild) {
-    json(res, 404, { error: 'Serveur non trouvé' });
-    return true;
-  }
-
-  // GET /api/dashboard/guilds/:guildId/schedules
-  if (parts.length === 5 && method === 'GET') {
+  router.get(`${base}/schedules`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
     try {
       const schedules = await prisma.scheduledTask.findMany({
         where: { guildId },
         orderBy: { createdAt: 'desc' },
       });
-      json(res, 200, schedules);
+      return send(c, schedules);
     } catch (error) {
       logger.error('SchedulesAPI', 'Error fetching schedules:', error);
-      jsonFailure(res, error, 'Erreur lors de la récupération des planifications', 'SchedulesAPI');
+      return fail(c, error, 'Erreur lors de la récupération des planifications', 'SchedulesAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/schedules
-  if (parts.length === 5 && method === 'POST') {
+  router.post(`${base}/schedules`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
     try {
-      const body = await readJsonBody<{
+      const body = await readBody<{
         name?: string;
         type?: string;
         cron?: string;
@@ -90,26 +75,22 @@ export async function handleScheduleRoutes(
         messageEmbed?: unknown;
         allowMentions?: boolean;
         runOnce?: boolean;
-      }>(req);
+      }>(c);
 
       if (!body) {
-        json(res, 400, { error: 'Corps de la requête invalide' });
-        return true;
+        return send(c, { error: 'Corps de la requête invalide' }, 400);
       }
 
       if (!body.name || !body.type || !body.cron) {
-        json(res, 400, { error: 'Champs obligatoires manquants (name, type, cron)' });
-        return true;
+        return send(c, { error: 'Champs obligatoires manquants (name, type, cron)' }, 400);
       }
 
       if (!['CHANNEL_RESET', 'DATA_EXPORT', 'SERVER_BACKUP', 'SEND_MESSAGE'].includes(body.type)) {
-        json(res, 400, { error: 'Type de tâche invalide' });
-        return true;
+        return send(c, { error: 'Type de tâche invalide' }, 400);
       }
 
       if (!cron.validate(body.cron)) {
-        json(res, 400, { error: 'Expression cron invalide' });
-        return true;
+        return send(c, { error: 'Expression cron invalide' }, 400);
       }
 
       await assertFreeQuota(guildId, 'scheduledTasks', () => prisma.scheduledTask.count({ where: { guildId } }));
@@ -144,19 +125,19 @@ export async function handleScheduleRoutes(
         await reloadSchedule(client, schedule.id);
       }
 
-      json(res, 200, schedule);
+      return send(c, schedule);
     } catch (error) {
       logger.error('SchedulesAPI', 'Error creating schedule:', error);
-      jsonFailure(res, error, 'Erreur lors de la création de la planification', 'SchedulesAPI');
+      return fail(c, error, 'Erreur lors de la création de la planification', 'SchedulesAPI');
     }
-    return true;
-  }
+  });
 
-  // PATCH /api/dashboard/guilds/:guildId/schedules/:scheduleId
-  if (parts.length === 6 && method === 'PATCH') {
+  router.patch(`${base}/schedules/:scheduleId`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
     try {
-      const scheduleId = parts[5];
-      const body = await readJsonBody<{
+      const scheduleId = c.req.param('scheduleId');
+      const body = await readBody<{
         name?: string;
         type?: string;
         cron?: string;
@@ -166,11 +147,10 @@ export async function handleScheduleRoutes(
         messageEmbed?: unknown;
         allowMentions?: boolean;
         runOnce?: boolean;
-      }>(req);
+      }>(c);
 
       if (!body) {
-        json(res, 400, { error: 'Corps de la requête invalide' });
-        return true;
+        return send(c, { error: 'Corps de la requête invalide' }, 400);
       }
 
       const existing = await prisma.scheduledTask.findUnique({
@@ -178,18 +158,15 @@ export async function handleScheduleRoutes(
       });
 
       if (!existing || existing.guildId !== guildId) {
-        json(res, 404, { error: 'Planification non trouvée' });
-        return true;
+        return send(c, { error: 'Planification non trouvée' }, 404);
       }
 
       if (body.type && !['CHANNEL_RESET', 'DATA_EXPORT', 'SERVER_BACKUP', 'SEND_MESSAGE'].includes(body.type)) {
-        json(res, 400, { error: 'Type de tâche invalide' });
-        return true;
+        return send(c, { error: 'Type de tâche invalide' }, 400);
       }
 
       if (body.cron && !cron.validate(body.cron)) {
-        json(res, 400, { error: 'Expression cron invalide' });
-        return true;
+        return send(c, { error: 'Expression cron invalide' }, 400);
       }
 
       const updated = await prisma.scheduledTask.update({
@@ -224,25 +201,24 @@ export async function handleScheduleRoutes(
         stopSchedule(updated.id);
       }
 
-      json(res, 200, updated);
+      return send(c, updated);
     } catch (error) {
       logger.error('SchedulesAPI', 'Error updating schedule:', error);
-      jsonFailure(res, error, 'Erreur lors de la mise à jour de la planification', 'SchedulesAPI');
+      return fail(c, error, 'Erreur lors de la mise à jour de la planification', 'SchedulesAPI');
     }
-    return true;
-  }
+  });
 
-  // DELETE /api/dashboard/guilds/:guildId/schedules/:scheduleId
-  if (parts.length === 6 && method === 'DELETE') {
+  router.delete(`${base}/schedules/:scheduleId`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
     try {
-      const scheduleId = parts[5];
+      const scheduleId = c.req.param('scheduleId');
       const existing = await prisma.scheduledTask.findUnique({
         where: { id: scheduleId },
       });
 
       if (!existing || existing.guildId !== guildId) {
-        json(res, 404, { error: 'Planification non trouvée' });
-        return true;
+        return send(c, { error: 'Planification non trouvée' }, 404);
       }
 
       // Stop cron job
@@ -262,25 +238,24 @@ export async function handleScheduleRoutes(
         details: `Nom: ${existing.name} | Type: ${existing.type} | Cron: ${existing.cron}`,
       });
 
-      json(res, 200, { success: true });
+      return send(c, { success: true });
     } catch (error) {
       logger.error('SchedulesAPI', 'Error deleting schedule:', error);
-      jsonFailure(res, error, 'Erreur lors de la suppression de la planification', 'SchedulesAPI');
+      return fail(c, error, 'Erreur lors de la suppression de la planification', 'SchedulesAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/schedules/:scheduleId/run
-  if (parts.length === 7 && parts[6] === 'run' && method === 'POST') {
+  router.post(`${base}/schedules/:scheduleId/run`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
     try {
-      const scheduleId = parts[5];
+      const scheduleId = c.req.param('scheduleId');
       const existing = await prisma.scheduledTask.findUnique({
         where: { id: scheduleId },
       });
 
       if (!existing || existing.guildId !== guildId) {
-        json(res, 404, { error: 'Planification non trouvée' });
-        return true;
+        return send(c, { error: 'Planification non trouvée' }, 404);
       }
 
       // Execute asynchronously to not block API response
@@ -298,13 +273,13 @@ export async function handleScheduleRoutes(
         details: `Nom: ${existing.name} | Type: ${existing.type} | Exécution manuelle déclenchée par le staff`,
       });
 
-      json(res, 200, { success: true });
+      return send(c, { success: true });
     } catch (error) {
       logger.error('SchedulesAPI', 'Error running schedule now:', error);
-      jsonFailure(res, error, 'Erreur lors du lancement de la planification', 'SchedulesAPI');
+      return fail(c, error, 'Erreur lors du lancement de la planification', 'SchedulesAPI');
     }
-    return true;
-  }
+  });
 
-  return false;
+  return router;
 }
+

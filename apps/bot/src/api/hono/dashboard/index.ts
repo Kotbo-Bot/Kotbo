@@ -7,6 +7,9 @@
 import { Hono } from 'hono';
 import { compress } from 'hono/compress';
 import type { Client } from 'discord.js';
+import { createBackupsRouter } from '../../routes/dashboard/backups.js';
+import { createCampaignsRouter } from '../../routes/dashboard/campaigns.js';
+import { createSchedulesRouter } from '../../routes/dashboard/schedules.js';
 import { createMigrationRouter } from '../../routes/dashboard/migration.js';
 import { createWelcomeExperimentsRouter } from '../../routes/dashboard/welcomeExperiments.js';
 import { createSimulationRouter } from '../../routes/dashboard/simulation.js';
@@ -81,5 +84,8 @@ export function createDashboardRouter(client: Client) {
   router.route('/', createSimulationRouter(client));
   router.route('/', createWelcomeExperimentsRouter(client));
   router.route('/', createMigrationRouter(client));
+  router.route('/', createSchedulesRouter(client));
+  router.route('/', createCampaignsRouter(client));
+  router.route('/', createBackupsRouter(client));
   return router;
 }

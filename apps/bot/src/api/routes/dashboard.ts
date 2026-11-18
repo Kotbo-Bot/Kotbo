@@ -17,9 +17,6 @@ import { handleLeadershipRoutes, handleGuildLeadershipRoutes } from './dashboard
 import { handleModulesRoutes } from './dashboard/modules.js';
 import { handleEventsRoutes } from './dashboard/events.js';
 import { handleGeneralistModulesRoutes } from './dashboard/generalistModules.js';
-import { handleBackupRoutes } from './dashboard/backups.js';
-import { handleScheduleRoutes } from './dashboard/schedules.js';
-import { handleCampaignRoutes } from './dashboard/campaigns.js';
 import { handleOutgoingWebhookRoutes } from './dashboard/outgoingWebhooks.js';
 import { handleDoingListRoutes } from './dashboard/doingLists.js';
 import { handleAegisRoutes } from './dashboard/aegis.js';
@@ -145,18 +142,6 @@ export async function handleDashboardRoutes(
       return true;
     }
     if (await handleEventsRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
-      if (method !== 'GET') await cache.invalidateGuild(guildId);
-      return true;
-    }
-    if (await handleBackupRoutes(req, res, parts, url, client, user)) {
-      if (method !== 'GET') await cache.invalidateGuild(guildId);
-      return true;
-    }
-    if (await handleScheduleRoutes(req, res, parts, url, client, user)) {
-      if (method !== 'GET') await cache.invalidateGuild(guildId);
-      return true;
-    }
-    if (await handleCampaignRoutes(req, res, parts, url, client, user)) {
       if (method !== 'GET') await cache.invalidateGuild(guildId);
       return true;
     }

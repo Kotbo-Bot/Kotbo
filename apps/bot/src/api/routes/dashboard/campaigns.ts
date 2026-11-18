@@ -1,13 +1,14 @@
 /** Routes dashboard des campagnes marketing. */
-import { IncomingMessage, ServerResponse } from 'node:http';
-import { Client } from 'discord.js';
+import { Hono } from 'hono';
+import { createMiddleware } from 'hono/factory';
+import type { Client } from 'discord.js';
 import { CampaignStatus, CampaignStepStatus, Prisma } from '@prisma/client';
 import prisma from '../../../utils/db.js';
 import { logger } from '../../../utils/logger.js';
-import { json, readJsonBody, resolveDashboardAccess, pushAudit, getGuildName, type AuthClaims } from '../../shared.js';
+import { pushAudit, getGuildName } from '../../shared.js';
 import { getCampaignReport, resolveAudience } from '../../../services/features/campaignService.js';
 
-import { jsonFailure } from '../../shared/failure.js';
+import { auditUserOf, fail, guildRoute, readBody, send } from '../../hono/dashboard/kit.js';
 /** Etapes d'une campagne, telles que le formulaire les envoie. */
 type StepInput = {
   offsetMinutes?: unknown;
@@ -77,56 +78,44 @@ function parseSteps(value: unknown): { steps: Prisma.CampaignStepCreateManyCampa
   return { steps };
 }
 
-export async function handleCampaignRoutes(
-  req: IncomingMessage,
-  res: ServerResponse,
-  parts: string[],
-  _url: URL,
-  client: Client,
-  user: AuthClaims,
-): Promise<boolean> {
-  if (parts[4] !== 'campaigns') return false;
+export function createCampaignsRouter(client: Client) {
+  const router = new Hono();
+  const base = '/api/dashboard/guilds/:guildId';
+  const adminAccess = createMiddleware(async (c, next) => {
+    if (!c.var.access.canManageSettings) return send(c, { error: 'Accès refusé' }, 403);
+    await next();
+  });
+  const gate = [...guildRoute(client), adminAccess] as const;
 
-  const method = req.method;
-  const guildId = parts[3];
 
-  const access = await resolveDashboardAccess(client, guildId, user.userId);
-  if (!access.canManageSettings) {
-    json(res, 403, { error: 'Accès refusé' });
-    return true;
-  }
-
-  const auditUser = user.username ?? `User${user.userId}`;
-
-  // GET /api/dashboard/guilds/:guildId/campaigns
-  if (parts.length === 5 && method === 'GET') {
+  router.get(`${base}/campaigns`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
     try {
       const campaigns = await prisma.campaign.findMany({
         where: { guildId },
         include: { steps: { orderBy: { position: 'asc' } } },
         orderBy: { createdAt: 'desc' },
       });
-      json(res, 200, { campaigns });
+      return send(c, { campaigns });
     } catch (err) {
       logger.error('CampaignsAPI', 'Erreur GET:', err);
-      jsonFailure(res, err, 'Erreur lors de la récupération des campagnes', 'CampaignsAPI');
+      return fail(c, err, 'Erreur lors de la récupération des campagnes', 'CampaignsAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/campaigns/audience-preview
   //
   // Compte l'audience avant l'enregistrement : un ciblage qui ne retient
   // personne, ou tout le serveur, se voit mieux avant l'envoi qu'apres.
-  if (parts.length === 6 && parts[5] === 'audience-preview' && method === 'POST') {
+  router.post(`${base}/campaigns/audience-preview`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
     try {
       const guild = client.guilds.cache.get(guildId) ?? (await client.guilds.fetch(guildId).catch(() => null));
       if (!guild) {
-        json(res, 404, { error: 'Serveur Discord introuvable' });
-        return true;
+        return send(c, { error: 'Serveur Discord introuvable' }, 404);
       }
 
-      const body = (await readJsonBody<Record<string, unknown>>(req)) ?? {};
+      const body = (await readBody<Record<string, unknown>>(c)) ?? {};
       const audience = await resolveAudience(guild, {
         audienceRoleIds: ids(body.audienceRoleIds),
         audienceExcludeRoleIds: ids(body.audienceExcludeRoleIds),
@@ -135,31 +124,30 @@ export async function handleCampaignRoutes(
         audienceInactiveDays: positiveOrNull(body.audienceInactiveDays),
       });
 
-      json(res, 200, {
+      return send(c, {
         count: audience.length,
         sample: audience.slice(0, 8).map((member) => ({ id: member.id, name: member.user.username })),
       });
     } catch (err) {
       logger.error('CampaignsAPI', 'Erreur audience-preview:', err);
-      jsonFailure(res, err, 'Erreur lors du calcul de l\'audience', 'CampaignsAPI');
+      return fail(c, err, 'Erreur lors du calcul de l\'audience', 'CampaignsAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/campaigns
-  if (parts.length === 5 && method === 'POST') {
+  router.post(`${base}/campaigns`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const auditUser = auditUserOf(c);
     try {
-      const body = (await readJsonBody<Record<string, unknown>>(req)) ?? {};
+      const body = (await readBody<Record<string, unknown>>(c)) ?? {};
       const name = typeof body.name === 'string' ? body.name.trim().slice(0, 120) : '';
       if (!name) {
-        json(res, 400, { error: 'Le nom de la campagne est obligatoire.' });
-        return true;
+        return send(c, { error: 'Le nom de la campagne est obligatoire.' }, 400);
       }
 
       const parsed = parseSteps(body.steps);
       if ('error' in parsed) {
-        json(res, 400, { error: parsed.error });
-        return true;
+        return send(c, { error: parsed.error }, 400);
       }
 
       const campaign = await prisma.campaign.create({
@@ -193,39 +181,34 @@ export async function handleCampaignRoutes(
         details: `${name} · ${parsed.steps.length} étape(s)`,
       });
 
-      json(res, 201, { campaign });
+      return send(c, { campaign }, 201);
     } catch (err) {
       logger.error('CampaignsAPI', 'Erreur POST:', err);
-      jsonFailure(res, err, 'Erreur lors de la création de la campagne', 'CampaignsAPI');
+      return fail(c, err, 'Erreur lors de la création de la campagne', 'CampaignsAPI');
     }
-    return true;
-  }
+  });
 
-  const campaignId = parts[5];
-
-  // PATCH /api/dashboard/guilds/:guildId/campaigns/:id
-  if (parts.length === 6 && method === 'PATCH') {
+  router.patch(`${base}/campaigns/:campaignId`, ...gate, async (c) => {
+    const campaignId = c.req.param('campaignId');
+    const guildId = c.req.param('guildId');
     try {
       const existing = await prisma.campaign.findFirst({ where: { id: campaignId, guildId } });
       if (!existing) {
-        json(res, 404, { error: 'Campagne introuvable' });
-        return true;
+        return send(c, { error: 'Campagne introuvable' }, 404);
       }
 
-      const body = (await readJsonBody<Record<string, unknown>>(req)) ?? {};
+      const body = (await readBody<Record<string, unknown>>(c)) ?? {};
 
       // Modifier les etapes d'une campagne deja partie reecrirait l'histoire :
       // les etapes envoyees portent leurs mesures, qu'un remplacement effacerait.
       const wantsSteps = body.steps !== undefined;
       if (wantsSteps && existing.status !== CampaignStatus.DRAFT) {
-        json(res, 409, { error: 'Les étapes ne se modifient qu\'en brouillon. Dupliquez la campagne pour la rejouer.' });
-        return true;
+        return send(c, { error: 'Les étapes ne se modifient qu\'en brouillon. Dupliquez la campagne pour la rejouer.' }, 409);
       }
 
       const parsed = wantsSteps ? parseSteps(body.steps) : null;
       if (parsed && 'error' in parsed) {
-        json(res, 400, { error: parsed.error });
-        return true;
+        return send(c, { error: parsed.error }, 400);
       }
 
       const campaign = await prisma.$transaction(async (tx) => {
@@ -260,21 +243,22 @@ export async function handleCampaignRoutes(
         });
       });
 
-      json(res, 200, { campaign });
+      return send(c, { campaign });
     } catch (err) {
       logger.error('CampaignsAPI', 'Erreur PATCH:', err);
-      jsonFailure(res, err, 'Erreur lors de la mise à jour de la campagne', 'CampaignsAPI');
+      return fail(c, err, 'Erreur lors de la mise à jour de la campagne', 'CampaignsAPI');
     }
-    return true;
-  }
+  });
 
-  // DELETE /api/dashboard/guilds/:guildId/campaigns/:id
-  if (parts.length === 6 && method === 'DELETE') {
+  router.delete(`${base}/campaigns/:campaignId`, ...gate, async (c) => {
+    const campaignId = c.req.param('campaignId');
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const auditUser = auditUserOf(c);
     try {
       const { count } = await prisma.campaign.deleteMany({ where: { id: campaignId, guildId } });
       if (count === 0) {
-        json(res, 404, { error: 'Campagne introuvable' });
-        return true;
+        return send(c, { error: 'Campagne introuvable' }, 404);
       }
 
       await pushAudit(guildId, {
@@ -287,37 +271,36 @@ export async function handleCampaignRoutes(
         details: campaignId,
       });
 
-      json(res, 200, { success: true });
+      return send(c, { success: true });
     } catch (err) {
       logger.error('CampaignsAPI', 'Erreur DELETE:', err);
-      jsonFailure(res, err, 'Erreur lors de la suppression de la campagne', 'CampaignsAPI');
+      return fail(c, err, 'Erreur lors de la suppression de la campagne', 'CampaignsAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/campaigns/:id/status { status }
-  if (parts.length === 7 && parts[6] === 'status' && method === 'POST') {
+  router.post(`${base}/campaigns/:campaignId/status`, ...gate, async (c) => {
+    const campaignId = c.req.param('campaignId');
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const auditUser = auditUserOf(c);
     try {
       const existing = await prisma.campaign.findFirst({ where: { id: campaignId, guildId } });
       if (!existing) {
-        json(res, 404, { error: 'Campagne introuvable' });
-        return true;
+        return send(c, { error: 'Campagne introuvable' }, 404);
       }
 
-      const body = await readJsonBody<{ status?: unknown }>(req);
+      const body = await readBody<{ status?: unknown }>(c);
       const wanted = body?.status;
 
       // Seules trois transitions sont pilotees a la main : lancer, annuler,
       // remettre en brouillon. Le passage a RUNNING puis COMPLETED appartient
       // au cycle, qui seul sait ou en sont les etapes.
       if (wanted !== 'SCHEDULED' && wanted !== 'CANCELLED' && wanted !== 'DRAFT') {
-        json(res, 400, { error: 'Transition non autorisée' });
-        return true;
+        return send(c, { error: 'Transition non autorisée' }, 400);
       }
 
       if (wanted === 'SCHEDULED' && !existing.startAt) {
-        json(res, 400, { error: 'Donnez une date de départ avant de lancer la campagne.' });
-        return true;
+        return send(c, { error: 'Donnez une date de départ avant de lancer la campagne.' }, 400);
       }
 
       const campaign = await prisma.campaign.update({
@@ -343,29 +326,28 @@ export async function handleCampaignRoutes(
         details: existing.name,
       });
 
-      json(res, 200, { campaign });
+      return send(c, { campaign });
     } catch (err) {
       logger.error('CampaignsAPI', 'Erreur POST status:', err);
-      jsonFailure(res, err, 'Erreur lors du changement de statut', 'CampaignsAPI');
+      return fail(c, err, 'Erreur lors du changement de statut', 'CampaignsAPI');
     }
-    return true;
-  }
+  });
 
-  // GET /api/dashboard/guilds/:guildId/campaigns/:id/report
-  if (parts.length === 7 && parts[6] === 'report' && method === 'GET') {
+  router.get(`${base}/campaigns/:campaignId/report`, ...gate, async (c) => {
+    const campaignId = c.req.param('campaignId');
+    const guildId = c.req.param('guildId');
     try {
       const exists = await prisma.campaign.findFirst({ where: { id: campaignId, guildId }, select: { id: true } });
       if (!exists) {
-        json(res, 404, { error: 'Campagne introuvable' });
-        return true;
+        return send(c, { error: 'Campagne introuvable' }, 404);
       }
-      json(res, 200, { report: await getCampaignReport(campaignId) });
+      return send(c, { report: await getCampaignReport(campaignId) });
     } catch (err) {
       logger.error('CampaignsAPI', 'Erreur GET report:', err);
-      jsonFailure(res, err, 'Erreur lors du calcul des indicateurs', 'CampaignsAPI');
+      return fail(c, err, 'Erreur lors du calcul des indicateurs', 'CampaignsAPI');
     }
-    return true;
-  }
+  });
 
-  return false;
+  return router;
 }
+
