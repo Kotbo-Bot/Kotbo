@@ -3044,7 +3044,7 @@ export function createPublicLegacyRouter(client: Client): Hono {
     }
     req.push(null);
 
-    return new Promise<Response>((resolve) => {
+    return new Promise<Response | void>((resolve) => {
       const res = new BunServerResponse(req, resolve);
       handlePublicRoutes(req as IncomingMessage & { bodyText?: string }, res, parts, url, client)
         .then((handled) => {
