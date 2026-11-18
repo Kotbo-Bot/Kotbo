@@ -17,7 +17,6 @@ import { handleLeadershipRoutes, handleGuildLeadershipRoutes } from './dashboard
 import { handleModulesRoutes } from './dashboard/modules.js';
 import { handleEventsRoutes } from './dashboard/events.js';
 import { handleGeneralistModulesRoutes } from './dashboard/generalistModules.js';
-import { handleOutgoingWebhookRoutes } from './dashboard/outgoingWebhooks.js';
 import { handleDoingListRoutes } from './dashboard/doingLists.js';
 import { handleAegisRoutes } from './dashboard/aegis.js';
 import { handleCustomBotRoutes } from './dashboard/customBot.js';
@@ -146,10 +145,6 @@ export async function handleDashboardRoutes(
       return true;
     }
     if (await handleAegisRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
-      if (method !== 'GET') await cache.invalidateGuild(guildId);
-      return true;
-    }
-    if (await handleOutgoingWebhookRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
       if (method !== 'GET') await cache.invalidateGuild(guildId);
       return true;
     }
