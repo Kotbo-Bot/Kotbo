@@ -8,29 +8,24 @@
  * Tant que la langue n'est pas chargee, on prend celle du dashboard.
  */
 import { getLocale, type Locale } from '../i18n';
-import { fetchGuildLanguage } from '../api/guild';
-import { authStore } from './auth.svelte';
 
-let current = $state<Locale>(getLocale());
-let loadedFor: string | null = null;
-
-function load() {
-  const guildId = authStore.selectedGuildId;
-  if (!guildId || guildId === loadedFor) return;
-  loadedFor = guildId;
-  void fetchGuildLanguage(guildId).then((language) => {
-    if (language && authStore.selectedGuildId === guildId) current = language.locale;
-  });
-}
+let getCurrent: () => Locale = () => getLocale();
+let setCurrent: (locale: Locale) => void = (locale) => {
+  getCurrent = () => locale;
+};
 
 export const botLocale = {
   get value(): Locale {
-    load();
-    return current;
+    return getCurrent();
   },
   /** A appeler apres un changement de langue du bot, pour ne pas attendre un rechargement. */
   set(locale: Locale) {
-    current = locale;
+    setCurrent(locale);
+  },
+  /** Branche la lecture et l'ecriture sur l'etat Svelte du dashboard (appele par liveLocale.svelte.ts). */
+  connect(get: () => Locale, set: (locale: Locale) => void) {
+    getCurrent = get;
+    setCurrent = set;
   },
 };
 
