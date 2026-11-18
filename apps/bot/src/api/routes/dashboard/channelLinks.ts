@@ -466,7 +466,7 @@ export function createChannelLinksRouter(client: Client) {
     const user = c.var.dashboardUser;
     const groupId = c.req.param('groupId');
     try {
-      const memberId = memberId;
+      const memberId = c.req.param('memberId');
       const member = group.members.find((m) => m.id === memberId);
       if (!member) {
         return send(c, { error: 'Salon introuvable dans ce pont' }, 404);
