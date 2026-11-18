@@ -4,6 +4,7 @@ import { Hono } from 'hono';
 import prisma from '../../../../utils/db.js';
 import { logger } from '../../../../utils/logger.js';
 import { getGuildName, pushAudit } from '../../../shared.js';
+import { withInviterAvatars } from '../../../../services/analytics/inviterAvatars.js';
 
 import { auditUserOf, fail, guildRoute, readBody, send } from '../../../hono/dashboard/kit.js';
 export function createInvitationsRouter(client: Client) {
@@ -66,7 +67,7 @@ export function createInvitationsRouter(client: Client) {
         invitations,
         suspendedInviters,
         inviteUsage,
-        inviterUsage,
+        inviterUsage: await withInviterAvatars(client, guildId, inviterUsage),
         summary: { totalJoined, totalLeft }
       });
     } catch (err) {

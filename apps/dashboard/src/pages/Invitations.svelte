@@ -977,9 +977,16 @@
             {#each topInviters as inviter, index}
               {@const rank = index + 1}
 
-              <div class="p-4 rounded-lg bg-surface-container-high/20 border border-outline-variant/10 flex items-center justify-between">
-                <div class="flex items-center gap-3">
-                  <div class="relative">
+              {@const clickable = memberCaseModal.canOpen && !!inviter.inviterId}
+              <svelte:element
+                this={clickable ? 'button' : 'div'}
+                type={clickable ? 'button' : undefined}
+                title={clickable ? m.sx_open_member({ name: inviter.inviterTag }) : undefined}
+                onclick={clickable ? () => memberCaseModal.show(inviter.inviterId, inviter.inviterTag) : undefined}
+                class="w-full text-left p-4 rounded-lg bg-surface-container-high/20 border border-outline-variant/10 flex items-center justify-between {clickable ? 'cursor-pointer hover:bg-surface-container-high/40 hover:border-primary/30 transition-colors focus-visible:outline-2 focus-visible:outline-primary' : ''}"
+              >
+                <div class="flex items-center gap-3 min-w-0">
+                  <div class="relative shrink-0">
                     <img
                       src={memberAvatarSrc(inviter.avatarUrl, inviter.inviterTag, inviter.inviterId)}
                       alt={inviter.inviterTag}
@@ -990,13 +997,16 @@
                       {rank}
                     </span>
                   </div>
-                  <div>
-                    {@render memberName(inviter.inviterId, inviter.inviterTag, 'block text-sm font-semibold text-on-surface')}
+                  <div class="min-w-0">
+                    <span class="inline-flex max-w-full min-w-0 items-center gap-1.5">
+                      <span class="block truncate text-sm font-semibold text-on-surface">{inviter.inviterTag}</span>
+                      <MemberTag userId={inviter.inviterId} />
+                    </span>
                     <p class="text-2xs text-on-surface-variant">{m.iv_last_join_short()} {formatRelative(inviter.lastJoinedAt)}</p>
                   </div>
                 </div>
                 <span class="text-lg font-semibold text-success">{inviter.joinedCount}</span>
-              </div>
+              </svelte:element>
             {/each}
             {#if topInviters.length === 0}
               <p class="text-xs text-on-surface-variant text-center py-8">{m.iv_no_data()}</p>
