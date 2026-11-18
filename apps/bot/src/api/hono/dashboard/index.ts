@@ -7,6 +7,8 @@
 import { Hono } from 'hono';
 import { compress } from 'hono/compress';
 import type { Client } from 'discord.js';
+import { createTelemetryRouter } from '../../routes/dashboard/telemetry.js';
+import { createNotificationInboxRouter } from '../../routes/dashboard/notificationInbox.js';
 import { createMemberProfileRouter } from '../../routes/dashboard/memberProfile.js';
 import { createAutomodSimulationRouter } from '../../routes/dashboard/automodSimulation.js';
 import { createSetupRouter } from '../../routes/dashboard/setup.js';
@@ -68,5 +70,8 @@ export function createDashboardRouter(client: Client) {
   router.route('/', createSetupRouter(client));
   router.route('/', createAutomodSimulationRouter(client));
   router.route('/', createMemberProfileRouter(client));
+  // Hors serveur : session seule, sans garde de guilde.
+  router.route('/', createTelemetryRouter(client));
+  router.route('/', createNotificationInboxRouter(client));
   return router;
 }

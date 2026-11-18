@@ -39,8 +39,6 @@ import { handleClansRoutes } from './dashboard/clans.js';
 import { handleDropsRoutes } from './dashboard/drops.js';
 import { handleWorkflowRoutes } from './dashboard/workflows.js';
 import { handleSimulationRoutes } from './dashboard/simulation.js';
-import { handleTelemetryRoute } from './dashboard/telemetry.js';
-import { handleNotificationInboxRoutes } from './dashboard/notificationInbox.js';
 import { getCachedFeatureAccess } from './dashboard/featureGate.js';
 
 export async function handleDashboardRoutes(
@@ -68,17 +66,6 @@ export async function handleDashboardRoutes(
   const user = await verifyAuth(req);
   if (!user) {
     json(res, 401, { error: 'Non authentifié' });
-    return true;
-  }
-
-  // 3ter. Télémétrie produit : hors serveur, avant les gardes d'accès par guilde
-  // (la route vérifie elle-même chaque serveur du lot).
-  if (await handleTelemetryRoute(req, res, parts, client, user)) {
-    return true;
-  }
-
-  // Boîte de notifications : propre à la personne, tous serveurs confondus.
-  if (await handleNotificationInboxRoutes(req, res, parts, url, client, user)) {
     return true;
   }
 
