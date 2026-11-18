@@ -91,7 +91,7 @@ const service = {
   unblockStarboardEntry: mock(async (..._args: unknown[]) => serviceEntry),
   removeHighlightsOfAuthors: mock(async (..._args: unknown[]) => 0),
   // Réexporté par le service : le module doublé le remplacerait sinon par un piège.
-  normalizeEmojiKey,
+  normalizeEmojiKey: mock(normalizeEmojiKey),
 };
 mockModule('../../services/features/starboardService', service);
 
