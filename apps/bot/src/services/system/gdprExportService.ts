@@ -108,6 +108,7 @@ const CATEGORY_META: Record<string, { label: string; description: string }> = {
 const STATIC_SOURCES: GdprSource[] = [
   // ── Identité & profil ──────────────────────────────────────────
   { category: 'identity', key: 'memberProfile', label: 'Profils membre', model: 'memberProfile', where: ({ discordId }) => ({ userId: discordId }) },
+  { category: 'identity', key: 'memberProfileHistory', label: 'Historique de profil', model: 'memberProfileHistory', where: ({ discordId }) => ({ userId: discordId }) },
   { category: 'identity', key: 'memberLevel', label: 'Niveaux', model: 'memberLevel', where: ({ discordId }) => ({ userId: discordId }) },
   { category: 'identity', key: 'seasonSnapshot', label: 'Instantanés de saison', model: 'seasonSnapshot', where: ({ discordId }) => ({ userId: discordId }) },
   { category: 'identity', key: 'seasonBaseline', label: 'XP au début des saisons', model: 'seasonBaseline', where: ({ discordId }) => ({ userId: discordId }) },
