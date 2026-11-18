@@ -7,6 +7,7 @@
 import { Hono } from 'hono';
 import { compress } from 'hono/compress';
 import type { Client } from 'discord.js';
+import { createRankedRouter } from '../../routes/dashboard/ranked.js';
 import { createAegisRouter } from '../../routes/dashboard/aegis.js';
 import { createBanAppealsRouter } from '../../routes/dashboard/banAppeals.js';
 import { createVisionRouter } from '../../routes/dashboard/visionRoutes.js';
@@ -163,5 +164,6 @@ export function createDashboardRouter(client: Client) {
   router.route('/', createVisionRouter(client));
   router.route('/', createBanAppealsRouter(client));
   router.route('/', createAegisRouter(client));
+  router.route('/', createRankedRouter(client));
   return router;
 }

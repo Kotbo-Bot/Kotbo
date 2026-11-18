@@ -15,7 +15,6 @@ import { handleGeneralistModulesRoutes } from './dashboard/generalistModules.js'
 import { handleDoingListRoutes } from './dashboard/doingLists.js';
 import { handleCustomBotRoutes } from './dashboard/customBot.js';
 import { handleHomeWidgetsRoutes } from './dashboard/homeWidgets.js';
-import { handleRankedRoutes } from './dashboard/ranked.js';
 import { handleClansRoutes } from './dashboard/clans.js';
 import { getCachedFeatureAccess } from './dashboard/featureGate.js';
 
@@ -113,10 +112,6 @@ export async function handleDashboardRoutes(
       return true;
     }
     if (await handleHomeWidgetsRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
-      return true;
-    }
-    if (await handleRankedRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
-      if (method !== 'GET') await cache.invalidateGuild(guildId);
       return true;
     }
     if (parts[4] === 'clans') {
