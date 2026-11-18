@@ -7,6 +7,10 @@
 import { Hono } from 'hono';
 import { compress } from 'hono/compress';
 import type { Client } from 'discord.js';
+import { createSettingsRouter } from '../../routes/dashboard/modules/settings.js';
+import { createNicknameModerationRouter } from '../../routes/dashboard/modules/nickname-moderation.js';
+import { createSocialFollowsRouter } from '../../routes/dashboard/modules/social-follows.js';
+import { createBannedWordsRouter } from '../../routes/dashboard/modules/banned-words.js';
 import { createDailyAlgoSubmissionsRouter } from '../../routes/dashboard/modules/daily-algo-submissions.js';
 import { createInvitationsRouter } from '../../routes/dashboard/modules/invitations.js';
 import { createNewsRouter } from '../../routes/dashboard/modules/news.js';
@@ -137,5 +141,9 @@ export function createDashboardRouter(client: Client) {
   router.route('/', createNewsRouter(client));
   router.route('/', createInvitationsRouter(client));
   router.route('/', createDailyAlgoSubmissionsRouter(client));
+  router.route('/', createBannedWordsRouter(client));
+  router.route('/', createSocialFollowsRouter(client));
+  router.route('/', createNicknameModerationRouter(client));
+  router.route('/', createSettingsRouter(client));
   return router;
 }

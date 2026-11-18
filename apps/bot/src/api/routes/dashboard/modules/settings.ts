@@ -1,20 +1,25 @@
+import { Hono } from 'hono';
+import type { Client } from 'discord.js';
 /** Routes dashboard du module `settings`. */
 import { isModulePaused } from '@kotbo/contracts';
 import { applyRegulationLock } from '../../../../services/staff/regulationService.js';
 import { cache } from '../../../../utils/cache.js';
 import prisma from '../../../../utils/db.js';
 import { logger } from '../../../../utils/logger.js';
-import { extractDiscordSnowflake, getGuildName, getOrCreateRuntime, json, pushAudit, readJsonBody } from '../../../shared.js';
-import { type ModuleRouteContext } from './_shared.js';
+import { extractDiscordSnowflake, getGuildName, getOrCreateRuntime, pushAudit } from '../../../shared.js';
 
-import { jsonFailure } from '../../../shared/failure.js';
-export async function handleSettingsRoutes(ctx: ModuleRouteContext): Promise<boolean> {
-  const { req, res, parts, client, guildId, method, auditUser, moduleKey } = ctx;
+import { auditUserOf, fail, guildRoute, readBody, send } from '../../../hono/dashboard/kit.js';
+export function createSettingsRouter(client: Client) {
+  const router = new Hono();
+  const base = '/api/dashboard/guilds/:guildId';
+  const gate = guildRoute(client);
 
-  // PATCH/PUT /api/dashboard/guilds/:guildId/settings
-  if (moduleKey === 'settings' && parts.length === 5 && (method === 'PATCH' || method === 'PUT')) {
+
+  router.on(['PATCH', 'PUT'], `${base}/settings`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const auditUser = auditUserOf(c);
     try {
-      const body = await readJsonBody<{
+      const body = await readBody<{
         discordChannel?: string;
         logChannelId?: string | null;
         logIgnoredChannelIds?: unknown;
@@ -71,11 +76,10 @@ export async function handleSettingsRoutes(ctx: ModuleRouteContext): Promise<boo
         regulationLockEnabled?: boolean;
         sanctionReportEnabled?: boolean;
         sanctionReportSkipBots?: boolean;
-      }>(req);
+      }>(c);
 
       if (!body) {
-        json(res, 400, { error: 'Payload settings invalide' });
-        return true;
+        return send(c, { error: 'Payload settings invalide' }, 400);
       }
 
       const oldGuild = await prisma.guild.findUnique({
@@ -99,8 +103,7 @@ export async function handleSettingsRoutes(ctx: ModuleRouteContext): Promise<boo
       }
       if (Object.prototype.hasOwnProperty.call(body, 'logIgnoredChannelIds')) {
         if (!Array.isArray(body.logIgnoredChannelIds)) {
-          json(res, 400, { error: 'logIgnoredChannelIds doit être un tableau de salons.' });
-          return true;
+          return send(c, { error: 'logIgnoredChannelIds doit être un tableau de salons.' }, 400);
         }
         const ids = body.logIgnoredChannelIds
           .filter((id): id is string => typeof id === 'string')
@@ -196,8 +199,7 @@ export async function handleSettingsRoutes(ctx: ModuleRouteContext): Promise<boo
         }
 
         if (!isValidTimeZone) {
-          json(res, 400, { error: `Fuseau horaire invalide : « ${candidate} ».` });
-          return true;
+          return send(c, { error: `Fuseau horaire invalide : « ${candidate} ».` }, 400);
         }
 
         data.dailyAlgoTimezone = candidate;
@@ -426,8 +428,7 @@ export async function handleSettingsRoutes(ctx: ModuleRouteContext): Promise<boo
 
       if (Object.prototype.hasOwnProperty.call(body, 'sidebarFavorites')) {
         if (!Array.isArray(body.sidebarFavorites)) {
-          json(res, 400, { error: 'sidebarFavorites doit être un tableau de chemins.' });
-          return true;
+          return send(c, { error: 'sidebarFavorites doit être un tableau de chemins.' }, 400);
         }
 
         dashboardSettingsPatch.sidebarFavorites = body.sidebarFavorites
@@ -459,13 +460,13 @@ export async function handleSettingsRoutes(ctx: ModuleRouteContext): Promise<boo
         });
       }
 
-      json(res, 200, { ok: true });
+      return send(c, { ok: true });
     } catch (err) {
       logger.error('SettingsAPI', 'Error updating settings:', err);
-      jsonFailure(res, err, 'Erreur lors de la mise à jour des paramètres', 'SettingsAPI');
+      return fail(c, err, 'Erreur lors de la mise à jour des paramètres', 'SettingsAPI');
     }
-    return true;
-  }
+  });
 
-  return false;
+  return router;
 }
+
