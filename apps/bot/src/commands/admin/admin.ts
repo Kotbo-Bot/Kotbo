@@ -6,7 +6,7 @@ import {
   PermissionFlagsBits,
   MessageFlags,
 } from 'discord.js';
-import { errorContainer, infoContainer, kotboContainer, successContainer } from '../../utils/embeds.js';
+import { errorContainer, kotboContainer, successContainer } from '../../utils/embeds.js';
 import { E } from '../../utils/emojis.js';
 import prisma from '../../utils/db.js';
 import { upsertRetryingRace } from '../../utils/upsertRetry.js';

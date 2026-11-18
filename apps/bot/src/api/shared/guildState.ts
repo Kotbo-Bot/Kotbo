@@ -1,7 +1,6 @@
 /** Etat complet d une guilde et acces par fonctionnalite. */
 import { ChannelType, PermissionFlagsBits, type Client } from 'discord.js';
 import prisma from '../../utils/db.js';
-import { cache } from '../../utils/cache.js';
 import { logger } from '../../utils/logger.js';
 import { isStaffServerGuild } from '../../services/staff/staffServerService.js';
 import { parseEvidenceLinks } from '../evidence.js';
