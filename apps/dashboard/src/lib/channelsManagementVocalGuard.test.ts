@@ -9,7 +9,7 @@ import { join } from 'node:path';
  * l'audit du dashboard ; la logique pure, elle, est testée dans
  * `tempVoiceUi.test.ts`.
  */
-const read = (...parts: string[]) => readFileSync(join(import.meta.dir, '..', ...parts), 'utf-8');
+const read = (...parts: string[]) => readFileSync(join(import.meta.dir, '..', ...parts), 'utf-8').replace(/\r\n/g, '\n');
 const page = read('pages', 'ChannelsManagement.svelte');
 const COUPE = page.lastIndexOf('</script>');
 const script = page.slice(0, COUPE);

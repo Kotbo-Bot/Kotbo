@@ -107,7 +107,7 @@
         </div>
         <div class="flex flex-wrap items-center gap-3">
           {#if live}
-            <span class="inline-flex items-center gap-2 rounded-lg bg-error/10 px-3 py-1.5 text-sm font-semibold text-error">
+            <span class="inline-flex items-center gap-2 rounded-lg bg-error/10 px-3 py-1.5 text-sm font-semibold text-on-error-container">
               <span class="h-2 w-2 animate-pulse rounded-full bg-error"></span>{m.tn_live()}
             </span>
           {:else if finished}

@@ -1501,7 +1501,7 @@
                               </span>
                               <div class="min-w-0 flex-1">
                                 <div class="flex items-center gap-2">
-                                  <span class="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">{historyFieldLabel(item.field)}</span>
+                                  <span class="text-xs font-semibold text-on-surface-variant">{historyFieldLabel(item.field)}</span>
                                   <span class="text-2xs text-on-surface-variant">·</span>
                                   <time class="text-xs text-on-surface-variant" datetime={item.recordedAt}>{formatDateTime(item.recordedAt)}</time>
                                 </div>

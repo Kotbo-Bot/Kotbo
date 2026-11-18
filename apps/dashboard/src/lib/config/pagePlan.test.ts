@@ -1,7 +1,5 @@
-import { describe, expect, mock, test } from 'bun:test';
-// pages.ts appelle les traductions au chargement : un m.* vide suffit ici.
-mock.module('../i18n', () => ({ m: new Proxy({}, { get: () => () => '' }) }));
-const { pagePlan } = await import('./pages');
+import { describe, expect, test } from 'bun:test';
+import { pagePlan } from './pages';
 
 describe('pagePlan', () => {
   test('module hors offre gratuite : couronne Plus', () => {

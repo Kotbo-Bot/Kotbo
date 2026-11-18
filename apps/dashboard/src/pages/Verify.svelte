@@ -166,7 +166,7 @@
         </div>
       {:else if error}
         <div class="admin-surface p-8 sm:p-10 text-center" role="alert">
-          <div class="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-error/10 text-error">
+          <div class="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-error/10 text-on-error-container">
             <Papicon icon="warning" size={26} />
           </div>
           <h1 class="font-headline text-2xl font-bold tracking-tight mb-1.5">{m.vfy_error_title()}</h1>
@@ -176,7 +176,7 @@
       {:else if result}
         <div class="admin-surface p-8 sm:p-10 text-center">
           {#if result.duplicateDetected}
-            <div class="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-warning/15 text-warning">
+            <div class="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-warning/15 text-on-warning-container">
               <Papicon icon="warning" size={26} />
             </div>
             <h1 class="font-headline text-2xl font-bold tracking-tight mb-1.5">{m.vfy_duplicate()}</h1>
@@ -187,7 +187,7 @@
               </div>
             {/if}
           {:else}
-            <div class="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-success/15 text-success">
+            <div class="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-success/15 text-on-success-container">
               <Papicon icon="check" size={26} />
             </div>
             <h1 class="font-headline text-2xl font-bold tracking-tight mb-1.5">{m.vfy_success()}</h1>

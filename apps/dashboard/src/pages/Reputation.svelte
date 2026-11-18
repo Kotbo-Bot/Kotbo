@@ -547,7 +547,8 @@
                 {#each data.leaderboard.entries as entry, i (entry.userId)}
                   {@const openMember = openMemberOnClick(entry.displayName)}
                   <!-- Le fond de la ligne ouvre la fiche ; le clavier passe deja par le pseudo, et les boutons gardent leur action. -->
-                  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+                  <!-- svelte-ignore a11y_click_events_have_key_events -->
+      <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
                   <li
                     class="reputation-leaderboard-row grid items-center gap-2 px-2.5 py-2 rounded-lg text-sm transition-colors hover:bg-surface-container-high/20 {openMember ? 'cursor-pointer' : ''} {i < 3 ? 'bg-surface-container-high/10' : ''}"
                     title={openMember ? m.sx_open_member({ name: entry.displayName || entry.userId }) : undefined}
@@ -625,7 +626,7 @@
                   <div class="flex items-start justify-between gap-2">
                     <div class="flex items-center gap-2 flex-wrap min-w-0">
                       {#if vote.kind === 'ADJUSTMENT'}
-                        <span class="text-2xs font-semibold px-2 py-0.5 rounded-full {(vote.value ?? 0) > 0 ? 'bg-success/10 text-success border border-success/20' : 'bg-error/10 text-error border border-error/20'}">
+                        <span class="text-2xs font-semibold px-2 py-0.5 rounded-full {(vote.value ?? 0) > 0 ? 'bg-success/10 text-on-success-container border border-success/20' : 'bg-error/10 text-on-error-container border border-error/20'}">
                           {m.rep_history_adjustment({ points: (vote.value ?? 0) > 0 ? `+${vote.value}` : `${vote.value}` })}
                         </span>
                       {/if}
@@ -820,7 +821,7 @@
                 <Papicon icon="ShieldCheck" size={15} />
                 {m.rep_guards_heading()}
               </span>
-              <span class="text-2xs font-semibold px-2 py-0.5 rounded-full {!guardsValid ? 'bg-error/10 text-error border border-error/20' : guardCount > 0 ? 'bg-success/10 text-success border border-success/20' : 'bg-surface-container-high/60 text-on-surface-variant'}">
+              <span class="text-2xs font-semibold px-2 py-0.5 rounded-full {!guardsValid ? 'bg-error/10 text-on-error-container border border-error/20' : guardCount > 0 ? 'bg-success/10 text-on-success-container border border-success/20' : 'bg-surface-container-high/60 text-on-surface-variant'}">
                 {!guardsValid ? m.rep_tab_to_fix() : guardCount > 0 ? m.rep_guards_summary({ count: guardCount }) : m.rep_guards_off()}
               </span>
             </summary>

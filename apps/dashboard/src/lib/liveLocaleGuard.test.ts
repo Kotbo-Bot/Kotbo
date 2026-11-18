@@ -200,7 +200,7 @@ describe('changement de langue sans rechargement', () => {
   test('la langue change sans recharger la page', () => {
     const calls = sourceFiles(SRC).flatMap((path) => {
       const code = readFileSync(path, 'utf-8');
-      return [...code.matchAll(/\bsetLocale\(([^)]*)\)/g)].map((match) => ({ path: relative(SRC, path), args: match[1] }));
+      return [...code.matchAll(/\bsetLocale\(([^)]*)\)/g)].map((match) => ({ path: relative(SRC, path).replaceAll('\\', '/'), args: match[1] }));
     });
     expect(calls.length).toBeGreaterThan(0);
     for (const call of calls) {

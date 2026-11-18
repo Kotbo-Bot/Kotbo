@@ -42,7 +42,7 @@ function openingTags(text: string, tag: string): string[] {
 }
 
 describe("garde-fou d'accessibilite", () => {
-  const sources = svelteFiles(SRC).map((file) => ({ file: file.slice(SRC.length + 1), text: readFileSync(file, 'utf-8') }));
+  const sources = svelteFiles(SRC).map((file) => ({ file: file.slice(SRC.length + 1).replaceAll('\\', '/'), text: readFileSync(file, 'utf-8') }));
 
   test('openingTags saute les fleches des expressions', () => {
     const [tag] = openingTags('<Modal onClose={() => (x = 1)} title="A">corps</Modal>', 'Modal');
@@ -242,6 +242,7 @@ describe("garde-fou d'accessibilite", () => {
       'pages/Login.svelte',
       'pages/MemberSpace.svelte',
       'pages/SanctionEvidenceFile.svelte',
+      'pages/Verify.svelte',
     ];
     const offenders = sources
       .filter(({ file, text }) => !OWN_MAIN.includes(file) && openingTags(text, 'main').length > 0)
