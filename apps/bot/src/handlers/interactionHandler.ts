@@ -27,6 +27,7 @@ import { showModeratorNoteModal } from '../commands/moderation/note.js';
 import { sendReportToAdmin } from '../commands/moderation/signal.js';
 import { parseDurationToMs, recordAppliedSanction, registerBanSanction, registerKickSanction, registerTimeoutSanction, registerWarnSanction, runGuildBan } from '../services/moderation/sanctionService.js';
 import { publicErrorMessage } from '../utils/publicError.js';
+import { APPROVAL_PREFIX, decideApproval } from '../api/mcp/staffApproval.js';
 
 
 /** Modal de saisie de raison (et durée pour timeout) partagé entre le select historique et les boutons rapides du casier. */
@@ -118,6 +119,28 @@ export async function handleButton(interaction: Interaction, client: Client): Pr
   if (!interaction.isButton()) return;
 
   const { customId, guildId, user } = interaction;
+
+  // ── Approbation staff d'une action critique demandée par l'agent MCP ──
+  // Seul un administrateur du serveur décide ; la décision est lue plus tard par `consumeApproval`.
+  if (customId.startsWith(APPROVAL_PREFIX)) {
+    const [, verdict, requestId] = customId.split(':');
+    const canDecide = Boolean(guildId)
+      && (interaction.memberPermissions?.has(PermissionFlagsBits.Administrator) || interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild));
+    if (!guildId || !canDecide || (verdict !== 'ok' && verdict !== 'no') || !requestId) {
+      await interaction.reply({ content: 'Seul un administrateur du serveur peut décider de cette demande.', flags: [MessageFlags.Ephemeral] });
+      return;
+    }
+    const decided = await decideApproval(guildId, requestId, verdict === 'ok', user.id);
+    if (!decided) {
+      await interaction.reply({ content: 'Cette demande est déjà tranchée ou introuvable.', flags: [MessageFlags.Ephemeral] });
+      return;
+    }
+    await interaction.update({
+      content: `${verdict === 'ok' ? '✅ Approuvée' : '❌ Rejetée'} par <@${user.id}>.`,
+      components: [],
+    });
+    return;
+  }
 
   if (customId.startsWith('help_')) {
     const { handleHelpInteraction } = await import('../commands/utility/help.js');

@@ -2,6 +2,7 @@
 import prisma from '../../../utils/db.js';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, type NewsChannel, PermissionFlagsBits, TextChannel } from 'discord.js';
 import { z } from 'zod';
+import { APPROVAL_PREFIX, createApprovalRequest } from '../staffApproval.js';
 import { type McpToolContext, err, ok, resolveChannel, toolError } from '../toolkit.js';
 
 export function registerSystemSafetyNewTools(ctx: McpToolContext) {
@@ -15,7 +16,7 @@ export function registerSystemSafetyNewTools(ctx: McpToolContext) {
       {
         description: 'Soumet une action critique (comme réinitialiser l\'économie ou bannir) à l\'approbation manuelle du Staff via un bouton Discord.',
         inputSchema: {
-          action_name: z.string().describe('Nom court de l\'action (ex: "reset_economy", "ban_member")'),
+          action_name: z.string().describe("Nom exact de l'action : admin_reset_economy:<component> ou dissolve_rpg_guild:<id>. La demande ne sert qu'à cette action."),
           details: z.string().describe('Détails textuels décrivant l\'action demandée par l\'IA'),
           channel: z.string().optional().describe('Salon où envoyer la demande (défaut: salon de logs)'),
           key_name: z.string().optional(),
@@ -49,21 +50,14 @@ export function registerSystemSafetyNewTools(ctx: McpToolContext) {
 
         try {
           const { randomBytes } = await import('crypto');
-          const requestId = `mcp_approve:${randomBytes(8).toString('hex')}`;
-          
-          // Stocker temporairement la demande d'approbation en base (si une table existe, ou en log)
-          // Pour éviter de surcharger le schema, on crée un log d'audit spécifique en statut PENDING
-          await prisma.dashboardAuditLog.create({
-            data: {
-              guildId,
-              user: `MCP[${key_name || 'agent'}]`,
-              action: `Demande d'approbation : ${action_name}`,
-              context: requestId,
-              module: 'MCP',
-              eventType: 'Action',
-              details: `PENDING - Détails : ${details}`,
-              dateIso: new Date(),
-            }
+          const requestId = randomBytes(8).toString('hex');
+
+          await createApprovalRequest({
+            guildId,
+            requestId,
+            actionName: action_name,
+            requestedBy: `MCP[${key_name || 'agent'}]`,
+            details,
           });
 
           const embed = new EmbedBuilder()
@@ -74,8 +68,8 @@ export function registerSystemSafetyNewTools(ctx: McpToolContext) {
             .setFooter({ text: `ID Demande : ${requestId}` });
 
           const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-            new ButtonBuilder().setCustomId(`mcp_approve:ok:${requestId}`).setLabel('Approuver').setStyle(ButtonStyle.Success).setEmoji('✅'),
-            new ButtonBuilder().setCustomId(`mcp_approve:no:${requestId}`).setLabel('Rejeter').setStyle(ButtonStyle.Danger).setEmoji('❌')
+            new ButtonBuilder().setCustomId(`${APPROVAL_PREFIX}ok:${requestId}`).setLabel('Approuver').setStyle(ButtonStyle.Success).setEmoji('✅'),
+            new ButtonBuilder().setCustomId(`${APPROVAL_PREFIX}no:${requestId}`).setLabel('Rejeter').setStyle(ButtonStyle.Danger).setEmoji('❌')
           );
 
           await targetChannel.send({

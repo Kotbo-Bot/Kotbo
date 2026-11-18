@@ -9,6 +9,7 @@ import { MENTION_CHANNEL, type McpToolContext, SNOWFLAKE, err, ok, resolveChanne
 import { INVITE_SOURCE, recordBotInvite } from '../../../services/analytics/inviteService.js';
 import { annoncerIntentionVocale } from '../../../services/moderation/voiceIntentRegistry.js';
 
+import { consumeApproval } from '../staffApproval.js';
 export function registerWriteServerAssetsTools(ctx: McpToolContext) {
   const { server, guildId, client, shouldRegister, guard, audit, toolMeta } = ctx;
 
@@ -745,14 +746,14 @@ export function registerWriteServerAssetsTools(ctx: McpToolContext) {
         description: 'Réinitialise l\'économie du serveur. Requiert une validation staff si déclenché directement.',
         inputSchema: {
           component: z.enum(['all', 'profiles', 'items', 'config', 'guilds', 'bestiary', 'titles']).default('all'),
-          approved_by_staff: z.boolean().default(false).describe('Indique si un bouton Discord a déjà approuvé cette demande'),
+          approval_id: z.string().optional().describe("Identifiant d'une demande request_staff_approval (action_name admin_reset_economy:<component>) approuvée par un humain du staff. Usage unique."),
           key_name: z.string().optional(),
         },
         _meta: toolMeta,
       },
-      guard('WRITE_MEMBERS', async ({ component, approved_by_staff, key_name }) => {
-        if (!approved_by_staff) {
-          return err('Action critique rejetée. Utilisez request_staff_approval pour soumettre le reset à la validation humaine du staff.');
+      guard('WRITE_MEMBERS', async ({ component, approval_id, key_name }) => {
+        if (!(await consumeApproval(guildId, approval_id, `admin_reset_economy:${component}`))) {
+          return err(`Action critique rejetée : aucune approbation staff valide. Utilisez request_staff_approval (action_name admin_reset_economy:${component}), attendez le clic d'un administrateur, puis passez approval_id.`);
         }
 
         try {
