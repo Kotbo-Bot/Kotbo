@@ -25,6 +25,9 @@ import { createShopAdminRouter } from './routes/shopAdmin.js';
 import { createAdminSitesRouter } from './routes/adminSites.js';
 import { logger } from '../../utils/logger.js';
 import { createDashboardRouter } from './dashboard/index.js';
+import { createUserRouter } from '../routes/user.js';
+import { createReportErrorRouter } from '../routes/error.js';
+import { createReportFeedbackRouter } from '../routes/feedback.js';
 import { fail } from './dashboard/kit.js';
 
 /**
@@ -75,6 +78,9 @@ export function createHonoApp(client: Client): OpenAPIHono {
   app.route('/', createSiteAdminRouter(client));
   app.route('/', createShopAdminRouter(client));
   app.route('/', createAdminSitesRouter(client));
+  app.route('/', createUserRouter(client));
+  app.route('/', createReportErrorRouter(client));
+  app.route('/', createReportFeedbackRouter(client));
   app.route('/', createDashboardRouter(client));
 
   // ---------------------------------------------------------------------------

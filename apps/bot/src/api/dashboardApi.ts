@@ -42,10 +42,6 @@ import { getAllInstances } from '../utils/instanceResolver.js';
 
 // Modular Route Handlers (legacy - maintenu pendant la migration progressive)
 import { handlePublicRoutes } from './routes/public.js';
-import { handleAuthRoutes } from './routes/auth.js';
-import { handleReportErrorRoute } from './routes/error.js';
-import { handleReportFeedbackRoute } from './routes/feedback.js';
-import { handleUserRoutes } from './routes/user.js';
 import { handleAdminRoutes } from './routes/admin.js';
 import { startBroadcastScheduler } from '../services/system/broadcastService.js';
 import { handleVerifyRoutes } from './routes/verify.js';
@@ -403,11 +399,7 @@ export const startDashboardApi = async (client: Client) => {
 
             // Routes legacy (non encore migrées vers Hono)
             if (await handlePublicRoutes(req, res, parts, url, client)) return;
-            if (await handleAuthRoutes(req, res, parts, url, client)) return;
             if (await handleVerifyRoutes(req, res, parts, url, client)) return;
-            if (await handleReportErrorRoute(req, res, parts, url, client)) return;
-            if (await handleReportFeedbackRoute(req, res, parts, url, client)) return;
-            if (await handleUserRoutes(req, res, parts, url, client)) return;
             if (await handleAdminRoutes(req, res, parts, url, client)) return;
             if (await handleMCPRoutes(req, res, parts, url, client)) return;
             if (await handleRestApiRoutes(req, res, parts, url, client)) return;

@@ -285,3 +285,9 @@ authRouter.post('/api/auth/logout', async (c) => {
   appendCookies(c.res.headers, clearSessionCookies());
   return c.json({ success: true });
 });
+
+// Compatibilité pour les clients utilisant encore l'ancien flux OAuth implicite.
+authRouter.post('/api/auth/discord/token-exchange', (c) =>
+  c.json({ error: 'Le flux OAuth implicite a été désactivé. Reconnectez-vous avec Discord.' }, 410),
+);
+

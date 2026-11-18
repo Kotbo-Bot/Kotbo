@@ -1,49 +1,34 @@
-import { IncomingMessage, ServerResponse } from 'node:http';
+import { Hono } from 'hono';
 import { Client, EmbedBuilder } from 'discord.js';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import {
-  json,
-  verifyAuth,
-  readJsonBody,
-  getClientIp,
   checkRateLimit,
   errorReportRateLimiter,
 } from '../shared.js';
+import { dashboardAuth, readBody, requestIp, send } from '../hono/dashboard/kit.js';
 
-export async function handleReportErrorRoute(
-  req: IncomingMessage,
-  res: ServerResponse,
-  parts: string[],
-  url: URL,
-  client: Client
-): Promise<boolean> {
-  const method = req.method;
-
-  if (parts[0] !== 'api' || parts[1] !== 'report-error') {
-    return false;
-  }
+export function createReportErrorRouter(client: Client) {
+  const router = new Hono();
 
   // POST /api/report-error
-  if (method === 'POST') {
-    const ip = getClientIp(req);
+  router.post('/api/report-error', dashboardAuth, async (c) => {
+    const ip = requestIp(c) || '127.0.0.1';
     if (!checkRateLimit(errorReportRateLimiter, ip, 5, 15 * 60 * 1000)) {
-      json(res, 429, { error: "Trop de rapports d'erreur envoyés. Veuillez réessayer plus tard." });
-      return true;
+      return send(c, { error: "Trop de rapports d'erreur envoyés. Veuillez réessayer plus tard." }, 429);
     }
 
     try {
-      const body = await readJsonBody<{
+      const body = await readBody<{
         error: unknown;
         stack?: unknown;
         url: unknown;
         userAgent: unknown;
         guildId?: unknown;
-      }>(req);
+      }>(c);
 
       if (!body) {
-        json(res, 400, { error: 'Payload invalide' });
-        return true;
+        return send(c, { error: 'Payload invalide' }, 400);
       }
 
       const { error, stack, url: errorUrl, userAgent, guildId } = body;
@@ -56,8 +41,7 @@ export async function handleReportErrorRoute(
         (userAgent !== undefined && typeof userAgent !== 'string') ||
         (guildId !== undefined && guildId !== null && typeof guildId !== 'string')
       ) {
-        json(res, 400, { error: 'Payload invalide' });
-        return true;
+        return send(c, { error: 'Payload invalide' }, 400);
       }
 
       const errorStr = error.slice(0, 1000);
@@ -68,8 +52,7 @@ export async function handleReportErrorRoute(
 
       const allowedOriginPattern = /^(https?:\/\/)?([a-zA-Z0-9-]+\.)*(kotbo\.fr|localhost)(:\d+)?(\/.*)?$/;
       if (errorUrl && !allowedOriginPattern.test(errorUrl)) {
-        json(res, 400, { error: 'URL non autorisée' });
-        return true;
+        return send(c, { error: 'URL non autorisée' }, 400);
       }
 
       const sanitizeMarkdown = (str: string) => str.replace(/`/g, '\\`');
@@ -79,16 +62,12 @@ export async function handleReportErrorRoute(
       const fitField = (str: string, wrapperLength: number) =>
         sanitizeMarkdown(str).slice(0, FIELD_MAX - wrapperLength);
 
-      const user = await verifyAuth(req);
-      if (!user) {
-        json(res, 401, { error: 'Non authentifié' });
-        return true;
-      }
+      const user = c.var.dashboardUser;
       const userInfo = `**Utilisateur:** <@${user.userId}> (${user.username} - ID: ${user.userId})`;
 
       const ownerId = process.env.DISCORD_CLIENT_OWNER_ID;
       const adminsFromDb = await prisma.globalAdmin.findMany({
-        select: { userId: true }
+        select: { userId: true },
       });
       const adminIds = new Set<string>();
       if (ownerId) {
@@ -100,20 +79,19 @@ export async function handleReportErrorRoute(
 
       if (adminIds.size === 0) {
         logger.error("Aucun administrateur configuré pour recevoir le rapport d'erreur.");
-        json(res, 500, { error: 'Aucun administrateur configuré' });
-        return true;
+        return send(c, { error: 'Aucun administrateur configuré' }, 500);
       }
 
       const embed = new EmbedBuilder()
         .setTitle("🚨 Rapport d'erreur du Dashboard")
-        .setColor(0xFF0000)
+        .setColor(0xff0000)
         .setTimestamp()
         .addFields(
           { name: '👤 Utilisateur', value: userInfo },
           { name: '🌐 Page / URL', value: `\`${fitField(urlStr, 2)}\`` },
           { name: '💻 Navigateur', value: `\`${fitField(userAgentStr, 2)}\`` },
           { name: '🏰 Serveur sélectionné (Guild ID)', value: `\`${fitField(guildIdStr, 2)}\`` },
-          { name: '❌ Erreur', value: `\`\`\`\n${fitField(errorStr, 8)}\n\`\`\`` }
+          { name: '❌ Erreur', value: `\`\`\`\n${fitField(errorStr, 8)}\n\`\`\`` },
         );
 
       if (stackStr) {
@@ -137,18 +115,16 @@ export async function handleReportErrorRoute(
       }
 
       if (sentCount === 0) {
-        json(res, 500, { error: "Impossible d'envoyer le rapport aux administrateurs" });
-        return true;
+        return send(c, { error: "Impossible d'envoyer le rapport aux administrateurs" }, 500);
       }
 
-      json(res, 200, { success: true });
+      return send(c, { success: true }, 200);
     } catch (err: unknown) {
       const errMessage = err instanceof Error ? err.message : String(err);
       logger.error('ReportError', `Erreur lors de la transmission du rapport d'erreur: ${errMessage}`);
-      json(res, 500, { error: 'Erreur lors de la transmission' });
+      return send(c, { error: 'Erreur lors de la transmission' }, 500);
     }
-    return true;
-  }
+  });
 
-  return false;
+  return router;
 }

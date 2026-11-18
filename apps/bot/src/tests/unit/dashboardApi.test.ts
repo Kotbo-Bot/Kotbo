@@ -207,9 +207,9 @@ mock.module(path.resolve(import.meta.dir, '../../services/system/planService.js'
 // Import router modules and helpers after mocks are set up
 import { JWT_SECRET, splitPath, resolveDashboardAccess } from '../../api/shared.js';
 import { handlePublicRoutes } from '../../api/routes/public.js';
-import { handleAuthRoutes } from '../../api/routes/auth.js';
-import { handleReportErrorRoute } from '../../api/routes/error.js';
-import { handleUserRoutes } from '../../api/routes/user.js';
+import { authRouter } from '../../api/hono/routes/auth.js';
+import { createReportErrorRouter } from '../../api/routes/error.js';
+import { createUserRouter } from '../../api/routes/user.js';
 import { handleAdminRoutes } from '../../api/routes/admin.js';
 import { createDashboardRouter } from '../../api/hono/dashboard/index.js';
 import { getMcpConnectionLogs, handleMCPRoutes, makeMcpDirectToken } from '../../api/mcp/mcpServer.js';
@@ -1161,62 +1161,33 @@ describe('Modular Routers Unit Tests', () => {
   });
 
   describe('2. Auth Routes', () => {
-    test('active Discord login is handled by the Hono router', async () => {
-      const req = createMockRequest({ method: 'GET', url: '/api/auth/discord/login' });
-      const res = createMockResponse();
-      const parts = splitPath(req.url!);
-      const url = new URL(req.url!, 'http://localhost');
-
-      const handled = await handleAuthRoutes(req, res, parts, url, mockClient);
-      expect(handled).toBeFalse();
-    });
-
     test('legacy implicit token exchange is retired', async () => {
-      const req = createMockRequest({ method: 'POST', url: '/api/auth/discord/token-exchange' });
-      const res = createMockResponse();
-      const parts = splitPath(req.url!);
-      const url = new URL(req.url!, 'http://localhost');
-
-      const handled = await handleAuthRoutes(req, res, parts, url, mockClient);
-      expect(handled).toBeTrue();
-      expect(res.statusCode).toBe(410);
+      const res = await authRouter.request('/api/auth/discord/token-exchange', { method: 'POST' });
+      expect(res.status).toBe(410);
     });
-
   });
 
   describe('3. Error Routes', () => {
     test('POST /api/report-error returns 400 for invalid payload', async () => {
-      const req = createMockRequest({
+      const router = createReportErrorRouter(mockClient);
+      const res = await router.request('/api/report-error', {
         method: 'POST',
-        url: '/api/report-error',
-        headers: { 'content-type': 'application/json' },
+        headers: authenticatedHeaders({ 'content-type': 'application/json' }),
         body: '{}',
       });
-      const res = createMockResponse();
-      const parts = splitPath(req.url!);
-      const url = new URL(req.url!, 'http://localhost');
-
-      const handled = await handleReportErrorRoute(req, res, parts, url, mockClient);
-      expect(handled).toBeTrue();
-      expect(res.statusCode).toBe(400);
+      expect(res.status).toBe(400);
     });
   });
 
   describe('4. User Routes', () => {
     test('GET /api/user/me returns user info when authenticated', async () => {
-      const req = createMockRequest({
+      const router = createUserRouter(mockClient);
+      const res = await router.request('/api/user/me', {
         method: 'GET',
-        url: '/api/user/me',
         headers: authenticatedHeaders(),
       });
-      const res = createMockResponse();
-      const parts = splitPath(req.url!);
-      const url = new URL(req.url!, 'http://localhost');
-
-      const handled = await handleUserRoutes(req, res, parts, url, mockClient);
-      expect(handled).toBeTrue();
-      expect(res.statusCode).toBe(200);
-      const data = JSON.parse(res.body);
+      expect(res.status).toBe(200);
+      const data = await res.json() as { id?: string; username?: string };
       expect(data.id).toBe('123456789012345678');
       expect(data.username).toBe('TestUser');
     });
