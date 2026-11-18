@@ -3,7 +3,7 @@
  * complets, écriture suivie de l'invalidation du cache du service et d'un
  * signal temps réel à la page.
  */
-import type { StarboardConfig } from '@prisma/client';
+import type { Prisma, StarboardConfig } from '@prisma/client';
 import {
   defaultStarboardSettings,
   readStarboardChannelThresholds,
@@ -51,9 +51,10 @@ export async function getStarboardSettings(guildId: string): Promise<StarboardSe
  */
 export async function saveStarboardSettings(guildId: string, patch: Partial<StarboardSettings>): Promise<StarboardSettings> {
   // Colonne JSON : des objets littéraux, que Prisma accepte comme valeur JSON.
+  const { tiers, ...rest } = patch;
   const data = {
-    ...patch,
-    ...(patch.tiers ? { tiers: patch.tiers.map((tier) => ({ threshold: tier.threshold, roleId: tier.roleId })) } : {}),
+    ...rest,
+    ...(tiers ? { tiers: tiers.map((tier) => ({ threshold: tier.threshold, roleId: tier.roleId })) as Prisma.InputJsonValue } : {}),
   };
   const defaults = defaultStarboardSettings();
   const row = await prisma.starboardConfig.upsert({

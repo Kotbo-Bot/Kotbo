@@ -12,6 +12,7 @@ import {
   isStarboardSort,
   readStarboardTiers,
   normalizeStarboardChannelThresholds,
+  type StarboardChannelThresholdError,
   starboardAdvice,
   starboardExcerpt,
   starboardPeriodStart,
@@ -146,7 +147,7 @@ describe('normalizeStarboardChannelThresholds', () => {
     [{ '111111111111111111': 2.5 }, 'BAD_THRESHOLD'],
     [Object.fromEntries(Array.from({ length: STARBOARD_CHANNEL_THRESHOLDS_MAX + 1 }, (_, i) => [`1${String(i).padStart(17, '0')}`, 3])), 'TOO_MANY'],
   ])('refuse %j (%s)', (raw, error) => {
-    expect(normalizeStarboardChannelThresholds(raw)).toEqual({ error });
+    expect(normalizeStarboardChannelThresholds(raw)).toEqual({ error } as { error: StarboardChannelThresholdError });
   });
 });
 
