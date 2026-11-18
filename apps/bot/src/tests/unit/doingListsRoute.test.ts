@@ -11,6 +11,7 @@ import path from 'node:path';
 import type { Client } from 'discord.js';
 import { DASHBOARD_ACCESS_ADMIN, type AuthClaims, type DashboardAccess } from '../../api/shared.js';
 import { completeModuleMock } from '../helpers/moduleMock.js';
+import { legacyModuleCall, mockDashboardGate } from '../helpers/honoDashboard.js';
 
 type Column = { id: string; name: string; position: number; wipLimit: number | null; isDone: boolean };
 
@@ -76,7 +77,8 @@ for (const suffix of ['../../services/staff/staffLeadershipService.ts', '../../s
   mock.module(path.resolve(__dirname, suffix), () => completeModuleMock(leadershipPath, { createTask }));
 }
 
-const { handleDoingListRoutes } = await import('../../api/routes/dashboard/doingLists.js');
+mockDashboardGate(DASHBOARD_ACCESS_ADMIN, { userId: 'user-1', username: 'Staff' });
+const { createDoingListsRouter } = await import('../../api/routes/dashboard/doingLists.js');
 const { columnForTaskStatus, taskStatusForColumn } = await import('../../services/staff/doingListTaskSync.js');
 
 function request(method: string, body: Record<string, unknown>): IncomingMessage {
@@ -109,7 +111,7 @@ const BOARD: Column[] = [
 
 async function call(access: DashboardAccess, body: Record<string, unknown>, method = 'POST', route = itemsPath) {
   const res = response();
-  await handleDoingListRoutes(request(method, body), res, route, new URL('http://x'), client, user, 'guild-1', access);
+  await legacyModuleCall(createDoingListsRouter(client), { req: request(method, body), res, parts: route, method, user, access });
   return res;
 }
 

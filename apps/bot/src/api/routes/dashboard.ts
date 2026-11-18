@@ -11,7 +11,6 @@ import { handleAnalyticsRoutes } from './dashboard/analytics.js';
 import { handleMembersRoutes } from './dashboard/members.js';
 import { handleLeadershipRoutes, handleGuildLeadershipRoutes } from './dashboard/leadership.js';
 import { handleGeneralistModulesRoutes } from './dashboard/generalistModules.js';
-import { handleDoingListRoutes } from './dashboard/doingLists.js';
 import { handleClansRoutes } from './dashboard/clans.js';
 import { getCachedFeatureAccess } from './dashboard/featureGate.js';
 
@@ -89,9 +88,6 @@ export async function handleDashboardRoutes(
     // Pas d'invalidation du cache derrière : une simulation n'écrit rien.
     if (await handleGeneralistModulesRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
       if (method !== 'GET') await cache.invalidateGuild(guildId);
-      return true;
-    }
-    if (await handleDoingListRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
       return true;
     }
     if (parts[4] === 'clans') {
