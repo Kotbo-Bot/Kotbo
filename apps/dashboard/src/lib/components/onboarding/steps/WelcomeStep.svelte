@@ -24,6 +24,7 @@
   import KotboMark from '../KotboMark.svelte';
   import Papicon from '../../Papicon.svelte';
   import Modal from '../../Modal.svelte';
+  import { Button, Callout } from '../../ui';
   import WizardShell from '../WizardShell.svelte';
 
   const selectedGuild = $derived(
@@ -108,52 +109,33 @@
       <span class="text-xs font-medium text-on-surface-variant">{m.obx_wc_duration()}</span>
     </div>
 
-    <!-- Etat des autorisations Discord : mise en avant forte de l'Admin ou avertissement de friction -->
     {#if !isAdministrator}
-      <div class="mt-7 w-full max-w-xl rounded-2xl border-2 border-warning/40 bg-warning/5 p-4 sm:p-5 text-left space-y-4">
-        <div class="flex items-start gap-3">
-          <div class="w-9 h-9 rounded-xl bg-warning/15 text-on-warning-container flex items-center justify-center shrink-0 mt-0.5">
-            <Papicon icon="AlertTriangle" size={18} />
-          </div>
-          <div class="min-w-0 flex-1 space-y-1">
-            <div class="flex items-center gap-2 flex-wrap">
-              <p class="text-sm font-semibold text-on-surface">Permissions restreintes détectées</p>
-              <span class="text-2xs font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-warning/15 text-on-warning-container">
-                Mode au détail
-              </span>
-            </div>
-            <p class="text-xs text-on-surface-variant/80 leading-relaxed">
-              Kotbo ne dispose pas de la permission Administrateur sur ce serveur. Sans elle, la création des salons de tickets privés, l'anti-raid et l'isolation des logs peuvent échouer ou créer des conflits d'accès.
-            </p>
-          </div>
-        </div>
-
-        <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2 border-t border-warning/20">
-          <a
-            href={clientId ? buildBotInviteUrl(clientId, ADMIN_INVITE_PERMISSIONS, selectedGuild?.id) : '#'}
-            target="_blank"
-            rel="noopener noreferrer"
-            class="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-primary text-on-primary text-xs font-semibold hover:opacity-90 transition-opacity shadow-sm"
-          >
-            <Papicon icon="ShieldCheck" size={14} />
-            Passer en Administrateur (Recommandé)
-          </a>
-
-          <button
-            type="button"
-            onclick={refreshPermissions}
-            disabled={refreshingPerms}
-            class="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg border border-outline-variant/30 text-xs font-medium text-on-surface-variant hover:text-on-surface transition-colors"
-          >
-            <Papicon icon="refresh-cw" size={12} class={refreshingPerms ? 'animate-spin' : ''} />
-            Vérifier l'état
-          </button>
-        </div>
-      </div>
-    {:else}
-      <div class="mt-6 inline-flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/5 px-4 py-2 text-xs font-medium text-primary">
-        <Papicon icon="ShieldCheck" size={15} />
-        <span>Permissions serveur : Administrateur (Recommandé) · Tous les modules sont déverrouillés</span>
+      <div class="mt-6 w-full max-w-xl text-left">
+        <Callout variant="warning" title="Permissions restreintes détectées">
+          Kotbo ne dispose pas de la permission Administrateur sur ce serveur. Sans elle, l'isolation des tickets privés et des salons de journalisation peut nécessiter un réglage manuel dans Discord.
+          {#snippet actions()}
+            {#if clientId}
+              <Button
+                variant="primary"
+                size="sm"
+                iconRight="ExternalLink"
+                href={buildBotInviteUrl(clientId, ADMIN_INVITE_PERMISSIONS, selectedGuild?.id)}
+                target="_blank"
+              >
+                Accorder la permission Administrateur
+              </Button>
+            {/if}
+            <Button
+              variant="secondary"
+              size="sm"
+              icon="refresh-cw"
+              loading={refreshingPerms}
+              onclick={refreshPermissions}
+            >
+              Vérifier l'état
+            </Button>
+          {/snippet}
+        </Callout>
       </div>
     {/if}
   </div>
@@ -182,55 +164,51 @@
   {/snippet}
 </WizardShell>
 
-<!-- Modal de friction si tentative de continuer sans la permission Administrateur -->
 <Modal
   bind:open={frictionModalOpen}
   onClose={() => (frictionModalOpen = false)}
   size="md"
-  title="Avertissement : Mode permissions au détail"
-  subtitle="Vous configurez le serveur sans les droits recommandés."
+  title="Permissions au détail"
+  subtitle="Le bot ne dispose pas de la permission Administrateur."
 >
   <div class="space-y-4 text-left">
-    <div class="flex items-start gap-2.5 rounded-lg border border-error/30 bg-error/10 p-3.5 text-on-error-container">
-      <Papicon icon="AlertTriangle" size={18} class="shrink-0 mt-0.5" />
-      <div class="space-y-1 text-xs">
-        <p class="font-semibold text-on-surface">Risque de dysfonctionnement majeur lors de la pose</p>
-        <p class="text-on-surface-variant/80 leading-relaxed text-2xs">
-          En continuant avec des permissions restreintes, Discord appliquera les limitations de chaque salon. Vos tickets peuvent devenir visibles par tous les membres et les salons de journalisation risquent de ne pas être créés. Vous devrez configurer manuellement toutes les permissions salon par salon sur Discord.
-        </p>
-      </div>
-    </div>
+    <Callout variant="warning" title="Réglages manuels à prévoir sur Discord">
+      Avec des permissions restreintes, Discord applique les limitations de chaque catégorie. Les salons de tickets privés et de journalisation devront être vérifiés manuellement dans Discord.
+    </Callout>
 
-    <label class="flex items-start gap-2.5 cursor-pointer select-none px-1">
+    <label class="flex items-start gap-2.5 cursor-pointer select-none">
       <input
         type="checkbox"
         bind:checked={acknowledgedDetailed}
-        class="mt-0.5 rounded border-error/40 text-error focus:ring-error"
+        class="mt-0.5 rounded border-field-border text-primary focus:ring-primary"
       />
-      <span class="text-2xs text-error font-medium leading-relaxed">
-        J'ai conscience des risques de dysfonctionnement, de fuite de salons privés et je confirme vouloir poursuivre en mode restreint.
+      <span class="text-xs text-on-surface-variant leading-relaxed">
+        Je préfère vérifier manuellement les permissions des salons créés sur Discord.
       </span>
     </label>
+  </div>
 
-    <div class="flex flex-col sm:flex-row gap-2 pt-2">
-      <a
-        href={clientId ? buildBotInviteUrl(clientId, ADMIN_INVITE_PERMISSIONS, selectedGuild?.id) : '#'}
-        target="_blank"
-        rel="noopener noreferrer"
-        class="flex-1 inline-flex items-center justify-center gap-1.5 py-2.5 px-4 rounded-xl bg-primary text-on-primary text-xs font-semibold hover:opacity-90 transition-opacity shadow-sm"
-      >
-        <Papicon icon="ShieldCheck" size={14} />
-        Passer en Administrateur
-      </a>
-
-      <button
-        type="button"
+  {#snippet footer()}
+    <div class="flex items-center justify-end gap-2">
+      {#if clientId}
+        <Button
+          variant="primary"
+          size="sm"
+          iconRight="ExternalLink"
+          href={buildBotInviteUrl(clientId, ADMIN_INVITE_PERMISSIONS, selectedGuild?.id)}
+          target="_blank"
+        >
+          Passer en Administrateur
+        </Button>
+      {/if}
+      <Button
+        variant="secondary"
+        size="sm"
         disabled={!acknowledgedDetailed}
         onclick={confirmDetailedAndProceed}
-        class="flex-1 py-2.5 px-4 rounded-xl border border-error/30 text-error text-xs font-semibold hover:bg-error/10 disabled:opacity-30 disabled:cursor-not-allowed transition-all text-center"
       >
         Continuer en mode restreint
-      </button>
+      </Button>
     </div>
-  </div>
+  {/snippet}
 </Modal>
