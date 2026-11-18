@@ -183,7 +183,7 @@ export async function submitCustomForm(
   // nécessiter plusieurs appels DB/réseau. La réponse HTTP ne doit pas attendre
   // ces traitements une fois la soumission durablement enregistrée.
   queueMicrotask(() => {
-    void processCustomFormSubmissionSideEffects(formId, guildId, userId, username, data, client);
+    void processCustomFormSubmissionSideEffects(formId, guildId, userId, username, data, client, identityVerified);
     void publishFormSubmitted(formId, guildId, submission.id, identityVerified ? userId : null, username ?? userTag ?? '', data);
   });
 
@@ -197,6 +197,7 @@ async function processCustomFormSubmissionSideEffects(
   username: string | undefined,
   data: Record<string, string>,
   client?: Client,
+  identityVerified = false,
 ): Promise<void> {
   // Si le formulaire autonome est lié au recrutement, on crée également une candidature
   try {
@@ -245,7 +246,9 @@ async function processCustomFormSubmissionSideEffects(
     logger.error('CustomFormService', 'Error processing recruitment link for custom form:', err);
   }
 
-  if (client) {
+  // Les déclencheurs ajoutent ou retirent des rôles et écrivent en MP : jamais sur un `userId` que
+  // le client a simplement déclaré, sinon n'importe qui agit sur n'importe quel membre.
+  if (client && identityVerified) {
     await handleFormTrigger(guildId, userId, formId, data, client).catch((err) => {
       logger.error('CustomFormService', `Error executing trigger for form ${formId}:`, err);
     });
