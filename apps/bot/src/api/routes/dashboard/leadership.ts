@@ -84,7 +84,6 @@ import {
 import { getStaffProfileSnapshot } from '../../../services/progression/profileService.js';
 import { canViewFeatureSection, getCachedFeatureAccess } from './featureGate.js';
 import { handleStaffRoutes } from './leadership/staff.js';
-import { handleTutoringRoutes } from './leadership/tutoring.js';
 
 import { jsonFailure } from '../../shared/failure.js';
 /**
@@ -290,7 +289,6 @@ const LEADERSHIP_ROUTE_HANDLERS: Record<string, (
   access: DashboardAccess
 ) => Promise<boolean>> = {
   'staff': handleStaffRoutes,
-  'tutoring': handleTutoringRoutes,
 };
 
 export async function handleGuildLeadershipRoutes(
