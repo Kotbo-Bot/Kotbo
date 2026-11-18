@@ -1,5 +1,7 @@
 import { IncomingMessage, ServerResponse } from 'node:http';
+import { Socket } from 'node:net';
 import { Client, TextChannel } from 'discord.js';
+import { Hono, type Context } from 'hono';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BannedWord } from '@prisma/client';
@@ -31,7 +33,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const servicePath = path.resolve(__dirname, '../../services/analytics/messageScraperService.js');
 const guildDataSyncServicePath = path.resolve(__dirname, '../../services/analytics/guildDataSyncService.js');
-import { json, verifyAuth, resolveAdminAccess, collectShardSnapshots, collectShardGuilds, loadShardingConfig, saveShardingConfig, requestContainerRestart, requestShardRespawn, normalizeGlobalBannedWord, normalizeGlobalBannedWordCategory, cleanupGlobalBannedWords, getGuildName, readJsonBody, DISCORD_CLIENT_OWNER_ID, ShardSnapshot, ShardingMode, ShardingConfig } from '../shared.js';
+import { json, verifyAuth, resolveAdminAccess, collectShardSnapshots, collectShardGuilds, loadShardingConfig, saveShardingConfig, requestContainerRestart, requestShardRespawn, normalizeGlobalBannedWord, normalizeGlobalBannedWordCategory, cleanupGlobalBannedWords, getGuildName, readJsonBody, DISCORD_CLIENT_OWNER_ID, ShardSnapshot, ShardingMode, ShardingConfig, splitPath, BunServerResponse } from '../shared.js';
 import { getKnownGuildNames } from '../../services/core/serverTagService.js';
 import {
   getModuleActivationStats,
@@ -3101,4 +3103,56 @@ export async function handleAdminRoutes(
   }
 
   return false;
+}
+
+export function createAdminLegacyRouter(client: Client): Hono {
+  const router = new Hono();
+
+  const handleAdmin = async (c: Context, next: () => Promise<void>) => {
+    const rawReq = c.req.raw;
+    const url = new URL(rawReq.url);
+    const parts = splitPath(url.pathname);
+
+    const socket = new Socket();
+    const req = new IncomingMessage(socket);
+    req.method = rawReq.method;
+    req.url = url.pathname + url.search;
+    req.headers = {};
+    rawReq.headers.forEach((value, key) => {
+      req.headers[key.toLowerCase()] = value;
+    });
+
+    let bodyText = '';
+    if (rawReq.method !== 'GET' && rawReq.method !== 'HEAD') {
+      try {
+        bodyText = await rawReq.text();
+      } catch {
+        /* corps illisible ou absent */
+      }
+    }
+    (req as IncomingMessage & { bodyText?: string }).bodyText = bodyText;
+    if (bodyText) {
+      req.push(Buffer.from(bodyText, 'utf8'));
+    }
+    req.push(null);
+
+    return new Promise<Response>((resolve) => {
+      const res = new BunServerResponse(req, resolve);
+      handleAdminRoutes(req as IncomingMessage & { bodyText?: string }, res, parts, url, client)
+        .then((handled) => {
+          if (!handled) {
+            next().then(resolve);
+          }
+        })
+        .catch((err) => {
+          logger.error('AdminAPI', err);
+          json(res, 500, { error: 'Erreur interne admin' });
+        });
+    });
+  };
+
+  router.all('/api/admin', (c, next) => handleAdmin(c, next));
+  router.all('/api/admin/*', (c, next) => handleAdmin(c, next));
+
+  return router;
 }

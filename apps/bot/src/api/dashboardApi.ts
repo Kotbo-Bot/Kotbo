@@ -21,7 +21,6 @@ import {
   getDashboardOrigin,
   CORS_EXTRA_ORIGINS,
   isKotboPublicOrigin,
-  splitPath,
   configRateLimiter,
   errorReportRateLimiter,
   feedbackReportRateLimiter,
@@ -41,7 +40,6 @@ import { getCurrentInstance } from '../utils/instanceContext.js';
 import { getAllInstances } from '../utils/instanceResolver.js';
 
 // Modular Route Handlers (legacy - maintenu pendant la migration progressive)
-import { handleAdminRoutes } from './routes/admin.js';
 import { startBroadcastScheduler } from '../services/system/broadcastService.js';
 import { mcpRateLimiter } from './mcp/mcpServer.js';
 
@@ -391,11 +389,6 @@ export const startDashboardApi = async (client: Client) => {
             res.end();
             return;
           }
-
-          const parts = splitPath(url.pathname);
-
-          // Routes legacy (non encore migrées vers Hono)
-          if (await handleAdminRoutes(req, res, parts, url, client)) return;
 
           json(res, 404, { error: 'Route introuvable' });
         } catch (error) {

@@ -210,7 +210,7 @@ import { handlePublicRoutes, createPublicLegacyRouter } from '../../api/routes/p
 import { authRouter } from '../../api/hono/routes/auth.js';
 import { createReportErrorRouter } from '../../api/routes/error.js';
 import { createUserRouter } from '../../api/routes/user.js';
-import { handleAdminRoutes } from '../../api/routes/admin.js';
+import { handleAdminRoutes, createAdminLegacyRouter } from '../../api/routes/admin.js';
 import { createDashboardRouter } from '../../api/hono/dashboard/index.js';
 import { getMcpConnectionLogs, handleMCPRoutes, makeMcpDirectToken, createMcpServerRouter } from '../../api/mcp/mcpServer.js';
 
@@ -1233,6 +1233,15 @@ describe('Modular Routers Unit Tests', () => {
       const handled = await handleAdminRoutes(req, res, parts, url, mockClient);
       expect(handled).toBeTrue();
       expect(res.statusCode).toBe(403);
+    });
+
+    test('createAdminLegacyRouter routes admin requests correctly through Hono', async () => {
+      mockDb.globalAdmin.findUnique.mockResolvedValue(null);
+      const router = createAdminLegacyRouter(mockClient);
+      const res = await router.request('/api/admin/stats', {
+        headers: authenticatedHeaders(),
+      });
+      expect(res.status).toBe(403);
     });
   });
 
