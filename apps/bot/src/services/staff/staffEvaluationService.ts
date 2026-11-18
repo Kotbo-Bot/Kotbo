@@ -116,9 +116,9 @@ export async function getStaffEvaluations(guildId: string, staffUserId?: string)
   });
 }
 
-export async function updateEvaluationNote(evaluationId: string, managerNote: string) {
+export async function updateEvaluationNote(guildId: string, evaluationId: string, managerNote: string) {
   return prisma.staffEvaluation.update({
-    where: { id: evaluationId },
+    where: { id: evaluationId, guildId },
     data: { managerNote, status: 'PUBLISHED' },
   });
 }

@@ -38,6 +38,7 @@ import { buildSiteBlueprint, blueprintNavigation, type SiteTemplateKey } from '.
 import { afterCommentApproved } from './siteActivity.js';
 import { UserFacingError } from '../../utils/userFacingError.js';
 
+import { fetchGuildChannel } from '../../utils/panelMessage.js';
 export class SiteAdminError extends UserFacingError {
   constructor(
     public readonly code: string,
@@ -641,7 +642,7 @@ async function announcePublication(client: Client, guildId: string, siteId: stri
   if (!site?.published || !page) return;
   const channelId = page.kind === 'WIKI' ? site.wikiAnnounceChannelId : site.blogAnnounceChannelId;
   if (!channelId) return;
-  const channel = await client.channels.fetch(channelId).catch(() => null);
+  const channel = await fetchGuildChannel(client, guildId, channelId);
   if (!channel?.isTextBased() || !('send' in channel)) return;
   const { getDashboardUrl } = await import('../../api/shared.js');
   const url = `${getDashboardUrl().replace(/\/$/, '')}/s/${site.slug}/${page.kind === 'WIKI' ? 'wiki' : 'blog'}/${page.slug}`;

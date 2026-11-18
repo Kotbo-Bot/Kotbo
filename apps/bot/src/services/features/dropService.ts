@@ -62,6 +62,7 @@ import { awardClanPointsToMembers } from '../community/clanService.js';
 import { flushClanPointsFeedGroup } from '../community/clanPointsFeedService.js';
 import { isModuleEnabled } from '../core/moduleGate.js';
 
+import { fetchGuildChannel } from '../../utils/panelMessage.js';
 export const DROP_CLAIM_PREFIX = 'drop_claim:';
 
 /** Groupe du flux des points de clan qui rassemble les gagnants d'un drop. */
@@ -281,8 +282,8 @@ const RECENT_MESSAGES_PAGE = 100;
  * messages système ne comptent pas. Un salon injoignable vaut zéro : le drop attend son
  * plafond de retard, puis la publication dira elle-même ce qui ne va pas.
  */
-export async function countRecentMemberMessages(client: Client, channelId: string, since: Date): Promise<number> {
-  const channel = await client.channels.fetch(channelId).catch(() => null);
+export async function countRecentMemberMessages(client: Client, channelId: string, since: Date, guildId: string): Promise<number> {
+  const channel = await fetchGuildChannel(client, guildId, channelId);
   if (!channel?.isTextBased()) return 0;
 
   // `after` : Discord ne renvoie que la fenêtre, un salon calme répond une page vide.
@@ -315,11 +316,12 @@ async function recentMessagesForActivity(
   channelId: string | null,
   settings: DropTypeSettings,
   now: Date,
+  guildId: string,
 ): Promise<number> {
   if (!channelId || !dropActivityCheckDue(activityCheckedAt.get(configId) ?? null, now)) return 0;
   activityCheckedAt.set(configId, now);
   const since = new Date(now.getTime() - settings.activity.windowMinutes * 60 * 1000);
-  return countRecentMemberMessages(client, channelId, since);
+  return countRecentMemberMessages(client, channelId, since, guildId);
 }
 
 async function publishDrop(
@@ -335,7 +337,7 @@ async function publishDrop(
     return;
   }
 
-  const channel = await client.channels.fetch(channelId).catch(() => null);
+  const channel = await fetchGuildChannel(client, guild.id, channelId);
   if (!channel?.isTextBased() || !channel.isSendable()) {
     logger.warn('Drops', `Salon ${channelId} injoignable pour le drop ${config.type} sur ${guild.id}.`);
     return;
@@ -435,7 +437,7 @@ async function tickDropConfig(client: Client, guild: DropGuildContext, config: N
   // garde-fou anti-spam, qui décale l'échéance : sinon chaque drop d'un autre
   // type remettrait à zéro le plafond de retard, mesuré depuis cette échéance.
   if (settings.activity.minMessages > DROP_ACTIVITY_DISABLED) {
-    const recentMessages = await recentMessagesForActivity(client, config.id, dropChannelIdFor(settings, guild), settings, now);
+    const recentMessages = await recentMessagesForActivity(client, config.id, dropChannelIdFor(settings, guild), settings, now, guild.id);
     const verdict = dropActivityVerdict({
       dueAt: config.nextDropAt,
       now,
@@ -551,7 +553,7 @@ export async function runDropCycle(client: Client): Promise<void> {
 async function closeDropMessage(client: Client, drop: DropRow): Promise<void> {
   if (!drop.messageId) return;
 
-  const channel = await client.channels.fetch(drop.channelId).catch(() => null);
+  const channel = await fetchGuildChannel(client, drop.guildId, drop.channelId);
   if (!channel?.isTextBased()) return;
 
   const message = await channel.messages.fetch(drop.messageId).catch(() => null);
@@ -639,7 +641,7 @@ async function purgeDeletedDropMessages(client: Client): Promise<void> {
     const deleteAt = dropMessageDeleteAt(drop.closedAt, drop.deleteAfterMinutes);
     if (!deleteAt || deleteAt > now) continue;
 
-    const channel = await client.channels.fetch(drop.channelId).catch(() => null);
+    const channel = await fetchGuildChannel(client, drop.guildId, drop.channelId);
     if (channel?.isTextBased()) {
       await channel.messages.delete(drop.messageId).catch(() => null);
     }

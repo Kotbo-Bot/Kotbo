@@ -338,9 +338,8 @@ describe('messages récents d\'un salon, pour l\'attente d\'activité', () => {
 
   function salon(messages: Array<readonly [string, unknown]>) {
     const fetchMessages = mock(async (_options: { limit: number; after?: string }) => new Map(messages));
-    const client = {
-      channels: { fetch: mock(async () => ({ isTextBased: () => true, messages: { fetch: fetchMessages } })) },
-    } as never;
+    const fetchChannel = mock(async () => ({ isTextBased: () => true, messages: { fetch: fetchMessages } }));
+    const client = { guilds: { cache: { get: () => ({ channels: { fetch: fetchChannel } }) } } } as never;
     return { client, fetchMessages };
   }
 
@@ -354,13 +353,13 @@ describe('messages récents d\'un salon, pour l\'attente d\'activité', () => {
       message('6', 30),
     ]);
 
-    expect(await countRecentMemberMessages(client, 'salon-1', new Date(now - 15 * 60 * 1000))).toBe(2);
+    expect(await countRecentMemberMessages(client, 'salon-1', new Date(now - 15 * 60 * 1000), 'guild-1')).toBe(2);
   });
 
   test('une seule page est lue, à partir du début de la fenêtre', async () => {
     const { client, fetchMessages } = salon([]);
     const since = new Date(now - 15 * 60 * 1000);
-    await countRecentMemberMessages(client, 'salon-1', since);
+    await countRecentMemberMessages(client, 'salon-1', since, 'guild-1');
     expect(fetchMessages).toHaveBeenCalledWith({
       limit: 100,
       after: SnowflakeUtil.generate({ timestamp: since.getTime() }).toString(),
@@ -368,7 +367,7 @@ describe('messages récents d\'un salon, pour l\'attente d\'activité', () => {
   });
 
   test('salon injoignable : zéro, le drop attend son plafond de retard', async () => {
-    const client = { channels: { fetch: mock(async () => null) } } as never;
-    expect(await countRecentMemberMessages(client, 'salon-1', new Date(now))).toBe(0);
+    const client = { guilds: { cache: { get: () => ({ channels: { fetch: mock(async () => null) } }) } } } as never;
+    expect(await countRecentMemberMessages(client, 'salon-1', new Date(now), 'guild-1')).toBe(0);
   });
 });

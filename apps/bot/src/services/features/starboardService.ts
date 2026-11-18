@@ -51,6 +51,7 @@ import { broadcastDashboardStateChange } from '../../api/shared/sharding.js';
 import { normalizeEmojiKey, tallyVotes } from './starboardTally.js';
 import { onEntryBlocked, onEntryFeatured, publishEntryRemoved } from './starboardFeatureEffects.js';
 
+import { fetchGuildChannel } from '../../utils/panelMessage.js';
 export { normalizeEmojiKey } from './starboardTally.js';
 
 /** TTL du cache de configuration. Invalidé explicitement par le dashboard. */
@@ -433,9 +434,10 @@ export function scheduleRefresh(client: Client, guildId: string, channelId: stri
   }, REFRESH_DEBOUNCE_MS));
 }
 
-function resolveTextChannel(client: Client, channelId: string): GuildTextBasedChannel | null {
+function resolveTextChannel(client: Client, channelId: string, guildId?: string): GuildTextBasedChannel | null {
   const channel = client.channels.cache.get(channelId);
   if (!channel || !channel.isTextBased() || channel.isDMBased()) return null;
+  if (guildId && channel.guildId !== guildId) return null;
   return channel as GuildTextBasedChannel;
 }
 
@@ -463,8 +465,8 @@ export async function refreshEntry(
       where: { guildId_messageId: { guildId, messageId } },
     }).catch(() => null);
 
-    const sourceChannel = resolveTextChannel(client, channelId)
-      ?? (await client.channels.fetch(channelId).catch(() => null)) as GuildTextBasedChannel | null;
+    const sourceChannel = resolveTextChannel(client, channelId, guildId)
+      ?? (await fetchGuildChannel(client, guildId, channelId)) as GuildTextBasedChannel | null;
     const message = sourceChannel
       ? await sourceChannel.messages.fetch(messageId).catch(() => null)
       : null;
@@ -479,7 +481,7 @@ export async function refreshEntry(
     // Garde-fous : message retiré par le staff, auteur exclu, NSFW vers un
     // salon tout public, message trop ancien pour entrer. Un highlight déjà
     // publié disparaît ; la ligne reste, avec la décision du staff.
-    const board = resolveTextChannel(client, config.channelId);
+    const board = resolveTextChannel(client, config.channelId, config.guildId);
     const skip = starboardSkipReason(config, {
       authorId: message.author.id,
       blocked: entry?.blockedAt != null,
@@ -505,7 +507,7 @@ export async function refreshEntry(
 
     // Réactions posées sur le highlight lui-même.
     if (config.countEmbedReactions && entry?.starMessageId) {
-      const starChannel = resolveTextChannel(client, entry.starChannelId ?? config.channelId);
+      const starChannel = resolveTextChannel(client, entry.starChannelId ?? config.channelId, entry.guildId);
       const starMessage = starChannel
         ? await starChannel.messages.fetch(entry.starMessageId).catch(() => null)
         : null;
@@ -583,7 +585,7 @@ async function postHighlight(
   config: StarboardConfig,
   tally: { up: number; down: number; score: number },
 ): Promise<void> {
-  const channel = resolveTextChannel(client, config.channelId!);
+  const channel = resolveTextChannel(client, config.channelId!, config.guildId);
   if (!channel) return;
 
   const me = channel.guild.members.me ?? (await channel.guild.members.fetchMe().catch(() => null));
@@ -635,7 +637,7 @@ async function editHighlight(
 ): Promise<void> {
   if (!entry.starMessageId) return;
 
-  const channel = resolveTextChannel(client, entry.starChannelId ?? config.channelId!);
+  const channel = resolveTextChannel(client, entry.starChannelId ?? config.channelId!, entry.guildId);
   const starMessage = channel
     ? await channel.messages.fetch(entry.starMessageId).catch(() => null)
     : null;
@@ -668,7 +670,7 @@ async function removeEntry(
   // Seul un message affiché quitte la une : une entrée détachée ne prévient personne.
   if (entry.starMessageId) publishEntryRemoved(entry, options.reason);
   if (entry.starMessageId) {
-    const channel = resolveTextChannel(client, entry.starChannelId ?? '');
+    const channel = resolveTextChannel(client, entry.starChannelId ?? '', entry.guildId);
     const starMessage = channel
       ? await channel.messages.fetch(entry.starMessageId).catch(() => null)
       : null;

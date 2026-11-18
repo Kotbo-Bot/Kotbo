@@ -316,7 +316,7 @@ export function registerWriteMembersNewTools(ctx: McpToolContext) {
         try {
           const existing = await prisma.staffEvaluation.findFirst({ where: { id: evaluation_id, guildId } });
           if (!existing) return err('Évaluation introuvable');
-          const updated = await updateEvaluationNote(evaluation_id, manager_note);
+          const updated = await updateEvaluationNote(guildId, evaluation_id, manager_note);
           await audit(key_name, 'Note évaluation staff MCP', evaluation_id, manager_note.slice(0, 200));
           return ok({ ok: true, evaluation: updated });
         } catch (e) {

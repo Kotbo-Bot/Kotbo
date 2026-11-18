@@ -41,7 +41,7 @@ export function createEvaluationsRouter(client: Client) {
     try {
       const body = await readLenientBody<{ managerNote?: string }>(c);
       if (body.managerNote === undefined) return send(c, { error: 'managerNote requis' }, 400);
-      return send(c, await updateEvaluationNote(c.req.param('evaluationId'), body.managerNote));
+      return send(c, await updateEvaluationNote(c.req.param('guildId')!, c.req.param('evaluationId'), body.managerNote));
     } catch (err) {
       logger.error('EvaluationsAPI', 'Error updating evaluation:', err);
       return fail(c, err, 'Erreur lors de la mise à jour', 'EvaluationsAPI');
