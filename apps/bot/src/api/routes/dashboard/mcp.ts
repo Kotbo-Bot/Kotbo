@@ -1,12 +1,12 @@
-import { IncomingMessage, ServerResponse } from 'node:http';
-import { Client } from 'discord.js';
-import { json, readJsonBody, type AuthClaims, type DashboardAccess } from '../../shared.js';
+import { Hono } from 'hono';
+import { createMiddleware } from 'hono/factory';
+import type { Client } from 'discord.js';
 import { logger } from '../../../utils/logger.js';
 import { getMcpConnectionLogs, makeMcpDirectUrl } from '../../mcp/mcpServer.js';
 import { createMcpKey, getMcpKeys, deactivateMcpKey, findActiveMcpKeyById } from '../../mcp/mcpKeyService.js';
 import type { McpKeyPermission } from '@prisma/client';
+import { fail, guildRoute, readBody, send } from '../../hono/dashboard/kit.js';
 
-import { jsonFailure } from '../../shared/failure.js';
 const VALID_PERMISSIONS: McpKeyPermission[] = [
   'READ_STATS',
   'READ_MEMBERS',
@@ -28,51 +28,34 @@ const VALID_PERMISSIONS: McpKeyPermission[] = [
   'WRITE_SITE',
 ];
 
-export async function handleMCPKeyRoutes(
-  req: IncomingMessage,
-  res: ServerResponse,
-  parts: string[],
-  _url: URL,
-  _client: Client,
-  user: AuthClaims,
-  guildId: string,
-  access: DashboardAccess
-): Promise<boolean> {
-  if (parts[4] !== 'mcp-keys' && parts[4] !== 'mcp-logs') return false;
+export function createMcpKeysRouter(client: Client) {
+  const router = new Hono();
+  const base = '/api/dashboard/guilds/:guildId';
 
-  const method = req.method;
+  const adminOnly = createMiddleware(async (c, next) => {
+    if (!c.var.effectiveAccess.canManageSettings) {
+      return send(c, { error: 'Réservé aux administrateurs du dashboard.' }, 403);
+    }
+    await next();
+  });
+  const gate = [...guildRoute(client), adminOnly] as const;
 
-  if (!access.canManageSettings) {
-    json(res, 403, { error: 'Réservé aux administrateurs du dashboard.' });
-    return true;
-  }
+  router.get(`${base}/mcp-logs`, ...gate, (c) => send(c, { logs: getMcpConnectionLogs(c.req.param('guildId')) }));
 
-  // GET /api/dashboard/guilds/:guildId/mcp-logs
-  if (parts.length === 5 && parts[4] === 'mcp-logs' && method === 'GET') {
-    const logs = getMcpConnectionLogs(guildId);
-    json(res, 200, { logs });
-    return true;
-  }
-
-  // GET /api/dashboard/guilds/:guildId/mcp-keys
-  if (parts.length === 5 && parts[4] === 'mcp-keys' && method === 'GET') {
+  router.get(`${base}/mcp-keys`, ...gate, async (c) => {
     try {
-      const keys = await getMcpKeys(guildId);
-      json(res, 200, keys);
+      return send(c, await getMcpKeys(c.req.param('guildId')));
     } catch (error) {
       logger.error('MCPKeyRoutes', 'Error fetching MCP keys:', error);
-      jsonFailure(res, error, 'Erreur lors de la récupération des clés MCP', 'MCPKeyRoutes');
+      return fail(c, error, 'Erreur lors de la récupération des clés MCP', 'MCPKeyRoutes');
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/mcp-keys
-  if (parts.length === 5 && parts[4] === 'mcp-keys' && method === 'POST') {
+  router.post(`${base}/mcp-keys`, ...gate, async (c) => {
     try {
-      const body = await readJsonBody<{ name?: string; permissions?: string[] }>(req);
+      const body = await readBody<{ name?: string; permissions?: string[] }>(c);
       if (!body?.name || typeof body.name !== 'string' || !body.name.trim()) {
-        json(res, 400, { error: 'Le champ "name" est requis.' });
-        return true;
+        return send(c, { error: 'Le champ "name" est requis.' }, 400);
       }
 
       const permissions: McpKeyPermission[] = (body.permissions ?? ['READ_STATS', 'READ_MEMBERS', 'READ_SANCTIONS'])
@@ -80,8 +63,8 @@ export async function handleMCPKeyRoutes(
 
       // La cle agit au nom de qui la cree : c'est ce rattachement qui permet
       // de la couper quand ce compte perd ses droits sur le serveur.
-      const created = await createMcpKey(guildId, body.name.trim(), permissions, user.userId);
-      json(res, 201, {
+      const created = await createMcpKey(c.req.param('guildId'), body.name.trim(), permissions, c.var.dashboardUser.userId);
+      return send(c, {
         id: created.id,
         name: created.name,
         displayKey: created.displayKey,
@@ -89,44 +72,34 @@ export async function handleMCPKeyRoutes(
         isActive: created.isActive,
         createdAt: created.createdAt,
         fullKey: created.fullKey,
-      });
+      }, 201);
     } catch (error) {
       logger.error('MCPKeyRoutes', 'Error creating MCP key:', error);
-      jsonFailure(res, error, 'Erreur lors de la création de la clé MCP', 'MCPKeyRoutes');
+      return fail(c, error, 'Erreur lors de la création de la clé MCP', 'MCPKeyRoutes');
     }
-    return true;
-  }
+  });
 
-  // GET /api/dashboard/guilds/:guildId/mcp-keys/:keyId/direct-url
-  if (parts.length === 7 && parts[4] === 'mcp-keys' && parts[6] === 'direct-url' && method === 'GET') {
-    const keyId = parts[5];
+  router.get(`${base}/mcp-keys/:keyId/direct-url`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
     try {
-      const key = await findActiveMcpKeyById(keyId, guildId);
-      if (!key) {
-        json(res, 404, { error: 'Clé MCP introuvable ou inactive' });
-        return true;
-      }
-
-      json(res, 200, makeMcpDirectUrl(req, _url, guildId, key.id));
+      const key = await findActiveMcpKeyById(c.req.param('keyId'), guildId);
+      if (!key) return send(c, { error: 'Clé MCP introuvable ou inactive' }, 404);
+      return send(c, makeMcpDirectUrl({ headers: c.req.header() }, new URL(c.req.url), guildId, key.id));
     } catch (error) {
       logger.error('MCPKeyRoutes', 'Error creating MCP direct URL:', error);
-      jsonFailure(res, error, 'Erreur lors de la génération de l URL MCP directe', 'MCPKeyRoutes');
+      return fail(c, error, 'Erreur lors de la génération de l URL MCP directe', 'MCPKeyRoutes');
     }
-    return true;
-  }
+  });
 
-  // DELETE /api/dashboard/guilds/:guildId/mcp-keys/:keyId
-  if (parts.length === 6 && parts[4] === 'mcp-keys' && method === 'DELETE') {
-    const keyId = parts[5];
+  router.delete(`${base}/mcp-keys/:keyId`, ...gate, async (c) => {
     try {
-      await deactivateMcpKey(guildId, keyId);
-      json(res, 200, { ok: true });
+      await deactivateMcpKey(c.req.param('guildId'), c.req.param('keyId'));
+      return send(c, { ok: true });
     } catch (error) {
       logger.error('MCPKeyRoutes', 'Error deactivating MCP key:', error);
-      jsonFailure(res, error, 'Erreur lors de la suppression de la clé MCP', 'MCPKeyRoutes');
+      return fail(c, error, 'Erreur lors de la suppression de la clé MCP', 'MCPKeyRoutes');
     }
-    return true;
-  }
+  });
 
-  return false;
+  return router;
 }

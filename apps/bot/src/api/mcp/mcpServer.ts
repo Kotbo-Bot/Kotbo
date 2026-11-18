@@ -235,7 +235,7 @@ function directPublicBase(req: IncomingMessage, url: URL, guildId: string, direc
   return `${publicOrigin(req, url)}/api/mcp-direct/${guildId}/${directToken}`;
 }
 
-function publicOrigin(req: IncomingMessage, url: URL): string {
+function publicOrigin(req: Pick<IncomingMessage, 'headers'>, url: URL): string {
   const proto = (req.headers['x-forwarded-proto'] as string | undefined)?.split(',')[0]?.trim()
     ?? url.protocol.replace(':', '');
   const host = (req.headers['x-forwarded-host'] as string | undefined) ?? url.host;
@@ -570,7 +570,7 @@ function makeAccessToken(opts: {
   );
 }
 
-export function makeMcpDirectUrl(req: IncomingMessage, url: URL, guildId: string, keyId: string) {
+export function makeMcpDirectUrl(req: Pick<IncomingMessage, 'headers'>, url: URL, guildId: string, keyId: string) {
   const token = makeMcpDirectToken(guildId, keyId);
   return {
     directUrl: `${publicOrigin(req, url)}/api/mcp-direct/${guildId}/${token}`,

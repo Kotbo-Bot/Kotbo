@@ -23,7 +23,6 @@ import { handleScheduleRoutes } from './dashboard/schedules.js';
 import { handleMigrationRoutes } from './dashboard/migration.js';
 import { handleCampaignRoutes } from './dashboard/campaigns.js';
 import { handleSetupRoutes } from './dashboard/setup.js';
-import { handleMCPKeyRoutes } from './dashboard/mcp.js';
 import { handleOutgoingWebhookRoutes } from './dashboard/outgoingWebhooks.js';
 import { handleDoingListRoutes } from './dashboard/doingLists.js';
 import { handleAutomodSimulationRoute } from './dashboard/automodSimulation.js';
@@ -32,18 +31,15 @@ import { handleAegisRoutes } from './dashboard/aegis.js';
 import { handleCustomBotRoutes } from './dashboard/customBot.js';
 import { handleChannelLinkRoutes } from './dashboard/channelLinks.js';
 import { handleStaffServerRoutes } from './dashboard/staffServer.js';
-import { handleChannelHealthRoutes } from './dashboard/channelHealth.js';
 import { handleHomeWidgetsRoutes } from './dashboard/homeWidgets.js';
 import { handleReputationRoutes } from './dashboard/reputation.js';
 import { handleSuggestionRoutes } from './dashboard/suggestions.js';
 import { handleSeasonRoutes } from './dashboard/seasons.js';
 import { handleRankedRoutes } from './dashboard/ranked.js';
-import { handleWidgetRoutes } from './dashboard/widget.js';
 import { handleMessageLogRoutes } from './dashboard/messageLogs.js';
 import { handleRaidProtectionRoutes } from './dashboard/raidProtection.js';
 import { handleClansRoutes } from './dashboard/clans.js';
 import { handleDropsRoutes } from './dashboard/drops.js';
-import { handleGhostMembersRoutes } from './dashboard/ghostMembers.js';
 import { handleWorkflowRoutes } from './dashboard/workflows.js';
 import { handleSimulationRoutes } from './dashboard/simulation.js';
 import { handleTelemetryRoute } from './dashboard/telemetry.js';
@@ -197,10 +193,6 @@ export async function handleDashboardRoutes(
     if (await handleSetupRoutes(req, res, parts, url, client, user)) {
       return true;
     }
-    if (await handleMCPKeyRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
-      if (method !== 'GET') await cache.invalidateGuild(guildId);
-      return true;
-    }
     if (await handleAegisRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
       if (method !== 'GET') await cache.invalidateGuild(guildId);
       return true;
@@ -227,10 +219,6 @@ export async function handleDashboardRoutes(
       if (method !== 'GET') await cache.invalidateGuild(guildId);
       return true;
     }
-    if (await handleChannelHealthRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
-      if (method !== 'GET') await cache.invalidateGuild(guildId);
-      return true;
-    }
     if (await handleHomeWidgetsRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
       return true;
     }
@@ -250,15 +238,7 @@ export async function handleDashboardRoutes(
       if (method !== 'GET') await cache.invalidateGuild(guildId);
       return true;
     }
-    if (await handleWidgetRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
-      if (method !== 'GET') await cache.invalidateGuild(guildId);
-      return true;
-    }
     if (await handleMessageLogRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
-      if (method !== 'GET') await cache.invalidateGuild(guildId);
-      return true;
-    }
-    if (await handleGhostMembersRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
       if (method !== 'GET') await cache.invalidateGuild(guildId);
       return true;
     }

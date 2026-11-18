@@ -7,6 +7,10 @@
 import { Hono } from 'hono';
 import { compress } from 'hono/compress';
 import type { Client } from 'discord.js';
+import { createGhostMembersRouter } from '../../routes/dashboard/ghostMembers.js';
+import { createChannelHealthRouter } from '../../routes/dashboard/channelHealth.js';
+import { createMcpKeysRouter } from '../../routes/dashboard/mcp.js';
+import { createWidgetRouter } from '../../routes/dashboard/widget.js';
 import { createAdminLockRouter } from '../../routes/dashboard/adminLock.js';
 import { createAuditEventsRouter } from '../../routes/dashboard/auditEvents.js';
 import { createQuestsRouter } from '../../routes/dashboard/quests.js';
@@ -34,5 +38,9 @@ export function createDashboardRouter(client: Client) {
   router.route('/', createQuestsRouter(client));
   router.route('/', createAuditEventsRouter(client));
   router.route('/', createAdminLockRouter(client));
+  router.route('/', createWidgetRouter(client));
+  router.route('/', createMcpKeysRouter(client));
+  router.route('/', createChannelHealthRouter(client));
+  router.route('/', createGhostMembersRouter(client));
   return router;
 }

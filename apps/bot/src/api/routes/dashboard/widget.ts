@@ -1,43 +1,36 @@
-import { IncomingMessage, ServerResponse } from 'node:http';
+import { Hono } from 'hono';
 import crypto from 'node:crypto';
-import { Client } from 'discord.js';
+import type { Client } from 'discord.js';
 import { logger } from '../../../utils/logger.js';
-import { json, type AuthClaims, type DashboardAccess } from '../../shared.js';
 import prisma from '../../../utils/db.js';
-import { jsonFailure } from '../../shared/failure.js';
 import {
   pushWidgetForUser,
   clearWidgetForUser,
   refreshAllStaffWidgets,
 } from '../../../services/integrations/widgetService.js';
+import { fail, guildRoute, send } from '../../hono/dashboard/kit.js';
 
 /** Token secret utilisé par les widgets externes (Scriptable, KWGT, widget Edge). */
 function generateWidgetToken(): string {
   return `wgt_${crypto.randomBytes(24).toString('hex')}`;
 }
 
-export async function handleWidgetRoutes(
-  req: IncomingMessage,
-  res: ServerResponse,
-  parts: string[],
-  url: URL,
-  client: Client,
-  user: AuthClaims,
-  guildId: string,
-  _access: DashboardAccess,
-): Promise<boolean> {
-  const method = req.method;
-  if (parts[4] !== 'widget') return false;
+export function createWidgetRouter(client: Client) {
+  const router = new Hono();
+  const base = '/api/dashboard/guilds/:guildId/widget';
+  const gate = guildRoute(client);
 
-  // GET /api/dashboard/guilds/:guildId/widget - liste des subscriptions
-  if (parts.length === 5 && method === 'GET') {
+  // Liste des subscriptions
+  router.get(base, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const userId = c.var.dashboardUser.userId;
     try {
       const subscriptions = await prisma.widgetSubscription.findMany({
         where: { guildId },
         orderBy: { createdAt: 'desc' },
       });
 
-      let mySubscription = subscriptions.find((s) => s.userId === user.userId) ?? null;
+      let mySubscription = subscriptions.find((s) => s.userId === userId) ?? null;
 
       // Génération paresseuse du token pour les subscriptions créées avant son introduction
       if (mySubscription && !mySubscription.token) {
@@ -47,91 +40,82 @@ export async function handleWidgetRoutes(
         });
       }
 
-      json(res, 200, {
+      return send(c, {
         // Le token est secret : on ne l'expose jamais pour les autres membres
         subscriptions: subscriptions.map(({ token: _token, ...rest }) => rest),
         mySubscription,
       });
     } catch (err) {
       logger.error('WidgetAPI', 'Error fetching widget data:', err);
-      jsonFailure(res, err, 'Erreur lors de la récupération des données widget', 'WidgetAPI');
+      return fail(c, err, 'Erreur lors de la récupération des données widget', 'WidgetAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/widget/rotate-token - régénérer le token widget
-  if (parts.length === 6 && parts[5] === 'rotate-token' && method === 'POST') {
+  router.post(`${base}/rotate-token`, ...gate, async (c) => {
     try {
       const subscription = await prisma.widgetSubscription.update({
-        where: { guildId_userId: { guildId, userId: user.userId } },
+        where: { guildId_userId: { guildId: c.req.param('guildId'), userId: c.var.dashboardUser.userId } },
         data: { token: generateWidgetToken() },
       });
-      json(res, 200, { success: true, token: subscription.token });
+      return send(c, { success: true, token: subscription.token });
     } catch (err) {
       logger.error('WidgetAPI', 'Error rotating widget token:', err);
-      jsonFailure(res, err, 'Erreur lors de la régénération du token', 'WidgetAPI');
+      return fail(c, err, 'Erreur lors de la régénération du token', 'WidgetAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/widget/activate - activer le widget pour l'utilisateur connecté
-  if (parts.length === 6 && parts[5] === 'activate' && method === 'POST') {
+  // Activer le widget pour l'utilisateur connecté
+  router.post(`${base}/activate`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const userId = c.var.dashboardUser.userId;
     try {
       await prisma.widgetSubscription.upsert({
-        where: { guildId_userId: { guildId, userId: user.userId } },
+        where: { guildId_userId: { guildId, userId } },
         update: { enabled: true },
-        create: { guildId, userId: user.userId, enabled: true, token: generateWidgetToken() },
+        create: { guildId, userId, enabled: true, token: generateWidgetToken() },
       });
-
-      const result = await pushWidgetForUser(guildId, user.userId);
-      json(res, 200, { success: result.ok, pushResult: result });
+      const result = await pushWidgetForUser(guildId, userId);
+      return send(c, { success: result.ok, pushResult: result });
     } catch (err) {
       logger.error('WidgetAPI', 'Error activating widget:', err);
-      jsonFailure(res, err, 'Erreur lors de l\'activation du widget', 'WidgetAPI');
+      return fail(c, err, 'Erreur lors de l\'activation du widget', 'WidgetAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/widget/deactivate - désactiver le widget
-  if (parts.length === 6 && parts[5] === 'deactivate' && method === 'POST') {
+  router.post(`${base}/deactivate`, ...gate, async (c) => {
+    const userId = c.var.dashboardUser.userId;
     try {
       await prisma.widgetSubscription.updateMany({
-        where: { guildId, userId: user.userId },
+        where: { guildId: c.req.param('guildId'), userId },
         data: { enabled: false },
       });
-
-      const result = await clearWidgetForUser(user.userId);
-      json(res, 200, { success: true, clearResult: result });
+      const result = await clearWidgetForUser(userId);
+      return send(c, { success: true, clearResult: result });
     } catch (err) {
       logger.error('WidgetAPI', 'Error deactivating widget:', err);
-      jsonFailure(res, err, 'Erreur lors de la désactivation du widget', 'WidgetAPI');
+      return fail(c, err, 'Erreur lors de la désactivation du widget', 'WidgetAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/widget/refresh - rafraîchir le widget de l'utilisateur
-  if (parts.length === 6 && parts[5] === 'refresh' && method === 'POST') {
+  router.post(`${base}/refresh`, ...gate, async (c) => {
     try {
-      const result = await pushWidgetForUser(guildId, user.userId);
-      json(res, 200, { success: true, pushResult: result });
+      const result = await pushWidgetForUser(c.req.param('guildId'), c.var.dashboardUser.userId);
+      return send(c, { success: true, pushResult: result });
     } catch (err) {
       logger.error('WidgetAPI', 'Error refreshing widget:', err);
-      jsonFailure(res, err, 'Erreur lors du rafraîchissement du widget', 'WidgetAPI');
+      return fail(c, err, 'Erreur lors du rafraîchissement du widget', 'WidgetAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/widget/refresh-all - rafraîchir tous les widgets (admin)
-  if (parts.length === 6 && parts[5] === 'refresh-all' && method === 'POST') {
+  // Rafraîchir tous les widgets (admin)
+  router.post(`${base}/refresh-all`, ...gate, async (c) => {
     try {
-      const result = await refreshAllStaffWidgets(guildId);
-      json(res, 200, result);
+      return send(c, await refreshAllStaffWidgets(c.req.param('guildId')));
     } catch (err) {
       logger.error('WidgetAPI', 'Error refreshing all widgets:', err);
-      jsonFailure(res, err, 'Erreur lors du rafraîchissement global', 'WidgetAPI');
+      return fail(c, err, 'Erreur lors du rafraîchissement global', 'WidgetAPI');
     }
-    return true;
-  }
+  });
 
-  return false;
+  return router;
 }
