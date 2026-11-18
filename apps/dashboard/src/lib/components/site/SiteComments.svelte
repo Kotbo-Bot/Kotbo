@@ -17,9 +17,9 @@
   let loading = $state(true);
 
   const filters: FilterOption[] = [
-    { value: 'PENDING', label: m.ste_comments_pending() },
-    { value: 'VISIBLE', label: m.ste_comments_visible() },
-    { value: 'HIDDEN', label: m.ste_comments_hidden() },
+    { value: 'PENDING', get label() { return m.ste_comments_pending(); } },
+    { value: 'VISIBLE', get label() { return m.ste_comments_visible(); } },
+    { value: 'HIDDEN', get label() { return m.ste_comments_hidden(); } },
   ];
 
   async function load() {

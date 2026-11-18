@@ -781,7 +781,7 @@
   /** Exemple affiché sous l'interrupteur JSON, à recopier puis adapter. */
   const STICKY_JSON_EXAMPLE = JSON.stringify({
     content: '',
-    embeds: [{ title: m.cmx_sticky_example_title(), description: m.cmx_sticky_example_desc(), color: 5793266 }],
+    embeds: [{ get title() { return m.cmx_sticky_example_title(); }, get description() { return m.cmx_sticky_example_desc(); }, color: 5793266 }],
   }, null, 2);
 
   let stickies = $state([] as StickyDraft[]);

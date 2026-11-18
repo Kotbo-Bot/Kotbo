@@ -23,10 +23,10 @@
 
   let {
     open = $bindable(false),
-    title = m.d7_confirm_required(),
+    title,
     description = '',
-    confirmLabel = m.d7_confirm(),
-    cancelLabel = m.d7_cancel(),
+    confirmLabel,
+    cancelLabel,
     variant = 'default',
     requireInput = '',
     impacts = [],
@@ -111,7 +111,7 @@
             <Papicon icon={config.icon} size={17} />
           </span>
           <div class="min-w-0 pt-1.5">
-            <h3 id={titleId} class="text-base font-semibold text-on-surface leading-snug">{title}</h3>
+            <h3 id={titleId} class="text-base font-semibold text-on-surface leading-snug">{title ?? m.d7_confirm_required()}</h3>
             {#if description}
               <p id={descriptionId} class="text-sm text-on-surface-variant mt-1.5 leading-relaxed">{description}</p>
             {/if}
@@ -150,7 +150,7 @@
         {/if}
 
         <div class="confirm-modal__actions flex items-center justify-end gap-2">
-          <Button variant="ghost" onclick={handleCancel} data-autofocus={focusTarget === 'cancel' || undefined}>{cancelLabel}</Button>
+          <Button variant="ghost" onclick={handleCancel} data-autofocus={focusTarget === 'cancel' || undefined}>{cancelLabel ?? m.d7_cancel()}</Button>
           <Button
             type="submit"
             variant={config.button}
@@ -158,7 +158,7 @@
             disabled={!canConfirm}
             loading={executing || loading}
           >
-            {confirmLabel}
+            {confirmLabel ?? m.d7_confirm()}
           </Button>
         </div>
       </form>

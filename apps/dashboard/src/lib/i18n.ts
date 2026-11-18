@@ -2,25 +2,23 @@
  * Point d'entrée i18n du dashboard (Paraglide-JS / Inlang).
  *
  * - `m` : messages compilés, type-safe et tree-shakés → `m.home_greeting({ name })`.
- * - `setLocale` / `getLocale` : lecture/écriture de la langue active.
+ * - `getLocale` : langue active, réactive (voir liveLocale.svelte.ts).
  *
  * La langue est persistée par Paraglide (stratégie `localStorage`, clé
  * `PARAGLIDE_LOCALE`) et reste synchronisée avec `userPrefs.language`
  * via `applyLocale()` ci-dessous.
  */
 import { m } from './paraglide/messages.js';
-import { getLocale, setLocale, locales, baseLocale, type Locale } from './paraglide/runtime.js';
+import { getLocale, locales, baseLocale, type Locale } from './paraglide/runtime.js';
+import { switchLocale } from './liveLocale.svelte';
 
 /**
- * Aligne la langue Paraglide sur la préférence utilisateur.
- *
- * Appelée à l'init (sans reload) et à chaque changement de langue (avec reload,
- * comportement par défaut de Paraglide) pour appliquer la traduction partout.
+ * Aligne la langue Paraglide sur la préférence utilisateur, sans recharger :
+ * l'interface se retraduit d'elle-même.
  */
-export function applyLocale(lang: string, options?: { reload?: boolean }) {
+export function applyLocale(lang: string) {
   if (!locales.includes(lang as Locale)) return;
-  if (getLocale() === lang) return;
-  setLocale(lang as Locale, options);
+  switchLocale(lang as Locale);
 }
 
 /** Locale BCP 47 pour `toLocaleDateString`/`toLocaleTimeString`. */
@@ -28,5 +26,5 @@ export function dateLocale(): string {
   return getLocale() === 'fr' ? 'fr-FR' : 'en-GB';
 }
 
-export { m, getLocale, setLocale, locales, baseLocale };
+export { m, getLocale, locales, baseLocale };
 export type { Locale };

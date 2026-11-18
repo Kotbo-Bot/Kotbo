@@ -93,7 +93,7 @@
 
   useUnsavedChanges({
     id: 'aegis-settings',
-    label: m.aegis_unsaved_label(),
+    get label() { return m.aegis_unsaved_label(); },
     getConfig: () => (config ? editable(config) : null),
     getSaved: () => (saved ? editable(saved) : null),
     canEdit: () => canEdit,

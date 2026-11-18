@@ -100,7 +100,7 @@
 
   useUnsavedChanges({
     id: UNSAVED_ID,
-    label: m.wf_page_title(),
+    get label() { return m.wf_page_title(); },
     getConfig: () => (editingDraft ? workflowDraftKey(form, graph) : null),
     getSaved: () => (editingDraft && saved ? workflowDraftKey(saved.form, saved.graph) : null),
     onSave: save,

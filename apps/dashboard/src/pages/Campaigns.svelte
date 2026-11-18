@@ -69,11 +69,11 @@
   };
 
   const STATUS_META: Record<string, { label: string; text: string; bg: string }> = {
-    DRAFT: { label: m.camp_status_draft(), text: 'text-on-surface-variant', bg: 'bg-surface-container' },
-    SCHEDULED: { label: m.camp_status_scheduled(), text: 'text-sky-500', bg: 'bg-sky-500/10' },
-    RUNNING: { label: m.camp_status_running(), text: 'text-success', bg: 'bg-success/10' },
-    COMPLETED: { label: m.camp_status_completed(), text: 'text-on-surface-variant', bg: 'bg-surface-container' },
-    CANCELLED: { label: m.camp_status_cancelled(), text: 'text-error', bg: 'bg-error/10' },
+    DRAFT: { get label() { return m.camp_status_draft(); }, text: 'text-on-surface-variant', bg: 'bg-surface-container' },
+    SCHEDULED: { get label() { return m.camp_status_scheduled(); }, text: 'text-sky-500', bg: 'bg-sky-500/10' },
+    RUNNING: { get label() { return m.camp_status_running(); }, text: 'text-success', bg: 'bg-success/10' },
+    COMPLETED: { get label() { return m.camp_status_completed(); }, text: 'text-on-surface-variant', bg: 'bg-surface-container' },
+    CANCELLED: { get label() { return m.camp_status_cancelled(); }, text: 'text-error', bg: 'bg-error/10' },
   };
 
   let campaigns = $state<Campaign[]>([]);

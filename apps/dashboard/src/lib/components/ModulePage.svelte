@@ -50,7 +50,7 @@
     PLUS: 'Plus',
     PRO: 'Pro',
     ULTIMATE: 'Ultimate',
-    CUSTOM: m.mpx_plan_custom(),
+    get CUSTOM() { return m.mpx_plan_custom(); },
   };
   const requiredPlanLabel = $derived(
     module?.requiredPlan ? PLAN_LABELS[module.requiredPlan] ?? module.requiredPlan : m.mpx_plan_paid(),

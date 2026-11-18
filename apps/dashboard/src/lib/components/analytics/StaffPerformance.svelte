@@ -10,10 +10,10 @@
   }>();
 
   const metrics = [
-    { key: 'sanctionsCount', label: m.sp_metric_sanctions(), icon: 'Gavel', color: 'text-warning' },
-    { key: 'reportsCount', label: m.sp_metric_reports(), icon: 'Megaphone', color: 'text-error' },
-    { key: 'warns', label: m.sp_metric_warns(), icon: 'Warning', color: 'text-orange-400' },
-    { key: 'bans', label: m.sp_metric_bans(), icon: 'Banning', color: 'text-error' },
+    { key: 'sanctionsCount', get label() { return m.sp_metric_sanctions(); }, icon: 'Gavel', color: 'text-warning' },
+    { key: 'reportsCount', get label() { return m.sp_metric_reports(); }, icon: 'Megaphone', color: 'text-error' },
+    { key: 'warns', get label() { return m.sp_metric_warns(); }, icon: 'Warning', color: 'text-orange-400' },
+    { key: 'bans', get label() { return m.sp_metric_bans(); }, icon: 'Banning', color: 'text-error' },
   ];
 </script>
 

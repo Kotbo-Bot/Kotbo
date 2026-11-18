@@ -19,15 +19,15 @@ export interface PreviewContext {
   guildName?: string;
 }
 
-const EXAMPLE_CHANNEL = m.wfp_channel();
+const exampleChannel = () => m.wfp_channel();
 
 const ROOT_EXAMPLES: Record<string, string> = {
   Member: 'Alice',
-  Channel: EXAMPLE_CHANNEL,
-  Role: m.wfp_role(),
-  Message: m.wfp_message(),
+  get Channel() { return exampleChannel(); },
+  get Role() { return m.wfp_role(); },
+  get Message() { return m.wfp_message(); },
   Number: '5',
-  Boolean: m.wfp_yes(),
+  get Boolean() { return m.wfp_yes(); },
 };
 
 const PROPERTY_EXAMPLES: Record<string, string> = {
@@ -36,13 +36,13 @@ const PROPERTY_EXAMPLES: Record<string, string> = {
   id: '123456789012345678',
   accountAgeDays: '120',
   joinedDaysAgo: '0',
-  isBot: m.wfp_no(),
-  roles: m.wfp_role(),
-  content: m.wfp_message(),
+  get isBot() { return m.wfp_no(); },
+  get roles() { return m.wfp_role(); },
+  get content() { return m.wfp_message(); },
   author: 'Alice',
-  channel: EXAMPLE_CHANNEL,
+  get channel() { return exampleChannel(); },
   length: '16',
-  name: EXAMPLE_CHANNEL,
+  get name() { return exampleChannel(); },
   categoryName: 'Discussion',
   memberCount: '250',
   memberToday: '1',
@@ -83,6 +83,6 @@ export function previewText(segments: PreviewSegment[]): string {
 
 /** Nom du salon où part le message : celui choisi, sinon un exemple. */
 export function previewChannelName(ref: ValueRef | undefined, channels: { id: string; name: string }[]): string {
-  if (ref?.from === 'channel') return channels.find((channel) => channel.id === ref.channelId)?.name ?? EXAMPLE_CHANNEL;
-  return EXAMPLE_CHANNEL;
+  if (ref?.from === 'channel') return channels.find((channel) => channel.id === ref.channelId)?.name ?? exampleChannel();
+  return exampleChannel();
 }

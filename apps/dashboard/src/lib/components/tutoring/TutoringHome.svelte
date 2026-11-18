@@ -27,8 +27,8 @@
   let search = $state('');
 
   const filterOptions: FilterOption<'ongoing' | 'ended'>[] = [
-    { value: 'ongoing', label: m.tu_filter_ongoing() },
-    { value: 'ended', label: m.tu_filter_ended() },
+    { value: 'ongoing', get label() { return m.tu_filter_ongoing(); } },
+    { value: 'ended', get label() { return m.tu_filter_ended(); } },
   ];
 
   const shownAll = $derived.by(() => {

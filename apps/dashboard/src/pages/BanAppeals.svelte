@@ -86,7 +86,7 @@
 
   useUnsavedChanges({
     id: 'ban-appeals',
-    label: m.nav_ban_appeals(),
+    get label() { return m.nav_ban_appeals(); },
     getConfig: () => config,
     getSaved: () => savedConfig,
     onSave: () => saveConfig(),

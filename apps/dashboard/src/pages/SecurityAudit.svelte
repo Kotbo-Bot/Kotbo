@@ -85,10 +85,10 @@
   } | null>(null);
 
   const SEVERITY_META: Record<Severity, { label: string; icon: string; text: string; bg: string; ring: string }> = {
-    CRITICAL: { label: m.sax_sev_critical(), icon: 'AlertOctagon', text: 'text-error', bg: 'bg-error/10', ring: 'ring-error/30' },
-    WARNING: { label: m.sax_sev_warning(), icon: 'AlertTriangle', text: 'text-warning', bg: 'bg-warning/10', ring: 'ring-warning/30' },
-    INFO: { label: m.sax_sev_info(), icon: 'Info', text: 'text-sky-500', bg: 'bg-sky-500/10', ring: 'ring-sky-500/30' },
-    OK: { label: m.sax_sev_ok(), icon: 'ShieldCheck', text: 'text-success', bg: 'bg-success/10', ring: 'ring-success/30' },
+    CRITICAL: { get label() { return m.sax_sev_critical(); }, icon: 'AlertOctagon', text: 'text-error', bg: 'bg-error/10', ring: 'ring-error/30' },
+    WARNING: { get label() { return m.sax_sev_warning(); }, icon: 'AlertTriangle', text: 'text-warning', bg: 'bg-warning/10', ring: 'ring-warning/30' },
+    INFO: { get label() { return m.sax_sev_info(); }, icon: 'Info', text: 'text-sky-500', bg: 'bg-sky-500/10', ring: 'ring-sky-500/30' },
+    OK: { get label() { return m.sax_sev_ok(); }, icon: 'ShieldCheck', text: 'text-success', bg: 'bg-success/10', ring: 'ring-success/30' },
   };
 
   /**

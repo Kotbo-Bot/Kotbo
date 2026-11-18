@@ -37,21 +37,21 @@
   let { channels = [] }: { channels?: { id: string; name: string }[] } = $props();
 
   const SANCTIONS: { value: VisionSanction; label: string }[] = [
-    { value: 'DELETE', label: m.arx_sanction_delete_only() },
-    { value: 'WARN', label: m.arx_sanction_warn() },
+    { value: 'DELETE', get label() { return m.arx_sanction_delete_only(); } },
+    { value: 'WARN', get label() { return m.arx_sanction_warn(); } },
     { value: 'TIMEOUT', label: 'Timeout' },
-    { value: 'JAIL', label: m.arx_jail_title() },
-    { value: 'KICK', label: m.arx_sanction_kick() },
+    { value: 'JAIL', get label() { return m.arx_jail_title(); } },
+    { value: 'KICK', get label() { return m.arx_sanction_kick(); } },
     { value: 'SOFTBAN', label: 'Softban' },
-    { value: 'BAN', label: m.arx_sanction_ban() },
+    { value: 'BAN', get label() { return m.arx_sanction_ban(); } },
   ];
   const DURATIONS: { value: number | null; label: string }[] = [
     { value: 5, label: '5 minutes' },
-    { value: 60, label: m.arx_duration_1h() },
-    { value: 1440, label: m.arx_duration_1d() },
-    { value: 10080, label: m.arx_duration_7d() },
-    { value: 43200, label: m.arx_duration_30d() },
-    { value: null, label: m.arx_duration_permanent() },
+    { value: 60, get label() { return m.arx_duration_1h(); } },
+    { value: 1440, get label() { return m.arx_duration_1d(); } },
+    { value: 10080, get label() { return m.arx_duration_7d(); } },
+    { value: 43200, get label() { return m.arx_duration_30d(); } },
+    { value: null, get label() { return m.arx_duration_permanent(); } },
   ];
   /** Le navigateur réduit l'image avant l'envoi : l'empreinte résiste au redimensionnement. */
   const UPLOAD_MAX_SIDE = 1280;

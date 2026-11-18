@@ -54,18 +54,18 @@
 
   /** Bascules regroupées, pour ne pas répéter trente fois le même balisage. */
   const automations = [
-    { key: 'autoPublishAds', label: m.pset_auto_publish(), hint: m.pset_auto_publish_hint() },
-    { key: 'reciprocityChecks', label: m.pset_reciprocity(), hint: m.pset_reciprocity_hint() },
-    { key: 'autoApplyBenefits', label: m.pset_auto_benefits(), hint: m.pset_auto_benefits_hint() },
-    { key: 'autoBreachOnFailure', label: m.pset_auto_breach(), hint: m.pset_auto_breach_hint() },
-    { key: 'trackInvites', label: m.pset_track_invites(), hint: m.pset_track_invites_hint() },
-    { key: 'trackReferredActivity', label: m.pset_track_activity(), hint: m.pset_track_activity_hint() },
+    { key: 'autoPublishAds', get label() { return m.pset_auto_publish(); }, get hint() { return m.pset_auto_publish_hint(); } },
+    { key: 'reciprocityChecks', get label() { return m.pset_reciprocity(); }, get hint() { return m.pset_reciprocity_hint(); } },
+    { key: 'autoApplyBenefits', get label() { return m.pset_auto_benefits(); }, get hint() { return m.pset_auto_benefits_hint(); } },
+    { key: 'autoBreachOnFailure', get label() { return m.pset_auto_breach(); }, get hint() { return m.pset_auto_breach_hint(); } },
+    { key: 'trackInvites', get label() { return m.pset_track_invites(); }, get hint() { return m.pset_track_invites_hint(); } },
+    { key: 'trackReferredActivity', get label() { return m.pset_track_activity(); }, get hint() { return m.pset_track_activity_hint(); } },
   ];
 
   const notifications = [
-    { key: 'notifyStaffChannel', label: m.pset_notify_staff() },
-    { key: 'notifyDashboard', label: m.pset_notify_dashboard() },
-    { key: 'notifyOwnerDm', label: m.pset_notify_owner_dm() },
+    { key: 'notifyStaffChannel', get label() { return m.pset_notify_staff(); } },
+    { key: 'notifyDashboard', get label() { return m.pset_notify_dashboard(); } },
+    { key: 'notifyOwnerDm', get label() { return m.pset_notify_owner_dm(); } },
   ];
 </script>
 

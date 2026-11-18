@@ -165,22 +165,22 @@
    * paramètre, et afficherait « undefined » à la place de la variable citée.
    */
   const commonMacros: MacroOption[] = [
-    { token: '{prize}', label: m.giv_macro_prize() },
-    { token: '{winnerCount}', label: m.giv_macro_winner_count() },
-    { token: '{participants}', label: m.giv_macro_participants() },
-    { token: '{host}', label: m.giv_macro_host() },
-    { token: '{server}', label: m.giv_macro_server() },
-    { token: '{id}', label: m.giv_macro_id() },
-    { token: '{endsAt}', label: m.giv_macro_ends_at() },
-    { token: '{endsRelative}', label: m.giv_macro_ends_relative() },
+    { token: '{prize}', get label() { return m.giv_macro_prize(); } },
+    { token: '{winnerCount}', get label() { return m.giv_macro_winner_count(); } },
+    { token: '{participants}', get label() { return m.giv_macro_participants(); } },
+    { token: '{host}', get label() { return m.giv_macro_host(); } },
+    { token: '{server}', get label() { return m.giv_macro_server(); } },
+    { token: '{id}', get label() { return m.giv_macro_id(); } },
+    { token: '{endsAt}', get label() { return m.giv_macro_ends_at(); } },
+    { token: '{endsRelative}', get label() { return m.giv_macro_ends_relative(); } },
   ];
 
-  const winnersMacro: MacroOption = { token: '{winners}', label: m.giv_macro_winners() };
+  const winnersMacro: MacroOption = { token: '{winners}', get label() { return m.giv_macro_winners(); } };
 
   const bodyMacros: MacroOption[] = [
-    { token: '{description}', label: m.giv_macro_description() },
-    { token: '{bonus}', label: m.giv_macro_bonus() },
-    { token: '{bonusRoles}', label: m.giv_macro_bonus_roles() },
+    { token: '{description}', get label() { return m.giv_macro_description(); } },
+    { token: '{bonus}', get label() { return m.giv_macro_bonus(); } },
+    { token: '{bonusRoles}', get label() { return m.giv_macro_bonus_roles(); } },
     ...commonMacros,
   ];
 
@@ -190,10 +190,10 @@
    * proposer ne produirait qu'un trou dans la phrase.
    */
   const refusalMacros: MacroOption[] = [
-    { token: '{minAccountAgeDays}', label: m.giv_macro_min_account_age() },
-    { token: '{minMemberAgeDays}', label: m.giv_macro_min_member_age() },
-    { token: '{minLevel}', label: m.giv_macro_min_level() },
-    { token: '{server}', label: m.giv_macro_server() },
+    { token: '{minAccountAgeDays}', get label() { return m.giv_macro_min_account_age(); } },
+    { token: '{minMemberAgeDays}', get label() { return m.giv_macro_min_member_age(); } },
+    { token: '{minLevel}', get label() { return m.giv_macro_min_level(); } },
+    { token: '{server}', get label() { return m.giv_macro_server(); } },
   ];
 
   function buttonStyleLabel(style: GiveawayConfigPayload['joinButtonStyle']) {
@@ -517,12 +517,12 @@
   }
 
   const presets = [
-    { label: m.e8_giveaways_preset_30m(), value: 30, unit: 'minutes' },
-    { label: m.e8_giveaways_preset_1h(), value: 1, unit: 'hours' },
-    { label: m.e8_giveaways_preset_12h(), value: 12, unit: 'hours' },
-    { label: m.e8_giveaways_preset_1d(), value: 1, unit: 'days' },
-    { label: m.e8_giveaways_preset_3d(), value: 3, unit: 'days' },
-    { label: m.e8_giveaways_preset_7d(), value: 7, unit: 'days' },
+    { get label() { return m.e8_giveaways_preset_30m(); }, value: 30, unit: 'minutes' },
+    { get label() { return m.e8_giveaways_preset_1h(); }, value: 1, unit: 'hours' },
+    { get label() { return m.e8_giveaways_preset_12h(); }, value: 12, unit: 'hours' },
+    { get label() { return m.e8_giveaways_preset_1d(); }, value: 1, unit: 'days' },
+    { get label() { return m.e8_giveaways_preset_3d(); }, value: 3, unit: 'days' },
+    { get label() { return m.e8_giveaways_preset_7d(); }, value: 7, unit: 'days' },
   ];
 
   function applyPreset(preset: typeof presets[0]) {
@@ -532,14 +532,14 @@
   }
 
   const endModes = [
-    { id: 'duration' as const, label: m.giv_field_end_mode_duration() },
-    { id: 'date' as const, label: m.giv_field_end_mode_date() },
+    { id: 'duration' as const, get label() { return m.giv_field_end_mode_duration(); } },
+    { id: 'date' as const, get label() { return m.giv_field_end_mode_date(); } },
   ];
 
   const appearanceModes: { id: AppearanceMode; label: string }[] = [
-    { id: 'plain', label: m.giv_form_style_plain() },
-    { id: 'server', label: m.giv_form_style_server() },
-    { id: 'custom', label: m.giv_form_style_custom() },
+    { id: 'plain', get label() { return m.giv_form_style_plain(); } },
+    { id: 'server', get label() { return m.giv_form_style_server(); } },
+    { id: 'custom', get label() { return m.giv_form_style_custom(); } },
   ];
 
   function appearanceModeHelp(mode: AppearanceMode): string {

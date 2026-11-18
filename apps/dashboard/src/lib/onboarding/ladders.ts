@@ -65,10 +65,9 @@ export type StaffStructure = {
 export const STAFF_STRUCTURES: StaffStructure[] = [
   {
     key: 'founder',
-    label: m.obl_founder(),
-    pitch: m.obl_founder_pitch(),
-    detail:
-      m.obl_founder_detail(),
+    get label() { return m.obl_founder(); },
+    get pitch() { return m.obl_founder_pitch(); },
+    get detail() { return m.obl_founder_detail(); },
     icon: 'crown',
     top: [
       {
@@ -77,7 +76,7 @@ export const STAFF_STRUCTURES: StaffStructure[] = [
         color: '#F59E0B',
         power: 'admin',
         hoist: true,
-        duty: m.obl_duty_owner(),
+        get duty() { return m.obl_duty_owner(); },
       },
       {
         key: 'staff.admin',
@@ -85,7 +84,7 @@ export const STAFF_STRUCTURES: StaffStructure[] = [
         color: '#EF4444',
         power: 'admin',
         hoist: true,
-        duty: m.obl_duty_admin(),
+        get duty() { return m.obl_duty_admin(); },
       },
     ],
     ground: [
@@ -95,7 +94,7 @@ export const STAFF_STRUCTURES: StaffStructure[] = [
         color: '#3B82F6',
         power: 'moderate',
         hoist: true,
-        duty: m.obl_duty_mod(),
+        get duty() { return m.obl_duty_mod(); },
       },
       {
         key: 'staff.helper',
@@ -103,16 +102,15 @@ export const STAFF_STRUCTURES: StaffStructure[] = [
         color: '#10B981',
         power: 'assist',
         hoist: true,
-        duty: m.obl_duty_helper(),
+        get duty() { return m.obl_duty_helper(); },
       },
     ],
   },
   {
     key: 'admin',
-    label: m.obl_admin(),
-    pitch: m.obl_admin_pitch(),
-    detail:
-      m.obl_admin_detail(),
+    get label() { return m.obl_admin(); },
+    get pitch() { return m.obl_admin_pitch(); },
+    get detail() { return m.obl_admin_detail(); },
     icon: 'shield',
     top: [
       {
@@ -121,7 +119,7 @@ export const STAFF_STRUCTURES: StaffStructure[] = [
         color: '#EF4444',
         power: 'admin',
         hoist: true,
-        duty: m.obl_duty_owner(),
+        get duty() { return m.obl_duty_owner(); },
       },
       {
         key: 'staff.supermod',
@@ -129,7 +127,7 @@ export const STAFF_STRUCTURES: StaffStructure[] = [
         color: '#F97316',
         power: 'manage',
         hoist: true,
-        duty: m.obl_duty_staff_lead(),
+        get duty() { return m.obl_duty_staff_lead(); },
       },
     ],
     ground: [
@@ -139,7 +137,7 @@ export const STAFF_STRUCTURES: StaffStructure[] = [
         color: '#3B82F6',
         power: 'moderate',
         hoist: true,
-        duty: m.obl_duty_mod(),
+        get duty() { return m.obl_duty_mod(); },
       },
       {
         key: 'staff.helper',
@@ -147,16 +145,15 @@ export const STAFF_STRUCTURES: StaffStructure[] = [
         color: '#10B981',
         power: 'assist',
         hoist: true,
-        duty: m.obl_duty_helper(),
+        get duty() { return m.obl_duty_helper(); },
       },
     ],
   },
   {
     key: 'flat',
-    label: m.obl_flat(),
-    pitch: m.obl_flat_pitch(),
-    detail:
-      m.obl_flat_detail(),
+    get label() { return m.obl_flat(); },
+    get pitch() { return m.obl_flat_pitch(); },
+    get detail() { return m.obl_flat_detail(); },
     icon: 'users',
     top: [
       {
@@ -165,7 +162,7 @@ export const STAFF_STRUCTURES: StaffStructure[] = [
         color: '#EF4444',
         power: 'admin',
         hoist: true,
-        duty: m.obl_duty_owner(),
+        get duty() { return m.obl_duty_owner(); },
       },
     ],
     ground: [
@@ -175,7 +172,7 @@ export const STAFF_STRUCTURES: StaffStructure[] = [
         color: '#3B82F6',
         power: 'moderate',
         hoist: true,
-        duty: m.obl_duty_mod(),
+        get duty() { return m.obl_duty_mod(); },
       },
     ],
   },
@@ -204,7 +201,7 @@ const ALL_STAFF_POLES: StaffPole[] = [
     color: '#6366F1',
     power: 'moderate',
     hoist: false,
-    duty: m.obl_duty_mod_lead(),
+    get duty() { return m.obl_duty_mod_lead(); },
     byDefault: true,
   },
   {
@@ -213,7 +210,7 @@ const ALL_STAFF_POLES: StaffPole[] = [
     color: '#EC4899',
     power: 'coordinate',
     hoist: false,
-    duty: m.obl_duty_events(),
+    get duty() { return m.obl_duty_events(); },
     byDefault: true,
   },
   {
@@ -222,7 +219,7 @@ const ALL_STAFF_POLES: StaffPole[] = [
     color: '#0EA5E9',
     power: 'coordinate',
     hoist: false,
-    duty: m.obl_duty_comms(),
+    get duty() { return m.obl_duty_comms(); },
     byDefault: false,
   },
   {
@@ -231,7 +228,7 @@ const ALL_STAFF_POLES: StaffPole[] = [
     color: '#8B5CF6',
     power: 'coordinate',
     hoist: false,
-    duty: m.obl_duty_recruit(),
+    get duty() { return m.obl_duty_recruit(); },
     byDefault: false,
   },
   {
@@ -241,7 +238,7 @@ const ALL_STAFF_POLES: StaffPole[] = [
     color: '#14B8A6',
     power: 'coordinate',
     hoist: false,
-    duty: m.obl_duty_partners(),
+    get duty() { return m.obl_duty_partners(); },
     byDefault: false,
   },
   {
@@ -250,7 +247,7 @@ const ALL_STAFF_POLES: StaffPole[] = [
     color: '#F59E0B',
     power: 'coordinate',
     hoist: false,
-    duty: m.obl_duty_host(),
+    get duty() { return m.obl_duty_host(); },
     byDefault: false,
   },
 ];
@@ -296,29 +293,29 @@ export type LevelLadder = {
 export const LEVEL_LADDERS: LevelLadder[] = [
   {
     key: 'metals',
-    label: m.obl_metals(),
-    pitch: m.obl_metals_pitch(),
+    get label() { return m.obl_metals(); },
+    get pitch() { return m.obl_metals_pitch(); },
     icon: 'award',
     get names() { return m.bot_ladder_metals({}, bot()).split(','); },
   },
   {
     key: 'seniority',
-    label: m.obl_seniority(),
-    pitch: m.obl_seniority_pitch(),
+    get label() { return m.obl_seniority(); },
+    get pitch() { return m.obl_seniority_pitch(); },
     icon: 'clock',
     get names() { return m.bot_ladder_seniority({}, bot()).split(','); },
   },
   {
     key: 'ranks',
-    label: m.obl_ranks(),
-    pitch: m.obl_ranks_pitch(),
+    get label() { return m.obl_ranks(); },
+    get pitch() { return m.obl_ranks_pitch(); },
     icon: 'trophy',
     get names() { return m.bot_ladder_ranks({}, bot()).split(','); },
   },
   {
     key: 'plain',
-    label: m.obl_plain(),
-    pitch: m.obl_plain_pitch(),
+    get label() { return m.obl_plain(); },
+    get pitch() { return m.obl_plain_pitch(); },
     icon: 'hash',
     names: [],
   },

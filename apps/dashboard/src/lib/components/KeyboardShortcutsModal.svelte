@@ -10,19 +10,19 @@
   }
 
   const shortcuts: Shortcut[] = [
-    { keys: ['G', 'D', 'ou', 'Ctrl', 'Shift', 'D'], description: m.ksm_sc_dashboard(), category: 'nav' },
-    { keys: ['G', 'M', 'ou', 'Ctrl', 'Shift', 'M'], description: m.ksm_sc_members(), category: 'nav' },
-    { keys: ['G', 'C', 'ou', 'Ctrl', 'Shift', 'C'], description: m.ksm_sc_config(), category: 'nav' },
-    { keys: ['G', 'L', 'ou', 'Ctrl', 'Shift', 'L'], description: m.ksm_sc_logs(), category: 'nav' },
-    { keys: ['/'], description: m.ksm_sc_search(), category: 'nav' },
-    { keys: ['Ctrl', 'K'], description: m.ksm_sc_search_palette(), category: 'nav' },
-    { keys: ['Ctrl', 'G'], description: m.ksm_sc_server_switch(), category: 'nav' },
-    { keys: ['Ctrl', 'Shift', 'N'], description: m.ksm_sc_open_menu(), category: 'system' },
+    { keys: ['G', 'D', 'ou', 'Ctrl', 'Shift', 'D'], get description() { return m.ksm_sc_dashboard(); }, category: 'nav' },
+    { keys: ['G', 'M', 'ou', 'Ctrl', 'Shift', 'M'], get description() { return m.ksm_sc_members(); }, category: 'nav' },
+    { keys: ['G', 'C', 'ou', 'Ctrl', 'Shift', 'C'], get description() { return m.ksm_sc_config(); }, category: 'nav' },
+    { keys: ['G', 'L', 'ou', 'Ctrl', 'Shift', 'L'], get description() { return m.ksm_sc_logs(); }, category: 'nav' },
+    { keys: ['/'], get description() { return m.ksm_sc_search(); }, category: 'nav' },
+    { keys: ['Ctrl', 'K'], get description() { return m.ksm_sc_search_palette(); }, category: 'nav' },
+    { keys: ['Ctrl', 'G'], get description() { return m.ksm_sc_server_switch(); }, category: 'nav' },
+    { keys: ['Ctrl', 'Shift', 'N'], get description() { return m.ksm_sc_open_menu(); }, category: 'system' },
   ];
 
   const categories: { id: 'nav' | 'system'; label: string }[] = [
-    { id: 'nav', label: m.ksm_cat_navigation() },
-    { id: 'system', label: m.ksm_cat_system() },
+    { id: 'nav', get label() { return m.ksm_cat_navigation(); } },
+    { id: 'system', get label() { return m.ksm_cat_system(); } },
   ];
 
   const { isOpen = false, onClose = () => {} }: { isOpen?: boolean; onClose?: () => void } = $props();

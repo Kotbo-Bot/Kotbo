@@ -30,12 +30,12 @@
   };
 
   // Libelles de groupe : affiches, et cles de regroupement des resultats.
-  const GROUP_ACCOUNT = m.cp_group_account();
-  const GROUP_ACTIONS = m.cp_group_actions();
-  const GROUP_ADMIN = m.cp_group_admin();
-  const GROUP_PINNED = m.cp_group_pinned();
-  const GROUP_RECENT = m.cp_group_recent();
-  const GROUP_MISSING = m.cp_group_missing();
+  const GROUP_ACCOUNT = $derived(m.cp_group_account());
+  const GROUP_ACTIONS = $derived(m.cp_group_actions());
+  const GROUP_ADMIN = $derived(m.cp_group_admin());
+  const GROUP_PINNED = $derived(m.cp_group_pinned());
+  const GROUP_RECENT = $derived(m.cp_group_recent());
+  const GROUP_MISSING = $derived(m.cp_group_missing());
 
   interface PaletteItem {
     id: string;

@@ -14,8 +14,8 @@ export interface WorkflowTemplate {
 export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
   {
     id: 'auto-role-on-join',
-    name: m.wft_autorole(),
-    description: m.wft_autorole_desc(),
+    get name() { return m.wft_autorole(); },
+    get description() { return m.wft_autorole_desc(); },
     category: 'welcome',
     icon: 'Shield',
     graph: {
@@ -53,8 +53,8 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
   },
   {
     id: 'welcome-dm',
-    name: m.wft_welcome_dm(),
-    description: m.wft_welcome_dm_desc(),
+    get name() { return m.wft_welcome_dm(); },
+    get description() { return m.wft_welcome_dm_desc(); },
     category: 'welcome',
     icon: 'Mail',
     graph: {
@@ -105,8 +105,8 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
   },
   {
     id: 'keyword-automod',
-    name: m.wft_keyword_mod(),
-    description: m.wft_keyword_mod_desc(),
+    get name() { return m.wft_keyword_mod(); },
+    get description() { return m.wft_keyword_mod_desc(); },
     category: 'moderation',
     icon: 'AlertTriangle',
     graph: {
@@ -236,8 +236,8 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
   },
   {
     id: 'ticket-auto-reply',
-    name: m.wft_ticket_reply(),
-    description: m.wft_ticket_reply_desc(),
+    get name() { return m.wft_ticket_reply(); },
+    get description() { return m.wft_ticket_reply_desc(); },
     category: 'support',
     icon: 'TextBubble',
     graph: {
@@ -288,8 +288,8 @@ export const WORKFLOW_TEMPLATES: WorkflowTemplate[] = [
   },
   {
     id: 'levelup-congrats',
-    name: m.wft_level_up(),
-    description: m.wft_level_up_desc(),
+    get name() { return m.wft_level_up(); },
+    get description() { return m.wft_level_up_desc(); },
     category: 'gamification',
     icon: 'Sparkles',
     graph: {

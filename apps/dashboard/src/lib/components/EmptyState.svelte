@@ -28,7 +28,7 @@
 
   const {
     icon = 'inbox',
-    title = m.esx_default_title(),
+    title,
     description = '',
     action,
     actionLabel = '',
@@ -56,7 +56,7 @@
   <div class="w-12 h-12 rounded-full flex items-center justify-center mb-2 {reason === 'all-clear' ? 'bg-success/10 text-success' : 'bg-surface-container text-on-surface-variant'}">
     <Papicon {icon} size={22} />
   </div>
-  <p class="text-sm font-medium text-on-surface">{title}</p>
+  <p class="text-sm font-medium text-on-surface">{title ?? m.esx_default_title()}</p>
   {#if description}
     <p class="text-body-sm text-on-surface-variant max-w-sm leading-relaxed">{description}</p>
   {/if}

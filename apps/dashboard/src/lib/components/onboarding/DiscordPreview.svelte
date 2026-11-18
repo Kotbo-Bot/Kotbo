@@ -64,7 +64,7 @@
   const tokens = $derived(content ? tokenize(content) : []);
 
   const now = new Date();
-  const stamp = m.onb_preview_today_at({ time: `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}` });
+  const stamp = $derived(m.onb_preview_today_at({ time: `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}` }));
 </script>
 
 <div class="rounded-xl overflow-hidden border border-black/25 shadow-sm">

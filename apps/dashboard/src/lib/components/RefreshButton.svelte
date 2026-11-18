@@ -5,9 +5,9 @@
     onClick,
     onclick,
     loading = false,
-    label = m.d6_refresh(),
+    label,
     iconOnly = false,
-    ariaLabel = m.d6_refresh(),
+    ariaLabel,
     className = '',
     iconClass = 'text-sm'
   }: {
@@ -37,9 +37,9 @@
 <button
   type="button"
   onclick={onClick ?? onclick}
-  aria-label={ariaLabel}
+  aria-label={ariaLabel ?? m.d6_refresh()}
   aria-busy={loading}
-  title={label}
+  title={label ?? m.d6_refresh()}
   class="{getBaseClass()} {iconOnly ? className : ''}"
 >
   <Papicon 

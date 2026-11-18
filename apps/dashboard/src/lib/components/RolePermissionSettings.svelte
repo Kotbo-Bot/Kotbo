@@ -7,7 +7,7 @@
   import ActionButton from './ActionButton.svelte';
   import { m } from '../i18n';
 
-  const { featureKey = '', roleAccess = [], title = m.rp_title(), description = m.rp_desc() } = $props();
+  const { featureKey = '', roleAccess = [], title, description } = $props();
 
   const saveAction = createAsyncActionState();
   const availableRoles = $derived(dashboardStore.state.discordRoles || []);
@@ -76,8 +76,8 @@
     class="w-full flex items-center justify-between gap-4 text-left {open ? 'border-b border-outline-variant/10 pb-4' : ''}"
   >
     <div>
-      <h3 class="text-sm font-semibold text-on-surface">{title}</h3>
-      <p class="text-xs text-on-surface-variant mt-1">{description}</p>
+      <h3 class="text-sm font-semibold text-on-surface">{title ?? m.rp_title()}</h3>
+      <p class="text-xs text-on-surface-variant mt-1">{description ?? m.rp_desc()}</p>
     </div>
     <div class="flex items-center gap-3 shrink-0">
       {#if configuredCount > 0}

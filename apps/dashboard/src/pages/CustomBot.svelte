@@ -337,19 +337,19 @@
   }
 
   const statusOptions = [
-    { value: 'ONLINE', label: m.cbx_status_online(), dot: 'bg-emerald-500' },
-    { value: 'IDLE', label: m.cbx_status_idle(), dot: 'bg-amber-500' },
-    { value: 'DND', label: m.cbx_status_dnd(), dot: 'bg-red-500' },
-    { value: 'INVISIBLE', label: m.cbx_status_invisible(), dot: 'bg-gray-500' },
+    { value: 'ONLINE', get label() { return m.cbx_status_online(); }, dot: 'bg-emerald-500' },
+    { value: 'IDLE', get label() { return m.cbx_status_idle(); }, dot: 'bg-amber-500' },
+    { value: 'DND', get label() { return m.cbx_status_dnd(); }, dot: 'bg-red-500' },
+    { value: 'INVISIBLE', get label() { return m.cbx_status_invisible(); }, dot: 'bg-gray-500' },
   ];
 
   const activityOptions = [
-    { value: 'NONE', label: m.cbx_activity_none() },
-    { value: 'PLAYING', label: m.cbx_activity_playing() },
-    { value: 'STREAMING', label: m.cbx_activity_streaming() },
-    { value: 'LISTENING', label: m.cbx_activity_listening() },
-    { value: 'WATCHING', label: m.cbx_activity_watching() },
-    { value: 'COMPETING', label: m.cbx_activity_competing() },
+    { value: 'NONE', get label() { return m.cbx_activity_none(); } },
+    { value: 'PLAYING', get label() { return m.cbx_activity_playing(); } },
+    { value: 'STREAMING', get label() { return m.cbx_activity_streaming(); } },
+    { value: 'LISTENING', get label() { return m.cbx_activity_listening(); } },
+    { value: 'WATCHING', get label() { return m.cbx_activity_watching(); } },
+    { value: 'COMPETING', get label() { return m.cbx_activity_competing(); } },
   ];
 
   const ownBotOn = $derived(Boolean(config?.enabled));

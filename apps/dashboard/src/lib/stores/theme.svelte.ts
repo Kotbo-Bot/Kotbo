@@ -34,14 +34,14 @@ const SURFACE_VAR_KEYS = [
 export const THEME_PRESETS: ThemePreset[] = [
   {
     id: 'light',
-    label: m.thx_light(),
+    get label() { return m.thx_light(); },
     mode: 'light',
     icon: 'sun',
     preview: { bg: '#ffffff', surface: '#f3f4f6', text: '#111827' },
   },
   {
     id: 'dark',
-    label: m.thx_dark(),
+    get label() { return m.thx_dark(); },
     mode: 'dark',
     icon: 'moon',
     preview: { bg: '#09090b', surface: '#1c1c1f', text: '#fafafa' },
@@ -117,7 +117,7 @@ export const THEME_PRESETS: ThemePreset[] = [
   },
   {
     id: 'forest',
-    label: m.thx_forest(),
+    get label() { return m.thx_forest(); },
     mode: 'dark',
     icon: 'moon',
     preview: { bg: '#0c1a14', surface: '#14261c', text: '#d1fae5' },
@@ -163,7 +163,7 @@ export const THEME_PRESETS: ThemePreset[] = [
   },
   {
     id: 'lavender',
-    label: m.thx_lavender(),
+    get label() { return m.thx_lavender(); },
     mode: 'light',
     icon: 'sun',
     preview: { bg: '#faf5ff', surface: '#f3e8ff', text: '#3b0764' },
@@ -186,7 +186,7 @@ export const THEME_PRESETS: ThemePreset[] = [
   },
   {
     id: 'ocean',
-    label: m.thx_ocean(),
+    get label() { return m.thx_ocean(); },
     mode: 'light',
     icon: 'sun',
     preview: { bg: '#f0f9ff', surface: '#e0f2fe', text: '#0c4a6e' },

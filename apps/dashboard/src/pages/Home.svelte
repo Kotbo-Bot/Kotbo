@@ -48,31 +48,31 @@
   ];
 
   const MODULE_CATALOG = [
-    { id: 'liveStats', title: m.home_mod_livestats_title(), desc: m.home_mod_livestats_desc(), icon: 'users' },
-    { id: 'analytics', title: m.home_mod_analytics_title(), desc: m.home_mod_analytics_desc(), icon: 'trending-up' },
-    { id: 'system', title: m.home_mod_system_title(), desc: m.home_mod_system_desc(), icon: 'cpu' },
-    { id: 'channels', title: m.home_mod_channels_title(), desc: m.home_mod_channels_desc(), icon: 'hash' },
-    { id: 'moderation', title: m.home_mod_moderation_title(), desc: m.home_mod_moderation_desc(), icon: 'shield' },
-    { id: 'members', title: m.home_mod_members_title(), desc: m.home_mod_members_desc(), icon: 'award' },
-    { id: 'notifications', title: m.home_mod_notifications_title(), desc: m.home_mod_notifications_desc(), icon: 'inbox' },
-    { id: 'staff', title: m.home_mod_staff_title(), desc: m.home_mod_staff_desc(), icon: 'users' },
-    { id: 'audit', title: m.home_mod_audit_title(), desc: m.home_mod_audit_desc(), icon: 'activity' },
-    { id: 'botLanguage', title: m.home_mod_botlanguage_title(), desc: m.home_mod_botlanguage_desc(), icon: 'globe' },
-    { id: 'timezone', title: m.home_mod_timezone_title(), desc: m.home_mod_timezone_desc(), icon: 'clock' },
-    { id: 'actions', title: m.home_mod_actions_title(), desc: m.home_mod_actions_desc(), icon: 'plus-circle' },
-    { id: 'notes', title: m.home_mod_notes_title(), desc: m.home_mod_notes_desc(), icon: 'edit' },
-    { id: 'serverInfo', title: m.home_mod_serverinfo_title(), desc: m.home_mod_serverinfo_desc(), icon: 'server' },
-    { id: 'botHosting', title: m.home_mod_bothosting_title(), desc: m.home_mod_bothosting_desc(), icon: 'cpu' },
-    { id: 'news', title: m.home_mod_news_title(), desc: m.home_mod_news_desc(), icon: 'book' },
-    { id: 'quickGuide', title: m.home_mod_quickguide_title(), desc: m.home_mod_quickguide_desc(), icon: 'info' },
-    { id: 'clockWeather', title: m.home_mod_clockweather_title(), desc: m.home_mod_clockweather_desc(), icon: 'clock' },
-    { id: 'economy', title: m.home_mod_economy_title(), desc: m.home_mod_economy_desc(), icon: 'dollar-sign' },
-    { id: 'leveling', title: m.home_mod_leveling_title(), desc: m.home_mod_leveling_desc(), icon: 'bar-chart-2' },
-    { id: 'tickets', title: m.home_mod_tickets_title(), desc: m.home_mod_tickets_desc(), icon: 'message-square' },
-    { id: 'invites', title: m.home_mod_invites_title(), desc: m.home_mod_invites_desc(), icon: 'user-plus' },
-    { id: 'events', title: m.home_mod_events_title(), desc: m.home_mod_events_desc(), icon: 'calendar' },
-    { id: 'polls', title: m.home_mod_polls_title(), desc: m.home_mod_polls_desc(), icon: 'bar-chart' },
-    { id: 'staffServer', title: m.home_mod_staffserver_title(), desc: m.home_mod_staffserver_desc(), icon: 'shield' },
+    { id: 'liveStats', get title() { return m.home_mod_livestats_title(); }, get desc() { return m.home_mod_livestats_desc(); }, icon: 'users' },
+    { id: 'analytics', get title() { return m.home_mod_analytics_title(); }, get desc() { return m.home_mod_analytics_desc(); }, icon: 'trending-up' },
+    { id: 'system', get title() { return m.home_mod_system_title(); }, get desc() { return m.home_mod_system_desc(); }, icon: 'cpu' },
+    { id: 'channels', get title() { return m.home_mod_channels_title(); }, get desc() { return m.home_mod_channels_desc(); }, icon: 'hash' },
+    { id: 'moderation', get title() { return m.home_mod_moderation_title(); }, get desc() { return m.home_mod_moderation_desc(); }, icon: 'shield' },
+    { id: 'members', get title() { return m.home_mod_members_title(); }, get desc() { return m.home_mod_members_desc(); }, icon: 'award' },
+    { id: 'notifications', get title() { return m.home_mod_notifications_title(); }, get desc() { return m.home_mod_notifications_desc(); }, icon: 'inbox' },
+    { id: 'staff', get title() { return m.home_mod_staff_title(); }, get desc() { return m.home_mod_staff_desc(); }, icon: 'users' },
+    { id: 'audit', get title() { return m.home_mod_audit_title(); }, get desc() { return m.home_mod_audit_desc(); }, icon: 'activity' },
+    { id: 'botLanguage', get title() { return m.home_mod_botlanguage_title(); }, get desc() { return m.home_mod_botlanguage_desc(); }, icon: 'globe' },
+    { id: 'timezone', get title() { return m.home_mod_timezone_title(); }, get desc() { return m.home_mod_timezone_desc(); }, icon: 'clock' },
+    { id: 'actions', get title() { return m.home_mod_actions_title(); }, get desc() { return m.home_mod_actions_desc(); }, icon: 'plus-circle' },
+    { id: 'notes', get title() { return m.home_mod_notes_title(); }, get desc() { return m.home_mod_notes_desc(); }, icon: 'edit' },
+    { id: 'serverInfo', get title() { return m.home_mod_serverinfo_title(); }, get desc() { return m.home_mod_serverinfo_desc(); }, icon: 'server' },
+    { id: 'botHosting', get title() { return m.home_mod_bothosting_title(); }, get desc() { return m.home_mod_bothosting_desc(); }, icon: 'cpu' },
+    { id: 'news', get title() { return m.home_mod_news_title(); }, get desc() { return m.home_mod_news_desc(); }, icon: 'book' },
+    { id: 'quickGuide', get title() { return m.home_mod_quickguide_title(); }, get desc() { return m.home_mod_quickguide_desc(); }, icon: 'info' },
+    { id: 'clockWeather', get title() { return m.home_mod_clockweather_title(); }, get desc() { return m.home_mod_clockweather_desc(); }, icon: 'clock' },
+    { id: 'economy', get title() { return m.home_mod_economy_title(); }, get desc() { return m.home_mod_economy_desc(); }, icon: 'dollar-sign' },
+    { id: 'leveling', get title() { return m.home_mod_leveling_title(); }, get desc() { return m.home_mod_leveling_desc(); }, icon: 'bar-chart-2' },
+    { id: 'tickets', get title() { return m.home_mod_tickets_title(); }, get desc() { return m.home_mod_tickets_desc(); }, icon: 'message-square' },
+    { id: 'invites', get title() { return m.home_mod_invites_title(); }, get desc() { return m.home_mod_invites_desc(); }, icon: 'user-plus' },
+    { id: 'events', get title() { return m.home_mod_events_title(); }, get desc() { return m.home_mod_events_desc(); }, icon: 'calendar' },
+    { id: 'polls', get title() { return m.home_mod_polls_title(); }, get desc() { return m.home_mod_polls_desc(); }, icon: 'bar-chart' },
+    { id: 'staffServer', get title() { return m.home_mod_staffserver_title(); }, get desc() { return m.home_mod_staffserver_desc(); }, icon: 'shield' },
   ];
 
   /**
@@ -568,9 +568,9 @@
 
   // Widget "Serveur Staff" - état du lien de la paire
   const SYNC_MODE_LABELS: Record<string, string> = {
-    MAIN_TO_STAFF: m.home_sync_main_to_staff(),
-    STAFF_TO_MAIN: m.home_sync_staff_to_main(),
-    BIDIRECTIONAL: m.home_sync_bidirectional(),
+    get MAIN_TO_STAFF() { return m.home_sync_main_to_staff(); },
+    get STAFF_TO_MAIN() { return m.home_sync_staff_to_main(); },
+    get BIDIRECTIONAL() { return m.home_sync_bidirectional(); },
   };
   let staffServerLinks = $state<any[]>([]);
   let staffLinksGuildId: string | null = null;

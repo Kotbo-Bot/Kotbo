@@ -24,9 +24,9 @@
   let signed = $state(false);
 
   const partyLabel: Record<string, string> = {
-    US: m.ppo_party_us(),
-    PARTNER: m.ppo_party_partner(),
-    BOTH: m.ppo_party_both(),
+    get US() { return m.ppo_party_us(); },
+    get PARTNER() { return m.ppo_party_partner(); },
+    get BOTH() { return m.ppo_party_both(); },
   };
 
   /** Le portail vit hors du dashboard : pas de store d'auth, pas d'en-tête. */
