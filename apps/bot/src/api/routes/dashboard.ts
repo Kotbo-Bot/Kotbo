@@ -30,7 +30,6 @@ import { handleMessageLogRoutes } from './dashboard/messageLogs.js';
 import { handleRaidProtectionRoutes } from './dashboard/raidProtection.js';
 import { handleClansRoutes } from './dashboard/clans.js';
 import { handleDropsRoutes } from './dashboard/drops.js';
-import { handleWorkflowRoutes } from './dashboard/workflows.js';
 import { getCachedFeatureAccess } from './dashboard/featureGate.js';
 
 export async function handleDashboardRoutes(
@@ -178,10 +177,6 @@ export async function handleDashboardRoutes(
       return true;
     }
     if (await handleMessageLogRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
-      if (method !== 'GET') await cache.invalidateGuild(guildId);
-      return true;
-    }
-    if (await handleWorkflowRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
       if (method !== 'GET') await cache.invalidateGuild(guildId);
       return true;
     }
