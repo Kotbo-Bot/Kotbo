@@ -358,6 +358,17 @@ export async function acceptLinkInvite(opts: {
 
 // ── Création directe (admin des serveurs concernés) ─────────
 
+/** L'utilisateur administre ce serveur (Administrateur ou Gérer le serveur). */
+export async function canManageGuild(client: Client, guildId: string, userId: string): Promise<boolean> {
+  const guild = client.guilds.cache.get(guildId);
+  if (!guild) return false;
+  const member = guild.members.cache.get(userId) ?? await guild.members.fetch(userId).catch(() => null);
+  if (!member) return false;
+  return member.permissions.has('Administrator') || member.permissions.has('ManageGuild');
+}
+
+const NOT_ADMIN_OF_TARGET = 'Vous devez être admin de chacun des serveurs reliés.';
+
 export async function createDirectGroup(opts: {
   ownerGuildId: string;
   ownerChannelId: string;
@@ -386,6 +397,13 @@ export async function createDirectGroup(opts: {
 
   const guildIds = [opts.ownerGuildId, ...targets.map((t) => t.guildId)];
   if (!hasActivatedMember(guildIds)) return { error: LINK_NEEDS_ACTIVATED_SIDE };
+
+  // Garde de service : aucun appelant (commande, API, futur code) ne relie le salon d'un
+  // serveur qu'il n'administre pas. Le serveur propriétaire est déjà contrôlé par l'appelant.
+  for (const guildId of new Set(targets.map((t) => t.guildId))) {
+    if (guildId === opts.ownerGuildId) continue;
+    if (!(await canManageGuild(opts.client, guildId, opts.createdByUserId))) return { error: NOT_ADMIN_OF_TARGET };
+  }
 
   const alreadyLinked = await prisma.channelLinkGroupMember.findFirst({
     where: {
@@ -453,6 +471,12 @@ export async function addGroupMember(opts: {
   }
   if (!hasActivatedMember([...group.members.map((m) => m.guildId), opts.guildId])) {
     return { error: LINK_NEEDS_ACTIVATED_SIDE };
+  }
+  if (
+    !group.members.some((m) => m.guildId === opts.guildId) &&
+    !(await canManageGuild(opts.client, opts.guildId, opts.addedByUserId))
+  ) {
+    return { error: NOT_ADMIN_OF_TARGET };
   }
 
   const webhookId = await createRelayWebhook(opts.client, opts.guildId, opts.channelId);
