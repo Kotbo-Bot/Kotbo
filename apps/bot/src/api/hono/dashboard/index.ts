@@ -7,6 +7,7 @@
 import { Hono } from 'hono';
 import { compress } from 'hono/compress';
 import type { Client } from 'discord.js';
+import { createMembersRouter } from '../../routes/dashboard/members.js';
 import { createGeneralRouter, createGuildGeneralRouter } from '../../routes/dashboard/general.js';
 import { createLeadershipRouter } from '../../routes/dashboard/leadership.js';
 import { createStaffRouter } from '../../routes/dashboard/leadership/staff.js';
@@ -33,7 +34,6 @@ import { createSettingsRouter } from '../../routes/dashboard/modules/settings.js
 import { createNicknameModerationRouter } from '../../routes/dashboard/modules/nickname-moderation.js';
 import { createSocialFollowsRouter } from '../../routes/dashboard/modules/social-follows.js';
 import { createBannedWordsRouter } from '../../routes/dashboard/modules/banned-words.js';
-import { createInvitationsRouter } from '../../routes/dashboard/modules/invitations.js';
 import { createNewsRouter } from '../../routes/dashboard/modules/news.js';
 import { createRegulationRouter } from '../../routes/dashboard/modules/regulation.js';
 import { createVerificationModuleRouter } from '../../routes/dashboard/modules/verification.js';
@@ -154,7 +154,6 @@ export function createDashboardRouter(client: Client) {
   router.route('/', createVerificationModuleRouter(client));
   router.route('/', createRegulationRouter(client));
   router.route('/', createNewsRouter(client));
-  router.route('/', createInvitationsRouter(client));
   router.route('/', createBannedWordsRouter(client));
   router.route('/', createSocialFollowsRouter(client));
   router.route('/', createNicknameModerationRouter(client));
@@ -182,5 +181,6 @@ export function createDashboardRouter(client: Client) {
   router.route('/', createLeadershipRouter(client));
   router.route('/', createGeneralRouter(client));
   router.route('/', createGuildGeneralRouter(client));
+  router.route('/', createMembersRouter(client));
   return router;
 }

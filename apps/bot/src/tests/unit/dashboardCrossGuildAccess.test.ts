@@ -89,9 +89,17 @@ for (const ext of ['ts', 'js']) {
     }));
 }
 
+// La carte des droits par section interroge Discord : ouverte ici, la route seule est testée.
+for (const ext of ['ts', 'js']) {
+  mock.module(path.resolve(import.meta.dir, `../../api/routes/dashboard/featureGate.${ext}`), () =>
+    completeModuleMock(path.resolve(import.meta.dir, '../../api/routes/dashboard/featureGate.ts'), {
+      getCachedFeatureAccess: async () => ({}),
+    }));
+}
+
 const { createEventsRouter } = await import('../../api/routes/dashboard/events.js');
 const { createStaffServerRouter } = await import('../../api/routes/dashboard/staffServer.js');
-const { createInvitationsRouter } = await import('../../api/routes/dashboard/modules/invitations.js');
+const { createMembersRouter } = await import('../../api/routes/dashboard/members.js');
 
 function request(method: string, body: unknown = {}): any {
   const req: any = Readable.from([Buffer.from(JSON.stringify(body))]);
@@ -146,7 +154,7 @@ describe('accès entre serveurs', () => {
   });
 
   test('une invitation d\'un autre serveur ne se suspend ni ne se supprime', async () => {
-    const router = createInvitationsRouter(client);
+    const router = createMembersRouter(client);
     const headers = { cookie: 'kotbo_session=x', 'content-type': 'application/json' };
     const suspend = await router.request(`/api/dashboard/guilds/${HERE}/invitations/abc123/suspend`, {
       method: 'PUT', headers, body: JSON.stringify({ suspended: true }),
@@ -178,9 +186,10 @@ describe('accès entre serveurs', () => {
 
     expect(read('leadership/apiKeys.ts')).toContain('prisma.aPIKey.findFirst({ where: { id: keyId, guildId } })');
 
+    // Indentation libre : seule compte la clause sur le serveur.
     const members = read('members.ts');
-    expect(members).not.toContain('prisma.linkedAccount.findUnique({\n          where: { id }');
-    expect(members.split('prisma.linkedAccount.findFirst({\n          where: { id, guildId }').length - 1).toBe(2);
+    expect(members).not.toMatch(/prisma\.linkedAccount\.findUnique\(\{\s*where: \{ id \}/);
+    expect(members.match(/prisma\.linkedAccount\.findFirst\(\{\s*where: \{ id, guildId \}/g)?.length).toBe(2);
 
   });
 

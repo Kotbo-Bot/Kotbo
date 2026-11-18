@@ -1,6 +1,4 @@
 import { describe, expect, test, mock, beforeEach } from 'bun:test';
-import { IncomingMessage, ServerResponse } from 'node:http';
-import { Socket } from 'node:net';
 import path from 'node:path';
 import type { Client } from 'discord.js';
 import {
@@ -10,6 +8,8 @@ import {
   type DashboardAccess,
   type FeatureAccessMap,
 } from '../../api/shared.js';
+import { completeModuleMock } from '../helpers/moduleMock.js';
+import { dashboardCall, mockDashboardGate, setDashboardAccess } from '../helpers/honoDashboard.js';
 
 /**
  * Lecture de la fiche membre : `GET /members/:userId`.
@@ -48,48 +48,26 @@ for (const dbPath of ['../../utils/db.ts', '../../utils/db.js']) {
   }));
 }
 
+// La carte des droits par section vient du test, sans base ni Discord.
+let currentFeatureAccess: FeatureAccessMap = {};
+const featureGatePath = path.resolve(__dirname, '../../api/routes/dashboard/featureGate.ts');
+for (const ext of ['ts', 'js']) {
+  mock.module(path.resolve(__dirname, `../../api/routes/dashboard/featureGate.${ext}`), () =>
+    completeModuleMock(featureGatePath, { getCachedFeatureAccess: async () => currentFeatureAccess }));
+}
+
 // Import après les mocks
-const { handleMembersRoutes } = await import('../../api/routes/dashboard/members.js');
-
-interface MockResponse extends ServerResponse {
-  body: string;
-}
-
-function createMockResponse(): MockResponse {
-  const res = new ServerResponse(new IncomingMessage(new Socket())) as MockResponse;
-  let statusCode = 200;
-  let body = '';
-
-  Object.defineProperty(res, 'statusCode', {
-    get: () => statusCode,
-    set: (code: number) => { statusCode = code; },
-  });
-
-  res.setHeader = () => res;
-  res.getHeader = () => undefined;
-  res.writeHead = (code: number) => { statusCode = code; return res; };
-  res.end = (chunk?: unknown) => {
-    if (chunk) body += String(chunk);
-    res.body = body;
-    return res;
-  };
-
-  return res;
-}
+mockDashboardGate(DASHBOARD_ACCESS_ADMIN, { userId: VIEWER, username: 'viewer' });
+const { createMembersRouter } = await import('../../api/routes/dashboard/members.js');
 
 const client = { guilds: { cache: new Map() } } as unknown as Client;
 const user: AuthClaims = { userId: VIEWER, username: 'viewer' };
 
 async function readMemberCase(access: DashboardAccess, featureAccess: FeatureAccessMap) {
-  const req = new IncomingMessage(new Socket());
-  req.method = 'GET';
-  req.url = `/api/dashboard/guilds/${GUILD}/members/${TARGET}`;
-  const url = new URL(req.url, 'http://localhost');
-  const parts = url.pathname.split('/').filter(Boolean);
-  const res = createMockResponse();
-
-  const handled = await handleMembersRoutes(req, res, parts, url, client, user, GUILD, access, featureAccess);
-  return { handled, status: res.statusCode, body: res.body ? JSON.parse(res.body) : null };
+  setDashboardAccess(access, user);
+  currentFeatureAccess = featureAccess;
+  const { status, body } = await dashboardCall(createMembersRouter(client), 'GET', `/api/dashboard/guilds/${GUILD}/members/${TARGET}`);
+  return { handled: status !== 404 || body?.error !== 'Route introuvable', status, body };
 }
 
 const MEMBERS_CLOSED: FeatureAccessMap = {

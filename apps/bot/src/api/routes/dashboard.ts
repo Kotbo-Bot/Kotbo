@@ -7,10 +7,8 @@ import { auditGlobalAdminWrite, evaluateGuildGate } from './dashboard/guildGate.
 
 // Sub-routers imports
 import { handleAnalyticsRoutes } from './dashboard/analytics.js';
-import { handleMembersRoutes } from './dashboard/members.js';
 import { handleGeneralistModulesRoutes } from './dashboard/generalistModules.js';
 import { handleClansRoutes } from './dashboard/clans.js';
-import { getCachedFeatureAccess } from './dashboard/featureGate.js';
 
 export async function handleDashboardRoutes(
   req: IncomingMessage,
@@ -46,24 +44,12 @@ export async function handleDashboardRoutes(
       json(res, gate.denied.status, gate.denied.body);
       return true;
     }
-    const { access, effectiveAccess } = gate;
+    const { effectiveAccess } = gate;
 
     // Dispatch to guild-specific sub-routers
     if (await handleAnalyticsRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
       if (method !== 'GET') await cache.invalidateGuild(guildId);
       return true;
-    }
-    if (['linked-accounts', 'detections', 'members', 'invitations'].includes(parts[4])) {
-      // `access` et non `effectiveAccess` : l'elevation ci-dessus vaut pour la
-      // seule fonctionnalite visee, alors que cette carte est calculee - et
-      // mise en cache - pour toutes. La nourrir de l'accès eleve ferait
-      // remonter « peut configurer » sur chaque fonctionnalite sans regle de
-      // role, et la lecture suivante relirait ce mensonge dans le cache.
-      const featureAccess = await getCachedFeatureAccess(client, guildId, access, user.userId);
-      if (await handleMembersRoutes(req, res, parts, url, client, user, guildId, effectiveAccess, featureAccess)) {
-        if (method !== 'GET') await cache.invalidateGuild(guildId);
-        return true;
-      }
     }
     // Avant les modules généralistes, qui portent le reste du segment `automod`.
     // `access` et non `effectiveAccess` : la route doit savoir si le droit de
