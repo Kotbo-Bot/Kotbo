@@ -228,6 +228,45 @@
     return left >= 0 ? left : null;
   });
   const unread = $derived(notificationsStore.unreadCount);
+
+  function onEdgeMouseDown(e: MouseEvent): void {
+    if (!isDesktop || e.button !== 0) return;
+    e.preventDefault();
+    sidebarStore.setResizing(true);
+    if (typeof document !== 'undefined') {
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    }
+
+    const onMouseMove = (ev: MouseEvent) => {
+      if (collapsed && ev.clientX > 120) {
+        sidebarStore.set(false);
+      }
+      sidebarStore.setWidth(ev.clientX);
+    };
+
+    const onMouseUp = () => {
+      sidebarStore.setResizing(false);
+      if (typeof document !== 'undefined') {
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      }
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  }
+
+  function onEdgeDblClick(e: MouseEvent): void {
+    if (!isDesktop) return;
+    e.preventDefault();
+    if (collapsed) {
+      sidebarStore.set(false);
+    }
+    sidebarStore.resetWidth();
+  }
 </script>
 
 {#snippet unreadBadge(href: string)}
@@ -317,37 +356,52 @@
   aria-hidden={!isDesktop && !mobileOpen}
   ontouchstart={onTouchStart}
   ontouchend={onTouchEnd}
+  style={isDesktop ? `width: ${isCollapsed ? '4.5rem' : `${sidebarStore.width}px`};` : ''}
   class="
     fixed left-0 top-0 h-dvh flex flex-col z-50
     bg-surface-container-lowest
     border-r border-outline-variant
-    will-change-transform transition-[transform,width] duration-200 ease-in-out
+    will-change-transform {sidebarStore.isResizing ? 'transition-none' : 'transition-[transform,width] duration-200 ease-in-out'}
     app-sidebar w-72
     {!isDesktop && mobileOpen ? 'translate-x-0 shadow-lg' : ''}
     {!isDesktop && !mobileOpen ? '-translate-x-full' : ''}
     lg:translate-x-0 lg:shadow-none
-    {isCollapsed ? 'lg:w-[4.5rem]' : 'lg:w-60'}
   "
 >
 
-  <button
-    type="button"
-    onclick={() => sidebarStore.toggle()}
-    class="
-      absolute -right-3 top-14 z-10
-      w-6 h-6 rounded-full border border-outline-variant
-      bg-surface-container-lowest shadow-sm
-      hidden lg:flex items-center justify-center
-      transition-colors duration-150
-      hover:bg-surface-container hover:text-primary
-      text-on-surface-variant
-    "
-    aria-label={isCollapsed ? m.sbx_expand() : m.sbx_collapse()}
-  >
-    <div class="transition-transform duration-200 {isCollapsed ? 'rotate-180' : ''}">
-      <Papicon icon="chevrons-left" size={12} />
+  {#if isDesktop}
+    <!-- Poignée de redimensionnement et bouton de repli/dépli animé au survol -->
+    <div
+      role="separator"
+      aria-orientation="vertical"
+      aria-label={isCollapsed ? m.sbx_expand() : m.sbx_collapse()}
+      tabindex="-1"
+      class="sidebar-edge-handle group/edge"
+      class:is-resizing={sidebarStore.isResizing}
+      onmousedown={onEdgeMouseDown}
+      ondblclick={onEdgeDblClick}
+    >
+      <!-- Ligne lumineuse qui apparaît doucement si le curseur approche lentement (5-10px) -->
+      <div class="edge-bar" aria-hidden="true"></div>
+
+      <!-- Flèche de repli/dépli : apparaît avec la barre, grossit au survol direct -->
+      <button
+        type="button"
+        class="edge-collapse-btn"
+        onmousedown={(e) => e.stopPropagation()}
+        onclick={(e) => {
+          e.stopPropagation();
+          sidebarStore.toggle();
+        }}
+        aria-label={isCollapsed ? m.sbx_expand() : m.sbx_collapse()}
+      >
+        <Papicon
+          icon={isCollapsed ? 'chevron-right' : 'chevron-left'}
+          size={12}
+        />
+      </button>
     </div>
-  </button>
+  {/if}
 
   <div class="flex items-center gap-2.5 px-4 h-14 shrink-0 {isCollapsed ? 'lg:justify-center lg:px-0' : ''}">
     <!-- Le logo ramene a l'accueil du dashboard : c'est la convention que
@@ -672,5 +726,97 @@
 
   .nav-thread .nav-row.is-active:hover {
     background: var(--surface-container);
+  }
+
+  /* Poignée de redimensionnement sur le bord droit */
+  .sidebar-edge-handle {
+    position: absolute;
+    top: 0;
+    right: -6px;
+    bottom: 0;
+    width: 14px;
+    z-index: 50;
+    cursor: col-resize;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Barre lumineuse fine (2px), centrée sur la bordure */
+  .edge-bar {
+    position: absolute;
+    left: 6px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: var(--primary-color);
+    opacity: 0;
+    transform: scaleX(0.5);
+    /* Transition douce avec temporisation (90ms) : visible lors d'une approche lente (5-10px) */
+    transition: opacity 280ms cubic-bezier(0.16, 1, 0.3, 1) 90ms,
+                transform 280ms cubic-bezier(0.16, 1, 0.3, 1) 90ms;
+    pointer-events: none;
+    box-shadow: 0 0 6px color-mix(in srgb, var(--primary-color) 40%, transparent);
+  }
+
+  .sidebar-edge-handle:hover .edge-bar,
+  .sidebar-edge-handle.is-resizing .edge-bar {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+
+  /* Bouton de repli/dépli avec flèche */
+  .edge-collapse-btn {
+    position: absolute;
+    left: 7px;
+    top: 50%;
+    transform: translate(-50%, -50%) scale(0.85);
+    width: 22px;
+    height: 30px;
+    border-radius: 9999px;
+    border: 1px solid var(--outline-variant);
+    background: var(--surface-container-lowest);
+    color: var(--on-surface-variant);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+    cursor: pointer;
+    transition: opacity 240ms cubic-bezier(0.16, 1, 0.3, 1) 90ms,
+                transform 200ms cubic-bezier(0.34, 1.3, 0.64, 1),
+                background-color 150ms ease,
+                color 150ms ease,
+                border-color 150ms ease,
+                box-shadow 150ms ease;
+  }
+
+  .sidebar-edge-handle:hover .edge-collapse-btn,
+  .sidebar-edge-handle.is-resizing .edge-collapse-btn {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translate(-50%, -50%) scale(1);
+  }
+
+  /* Survol direct de la flèche : s'affiche plus grand */
+  .edge-collapse-btn:hover {
+    transform: translate(-50%, -50%) scale(1.25);
+    background: var(--surface-container-high);
+    color: var(--primary-color);
+    border-color: color-mix(in srgb, var(--primary-color) 50%, var(--outline-variant));
+    box-shadow: 0 4px 12px color-mix(in srgb, var(--primary-color) 25%, rgba(0, 0, 0, 0.15));
+  }
+
+  .edge-collapse-btn:active {
+    transform: translate(-50%, -50%) scale(1.12);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .edge-bar,
+    .edge-collapse-btn {
+      transition: none;
+    }
   }
 </style>
