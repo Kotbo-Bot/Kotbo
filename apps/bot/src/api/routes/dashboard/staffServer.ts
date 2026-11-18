@@ -115,6 +115,7 @@ export function createStaffServerRouter(client: Client) {
         mainLogChannelId: optionalId(body?.mainLogChannelId),
         staffLogChannelId: optionalId(body?.staffLogChannelId),
         createdByUserId: user.userId,
+        client,
       });
 
       if ('error' in linkResult) {
@@ -263,13 +264,26 @@ export function createStaffServerRouter(client: Client) {
         return send(c, { error: 'Lien introuvable' }, 404);
       }
       const body = await readBody(c);
+      const mainDiscordRoleId = typeof body?.mainDiscordRoleId === 'string' ? body.mainDiscordRoleId : null;
+      const staffDiscordRoleId = typeof body?.staffDiscordRoleId === 'string' ? body.staffDiscordRoleId : null;
+
+      // Chaque rôle doit exister dans le serveur du lien auquel il est rattaché.
+      const link = await prisma.staffServerLink.findUnique({
+        where: { id: linkId },
+        select: { mainGuildId: true, staffGuildId: true },
+      });
+      const roleIn = (guildId: string | undefined, roleId: string | null) =>
+        !roleId || Boolean(guildId && client.guilds.cache.get(guildId)?.roles.cache.has(roleId));
+      if (!roleIn(link?.mainGuildId, mainDiscordRoleId) || !roleIn(link?.staffGuildId, staffDiscordRoleId)) {
+        return send(c, { error: 'Rôle introuvable sur le serveur concerné.' }, 400);
+      }
 
       const mapping = await prisma.staffServerRoleMapping.create({
         data: {
           staffServerLinkId: linkId,
           staffRoleId: typeof body?.staffRoleId === 'string' ? body.staffRoleId : null,
-          mainDiscordRoleId: typeof body?.mainDiscordRoleId === 'string' ? body.mainDiscordRoleId : null,
-          staffDiscordRoleId: typeof body?.staffDiscordRoleId === 'string' ? body.staffDiscordRoleId : null,
+          mainDiscordRoleId,
+          staffDiscordRoleId,
         },
       });
 

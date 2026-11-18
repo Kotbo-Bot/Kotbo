@@ -1,4 +1,5 @@
 import { type APIEmbed, type Client, type Message, type MessageReaction, type TextChannel, type NewsChannel, type ThreadChannel, type User, EmbedBuilder, PermissionFlagsBits, StickerFormatType, WebhookClient } from 'discord.js';
+import { canManageGuild } from '../../utils/guildAdmin.js';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { COLORS } from '../../utils/embeds.js';
@@ -358,14 +359,7 @@ export async function acceptLinkInvite(opts: {
 
 // ── Création directe (admin des serveurs concernés) ─────────
 
-/** L'utilisateur administre ce serveur (Administrateur ou Gérer le serveur). */
-export async function canManageGuild(client: Client, guildId: string, userId: string): Promise<boolean> {
-  const guild = client.guilds.cache.get(guildId);
-  if (!guild) return false;
-  const member = guild.members.cache.get(userId) ?? await guild.members.fetch(userId).catch(() => null);
-  if (!member) return false;
-  return member.permissions.has('Administrator') || member.permissions.has('ManageGuild');
-}
+export { canManageGuild };
 
 const NOT_ADMIN_OF_TARGET = 'Vous devez être admin de chacun des serveurs reliés.';
 
