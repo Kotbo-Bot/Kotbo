@@ -20,7 +20,6 @@ const BY_LINK: [string, string[]][] = [
   ['security', ['/security', '/admin-lock', '/members']],
   ['tickets', ['/tickets', '/transcripts']],
   ['partnerships', ['/partner']],
-  ['community', ['/dailyalgo']],
   ['staff', ['/procedures', '/staff-management', '/evaluations', '/profile', '/news', '/polls']],
 ];
 

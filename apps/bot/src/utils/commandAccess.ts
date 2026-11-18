@@ -31,7 +31,7 @@ export const COMMAND_CATALOG: CommandCatalogEntry[] = [
   { name: 'status', label: "Statut", description: "Affichage d'un statut synthétique.", defaultAccess: "tout_le_monde" },
   { name: 'admin', label: 'Admin', description: 'Commandes administrateur du serveur.', defaultAccess: 'administration' },
   { name: 'help', label: 'Aide', description: 'Aide générale et documentation des commandes.', defaultAccess: 'tout_le_monde' },
-  { name: 'profile', label: 'Profil', description: 'Affiche le profil utilisateur et la progression Daily Algo.', defaultAccess: 'tout_le_monde' },
+  { name: 'profile', label: 'Profil', description: 'Affiche le profil utilisateur et sa progression.', defaultAccess: 'tout_le_monde' },
   { name: 'sanction', label: 'Sanctions', description: 'Gestion des sanctions et des rapports.', defaultAccess: 'modération' },
   { name: 'journal', label: "Journal", description: "Publication manuelle d'articles de presse.", defaultAccess: "modération" },
 ];

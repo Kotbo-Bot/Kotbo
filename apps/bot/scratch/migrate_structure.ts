@@ -41,7 +41,6 @@ const commandsMap: Record<string, string> = {
   'ticket.ts': 'utility/ticket.ts',
 
   'ctf.ts': 'fun/ctf.ts',
-  'dailyAlgo.ts': 'fun/dailyAlgo.ts',
   'excuse.ts': 'fun/excuse.ts',
   'giveaway.ts': 'fun/giveaway.ts',
   'say.ts': 'fun/say.ts',
@@ -84,7 +83,6 @@ const servicesMap: Record<string, string> = {
   'transcriptService.ts': 'features/transcriptService.ts',
   'welcomeGoodbyeService.ts': 'features/welcomeGoodbyeService.ts',
 
-  'dailyAlgoService.ts': 'progression/dailyAlgoService.ts',
   'levelingService.ts': 'progression/levelingService.ts',
   'profileService.ts': 'progression/profileService.ts',
 

@@ -504,7 +504,6 @@ export type DashboardState = {
   codePoliceEnabled: boolean;
   /** Collecte des statistiques d'activité. À false, plus rien n'est enregistré. */
   analyticsEnabled: boolean;
-  // ── Daily Algo v2 : barème, semaine, sanctions, pont clans ──
   githubReleasesEnabled: boolean;
   digestEnabled: boolean;
   youtubeEnabled: boolean;
@@ -618,7 +617,6 @@ export const MODULE_DESCRIPTIONS: Record<string, string> = {
 
 export const DEFAULT_SEVERITY_BY_MODULE: Array<{ module: string; level: SeverityLevel }> = [
   { module: 'Auto-Modération', level: 'attention' },
-  { module: 'Daily Algo', level: 'info' }
 ];
 
 export const DEFAULT_MESSAGE_TEMPLATE =

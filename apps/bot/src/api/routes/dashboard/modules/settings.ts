@@ -40,7 +40,6 @@ export function createSettingsRouter(client: Client) {
         translationEnabled?: boolean;
         codePoliceEnabled?: boolean;
         analyticsEnabled?: boolean;
-        // ── Daily Algo v2 : barème, semaine, sanctions, pont clans ──
         githubReleasesEnabled?: boolean;
         digestEnabled?: boolean;
         youtubeEnabled?: boolean;
@@ -139,22 +138,6 @@ export function createSettingsRouter(client: Client) {
       if (Object.prototype.hasOwnProperty.call(body, 'digestChannelId')) {
         data.digestChannelId = extractDiscordSnowflake(body.digestChannelId);
       }
-
-      // ── Daily Algo v2 ────────────────────────────────────────────────────────
-      // Toutes ces valeurs sont réglables depuis le panel : rien n'est codé en dur
-      // côté bot. Les bornes ci-dessous évitent qu'une saisie farfelue casse le
-      // barème (multiplicateur nul, XP négative, taux de conversion à zéro…).
-      const readClampedInt = (value: unknown, min: number, max: number, fallback: number): number => {
-        const parsed = Math.trunc(Number(value));
-        if (!Number.isFinite(parsed)) return fallback;
-        return Math.min(max, Math.max(min, parsed));
-      };
-
-      const readClampedFloat = (value: unknown, min: number, max: number, fallback: number): number => {
-        const parsed = Number(value);
-        if (!Number.isFinite(parsed)) return fallback;
-        return Math.min(max, Math.max(min, parsed));
-      };
 
       if (Object.prototype.hasOwnProperty.call(body, 'meetingAnnouncementChannelId')) {
         data.meetingAnnouncementChannelId = extractDiscordSnowflake(body.meetingAnnouncementChannelId);
