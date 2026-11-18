@@ -100,10 +100,7 @@
       $router.path.startsWith("/sanction-evidence/") ||
       $router.path.startsWith("/form/") ||
       $router.path.startsWith("/appeal/") ||
-      $router.path.startsWith("/verify/") ||
-      // Portail partenaire : le jeton de l'URL tient lieu d'authentification,
-      // et demander un compte a un partenaire qui n'en a pas tuerait l'usage.
-      $router.path.startsWith("/partner-portal/"),
+      $router.path.startsWith("/verify/"),
   );
 
   // `/profile/<id>` cible un autre membre, `/profile/<onglet>` mon propre profil :
@@ -663,11 +660,6 @@
         path="/:serverId/tournaments/:eventId"
         load={() => import("./pages/TournamentPublic.svelte")}
         props={(meta) => ({ serverId: meta.params.serverId, eventId: meta.params.eventId })}
-      />
-      <LazyRoute
-        path="/partner-portal/:token"
-        load={() => import("./pages/PartnerPortal.svelte")}
-        props={(meta) => ({ token: meta.params.token })}
       />
       <LazyRoute
         path="/profile/:userId"

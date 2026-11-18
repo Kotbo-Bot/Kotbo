@@ -232,16 +232,6 @@ const ALL_STAFF_POLES: StaffPole[] = [
     byDefault: false,
   },
   {
-    key: 'staff.pole.partnerships',
-    module: 'partnerships',
-    get name() { return m.bot_role_pole_partners({}, bot()); },
-    color: '#14B8A6',
-    power: 'coordinate',
-    hoist: false,
-    get duty() { return m.obl_duty_partners(); },
-    byDefault: false,
-  },
-  {
     key: 'staff.pole.animation',
     get name() { return m.bot_role_pole_host({}, bot()); },
     color: '#F59E0B',

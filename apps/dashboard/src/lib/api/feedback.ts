@@ -1,4 +1,4 @@
-/** Remontees d erreurs, feedback et partenariats. */
+/** Remontees d erreurs et feedback. */
 import { authStore } from '../stores/auth.svelte';
 import { API_BASE_URL } from './client';
 
@@ -56,42 +56,4 @@ export async function reportFeedback(feedbackData: {
   }
 
   return response.json();
-}
-
-export async function submitPartnershipApplication(data: {
-  category: 'partenariat' | 'beta';
-  projectName: string;
-  projectUrl?: string | null;
-  memberCount?: string | null;
-  description: string;
-  motivation: string;
-  experience?: string | null;
-  availability?: string | null;
-  contact?: string | null;
-}) {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    'Accept': 'application/json'
-  };
-  if (authStore.token) {
-    headers.Authorization = `Bearer ${authStore.token}`;
-  }
-
-  const response = await fetch(`${API_BASE_URL}/api/partnership-application`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(data)
-  });
-
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error(err.error || `Server error: ${response.status}`);
-  }
-
-  return response.json() as Promise<{
-    success: boolean;
-    alreadyMember: boolean;
-    dmDelivered: boolean;
-    inviteUrl: string | null;
-  }>;
 }
