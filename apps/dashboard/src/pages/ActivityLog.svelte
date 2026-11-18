@@ -7,6 +7,8 @@
   import FormInput from '../lib/components/FormInput.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
   import ModulePage from '../lib/components/ModulePage.svelte';
+  import UserDisplay from '../lib/components/UserDisplay.svelte';
+  import { logEntryUser } from '../lib/logEntryUser';
   import ColumnSortFilter, { type ColumnFilterOption } from '../lib/components/sanctions/ColumnSortFilter.svelte';
 
   onMount(() => {
@@ -252,6 +254,7 @@
       <tbody class="divide-y divide-slate-50 dark:divide-slate-800">
         {#each filteredLogs as entry}
           {@const parsed = parseDetailsStructure(entry.details, logLabels)}
+          {@const member = logEntryUser(entry)}
           <tr class="hover:bg-surface-container-low dark:hover:bg-white/5 transition-colors group">
             <td class="px-6 py-6">
               <div class="text-xs">
@@ -260,9 +263,13 @@
               </div>
             </td>
             <td class="px-6 py-6">
-              <span class="inline-flex max-w-40 truncate rounded-full border border-outline-variant bg-surface-container px-3 py-1 text-2xs font-bold text-on-surface">
-                {entry.user}
-              </span>
+              {#if member.userId}
+                <UserDisplay userId={member.userId} name={member.name} size="sm" class="min-w-0" />
+              {:else}
+                <span class="inline-flex max-w-40 truncate rounded-full border border-outline-variant bg-surface-container px-3 py-1 text-2xs font-bold text-on-surface">
+                  {member.name}
+                </span>
+              {/if}
             </td>
             <td class="px-6 py-6 font-bold text-sm text-primary">
               {entry.module}

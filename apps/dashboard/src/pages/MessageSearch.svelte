@@ -16,6 +16,8 @@
   import RefreshButton from '../lib/components/RefreshButton.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
   import MemberName from '../lib/components/MemberName.svelte';
+  import { memberCaseModal } from '../lib/stores/memberCaseModal.svelte';
+  import { memberAvatarSrc } from '../lib/discordMedia';
   import ToggleSwitch from '../lib/components/ToggleSwitch.svelte';
   import MultiSelect from '../lib/components/MultiSelect.svelte';
   import { m, dateLocale } from '../lib/i18n';
@@ -514,12 +516,33 @@
         <div class="flex flex-col gap-2">
           {#each messages as message (message.id)}
             <div class="flex gap-3 p-4 bg-surface-container-low/60 border border-outline-variant/20 rounded-lg hover:border-outline-variant/40 transition-colors {message.deletedAt ? 'opacity-70' : ''}">
-              {#if message.authorAvatar}
-                <img src={message.authorAvatar} alt="" class="w-9 h-9 rounded-full shrink-0" />
+              {#if message.isBot}
+                {#if message.authorAvatar}
+                  <img src={message.authorAvatar} alt="" class="w-9 h-9 rounded-full shrink-0 object-cover" />
+                {:else}
+                  <div class="w-9 h-9 rounded-full bg-surface-container flex items-center justify-center shrink-0">
+                    <Papicon icon="user" size={16} class="text-on-surface-variant" />
+                  </div>
+                {/if}
+              {:else if memberCaseModal.canOpen}
+                <button
+                  type="button"
+                  onclick={() => memberCaseModal.show(message.authorId, message.authorName)}
+                  class="shrink-0 rounded-full transition-opacity hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                  title={m.lg_open_case()}
+                >
+                  <img
+                    src={memberAvatarSrc(message.authorAvatar, message.authorName, message.authorId)}
+                    alt=""
+                    class="w-9 h-9 rounded-full object-cover bg-surface-container"
+                  />
+                </button>
               {:else}
-                <div class="w-9 h-9 rounded-full bg-surface-container flex items-center justify-center shrink-0">
-                  <Papicon icon="user" size={16} class="text-on-surface-variant" />
-                </div>
+                <img
+                  src={memberAvatarSrc(message.authorAvatar, message.authorName, message.authorId)}
+                  alt=""
+                  class="w-9 h-9 rounded-full object-cover bg-surface-container shrink-0"
+                />
               {/if}
 
               <div class="min-w-0 flex-1">

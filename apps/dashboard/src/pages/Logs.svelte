@@ -22,6 +22,7 @@
   import RefreshButton from "../lib/components/RefreshButton.svelte";
   import Papicon from "../lib/components/Papicon.svelte";
   import MemberCaseModal from "../lib/components/MemberCaseModal.svelte";
+  import UserDisplay from "../lib/components/UserDisplay.svelte";
   import { MemberCaseState } from "../lib/memberCase.svelte";
   import AuditDiffViewer from "../lib/components/logs/AuditDiffViewer.svelte";
   import LogDetails from "../lib/components/logs/LogDetails.svelte";
@@ -849,21 +850,17 @@
                     </p>
                   </td>
                   <td>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      class="max-w-40"
-                      disabled={!memberCase.canOpen || !member.userId}
-                      disabledReason={memberCase.canOpen
-                        ? m.lg_no_member_id()
-                        : m.common_reason_no_permission()}
-                      title={memberCase.canOpen && member.userId
-                        ? m.lg_open_case()
-                        : undefined}
-                      onclick={() => openCaseModal(member, entry.action)}
-                    >
-                      <span class="truncate">{member.name}</span>
-                    </Button>
+                    {#if member.userId}
+                      <UserDisplay
+                        userId={member.userId}
+                        name={member.name}
+                        size="sm"
+                        class="min-w-0"
+                        onClick={memberCase.canOpen ? () => openCaseModal(member, entry.action) : null}
+                      />
+                    {:else}
+                      <span class="text-body-sm font-semibold text-on-surface truncate">{member.name}</span>
+                    {/if}
                   </td>
                   <td class="max-w-xs text-body-sm text-on-surface-variant">
                     {formatChannelLabel(getLogChannelId(entry))}
