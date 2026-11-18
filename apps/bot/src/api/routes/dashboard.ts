@@ -6,7 +6,6 @@ import { resolveRequestIp } from '../../services/system/adminAuditService.js';
 import { auditGlobalAdminWrite, evaluateGuildGate } from './dashboard/guildGate.js';
 
 // Sub-routers imports
-import { handleGeneralRoutes, handleGuildGeneralRoutes } from './dashboard/general.js';
 import { handleAnalyticsRoutes } from './dashboard/analytics.js';
 import { handleMembersRoutes } from './dashboard/members.js';
 import { handleGeneralistModulesRoutes } from './dashboard/generalistModules.js';
@@ -37,10 +36,6 @@ export async function handleDashboardRoutes(
   // 3bis. Ecritures d'un admin global : journalisees (voir guildGate.ts).
   await auditGlobalAdminWrite(client, user, parts, method ?? 'GET', resolveRequestIp(req));
 
-  // 4. Try general, non-guild-specific routes first (translate, list guilds, staff profile snapshots)
-  if (await handleGeneralRoutes(req, res, parts, url, client, user)) {
-    return true;
-  }
 
   // 5. Check if it's a guild-specific route (/api/dashboard/guilds/:guildId/...)
   if (parts.length >= 4 && parts[2] === 'guilds') {
@@ -54,10 +49,6 @@ export async function handleDashboardRoutes(
     const { access, effectiveAccess } = gate;
 
     // Dispatch to guild-specific sub-routers
-    if (await handleGuildGeneralRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
-      if (method !== 'GET') await cache.invalidateGuild(guildId);
-      return true;
-    }
     if (await handleAnalyticsRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
       if (method !== 'GET') await cache.invalidateGuild(guildId);
       return true;
