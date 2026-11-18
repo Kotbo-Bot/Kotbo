@@ -191,7 +191,10 @@
     <Sidebar />
   {/if}
 
-  <div class="app-content min-w-0 flex-1 flex flex-col transition-all duration-200 {$isMobile ? 'ml-0' : (collapsed ? 'ml-18' : 'ml-60')}">
+  <div
+    class="app-content min-w-0 flex-1 flex flex-col {$isMobile ? 'ml-0' : ''} {sidebarStore.isResizing ? 'transition-none' : 'transition-[margin] duration-200 ease-in-out'}"
+    style={!$isMobile ? `margin-left: ${collapsed ? '4.5rem' : `${sidebarStore.width}px`};` : ''}
+  >
     {#if $isPhone}
       <MobileTopBar />
     {:else}
