@@ -93,13 +93,8 @@ describe('registre des modules', () => {
 });
 
 describe('modules en pause', () => {
-  test('le daily algo et les partenariats sont en pause', () => {
-    expect(isModulePaused('daily_algo')).toBeTrue();
+  test('les partenariats sont en pause', () => {
     expect(isModulePaused('partnerships')).toBeTrue();
-  });
-
-  test('la pause se lit aussi par une cle historique', () => {
-    expect(isModulePaused('dailyalgo')).toBeTrue();
   });
 
   test('un module ordinaire ou inconnu n est pas en pause', () => {
@@ -116,7 +111,7 @@ describe('modules en pause', () => {
 
   test('les permissions d un module en pause ne sont plus accordees', () => {
     expect(
-      withoutPausedModulePermissions(['daily_algo:create_exercise', 'recruitment:forms', 'dailyalgo:read_exercise']),
+      withoutPausedModulePermissions(['partnerships:manage', 'recruitment:forms']),
     ).toEqual(['recruitment:forms']);
   });
 
@@ -134,7 +129,6 @@ describe('modules en pause', () => {
 
 describe('resolution du module proprietaire', () => {
   test('les alias historiques mènent a la cle canonique', () => {
-    expect(canonicalModuleKey('dailyalgo')).toBe('daily_algo');
     expect(canonicalModuleKey('traduction')).toBe('translation');
   });
 
@@ -145,7 +139,6 @@ describe('resolution du module proprietaire', () => {
 
   test('un segment d API remonte a son module', () => {
     expect(getModuleForApiSegment('tickets')).toBe('tickets');
-    expect(getModuleForApiSegment('daily-algo-runs')).toBe('daily_algo');
     expect(getModuleForApiSegment('segment-inconnu')).toBeUndefined();
     expect(getModuleForApiSegment(undefined)).toBeUndefined();
   });
@@ -160,20 +153,6 @@ describe('resolution du module proprietaire', () => {
     expect(getModuleForCustomId('inconnu:42')).toBeUndefined();
   });
 
-  test('les boutons et modals du daily algo remontent a leur module', () => {
-    // Sans ces prefixes, les boutons des anciens defis restaient cliquables
-    // une fois le module eteint : la garde ne savait pas a qui ils etaient.
-    for (const customId of [
-      'daily-algo-submit:run1',
-      'daily-algo-why:run1',
-      'daily-algo-solution:run1',
-      'daily-algo-feedback:sub1',
-      'modal:daily-algo-feedback:sub1',
-      'modal:daily-algo-rate:sub1',
-    ]) {
-      expect(getModuleForCustomId(customId)).toBe('daily_algo');
-    }
-  });
 
   test('une route du dashboard remonte a son module, sous-routes comprises', () => {
     expect(getModuleForPath('/tickets')).toBe('tickets');

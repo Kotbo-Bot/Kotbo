@@ -195,10 +195,10 @@ describe('isModuleEnabled', () => {
   });
 
   test('accepte les cles historiques', async () => {
-    featureRows = [{ guildId: GUILD, featureKey: 'daily_algo', enabled: false }];
+    featureRows = [{ guildId: GUILD, featureKey: 'translation', enabled: false }];
 
-    expect(await isModuleEnabled(GUILD, 'dailyalgo')).toBeFalse();
-    expect(await isModuleEnabled(GUILD, 'daily_algo')).toBeFalse();
+    expect(await isModuleEnabled(GUILD, 'traduction')).toBeFalse();
+    expect(await isModuleEnabled(GUILD, 'translation')).toBeFalse();
   });
 
   test('une ligne sous un alias est repliee sur la cle canonique', async () => {
@@ -270,11 +270,11 @@ describe('setDashboardModuleStatus', () => {
   });
 
   test('normalise la cle historique avant d ecrire', async () => {
-    const result = await setDashboardModuleStatus(GUILD, 'dailyalgo', false);
+    const result = await setDashboardModuleStatus(GUILD, 'traduction', false);
 
-    expect(result.moduleKey).toBe('daily_algo');
-    expect(featureRows.some((row) => row.featureKey === 'daily_algo')).toBeTrue();
-    expect(featureRows.some((row) => row.featureKey === 'dailyalgo')).toBeFalse();
+    expect(result.moduleKey).toBe('translation');
+    expect(featureRows.some((row) => row.featureKey === 'translation')).toBeTrue();
+    expect(featureRows.some((row) => row.featureKey === 'traduction')).toBeFalse();
   });
 
   test('desactive les dependants actifs en cascade', async () => {
@@ -379,31 +379,31 @@ describe('setDashboardModuleStatus', () => {
  */
 describe('module en pause', () => {
   test('est eteint malgre une ligne et une colonne qui l activent', async () => {
-    guildRow = guild({ dailyAlgoEnabled: true });
-    featureRows = [{ guildId: GUILD, featureKey: 'daily_algo', enabled: true }];
+    guildRow = guild();
+    featureRows = [{ guildId: GUILD, featureKey: 'partnerships', enabled: true }];
 
-    expect(await isModuleEnabled(GUILD, 'daily_algo')).toBeFalse();
-    expect((await getModuleStates(GUILD)).daily_algo).toBeFalse();
+    expect(await isModuleEnabled(GUILD, 'partnerships')).toBeFalse();
+    expect((await getModuleStates(GUILD)).partnerships).toBeFalse();
   });
 
   test('refuse d etre rallume, sans rien ecrire', async () => {
-    const err = await setDashboardModuleStatus(GUILD, 'daily_algo', true).catch((e) => e);
+    const err = await setDashboardModuleStatus(GUILD, 'partnerships', true).catch((e) => e);
 
     expect(err).toBeInstanceOf(PausedModuleError);
-    expect(err.moduleKey).toBe('daily_algo');
-    expect(featureRows.find((row) => row.featureKey === 'daily_algo')).toBeUndefined();
+    expect(err.moduleKey).toBe('partnerships');
+    expect(featureRows.find((row) => row.featureKey === 'partnerships')).toBeUndefined();
   });
 
   test('refuse aussi la mise en place guidee', async () => {
     await expect(
-      setDashboardModuleStatus(GUILD, 'daily_algo', true, undefined, { recordIntentWhenLocked: true }),
+      setDashboardModuleStatus(GUILD, 'partnerships', true, undefined, { recordIntentWhenLocked: true }),
     ).rejects.toThrow(PausedModuleError);
   });
 
   test('laisse ecrire l extinction', async () => {
-    featureRows = [{ guildId: GUILD, featureKey: 'daily_algo', enabled: true }];
+    featureRows = [{ guildId: GUILD, featureKey: 'partnerships', enabled: true }];
 
-    const result = await setDashboardModuleStatus(GUILD, 'daily_algo', false);
+    const result = await setDashboardModuleStatus(GUILD, 'partnerships', false);
 
     expect(result.enabled).toBeFalse();
   });

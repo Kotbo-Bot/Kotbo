@@ -35,9 +35,6 @@ const mockDb = {
     count: mock(() => Promise.resolve(0)),
     findMany: mock(() => Promise.resolve([])),
   },
-  dailyAlgoSubmission: {
-    count: mock(() => Promise.resolve(0)),
-  },
   globalBlacklist: {
     findMany: mock(() => Promise.resolve([])),
     upsert: mock(() => Promise.resolve({})),
@@ -482,7 +479,6 @@ describe('Modular Routers Unit Tests', () => {
     mockDb.globalAdmin.findUnique.mockClear();
     mockDb.sanction.count.mockClear();
     mockDb.sanction.findMany.mockClear();
-    mockDb.dailyAlgoSubmission.count.mockClear();
     mockDb.globalBlacklist.findMany.mockClear();
     mockDb.globalBlacklist.upsert.mockClear();
     mockDb.globalBlacklist.delete.mockClear();
@@ -1281,7 +1277,7 @@ describe('Modular Routers Unit Tests', () => {
 
     test('GET /api/dashboard/guilds/:guildId/notifications/features returns 200', async () => {
       // Mock db feature configs and guild info
-      mockDb.guild.findUnique.mockResolvedValue({ id: '1122334455667788', dailyAlgoEnabled: true });
+      mockDb.guild.findUnique.mockResolvedValue({ id: '1122334455667788' });
       mockDb.dashboardFeatureConfig.findMany.mockResolvedValue([]);
       
       // Route servie par Hono depuis la migration.

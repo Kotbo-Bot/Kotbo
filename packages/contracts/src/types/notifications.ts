@@ -98,7 +98,6 @@ export const NOTIFICATION_KINDS = {
   'partnerships.application_decided': { category: 'partnerships', mandatory: true },
 
   // Communauté
-  'community.daily_algo_feedback': { category: 'community', mandatory: true },
   'community.level_up': { category: 'community' },
   'community.shop': { category: 'community' },
   'community.site': { category: 'community' },

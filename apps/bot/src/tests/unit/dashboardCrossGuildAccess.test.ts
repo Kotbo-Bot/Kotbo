@@ -182,7 +182,6 @@ describe('accès entre serveurs', () => {
     expect(members).not.toContain('prisma.linkedAccount.findUnique({\n          where: { id }');
     expect(members.split('prisma.linkedAccount.findFirst({\n          where: { id, guildId }').length - 1).toBe(2);
 
-    expect(read('modules/daily-algo-submissions.ts')).toContain('where: { id: submissionId, run: { guildId } }');
   });
 
   test('un sous-élément de partenariat doit appartenir au dossier du serveur', () => {

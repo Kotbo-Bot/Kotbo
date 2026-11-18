@@ -148,7 +148,6 @@ const mockDb: any = {
   staffMember: { count: mock(async () => 0), findMany: mock(async () => []) },
   staffMeeting: { findMany: mock(async () => []) },
   recruitmentCandidature: { groupBy: mock(async () => []) },
-  dailyAlgoRun: { findMany: mock(async () => []) },
   memberInvite: { groupBy: mock(async () => []), findMany: mock(async () => []) },
   dashboardCommandUsage: { findMany: mock(async () => []) },
   guild: { findUnique: mock(async () => null) },
