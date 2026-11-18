@@ -45,16 +45,6 @@ const PublicProfileResponse = z.object({
   messageCount:     z.number().nullable(),
   voiceTimeSeconds: z.number().nullable(),
   invite:           PublicInvite.nullable(),
-  points:           z.number(),
-  tier:             z.string(),
-  streak:           z.number(),
-  rank:             z.number(),
-  recentAlgos:      z.array(z.object({
-    title:  z.string(),
-    date:   z.string(),
-    status: z.string(),
-    points: z.number().nullable(),
-  })),
   eventParticipations: z.array(z.object({
     id:      z.string(),
     eventId: z.string(),
@@ -157,8 +147,6 @@ export function createPublicProfileRouter(client: Client) {
           memberProfile:          profile,
           invite:                 null,
           eventParticipations:    [],
-          dailyAlgoProfile:       null,
-          dailyAlgoParticipations:[],
         };
       }
 
@@ -198,16 +186,6 @@ export function createPublicProfileRouter(client: Client) {
                 joinedAt:   snapshot.invite.joinedAt.toISOString(),
               }
             : null,
-          points:              snapshot.dailyAlgoProfile?.totalPoints || 0,
-          tier:                snapshot.dailyAlgoProfile?.tier || 'Débutant',
-          streak:              snapshot.dailyAlgoProfile?.currentStreak || 0,
-          rank:                snapshot.dailyAlgoProfile ? snapshot.dailyAlgoProfile.rank - 1 : 0,
-          recentAlgos:         snapshot.dailyAlgoParticipations.map((entry) => ({
-            title:  entry.problemTitle,
-            date:   entry.submittedAt ? entry.submittedAt.toISOString() : new Date().toISOString(),
-            status: entry.status,
-            points: entry.totalPoints,
-          })),
           eventParticipations: snapshot.eventParticipations.map((entry) => ({
             id:      entry.id,
             eventId: entry.eventId,
@@ -238,11 +216,6 @@ export function createPublicProfileRouter(client: Client) {
         messageCount:        null,
         voiceTimeSeconds:    null,
         invite:              null,
-        points:              0,
-        tier:                'Débutant',
-        streak:              0,
-        rank:                0,
-        recentAlgos:         [],
         eventParticipations: [],
       }, 200);
     } catch (err) {

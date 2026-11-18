@@ -1,4 +1,4 @@
-import { boostMonths, isModulePaused } from '@kotbo/contracts';
+import { boostMonths } from '@kotbo/contracts';
 import type { SlashCommandDefinition } from '../../commands.js';
 import { SlashCommandBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder, MessageFlags, type ChatInputCommandInteraction } from 'discord.js';
 import { getPublicProfileSnapshot } from '../../services/progression/profileService.js';
@@ -7,7 +7,7 @@ import { generateProfileCard } from '../../services/core/imageService.js';
 import { getMemberBoostStats } from '../../services/analytics/boostService.js';
 import { getGuildLevelCurve, getMemberRankData } from '../../services/progression/levelingService.js';
 import { kotboContainer, truncate } from '../../utils/embeds.js';
-import { E, rankEmoji } from '../../utils/emojis.js';
+import { E } from '../../utils/emojis.js';
 import { actionRow, ContainerChild, mediaGallery, separator, v2Message } from '@arcscord/components';
 import { getCommandMetadata } from '../../utils/i18n.js';
 import * as m from '../../lib/paraglide/messages.js';
@@ -107,8 +107,6 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
       },
       invite: null,
       eventParticipations: [],
-      dailyAlgoProfile: null,
-      dailyAlgoParticipations: [],
     };
   }
 
@@ -117,14 +115,6 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
   const profile = snapshot.memberProfile;
   const publicName = profile.displayName ?? profile.globalName ?? profile.username ?? user.username;
   const hasPrivateProfile = profile.isProfilePrivate && !canSeePrivate;
-
-  // Badge, points, série et classement viennent du Daily Algo : en pause, ils
-  // disparaissent du profil avec lui.
-  const showDailyAlgo = !isModulePaused('daily_algo');
-  const currentPoints = snapshot.dailyAlgoProfile?.totalPoints ?? 0;
-  const currentTier = snapshot.dailyAlgoProfile?.tier ?? 'Débutant';
-  const currentStreak = snapshot.dailyAlgoProfile?.currentStreak ?? 0;
-  const currentRank = snapshot.dailyAlgoProfile?.rank ?? null;
 
   // Le boost est public sur Discord : il reste visible même sur un profil privé.
   const boostingSince = interaction.guild?.members.cache.get(user.id)?.premiumSince
@@ -173,8 +163,6 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
       rank: rankData?.rank,
       joinedAt: formatDate(profile.guildJoinedAt),
       roles: profile.rolesSnapshot.slice(0, 10),
-      streak: currentStreak,
-      tier: currentTier,
       booster: boosterLabel,
       curve: await getGuildLevelCurve(guildId),
     });
@@ -207,14 +195,6 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
     ? truncate(profile.rolesSnapshot.map(r => `\`${r}\``).join(' '), 900)
     : 'Aucun rôle enregistré';
 
-  const dailyAlgoLines = snapshot.dailyAlgoParticipations.length > 0
-    ? truncate(snapshot.dailyAlgoParticipations.slice(0, 5).map((entry) => {
-      const date = entry.dateKey ?? formatDate(entry.submittedAt);
-      const points = entry.totalPoints !== null ? `${entry.totalPoints.toFixed(1)} pts` : '-';
-      return `${E.arrow} ${date} - ${entry.status} · ${points}\n  *${entry.problemTitle}*`;
-    }).join('\n'), 900)
-    : '*Aucune participation récente*';
-
   const eventHistory = snapshot.eventParticipations.length > 0
     ? truncate(snapshot.eventParticipations.slice(0, 5).map((entry) =>
       `${E.arrow} ${formatDate(entry.createdAt)} - ${formatEventType(entry.eventType)} · ${entry.eventTitle}`
@@ -228,16 +208,11 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
       `**${E.stats} Vue générale**`,
       `${E.dot} Discord: <@${profile.userId}>`,
       `${E.dot} Rôles: **${profile.rolesSnapshot.length}**`,
-      ...(showDailyAlgo ? [`${E.dot} Badge: **${currentTier}**`] : []),
     ].join('\n'),
     [
       `**${E.xp} Activité**`,
-      ...(showDailyAlgo ? [`${E.dot} Points: **${currentPoints.toFixed(1)}**`] : []),
       `${E.dot} Messages: **${profile.messageCount.toLocaleString('fr-FR')}**`,
       `${E.dot} Vocal: **${formatDuration(profile.voiceTimeSeconds)}**`,
-      ...(showDailyAlgo
-        ? [`${E.dot} Streak Daily Algo: **${currentStreak}**`, `${E.dot} Classement: ${rankEmoji(currentRank ?? 0)}`]
-        : []),
     ].join('\n'),
     [
       `**${E.calendar} Arrivée & invitation**`,
@@ -250,7 +225,6 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
     separator({ divider: true, spacing: 'small' }),
     `**${E.shield} Rôles**\n${roles}`,
     `**${E.calendar} Événements**\n${eventHistory}`,
-    ...(showDailyAlgo ? [`**${E.fire} Daily Algo**\n${dailyAlgoLines}`] : []),
   ];
 
   if (profile.guildLeftAt) {

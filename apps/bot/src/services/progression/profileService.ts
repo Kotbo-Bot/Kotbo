@@ -1,5 +1,4 @@
 import prisma from '../../utils/db.js';
-import { getDailyAlgoUserParticipations, getDailyAlgoUserProfile } from './dailyAlgoService.js';
 import { getStaffMember } from '../staff/staffManagementService.js';
 
 type PublicEventParticipation = {
@@ -55,8 +54,6 @@ export type PublicProfileSnapshot = {
   };
   invite: PublicInvite | null;
   eventParticipations: PublicEventParticipation[];
-  dailyAlgoProfile: Awaited<ReturnType<typeof getDailyAlgoUserProfile>> | null;
-  dailyAlgoParticipations: Awaited<ReturnType<typeof getDailyAlgoUserParticipations>>;
 };
 
 type StaffGradeHistoryEntry = {
@@ -101,7 +98,7 @@ export async function getPublicProfileSnapshot(userId: string, guildId?: string)
     return null;
   }
 
-  const [invite, eventParticipations, dailyAlgoProfile, dailyAlgoParticipations] = await Promise.all([
+  const [invite, eventParticipations] = await Promise.all([
     prisma.memberInvite.findFirst({
       where: {
         guildId: memberProfile.guildId,
@@ -120,8 +117,6 @@ export async function getPublicProfileSnapshot(userId: string, guildId?: string)
       orderBy: { createdAt: 'desc' },
       take: 12,
     }),
-    getDailyAlgoUserProfile(memberProfile.guildId, userId),
-    getDailyAlgoUserParticipations(memberProfile.guildId, userId, 8),
   ]);
 
   return {
@@ -175,8 +170,6 @@ export async function getPublicProfileSnapshot(userId: string, guildId?: string)
       createdAt: entry.createdAt,
       score: entry.score,
     })),
-    dailyAlgoProfile,
-    dailyAlgoParticipations,
   };
 }
 

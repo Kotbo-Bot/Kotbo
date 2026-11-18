@@ -63,9 +63,7 @@ import { registerAnalyticsTrackers } from './events/analyticsTrackers.js';
 import { registerStatsChannelListener } from './events/stats.js';
 import { registerFunEventsListener } from './events/funEvents.js';
 import { registerGiveawayEventsListener } from './events/giveawayEvents.js';
-import { registerDailyAlgoHandlers } from './handlers/dailyAlgoHandler.js';
 import { registerMeetingEvents } from './events/meetingEvents.js';
-import { syncOngoingDailyAlgoButtons } from './services/progression/dailyAlgoService.js';
 import { checkTranslationProviderHealth } from './services/integrations/translationService.js';
 import {
   cleanupExpiredExternalGuilds,
@@ -587,7 +585,6 @@ client.once(Events.ClientReady, async (c) => {
   // par salon et peut inverser deux messages. Le module est testé dans la file.
   registerFunEventsListener(client);
   registerGiveawayEventsListener(scopeClientToModule(client, 'giveaways'));
-  registerDailyAlgoHandlers(scopeClientToModule(client, 'daily_algo'));
   registerMeetingEvents(scopeClientToModule(client, 'meetings'));
   registerLevelingListener(scopeClientToModule(client, 'leveling')); // XP vocale uniquement (boucle de polling)
   registerSecurityVerificationListener(scopeClientToModule(client, 'security_verification'));
@@ -641,14 +638,6 @@ client.once(Events.ClientReady, async (c) => {
   // worker. Tous leurs handlers doivent donc être enregistrés auparavant.
   await startBackgroundQueueWorker();
 
-  // Non attendu : chaque run des 30 derniers jours coûte plusieurs appels
-  // Discord séquentiels, et les étapes suivantes n'en dépendent pas.
-  logger.info('System', 'Début de la synchronisation des boutons DailyAlgo...');
-  void syncOngoingDailyAlgoButtons(client)
-    .then(() => logger.info('System', 'Synchronisation DailyAlgo terminée.'))
-    .catch((error) =>
-      logger.error('DailyAlgo', 'Impossible de synchroniser les boutons des runs en cours:', error),
-    );
   logger.info('System', 'Initialisation des backups automatiques...');
   await initializeAutoBackupForAllGuilds(c.guilds.cache.values()).catch((error) =>
     logger.error('AutoBackup', "Impossible d'initialiser les backups automatiques:", error)

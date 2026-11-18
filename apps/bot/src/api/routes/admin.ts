@@ -265,13 +265,11 @@ export async function handleAdminRoutes(
       const guildCount = guilds.length;
       const userCount = guilds.reduce((acc: number, guild: { memberCount: number }) => acc + guild.memberCount, 0);
       const activeSanctions = await prisma.sanction.count({ where: { status: 'ACTIVE' } });
-      const dailyAlgoSubmissions = await prisma.dailyAlgoSubmission.count();
 
       json(res, 200, {
         guildCount,
         userCount,
         activeSanctions,
-        dailyAlgoSubmissions,
         uptime: Math.floor(process.uptime()),
         memoryUsage: process.memoryUsage(),
         shardCount: shardSnapshots.length,

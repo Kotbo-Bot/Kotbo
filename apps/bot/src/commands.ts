@@ -4,7 +4,6 @@ import { activateCommand } from './commands/admin/activate.js';
 import { adminCommand } from './commands/admin/admin.js';
 import { casierCommand, casierContextCommand } from './commands/moderation/casier.js';
 import { configCommand } from './commands/admin/config.js';
-import { dailyAlgoCommand } from './commands/fun/dailyAlgo.js';
 import { dcCommand } from './commands/moderation/dc.js';
 import { demissionCommand } from './commands/admin/demission.js';
 import { devutilsCommand } from './commands/admin/devutils.js';
@@ -26,7 +25,6 @@ import { convoquerCommand } from './commands/moderation/convoquer.js';
 import { optOutCommand } from './commands/utility/optout.js';
 import { privacyCommand } from './commands/utility/privacy.js';
 import { pingCommand } from './commands/utility/ping.js';
-import { postCommand } from './commands/utility/post.js';
 import { profilCommand } from './commands/profile/profil.js';
 import { profileCommand } from './commands/profile/profile.js';
 import { rankCommand } from './commands/profile/rank.js';
@@ -124,9 +122,7 @@ export const commands: SlashCommandDefinition[] = [
   devutilsCommand,
   statusCommand,
   adminCommand,
-  postCommand,
   helpCommand,
-  dailyAlgoCommand,
   profileCommand,
   profilCommand,
   sanctionCommand,
@@ -301,7 +297,6 @@ export const COMMAND_MODULES = new Map<ApplicationCommandDefinition, string>([
   [staffserverCommand, 'staff_server'],
 
   // Communauté
-  [dailyAlgoCommand, 'daily_algo'],
   [ticketCommand, 'tickets'],
   [giveawayCommand, 'giveaways'],
   [suggestCommand, 'suggestions'],
@@ -354,7 +349,6 @@ export const COMMAND_MODULES = new Map<ApplicationCommandDefinition, string>([
   [widgetCommand, 'analytics'],
   [pulseCommand, 'analytics'],
   // `/post` ne publie que le défi du jour : elle suit le Daily Algo, pas les actualités.
-  [postCommand, 'daily_algo'],
   [linkCommand, 'channel_links'],
 ]);
 

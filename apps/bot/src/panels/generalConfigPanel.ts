@@ -14,7 +14,6 @@ import {
   type ModalSubmitInteraction,
   type SelectMenuInteraction,
 } from 'discord.js';
-import { isModulePaused } from '@kotbo/contracts';
 import prisma from '../utils/db.js';
 import { errorEmbed } from '../utils/embeds.js';
 import { acknowledgeInteraction, renderPanelTarget } from '../utils/interactionResponses.js';
@@ -63,9 +62,6 @@ export async function sendMainConfigPanel(
   const feedCount = guild.feeds.length;
   const activeFeeds = guild.feeds.filter((feed) => feed.enabled).length;
 
-  // Daily Algo en pause : ni son etat, ni sa section ne s'affichent.
-  const dailyAlgoPaused = isModulePaused('daily_algo');
-
   const embed = new EmbedBuilder()
     .setColor(0x5865f2)
     .setTitle('🧭 Dashboard de configuration Kotbo')
@@ -78,7 +74,7 @@ export async function sendMainConfigPanel(
       },
       {
         name: '🚨 Automatisations',
-        value: `Police du code : ${formatToggleState(guild.codePoliceEnabled)}\n${dailyAlgoPaused ? '' : `Daily Algo : ${formatToggleState(guild.dailyAlgoEnabled)}\n`}Releases GitHub : ${formatToggleState(guild.githubReleasesEnabled)}\nLogs avancés : ${formatChannel(guild.logChannelId, 'Non configuré')}`,
+        value: `Police du code : ${formatToggleState(guild.codePoliceEnabled)}\nReleases GitHub : ${formatToggleState(guild.githubReleasesEnabled)}\nLogs avancés : ${formatChannel(guild.logChannelId, 'Non configuré')}`,
         inline: true,
       },
       {
@@ -86,13 +82,6 @@ export async function sendMainConfigPanel(
         value: `Public : ${formatChannel(guild.publicChannelId)}\nDigest : ${formatChannel(guild.digestChannelId ?? guild.publicChannelId)}\nYouTube : ${formatChannel(guild.youtubeChannelId ?? guild.nathanChannelId)}\nLogs : ${formatChannel(guild.logChannelId, 'Non configuré')}\n\n/status : ${guild.statusCheckChannelId ? `<#${guild.statusCheckChannelId}>` : 'Aucune restriction'}`,
         inline: true,
       },
-      ...(dailyAlgoPaused ? [] : [{
-        name: '📚 Daily Algo',
-        value: guild.dailyAlgoEnabled
-          ? `${guild.dailyAlgoTime} UTC\nDéfi : ${formatChannel(guild.dailyAlgoChannelId, 'Non configuré')}\nValidation : ${formatChannel(guild.dailyAlgoValidationChannelId, 'Non configuré')}`
-          : 'Désactivé',
-        inline: true,
-      }]),
       {
         name: '📦 Releases GitHub',
         value: guild.githubReleasesEnabled
@@ -112,9 +101,6 @@ export async function sendMainConfigPanel(
   const row1 = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder().setCustomId('config:feeds').setLabel('📰 Flux').setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId('cfg:section:code-police').setLabel('🚨 Code').setStyle(ButtonStyle.Secondary),
-    ...(dailyAlgoPaused
-      ? []
-      : [new ButtonBuilder().setCustomId('cfg:section:daily-algo').setLabel('📚 Daily Algo').setStyle(ButtonStyle.Secondary)]),
     new ButtonBuilder().setCustomId('cfg:section:github-releases').setLabel('📦 GitHub').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId('cfg:section:status').setLabel('🌐 /status').setStyle(ButtonStyle.Secondary),
   );
@@ -261,91 +247,6 @@ export async function sendCodePoliceConfig(
   await renderPanelTarget(interaction, {
     embeds: [embed],
     components: [row],
-  });
-}
-
-export async function sendDailyAlgoConfig(
-  interaction: PanelInteraction,
-  guildId: string
-): Promise<void> {
-  await acknowledgeInteraction(interaction);
-  const guild = await prisma.guild.findUnique({ where: { id: guildId } });
-  if (!guild) return;
-
-  const embed = new EmbedBuilder()
-    .setColor(0xffbe0b)
-    .setTitle('📚 Configuration - Daily Algo')
-    .setDescription('Défis algorithmiques quotidiens avec validation manuelle des réponses')
-    .addFields(
-      {
-        name: 'Statut',
-        value: guild.dailyAlgoEnabled ? '✅ **Activé**' : '❌ **Désactivé**',
-        inline: false,
-      },
-      {
-        name: 'Canal du défi',
-        value: guild.dailyAlgoChannelId ? `<#${guild.dailyAlgoChannelId}>` : '❌ Non configuré',
-        inline: false,
-      },
-      {
-        name: 'Canal de validation',
-        value: guild.dailyAlgoValidationChannelId ? `<#${guild.dailyAlgoValidationChannelId}>` : '❌ Non configuré',
-        inline: false,
-      },
-      {
-        name: 'Heure',
-        value: `⏰ **${guild.dailyAlgoTime}** UTC`,
-        inline: false,
-      }
-    );
-
-  const toggleBtn = new ButtonBuilder()
-    .setCustomId('cfg:toggle:daily-algo')
-    .setLabel(guild.dailyAlgoEnabled ? 'Désactiver' : 'Activer')
-    .setStyle(guild.dailyAlgoEnabled ? ButtonStyle.Danger : ButtonStyle.Success);
-
-  const timeBtn = new ButtonBuilder()
-    .setCustomId('cfg:modal:daily-algo:time')
-    .setLabel("🕐 Changer l'heure")
-    .setStyle(ButtonStyle.Primary);
-
-  const clearChannelBtn = new ButtonBuilder()
-    .setCustomId('cfg:clear:daily-algo:channel')
-    .setLabel('🧹 Retirer le salon du défi')
-    .setStyle(ButtonStyle.Danger);
-
-  const clearValidationBtn = new ButtonBuilder()
-    .setCustomId('cfg:clear:daily-algo:validation-channel')
-    .setLabel('🧹 Retirer le salon de validation')
-    .setStyle(ButtonStyle.Danger);
-
-  const backBtn = new ButtonBuilder()
-    .setCustomId('cfg:back:main')
-    .setLabel('← Retour')
-    .setStyle(ButtonStyle.Secondary);
-
-  const channelSelect = new ChannelSelectMenuBuilder()
-    .setCustomId('cfg:select:daily-algo:channel')
-    .setPlaceholder('Choisir le salon du défi Daily Algo')
-    .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
-    .setMinValues(1)
-    .setMaxValues(1);
-
-  const validationSelect = new ChannelSelectMenuBuilder()
-    .setCustomId('cfg:select:daily-algo:validation-channel')
-    .setPlaceholder('Choisir le salon de validation des réponses')
-    .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
-    .setMinValues(1)
-    .setMaxValues(1);
-
-  const row1 = new ActionRowBuilder<ButtonBuilder>().addComponents(toggleBtn, timeBtn, backBtn);
-  const row2 = new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(channelSelect);
-  const row3 = new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(validationSelect);
-  const row4 = new ActionRowBuilder<ButtonBuilder>().addComponents(clearChannelBtn, clearValidationBtn);
-
-  await renderPanelTarget(interaction, {
-    embeds: [embed],
-    components: [row1, row2, row3, row4],
   });
 }
 
@@ -513,22 +414,6 @@ export async function sendAdvancedLogsConfig(interaction: PanelInteraction, guil
     embeds: [embed],
     components: [row1, row2],
   });
-}
-
-export async function buildSetTimeModal(): Promise<ModalBuilder> {
-  return new ModalBuilder()
-    .setCustomId('cfg:modal:daily-algo:time')
-    .setTitle("Configurer l'heure - Daily Algo")
-    .addComponents(
-      new ActionRowBuilder<TextInputBuilder>().addComponents(
-        new TextInputBuilder()
-          .setCustomId('time')
-          .setLabel('Heure (HH:MM UTC)')
-          .setStyle(TextInputStyle.Short)
-          .setPlaceholder('Ex: 09:00')
-          .setRequired(true)
-      )
-    );
 }
 
 export async function buildSetReposModal(): Promise<ModalBuilder> {

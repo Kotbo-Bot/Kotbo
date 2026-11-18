@@ -770,8 +770,6 @@ export async function handlePublicRoutes(
           memberProfile: profile,
           invite: null,
           eventParticipations: [],
-          dailyAlgoProfile: null,
-          dailyAlgoParticipations: [],
         };
       }
 
@@ -807,16 +805,6 @@ export async function handlePublicRoutes(
             boostingSince,
             boost: await getMemberBoostStats(profile.guildId, userId, boostingSince).catch(() => null),
             invite: snapshot.invite,
-            points: snapshot.dailyAlgoProfile?.totalPoints || 0,
-            tier: snapshot.dailyAlgoProfile?.tier || 'Débutant',
-            streak: snapshot.dailyAlgoProfile?.currentStreak || 0,
-            rank: snapshot.dailyAlgoProfile ? snapshot.dailyAlgoProfile.rank - 1 : 0,
-            recentAlgos: snapshot.dailyAlgoParticipations.map((entry) => ({
-              title: entry.problemTitle,
-              date: entry.submittedAt ? entry.submittedAt.toISOString() : new Date().toISOString(),
-              status: entry.status,
-              points: entry.totalPoints,
-            })),
             eventParticipations: snapshot.eventParticipations.map((entry) => ({
               id: entry.id,
               eventId: entry.eventId,
@@ -846,11 +834,6 @@ export async function handlePublicRoutes(
             boostingSince,
             boost: null,
             invite: null,
-            points: 0,
-            tier: 'Débutant',
-            streak: 0,
-            rank: 0,
-            recentAlgos: [],
             eventParticipations: [],
           };
 
