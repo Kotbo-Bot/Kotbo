@@ -8,6 +8,7 @@
   import { memberIdentities } from '../stores/memberIdentities.svelte';
   import ServerTagPill from './ServerTagPill.svelte';
   import BoosterBadge from './BoosterBadge.svelte';
+  import { serverDetailsModal } from '../stores/serverDetailsModal.svelte';
 
   let {
     userId,
@@ -29,6 +30,10 @@
   const known = $derived(memberIdentities.get(userId));
   const label = $derived(name?.trim() || known?.displayName || userId);
   const shownTag = $derived(tag ? known?.serverTag ?? null : null);
+  const tagGuildId = $derived(shownTag?.guildId ?? null);
+  const openTag = $derived(
+    tagGuildId && shownTag ? () => serverDetailsModal.show(tagGuildId, shownTag.tag) : null,
+  );
 </script>
 
 <span class="inline-flex max-w-full min-w-0 items-center gap-1.5 align-middle">
@@ -43,7 +48,7 @@
     <span title={userId} class="truncate {className}">{prefix}{label}</span>
   {/if}
   {#if shownTag}
-    <ServerTagPill tag={shownTag.tag} badgeUrl={shownTag.badgeUrl} />
+    <ServerTagPill tag={shownTag.tag} badgeUrl={shownTag.badgeUrl} onclick={openTag} />
   {/if}
   {#if tag && known?.boostingSince}
     <BoosterBadge since={known.boostingSince} />

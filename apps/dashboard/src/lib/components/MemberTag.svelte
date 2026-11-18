@@ -8,15 +8,20 @@
   import { memberIdentities } from '../stores/memberIdentities.svelte';
   import ServerTagPill from './ServerTagPill.svelte';
   import BoosterBadge from './BoosterBadge.svelte';
+  import { serverDetailsModal } from '../stores/serverDetailsModal.svelte';
 
   const { userId }: { userId: string | null | undefined } = $props();
 
   const identity = $derived(memberIdentities.get(userId));
   const tag = $derived(identity?.serverTag ?? null);
+  const tagGuildId = $derived(tag?.guildId ?? null);
+  const openTag = $derived(
+    tagGuildId && tag ? () => serverDetailsModal.show(tagGuildId, tag.tag) : null,
+  );
 </script>
 
 {#if tag}
-  <ServerTagPill tag={tag.tag} badgeUrl={tag.badgeUrl} />
+  <ServerTagPill tag={tag.tag} badgeUrl={tag.badgeUrl} onclick={openTag} />
 {/if}
 {#if identity?.boostingSince}
   <BoosterBadge since={identity.boostingSince} />
