@@ -64,30 +64,30 @@
   type Jailed = { userId: string; source: string; reason: string | null; releaseAt: string | null; createdAt: string };
 
   const JAIL_SOURCES: Record<string, string> = {
-    MANUAL: m.arx_jail_src_manual(),
-    SERVER_TAG: m.arx_jail_src_server_tag(),
-    ACCOUNT_AGE: m.arx_jail_src_account_age(),
-    DISCORD_QUARANTINE: m.arx_jail_src_discord(),
+    get MANUAL() { return m.arx_jail_src_manual(); },
+    get SERVER_TAG() { return m.arx_jail_src_server_tag(); },
+    get ACCOUNT_AGE() { return m.arx_jail_src_account_age(); },
+    get DISCORD_QUARANTINE() { return m.arx_jail_src_discord(); },
     HONEYPOT: 'Honeypot',
-    VISION: m.sec_tab_antiraid_vision(),
+    get VISION() { return m.sec_tab_antiraid_vision(); },
   };
 
   const SANCTION_OPTIONS = [
-    { value: 'DELETE', label: m.arx_sanction_delete_only() },
-    { value: 'WARN', label: m.arx_sanction_warn() },
+    { value: 'DELETE', get label() { return m.arx_sanction_delete_only(); } },
+    { value: 'WARN', get label() { return m.arx_sanction_warn(); } },
     { value: 'TIMEOUT', label: 'Timeout' },
-    { value: 'JAIL', label: m.arx_jail_title() },
-    { value: 'KICK', label: m.arx_sanction_kick() },
+    { value: 'JAIL', get label() { return m.arx_jail_title(); } },
+    { value: 'KICK', get label() { return m.arx_sanction_kick(); } },
     { value: 'SOFTBAN', label: 'Softban' },
-    { value: 'BAN', label: m.arx_sanction_ban() },
+    { value: 'BAN', get label() { return m.arx_sanction_ban(); } },
   ];
   const DURATION_OPTIONS: { value: number | null; label: string }[] = [
     { value: 5, label: '5 minutes' },
-    { value: 60, label: m.arx_duration_1h() },
-    { value: 1440, label: m.arx_duration_1d() },
-    { value: 10080, label: m.arx_duration_7d() },
-    { value: 43200, label: m.arx_duration_30d() },
-    { value: null, label: m.arx_duration_permanent() },
+    { value: 60, get label() { return m.arx_duration_1h(); } },
+    { value: 1440, get label() { return m.arx_duration_1d(); } },
+    { value: 10080, get label() { return m.arx_duration_7d(); } },
+    { value: 43200, get label() { return m.arx_duration_30d(); } },
+    { value: null, get label() { return m.arx_duration_permanent(); } },
   ];
 
   let config = $state<Config>({});
@@ -123,7 +123,7 @@
   // La barre « Modifications non enregistrées » est celle de MainLayout.
   useUnsavedChanges({
     id: 'security-anti-raid',
-    label: m.nav_security_antiraid(),
+    get label() { return m.nav_security_antiraid(); },
     getConfig: () => config,
     getSaved: () => original,
     onSave: save,

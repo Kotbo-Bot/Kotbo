@@ -42,10 +42,10 @@
   let busy = $state(false);
 
   const statusFilters: FilterOption[] = [
-    { value: 'OPEN', label: m.ste_admin_open() },
-    { value: 'RESOLVED', label: m.ste_admin_resolved() },
-    { value: 'DISMISSED', label: m.ste_admin_dismissed() },
-    { value: 'ALL', label: m.ste_admin_all() },
+    { value: 'OPEN', get label() { return m.ste_admin_open(); } },
+    { value: 'RESOLVED', get label() { return m.ste_admin_resolved(); } },
+    { value: 'DISMISSED', get label() { return m.ste_admin_dismissed(); } },
+    { value: 'ALL', get label() { return m.ste_admin_all(); } },
   ];
 
   const REASONS: Record<string, () => string> = {

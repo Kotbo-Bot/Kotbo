@@ -5,7 +5,8 @@
 
 import { sidebarStore } from './sidebar.svelte';
 import { themeStore, type ThemeId, type AccentColorId } from './theme.svelte';
-import { applyLocale, getLocale } from '../i18n';
+import { getLocale } from '../i18n';
+import { applyLocale } from '../liveLocale.svelte';
 
 type Language = 'fr' | 'en';
 type DateFormat = 'relative' | 'absolute' | 'both';
@@ -137,8 +138,7 @@ class UserPreferencesStore {
     document.documentElement.classList.toggle('no-animations', !this.prefs.animationsEnabled);
     document.documentElement.classList.toggle('compact-ui', this.prefs.compactMode);
     document.documentElement.lang = this.prefs.language;
-    // Aligne Paraglide sur la préférence sans recharger (init / restauration).
-    applyLocale(this.prefs.language, { reload: false });
+    applyLocale(this.prefs.language);
     document.documentElement.dataset.sidebarBehavior = this.prefs.sidebarBehavior;
     document.documentElement.dataset.dateFormat = this.prefs.dateFormat;
 
@@ -228,13 +228,6 @@ class UserPreferencesStore {
     }
     this.prefs[key] = value;
     this.save();
-    // Les messages Paraglide ne sont pas réactifs en Svelte pur : un changement
-    // de langue recharge la page pour retraduire l'ensemble de l'UI.
-    if (key === 'language' && canUseDom()) {
-      this.syncToDatabase();
-      applyLocale(value as Language);
-      return;
-    }
     this.applyPreferences();
     this.syncToDatabase();
   }

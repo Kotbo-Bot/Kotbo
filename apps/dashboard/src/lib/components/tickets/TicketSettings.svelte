@@ -218,7 +218,7 @@
 
   useUnsavedChanges({
     id: 'tickets',
-    label: m.e1_tickets_config_label(),
+    get label() { return m.e1_tickets_config_label(); },
     getConfig: () => currentSettings,
     getSaved: () => savedSettingsConfig,
     onSave: () => saveSettings(),
@@ -310,9 +310,9 @@
   );
 
   const STAFF_LOAD_MODES = [
-    { value: 'OFF', label: m.tq_load_off() },
-    { value: 'WARN', label: m.tq_load_warn() },
-    { value: 'BLOCK', label: m.tq_load_block() },
+    { value: 'OFF', get label() { return m.tq_load_off(); } },
+    { value: 'WARN', get label() { return m.tq_load_warn(); } },
+    { value: 'BLOCK', get label() { return m.tq_load_block(); } },
   ] as const;
 
   /** Badge de l'accordeon : combien de quotas imposent effectivement une limite. */

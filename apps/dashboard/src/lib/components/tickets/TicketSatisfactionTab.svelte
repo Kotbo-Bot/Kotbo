@@ -31,7 +31,7 @@
   };
 
   const ratingEmojis = ['', '\u{1F621}', '\u{1F615}', '\u{1F610}', '\u{1F642}', '\u{1F929}'];
-  const ratingLabels = ['', m.e1_tickets_sat_rating_1(), m.e1_tickets_sat_rating_2(), m.e1_tickets_sat_rating_3(), m.e1_tickets_sat_rating_4(), m.e1_tickets_sat_rating_5()];
+  const ratingLabels = $derived(['', m.e1_tickets_sat_rating_1(), m.e1_tickets_sat_rating_2(), m.e1_tickets_sat_rating_3(), m.e1_tickets_sat_rating_4(), m.e1_tickets_sat_rating_5()]);
 
   function getSatisfactionPersonName(person: SatisfactionPerson | null | undefined, userId: string): string {
     return person?.displayName || person?.username || m.e1_tickets_sat_user_fallback({ userId });

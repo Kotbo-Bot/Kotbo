@@ -163,23 +163,23 @@
   ]);
 
   const accentColors: { id: AccentColorId; label: string; hex: string }[] = [
-    { id: 'violet', label: m.us_color_violet(), hex: ACCENT_COLORS.violet.hex },
-    { id: 'blue',   label: m.us_color_blue(),   hex: ACCENT_COLORS.blue.hex },
-    { id: 'green',  label: m.us_color_green(),  hex: ACCENT_COLORS.green.hex },
-    { id: 'rose',   label: m.us_color_rose(),   hex: ACCENT_COLORS.rose.hex },
-    { id: 'orange', label: m.us_color_orange(), hex: ACCENT_COLORS.orange.hex },
-    { id: 'cyan',   label: m.us_color_cyan(),   hex: ACCENT_COLORS.cyan.hex },
+    { id: 'violet', get label() { return m.us_color_violet(); }, hex: ACCENT_COLORS.violet.hex },
+    { id: 'blue',   get label() { return m.us_color_blue(); },   hex: ACCENT_COLORS.blue.hex },
+    { id: 'green',  get label() { return m.us_color_green(); },  hex: ACCENT_COLORS.green.hex },
+    { id: 'rose',   get label() { return m.us_color_rose(); },   hex: ACCENT_COLORS.rose.hex },
+    { id: 'orange', get label() { return m.us_color_orange(); }, hex: ACCENT_COLORS.orange.hex },
+    { id: 'cyan',   get label() { return m.us_color_cyan(); },   hex: ACCENT_COLORS.cyan.hex },
   ];
 
   const languages: { id: Language; label: string; flag: string }[] = [
-    { id: 'fr', label: m.settings_language_fr(), flag: '🇫🇷' },
-    { id: 'en', label: m.settings_language_en(),  flag: '🇬🇧' },
+    { id: 'fr', get label() { return m.settings_language_fr(); }, flag: '🇫🇷' },
+    { id: 'en', get label() { return m.settings_language_en(); },  flag: '🇬🇧' },
   ];
 
   const dateFormats: { id: DateFormat; label: string; example: string }[] = [
-    { id: 'relative', label: m.us_datefmt_relative(), example: m.us_datefmt_relative_ex() },
-    { id: 'absolute', label: m.us_datefmt_absolute(), example: m.us_datefmt_absolute_ex() },
-    { id: 'both',     label: m.us_datefmt_both(), example: m.us_datefmt_both_ex() },
+    { id: 'relative', get label() { return m.us_datefmt_relative(); }, get example() { return m.us_datefmt_relative_ex(); } },
+    { id: 'absolute', get label() { return m.us_datefmt_absolute(); }, get example() { return m.us_datefmt_absolute_ex(); } },
+    { id: 'both',     get label() { return m.us_datefmt_both(); }, get example() { return m.us_datefmt_both_ex(); } },
   ];
 
   /**
@@ -196,9 +196,9 @@
   }
 
   const sidebarBehaviors: { id: SidebarBehavior; label: string; desc: string }[] = [
-    { id: 'auto',         label: m.us_sidebar_auto(), desc: m.us_sidebar_auto_desc() },
-    { id: 'always-open',  label: m.us_sidebar_open(), desc: m.us_sidebar_open_desc() },
-    { id: 'always-closed',label: m.us_sidebar_closed(), desc: m.us_sidebar_closed_desc() },
+    { id: 'auto',         get label() { return m.us_sidebar_auto(); }, get desc() { return m.us_sidebar_auto_desc(); } },
+    { id: 'always-open',  get label() { return m.us_sidebar_open(); }, get desc() { return m.us_sidebar_open_desc(); } },
+    { id: 'always-closed',get label() { return m.us_sidebar_closed(); }, get desc() { return m.us_sidebar_closed_desc(); } },
   ];
 </script>
 

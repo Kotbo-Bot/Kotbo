@@ -20,7 +20,7 @@
     selectedUsername = $bindable(''),
     selectedAvatarUrl = $bindable(''),
     selectedRoleIds = $bindable<string[]>([]),
-    placeholder = m.dml_placeholder(),
+    placeholder,
     autoSelectOnExactMatch = true,
     disabled = false,
     staffOnly = false,
@@ -45,6 +45,8 @@
     /** Id de l'aide ou de l'erreur du champ (`describedBy` de Field, RGAA 11.2). */
     describedBy?: string;
   } = $props();
+
+  const placeholderText = $derived(placeholder ?? m.dml_placeholder());
 
   let suggestions = $state<DiscordMemberSuggestion[]>([]);
   let isLoading = $state(false);
@@ -181,11 +183,11 @@
 <div class={`relative ${className}`.trim()}>
   <input
     id={id || undefined}
-    aria-label={id ? undefined : placeholder}
+    aria-label={id ? undefined : placeholderText}
     aria-describedby={describedBy}
     type="text"
     value={query}
-    placeholder={placeholder}
+    placeholder={placeholderText}
     oninput={(event) => handleInput((event.currentTarget as HTMLInputElement).value)}
     class="w-full bg-[#1e1e2e]/60 border border-white/5 rounded-xl px-4 py-3 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#8a2be2]/50 focus:border-transparent transition-all duration-300"
     {disabled}

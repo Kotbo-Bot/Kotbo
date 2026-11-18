@@ -91,30 +91,30 @@
   };
 
   const SIGNAL_LABELS: Record<string, string> = {
-    no_typing: m.asp_sig_no_typing(),
-    paste_burst: m.asp_sig_paste_burst(),
-    inhuman_rate: m.asp_sig_inhuman_rate(),
-    regular_intervals: m.asp_sig_regular_intervals(),
-    cross_channel_burst: m.asp_sig_cross_channel_burst(),
-    attachment_flood: m.asp_sig_attachment_flood(),
-    near_duplicate: m.asp_sig_near_duplicate(),
-    repeat_identical: m.asp_sig_repeat_identical(),
-    mention_burst: m.asp_sig_mention_burst(),
-    everyone_attempt: m.asp_sig_everyone_attempt(),
-    unicode_obfuscation: m.asp_sig_unicode_obfuscation(),
-    invite_link: m.asp_sig_invite_link(),
-    first_message_link: m.asp_sig_first_message_link(),
-    link_from_newcomer: m.asp_sig_link_from_newcomer(),
+    get no_typing() { return m.asp_sig_no_typing(); },
+    get paste_burst() { return m.asp_sig_paste_burst(); },
+    get inhuman_rate() { return m.asp_sig_inhuman_rate(); },
+    get regular_intervals() { return m.asp_sig_regular_intervals(); },
+    get cross_channel_burst() { return m.asp_sig_cross_channel_burst(); },
+    get attachment_flood() { return m.asp_sig_attachment_flood(); },
+    get near_duplicate() { return m.asp_sig_near_duplicate(); },
+    get repeat_identical() { return m.asp_sig_repeat_identical(); },
+    get mention_burst() { return m.asp_sig_mention_burst(); },
+    get everyone_attempt() { return m.asp_sig_everyone_attempt(); },
+    get unicode_obfuscation() { return m.asp_sig_unicode_obfuscation(); },
+    get invite_link() { return m.asp_sig_invite_link(); },
+    get first_message_link() { return m.asp_sig_first_message_link(); },
+    get link_from_newcomer() { return m.asp_sig_link_from_newcomer(); },
   };
 
   const SIGNAL_TOGGLES: { field: keyof SpamConfig; label: string; help: string }[] = [
-    { field: 'typingSignalEnabled', label: m.asp_toggle_typing(), help: m.asp_toggle_typing_help() },
-    { field: 'pasteSignalEnabled', label: m.asp_toggle_paste(), help: m.asp_toggle_paste_help() },
-    { field: 'crossChannelEnabled', label: m.asp_toggle_cross_channel(), help: m.asp_toggle_cross_channel_help() },
-    { field: 'duplicateEnabled', label: m.asp_toggle_duplicate(), help: m.asp_toggle_duplicate_help() },
-    { field: 'cadenceEnabled', label: m.asp_toggle_cadence(), help: m.asp_toggle_cadence_help() },
-    { field: 'contentEnabled', label: m.asp_toggle_content(), help: m.asp_toggle_content_help() },
-    { field: 'trustEnabled', label: m.asp_toggle_trust(), help: m.asp_toggle_trust_help() },
+    { field: 'typingSignalEnabled', get label() { return m.asp_toggle_typing(); }, get help() { return m.asp_toggle_typing_help(); } },
+    { field: 'pasteSignalEnabled', get label() { return m.asp_toggle_paste(); }, get help() { return m.asp_toggle_paste_help(); } },
+    { field: 'crossChannelEnabled', get label() { return m.asp_toggle_cross_channel(); }, get help() { return m.asp_toggle_cross_channel_help(); } },
+    { field: 'duplicateEnabled', get label() { return m.asp_toggle_duplicate(); }, get help() { return m.asp_toggle_duplicate_help(); } },
+    { field: 'cadenceEnabled', get label() { return m.asp_toggle_cadence(); }, get help() { return m.asp_toggle_cadence_help(); } },
+    { field: 'contentEnabled', get label() { return m.asp_toggle_content(); }, get help() { return m.asp_toggle_content_help(); } },
+    { field: 'trustEnabled', get label() { return m.asp_toggle_trust(); }, get help() { return m.asp_toggle_trust_help(); } },
   ];
 
   let config = $state<SpamConfig>({ ...DEFAULTS });

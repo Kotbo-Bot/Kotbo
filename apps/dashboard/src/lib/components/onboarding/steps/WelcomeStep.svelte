@@ -28,10 +28,10 @@
   );
 
   const PROMISES = [
-    { icon: 'layout-grid', title: m.obx_wc_structure(), text: m.obx_wc_structure_desc() },
-    { icon: 'shield', title: m.obx_wc_moderation(), text: m.obx_wc_moderation_desc() },
-    { icon: 'door-open', title: m.obx_wc_welcome(), text: m.obx_wc_welcome_desc() },
-    { icon: 'sparkles', title: m.obx_wc_rest(), text: m.obx_wc_rest_desc() },
+    { icon: 'layout-grid', get title() { return m.obx_wc_structure(); }, get text() { return m.obx_wc_structure_desc(); } },
+    { icon: 'shield', get title() { return m.obx_wc_moderation(); }, get text() { return m.obx_wc_moderation_desc(); } },
+    { icon: 'door-open', get title() { return m.obx_wc_welcome(); }, get text() { return m.obx_wc_welcome_desc(); } },
+    { icon: 'sparkles', get title() { return m.obx_wc_rest(); }, get text() { return m.obx_wc_rest_desc(); } },
   ];
 </script>
 

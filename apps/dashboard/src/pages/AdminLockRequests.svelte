@@ -37,16 +37,16 @@
   const history = $derived(requests.filter(r => r.status !== 'PENDING'));
 
   const TYPE_LABELS: Record<string, string> = {
-    ROLE_CREATE: m.e7_alr_type_role_create(),
-    ROLE_PERMISSION_EDIT: m.e7_alr_type_role_permission_edit(),
-    MEMBER_ROLE_GRANT: m.e7_alr_type_member_role_grant(),
+    get ROLE_CREATE() { return m.e7_alr_type_role_create(); },
+    get ROLE_PERMISSION_EDIT() { return m.e7_alr_type_role_permission_edit(); },
+    get MEMBER_ROLE_GRANT() { return m.e7_alr_type_member_role_grant(); },
   };
 
   const STATUS_META: Record<string, { label: string; classes: string }> = {
-    PENDING: { label: m.e7_alr_status_pending(), classes: 'bg-warning/10 text-on-warning-container border-warning/30' },
-    APPROVED: { label: m.e7_alr_status_approved(), classes: 'bg-success/10 text-on-success-container border-success/30' },
-    REJECTED: { label: m.e7_alr_status_rejected(), classes: 'bg-error/10 text-on-error-container border-error/30' },
-    EXPIRED: { label: m.e7_alr_status_expired(), classes: 'bg-rose-900/20 text-error border-rose-900/40' },
+    PENDING: { get label() { return m.e7_alr_status_pending(); }, classes: 'bg-warning/10 text-on-warning-container border-warning/30' },
+    APPROVED: { get label() { return m.e7_alr_status_approved(); }, classes: 'bg-success/10 text-on-success-container border-success/30' },
+    REJECTED: { get label() { return m.e7_alr_status_rejected(); }, classes: 'bg-error/10 text-on-error-container border-error/30' },
+    EXPIRED: { get label() { return m.e7_alr_status_expired(); }, classes: 'bg-rose-900/20 text-error border-rose-900/40' },
   };
 
   // ── API ────────────────────────────────────────────────────────────────────

@@ -45,8 +45,8 @@
   let editDraft = $state('');
 
   const filterOptions: FilterOption<'all' | 'comments'>[] = [
-    { value: 'all', label: m.dl_activity_all() },
-    { value: 'comments', label: m.dl_activity_comments() },
+    { value: 'all', get label() { return m.dl_activity_all(); } },
+    { value: 'comments', get label() { return m.dl_activity_comments(); } },
   ];
 
   const shown = $derived(filter === 'comments' ? events.filter((event) => event.kind === 'comment') : events);

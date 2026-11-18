@@ -27,9 +27,9 @@
   const VARS = { user: '{user}', server: '{server}' };
 
   const TONES = [
-    { key: 'warm', label: m.obx_gr_warm(), icon: 'heart', get text() { return m.bot_greet_warm(VARS, bot()); } },
-    { key: 'plain', label: m.obx_gr_plain(), icon: 'align-left', get text() { return m.bot_greet_plain(VARS, bot()); } },
-    { key: 'playful', label: m.obx_gr_playful(), icon: 'star', get text() { return m.bot_greet_playful(VARS, bot()); } },
+    { key: 'warm', get label() { return m.obx_gr_warm(); }, icon: 'heart', get text() { return m.bot_greet_warm(VARS, bot()); } },
+    { key: 'plain', get label() { return m.obx_gr_plain(); }, icon: 'align-left', get text() { return m.bot_greet_plain(VARS, bot()); } },
+    { key: 'playful', get label() { return m.obx_gr_playful(); }, icon: 'star', get text() { return m.bot_greet_playful(VARS, bot()); } },
   ];
 
   let message = $state('');

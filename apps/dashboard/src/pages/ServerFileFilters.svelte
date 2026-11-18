@@ -35,31 +35,31 @@
   type Config = Record<string, any>;
 
   const MODES = [
-    { value: 'OFF', label: m.common_disabled() },
-    { value: 'BLACKLIST', label: m.sff_mode_blacklist() },
-    { value: 'WHITELIST', label: m.sff_mode_whitelist() },
+    { value: 'OFF', get label() { return m.common_disabled(); } },
+    { value: 'BLACKLIST', get label() { return m.sff_mode_blacklist(); } },
+    { value: 'WHITELIST', get label() { return m.sff_mode_whitelist(); } },
   ];
   const SANCTIONS = [
-    { value: 'DELETE', label: m.sff_sanction_delete() },
-    { value: 'WARN', label: m.arx_sanction_warn() },
+    { value: 'DELETE', get label() { return m.sff_sanction_delete(); } },
+    { value: 'WARN', get label() { return m.arx_sanction_warn(); } },
     { value: 'TIMEOUT', label: 'Timeout' },
-    { value: 'JAIL', label: m.arx_jail_title() },
-    { value: 'KICK', label: m.arx_sanction_kick() },
-    { value: 'BAN', label: m.arx_sanction_ban() },
+    { value: 'JAIL', get label() { return m.arx_jail_title(); } },
+    { value: 'KICK', get label() { return m.arx_sanction_kick(); } },
+    { value: 'BAN', get label() { return m.arx_sanction_ban(); } },
   ];
   const DURATIONS = [
     { value: 10, label: '10 minutes' },
-    { value: 60, label: m.arx_duration_1h() },
-    { value: 1440, label: m.arx_duration_1d() },
-    { value: 10080, label: m.arx_duration_7d() },
+    { value: 60, get label() { return m.arx_duration_1h(); } },
+    { value: 1440, get label() { return m.arx_duration_1d(); } },
+    { value: 10080, get label() { return m.arx_duration_7d(); } },
   ];
   const GROUP_LABELS: Record<string, string> = {
-    EXECUTABLES: m.sff_group_executables(),
-    IMAGES: m.sff_group_images(),
-    VIDEOS: m.sff_group_videos(),
+    get EXECUTABLES() { return m.sff_group_executables(); },
+    get IMAGES() { return m.sff_group_images(); },
+    get VIDEOS() { return m.sff_group_videos(); },
     AUDIO: 'Audio',
-    ARCHIVES: m.sff_group_archives(),
-    DOCUMENTS: m.sff_group_documents(),
+    get ARCHIVES() { return m.sff_group_archives(); },
+    get DOCUMENTS() { return m.sff_group_documents(); },
   };
 
   let config = $state<Config>({});
@@ -77,7 +77,7 @@
   // La barre « Modifications non enregistrées » est celle de MainLayout.
   useUnsavedChanges({
     id: 'server-file-filters',
-    label: m.am_page_title(),
+    get label() { return m.am_page_title(); },
     getConfig: () => config,
     getSaved: () => original,
     onSave: save,

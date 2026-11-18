@@ -89,13 +89,13 @@
     dark: () => m.ste_mode_dark(),
   };
   const modeOptions: FilterOption<SiteColorMode>[] = [
-    { value: 'auto', label: m.ste_mode_auto() },
-    { value: 'light', label: m.ste_mode_light() },
-    { value: 'dark', label: m.ste_mode_dark() },
+    { value: 'auto', get label() { return m.ste_mode_auto(); } },
+    { value: 'light', get label() { return m.ste_mode_light(); } },
+    { value: 'dark', get label() { return m.ste_mode_dark(); } },
   ];
   const previewOptions: FilterOption<'light' | 'dark'>[] = [
-    { value: 'light', label: m.ste_mode_light() },
-    { value: 'dark', label: m.ste_mode_dark() },
+    { value: 'light', get label() { return m.ste_mode_light(); } },
+    { value: 'dark', get label() { return m.ste_mode_dark(); } },
   ];
 
   function pickTheme(key: string) {

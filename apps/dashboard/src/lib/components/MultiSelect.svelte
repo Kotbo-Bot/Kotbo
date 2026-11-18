@@ -3,7 +3,7 @@
   import Papicon from './Papicon.svelte';
   export let values: string[] = [];
   export let options: Array<{ id: string; name: string }> = [];
-  export let placeholder: string = m.d4_search_placeholder();
+  export let placeholder: string | undefined = undefined;
   export let disabled: boolean = false;
   export let accentClass: string = 'bg-primary/20 text-primary border-primary/40'; // active pill style
   export let id: string = '';
@@ -115,7 +115,7 @@
       aria-activedescendant={activeOption ? `${inputId}-opt-${activeOption.id}` : undefined}
       {disabled}
       bind:value={query}
-      {placeholder}
+      placeholder={placeholder ?? m.d4_search_placeholder()}
       class="flex-1 min-w-[120px] bg-transparent text-sm text-on-surface placeholder:text-on-surface-variant/40 outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed"
       oninput={() => { open = true; }}
       onfocus={() => { open = true; }}
