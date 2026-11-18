@@ -19,11 +19,9 @@ import { handleEventsRoutes } from './dashboard/events.js';
 import { handleGeneralistModulesRoutes } from './dashboard/generalistModules.js';
 import { handleBackupRoutes } from './dashboard/backups.js';
 import { handleScheduleRoutes } from './dashboard/schedules.js';
-import { handleMigrationRoutes } from './dashboard/migration.js';
 import { handleCampaignRoutes } from './dashboard/campaigns.js';
 import { handleOutgoingWebhookRoutes } from './dashboard/outgoingWebhooks.js';
 import { handleDoingListRoutes } from './dashboard/doingLists.js';
-import { handleWelcomeExperimentRoutes } from './dashboard/welcomeExperiments.js';
 import { handleAegisRoutes } from './dashboard/aegis.js';
 import { handleCustomBotRoutes } from './dashboard/customBot.js';
 import { handleChannelLinkRoutes } from './dashboard/channelLinks.js';
@@ -31,14 +29,12 @@ import { handleStaffServerRoutes } from './dashboard/staffServer.js';
 import { handleHomeWidgetsRoutes } from './dashboard/homeWidgets.js';
 import { handleReputationRoutes } from './dashboard/reputation.js';
 import { handleSuggestionRoutes } from './dashboard/suggestions.js';
-import { handleSeasonRoutes } from './dashboard/seasons.js';
 import { handleRankedRoutes } from './dashboard/ranked.js';
 import { handleMessageLogRoutes } from './dashboard/messageLogs.js';
 import { handleRaidProtectionRoutes } from './dashboard/raidProtection.js';
 import { handleClansRoutes } from './dashboard/clans.js';
 import { handleDropsRoutes } from './dashboard/drops.js';
 import { handleWorkflowRoutes } from './dashboard/workflows.js';
-import { handleSimulationRoutes } from './dashboard/simulation.js';
 import { getCachedFeatureAccess } from './dashboard/featureGate.js';
 
 export async function handleDashboardRoutes(
@@ -160,19 +156,11 @@ export async function handleDashboardRoutes(
       if (method !== 'GET') await cache.invalidateGuild(guildId);
       return true;
     }
-    if (await handleMigrationRoutes(req, res, parts, url, client, user)) {
-      if (method !== 'GET') await cache.invalidateGuild(guildId);
-      return true;
-    }
     if (await handleCampaignRoutes(req, res, parts, url, client, user)) {
       if (method !== 'GET') await cache.invalidateGuild(guildId);
       return true;
     }
     if (await handleAegisRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
-      if (method !== 'GET') await cache.invalidateGuild(guildId);
-      return true;
-    }
-    if (await handleWelcomeExperimentRoutes(req, res, parts, client, user, guildId, effectiveAccess)) {
       if (method !== 'GET') await cache.invalidateGuild(guildId);
       return true;
     }
@@ -205,10 +193,6 @@ export async function handleDashboardRoutes(
       if (method !== 'GET') await cache.invalidateGuild(guildId);
       return true;
     }
-    if (await handleSeasonRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
-      if (method !== 'GET') await cache.invalidateGuild(guildId);
-      return true;
-    }
     if (await handleRankedRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
       if (method !== 'GET') await cache.invalidateGuild(guildId);
       return true;
@@ -218,10 +202,6 @@ export async function handleDashboardRoutes(
       return true;
     }
     if (await handleWorkflowRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
-      if (method !== 'GET') await cache.invalidateGuild(guildId);
-      return true;
-    }
-    if (await handleSimulationRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
       if (method !== 'GET') await cache.invalidateGuild(guildId);
       return true;
     }

@@ -1,8 +1,8 @@
-import { IncomingMessage, ServerResponse } from 'node:http';
-import { Client } from 'discord.js';
+import { Hono, type Context } from 'hono';
+import { createMiddleware } from 'hono/factory';
+import type { Client } from 'discord.js';
 import { rankedTierByKey } from '@kotbo/shared';
 import { logger } from '../../../utils/logger.js';
-import { json, readJsonBody, type AuthClaims, type DashboardAccess } from '../../shared.js';
 import {
   getSeasonsDashboardData,
   createSeason,
@@ -23,8 +23,8 @@ import { getGuildLadder } from '../../../services/progression/ranked/rankedConfi
 import { getMemberIdentities } from '../../../services/moderation/memberIdentityService.js';
 import { seasonAnnouncementLabels } from '../../../services/progression/seasonAnnouncements.js';
 import { resolveGuildLocale } from '../../../utils/i18n.js';
+import { fail, guildRoute, readBody, send } from '../../hono/dashboard/kit.js';
 
-import { jsonFailure } from '../../shared/failure.js';
 /** Le classement archivé ne stocke que des identifiants : il faut les nommer. */
 async function withSeasonIdentities<T extends { userId: string }>(
   client: Client,
@@ -68,34 +68,28 @@ const INPUT_ERRORS: Record<SeasonInputError, { code: string; message: string }> 
   BAD_ANNOUNCE_CHANNEL: { code: 'sea_bad_announce_channel', message: 'Salon d\'annonce invalide' },
 };
 
-function refuse(res: ServerResponse, status: number, code: string, message: string): void {
-  json(res, status, { error: message, code });
+function refuse(c: Context, status: number, code: string, message: string): Response {
+  return send(c, { error: message, code }, status);
 }
 
-function refuseInput(res: ServerResponse, error: SeasonInputError): void {
-  refuse(res, 400, INPUT_ERRORS[error].code, INPUT_ERRORS[error].message);
+function refuseInput(c: Context, error: SeasonInputError): Response {
+  return refuse(c, 400, INPUT_ERRORS[error].code, INPUT_ERRORS[error].message);
 }
 
-export async function handleSeasonRoutes(
-  req: IncomingMessage,
-  res: ServerResponse,
-  parts: string[],
-  url: URL,
-  client: Client,
-  user: AuthClaims,
-  guildId: string,
-  access: DashboardAccess,
-): Promise<boolean> {
-  const method = req.method;
-  if (parts[4] !== 'seasons') return false;
+export function createSeasonsRouter(client: Client) {
+  const router = new Hono();
+  const base = '/api/dashboard/guilds/:guildId/seasons';
 
-  if (method !== 'GET' && !access.canManageSettings) {
-    refuse(res, 403, 'sea_forbidden', 'Permissions insuffisantes');
-    return true;
-  }
+  const writeAccess = createMiddleware(async (c, next) => {
+    if (c.req.method !== 'GET' && !c.var.effectiveAccess.canManageSettings) {
+      return refuse(c, 403, 'sea_forbidden', 'Permissions insuffisantes');
+    }
+    await next();
+  });
+  const gate = [...guildRoute(client), writeAccess] as const;
 
-  // GET /api/dashboard/guilds/:guildId/seasons
-  if (parts.length === 5 && method === 'GET') {
+  router.get(base, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
     try {
       const discordGuild = client.guilds.cache.get(guildId) ?? null;
       const data = await getSeasonsDashboardData(guildId, discordGuild);
@@ -107,7 +101,7 @@ export async function handleSeasonRoutes(
         : [];
 
       const locale = await resolveGuildLocale(guildId, client.guilds.cache.get(guildId)?.preferredLocale);
-      json(res, 200, {
+      return send(c, {
         ...data,
         // Gabarits de l'annonce dans la langue du serveur, pour l'aperçu.
         announcement: seasonAnnouncementLabels(locale),
@@ -121,107 +115,92 @@ export async function handleSeasonRoutes(
       });
     } catch (err) {
       logger.error('SeasonsAPI', 'Error fetching seasons:', err);
-      jsonFailure(res, err, 'Erreur lors de la récupération des saisons', 'SeasonsAPI');
+      return fail(c, err, 'Erreur lors de la récupération des saisons', 'SeasonsAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/seasons
-  if (parts.length === 5 && method === 'POST') {
+  router.post(base, ...gate, async (c) => {
     try {
-      const parsed = parseSeasonInput((await readJsonBody(req)) ?? {});
-      if ('error' in parsed) {
-        refuseInput(res, parsed.error);
-        return true;
-      }
-      json(res, 201, await createSeason(guildId, parsed.input, client));
+      const parsed = parseSeasonInput((await readBody(c)) ?? {});
+      if ('error' in parsed) return refuseInput(c, parsed.error);
+      return send(c, await createSeason(c.req.param('guildId'), parsed.input, client), 201);
     } catch (err) {
       logger.error('SeasonsAPI', 'Error creating season:', err);
-      jsonFailure(res, err, 'Erreur lors de la création', 'SeasonsAPI');
+      return fail(c, err, 'Erreur lors de la création', 'SeasonsAPI');
     }
-    return true;
-  }
+  });
 
-  // PATCH /api/dashboard/guilds/:guildId/seasons/:seasonId
-  if (parts.length === 6 && method === 'PATCH') {
+  router.patch(`${base}/:seasonId`, ...gate, async (c) => {
     try {
-      const result = await updateSeason(guildId, parts[5], (await readJsonBody(req)) ?? {}, client);
-      if (result === 'updated') json(res, 200, { ok: true });
-      else if (result === 'not_found') refuse(res, 404, 'sea_not_editable', 'Saison introuvable ou déjà terminée');
-      else refuseInput(res, result);
+      const result = await updateSeason(c.req.param('guildId'), c.req.param('seasonId'), (await readBody(c)) ?? {}, client);
+      if (result === 'updated') return send(c, { ok: true });
+      if (result === 'not_found') return refuse(c, 404, 'sea_not_editable', 'Saison introuvable ou déjà terminée');
+      return refuseInput(c, result);
     } catch (err) {
       logger.error('SeasonsAPI', 'Error updating season:', err);
-      jsonFailure(res, err, 'Erreur lors de la modification', 'SeasonsAPI');
+      return fail(c, err, 'Erreur lors de la modification', 'SeasonsAPI');
     }
-    return true;
-  }
+  });
 
-  // DELETE /api/dashboard/guilds/:guildId/seasons/:seasonId
-  if (parts.length === 6 && method === 'DELETE') {
+  router.delete(`${base}/:seasonId`, ...gate, async (c) => {
     try {
-      const deleted = await deleteSeason(guildId, parts[5]);
-      if (deleted) json(res, 200, { ok: true });
-      else refuse(res, 404, 'sea_not_deletable', 'Seule une saison à venir peut être supprimée');
+      const deleted = await deleteSeason(c.req.param('guildId'), c.req.param('seasonId'));
+      if (deleted) return send(c, { ok: true });
+      return refuse(c, 404, 'sea_not_deletable', 'Seule une saison à venir peut être supprimée');
     } catch (err) {
       logger.error('SeasonsAPI', 'Error deleting season:', err);
-      jsonFailure(res, err, 'Erreur lors de la suppression', 'SeasonsAPI');
+      return fail(c, err, 'Erreur lors de la suppression', 'SeasonsAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/seasons/:seasonId/start
-  if (parts.length === 7 && parts[6] === 'start' && method === 'POST') {
+  router.post(`${base}/:seasonId/start`, ...gate, async (c) => {
     try {
-      const result = await startSeason(guildId, parts[5], client);
-      if (result === 'started') json(res, 200, { ok: true });
-      else if (result === 'another_active') refuse(res, 409, 'sea_another_active', 'Une saison est déjà en cours : termine-la avant d\'en ouvrir une autre');
-      else refuse(res, 404, 'sea_not_startable', 'Saison introuvable ou déjà ouverte');
+      const result = await startSeason(c.req.param('guildId'), c.req.param('seasonId'), client);
+      if (result === 'started') return send(c, { ok: true });
+      if (result === 'another_active') return refuse(c, 409, 'sea_another_active', 'Une saison est déjà en cours : termine-la avant d\'en ouvrir une autre');
+      return refuse(c, 404, 'sea_not_startable', 'Saison introuvable ou déjà ouverte');
     } catch (err) {
       logger.error('SeasonsAPI', 'Error starting season:', err);
-      jsonFailure(res, err, 'Erreur lors du démarrage', 'SeasonsAPI');
+      return fail(c, err, 'Erreur lors du démarrage', 'SeasonsAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/seasons/:seasonId/end
-  if (parts.length === 7 && parts[6] === 'end' && method === 'POST') {
+  router.post(`${base}/:seasonId/end`, ...gate, async (c) => {
     try {
-      const success = await endSeason(client, guildId, parts[5]);
-      if (success) json(res, 200, { ok: true });
-      else refuse(res, 400, 'sea_end_failed', 'Impossible de terminer la saison');
+      const success = await endSeason(client, c.req.param('guildId'), c.req.param('seasonId'));
+      if (success) return send(c, { ok: true });
+      return refuse(c, 400, 'sea_end_failed', 'Impossible de terminer la saison');
     } catch (err) {
       logger.error('SeasonsAPI', 'Error ending season:', err);
-      jsonFailure(res, err, 'Erreur lors de la fin de saison', 'SeasonsAPI');
+      return fail(c, err, 'Erreur lors de la fin de saison', 'SeasonsAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/seasons/:seasonId/rewards/retry
-  if (parts.length === 8 && parts[6] === 'rewards' && parts[7] === 'retry' && method === 'POST') {
+  router.post(`${base}/:seasonId/rewards/retry`, ...gate, async (c) => {
     try {
-      const result = await retrySeasonRewards(client, guildId, parts[5]);
-      if (result === 'not_found') refuse(res, 404, 'sea_rewards_not_found', 'Saison introuvable ou pas encore terminée');
-      else if (result === 'busy') refuse(res, 409, 'sea_rewards_busy', 'Les récompenses de cette saison sont déjà en cours de reprise');
-      else json(res, 200, { ok: true, ...result });
+      const result = await retrySeasonRewards(client, c.req.param('guildId'), c.req.param('seasonId'));
+      if (result === 'not_found') return refuse(c, 404, 'sea_rewards_not_found', 'Saison introuvable ou pas encore terminée');
+      if (result === 'busy') return refuse(c, 409, 'sea_rewards_busy', 'Les récompenses de cette saison sont déjà en cours de reprise');
+      return send(c, { ok: true, ...result });
     } catch (err) {
       logger.error('SeasonsAPI', 'Error retrying season rewards:', err);
-      jsonFailure(res, err, 'Erreur lors de la reprise des récompenses', 'SeasonsAPI');
+      return fail(c, err, 'Erreur lors de la reprise des récompenses', 'SeasonsAPI');
     }
-    return true;
-  }
+  });
 
-  // GET /api/dashboard/guilds/:guildId/seasons/:seasonId/leaderboard
-  if (parts.length === 7 && parts[6] === 'leaderboard' && method === 'GET') {
+  router.get(`${base}/:seasonId/leaderboard`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const seasonId = c.req.param('seasonId');
     try {
-      const leaderboard = await getSeasonLeaderboard(guildId, parts[5], 20, client.guilds.cache.get(guildId) ?? null);
+      const leaderboard = await getSeasonLeaderboard(guildId, seasonId, 20, client.guilds.cache.get(guildId) ?? null);
       // Le RP est archivé par la clôture (`RankedSeasonEntry`) mais n'était
       // jamais renvoyé : la page des saisons ne montrait que le classement
       // d'XP, comme si le prestige n'avait pas eu de saison.
-      const rankedStandings = await getRankedSeasonStandings(guildId, parts[5])
+      const rankedStandings = await getRankedSeasonStandings(guildId, seasonId)
         .catch(() => [] as Awaited<ReturnType<typeof getRankedSeasonStandings>>);
       const ladder = await getGuildLadder(guildId).catch(() => null);
 
-      json(res, 200, {
+      return send(c, {
         leaderboard: await withSeasonIdentities(client, guildId, leaderboard),
         rankedStandings: await withSeasonIdentities(client, guildId, rankedStandings.map((entry) => ({
           ...entry,
@@ -230,10 +209,9 @@ export async function handleSeasonRoutes(
       });
     } catch (err) {
       logger.error('SeasonsAPI', 'Error fetching leaderboard:', err);
-      jsonFailure(res, err, 'Erreur lors de la récupération du classement', 'SeasonsAPI');
+      return fail(c, err, 'Erreur lors de la récupération du classement', 'SeasonsAPI');
     }
-    return true;
-  }
+  });
 
-  return false;
+  return router;
 }

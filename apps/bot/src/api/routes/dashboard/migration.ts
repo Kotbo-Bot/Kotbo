@@ -4,14 +4,15 @@
  * Trois surfaces : le plan (ce qu'on a detecte), l'application des propositions
  * retenues, et l'inspection d'un fichier d'export tiers.
  */
-import { IncomingMessage, ServerResponse } from 'node:http';
-import { Client } from 'discord.js';
+import { Hono } from 'hono';
+import { createMiddleware } from 'hono/factory';
+import type { Client, Guild } from 'discord.js';
 import prisma from '../../../utils/db.js';
 import { logger } from '../../../utils/logger.js';
-import { json, readJsonBody, resolveDashboardAccess, pushAudit, getGuildName, type AuthClaims } from '../../shared.js';
+import { pushAudit, getGuildName } from '../../shared.js';
 import { applyMigrationPlan, buildMigrationPlan } from '../../../services/core/botMigrationService.js';
 
-import { jsonFailure } from '../../shared/failure.js';
+import { auditUserOf, fail, guildRoute, readBody, send } from '../../hono/dashboard/kit.js';
 /**
  * Reglages de la guilde qu'une valeur importee peut alimenter.
  *
@@ -64,63 +65,46 @@ function collectSnowflakes(
   return out;
 }
 
-export async function handleMigrationRoutes(
-  req: IncomingMessage,
-  res: ServerResponse,
-  parts: string[],
-  _url: URL,
-  client: Client,
-  user: AuthClaims,
-): Promise<boolean> {
-  if (parts[4] !== 'migration') return false;
+export function createMigrationRouter(client: Client) {
+  const router = new Hono();
+  const base = '/api/dashboard/guilds/:guildId/migration';
 
-  const method = req.method;
-  const guildId = parts[3];
+  /** Administrateur seulement, et serveur Discord joignable. */
+  const migrationAccess = createMiddleware<{ Variables: { guild: Guild } }>(async (c, next) => {
+    if (!c.var.access.canManageSettings) return send(c, { error: 'Accès refusé' }, 403);
+    const guildId = c.req.param('guildId')!;
+    const guild = client.guilds.cache.get(guildId) ?? (await client.guilds.fetch(guildId).catch(() => null));
+    if (!guild) return send(c, { error: 'Serveur Discord introuvable' }, 404);
+    c.set('guild', guild);
+    await next();
+  });
+  const gate = [...guildRoute(client), migrationAccess] as const;
 
-  const access = await resolveDashboardAccess(client, guildId, user.userId);
-  if (!access.canManageSettings) {
-    json(res, 403, { error: 'Accès refusé' });
-    return true;
-  }
-
-  const guild = client.guilds.cache.get(guildId) ?? (await client.guilds.fetch(guildId).catch(() => null));
-  if (!guild) {
-    json(res, 404, { error: 'Serveur Discord introuvable' });
-    return true;
-  }
-
-  const auditUser = user.username ?? `User${user.userId}`;
-
-  // GET /api/dashboard/guilds/:guildId/migration
-  if (parts.length === 5 && method === 'GET') {
+  router.get(base, ...gate, async (c) => {
     try {
-      json(res, 200, await buildMigrationPlan(guild));
+      return send(c, await buildMigrationPlan(c.var.guild));
     } catch (err) {
       logger.error('MigrationAPI', 'Erreur GET plan:', err);
-      jsonFailure(res, err, 'Erreur lors de l\'analyse du serveur', 'MigrationAPI');
+      return fail(c, err, 'Erreur lors de l\'analyse du serveur', 'MigrationAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/migration/apply { keys }
-  if (parts.length === 6 && parts[5] === 'apply' && method === 'POST') {
+  // { keys }
+  router.post(`${base}/apply`, ...gate, async (c) => {
+    const guild = c.var.guild;
+    const guildId = guild.id;
     try {
-      const body = await readJsonBody<{ keys?: unknown }>(req);
+      const body = await readBody<{ keys?: unknown }>(c);
       const keys = Array.isArray(body?.keys)
         ? body.keys.filter((k): k is string => typeof k === 'string')
         : [];
-
-      if (keys.length === 0) {
-        json(res, 400, { error: 'Aucune proposition sélectionnée' });
-        return true;
-      }
+      if (keys.length === 0) return send(c, { error: 'Aucune proposition sélectionnée' }, 400);
 
       const result = await applyMigrationPlan(guild, keys);
-
       if (result.applied.length > 0) {
         await pushAudit(guildId, {
           channelId: null,
-          user: auditUser,
+          user: auditUserOf(c),
           action: `Reprise de configuration : ${result.applied.length} réglage(s)`,
           context: getGuildName(client, guildId),
           module: 'Reprise',
@@ -129,22 +113,19 @@ export async function handleMigrationRoutes(
         });
       }
 
-      json(res, 200, { ...result, plan: await buildMigrationPlan(guild) });
+      return send(c, { ...result, plan: await buildMigrationPlan(guild) });
     } catch (err) {
       logger.error('MigrationAPI', 'Erreur POST apply:', err);
-      jsonFailure(res, err, 'Erreur lors de la reprise', 'MigrationAPI');
+      return fail(c, err, 'Erreur lors de la reprise', 'MigrationAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/migration/inspect { export }
-  if (parts.length === 6 && parts[5] === 'inspect' && method === 'POST') {
+  // { export }
+  router.post(`${base}/inspect`, ...gate, async (c) => {
+    const guild = c.var.guild;
     try {
-      const body = await readJsonBody<{ export?: unknown }>(req);
-      if (body?.export === undefined) {
-        json(res, 400, { error: 'Fichier vide ou illisible' });
-        return true;
-      }
+      const body = await readBody<{ export?: unknown }>(c);
+      if (body?.export === undefined) return send(c, { error: 'Fichier vide ou illisible' }, 400);
 
       const found = collectSnowflakes(body.export);
 
@@ -160,9 +141,9 @@ export async function handleMigrationRoutes(
           if (role) return { path, value, kind: 'role' as const, name: role.name };
           return null;
         })
-        .filter((c): c is NonNullable<typeof c> => c !== null);
+        .filter((candidate): candidate is NonNullable<typeof candidate> => candidate !== null);
 
-      json(res, 200, {
+      return send(c, {
         candidates,
         // Doublons retires : un meme salon cite dix fois dans l'export ne
         // merite pas dix lignes a l'ecran.
@@ -171,15 +152,15 @@ export async function handleMigrationRoutes(
       });
     } catch (err) {
       logger.error('MigrationAPI', 'Erreur POST inspect:', err);
-      jsonFailure(res, err, "Erreur lors de la lecture de l'export", 'MigrationAPI');
+      return fail(c, err, "Erreur lors de la lecture de l'export", 'MigrationAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/migration/assign { assignments }
-  if (parts.length === 6 && parts[5] === 'assign' && method === 'POST') {
+  // { assignments }
+  router.post(`${base}/assign`, ...gate, async (c) => {
+    const guildId = c.var.guild.id;
     try {
-      const body = await readJsonBody<{ assignments?: unknown }>(req);
+      const body = await readBody<{ assignments?: unknown }>(c);
       const raw = Array.isArray(body?.assignments) ? body.assignments : [];
 
       const data: Record<string, string> = {};
@@ -195,16 +176,13 @@ export async function handleMigrationRoutes(
         data[column] = value;
       }
 
-      if (Object.keys(data).length === 0) {
-        json(res, 400, { error: 'Aucune association valide' });
-        return true;
-      }
+      if (Object.keys(data).length === 0) return send(c, { error: 'Aucune association valide' }, 400);
 
       await prisma.guild.update({ where: { id: guildId }, data });
 
       await pushAudit(guildId, {
         channelId: null,
-        user: auditUser,
+        user: auditUserOf(c),
         action: `Reprise depuis un export : ${Object.keys(data).length} réglage(s)`,
         context: getGuildName(client, guildId),
         module: 'Reprise',
@@ -212,13 +190,12 @@ export async function handleMigrationRoutes(
         details: Object.keys(data).join(', '),
       });
 
-      json(res, 200, { success: true, applied: Object.keys(data) });
+      return send(c, { success: true, applied: Object.keys(data) });
     } catch (err) {
       logger.error('MigrationAPI', 'Erreur POST assign:', err);
-      jsonFailure(res, err, "Erreur lors de l'association", 'MigrationAPI');
+      return fail(c, err, "Erreur lors de l'association", 'MigrationAPI');
     }
-    return true;
-  }
+  });
 
-  return false;
+  return router;
 }

@@ -7,6 +7,10 @@
 import { Hono } from 'hono';
 import { compress } from 'hono/compress';
 import type { Client } from 'discord.js';
+import { createMigrationRouter } from '../../routes/dashboard/migration.js';
+import { createWelcomeExperimentsRouter } from '../../routes/dashboard/welcomeExperiments.js';
+import { createSimulationRouter } from '../../routes/dashboard/simulation.js';
+import { createSeasonsRouter } from '../../routes/dashboard/seasons.js';
 import { createTelemetryRouter } from '../../routes/dashboard/telemetry.js';
 import { createNotificationInboxRouter } from '../../routes/dashboard/notificationInbox.js';
 import { createMemberProfileRouter } from '../../routes/dashboard/memberProfile.js';
@@ -73,5 +77,9 @@ export function createDashboardRouter(client: Client) {
   // Hors serveur : session seule, sans garde de guilde.
   router.route('/', createTelemetryRouter(client));
   router.route('/', createNotificationInboxRouter(client));
+  router.route('/', createSeasonsRouter(client));
+  router.route('/', createSimulationRouter(client));
+  router.route('/', createWelcomeExperimentsRouter(client));
+  router.route('/', createMigrationRouter(client));
   return router;
 }
