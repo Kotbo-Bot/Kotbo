@@ -83,7 +83,7 @@ describe('Contrats des features', () => {
   });
 
   test('Le worker BullMQ démarre après l’enregistrement de ses handlers', () => {
-    const indexPath = listSourceFiles('.').find((file) => file.replace(/\\/g, '/').endsWith('/index.ts'));
+    const indexPath = listSourceFiles('.').find((file) => file.replace(/\\/g, '/').endsWith('/src/index.ts'));
     expect(indexPath).toBeDefined();
     if (!indexPath) return;
 

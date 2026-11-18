@@ -13,6 +13,7 @@ import type { Client } from 'discord.js';
 import { DEFAULT_STARBOARD_CONFIG } from '@kotbo/shared';
 import { DASHBOARD_ACCESS_ADMIN, DASHBOARD_ACCESS_MODERATOR, type AuthClaims, type DashboardAccess } from '../../api/shared.js';
 import { completeModuleMock } from '../helpers/moduleMock.js';
+import { normalizeEmojiKey } from '../../services/features/starboardTally.js';
 
 const mockDb = {
   dashboardAuditLog: { create: mock(async (_args?: unknown) => ({})) },
@@ -89,6 +90,8 @@ const service = {
   blockStarboardEntry: mock(async (..._args: unknown[]) => serviceEntry),
   unblockStarboardEntry: mock(async (..._args: unknown[]) => serviceEntry),
   removeHighlightsOfAuthors: mock(async (..._args: unknown[]) => 0),
+  // Réexporté par le service : le module doublé le remplacerait sinon par un piège.
+  normalizeEmojiKey,
 };
 mockModule('../../services/features/starboardService', service);
 
