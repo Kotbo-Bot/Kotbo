@@ -163,11 +163,6 @@ const MODULE_SEO: Record<string, { slug: { fr: string; en: string }; nameFr?: st
     nameEn: 'Fun channels',
     descriptionEn: 'Counting, one-word story, mystery number and channel mini-games.',
   },
-  daily_algo: {
-    slug: { fr: 'daily-algo', en: 'daily-algo' },
-    nameEn: 'Daily Algo',
-    descriptionEn: 'Daily algorithm challenge, submissions and a weekly leaderboard.',
-  },
   tickets: {
     slug: { fr: 'tickets-discord', en: 'discord-tickets' },
     nameEn: 'Support tickets',

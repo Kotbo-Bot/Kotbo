@@ -192,35 +192,6 @@ export async function handleStaffRoutes(
         }
       }
 
-      // GET /api/dashboard/guilds/:guildId/staff/algo-schedule
-      if (parts[5] === 'algo-schedule' && method === 'GET' && !parts[6]) {
-        try {
-          const rangeDays = Number(url.searchParams.get('range') || '14');
-          const runs = await prisma.dailyAlgoRun.findMany({
-            where: { guildId },
-            include: { problem: true },
-            orderBy: { createdAt: 'desc' },
-            take: rangeDays
-          });
-          json(res, 200, { runs });
-        } catch (err) {
-          logger.error('StaffAPI', 'Error getting algo schedule:', err);
-          jsonFailure(res, err, 'Erreur lors de la récupération du planning Daily Algo', 'StaffAPI');
-        }
-        return true;
-      }
-
-      // POST /api/dashboard/guilds/:guildId/staff/algo-ensure
-      if (parts[5] === 'algo-ensure' && method === 'POST') {
-        try {
-          json(res, 200, { ok: true, message: 'Génération de planning demandée' });
-        } catch (err) {
-          logger.error('StaffAPI', 'Error triggering algo ensure:', err);
-          jsonFailure(res, err, 'Erreur lors de la génération du planning', 'StaffAPI');
-        }
-        return true;
-      }
-
       // GET /api/dashboard/guilds/:guildId/staff/alerts
       if (parts[5] === 'alerts' && method === 'GET' && !parts[6]) {
         if (!(await canView('staff_directory'))) return denySection();

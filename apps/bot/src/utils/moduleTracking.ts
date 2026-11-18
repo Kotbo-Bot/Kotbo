@@ -82,8 +82,6 @@ export const COMMAND_TO_MODULE: Record<string, KotboModule> = {
   'tempban': 'sanction',
   'timeout': 'sanction',
   'to': 'sanction',
-  'daily-algo': 'dailyAlgo',
-  'dailyalgo': 'dailyAlgo',
   'ticket': 'ticket',
   'tickets': 'ticket',
   'giveaway': 'giveaway',

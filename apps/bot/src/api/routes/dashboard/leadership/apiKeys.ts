@@ -61,7 +61,7 @@ export function createApiKeysRouter(client: Client) {
         keyHash,
         displayKey,
         body?.name || 'Mon clé API',
-        body?.permissions || ['daily_algo:create_exercise']
+        body?.permissions || []
       );
 
       await pushAudit(guildId, {

@@ -16,7 +16,6 @@ import {
   getHourlyHeatmapData,
   getWeekOverWeekComparison,
   getGrowthAndRetention,
-  getDailyAlgoAnalytics,
   getGlobalInteractions,
   getCommandUsageAnalytics,
   getStaffPerformanceAnalytics,
@@ -27,7 +26,6 @@ import { resolveOnlineMembersCount } from '../../../services/core/presenceDetect
 import { canViewFeatureSection } from './featureGate.js';
 import { applyFreeAnalyticsLimits } from './analyticsFreeTier.js';
 import { getGuildPlan } from '../../../services/system/planService.js';
-import { isModulePaused } from '@kotbo/contracts';
 
 export type LiveGuildCounts = {
   totalMembers: number;
@@ -931,28 +929,6 @@ export async function handleAnalyticsRoutes(
     return true;
   }
 
-  // GET /api/dashboard/guilds/:guildId/analytics/daily-algo - Daily Algo analytics
-  if (parts.length === 6 && parts[5] === 'daily-algo') {
-    // Le segment est celui d'Analytics : la garde de module ne le rattache
-    // pas au Daily Algo. Seule la pause ferme la route, comme elle retire
-    // l'onglet du dashboard : un module simplement éteint garde son historique.
-    if (isModulePaused('daily_algo')) {
-      json(res, 404, { error: 'Le Daily Algo est en pause.' });
-      return true;
-    }
-    try {
-      const days = Math.min(365, Math.max(1, parseInt(url.searchParams.get('days') || '30', 10) || 30));
-      const startDate = url.searchParams.get('startDate');
-      const endDate = url.searchParams.get('endDate');
-      const algoData = await getDailyAlgoAnalytics(guildId, { days, startDate, endDate });
-      json(res, 200, algoData);
-    } catch (err) {
-      logger.error('AnalyticsAPI', 'Error computing daily algo analytics:', err);
-      jsonFailure(res, err, 'Erreur daily algo analytics', 'AnalyticsAPI');
-    }
-    return true;
-  }
-
   // GET /api/dashboard/guilds/:guildId/analytics/interactions
   if (parts.length === 6 && parts[5] === 'interactions') {
     try {
@@ -1062,7 +1038,6 @@ export async function handleAnalyticsRoutes(
         totalStaff,
         meetings,
         candidatures,
-        algoRuns,
         DBInvites,
         memberProfiles,
         inactiveMembers,
@@ -1197,11 +1172,6 @@ export async function handleAnalyticsRoutes(
           by: ['status'],
           where: { guildId },
           _count: true,
-        }),
-        // Algo runs
-        prismaRead.dailyAlgoRun.findMany({
-          where: { guildId, createdAt: { gte: startDate, lte: endDate } },
-          include: { _count: { select: { submissions: true } } },
         }),
         // Top inviters
         prismaRead.memberInvite.groupBy({
@@ -1557,10 +1527,6 @@ export async function handleAnalyticsRoutes(
 
       const recruitmentPipeline = candidatures.map(c => ({ status: c.status, count: c._count }));
 
-      const algoAvgParticipation = algoRuns.length > 0
-        ? Math.round(algoRuns.reduce((sum, r) => sum + r._count.submissions, 0) / algoRuns.length * 10) / 10
-        : 0;
-
       // Le regroupement et le tri viennent de Postgres ; il reste à attacher
       // le nom et la couleur, que seul le cache Discord connaît.
       const roleDistribution = memberProfiles
@@ -1703,7 +1669,6 @@ export async function handleAnalyticsRoutes(
           totalStaff,
           inactiveMembers,
           avgTenureDays,
-          algoAvgParticipation,
           avgMeetingAttendance,
           messagesTrend,
         },

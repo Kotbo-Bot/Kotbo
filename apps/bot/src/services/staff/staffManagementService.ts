@@ -1186,7 +1186,7 @@ export const createAPIKey = async (
   keyHash: string,
   displayKey: string,
   name: string = 'Mon clé API',
-  permissions: string[] = ['daily_algo:create_exercise']
+  permissions: string[] = []
 ) => {
   const resolvedCreatorId = await resolveStaffMemberId(guildId, createdByUserId);
   if (!resolvedCreatorId) {
