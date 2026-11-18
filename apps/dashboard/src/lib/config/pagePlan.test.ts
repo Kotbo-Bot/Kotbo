@@ -5,7 +5,7 @@ const { pagePlan } = await import('./pages');
 
 describe('pagePlan', () => {
   test('module hors offre gratuite : couronne Plus', () => {
-    expect(pagePlan({ name: '', href: '/forms', featureKey: 'custom_forms' })).toBe('plus');
+    expect(pagePlan({ name: '', href: '/seasons', featureKey: 'seasons' })).toBe('plus');
   });
 
   test('module gratuit ou page du cœur : pas de couronne', () => {
