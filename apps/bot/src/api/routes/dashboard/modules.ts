@@ -11,7 +11,6 @@ import type { Client } from 'discord.js';
 import type { AuthClaims, DashboardAccess } from '../../shared.js';
 import type { ModuleRouteContext } from './modules/_shared.js';
 import { handleSanctionsRoutes } from './modules/sanctions.js';
-import { handleAutoThreadRoutes } from './modules/auto-thread.js';
 import { handleChannelsManagementRoutes } from './modules/channels-management.js';
 import { handleTicketsRoutes } from './modules/tickets.js';
 import { handleServerTemplateRoutes } from './modules/server-template.js';
@@ -34,7 +33,6 @@ export async function handleModulesRoutes(
 
   switch (moduleKey) {
     case 'sanctions': return handleSanctionsRoutes(ctx);
-    case 'auto-thread': return handleAutoThreadRoutes(ctx);
     case 'channels-management': return handleChannelsManagementRoutes(ctx);
     case 'tickets': return handleTicketsRoutes(ctx);
     case 'server-template': return handleServerTemplateRoutes(ctx);

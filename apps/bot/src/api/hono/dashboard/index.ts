@@ -7,6 +7,8 @@
 import { Hono } from 'hono';
 import { compress } from 'hono/compress';
 import type { Client } from 'discord.js';
+import { createThreadPanelsRouter } from '../../routes/dashboard/modules/auto-thread-panels.js';
+import { createAutoThreadRouter } from '../../routes/dashboard/modules/auto-thread.js';
 import { createTagAutomodRouter } from '../../routes/dashboard/modules/tag-automod.js';
 import { createStarboardRouter } from '../../routes/dashboard/modules/starboard.js';
 import { createSettingsRouter } from '../../routes/dashboard/modules/settings.js';
@@ -149,5 +151,7 @@ export function createDashboardRouter(client: Client) {
   router.route('/', createSettingsRouter(client));
   router.route('/', createStarboardRouter(client));
   router.route('/', createTagAutomodRouter(client));
+  router.route('/', createAutoThreadRouter(client));
+  router.route('/', createThreadPanelsRouter(client));
   return router;
 }
