@@ -390,6 +390,7 @@ model Guild {
   sanctionEvidenceFiles SanctionEvidenceFile[]
   regulationArticles GuildRegulationArticle[]
   memberProfiles MemberProfile[]
+  memberProfileHistories MemberProfileHistory[]
   staffMembers StaffMember[] @relation("GuildStaffMembers")
   staffRoles StaffRole[] @relation("GuildStaffRoles")
   staffHierarchies StaffHierarchy[] @relation("GuildStaffHierarchies")

@@ -1,0 +1,25 @@
+// ── Historique d'identité des membres ──────────────────────────────────────────
+// Conserve les changements successifs des attributs d'identité :
+// - Pseudos (username Discord)
+// - Pseudos d'affichage (surnom de serveur ou nom global)
+// - Photos de profil (avatar)
+// - Descriptions (bio du profil membre)
+// - Tags (tag de serveur Discord primary_guild ou tag utilisateur)
+// - Pronoms (pronoms déduits des rôles ou du profil)
+
+model MemberProfileHistory {
+  id         String   @id @default(cuid())
+  guildId    String
+  userId     String
+  field      String   // 'username' | 'displayName' | 'avatar' | 'bio' | 'tag' | 'pronouns'
+  oldValue   String?
+  newValue   String?
+  recordedAt DateTime @default(now())
+
+  guild      Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@index([guildId, userId, field])
+  @@index([guildId, userId, recordedAt])
+  @@index([userId, field])
+  @@map("member_profile_history")
+}
