@@ -249,6 +249,9 @@ function standardProtectedResourceMetadataUrl(req: IncomingMessage, url: URL, gu
   return `${proto}://${host}/.well-known/oauth-protected-resource/api/mcp/${guildId}`;
 }
 
+/** Empreintes des codes d'autorisation déjà échangés, avec leur échéance. */
+const consumedAuthCodes = new Map<string, number>();
+
 function oauthCodeKey(): Buffer {
   const secret = process.env.MCP_OAUTH_CODE_SECRET || JWT_SECRET || process.env.JWT_SECRET || 'kotbo-mcp-dev-secret';
   return crypto.createHash('sha256').update(secret).digest();
@@ -1049,7 +1052,10 @@ export async function handleMCPRoutes(
       return true;
     }
 
-    const ac = authCodes.get(code) ?? openAuthCode(code);
+    // Le code est un blob chiffré autoportant : le cache mémoire seul ne l'invalide pas. Une empreinte
+    // des codes déjà échangés (jusqu'à leur expiration) empêche une seconde présentation.
+    const codeHash = crypto.createHash('sha256').update(code).digest('hex');
+    const ac = consumedAuthCodes.has(codeHash) ? null : (authCodes.get(code) ?? openAuthCode(code));
     if (!ac || ac.expiresAt < Date.now()) {
       oauthError(req, res, 400, 'invalid_grant', 'Code invalide ou expiré');
       return true;
@@ -1076,6 +1082,8 @@ export async function handleMCPRoutes(
     }
 
     authCodes.delete(code); // single-use
+    consumedAuthCodes.set(codeHash, ac.expiresAt);
+    for (const [hash, expiresAt] of consumedAuthCodes) if (expiresAt < Date.now()) consumedAuthCodes.delete(hash);
     const tokenAudience = resource ?? ac.resource ?? base;
     const refreshToken = sealRefreshToken({
       clientId: ac.clientId,

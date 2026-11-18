@@ -919,8 +919,18 @@ export async function handlePublicRoutes(
       json(res, 400, { error: 'ID utilisateur invalide' });
       return true;
     }
-    const days = parseInt(url.searchParams.get('days') || '14', 10);
+    // Bornée : sans plafond, la fenêtre se règle sur toute l'historique du membre.
+    const days = Math.min(Math.max(parseInt(url.searchParams.get('days') || '14', 10) || 14, 1), 90);
     try {
+      // Même règle que la route profil : un membre dont tous les profils sont privés n'expose pas son activité.
+      const publicProfile = await prisma.memberProfile.findFirst({
+        where: { userId, isProfilePrivate: false },
+        select: { id: true },
+      });
+      if (!publicProfile) {
+        json(res, 404, { error: 'Profil introuvable ou privé' });
+        return true;
+      }
       const since = new Date();
       since.setDate(since.getDate() - days + 1);
       const startKey = `${since.getFullYear()}-${String(since.getMonth() + 1).padStart(2, '0')}-${String(since.getDate()).padStart(2, '0')}`;
