@@ -10,8 +10,6 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Client } from 'discord.js';
 import type { AuthClaims, DashboardAccess } from '../../shared.js';
 import type { ModuleRouteContext } from './modules/_shared.js';
-import { handleModuleToggleRoutes } from './modules/modules.js';
-import { handlePresetsRoutes } from './modules/presets.js';
 import { handleSanctionsRoutes } from './modules/sanctions.js';
 import { handleNicknameModerationRoutes } from './modules/nickname-moderation.js';
 import { handleAutoThreadRoutes } from './modules/auto-thread.js';
@@ -19,7 +17,6 @@ import { handleChannelsManagementRoutes } from './modules/channels-management.js
 import { handleVerificationRoutes } from './modules/verification.js';
 import { handleBannedWordsRoutes } from './modules/banned-words.js';
 import { handleNotificationsRoutes } from './modules/notifications.js';
-import { handleManagementRoutes } from './modules/management.js';
 import { handleSettingsRoutes } from './modules/settings.js';
 import { handleRegulationRoutes } from './modules/regulation.js';
 import { handleNewsRoutes } from './modules/news.js';
@@ -51,8 +48,6 @@ export async function handleModulesRoutes(
   const ctx: ModuleRouteContext = { req, res, parts, url, client, user, guildId, access, method, auditUser, moduleKey };
 
   switch (moduleKey) {
-    case 'modules': return handleModuleToggleRoutes(ctx);
-    case 'presets': return handlePresetsRoutes(ctx);
     case 'sanctions': return handleSanctionsRoutes(ctx);
     case 'nickname-moderation': return handleNicknameModerationRoutes(ctx);
     case 'auto-thread': return handleAutoThreadRoutes(ctx);
@@ -60,7 +55,6 @@ export async function handleModulesRoutes(
     case 'verification': return handleVerificationRoutes(ctx);
     case 'banned-words': return handleBannedWordsRoutes(ctx);
     case 'notifications': return handleNotificationsRoutes(ctx);
-    case 'management': return handleManagementRoutes(ctx);
     case 'settings': return handleSettingsRoutes(ctx);
     case 'regulation': return handleRegulationRoutes(ctx);
     case 'news': return handleNewsRoutes(ctx);
