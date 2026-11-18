@@ -316,33 +316,33 @@
   {:else}
     <dl class="space-y-2 text-sm">
       <div class="flex items-center justify-between gap-3">
-        <dt class="text-on-surface-variant">{m.sea_status_current()}</dt>
+        <dt class="text-on-surface-variant shrink-0">{m.sea_status_current()}</dt>
         <dd class="font-semibold text-right truncate">{active ? active.name : m.sea_status_none()}</dd>
       </div>
       {#if active && progress}
         <div class="flex items-center justify-between gap-3">
-          <dt class="text-on-surface-variant">{m.sea_stat_days_left()}</dt>
+          <dt class="text-on-surface-variant shrink-0">{m.sea_stat_days_left()}</dt>
           <dd class="font-semibold">{progress.daysLeft}</dd>
         </div>
         <div class="flex items-center justify-between gap-3">
-          <dt class="text-on-surface-variant">{m.sea_status_rewards()}</dt>
+          <dt class="text-on-surface-variant shrink-0">{m.sea_status_rewards()}</dt>
           <dd class="font-semibold">{(active.rewards?.length ?? 0) + (active.tiers?.length ?? 0) + (active.topRoleId ? 1 : 0)}</dd>
         </div>
         <div class="flex items-center justify-between gap-3">
-          <dt class="text-on-surface-variant">{m.sea_announce_channel_label()}</dt>
+          <dt class="text-on-surface-variant shrink-0">{m.sea_announce_channel_label()}</dt>
           <dd class="font-semibold text-right truncate">{active.announceChannelId ? `#${channelName(active.announceChannelId)}` : m.sea_status_none()}</dd>
         </div>
         <div class="flex items-center justify-between gap-3">
-          <dt class="text-on-surface-variant">{m.sea_status_auto_renew()}</dt>
+          <dt class="text-on-surface-variant shrink-0">{m.sea_status_auto_renew()}</dt>
           <dd class="font-semibold">{active.autoRenew ? m.sea_status_on() : m.sea_status_off()}</dd>
         </div>
       {/if}
       <div class="flex items-center justify-between gap-3">
-        <dt class="text-on-surface-variant">{m.sea_status_next()}</dt>
+        <dt class="text-on-surface-variant shrink-0">{m.sea_status_next()}</dt>
         <dd class="font-semibold text-right truncate">{nextUpcoming ? m.sea_status_next_value({ name: nextUpcoming.name, date: formatDate(nextUpcoming.startDate) }) : m.sea_status_none()}</dd>
       </div>
       <div class="flex items-center justify-between gap-3">
-        <dt class="text-on-surface-variant">{m.sea_status_last_ended()}</dt>
+        <dt class="text-on-surface-variant shrink-0">{m.sea_status_last_ended()}</dt>
         <dd class="font-semibold text-right">{lastEnded ? formatDate(lastEnded.endDate) : m.sea_status_never()}</dd>
       </div>
     </dl>

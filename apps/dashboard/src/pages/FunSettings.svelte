@@ -362,11 +362,11 @@
         </div>
       {/each}
       <div class="flex items-center justify-between gap-3 border-t border-outline-variant/15 pt-2">
-        <dt class="text-on-surface-variant">{m.fun_confession_title()}</dt>
+        <dt class="text-on-surface-variant shrink-0">{m.fun_confession_title()}</dt>
         <dd class="font-semibold text-right truncate {savedConfig.funConfessionChannelId ? '' : 'text-on-surface-variant'}">{channelName(savedConfig.funConfessionChannelId)}</dd>
       </div>
       <div class="flex items-center justify-between gap-3">
-        <dt class="text-on-surface-variant">{m.fun_punitive_title()}</dt>
+        <dt class="text-on-surface-variant shrink-0">{m.fun_punitive_title()}</dt>
         <dd class="font-semibold">{savedConfig.funPunitiveMode ? m.fun_status_on() : m.fun_status_off()}</dd>
       </div>
     </dl>
