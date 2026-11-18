@@ -1,11 +1,13 @@
+import type { Client } from 'discord.js';
+import { Hono } from 'hono';
 /** Routes dashboard du module `verification`. */
 import { cache } from '../../../../utils/cache.js';
 import prisma from '../../../../utils/db.js';
 import { logger } from '../../../../utils/logger.js';
-import { getGuildName, json, pushAudit, readJsonBody } from '../../../shared.js';
-import { readWordStatsEnabled, startWordStatsBackfillIfTurnedOn, type ModuleRouteContext } from './_shared.js';
+import { getGuildName, pushAudit } from '../../../shared.js';
+import { readWordStatsEnabled, startWordStatsBackfillIfTurnedOn } from './_shared.js';
 
-import { jsonFailure } from '../../../shared/failure.js';
+import { auditUserOf, fail, guildRoute, readBody, send } from '../../../hono/dashboard/kit.js';
 /**
  * La verification de securite se reglait depuis `channels-management`, segment
  * du module « Auto-thread & salons », alors qu'elle ne s'affiche que dans
@@ -20,13 +22,14 @@ import { jsonFailure } from '../../../shared/failure.js';
  * autre page ne les ecrit. Les statistiques de mots gardent leur seconde porte
  * dans `channels-management`, ou le panneau d'analytique avancee les allume.
  */
-export async function handleVerificationRoutes(ctx: ModuleRouteContext): Promise<boolean> {
-  const { req, res, parts, client, guildId, method, auditUser, moduleKey } = ctx;
+export function createVerificationModuleRouter(client: Client) {
+  const router = new Hono();
+  const base = '/api/dashboard/guilds/:guildId';
+  const gate = guildRoute(client);
 
-  if (moduleKey !== 'verification' || parts.length !== 5) return false;
 
-  // GET /api/dashboard/guilds/:guildId/verification
-  if (method === 'GET') {
+  router.get(`${base}/verification`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
     try {
       const guild = await prisma.guild.findUnique({
         where: { id: guildId },
@@ -58,21 +61,21 @@ export async function handleVerificationRoutes(ctx: ModuleRouteContext): Promise
         },
       });
       if (!guild) {
-        json(res, 404, { error: 'Serveur introuvable' });
-        return true;
+        return send(c, { error: 'Serveur introuvable' }, 404);
       }
-      json(res, 200, guild);
+      return send(c, guild);
     } catch (err) {
       logger.error('VerificationAPI', 'GET config error:', err);
-      jsonFailure(res, err, 'Erreur lors de la récupération de la configuration', 'VerificationAPI');
+      return fail(c, err, 'Erreur lors de la récupération de la configuration', 'VerificationAPI');
     }
-    return true;
-  }
+  });
 
-  // PATCH /api/dashboard/guilds/:guildId/verification
-  if (method === 'PATCH') {
+  router.patch(`${base}/verification`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const auditUser = auditUserOf(c);
     try {
-      const body = await readJsonBody<{
+      const body = await readBody<{
         verificationEnabled?: boolean;
         verificationMode?: string;
         verificationAction?: string;
@@ -97,11 +100,10 @@ export async function handleVerificationRoutes(ctx: ModuleRouteContext): Promise
         warnAutoArchiveDays?: number | null;
         wordStatsEnabled?: boolean;
         banHygieneEnabled?: boolean;
-      }>(req);
+      }>(c);
 
       if (!body) {
-        json(res, 400, { error: 'Payload invalide' });
-        return true;
+        return send(c, { error: 'Payload invalide' }, 400);
       }
 
       const has = (field: string) => Object.prototype.hasOwnProperty.call(body, field);
@@ -186,13 +188,13 @@ export async function handleVerificationRoutes(ctx: ModuleRouteContext): Promise
         channelId: null,
       });
 
-      json(res, 200, { ok: true });
+      return send(c, { ok: true });
     } catch (err) {
       logger.error('VerificationAPI', 'PATCH config error:', err);
-      jsonFailure(res, err, 'Erreur lors de la mise à jour', 'VerificationAPI');
+      return fail(c, err, 'Erreur lors de la mise à jour', 'VerificationAPI');
     }
-    return true;
-  }
+  });
 
-  return false;
+  return router;
 }
+

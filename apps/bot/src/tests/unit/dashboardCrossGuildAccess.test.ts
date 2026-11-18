@@ -91,7 +91,7 @@ for (const ext of ['ts', 'js']) {
 
 const { createEventsRouter } = await import('../../api/routes/dashboard/events.js');
 const { createStaffServerRouter } = await import('../../api/routes/dashboard/staffServer.js');
-const { handleInvitationsRoutes } = await import('../../api/routes/dashboard/modules/invitations.js');
+const { createInvitationsRouter } = await import('../../api/routes/dashboard/modules/invitations.js');
 
 function request(method: string, body: unknown = {}): any {
   const req: any = Readable.from([Buffer.from(JSON.stringify(body))]);
@@ -112,12 +112,6 @@ const user = { userId: 'staff-1', username: 'staff' } as any;
 const access = { level: 'admin', canManageSettings: true, canModerateContent: true } as any;
 const client: any = { guilds: { cache: new Map(), fetch: async () => null }, channels: { cache: new Map() } };
 
-function moduleCtx(method: string, parts: string[], body?: unknown): any {
-  return {
-    req: request(method, body), res: response(), parts, url: new URL('http://localhost/'), client, user,
-    guildId: HERE, access, method, auditUser: 'staff', moduleKey: parts[4],
-  };
-}
 
 beforeEach(() => { writes = []; writeWheres = []; });
 
@@ -152,13 +146,15 @@ describe('accès entre serveurs', () => {
   });
 
   test('une invitation d\'un autre serveur ne se suspend ni ne se supprime', async () => {
-    const suspend = moduleCtx('PUT', ['api', 'dashboard', 'guilds', HERE, 'invitations', 'abc123', 'suspend'], { suspended: true });
-    await handleInvitationsRoutes(suspend);
-    expect(suspend.res.statusCode).toBe(404);
+    const router = createInvitationsRouter(client);
+    const headers = { cookie: 'kotbo_session=x', 'content-type': 'application/json' };
+    const suspend = await router.request(`/api/dashboard/guilds/${HERE}/invitations/abc123/suspend`, {
+      method: 'PUT', headers, body: JSON.stringify({ suspended: true }),
+    });
+    expect(suspend.status).toBe(404);
 
-    const remove = moduleCtx('DELETE', ['api', 'dashboard', 'guilds', HERE, 'invitations', 'abc123']);
-    await handleInvitationsRoutes(remove);
-    expect(remove.res.statusCode).toBe(404);
+    const remove = await router.request(`/api/dashboard/guilds/${HERE}/invitations/abc123`, { method: 'DELETE', headers });
+    expect(remove.status).toBe(404);
     expect(writes).toEqual([]);
   });
 

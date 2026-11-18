@@ -7,6 +7,12 @@
 import { Hono } from 'hono';
 import { compress } from 'hono/compress';
 import type { Client } from 'discord.js';
+import { createDailyAlgoSubmissionsRouter } from '../../routes/dashboard/modules/daily-algo-submissions.js';
+import { createInvitationsRouter } from '../../routes/dashboard/modules/invitations.js';
+import { createNewsRouter } from '../../routes/dashboard/modules/news.js';
+import { createDailyAlgoProblemsRouter } from '../../routes/dashboard/modules/daily-algo-problems.js';
+import { createRegulationRouter } from '../../routes/dashboard/modules/regulation.js';
+import { createVerificationModuleRouter } from '../../routes/dashboard/modules/verification.js';
 import { createChannelLinksRouter } from '../../routes/dashboard/channelLinks.js';
 import { createDropsRouter } from '../../routes/dashboard/drops.js';
 import { createCustomFormsRouter } from '../../routes/dashboard/customForms.js';
@@ -125,5 +131,11 @@ export function createDashboardRouter(client: Client) {
   router.route('/', createCustomFormsRouter(client));
   router.route('/', createDropsRouter(client));
   router.route('/', createChannelLinksRouter(client));
+  router.route('/', createVerificationModuleRouter(client));
+  router.route('/', createRegulationRouter(client));
+  router.route('/', createDailyAlgoProblemsRouter(client));
+  router.route('/', createNewsRouter(client));
+  router.route('/', createInvitationsRouter(client));
+  router.route('/', createDailyAlgoSubmissionsRouter(client));
   return router;
 }
