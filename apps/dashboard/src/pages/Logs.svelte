@@ -93,127 +93,217 @@
   const logCategories = [
     {
       id: "messages",
-      get label() { return m.lg_cat_messages(); },
+      get label() {
+        return m.lg_cat_messages();
+      },
       icon: "Chat",
       events: [
         {
           type: "message_delete",
-          get label() { return m.lg_ev_message_delete(); },
-          get desc() { return m.lg_ev_message_delete_d(); },
+          get label() {
+            return m.lg_ev_message_delete();
+          },
+          get desc() {
+            return m.lg_ev_message_delete_d();
+          },
         },
         {
           type: "message_edit",
-          get label() { return m.lg_ev_message_edit(); },
-          get desc() { return m.lg_ev_message_edit_d(); },
+          get label() {
+            return m.lg_ev_message_edit();
+          },
+          get desc() {
+            return m.lg_ev_message_edit_d();
+          },
         },
         {
           type: "message_bulk_delete",
-          get label() { return m.lg_ev_bulk_delete(); },
-          get desc() { return m.lg_ev_bulk_delete_d(); },
+          get label() {
+            return m.lg_ev_bulk_delete();
+          },
+          get desc() {
+            return m.lg_ev_bulk_delete_d();
+          },
         },
       ],
     },
     {
       id: "members",
-      get label() { return m.lg_cat_members(); },
+      get label() {
+        return m.lg_cat_members();
+      },
       icon: "Users",
       events: [
         {
           type: "member_join",
-          get label() { return m.lg_ev_member_join(); },
-          get desc() { return m.lg_ev_member_join_d(); },
+          get label() {
+            return m.lg_ev_member_join();
+          },
+          get desc() {
+            return m.lg_ev_member_join_d();
+          },
         },
         {
           type: "member_leave",
-          get label() { return m.lg_ev_member_leave(); },
-          get desc() { return m.lg_ev_member_leave_d(); },
+          get label() {
+            return m.lg_ev_member_leave();
+          },
+          get desc() {
+            return m.lg_ev_member_leave_d();
+          },
         },
         {
           type: "member_roles_update",
-          get label() { return m.lg_ev_roles_update(); },
-          get desc() { return m.lg_ev_roles_update_d(); },
+          get label() {
+            return m.lg_ev_roles_update();
+          },
+          get desc() {
+            return m.lg_ev_roles_update_d();
+          },
         },
         {
           type: "member_tag_update",
-          get label() { return m.lg_ev_tag_update(); },
-          get desc() { return m.lg_ev_tag_update_d(); },
+          get label() {
+            return m.lg_ev_tag_update();
+          },
+          get desc() {
+            return m.lg_ev_tag_update_d();
+          },
         },
         {
           type: "member_timeout",
-          get label() { return m.lg_ev_member_timeout(); },
-          get desc() { return m.lg_ev_member_timeout_d(); },
+          get label() {
+            return m.lg_ev_member_timeout();
+          },
+          get desc() {
+            return m.lg_ev_member_timeout_d();
+          },
         },
       ],
     },
     {
       id: "moderation",
-      get label() { return m.lg_cat_moderation(); },
+      get label() {
+        return m.lg_cat_moderation();
+      },
       icon: "Shield",
       events: [
         {
           type: "moderation_kick",
-          get label() { return m.lg_ev_kick(); },
-          get desc() { return m.lg_ev_kick_d(); },
+          get label() {
+            return m.lg_ev_kick();
+          },
+          get desc() {
+            return m.lg_ev_kick_d();
+          },
         },
-        { type: "moderation_ban", get label() { return m.lg_ev_ban(); }, get desc() { return m.lg_ev_ban_d(); } },
+        {
+          type: "moderation_ban",
+          get label() {
+            return m.lg_ev_ban();
+          },
+          get desc() {
+            return m.lg_ev_ban_d();
+          },
+        },
         {
           type: "moderation_unban",
-          get label() { return m.lg_ev_unban(); },
-          get desc() { return m.lg_ev_unban_d(); },
+          get label() {
+            return m.lg_ev_unban();
+          },
+          get desc() {
+            return m.lg_ev_unban_d();
+          },
         },
         {
           type: "moderation_timeout",
-          get label() { return m.lg_ev_timeout_audit(); },
-          get desc() { return m.lg_ev_timeout_audit_d(); },
+          get label() {
+            return m.lg_ev_timeout_audit();
+          },
+          get desc() {
+            return m.lg_ev_timeout_audit_d();
+          },
         },
       ],
     },
     {
       id: "voice",
-      get label() { return m.lg_cat_voice(); },
+      get label() {
+        return m.lg_cat_voice();
+      },
       icon: "Microphone",
       events: [
         {
           type: "voice_join",
-          get label() { return m.lg_ev_voice_join(); },
-          get desc() { return m.lg_ev_voice_join_d(); },
+          get label() {
+            return m.lg_ev_voice_join();
+          },
+          get desc() {
+            return m.lg_ev_voice_join_d();
+          },
         },
         {
           type: "voice_leave",
-          get label() { return m.lg_ev_voice_leave(); },
-          get desc() { return m.lg_ev_voice_leave_d(); },
+          get label() {
+            return m.lg_ev_voice_leave();
+          },
+          get desc() {
+            return m.lg_ev_voice_leave_d();
+          },
         },
         {
           type: "voice_move",
-          get label() { return m.lg_ev_voice_move(); },
-          get desc() { return m.lg_ev_voice_move_d(); },
+          get label() {
+            return m.lg_ev_voice_move();
+          },
+          get desc() {
+            return m.lg_ev_voice_move_d();
+          },
         },
         {
           type: "voice_moderation",
-          get label() { return m.lg_ev_voice_moderation(); },
-          get desc() { return m.lg_ev_voice_moderation_d(); },
+          get label() {
+            return m.lg_ev_voice_moderation();
+          },
+          get desc() {
+            return m.lg_ev_voice_moderation_d();
+          },
         },
         {
           type: "voice_panel",
-          get label() { return m.lg_ev_voice_panel(); },
-          get desc() { return m.lg_ev_voice_panel_d(); },
+          get label() {
+            return m.lg_ev_voice_panel();
+          },
+          get desc() {
+            return m.lg_ev_voice_panel_d();
+          },
         },
       ],
     },
     {
       id: "lifecycle",
-      get label() { return m.lg_cat_lifecycle(); },
+      get label() {
+        return m.lg_cat_lifecycle();
+      },
       icon: "Folder",
       events: [
         {
           type: "channel_lifecycle",
-          get label() { return m.lg_ev_channel_lifecycle(); },
-          get desc() { return m.lg_ev_channel_lifecycle_d(); },
+          get label() {
+            return m.lg_ev_channel_lifecycle();
+          },
+          get desc() {
+            return m.lg_ev_channel_lifecycle_d();
+          },
         },
         {
           type: "role_lifecycle",
-          get label() { return m.lg_ev_role_lifecycle(); },
-          get desc() { return m.lg_ev_role_lifecycle_d(); },
+          get label() {
+            return m.lg_ev_role_lifecycle();
+          },
+          get desc() {
+            return m.lg_ev_role_lifecycle_d();
+          },
         },
       ],
     },
@@ -856,10 +946,15 @@
                         name={member.name}
                         size="sm"
                         class="min-w-0"
-                        onClick={memberCase.canOpen ? () => openCaseModal(member, entry.action) : null}
+                        onClick={memberCase.canOpen
+                          ? () => openCaseModal(member, entry.action)
+                          : null}
                       />
                     {:else}
-                      <span class="text-body-sm font-semibold text-on-surface truncate">{member.name}</span>
+                      <span
+                        class="text-body-sm font-semibold text-on-surface truncate"
+                        >{member.name}</span
+                      >
                     {/if}
                   </td>
                   <td class="max-w-xs text-body-sm text-on-surface-variant">

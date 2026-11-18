@@ -9,40 +9,40 @@
   coupe jamais au milieu d'un mot.
 -->
 <script lang="ts">
-  import { untrack } from 'svelte';
-  import { Button, Callout, Modal } from '../ui';
-  import Papicon from '../Papicon.svelte';
-  import BarList from './BarList.svelte';
-  import Sparkline from './Sparkline.svelte';
-  import AnalyticsSkeleton from './AnalyticsSkeleton.svelte';
-  import { memberAvatarSrc } from '../../discordMedia';
-  import UserDisplay from '../UserDisplay.svelte';
-  import { downloadSingleSheetXlsx } from '../../xlsxExport';
-  import { toast } from '../../stores/toast.svelte';
-  import { m } from '../../i18n';
-  import { errorMessage } from '@kotbo/shared';
-  import type { ActivityRankingItem, ActivityRankings } from '../../api';
-  import { fmtNumber } from './analyticsFormat';
+  import { untrack } from "svelte";
+  import { Button, Callout, Modal } from "../ui";
+  import Papicon from "../Papicon.svelte";
+  import BarList from "./BarList.svelte";
+  import Sparkline from "./Sparkline.svelte";
+  import AnalyticsSkeleton from "./AnalyticsSkeleton.svelte";
+  import { memberAvatarSrc } from "../../discordMedia";
+  import UserDisplay from "../UserDisplay.svelte";
+  import { downloadSingleSheetXlsx } from "../../xlsxExport";
+  import { toast } from "../../stores/toast.svelte";
+  import { m } from "../../i18n";
+  import { errorMessage } from "@kotbo/shared";
+  import type { ActivityRankingItem, ActivityRankings } from "../../api";
+  import { fmtNumber } from "./analyticsFormat";
 
   const {
     title,
-    description = '',
-    icon = '',
+    description = "",
+    icon = "",
     kind,
     load,
     reloadKey,
     format = fmtNumber,
     compare = false,
-    color = 'var(--series-1)',
+    color = "var(--series-1)",
     onselect,
-    exportName = 'classement',
+    exportName = "classement",
     limit = 8,
     bare = false,
   }: {
     title: string;
     description?: string;
     icon?: string;
-    kind: 'members' | 'channels';
+    kind: "members" | "channels";
     load: (limit: number) => Promise<ActivityRankings | null>;
     reloadKey: string;
     format?: (value: number) => string;
@@ -61,21 +61,22 @@
 
   let data = $state<ActivityRankings | null>(null);
   let loading = $state(true);
-  let error = $state('');
-  let requestKey = '';
+  let error = $state("");
+  let requestKey = "";
 
   $effect(() => {
     const key = reloadKey;
     untrack(() => {
       requestKey = key;
       loading = true;
-      error = '';
+      error = "";
       load(limit)
         .then((res) => {
           if (requestKey === key) data = res;
         })
         .catch((e) => {
-          if (requestKey === key) error = errorMessage(e) || m.an_error_generic();
+          if (requestKey === key)
+            error = errorMessage(e) || m.an_error_generic();
         })
         .finally(() => {
           if (requestKey === key) loading = false;
@@ -83,19 +84,19 @@
     });
   });
 
-  let mode = $state<'table' | 'chart'>('table');
+  let mode = $state<"table" | "chart">("table");
 
   // ── Liste complète ─────────────────────────────────────────────────────────
   let fullOpen = $state(false);
   let full = $state<ActivityRankings | null>(null);
-  let fullKey = '';
+  let fullKey = "";
   let fullLoading = $state(false);
-  let search = $state('');
+  let search = $state("");
   let page = $state(1);
 
   function openFull() {
     fullOpen = true;
-    search = '';
+    search = "";
     page = 1;
     if (fullKey === reloadKey && full) return;
     const key = reloadKey;
@@ -111,10 +112,14 @@
       });
   }
 
-  const ranked = $derived((full?.items ?? []).map((item, i) => ({ item, rank: i + 1 })));
+  const ranked = $derived(
+    (full?.items ?? []).map((item, i) => ({ item, rank: i + 1 })),
+  );
   const filtered = $derived.by(() => {
     const q = search.trim().toLowerCase();
-    return q ? ranked.filter(({ item }) => displayName(item).toLowerCase().includes(q)) : ranked;
+    return q
+      ? ranked.filter(({ item }) => displayName(item).toLowerCase().includes(q))
+      : ranked;
   });
   const pages = $derived(Math.max(1, Math.ceil(filtered.length / PAGE)));
   const visible = $derived(filtered.slice((page - 1) * PAGE, page * PAGE));
@@ -125,7 +130,8 @@
   });
 
   function displayName(item: ActivityRankingItem): string {
-    if (kind === 'channels') return item.name ? `#${item.name}` : m.anx_channel_deleted();
+    if (kind === "channels")
+      return item.name ? `#${item.name}` : m.anx_channel_deleted();
     return item.name ?? m.an_member_fallback();
   }
 
@@ -138,30 +144,50 @@
       [m.anx_table_previous()]: item.previous,
       [m.anx_top_share()]: item.share,
     }));
-    const ok = await downloadSingleSheetXlsx(`${exportName}_${new Date().toISOString().slice(0, 10)}.xlsx`, exportName.slice(0, 31), rows);
+    const ok = await downloadSingleSheetXlsx(
+      `${exportName}_${new Date().toISOString().slice(0, 10)}.xlsx`,
+      exportName.slice(0, 31),
+      rows,
+    );
     if (ok) toast.success(m.an_export_xlsx_done());
     else toast.error(m.an_export_no_data());
   }
 
   const max = $derived(Math.max(1, ...(data?.items ?? []).map((i) => i.value)));
   const barItems = $derived(
-    (data?.items ?? []).map((item) => ({ id: item.id, label: displayName(item), value: item.value, display: format(item.value), raw: item })),
+    (data?.items ?? []).map((item) => ({
+      id: item.id,
+      label: displayName(item),
+      value: item.value,
+      display: format(item.value),
+      raw: item,
+    })),
   );
 </script>
 
 {#snippet identity(item: ActivityRankingItem)}
-  {#if kind === 'members'}
-    <img class="top-avatar" src={memberAvatarSrc(item.avatarUrl, item.name, item.id)} alt="" loading="lazy" width="24" height="24" />
+  {#if kind === "members"}
+    <img
+      class="top-avatar"
+      src={memberAvatarSrc(item.avatarUrl, item.name, item.id)}
+      alt=""
+      loading="lazy"
+      width="24"
+      height="24"
+    />
   {:else}
     <span class="top-hash" aria-hidden="true">#</span>
   {/if}
 {/snippet}
 
 {#snippet row(item: ActivityRankingItem, rank: number, scale: number)}
-  {#if kind === 'members'}
+  {#if kind === "members"}
     <div
       class="top-row"
-      style="--fill: {Math.max(1.5, (item.value / scale) * 100)}%; --row-color: {color};"
+      style="--fill: {Math.max(
+        1.5,
+        (item.value / scale) * 100,
+      )}%; --row-color: {color};"
     >
       <span class="top-row__rank">{rank}</span>
       <span class="top-row__ident">
@@ -175,18 +201,32 @@
         />
       </span>
       {#if item.spark.length > 1}
-        <span class="top-row__spark"><Sparkline values={item.spark} {color} width={56} height={18} fill={false} /></span>
+        <span class="top-row__spark"
+          ><Sparkline
+            values={item.spark}
+            {color}
+            width={56}
+            height={18}
+            fill={false}
+          /></span
+        >
       {/if}
       <span class="top-row__value">{format(item.value)}</span>
       {#if compare}
-        <span class="top-row__delta text-on-surface-variant" title={m.anx_delta_title()}>{format(item.previous)}</span>
+        <span
+          class="top-row__delta text-on-surface-variant"
+          title={m.anx_delta_title()}>{format(item.previous)}</span
+        >
       {/if}
     </div>
   {:else}
     <button
       type="button"
       class="top-row"
-      style="--fill: {Math.max(1.5, (item.value / scale) * 100)}%; --row-color: {color};"
+      style="--fill: {Math.max(
+        1.5,
+        (item.value / scale) * 100,
+      )}%; --row-color: {color};"
       onclick={() => onselect?.(item)}
       disabled={!onselect}
     >
@@ -196,11 +236,22 @@
         <span class="top-row__name">{displayName(item)}</span>
       </span>
       {#if item.spark.length > 1}
-        <span class="top-row__spark"><Sparkline values={item.spark} {color} width={56} height={18} fill={false} /></span>
+        <span class="top-row__spark"
+          ><Sparkline
+            values={item.spark}
+            {color}
+            width={56}
+            height={18}
+            fill={false}
+          /></span
+        >
       {/if}
       <span class="top-row__value">{format(item.value)}</span>
       {#if compare}
-        <span class="top-row__delta text-on-surface-variant" title={m.anx_delta_title()}>{format(item.previous)}</span>
+        <span
+          class="top-row__delta text-on-surface-variant"
+          title={m.anx_delta_title()}>{format(item.previous)}</span
+        >
       {/if}
     </button>
   {/if}
@@ -214,15 +265,31 @@
       {/if}
       <div class="min-w-0">
         <h3 class="text-sm font-semibold text-on-surface">{title}</h3>
-        {#if description}<p class="text-body-sm text-on-surface-variant">{description}</p>{/if}
+        {#if description}<p class="text-body-sm text-on-surface-variant">
+            {description}
+          </p>{/if}
       </div>
     </div>
     <div class="flex shrink-0 items-center gap-1">
       <div class="icon-group" role="group" aria-label={m.anx_view_label()}>
-        <button type="button" class="icon-group__btn" aria-pressed={mode === 'table'} aria-label={m.anx_view_table()} title={m.anx_view_table()} onclick={() => (mode = 'table')}>
+        <button
+          type="button"
+          class="icon-group__btn"
+          aria-pressed={mode === "table"}
+          aria-label={m.anx_view_table()}
+          title={m.anx_view_table()}
+          onclick={() => (mode = "table")}
+        >
           <Papicon icon="table" size={15} />
         </button>
-        <button type="button" class="icon-group__btn" aria-pressed={mode === 'chart'} aria-label={m.anx_view_bar()} title={m.anx_view_bar()} onclick={() => (mode = 'chart')}>
+        <button
+          type="button"
+          class="icon-group__btn"
+          aria-pressed={mode === "chart"}
+          aria-label={m.anx_view_bar()}
+          title={m.anx_view_bar()}
+          onclick={() => (mode = "chart")}
+        >
           <Papicon icon="bar-chart-2" size={15} />
         </button>
       </div>
@@ -236,14 +303,22 @@
   {:else if data && !data.available}
     <Callout variant="info">{m.anx_top_unavailable()}</Callout>
   {:else if data && data.items.length === 0}
-    <p class="py-6 text-center text-body-sm text-on-surface-variant">{m.anx_top_empty()}</p>
+    <p class="py-6 text-center text-body-sm text-on-surface-variant">
+      {m.anx_top_empty()}
+    </p>
   {:else if data}
     <div class="top-list__body" class:top-list__body--busy={loading}>
-      {#if mode === 'table'}
+      {#if mode === "table"}
         <div class="top-head" aria-hidden="true">
-          <span class="min-w-0 flex-1">{kind === 'members' ? m.anx_top_member() : m.anx_top_channel()}</span>
+          <span class="min-w-0 flex-1"
+            >{kind === "members"
+              ? m.anx_top_member()
+              : m.anx_top_channel()}</span
+          >
           <span class="top-head__value">{m.anx_top_value()}</span>
-          {#if compare}<span class="top-head__delta">{m.anx_table_previous()}</span>{/if}
+          {#if compare}<span class="top-head__delta"
+              >{m.anx_table_previous()}</span
+            >{/if}
         </div>
         <ol class="top-rows">
           {#each data.items as item, i (item.id)}
@@ -251,7 +326,11 @@
           {/each}
         </ol>
       {:else}
-        <BarList items={barItems} {color} onselect={onselect ? (b) => onselect(b.raw) : undefined}>
+        <BarList
+          items={barItems}
+          {color}
+          onselect={onselect ? (b) => onselect(b.raw) : undefined}
+        >
           {#snippet leading(b)}{@render identity(b.raw)}{/snippet}
         </BarList>
       {/if}
@@ -262,38 +341,81 @@
             · {m.anx_previous_period({ value: format(data.prevTotal) })}
           {/if}
         </span>
-        <Button size="sm" variant="ghost" iconRight="chevron-right" onclick={openFull}>{m.anx_top_see_all()}</Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          iconRight="chevron-right"
+          onclick={openFull}>{m.anx_top_see_all()}</Button
+        >
       </footer>
     </div>
   {/if}
 </section>
 
-<Modal bind:open={fullOpen} title={title} subtitle={description} size="lg" onClose={() => (fullOpen = false)}>
+<Modal
+  bind:open={fullOpen}
+  {title}
+  subtitle={description}
+  size="lg"
+  onClose={() => (fullOpen = false)}
+>
   <div class="flex flex-col gap-3">
     <div class="flex flex-wrap items-center gap-2">
       <label class="relative min-w-0 flex-1">
         <span class="sr-only">{m.anx_top_search()}</span>
-        <input type="search" class="input w-full" placeholder={m.anx_top_search()} bind:value={search} />
+        <input
+          type="search"
+          class="input w-full"
+          placeholder={m.anx_top_search()}
+          bind:value={search}
+        />
       </label>
-      <Button size="sm" icon="download" onclick={exportFull} disabled={!full || full.items.length === 0}>{m.anx_top_export()}</Button>
+      <Button
+        size="sm"
+        icon="download"
+        onclick={exportFull}
+        disabled={!full || full.items.length === 0}>{m.anx_top_export()}</Button
+      >
     </div>
     {#if fullLoading && !full}
       <AnalyticsSkeleton />
     {:else if visible.length === 0}
-      <p class="py-6 text-center text-body-sm text-on-surface-variant">{m.anx_top_empty()}</p>
+      <p class="py-6 text-center text-body-sm text-on-surface-variant">
+        {m.anx_top_empty()}
+      </p>
     {:else}
       <div class="top-list top-list--modal">
         <ol class="top-rows">
           {#each visible as entry (entry.item.id)}
-            <li>{@render row(entry.item, entry.rank, Math.max(1, full?.items[0]?.value ?? 1))}</li>
+            <li>
+              {@render row(
+                entry.item,
+                entry.rank,
+                Math.max(1, full?.items[0]?.value ?? 1),
+              )}
+            </li>
           {/each}
         </ol>
       </div>
       {#if pages > 1}
         <div class="flex items-center justify-between gap-2">
-          <Button size="sm" variant="ghost" icon="chevron-left" disabled={page <= 1} onclick={() => (page -= 1)}>{m.anx_top_prev_page()}</Button>
-          <span class="text-body-sm text-on-surface-variant tabular-nums">{page} / {pages}</span>
-          <Button size="sm" variant="ghost" iconRight="chevron-right" disabled={page >= pages} onclick={() => (page += 1)}>{m.anx_top_next_page()}</Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            icon="chevron-left"
+            disabled={page <= 1}
+            onclick={() => (page -= 1)}>{m.anx_top_prev_page()}</Button
+          >
+          <span class="text-body-sm text-on-surface-variant tabular-nums"
+            >{page} / {pages}</span
+          >
+          <Button
+            size="sm"
+            variant="ghost"
+            iconRight="chevron-right"
+            disabled={page >= pages}
+            onclick={() => (page += 1)}>{m.anx_top_next_page()}</Button
+          >
         </div>
       {/if}
     {/if}
@@ -399,7 +521,7 @@
   }
 
   .top-row::before {
-    content: '';
+    content: "";
     position: absolute;
     inset: 0 auto 0 0;
     width: var(--fill);
@@ -516,7 +638,7 @@
     color: var(--color-on-surface);
   }
 
-  .icon-group__btn[aria-pressed='true'] {
+  .icon-group__btn[aria-pressed="true"] {
     background: var(--color-surface-container-high);
     color: var(--color-on-surface);
   }
