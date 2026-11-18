@@ -3,6 +3,7 @@ import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { firstKillRoleProblem } from './rpg/rpgFirstKillService.js';
 
+import { testSafeRegex } from '../../utils/safeRegex.js';
 interface WeightedMessage {
   message: string;
   weight: number;
@@ -223,8 +224,7 @@ export async function handleAutoResponse(message: Message) {
         isMatch = contentLower.includes(item.trigger.toLowerCase());
       } else if (item.matchType === 'REGEX') {
         try {
-          const regex = new RegExp(item.trigger, 'i');
-          isMatch = regex.test(content);
+          isMatch = testSafeRegex(item.trigger, content);
         } catch (e) {
           logger.warn('AutoResponseService', `Regex invalide pour l'auto-réponse ${item.id}:`, e);
         }
@@ -484,8 +484,7 @@ export async function handleFormTrigger(
         isMatch = answerLower.includes(triggerLower);
       } else if (item.matchType === 'REGEX') {
         try {
-          const regex = new RegExp(item.trigger, 'i');
-          isMatch = regex.test(answerValue);
+          isMatch = testSafeRegex(item.trigger, answerValue);
         } catch (e) {
           logger.warn('AutoResponseService', `Regex invalide pour l'auto-réponse formulaire ${item.id}:`, e);
         }
@@ -592,8 +591,7 @@ export async function handleTicketTrigger(
         isMatch = valueLower.includes(triggerLower);
       } else if (item.matchType === 'REGEX') {
         try {
-          const regex = new RegExp(item.trigger, 'i');
-          isMatch = regex.test(fieldToCheck);
+          isMatch = testSafeRegex(item.trigger, fieldToCheck);
         } catch (e) {
           logger.warn('AutoResponseService', `Regex invalide pour l'auto-réponse ticket ${item.id}:`, e);
         }

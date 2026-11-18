@@ -68,6 +68,7 @@ import * as m from '../../../lib/paraglide/messages.js';
 import { jsonFailure } from '../../shared/failure.js';
 import { cache } from '../../../utils/cache.js';
 import { publicErrorMessage } from '../../../utils/publicError.js';
+import { regexProblem } from '../../../utils/safeRegex.js';
 /** Modules de ce fichier dont l'acces est filtre par les regles de role. */
 const FEATURE_GUARDED_MODULE_KEYS = new Set(['economy', 'fun']);
 
@@ -2147,6 +2148,14 @@ export async function handleGeneralistModulesRoutes(
           return true;
         }
 
+        if (body.matchType === 'REGEX') {
+          const problem = regexProblem(body.trigger);
+          if (problem) {
+            json(res, 400, { error: problem });
+            return true;
+          }
+        }
+
         if (!body.response && !body.roleIdToAdd && !body.roleIdToRemove && !body.deleteTrigger && !body.closeTicket && !body.rejectForm && (!body.reactions || body.reactions.length === 0) && !body.actions) {
           json(res, 400, { error: 'Au moins une action doit être configurée (réponse, ajout/retrait de rôle, suppression du message, fermeture de ticket, rejet de formulaire, réaction ou action avancée)' });
           return true;
@@ -2234,6 +2243,15 @@ export async function handleGeneralistModulesRoutes(
         if (!existing) {
           json(res, 404, { error: 'Déclencheur introuvable' });
           return true;
+        }
+
+        const effectiveMatchType = body.matchType !== undefined ? body.matchType : existing.matchType;
+        if (effectiveMatchType === 'REGEX' && (body.trigger !== undefined || body.matchType !== undefined)) {
+          const problem = regexProblem(body.trigger !== undefined ? body.trigger : existing.trigger);
+          if (problem) {
+            json(res, 400, { error: problem });
+            return true;
+          }
         }
 
         const combinedTrigger = body.trigger !== undefined ? body.trigger : existing.trigger;
