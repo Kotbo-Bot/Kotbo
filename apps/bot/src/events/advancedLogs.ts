@@ -40,6 +40,8 @@ import {
 } from '../services/moderation/memberCaseService.js';
 import * as dcDetectionService from '../services/moderation/dcDetectionService.js';
 import { getKnownGuildNames, guildTagBadgeUrl } from '../services/core/serverTagService.js';
+import { recordMemberIdentityChange } from '../services/moderation/memberHistoryService.js';
+import { pronounsFromRoles } from '../api/shared/pronouns.js';
 import { pickRecentAuditEntry } from './auditEntryMatch.js';
 import { attribuerLot, creerRegroupeurLots, type ReleveAudit } from './voiceAuditAttribution.js';
 
@@ -1587,6 +1589,12 @@ export function registerAdvancedLogsListener(client: Client): void {
 
     const roleChanges = summarizeMemberRoleChanges(oldMember, newMember);
     if (roleChanges) {
+      const oldPronouns = pronounsFromRoles([...oldMember.roles.cache.values()]);
+      const newPronouns = pronounsFromRoles([...newMember.roles.cache.values()]);
+      if (oldPronouns !== newPronouns) {
+        void recordMemberIdentityChange(newMember.guild.id, newMember.id, 'pronouns', oldPronouns, newPronouns).catch(() => {});
+      }
+
       void syncStaffHierarchyMembership(newMember.guild.id, newMember.id).catch((error) => {
         logger.warn('StaffManagement', `Impossible de synchroniser l'organigramme pour ${newMember.id}: ${String(error)}`);
       });

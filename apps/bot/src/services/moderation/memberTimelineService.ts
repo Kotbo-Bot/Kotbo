@@ -477,6 +477,54 @@ const SOURCES: Source[] = [
       }));
     },
   },
+
+  // ── Historique d'identité (pseudos, description, pseudo d'affichage, avatar, tag, pronoms) ──
+  {
+    category: 'changes',
+    load: async ({ guildId, userId, before, limit }) => {
+      const historyRows = await prisma.memberProfileHistory.findMany({
+        where: { guildId, userId, recordedAt: { lt: before } },
+        orderBy: { recordedAt: 'desc' },
+        take: limit,
+      }).catch(() => []);
+
+      return historyRows.map((h) => {
+        let title = "Modification d'identité";
+        let description: string | null = null;
+
+        if (h.field === 'username') {
+          title = 'A changé de pseudo';
+          description = h.oldValue ? `@${h.oldValue} → @${h.newValue}` : `@${h.newValue}`;
+        } else if (h.field === 'displayName') {
+          title = "A changé de pseudo d'affichage";
+          description = h.oldValue ? `${h.oldValue} → ${h.newValue}` : h.newValue;
+        } else if (h.field === 'avatar') {
+          title = 'A mis à jour sa photo de profil';
+        } else if (h.field === 'bio') {
+          title = 'A modifié sa description';
+          description = truncate(h.newValue, 150);
+        } else if (h.field === 'tag') {
+          title = 'A mis à jour son tag';
+          description = h.oldValue ? `${h.oldValue} → ${h.newValue}` : h.newValue;
+        } else if (h.field === 'pronouns') {
+          title = 'A mis à jour ses pronoms';
+          description = h.oldValue ? `${h.oldValue} → ${h.newValue}` : h.newValue;
+        }
+
+        return {
+          id: `identity:${h.id}`,
+          type: `member.identity.${h.field}`,
+          category: 'changes' as const,
+          at: h.recordedAt.toISOString(),
+          title,
+          description,
+          actor: null,
+          link: null,
+          tone: 'info' as const,
+        };
+      });
+    },
+  },
 ];
 
 const AUDIT_FIELD_LABEL: Record<string, string> = {

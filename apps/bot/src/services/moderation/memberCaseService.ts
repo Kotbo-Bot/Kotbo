@@ -10,6 +10,7 @@ import * as altAccountService from './altAccountService.js';
 import { getCrossServerSanctionSummary, type CrossServerSanctionSummary } from './crossServerSanctionService.js';
 import { extractPrimaryGuildTag } from '../core/serverTagService.js';
 import { generateMemberStatsImage } from '../core/imageService.js';
+import { compareAndRecordIdentityChanges } from './memberHistoryService.js';
 
 export type MemberCaseSection = 'resume' | 'sanctions' | 'identite' | 'activite';
 
@@ -116,6 +117,42 @@ async function upsertMemberProfile(snapshot: MemberProfileSnapshot): Promise<voi
   }
 
   try {
+    const existing = await prisma.memberProfile.findUnique({
+      where: {
+        guildId_userId: {
+          guildId: snapshot.guildId,
+          userId: snapshot.userId,
+        },
+      },
+      select: {
+        username: true,
+        displayName: true,
+        avatarUrl: true,
+        bio: true,
+        primaryGuildTag: true,
+      },
+    }).catch(() => null);
+
+    if (existing) {
+      void compareAndRecordIdentityChanges(
+        snapshot.guildId,
+        snapshot.userId,
+        {
+          username: existing.username,
+          displayName: existing.displayName,
+          avatarUrl: existing.avatarUrl,
+          bio: existing.bio,
+          primaryGuildTag: existing.primaryGuildTag,
+        },
+        {
+          username: snapshot.username ?? existing.username,
+          displayName: snapshot.displayName ?? existing.displayName,
+          avatarUrl: snapshot.avatarUrl ?? existing.avatarUrl,
+          primaryGuildTag: snapshot.primaryGuildTag !== undefined ? snapshot.primaryGuildTag : existing.primaryGuildTag,
+        },
+      ).catch(() => {});
+    }
+
     await prisma.memberProfile.upsert({
       where: {
         guildId_userId: {
