@@ -1486,6 +1486,7 @@ export async function handleButton(interaction: Interaction, client: Client): Pr
       if (type === 'daily-algo') {
         await reviewDailyAlgoSubmission({
           client,
+          guildId: interaction.guildId ?? '',
           submissionId: itemId,
           action: 'reject',
           moderatorId: user.id,
@@ -1499,6 +1500,7 @@ export async function handleButton(interaction: Interaction, client: Client): Pr
       if (type === 'daily-algo') {
         await reviewDailyAlgoSubmission({
           client,
+          guildId: interaction.guildId ?? '',
           submissionId: itemId,
           action: 'dismiss',
           moderatorId: user.id,
@@ -2184,6 +2186,7 @@ export async function handleModalSubmit(interaction: ModalSubmitInteraction, cli
     try {
       success = await reviewDailyAlgoSubmission({
         client,
+        guildId: interaction.guildId ?? '',
         submissionId,
         action: 'approve',
         moderatorId: interaction.user.id,
@@ -2240,6 +2243,7 @@ export async function handleModalSubmit(interaction: ModalSubmitInteraction, cli
     try {
       success = await reviewDailyAlgoSubmission({
         client,
+        guildId: interaction.guildId ?? '',
         submissionId,
         action: 'approve',
         moderatorId: interaction.user.id,

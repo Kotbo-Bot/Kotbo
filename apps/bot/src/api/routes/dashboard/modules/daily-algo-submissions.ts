@@ -8,6 +8,7 @@ import { getGuildName, pushAudit, resolveDailyAlgoTotalPoints } from '../../../s
 import { resolveDailyAlgoFinalScore } from './_shared.js';
 
 import { auditUserOf, fail, guildRoute, readBody, send } from '../../../hono/dashboard/kit.js';
+import { createHash } from 'node:crypto';
 export function createDailyAlgoSubmissionsRouter(client: Client) {
   const router = new Hono();
   const base = '/api/dashboard/guilds/:guildId';
@@ -37,9 +38,12 @@ export function createDailyAlgoSubmissionsRouter(client: Client) {
         const finalScore = resolveDailyAlgoFinalScore(submission);
         const totalPoints = resolveDailyAlgoTotalPoints(submission);
 
+        // Les identifiants d'une soumission d'un autre serveur ne sont pas servis : ils suffiraient
+        // à la noter ou la rejeter. Une empreinte garde la clé d'affichage sans permettre d'agir.
+        const own = submission.run.guildId === guildId;
         return {
-          id: submission.id,
-          authorId: submission.authorId,
+          id: own ? submission.id : createHash('sha256').update(submission.id).digest('hex').slice(0, 16),
+          authorId: own ? submission.authorId : null,
           authorName: submission.authorName,
           guildId: submission.run.guildId,
           guildName: getGuildName(client, submission.run.guildId),
@@ -342,6 +346,7 @@ export function createDailyAlgoSubmissionsRouter(client: Client) {
 
       const success = await reviewDailyAlgoSubmission({
         client,
+        guildId,
         submissionId,
         action: body.action,
         moderatorId: user.userId,

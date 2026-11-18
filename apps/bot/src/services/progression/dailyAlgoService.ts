@@ -1290,6 +1290,8 @@ export async function getDailyAlgoSubmissionFeedbackForUser(runId: string, autho
 
 export async function reviewDailyAlgoSubmission(params: {
   client: Client;
+  /** Serveur de l'appelant : la soumission doit appartenir à l'un de ses runs. */
+  guildId: string;
   submissionId: string;
   /**
    * `dismiss` = hors-sujet : aucun point, mais aucune sanction. À réserver aux
@@ -1308,8 +1310,8 @@ export async function reviewDailyAlgoSubmission(params: {
   };
   feedback?: string;
 }): Promise<boolean> {
-  const submission = await prisma.dailyAlgoSubmission.findUnique({
-    where: { id: params.submissionId },
+  const submission = await prisma.dailyAlgoSubmission.findFirst({
+    where: { id: params.submissionId, run: { guildId: params.guildId } },
     include: {
       run: {
         include: {
