@@ -10,6 +10,7 @@ import { ChannelType, EmbedBuilder } from 'discord.js';
 import { z } from 'zod';
 import { type McpToolContext, err, ok, resolveChannel, toolError } from '../toolkit.js';
 
+import { assertFirstKillRole } from '../../../services/features/rpg/rpgFirstKillService.js';
 export function registerWriteCommunityNewTools(ctx: McpToolContext) {
   const { server, guildId, client, shouldRegister, guard, audit, toolMeta, ownerId } = ctx;
 
@@ -373,6 +374,13 @@ export function registerWriteCommunityNewTools(ctx: McpToolContext) {
       },
       guard('WRITE_COMMUNITY', async ({ trigger, response, trigger_type, match_type, role_to_add, role_to_remove, delete_trigger, allowed_channels, banned_channels, allowed_roles, banned_roles, reactions, actions, close_ticket, reject_form, form_id, form_question_label, ticket_type_id, ticket_question_label, key_name }) => {
         try {
+          // Même contrôle que la prime RPG : jamais de rôle Administrateur, @everyone ou géré.
+          try {
+            await assertFirstKillRole(client, guildId, role_to_add);
+          } catch (roleError) {
+            return err(roleError instanceof Error ? roleError.message : 'Rôle invalide.');
+          }
+
           let parsedActions: any = null;
           if (actions) {
             try {
@@ -818,6 +826,14 @@ export function registerWriteCommunityNewTools(ctx: McpToolContext) {
         try {
           const existing = await prisma.autoResponse.findFirst({ where: { id: auto_response_id, guildId } });
           if (!existing) return err('Réponse automatique introuvable');
+
+          if (role_to_add) {
+            try {
+              await assertFirstKillRole(client, guildId, role_to_add);
+            } catch (roleError) {
+              return err(roleError instanceof Error ? roleError.message : 'Rôle invalide.');
+            }
+          }
 
           const updateData: any = {};
           if (trigger !== undefined) updateData.trigger = trigger;
