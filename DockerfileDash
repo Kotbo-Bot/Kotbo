@@ -28,7 +28,8 @@ COPY apps/dashboard/messages messages
 # --strategy doit rester identique a celle de vite.config.ts : le CLI n'a pas la
 # meme valeur par defaut que le plugin, et le runtime genere en depend.
 RUN bunx @inlang/paraglide-js compile --project ./project.inlang --outdir ./src/lib/paraglide \
-      --strategy localStorage preferredLanguage baseLocale
+      --strategy localStorage preferredLanguage baseLocale \
+      --output-structure locale-modules
 
 # Copy dashboard source and workspace packages
 WORKDIR /app

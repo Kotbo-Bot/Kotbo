@@ -46,6 +46,7 @@ export default defineConfig({
             project: './project.inlang',
             outdir: './src/lib/paraglide',
             strategy: ['localStorage', 'preferredLanguage', 'baseLocale'],
+            outputStructure: 'locale-modules',
           }),
         ]),
     demoHead(),

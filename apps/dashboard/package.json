@@ -4,7 +4,7 @@
   "version": "5.74",
   "type": "module",
   "scripts": {
-    "build:i18n": "bunx @inlang/paraglide-js compile --project ./project.inlang --outdir ./src/lib/paraglide",
+    "build:i18n": "bunx @inlang/paraglide-js compile --project ./project.inlang --outdir ./src/lib/paraglide --output-structure locale-modules",
     "dev": "vite",
     "dev:demo": "vite --mode demo",
     "check": "svelte-check --output human",
