@@ -749,6 +749,27 @@ export async function handleMembersRoutes(
         return true;
       }
 
+      // Mêmes garde-fous que `/sanction` : ni soi-même, ni le bot, ni un membre placé au moins aussi
+      // haut. Un membre du dashboard absent du serveur (admin global) n'a pas de rôle à comparer.
+      if (userId === user.userId) {
+        json(res, 403, { error: 'Tu ne peux pas te sanctionner toi-même.' });
+        return true;
+      }
+      if (userId === client.user?.id) {
+        json(res, 403, { error: 'Tu ne peux pas sanctionner le bot.' });
+        return true;
+      }
+      if (targetMember && discordGuild.ownerId !== user.userId) {
+        const actorMember = await discordGuild.members.fetch(user.userId).catch(() => null);
+        if (
+          userId === discordGuild.ownerId ||
+          (actorMember && targetMember.roles.highest.position >= actorMember.roles.highest.position)
+        ) {
+          json(res, 403, { error: 'Tu ne peux pas sanctionner un membre placé au-dessus de toi ou au même rang.' });
+          return true;
+        }
+      }
+
       if (action === 'REQUEST_VERIFICATION') {
         if (!targetMember) {
           json(res, 404, { error: 'Le membre doit être présent sur le serveur.' });
@@ -1143,9 +1164,14 @@ export async function handleMembersRoutes(
               // limitée en débit), mais marquer le départ n'a pas à l'être :
               // un UPDATE par membre purgé devient un seul UPDATE groupé.
               const now = new Date();
+              const actorMember = discordGuild.ownerId === user.userId
+                ? null
+                : await discordGuild.members.fetch(user.userId).catch(() => null);
               for (const join of activeJoins) {
                 const member = await discordGuild.members.fetch(join.userId).catch(() => null);
-                if (member) {
+                // Même règle que les sanctions : on n'expulse pas un membre placé au moins aussi haut.
+                const outranks = member && actorMember && member.roles.highest.position >= actorMember.roles.highest.position;
+                if (member && !outranks && member.id !== user.userId && member.id !== discordGuild.ownerId) {
                   await member.kick(`Purge cascade créateur suspendu ${userId} par ${auditUser}`).catch(() => null);
                   purgedCount++;
                 }
