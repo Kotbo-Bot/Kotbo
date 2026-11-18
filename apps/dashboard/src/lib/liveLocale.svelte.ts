@@ -14,31 +14,45 @@ import { fetchGuildLanguage } from './api/guild';
 import { authStore } from './stores/auth.svelte';
 import { botLocale } from './stores/botLocale.svelte';
 
-let current = $state<Locale>(getLocale());
-let currentBot = $state<Locale>(getLocale());
-let loadedFor: string | null = null;
+class LiveLocaleStore {
+  current = $state<Locale>(getLocale());
+  currentBot = $state<Locale>(getLocale());
+  private loadedFor: string | null = null;
 
-overwriteGetLocale(() => current);
+  constructor() {
+    overwriteGetLocale(() => this.current);
 
-botLocale.connect(
-  () => {
-    const guildId = authStore.selectedGuildId;
-    if (guildId && guildId !== loadedFor) {
-      loadedFor = guildId;
-      void fetchGuildLanguage(guildId).then((language) => {
-        if (language && authStore.selectedGuildId === guildId) currentBot = language.locale;
-      });
-    }
-    return currentBot;
-  },
-  (locale) => {
-    currentBot = locale;
-  },
-);
+    botLocale.connect(
+      () => {
+        const guildId = authStore.selectedGuildId;
+        if (guildId && guildId !== this.loadedFor) {
+          this.loadedFor = guildId;
+          void fetchGuildLanguage(guildId).then((language) => {
+            if (language && authStore.selectedGuildId === guildId) {
+              this.currentBot = language.locale;
+            }
+          });
+        }
+        return this.currentBot;
+      },
+      (locale) => {
+        this.currentBot = locale;
+      },
+    );
+  }
+
+  apply(lang: string): void {
+    if (!locales.includes(lang as Locale) || lang === this.current) return;
+    setLocale(lang as Locale, { reload: false });
+    this.current = lang as Locale;
+  }
+}
+
+let liveLocaleStore: LiveLocaleStore | null = null;
+
+liveLocaleStore = new LiveLocaleStore();
 
 /** Aligne la langue sur la preference utilisateur et la memorise, sans rechargement. */
 export function applyLocale(lang: string): void {
-  if (!locales.includes(lang as Locale) || lang === current) return;
-  setLocale(lang as Locale, { reload: false });
-  current = lang as Locale;
+  liveLocaleStore?.apply(lang);
 }
