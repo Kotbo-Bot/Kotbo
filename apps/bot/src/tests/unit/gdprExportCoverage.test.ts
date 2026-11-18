@@ -41,6 +41,9 @@ const EXCLUDED_MEMBER_LISTS: Record<string, string> = {
   'PanelThread.trustedIds': 'réglage du fil par son propriétaire, sans information sur la personne',
   'PanelThread.bannedIds': 'réglage du fil par son propriétaire, sans information sur la personne',
   'AutoModConfig.antiBotBypassUsers': 'réglage du serveur, sans information sur la personne',
+  'StarboardConfig.blockedUserIds': 'réglage du serveur, sans information sur la personne',
+  'TagAutomodConfig.exemptUserIds': 'réglage du serveur, sans information sur la personne',
+  'TagWave.userIds': "vague d'arrivées partagée : la liste désigne d'autres membres, l'événement du membre est exporté par TagAutomodEvent",
 };
 
 /** Champs au nom d'auteur d'action qui n'en sont pas : état de jeu, réglage. */

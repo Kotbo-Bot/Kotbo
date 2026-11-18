@@ -75,7 +75,7 @@ export const projectMcpApiKey: GdprProjection = (record) => {
  */
 export const ACTOR_FIELDS: readonly string[] = [
   'acceptedByUsUserId', 'actorId', 'actorUserId', 'addedBy', 'addedByUserId', 'appealLockedByUserId',
-  'approvedByUserId', 'archivedById', 'archivedByUserId', 'authorUserId', 'bannedBy', 'cancelledBy',
+  'approvedByUserId', 'archivedById', 'archivedByUserId', 'authorUserId', 'bannedBy', 'blockedById', 'cancelledBy',
   'claimedById', 'closedById', 'completedByUserId', 'createdBy', 'createdById', 'createdByUserId',
   'decidedBy', 'decidedByUserId', 'decisionByUserId', 'deletedBy', 'deletionLockedById',
   'dismissedByUserId', 'endedByUserId', 'evaluatorId', 'executedById', 'executorId', 'grantedBy',
