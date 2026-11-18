@@ -11,17 +11,19 @@
  * Appelées par `handleTicketsRoutes` une fois le droit d'accès aux tickets
  * vérifié.
  */
+import { Hono } from 'hono';
 import { TextChannel, type Client } from 'discord.js';
 import prisma from '../../../../utils/db.js';
 import { successEmbed } from '../../../../utils/embeds.js';
 import { errorMessage } from '../../../../utils/errors.js';
 import { logger } from '../../../../utils/logger.js';
 import { resolveViewTimezone } from '../../../../utils/timezone.js';
-import { broadcastDashboardStateChange, getGuildName, json, pushAudit, readJsonBody } from '../../../shared.js';
+import { broadcastDashboardStateChange, getGuildName, pushAudit } from '../../../shared.js';
 import { normalizePriority, normalizeTags } from '../../../../services/features/ticketHelpdesk.js';
 import { getTicketStats } from '../../../../services/features/ticketStatsService.js';
 import { announceTicketClaim, approvePendingTicket, approvalErrorMessage, rejectPendingTicket } from '../../../../services/features/ticketService.js';
-import type { ModuleRouteContext } from './_shared.js';
+import { ticketsGate } from './tickets.js';
+import { auditUserOf, readBody, send } from '../../../hono/dashboard/kit.js';
 
 const PRIORITY_LABEL: Record<string, string> = { LOW: 'basse', NORMAL: 'normale', HIGH: 'haute', URGENT: 'urgente' };
 
@@ -32,23 +34,27 @@ async function ticketChannel(client: Client, channelId: string | null, threadId:
   return channel && (channel instanceof TextChannel || channel.isThread()) ? channel : null;
 }
 
-export async function handleTicketHelpdeskRoutes(ctx: ModuleRouteContext): Promise<boolean> {
-  const { req, res, parts, url, client, user, guildId, method, auditUser } = ctx;
+export function createTicketHelpdeskRouter(client: Client) {
+  const router = new Hono();
+  const base = '/api/dashboard/guilds/:guildId';
+  // Même garde que les tickets : le répartiteur d'origine la posait avant ces routes.
+  const gate = ticketsGate(client);
 
-  // GET /tickets/stats
-  if (parts.length === 6 && parts[5] === 'stats' && method === 'GET') {
+
+
+  router.get(`${base}/tickets/stats`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
     try {
-      const timezone = await resolveViewTimezone(url.searchParams.get('tz'), guildId);
-      json(res, 200, await getTicketStats(guildId, Number(url.searchParams.get('days')) || 30, timezone));
+      const timezone = await resolveViewTimezone((c.req.query('tz') ?? null), guildId);
+      return send(c, await getTicketStats(guildId, Number((c.req.query('days') ?? null)) || 30, timezone));
     } catch (err) {
       logger.error('TicketHelpdeskAPI', `Statistiques du support (${guildId}) : ${errorMessage(err)}`);
-      json(res, 500, { error: 'Erreur lors du calcul des statistiques du support' });
+      return send(c, { error: 'Erreur lors du calcul des statistiques du support' }, 500);
     }
-    return true;
-  }
+  });
 
-  // GET /tickets/agents
-  if (parts.length === 6 && parts[5] === 'agents' && method === 'GET') {
+  router.get(`${base}/tickets/agents`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
     try {
       const guild = client.guilds.cache.get(guildId);
       const [config, staffRows, loads] = await Promise.all([
@@ -75,32 +81,28 @@ export async function handleTicketHelpdeskRoutes(ctx: ModuleRouteContext): Promi
         .filter((agent): agent is NonNullable<typeof agent> => agent !== null)
         .sort((a, b) => a.name.localeCompare(b.name))
         .slice(0, 200);
-      json(res, 200, { agents });
+      return send(c, { agents });
     } catch (err) {
       logger.error('TicketHelpdeskAPI', `Agents (${guildId}) : ${errorMessage(err)}`);
-      json(res, 500, { error: 'Erreur lors de la récupération du staff' });
+      return send(c, { error: 'Erreur lors de la récupération du staff' }, 500);
     }
-    return true;
-  }
+  });
 
-  if (parts.length !== 7) return false;
-  const ticketId = parts[5];
-
-  // PATCH /tickets/:id/properties
-  if (parts[6] === 'properties' && method === 'PATCH') {
+  router.patch(`${base}/tickets/:ticketId/properties`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const auditUser = auditUserOf(c);
+    const ticketId = c.req.param('ticketId');
     try {
       const ticket = await prisma.ticket.findFirst({ where: { id: ticketId, guildId }, select: { id: true, priority: true, tags: true, username: true } });
       if (!ticket) {
-        json(res, 404, { error: 'Ticket introuvable' });
-        return true;
+        return send(c, { error: 'Ticket introuvable' }, 404);
       }
-      const body = await readJsonBody<{ priority?: unknown; tags?: unknown }>(req);
+      const body = await readBody<{ priority?: unknown; tags?: unknown }>(c);
       const data: { priority?: string; tags?: string[] } = {};
       if (body?.priority !== undefined) {
         const priority = normalizePriority(body.priority);
         if (!priority) {
-          json(res, 400, { error: 'Priorité inconnue.' });
-          return true;
+          return send(c, { error: 'Priorité inconnue.' }, 400);
         }
         data.priority = priority;
       }
@@ -123,30 +125,31 @@ export async function handleTicketHelpdeskRoutes(ctx: ModuleRouteContext): Promi
         }).catch(() => null);
       }
       broadcastDashboardStateChange(guildId, 'tickets_updated');
-      json(res, 200, { ticket: updated });
+      return send(c, { ticket: updated });
     } catch (err) {
       logger.error('TicketHelpdeskAPI', `Propriétés du ticket ${ticketId} : ${errorMessage(err)}`);
-      json(res, 500, { error: 'Erreur lors de la mise à jour du ticket' });
+      return send(c, { error: 'Erreur lors de la mise à jour du ticket' }, 500);
     }
-    return true;
-  }
+  });
 
-  // POST /tickets/:id/approve et /tickets/:id/reject { reason? }
   // Mêmes fonctions que les boutons « Valider » et « Refuser » de Discord.
-  if ((parts[6] === 'approve' || parts[6] === 'reject') && method === 'POST') {
+  router.post(`${base}/tickets/:ticketId/:decision{approve|reject}`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const auditUser = auditUserOf(c);
+    const ticketId = c.req.param('ticketId');
+    const decision = c.req.param('decision');
     const guild = client.guilds.cache.get(guildId);
     const ticket = await prisma.ticket.findFirst({ where: { id: ticketId, guildId } });
     if (!ticket || !guild) {
-      json(res, 404, { error: 'Demande introuvable' });
-      return true;
+      return send(c, { error: 'Demande introuvable' }, 404);
     }
     if (ticket.status !== 'PENDING') {
-      json(res, 409, { error: 'Cette demande a déjà été traitée.' });
-      return true;
+      return send(c, { error: 'Cette demande a déjà été traitée.' }, 409);
     }
     const reviewer = { id: user.userId, username: user.username ?? user.userId };
     try {
-      if (parts[6] === 'approve') {
+      if (decision === 'approve') {
         const guildConfig = await prisma.guild.findUnique({ where: { id: guildId } });
         const result = await approvePendingTicket(client, guild, guildConfig, ticket, reviewer);
         await pushAudit(guildId, {
@@ -158,9 +161,9 @@ export async function handleTicketHelpdeskRoutes(ctx: ModuleRouteContext): Promi
           details: `Demande de ${ticket.username} validée depuis le dashboard.`,
           channelId: null,
         }).catch(() => null);
-        json(res, 200, { ok: true, message: result.userMessage, ticketId: result.ticketId ?? ticket.id });
+        return send(c, { ok: true, message: result.userMessage, ticketId: result.ticketId ?? ticket.id });
       } else {
-        const body = await readJsonBody<{ reason?: unknown }>(req);
+        const body = await readBody<{ reason?: unknown }>(c);
         const reason = typeof body?.reason === 'string' && body.reason.trim() ? body.reason.trim().slice(0, 500) : null;
         await rejectPendingTicket(client, guild, ticket, reviewer, reason);
         await pushAudit(guildId, {
@@ -172,28 +175,28 @@ export async function handleTicketHelpdeskRoutes(ctx: ModuleRouteContext): Promi
           details: `Demande de ${ticket.username} refusée depuis le dashboard${reason ? ` : ${reason}` : ''}.`,
           channelId: null,
         }).catch(() => null);
-        json(res, 200, { ok: true });
+        return send(c, { ok: true });
       }
     } catch (err) {
       // Les messages sont écrits pour Discord : on retire l'émoji de tête.
-      json(res, 409, { error: approvalErrorMessage(err).replace(/^(?:❌|⚠️|\s)+/u, '') });
+      return send(c, { error: approvalErrorMessage(err).replace(/^(?:❌|⚠️|\s)+/u, '') }, 409);
     }
-    return true;
-  }
+  });
 
-  // POST /tickets/:id/assign  { userId: string | null }
-  if (parts[6] === 'assign' && method === 'POST') {
+  router.post(`${base}/tickets/:ticketId/assign`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const auditUser = auditUserOf(c);
+    const ticketId = c.req.param('ticketId');
     try {
       const ticket = await prisma.ticket.findFirst({ where: { id: ticketId, guildId } });
       if (!ticket) {
-        json(res, 404, { error: 'Ticket introuvable' });
-        return true;
+        return send(c, { error: 'Ticket introuvable' }, 404);
       }
       if (ticket.status !== 'OPEN' && ticket.status !== 'CLAIMED') {
-        json(res, 400, { error: 'Seul un ticket en cours peut être attribué.' });
-        return true;
+        return send(c, { error: 'Seul un ticket en cours peut être attribué.' }, 400);
       }
-      const body = await readJsonBody<{ userId?: unknown }>(req);
+      const body = await readBody<{ userId?: unknown }>(c);
       const targetId = typeof body?.userId === 'string' && /^\d{17,20}$/.test(body.userId) ? body.userId : null;
       const channel = await ticketChannel(client, ticket.channelId, ticket.threadId);
 
@@ -204,15 +207,13 @@ export async function handleTicketHelpdeskRoutes(ctx: ModuleRouteContext): Promi
         });
         await channel?.send({ embeds: [successEmbed('Ticket remis en file', `Le ticket n'est plus attribué (modifié depuis le dashboard par **${user.username}**).`)] }).catch(() => null);
         broadcastDashboardStateChange(guildId, 'tickets_updated');
-        json(res, 200, { ticket: updated });
-        return true;
+        return send(c, { ticket: updated });
       }
 
       const guild = client.guilds.cache.get(guildId);
       const member = guild ? guild.members.cache.get(targetId) ?? await guild.members.fetch(targetId).catch(() => null) : null;
       if (!member) {
-        json(res, 400, { error: "Ce membre n'est pas sur le serveur." });
-        return true;
+        return send(c, { error: "Ce membre n'est pas sur le serveur." }, 400);
       }
 
       const updated = await prisma.ticket.update({
@@ -252,13 +253,13 @@ export async function handleTicketHelpdeskRoutes(ctx: ModuleRouteContext): Promi
       }).catch(() => null);
 
       broadcastDashboardStateChange(guildId, 'tickets_updated');
-      json(res, 200, { ticket: updated });
+      return send(c, { ticket: updated });
     } catch (err) {
       logger.error('TicketHelpdeskAPI', `Attribution du ticket ${ticketId} : ${errorMessage(err)}`);
-      json(res, 500, { error: "Erreur lors de l'attribution du ticket" });
+      return send(c, { error: "Erreur lors de l'attribution du ticket" }, 500);
     }
-    return true;
-  }
+  });
 
-  return false;
+  return router;
 }
+

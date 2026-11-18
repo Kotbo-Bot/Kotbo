@@ -11,7 +11,6 @@ import type { Client } from 'discord.js';
 import type { AuthClaims, DashboardAccess } from '../../shared.js';
 import type { ModuleRouteContext } from './modules/_shared.js';
 import { handleChannelsManagementRoutes } from './modules/channels-management.js';
-import { handleTicketsRoutes } from './modules/tickets.js';
 
 export async function handleModulesRoutes(
   req: IncomingMessage,
@@ -31,7 +30,6 @@ export async function handleModulesRoutes(
 
   switch (moduleKey) {
     case 'channels-management': return handleChannelsManagementRoutes(ctx);
-    case 'tickets': return handleTicketsRoutes(ctx);
     default: return false;
   }
 }
