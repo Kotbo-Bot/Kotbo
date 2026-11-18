@@ -1128,8 +1128,14 @@ export const verifyRecruitmentWebhookAuth = async (req: IncomingMessage, guildId
   if (authHeader && authHeader.startsWith('Bearer ')) {
     const token = authHeader.split(' ')[1];
     try {
+      const claims = jwt.verify(token, getJwtSecret()) as AuthClaims & Record<string, unknown>;
+      // Les jetons MCP (OAuth ou lien direct) sont signés avec le même secret quand aucun secret
+      // dédié n'est configuré : ils portent un émetteur, une audience ou un `guildId`, qu'un jeton
+      // de session n'a jamais. Les accepter ici ouvrirait la route à toute clé MCP, sur tout serveur.
+      const isMcpShaped = Boolean(claims.iss || claims.aud || claims.scope || claims.typ || claims.guildId);
+      if (isMcpShaped) return { auth: null, reason: 'invalid_jwt' };
       return {
-        auth: jwt.verify(token, getJwtSecret()) as AuthClaims,
+        auth: claims,
         reason: 'ok_jwt',
       };
     } catch {
