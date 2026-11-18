@@ -40,7 +40,7 @@ Décisions arrêtées avec Elouan le 2026-10-08. Ce qui suit est la référence 
 | Équipe | Organigramme tiré de la hiérarchie staff | Chaque staff édite sa bio et peut se masquer |
 | Règlement | Articles du module Règlement | — |
 | Actualités | Module News | — |
-| Partenaires | Liste saisie à la main (le module Partenariats est en pause) | — |
+| Partenaires | Liste saisie à la main | — |
 | Appels de ban | Formulaire d'appel existant | Dépôt (connexion Discord) |
 | Recrutement | Postes ouverts + formulaires `isRecruitment` | Candidature |
 | Support | Ouverture de ticket | Conversation synchronisée avec le salon Discord |
