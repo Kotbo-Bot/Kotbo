@@ -363,13 +363,10 @@ export function createUserRouter(client: Client) {
         progression?.curve,
       );
 
-      return new Response(new Uint8Array(buffer), {
-        status: 200,
-        headers: {
-          'Content-Type': 'image/png',
-          'Cache-Control': 'no-store',
-          'X-Rank-Card-Preview': progression ? 'real' : 'sample',
-        },
+      return c.body(new Uint8Array(buffer), 200, {
+        'Content-Type': 'image/png',
+        'Cache-Control': 'no-store',
+        'X-Rank-Card-Preview': progression ? 'real' : 'sample',
       });
     } catch (err) {
       logger.error('API', `Erreur d'aperçu de la carte de rang pour ${user.userId}:`, err);
