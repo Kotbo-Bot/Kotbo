@@ -17,7 +17,6 @@ import { handleGeneralistModulesRoutes } from './dashboard/generalistModules.js'
 import { handleDoingListRoutes } from './dashboard/doingLists.js';
 import { handleAegisRoutes } from './dashboard/aegis.js';
 import { handleCustomBotRoutes } from './dashboard/customBot.js';
-import { handleChannelLinkRoutes } from './dashboard/channelLinks.js';
 import { handleHomeWidgetsRoutes } from './dashboard/homeWidgets.js';
 import { handleRankedRoutes } from './dashboard/ranked.js';
 import { handleRaidProtectionRoutes } from './dashboard/raidProtection.js';
@@ -131,10 +130,6 @@ export async function handleDashboardRoutes(
       return true;
     }
     if (await handleCustomBotRoutes(req, res, parts, url, client, user)) {
-      return true;
-    }
-    if (await handleChannelLinkRoutes(req, res, parts, url, client, user, guildId)) {
-      if (method !== 'GET') await cache.invalidateGuild(guildId);
       return true;
     }
     if (await handleHomeWidgetsRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {

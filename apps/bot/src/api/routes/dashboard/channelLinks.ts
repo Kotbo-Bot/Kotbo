@@ -1,12 +1,8 @@
-import { IncomingMessage, ServerResponse } from 'node:http';
+import { Hono } from 'hono';
+import { createMiddleware } from 'hono/factory';
 import { ChannelType, Client, PermissionFlagsBits } from 'discord.js';
 import prisma from '../../../utils/db.js';
 import { logger } from '../../../utils/logger.js';
-import {
-  json,
-  readJsonBody,
-  type AuthClaims,
-} from '../../shared.js';
 import {
   addGroupMember,
   createDirectGroup,
@@ -27,8 +23,7 @@ import { isLinkGuestGuild } from '../../../services/features/channelLinkGuestSer
 import { getLinkGroupStats } from '../../../services/features/channelLinkStatsService.js';
 import { INVITE_SOURCE, recordBotInvite } from '../../../services/analytics/inviteService.js';
 
-import { jsonFailure } from '../../shared/failure.js';
-const RESERVED_SEGMENTS = new Set(['invites', 'other-guilds', 'direct']);
+import { fail, guildRoute, readBody, send } from '../../hono/dashboard/kit.js';
 
 function readMode(value: unknown, fallback: LinkMemberMode = 'BOTH'): LinkMemberMode {
   return value === 'SEND_ONLY' || value === 'RECEIVE_ONLY' || value === 'BOTH' ? value : fallback;
@@ -89,21 +84,26 @@ async function canManageGuild(client: Client, guildId: string, userId: string): 
   return member.permissions.has('Administrator') || member.permissions.has('ManageGuild');
 }
 
-export async function handleChannelLinkRoutes(
-  req: IncomingMessage,
-  res: ServerResponse,
-  parts: string[],
-  url: URL,
-  client: Client,
-  user: AuthClaims,
-  guildId: string,
-): Promise<boolean> {
-  const method = req.method;
+export function createChannelLinksRouter(client: Client) {
+  const router = new Hono();
+  const base = '/api/dashboard/guilds/:guildId';
+  const gate = guildRoute(client);
 
-  if (parts[4] !== 'channel-links') return false;
+  /** Le pont visé, dont le serveur ouvert doit faire partie. */
+  const loadGroup = createMiddleware<{ Variables: { group: NonNullable<Awaited<ReturnType<typeof getGroup>>> } }>(async (c, next) => {
+    const group = await getGroup(c.req.param('groupId')!);
+    if (!group || !group.members.some((m) => m.guildId === c.req.param('guildId'))) {
+      return send(c, { error: 'Pont introuvable' }, 404);
+    }
+    c.set('group', group);
+    await next();
+  });
+  const groupGate = [...gate, loadGroup] as const;
 
-  // GET /api/dashboard/guilds/:guildId/channel-links
-  if (parts.length === 5 && method === 'GET') {
+
+
+  router.get(`${base}/channel-links`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
     try {
       const groups = await prisma.channelLinkGroup.findMany({
         where: { members: { some: { guildId } } },
@@ -112,20 +112,19 @@ export async function handleChannelLinkRoutes(
       });
 
       const stats = await getLinkGroupStats(groups.map((group) => group.id));
-      json(res, 200, groups.map((group) => ({
+      return send(c, groups.map((group) => ({
         ...serializeGroup(group, guildId, client),
         // Trafic des 30 derniers jours, `null` tant que le pont n'a rien relayé.
         stats: stats.get(group.id) ?? null,
       })));
     } catch (err) {
       logger.error('ChannelLinkAPI', 'Erreur GET channel-links', err);
-      jsonFailure(res, err, 'Erreur serveur', 'ChannelLinkAPI');
+      return fail(c, err, 'Erreur serveur', 'ChannelLinkAPI');
     }
-    return true;
-  }
+  });
 
-  // GET /api/dashboard/guilds/:guildId/channel-links/other-guilds
-  if (parts.length === 6 && parts[5] === 'other-guilds' && method === 'GET') {
+  router.get(`${base}/channel-links/other-guilds`, ...gate, async (c) => {
+    const user = c.var.dashboardUser;
     try {
       // Le membre etait resolu serveur par serveur, en sequence : chaque
       // absence du cache declenchait un aller-retour Discord, et la reponse
@@ -153,18 +152,18 @@ export async function handleChannelLinkRoutes(
         }),
       );
 
-      json(res, 200, resolved.filter((guild) => guild !== null));
+      return send(c, resolved.filter((guild) => guild !== null));
     } catch (err) {
       logger.error('ChannelLinkAPI', 'Erreur GET other-guilds', err);
-      jsonFailure(res, err, 'Erreur serveur', 'ChannelLinkAPI');
+      return fail(c, err, 'Erreur serveur', 'ChannelLinkAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/channel-links/direct
-  if (parts.length === 6 && parts[5] === 'direct' && method === 'POST') {
+  router.post(`${base}/channel-links/direct`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
     try {
-      const body = await readJsonBody(req);
+      const body = await readBody(c);
       const sourceChannelId = typeof body?.sourceChannelId === 'string' ? body.sourceChannelId : null;
 
       // Le dashboard envoie une liste de cibles ; l'ancien couple
@@ -176,8 +175,7 @@ export async function handleChannelLinkRoutes(
           : []);
 
       if (!sourceChannelId || rawTargets.length === 0) {
-        json(res, 400, { error: 'sourceChannelId et au moins une cible sont requis' });
-        return true;
+        return send(c, { error: 'sourceChannelId et au moins une cible sont requis' }, 400);
       }
 
       const targets = [];
@@ -187,16 +185,13 @@ export async function handleChannelLinkRoutes(
         const createChannel = raw?.createChannel === true;
         const targetChannelId = typeof raw?.channelId === 'string' ? raw.channelId : null;
         if (!targetGuildId || (!targetChannelId && !createChannel)) {
-          json(res, 400, { error: 'Chaque cible doit préciser guildId et channelId.' });
-          return true;
+          return send(c, { error: 'Chaque cible doit préciser guildId et channelId.' }, 400);
         }
         if (!client.guilds.cache.get(targetGuildId)) {
-          json(res, 400, { error: 'Le bot n\'est pas présent sur l\'un des serveurs cibles.' });
-          return true;
+          return send(c, { error: 'Le bot n\'est pas présent sur l\'un des serveurs cibles.' }, 400);
         }
         if (!(await canManageGuild(client, targetGuildId, user.userId))) {
-          json(res, 403, { error: 'Vous devez être admin de chacun des serveurs cibles.' });
-          return true;
+          return send(c, { error: 'Vous devez être admin de chacun des serveurs cibles.' }, 403);
         }
         if (createChannel) toCreate.push({ guildId: targetGuildId, mode: readMode(raw?.mode) });
         else targets.push({ guildId: targetGuildId, channelId: targetChannelId!, mode: readMode(raw?.mode) });
@@ -224,8 +219,7 @@ export async function handleChannelLinkRoutes(
           } catch (err) {
             logger.warn('ChannelLinkAPI', `Création du salon impossible sur ${item.guildId}`, err);
             await annulerSalonsCrees();
-            json(res, 400, { error: 'Le bot n\'a pas pu créer le salon sur l\'un des serveurs (permission Gérer les salons ?).' });
-            return true;
+            return send(c, { error: 'Le bot n\'a pas pu créer le salon sur l\'un des serveurs (permission Gérer les salons ?).' }, 400);
           }
         }
       }
@@ -246,8 +240,7 @@ export async function handleChannelLinkRoutes(
 
       if ('error' in result) {
         await annulerSalonsCrees();
-        json(res, 400, { error: result.error });
-        return true;
+        return send(c, { error: result.error }, 400);
       }
 
       let serverInviteUrl: string | null = null;
@@ -269,37 +262,35 @@ export async function handleChannelLinkRoutes(
         }
       }
 
-      json(res, 201, { ...serializeGroup(result, guildId, client), serverInviteUrl });
+      return send(c, { ...serializeGroup(result, guildId, client), serverInviteUrl }, 201);
     } catch (err) {
       logger.error('ChannelLinkAPI', 'Erreur POST direct link', err);
-      jsonFailure(res, err, 'Erreur serveur', 'ChannelLinkAPI');
+      return fail(c, err, 'Erreur serveur', 'ChannelLinkAPI');
     }
-    return true;
-  }
+  });
 
-  // GET /api/dashboard/guilds/:guildId/channel-links/invites
-  if (parts.length === 6 && parts[5] === 'invites' && method === 'GET') {
+  router.get(`${base}/channel-links/invites`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
     try {
       const invites = await prisma.channelLinkInvite.findMany({
         where: { guildId },
         orderBy: { createdAt: 'desc' },
         take: 50,
       });
-      json(res, 200, invites);
+      return send(c, invites);
     } catch (err) {
       logger.error('ChannelLinkAPI', 'Erreur GET invites', err);
-      jsonFailure(res, err, 'Erreur serveur', 'ChannelLinkAPI');
+      return fail(c, err, 'Erreur serveur', 'ChannelLinkAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/channel-links/invites
-  if (parts.length === 6 && parts[5] === 'invites' && method === 'POST') {
+  router.post(`${base}/channel-links/invites`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
     try {
-      const body = await readJsonBody(req);
+      const body = await readBody(c);
       if (!body?.channelId) {
-        json(res, 400, { error: 'channelId requis' });
-        return true;
+        return send(c, { error: 'channelId requis' }, 400);
       }
 
       // Un code peut viser un pont existant : chaque serveur qui l'utilise
@@ -308,8 +299,7 @@ export async function handleChannelLinkRoutes(
       if (groupId) {
         const group = await getGroup(groupId);
         if (!group || !group.members.some((m) => m.guildId === guildId)) {
-          json(res, 404, { error: 'Pont introuvable' });
-          return true;
+          return send(c, { error: 'Pont introuvable' }, 404);
         }
       }
 
@@ -362,30 +352,18 @@ export async function handleChannelLinkRoutes(
         }
       }
 
-      json(res, 201, { ...invite, serverInviteUrl });
+      return send(c, { ...invite, serverInviteUrl }, 201);
     } catch (err) {
       logger.error('ChannelLinkAPI', 'Erreur POST invite', err);
-      jsonFailure(res, err, 'Erreur serveur', 'ChannelLinkAPI');
+      return fail(c, err, 'Erreur serveur', 'ChannelLinkAPI');
     }
-    return true;
-  }
+  });
 
-  const groupId = parts.length >= 6 && !RESERVED_SEGMENTS.has(parts[5]!) ? parts[5]! : null;
-  if (!groupId) return false;
-
-  const group = await getGroup(groupId);
-  if (!group || !group.members.some((m) => m.guildId === guildId)) {
-    if (parts.length >= 6 && (method === 'PATCH' || method === 'DELETE' || method === 'POST')) {
-      json(res, 404, { error: 'Pont introuvable' });
-      return true;
-    }
-    return false;
-  }
-
-  // PATCH /api/dashboard/guilds/:guildId/channel-links/:groupId
-  if (parts.length === 6 && method === 'PATCH') {
+  router.patch(`${base}/channel-links/:groupId`, ...groupGate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const groupId = c.req.param('groupId');
     try {
-      const body = await readJsonBody(req);
+      const body = await readBody(c);
 
       const allowedFields = ['name', 'relayText', 'relayImages', 'relayEmbeds', 'relayReactions', 'relayEdits', 'relayDeletes', 'relayThreads', 'relayPolls', 'relayPins', 'enabled', 'updateTopic'];
       const updateData: Record<string, any> = {};
@@ -398,48 +376,44 @@ export async function handleChannelLinkRoutes(
       // correspondances de messages devenues inutiles.
       const updated = await updateGroupConfig(groupId, updateData);
       if (!updated) {
-        json(res, 404, { error: 'Pont introuvable' });
-        return true;
+        return send(c, { error: 'Pont introuvable' }, 404);
       }
 
-      json(res, 200, serializeGroup(updated, guildId, client));
+      return send(c, serializeGroup(updated, guildId, client));
     } catch (err) {
       logger.error('ChannelLinkAPI', 'Erreur PATCH channel-link', err);
-      jsonFailure(res, err, 'Erreur serveur', 'ChannelLinkAPI');
+      return fail(c, err, 'Erreur serveur', 'ChannelLinkAPI');
     }
-    return true;
-  }
+  });
 
-  // DELETE /api/dashboard/guilds/:guildId/channel-links/:groupId
-  if (parts.length === 6 && method === 'DELETE') {
+  router.delete(`${base}/channel-links/:groupId`, ...groupGate, async (c) => {
+    const groupId = c.req.param('groupId');
     try {
       await removeGroup(groupId, client);
-      json(res, 200, { ok: true });
+      return send(c, { ok: true });
     } catch (err) {
       logger.error('ChannelLinkAPI', 'Erreur DELETE channel-link', err);
-      jsonFailure(res, err, 'Erreur serveur', 'ChannelLinkAPI');
+      return fail(c, err, 'Erreur serveur', 'ChannelLinkAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/channel-links/:groupId/members
-  if (parts.length === 7 && parts[6] === 'members' && method === 'POST') {
+  router.post(`${base}/channel-links/:groupId/members`, ...groupGate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const groupId = c.req.param('groupId');
     try {
-      const body = await readJsonBody(req);
+      const body = await readBody(c);
       const memberGuildId = typeof body?.guildId === 'string' ? body.guildId : null;
       const memberChannelId = typeof body?.channelId === 'string' ? body.channelId : null;
       if (!memberGuildId || !memberChannelId) {
-        json(res, 400, { error: 'guildId et channelId requis' });
-        return true;
+        return send(c, { error: 'guildId et channelId requis' }, 400);
       }
 
       if (!client.guilds.cache.get(memberGuildId)) {
-        json(res, 400, { error: 'Le bot n\'est pas présent sur ce serveur.' });
-        return true;
+        return send(c, { error: 'Le bot n\'est pas présent sur ce serveur.' }, 400);
       }
       if (!(await canManageGuild(client, memberGuildId, user.userId))) {
-        json(res, 403, { error: 'Vous devez être admin du serveur ajouté.' });
-        return true;
+        return send(c, { error: 'Vous devez être admin du serveur ajouté.' }, 403);
       }
 
       const result = await addGroupMember({
@@ -453,75 +427,73 @@ export async function handleChannelLinkRoutes(
       });
 
       if ('error' in result) {
-        json(res, 400, { error: result.error });
-        return true;
+        return send(c, { error: result.error }, 400);
       }
 
-      json(res, 201, serializeGroup(result, guildId, client));
+      return send(c, serializeGroup(result, guildId, client), 201);
     } catch (err) {
       logger.error('ChannelLinkAPI', 'Erreur POST membre de pont', err);
-      jsonFailure(res, err, 'Erreur serveur', 'ChannelLinkAPI');
+      return fail(c, err, 'Erreur serveur', 'ChannelLinkAPI');
     }
-    return true;
-  }
+  });
 
-  // PATCH /api/dashboard/guilds/:guildId/channel-links/:groupId/members/:memberId
-  if (parts.length === 8 && parts[6] === 'members' && method === 'PATCH') {
+  router.patch(`${base}/channel-links/:groupId/members/:memberId`, ...groupGate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const groupId = c.req.param('groupId');
+    const memberId = c.req.param('memberId');
     try {
-      const body = await readJsonBody(req);
+      const body = await readBody(c);
       const data: Record<string, any> = {};
       if (body?.mode !== undefined) data.mode = readMode(body.mode);
       if (body?.relayMode !== undefined) data.relayMode = readRelayMode(body.relayMode);
       if (typeof body?.enabled === 'boolean') data.enabled = body.enabled;
 
-      const updated = await updateGroupMemberConfig(groupId, parts[7]!, data);
+      const updated = await updateGroupMemberConfig(groupId, c.req.param('memberId')!, data);
       if (!updated) {
-        json(res, 404, { error: 'Salon introuvable dans ce pont' });
-        return true;
+        return send(c, { error: 'Salon introuvable dans ce pont' }, 404);
       }
 
-      json(res, 200, serializeGroup(updated, guildId, client));
+      return send(c, serializeGroup(updated, guildId, client));
     } catch (err) {
       logger.error('ChannelLinkAPI', 'Erreur PATCH membre de pont', err);
-      jsonFailure(res, err, 'Erreur serveur', 'ChannelLinkAPI');
+      return fail(c, err, 'Erreur serveur', 'ChannelLinkAPI');
     }
-    return true;
-  }
+  });
 
-  // DELETE /api/dashboard/guilds/:guildId/channel-links/:groupId/members/:memberId
-  if (parts.length === 8 && parts[6] === 'members' && method === 'DELETE') {
+  router.delete(`${base}/channel-links/:groupId/members/:memberId`, ...groupGate, async (c) => {
+    const group = c.var.group;
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const groupId = c.req.param('groupId');
     try {
-      const memberId = parts[7]!;
+      const memberId = c.req.param('memberId')!;
       const member = group.members.find((m) => m.id === memberId);
       if (!member) {
-        json(res, 404, { error: 'Salon introuvable dans ce pont' });
-        return true;
+        return send(c, { error: 'Salon introuvable dans ce pont' }, 404);
       }
       // Retirer le salon d'un autre serveur suppose d'y être admin ; retirer le
       // sien est toujours permis, c'est la façon de quitter un pont.
       if (member.guildId !== guildId && !(await canManageGuild(client, member.guildId, user.userId))) {
-        json(res, 403, { error: 'Vous devez être admin de ce serveur pour le retirer.' });
-        return true;
+        return send(c, { error: 'Vous devez être admin de ce serveur pour le retirer.' }, 403);
       }
 
       const remaining = await removeGroupMember(groupId, memberId, client);
-      json(res, 200, { ok: true, group: remaining ? serializeGroup(remaining, guildId, client) : null });
+      return send(c, { ok: true, group: remaining ? serializeGroup(remaining, guildId, client) : null });
     } catch (err) {
       logger.error('ChannelLinkAPI', 'Erreur DELETE membre de pont', err);
-      jsonFailure(res, err, 'Erreur serveur', 'ChannelLinkAPI');
+      return fail(c, err, 'Erreur serveur', 'ChannelLinkAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/channel-links/:groupId/invite
-  if (parts.length === 7 && parts[6] === 'invite' && method === 'POST') {
+  router.post(`${base}/channel-links/:groupId/invite`, ...groupGate, async (c) => {
+    const group = c.var.group;
+    const guildId = c.req.param('guildId');
     try {
       const localMember = group.members.find((m) => m.guildId === guildId);
       const localChannel = localMember ? client.guilds.cache.get(guildId)?.channels.cache.get(localMember.channelId) : null;
 
       if (!localChannel || !('createInvite' in localChannel) || typeof localChannel.createInvite !== 'function') {
-        json(res, 400, { error: 'Impossible de créer une invitation sur ce salon.' });
-        return true;
+        return send(c, { error: 'Impossible de créer une invitation sur ce salon.' }, 400);
       }
 
       const discordInvite = await localChannel.createInvite({
@@ -541,13 +513,13 @@ export async function handleChannelLinkRoutes(
         topicUpdated = true;
       }
 
-      json(res, 201, { inviteUrl: discordInvite.url, topicUpdated });
+      return send(c, { inviteUrl: discordInvite.url, topicUpdated }, 201);
     } catch (err) {
       logger.error('ChannelLinkAPI', 'Erreur POST invite pour pont', err);
-      jsonFailure(res, err, 'Erreur serveur', 'ChannelLinkAPI');
+      return fail(c, err, 'Erreur serveur', 'ChannelLinkAPI');
     }
-    return true;
-  }
+  });
 
-  return false;
+  return router;
 }
+

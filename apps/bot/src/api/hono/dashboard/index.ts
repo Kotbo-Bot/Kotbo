@@ -7,6 +7,7 @@
 import { Hono } from 'hono';
 import { compress } from 'hono/compress';
 import type { Client } from 'discord.js';
+import { createChannelLinksRouter } from '../../routes/dashboard/channelLinks.js';
 import { createDropsRouter } from '../../routes/dashboard/drops.js';
 import { createCustomFormsRouter } from '../../routes/dashboard/customForms.js';
 import { createStaffServerRouter } from '../../routes/dashboard/staffServer.js';
@@ -123,5 +124,6 @@ export function createDashboardRouter(client: Client) {
   router.route('/', createStaffServerRouter(client));
   router.route('/', createCustomFormsRouter(client));
   router.route('/', createDropsRouter(client));
+  router.route('/', createChannelLinksRouter(client));
   return router;
 }
