@@ -44,7 +44,6 @@ import { getAllInstances } from '../utils/instanceResolver.js';
 import { handlePublicRoutes } from './routes/public.js';
 import { handleAdminRoutes } from './routes/admin.js';
 import { startBroadcastScheduler } from '../services/system/broadcastService.js';
-import { handleVerifyRoutes } from './routes/verify.js';
 import { handleMCPRoutes, mcpRateLimiter } from './mcp/mcpServer.js';
 import { handleRestApiRoutes } from './mcp/restApi.js';
 
@@ -399,7 +398,6 @@ export const startDashboardApi = async (client: Client) => {
 
             // Routes legacy (non encore migrées vers Hono)
             if (await handlePublicRoutes(req, res, parts, url, client)) return;
-            if (await handleVerifyRoutes(req, res, parts, url, client)) return;
             if (await handleAdminRoutes(req, res, parts, url, client)) return;
             if (await handleMCPRoutes(req, res, parts, url, client)) return;
             if (await handleRestApiRoutes(req, res, parts, url, client)) return;
