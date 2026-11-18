@@ -1,14 +1,14 @@
 import os from 'node:os';
-import { IncomingMessage, ServerResponse } from 'node:http';
-import { Client } from 'discord.js';
+import { Hono } from 'hono';
+import type { Client } from 'discord.js';
 import prisma from '../../../utils/db.js';
 import { cache } from '../../../utils/cache.js';
 import { logger } from '../../../utils/logger.js';
 import { homeWidgetFeatureKey, isHomeWidgetAdminOnly } from '@kotbo/contracts';
-import { json, type AuthClaims, type DashboardAccess, type FeatureAccessMap } from '../../shared.js';
+import { type DashboardAccess, type FeatureAccessMap } from '../../shared.js';
 import { getCachedFeatureAccess } from './featureGate.js';
 
-import { jsonFailure } from '../../shared/failure.js';
+import { fail, guildRoute, send } from '../../hono/dashboard/kit.js';
 const CACHE_TTL_SECONDS = 30;
 const WINDOW_DAYS = 7;
 const MAX_LIST_ITEMS = 5;
@@ -281,77 +281,71 @@ function buildHosting(client: Client) {
   };
 }
 
-export async function handleHomeWidgetsRoutes(
-  req: IncomingMessage,
-  res: ServerResponse,
-  parts: string[],
-  url: URL,
-  client: Client,
-  user: AuthClaims,
-  guildId: string,
-  access: DashboardAccess,
-): Promise<boolean> {
-  if (parts[4] !== 'home-widgets') return false;
-  if (parts.length !== 5 || req.method !== 'GET') return false;
+export function createHomeWidgetsRouter(client: Client) {
+  const router = new Hono();
 
-  const featureAccess = await getCachedFeatureAccess(client, guildId, access, user.userId);
-  const sections = allowedSections(parseSections(url.searchParams.get('sections')), access, featureAccess);
+  router.get('/api/dashboard/guilds/:guildId/home-widgets', ...guildRoute(client, { invalidateCache: false }), async (c) => {
+    const guildId = c.req.param('guildId');
+    const access = c.var.effectiveAccess;
+    const featureAccess = await getCachedFeatureAccess(client, guildId, access, c.var.dashboardUser.userId);
+    const sections = allowedSections(parseSections(c.req.query('sections') ?? null), access, featureAccess);
 
-  try {
-    // L'état d'hébergement est une lecture process, pas une requête : le mettre
-    // en cache n'apporterait rien et le rendrait faux jusqu'à 30 s.
-    const hosting = sections.includes('hosting') ? buildHosting(client) : undefined;
+    try {
+      // L'état d'hébergement est une lecture process, pas une requête : le mettre
+      // en cache n'apporterait rien et le rendrait faux jusqu'à 30 s.
+      const hosting = sections.includes('hosting') ? buildHosting(client) : undefined;
 
-    const persisted = sections.filter((section) => section !== 'hosting');
-    let payload: Record<string, unknown> = {};
+      const persisted = sections.filter((section) => section !== 'hosting');
+      let payload: Record<string, unknown> = {};
 
-    if (persisted.length > 0) {
-      const cacheKey = `guild:${guildId}:home-widgets:${persisted.join(',')}`;
-      const cached = await cache.get<Record<string, unknown>>(cacheKey);
-      if (cached) {
-        payload = cached;
-      } else {
-        const since = new Date(Date.now() - WINDOW_DAYS * 24 * 60 * 60 * 1000);
-        const builders: Array<[Section, Promise<unknown>]> = [];
+      if (persisted.length > 0) {
+        const cacheKey = `guild:${guildId}:home-widgets:${persisted.join(',')}`;
+        const cached = await cache.get<Record<string, unknown>>(cacheKey);
+        if (cached) {
+          payload = cached;
+        } else {
+          const since = new Date(Date.now() - WINDOW_DAYS * 24 * 60 * 60 * 1000);
+          const builders: Array<[Section, Promise<unknown>]> = [];
 
-        for (const section of persisted) {
-          switch (section) {
-            case 'leveling': builders.push([section, buildLeveling(guildId, since)]); break;
-            case 'invites': builders.push([section, buildInvites(guildId, since)]); break;
-            case 'economy': builders.push([section, buildEconomy(guildId, since)]); break;
-            case 'tickets': builders.push([section, buildTickets(guildId, since)]); break;
-            case 'events': builders.push([section, buildEvents(guildId)]); break;
-            case 'polls': builders.push([section, buildPolls(guildId)]); break;
-            case 'serverInfo': builders.push([section, buildServerInfo(client, guildId)]); break;
-            case 'quickGuide': builders.push([section, buildQuickGuide(client, guildId)]); break;
+          for (const section of persisted) {
+            switch (section) {
+              case 'leveling': builders.push([section, buildLeveling(guildId, since)]); break;
+              case 'invites': builders.push([section, buildInvites(guildId, since)]); break;
+              case 'economy': builders.push([section, buildEconomy(guildId, since)]); break;
+              case 'tickets': builders.push([section, buildTickets(guildId, since)]); break;
+              case 'events': builders.push([section, buildEvents(guildId)]); break;
+              case 'polls': builders.push([section, buildPolls(guildId)]); break;
+              case 'serverInfo': builders.push([section, buildServerInfo(client, guildId)]); break;
+              case 'quickGuide': builders.push([section, buildQuickGuide(client, guildId)]); break;
+            }
           }
+
+          // Une section qui échoue ne doit pas vider toute la page d'accueil : les
+          // autres widgets restent alimentés et celui-ci retombe sur son état vide.
+          const results = await Promise.allSettled(builders.map(([, promise]) => promise));
+          builders.forEach(([section], index) => {
+            const result = results[index];
+            if (result.status === 'fulfilled') {
+              payload[section] = result.value;
+            } else {
+              logger.error('HomeWidgetsAPI', `Section ${section} failed:`, result.reason);
+            }
+          });
+
+          await cache.set(cacheKey, payload, CACHE_TTL_SECONDS);
         }
-
-        // Une section qui échoue ne doit pas vider toute la page d'accueil : les
-        // autres widgets restent alimentés et celui-ci retombe sur son état vide.
-        const results = await Promise.allSettled(builders.map(([, promise]) => promise));
-        builders.forEach(([section], index) => {
-          const result = results[index];
-          if (result.status === 'fulfilled') {
-            payload[section] = result.value;
-          } else {
-            logger.error('HomeWidgetsAPI', `Section ${section} failed:`, result.reason);
-          }
-        });
-
-        await cache.set(cacheKey, payload, CACHE_TTL_SECONDS);
       }
+
+      return send(c, {
+        ...payload,
+        ...(hosting ? { hosting } : {}),
+        windowDays: WINDOW_DAYS,
+      });
+    } catch (err) {
+      logger.error('HomeWidgetsAPI', 'Error building home widgets data:', err);
+      return fail(c, err, 'Erreur lors de la récupération des widgets', 'HomeWidgetsAPI');
     }
+  });
 
-    json(res, 200, {
-      ...payload,
-      ...(hosting ? { hosting } : {}),
-      windowDays: WINDOW_DAYS,
-    });
-  } catch (err) {
-    logger.error('HomeWidgetsAPI', 'Error building home widgets data:', err);
-    jsonFailure(res, err, 'Erreur lors de la récupération des widgets', 'HomeWidgetsAPI');
-  }
-
-  return true;
+  return router;
 }
