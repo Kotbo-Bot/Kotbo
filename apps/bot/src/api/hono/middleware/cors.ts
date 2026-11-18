@@ -24,9 +24,7 @@ export function dashboardCors(): MiddlewareHandler {
     const isMcpPath =
       c.req.path.startsWith('/api/mcp/') ||
       c.req.path.startsWith('/api/mcp-direct/') ||
-      c.req.path === '/.well-known/oauth-authorization-server' ||
-      c.req.path.startsWith('/.well-known/oauth-protected-resource/') ||
-      c.req.path.startsWith('/.well-known/oauth-authorization-server/');
+      c.req.path.startsWith('/.well-known/');
 
     // Les apercus de liens (Open Graph) sont lus par les robots de Discord,
     // Slack ou X : ils n'envoient pas d'`Origin` et leurs CDN rechargent les

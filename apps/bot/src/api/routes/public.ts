@@ -1,7 +1,9 @@
 import { IncomingMessage, ServerResponse } from 'node:http';
+import { Socket } from 'node:net';
 import { promisify } from 'node:util';
 import { gzip } from 'node:zlib';
 import { Client, type Guild } from 'discord.js';
+import { Hono, type Context } from 'hono';
 import { LinkedAccountStatus, Prisma } from '@prisma/client';
 import { buildBettorStandings, buildSeasonLaureates, firmDebtOf, normalizeLevelCurve } from '@kotbo/shared';
 import { getRaidRecap, RAID_RECAP_PUBLIC_WINDOW_MS } from '../../services/features/rpg/rpgRaidService.js';
@@ -29,6 +31,8 @@ import {
   getDiscordClientId,
   getDashboardOrigin,
   getDashboardUrl,
+  splitPath,
+  BunServerResponse,
 } from '../shared.js';
 import {
   isValidMcpGuildId,
@@ -3007,4 +3011,60 @@ export async function handlePublicRoutes(
   }
 
   return false;
+}
+
+export function createPublicLegacyRouter(client: Client): Hono {
+  const router = new Hono();
+
+  const handlePublic = async (c: Context, next: () => Promise<void>) => {
+    const rawReq = c.req.raw;
+    const url = new URL(rawReq.url);
+    const parts = splitPath(url.pathname);
+
+    const socket = new Socket();
+    const req = new IncomingMessage(socket);
+    req.method = rawReq.method;
+    req.url = url.pathname + url.search;
+    req.headers = {};
+    rawReq.headers.forEach((value, key) => {
+      req.headers[key.toLowerCase()] = value;
+    });
+
+    let bodyText = '';
+    if (rawReq.method !== 'GET' && rawReq.method !== 'HEAD') {
+      try {
+        bodyText = await rawReq.text();
+      } catch {
+        /* corps illisible ou absent */
+      }
+    }
+    (req as IncomingMessage & { bodyText?: string }).bodyText = bodyText;
+    if (bodyText) {
+      req.push(Buffer.from(bodyText, 'utf8'));
+    }
+    req.push(null);
+
+    return new Promise<Response>((resolve) => {
+      const res = new BunServerResponse(req, resolve);
+      handlePublicRoutes(req as IncomingMessage & { bodyText?: string }, res, parts, url, client)
+        .then((handled) => {
+          if (!handled) {
+            next().then(resolve);
+          }
+        })
+        .catch((err) => {
+          logger.error('PublicAPI', err);
+          json(res, 500, { error: 'Erreur interne' });
+        });
+    });
+  };
+
+  router.all('/health', (c, next) => handlePublic(c, next));
+  router.all('/api/config', (c, next) => handlePublic(c, next));
+  router.all('/api/branding', (c, next) => handlePublic(c, next));
+  router.all('/.well-known/*', (c, next) => handlePublic(c, next));
+  router.all('/api/public', (c, next) => handlePublic(c, next));
+  router.all('/api/public/*', (c, next) => handlePublic(c, next));
+
+  return router;
 }

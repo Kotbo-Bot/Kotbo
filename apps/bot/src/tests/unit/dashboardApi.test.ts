@@ -206,7 +206,7 @@ mock.module(path.resolve(import.meta.dir, '../../services/system/planService.js'
 
 // Import router modules and helpers after mocks are set up
 import { JWT_SECRET, splitPath, resolveDashboardAccess } from '../../api/shared.js';
-import { handlePublicRoutes } from '../../api/routes/public.js';
+import { handlePublicRoutes, createPublicLegacyRouter } from '../../api/routes/public.js';
 import { authRouter } from '../../api/hono/routes/auth.js';
 import { createReportErrorRouter } from '../../api/routes/error.js';
 import { createUserRouter } from '../../api/routes/user.js';
@@ -667,6 +667,15 @@ describe('Modular Routers Unit Tests', () => {
       expect(data.registration_endpoint).toBe(`${directResource}/oauth/register`);
       expect(data.authorization_endpoint).toBe(`${directResource}/oauth/authorize`);
       expect(data.token_endpoint).toBe(`${directResource}/oauth/token`);
+    });
+
+    test('createPublicLegacyRouter routes public requests correctly through Hono', async () => {
+      const router = createPublicLegacyRouter(mockClient);
+      const res = await router.request('/health');
+      expect(res.status).toBe(200);
+      const data = await res.json() as { ok: boolean; service: string };
+      expect(data.ok).toBeTrue();
+      expect(data.service).toBe('kotbo-dashboard-api');
     });
   });
 

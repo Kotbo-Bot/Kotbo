@@ -30,6 +30,7 @@ import { createReportErrorRouter } from '../routes/error.js';
 import { createReportFeedbackRouter } from '../routes/feedback.js';
 import { createRestApiRouter } from '../mcp/restApi.js';
 import { createMcpServerRouter } from '../mcp/mcpServer.js';
+import { createPublicLegacyRouter } from '../routes/public.js';
 import { fail } from './dashboard/kit.js';
 
 /**
@@ -85,6 +86,7 @@ export function createHonoApp(client: Client): OpenAPIHono {
   app.route('/', createReportFeedbackRouter(client));
   app.route('/', createRestApiRouter(client));
   app.route('/', createMcpServerRouter(client));
+  app.route('/', createPublicLegacyRouter(client));
   app.route('/', createDashboardRouter(client));
 
   // ---------------------------------------------------------------------------
