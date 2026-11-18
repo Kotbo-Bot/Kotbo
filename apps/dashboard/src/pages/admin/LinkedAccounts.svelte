@@ -7,6 +7,8 @@
    * d'œil les personnes qui jouent avec plusieurs comptes.
    */
   import { onMount } from 'svelte';
+  import { errorMessage } from '@kotbo/shared';
+  import { m } from '../../lib/i18n';
   import { toast } from '../../lib/stores/toast.svelte';
   import { fetchAdminLinkedGroups, type LinkedGroup } from '../../lib/api';
   import AdminShell from '../../lib/components/admin/AdminShell.svelte';
@@ -53,7 +55,7 @@
       totalAccounts = result.totalAccounts;
       truncated = result.truncated;
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Chargement impossible.');
+      toast.error(errorMessage(err) || m.ppo_load_failed());
     } finally {
       loading = false;
     }
@@ -66,7 +68,7 @@
       const result = await fetchAdminLinkedGroups(query(groups.length));
       groups = [...groups, ...result.groups];
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Chargement impossible.');
+      toast.error(errorMessage(err) || m.ppo_load_failed());
     } finally {
       loadingMore = false;
     }

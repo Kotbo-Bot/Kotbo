@@ -53,9 +53,9 @@
     refreshingPerms = true;
     try {
       await onboardingData.loadCore();
-      toast.success('Permissions actualisées.');
+      toast.success(m.obx_wc_perms_refreshed());
     } catch {
-      toast.error('Impossible de vérifier les permissions.');
+      toast.error(m.obx_wc_perms_refresh_failed());
     } finally {
       refreshingPerms = false;
     }
@@ -111,8 +111,8 @@
 
     {#if !isAdministrator}
       <div class="mt-6 w-full max-w-xl text-left">
-        <Callout variant="warning" title="Permissions restreintes détectées">
-          Kotbo ne dispose pas de la permission Administrateur sur ce serveur. Sans elle, l'isolation des tickets privés et des salons de journalisation peut nécessiter un réglage manuel dans Discord.
+        <Callout variant="warning" title={m.obx_wc_restricted_title()}>
+          {m.obx_wc_restricted_desc()}
           {#snippet actions()}
             {#if clientId}
               <Button
@@ -122,7 +122,7 @@
                 href={buildBotInviteUrl(clientId, ADMIN_INVITE_PERMISSIONS, selectedGuild?.id)}
                 target="_blank"
               >
-                Accorder la permission Administrateur
+                {m.obx_wc_grant_admin()}
               </Button>
             {/if}
             <Button
@@ -132,7 +132,7 @@
               loading={refreshingPerms}
               onclick={refreshPermissions}
             >
-              Vérifier l'état
+              {m.obx_wc_check_status()}
             </Button>
           {/snippet}
         </Callout>
@@ -168,12 +168,12 @@
   bind:open={frictionModalOpen}
   onClose={() => (frictionModalOpen = false)}
   size="md"
-  title="Permissions au détail"
-  subtitle="Le bot ne dispose pas de la permission Administrateur."
+  title={m.obx_wc_detailed_title()}
+  subtitle={m.obx_wc_detailed_subtitle()}
 >
   <div class="space-y-4 text-left">
-    <Callout variant="warning" title="Réglages manuels à prévoir sur Discord">
-      Avec des permissions restreintes, Discord applique les limitations de chaque catégorie. Les salons de tickets privés et de journalisation devront être vérifiés manuellement dans Discord.
+    <Callout variant="warning" title={m.obx_wc_manual_title()}>
+      {m.obx_wc_manual_desc()}
     </Callout>
 
     <label class="flex items-start gap-2.5 cursor-pointer select-none">
@@ -183,7 +183,7 @@
         class="mt-0.5 rounded border-field-border text-primary focus:ring-primary"
       />
       <span class="text-xs text-on-surface-variant leading-relaxed">
-        Je préfère vérifier manuellement les permissions des salons créés sur Discord.
+        {m.obx_wc_manual_ack()}
       </span>
     </label>
   </div>
@@ -198,7 +198,7 @@
           href={buildBotInviteUrl(clientId, ADMIN_INVITE_PERMISSIONS, selectedGuild?.id)}
           target="_blank"
         >
-          Passer en Administrateur
+          {m.obx_wc_switch_admin()}
         </Button>
       {/if}
       <Button
@@ -207,7 +207,7 @@
         disabled={!acknowledgedDetailed}
         onclick={confirmDetailedAndProceed}
       >
-        Continuer en mode restreint
+        {m.obx_wc_continue_restricted()}
       </Button>
     </div>
   {/snippet}
