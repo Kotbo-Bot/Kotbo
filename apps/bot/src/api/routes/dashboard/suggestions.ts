@@ -14,8 +14,8 @@
  * contenu quand le centre de gestion ne l'a pas retiré au rôle, comme pour les
  * appels de bannissement.
  */
-import { IncomingMessage, ServerResponse } from 'node:http';
-import { Client } from 'discord.js';
+import { Hono } from 'hono';
+import type { Client } from 'discord.js';
 import type { Suggestion } from '@prisma/client';
 import {
   SUGGESTION_ALLOWED_ROLES_MAX,
@@ -36,14 +36,7 @@ import {
 } from '@kotbo/shared';
 import { resolveGuildLocale } from '../../../utils/i18n.js';
 import { logger } from '../../../utils/logger.js';
-import {
-  getGuildName,
-  json,
-  pushAudit,
-  readJsonBody,
-  type AuthClaims,
-  type DashboardAccess,
-} from '../../shared.js';
+import { getGuildName, pushAudit, type DashboardAccess } from '../../shared.js';
 import { getCachedFeatureAccess } from './featureGate.js';
 import { getSuggestionVoters, getSuggestionsOverview, listSuggestions } from '../../../services/features/suggestionDashboard.js';
 import { getSuggestionSettings, saveSuggestionSettings, type SuggestionSettings } from '../../../services/features/suggestionSettings.js';
@@ -55,7 +48,7 @@ import {
 } from '../../../services/features/suggestionService.js';
 import { suggestionMessageLabels } from '../../../services/features/suggestionMessageLabels.js';
 import { getMemberIdentities } from '../../../services/moderation/memberIdentityService.js';
-import { jsonFailure } from '../../shared/failure.js';
+import { fail, guildRoute, readBody, send } from '../../hono/dashboard/kit.js';
 
 const SNOWFLAKE_RE = /^\d{17,20}$/;
 const CUID_RE = /^[a-z0-9]{20,40}$/i;
@@ -191,27 +184,19 @@ async function canDecide(client: Client, guildId: string, access: DashboardAcces
   return rights?.canModerate === true || (access.canModerateContent && rights?.canModerate !== false);
 }
 
-export async function handleSuggestionRoutes(
-  req: IncomingMessage,
-  res: ServerResponse,
-  parts: string[],
-  url: URL,
-  client: Client,
-  user: AuthClaims,
-  guildId: string,
-  access: DashboardAccess,
-): Promise<boolean> {
-  const method = req.method;
-  if (parts[4] !== 'suggestions') return false;
-  const auditUser = `${user.username} (${user.userId})`;
+export function createSuggestionsRouter(client: Client) {
+  const router = new Hono();
+  const base = '/api/dashboard/guilds/:guildId';
+  const gate = guildRoute(client);
 
-  // GET /suggestions
-  if (parts.length === 5 && method === 'GET') {
+
+  router.get(`${base}/suggestions`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
     try {
       const overview = await getSuggestionsOverview(guildId);
       const guild = client.guilds.cache.get(guildId);
       const locale = await resolveGuildLocale(guildId, guild?.preferredLocale);
-      json(res, 200, {
+      return send(c, {
         config: overview.config,
         stats: overview.stats,
         queue: await presentSuggestions(client, guildId, overview.queue),
@@ -222,71 +207,63 @@ export async function handleSuggestionRoutes(
       });
     } catch (err) {
       logger.error('SuggestionsAPI', 'Error fetching suggestions overview:', err);
-      jsonFailure(res, err, 'Erreur de récupération des suggestions', 'SuggestionsAPI');
+      return fail(c, err, 'Erreur de récupération des suggestions', 'SuggestionsAPI');
     }
-    return true;
-  }
+  });
 
-  // GET /suggestions/list
-  if (parts.length === 6 && parts[5] === 'list' && method === 'GET') {
-    const status = url.searchParams.get('status') || undefined;
-    const userId = url.searchParams.get('userId') || undefined;
-    const cursor = url.searchParams.get('cursor') || undefined;
+  router.get(`${base}/suggestions/list`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const status = (c.req.query('status') ?? null) || undefined;
+    const userId = (c.req.query('userId') ?? null) || undefined;
+    const cursor = (c.req.query('cursor') ?? null) || undefined;
     // `none` : les suggestions sans catégorie.
-    const rawCategory = url.searchParams.get('category');
+    const rawCategory = (c.req.query('category') ?? null);
     const category = rawCategory === null || rawCategory === '' ? undefined : rawCategory === 'none' ? null : rawCategory;
     if (typeof category === 'string' && category.length > SUGGESTION_CATEGORY_NAME_MAX) {
-      json(res, 400, { error: 'Catégorie invalide' });
-      return true;
+      return send(c, { error: 'Catégorie invalide' }, 400);
     }
     if (status && !isSuggestionStatus(status)) {
-      json(res, 400, { error: 'Statut invalide' });
-      return true;
+      return send(c, { error: 'Statut invalide' }, 400);
     }
     if (userId && !SNOWFLAKE_RE.test(userId)) {
-      json(res, 400, { error: 'Identifiant de membre invalide' });
-      return true;
+      return send(c, { error: 'Identifiant de membre invalide' }, 400);
     }
     if (cursor && !decodeTimeCursor(cursor)) {
-      json(res, 400, { error: 'Curseur invalide' });
-      return true;
+      return send(c, { error: 'Curseur invalide' }, 400);
     }
 
     try {
       const page = await listSuggestions(guildId, { status: status && isSuggestionStatus(status) ? status : undefined, userId, cursor, category });
-      json(res, 200, {
+      return send(c, {
         suggestions: await presentSuggestions(client, guildId, page.suggestions),
         nextCursor: page.nextCursor,
       });
     } catch (err) {
       logger.error('SuggestionsAPI', 'Error listing suggestions:', err);
-      jsonFailure(res, err, 'Erreur de récupération des suggestions', 'SuggestionsAPI');
+      return fail(c, err, 'Erreur de récupération des suggestions', 'SuggestionsAPI');
     }
-    return true;
-  }
+  });
 
-  // GET /suggestions/:id/voters
-  if (parts.length === 7 && parts[6] === 'voters' && method === 'GET') {
-    const suggestionId = parts[5];
+  router.get(`${base}/suggestions/:suggestionId/voters`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const access = c.var.effectiveAccess;
+    const suggestionId = c.req.param('suggestionId');
     if (!CUID_RE.test(suggestionId)) {
-      json(res, 400, { error: 'Identifiant de suggestion invalide' });
-      return true;
+      return send(c, { error: 'Identifiant de suggestion invalide' }, 400);
     }
 
     try {
       // Réglage du serveur d'abord : sans lui, les votes restent anonymes pour tous.
       if (!(await getSuggestionSettings(guildId)).showVoters) {
-        json(res, 403, { error: 'Les votants ne sont pas visibles sur ce serveur' });
-        return true;
+        return send(c, { error: 'Les votants ne sont pas visibles sur ce serveur' }, 403);
       }
       if (!(await canDecide(client, guildId, access, user.userId))) {
-        json(res, 403, { error: 'Accès modérateur requis pour voir les votants' });
-        return true;
+        return send(c, { error: 'Accès modérateur requis pour voir les votants' }, 403);
       }
       const voters = await getSuggestionVoters(guildId, suggestionId);
       if (!voters) {
-        json(res, 404, { error: 'Suggestion introuvable' });
-        return true;
+        return send(c, { error: 'Suggestion introuvable' }, 404);
       }
       const identities = await getMemberIdentities(client, guildId, [...new Set([...voters.upvoters, ...voters.downvoters])]);
       const present = (userIds: string[]) => userIds.map((userId) => ({
@@ -294,28 +271,28 @@ export async function handleSuggestionRoutes(
         name: identities.get(userId)?.displayName ?? null,
         avatarUrl: identities.get(userId)?.avatarUrl || null,
       }));
-      json(res, 200, { up: present(voters.upvoters), down: present(voters.downvoters) });
+      return send(c, { up: present(voters.upvoters), down: present(voters.downvoters) });
     } catch (err) {
       logger.error('SuggestionsAPI', 'Error listing suggestion voters:', err);
-      jsonFailure(res, err, 'Erreur de récupération des votants', 'SuggestionsAPI');
+      return fail(c, err, 'Erreur de récupération des votants', 'SuggestionsAPI');
     }
-    return true;
-  }
+  });
 
-  // PATCH /suggestions/config
-  if (parts.length === 6 && parts[5] === 'config' && method === 'PATCH') {
+  router.patch(`${base}/suggestions/config`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const access = c.var.effectiveAccess;
+    const auditUser = `${user.username} (${user.userId})`;
     if (!access.canManageSettings) {
-      json(res, 403, { error: 'Permissions insuffisantes' });
-      return true;
+      return send(c, { error: 'Permissions insuffisantes' }, 403);
     }
 
     try {
       const guild = client.guilds.cache.get(guildId);
       const guildRoleIds = guild ? new Set(guild.roles.cache.keys()) : null;
-      const parsed = parseSuggestionConfigPatch(await readJsonBody<unknown>(req), guildId, guildRoleIds);
+      const parsed = parseSuggestionConfigPatch(await readBody<unknown>(c), guildId, guildRoleIds);
       if ('error' in parsed) {
-        json(res, 400, { error: parsed.error });
-        return true;
+        return send(c, { error: parsed.error }, 400);
       }
 
       const before = parsed.patch.voteWhileApproved === undefined ? null : await getSuggestionSettings(guildId);
@@ -335,52 +312,47 @@ export async function handleSuggestionRoutes(
         details: `Salon : ${config.channelId ? `<#${config.channelId}>` : 'aucun'}, commentaire ${config.requireComment ? 'obligatoire' : 'facultatif'}, votes ${config.voteWhileApproved ? 'ouverts' : 'fermés'} après approbation, ${config.allowedRoleIds.length > 0 ? `${config.allowedRoleIds.length} rôle(s) autorisé(s) à proposer` : 'tout le monde peut proposer'}, auteur ${config.notifyAuthor ? 'prévenu' : 'non prévenu'}, fil ${config.createThread ? 'ouvert' : 'non'}, seuil ${config.voteThreshold ?? 'aucun'}${config.voteThreshold && config.pinAtThreshold ? ' (épinglé)' : ''}, garde-fous : délai ${config.cooldownMinutes} min, compte ${config.minAccountAgeDays} j, ancienneté ${config.minMemberDays} j, récompense ${config.rewardXp} XP / ${config.rewardCoins} pièce(s), ${config.categories.length} catégorie(s), votants ${config.showVoters ? 'visibles' : 'anonymes'}.`,
         channelId: config.channelId,
       });
-      json(res, 200, { config });
+      return send(c, { config });
     } catch (err) {
       logger.error('SuggestionsAPI', 'Error updating suggestions config:', err);
-      jsonFailure(res, err, 'Erreur lors de la mise à jour de la configuration', 'SuggestionsAPI');
+      return fail(c, err, 'Erreur lors de la mise à jour de la configuration', 'SuggestionsAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /suggestions/:id/resolve
-  if (parts.length === 7 && parts[6] === 'resolve' && method === 'POST') {
-    const suggestionId = parts[5];
+  router.post(`${base}/suggestions/:suggestionId/resolve`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const access = c.var.effectiveAccess;
+    const auditUser = `${user.username} (${user.userId})`;
+    const suggestionId = c.req.param('suggestionId');
     if (!CUID_RE.test(suggestionId)) {
-      json(res, 400, { error: 'Identifiant de suggestion invalide' });
-      return true;
+      return send(c, { error: 'Identifiant de suggestion invalide' }, 400);
     }
 
     try {
       if (!(await canDecide(client, guildId, access, user.userId))) {
-        json(res, 403, { error: 'Accès modérateur requis pour trancher une suggestion' });
-        return true;
+        return send(c, { error: 'Accès modérateur requis pour trancher une suggestion' }, 403);
       }
 
-      const body = await readJsonBody<{ status?: unknown; responseText?: unknown }>(req);
+      const body = await readBody<{ status?: unknown; responseText?: unknown }>(c);
       if (!body || !isSuggestionStatus(body.status)) {
-        json(res, 400, { error: 'Statut invalide' });
-        return true;
+        return send(c, { error: 'Statut invalide' }, 400);
       }
       if (body.responseText !== undefined && body.responseText !== null && typeof body.responseText !== 'string') {
-        json(res, 400, { error: 'Commentaire invalide' });
-        return true;
+        return send(c, { error: 'Commentaire invalide' }, 400);
       }
       const responseText = typeof body.responseText === 'string' ? body.responseText.trim() : '';
       if (responseText.length > SUGGESTION_RESPONSE_MAX) {
-        json(res, 400, { error: `Le commentaire ne doit pas dépasser ${SUGGESTION_RESPONSE_MAX} caractères` });
-        return true;
+        return send(c, { error: `Le commentaire ne doit pas dépasser ${SUGGESTION_RESPONSE_MAX} caractères` }, 400);
       }
       const { requireComment } = await getSuggestionSettings(guildId);
       if (suggestionNeedsComment(body.status, requireComment) && !responseText) {
-        json(res, 400, { error: 'Un commentaire public est requis pour cette décision' });
-        return true;
+        return send(c, { error: 'Un commentaire public est requis pour cette décision' }, 400);
       }
 
       const result = await resolveSuggestion(guildId, suggestionId, body.status, responseText || null, user.userId, client);
       if (!result) {
-        json(res, 404, { error: 'Suggestion introuvable' });
-        return true;
+        return send(c, { error: 'Suggestion introuvable' }, 404);
       }
 
       await pushAudit(guildId, {
@@ -394,31 +366,30 @@ export async function handleSuggestionRoutes(
       });
 
       const [suggestion] = await presentSuggestions(client, guildId, [result.suggestion]);
-      json(res, 200, { suggestion });
+      return send(c, { suggestion });
     } catch (err) {
       logger.error('SuggestionsAPI', 'Error resolving suggestion:', err);
-      jsonFailure(res, err, 'Erreur lors de la décision', 'SuggestionsAPI');
+      return fail(c, err, 'Erreur lors de la décision', 'SuggestionsAPI');
     }
-    return true;
-  }
+  });
 
-  // DELETE /suggestions/:id
-  if (parts.length === 6 && method === 'DELETE') {
+  router.delete(`${base}/suggestions/:suggestionId`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const access = c.var.effectiveAccess;
+    const auditUser = `${user.username} (${user.userId})`;
     if (!access.canManageSettings) {
-      json(res, 403, { error: 'Permissions insuffisantes' });
-      return true;
+      return send(c, { error: 'Permissions insuffisantes' }, 403);
     }
-    const suggestionId = parts[5];
+    const suggestionId = c.req.param('suggestionId');
     if (!CUID_RE.test(suggestionId)) {
-      json(res, 400, { error: 'Identifiant de suggestion invalide' });
-      return true;
+      return send(c, { error: 'Identifiant de suggestion invalide' }, 400);
     }
 
     try {
       const deleted = await deleteSuggestion(client, guildId, suggestionId);
       if (!deleted) {
-        json(res, 404, { error: 'Suggestion introuvable' });
-        return true;
+        return send(c, { error: 'Suggestion introuvable' }, 404);
       }
       await pushAudit(guildId, {
         user: auditUser,
@@ -429,19 +400,20 @@ export async function handleSuggestionRoutes(
         details: `Suggestion ${deleted.id} de ${deleted.username} (${deleted.userId}) supprimée : « ${deleted.content.slice(0, 200)} ».`,
         channelId: deleted.channelId,
       });
-      json(res, 200, { deleted: true });
+      return send(c, { deleted: true });
     } catch (err) {
       logger.error('SuggestionsAPI', 'Error deleting suggestion:', err);
-      jsonFailure(res, err, 'Erreur lors de la suppression', 'SuggestionsAPI');
+      return fail(c, err, 'Erreur lors de la suppression', 'SuggestionsAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /suggestions/refresh
-  if (parts.length === 6 && parts[5] === 'refresh' && method === 'POST') {
+  router.post(`${base}/suggestions/refresh`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const access = c.var.effectiveAccess;
+    const auditUser = `${user.username} (${user.userId})`;
     if (!access.canManageSettings) {
-      json(res, 403, { error: 'Permissions insuffisantes' });
-      return true;
+      return send(c, { error: 'Permissions insuffisantes' }, 403);
     }
 
     try {
@@ -460,13 +432,13 @@ export async function handleSuggestionRoutes(
         details: `${total} message(s) repris au format actuel.`,
         channelId: null,
       });
-      json(res, 202, { total });
+      return send(c, { total }, 202);
     } catch (err) {
       logger.error('SuggestionsAPI', 'Error refreshing suggestion messages:', err);
-      jsonFailure(res, err, 'Erreur lors de la mise à jour des messages', 'SuggestionsAPI');
+      return fail(c, err, 'Erreur lors de la mise à jour des messages', 'SuggestionsAPI');
     }
-    return true;
-  }
+  });
 
-  return false;
+  return router;
 }
+

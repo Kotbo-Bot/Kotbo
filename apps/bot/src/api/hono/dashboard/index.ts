@@ -7,6 +7,10 @@
 import { Hono } from 'hono';
 import { compress } from 'hono/compress';
 import type { Client } from 'discord.js';
+import { createRecruitmentFormsRouter } from '../../routes/dashboard/recruitmentForms.js';
+import { createMessageLogsRouter } from '../../routes/dashboard/messageLogs.js';
+import { createSuggestionsRouter } from '../../routes/dashboard/suggestions.js';
+import { createReputationRouter } from '../../routes/dashboard/reputation.js';
 import { createAbsencesRouter } from '../../routes/dashboard/leadership/absences.js';
 import { createMeetingsRouter } from '../../routes/dashboard/leadership/meetings.js';
 import { createCallsRouter } from '../../routes/dashboard/leadership/calls.js';
@@ -109,5 +113,9 @@ export function createDashboardRouter(client: Client) {
   router.route('/', createCallsRouter(client));
   router.route('/', createMeetingsRouter(client));
   router.route('/', createAbsencesRouter(client));
+  router.route('/', createReputationRouter(client));
+  router.route('/', createSuggestionsRouter(client));
+  router.route('/', createMessageLogsRouter(client));
+  router.route('/', createRecruitmentFormsRouter(client));
   return router;
 }

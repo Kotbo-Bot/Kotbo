@@ -13,8 +13,8 @@
  * ferme déjà ces routes quand il est éteint. Le service prévient le dashboard
  * en temps réel à chaque écriture, qu'elle vienne d'ici ou de Discord.
  */
-import { IncomingMessage, ServerResponse } from 'node:http';
-import { Client } from 'discord.js';
+import { Hono } from 'hono';
+import type { Client } from 'discord.js';
 import {
   REPUTATION_ADJUSTMENT,
   REPUTATION_COINS_PER_REP,
@@ -34,14 +34,7 @@ import {
 } from '@kotbo/shared';
 import { resolveGuildLocale } from '../../../utils/i18n.js';
 import { logger } from '../../../utils/logger.js';
-import {
-  getGuildName,
-  json,
-  pushAudit,
-  readJsonBody,
-  type AuthClaims,
-  type DashboardAccess,
-} from '../../shared.js';
+import { getGuildName, pushAudit } from '../../shared.js';
 import {
   getMemberReputationSummary,
   getReputationConfig,
@@ -54,7 +47,7 @@ import { adjustRep, resetGuildRep, resetMemberRep, revokeRep } from '../../../se
 import { manageableRole, tierAnnouncementLabels } from '../../../services/community/reputationTierService.js';
 import { normalizeEmojiKey } from '../../../services/features/starboardTally.js';
 import { getMemberIdentities } from '../../../services/moderation/memberIdentityService.js';
-import { jsonFailure } from '../../shared/failure.js';
+import { fail, guildRoute, readBody, send } from '../../hono/dashboard/kit.js';
 
 const SNOWFLAKE_RE = /^\d{17,20}$/;
 const ADJUSTMENT_REASON_MAX = 200;
@@ -181,28 +174,20 @@ function parseConfigPatch(
   return { patch };
 }
 
-export async function handleReputationRoutes(
-  req: IncomingMessage,
-  res: ServerResponse,
-  parts: string[],
-  url: URL,
-  client: Client,
-  user: AuthClaims,
-  guildId: string,
-  access: DashboardAccess,
-): Promise<boolean> {
-  const method = req.method;
-  if (parts[4] !== 'reputation') return false;
-  const auditUser = `${user.username} (${user.userId})`;
+export function createReputationRouter(client: Client) {
+  const router = new Hono();
+  const base = '/api/dashboard/guilds/:guildId';
+  const gate = guildRoute(client);
 
-  // GET /reputation
-  if (parts.length === 5 && method === 'GET') {
+
+  router.get(`${base}/reputation`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
     try {
-      const data = await getReputationDashboardData(guildId, periodOf(url));
+      const data = await getReputationDashboardData(guildId, periodOf(new URL(c.req.url)));
       const who = await identityResolver(client, guildId, data.leaderboard.entries.map((entry) => entry.userId));
       const guild = client.guilds.cache.get(guildId);
       const locale = await resolveGuildLocale(guildId, guild?.preferredLocale);
-      json(res, 200, {
+      return send(c, {
         ...data,
         announcement: tierAnnouncementLabels(locale),
         // Rôles de palier que le bot ne pourra pas donner : supprimés, gérés par
@@ -221,28 +206,25 @@ export async function handleReputationRoutes(
       });
     } catch (err) {
       logger.error('ReputationAPI', 'Error fetching reputation data:', err);
-      jsonFailure(res, err, 'Erreur lors de la récupération des données', 'ReputationAPI');
+      return fail(c, err, 'Erreur lors de la récupération des données', 'ReputationAPI');
     }
-    return true;
-  }
+  });
 
-  // GET /reputation/votes
-  if (parts.length === 6 && parts[5] === 'votes' && method === 'GET') {
-    const userId = url.searchParams.get('userId') || undefined;
-    const cursor = url.searchParams.get('cursor') || undefined;
+  router.get(`${base}/reputation/votes`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const userId = (c.req.query('userId') ?? null) || undefined;
+    const cursor = (c.req.query('cursor') ?? null) || undefined;
     if (userId && !SNOWFLAKE_RE.test(userId)) {
-      json(res, 400, { error: 'Identifiant de membre invalide' });
-      return true;
+      return send(c, { error: 'Identifiant de membre invalide' }, 400);
     }
     if (cursor && !decodeReputationCursor(cursor)) {
-      json(res, 400, { error: 'Curseur invalide' });
-      return true;
+      return send(c, { error: 'Curseur invalide' }, 400);
     }
 
     try {
-      const page = await listReputationVotes(guildId, { period: periodOf(url), userId, cursor });
+      const page = await listReputationVotes(guildId, { period: periodOf(new URL(c.req.url)), userId, cursor });
       const who = await identityResolver(client, guildId, page.votes.flatMap((vote) => [vote.giverId, vote.receiverId]));
-      json(res, 200, {
+      return send(c, {
         nextCursor: page.nextCursor,
         votes: page.votes.map((vote) => ({
           ...vote,
@@ -257,25 +239,25 @@ export async function handleReputationRoutes(
       });
     } catch (err) {
       logger.error('ReputationAPI', 'Error listing reputation votes:', err);
-      jsonFailure(res, err, 'Erreur lors de la récupération de l\'historique', 'ReputationAPI');
+      return fail(c, err, 'Erreur lors de la récupération de l\'historique', 'ReputationAPI');
     }
-    return true;
-  }
+  });
 
-  // PATCH /reputation/config
-  if (parts.length === 6 && parts[5] === 'config' && method === 'PATCH') {
+  router.patch(`${base}/reputation/config`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const access = c.var.effectiveAccess;
+    const auditUser = `${user.username} (${user.userId})`;
     if (!access.canManageSettings) {
-      json(res, 403, { error: 'Permissions insuffisantes' });
-      return true;
+      return send(c, { error: 'Permissions insuffisantes' }, 403);
     }
 
     try {
       const guild = client.guilds.cache.get(guildId);
       const guildRoleIds = guild ? new Set(guild.roles.cache.keys()) : null;
-      const parsed = parseConfigPatch(await readJsonBody<unknown>(req), guildId, guildRoleIds);
+      const parsed = parseConfigPatch(await readBody<unknown>(c), guildId, guildRoleIds);
       if ('error' in parsed) {
-        json(res, 400, { error: parsed.error });
-        return true;
+        return send(c, { error: parsed.error }, 400);
       }
 
       // Allumer la réaction sans emoji laisserait l'option inerte sans le dire.
@@ -285,8 +267,7 @@ export async function handleReputationRoutes(
         const enabled = patch.reactionEnabled ?? current.reactionEnabled;
         const emoji = has(patch, 'reactionEmoji') ? patch.reactionEmoji : current.reactionEmoji;
         if (enabled && !emoji) {
-          json(res, 400, { error: 'Choisis un emoji pour remercier par réaction' });
-          return true;
+          return send(c, { error: 'Choisis un emoji pour remercier par réaction' }, 400);
         }
       }
 
@@ -300,26 +281,27 @@ export async function handleReputationRoutes(
         details: `Limite par jour : ${config.dailyLimit} vote(s), réaction : ${config.reactionEnabled ? config.reactionEmoji : 'non'}, gains : ${config.xpPerRep} XP / ${config.coinsPerRep} pièce(s), ${config.tiers.length} palier(s), annonce : ${config.announceChannelId ?? 'aucune'}, garde-fous : compte ${config.minAccountAgeDays} j, ancienneté ${config.minMemberDays} j, même membre tous les ${config.sameMemberCooldownDays} j, ${config.excludedRoleIds.length} rôle(s) et ${config.excludedChannelIds.length} salon(s) exclus.`,
         channelId: null,
       });
-      json(res, 200, { config });
+      return send(c, { config });
     } catch (err) {
       logger.error('ReputationAPI', 'Error saving reputation config:', err);
-      jsonFailure(res, err, 'Erreur lors de la mise à jour', 'ReputationAPI');
+      return fail(c, err, 'Erreur lors de la mise à jour', 'ReputationAPI');
     }
-    return true;
-  }
+  });
 
-  // DELETE /reputation/votes/:id
-  if (parts.length === 7 && parts[5] === 'votes' && method === 'DELETE') {
+  router.delete(`${base}/reputation/votes/:userId`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const access = c.var.effectiveAccess;
+    const auditUser = `${user.username} (${user.userId})`;
+    const userId = c.req.param('userId');
     if (!access.canManageSettings) {
-      json(res, 403, { error: 'Permissions insuffisantes' });
-      return true;
+      return send(c, { error: 'Permissions insuffisantes' }, 403);
     }
 
     try {
-      const vote = await revokeRep(client, guildId, parts[6]);
+      const vote = await revokeRep(client, guildId, c.req.param('userId'));
       if (!vote) {
-        json(res, 404, { error: 'Vote introuvable' });
-        return true;
+        return send(c, { error: 'Vote introuvable' }, 404);
       }
 
       // Le vote est déjà retiré : un échec de résolution des pseudos ne doit
@@ -337,69 +319,63 @@ export async function handleReputationRoutes(
           : `Vote de ${label(vote.giverId)} pour ${label(vote.receiverId)} retiré.`,
         channelId: null,
       });
-      json(res, 200, { deleted: true });
+      return send(c, { deleted: true });
     } catch (err) {
       logger.error('ReputationAPI', 'Error deleting reputation vote:', err);
-      jsonFailure(res, err, 'Erreur lors du retrait du vote', 'ReputationAPI');
+      return fail(c, err, 'Erreur lors du retrait du vote', 'ReputationAPI');
     }
-    return true;
-  }
+  });
 
-  // GET /reputation/members/:userId
-  if (parts.length === 7 && parts[5] === 'members' && method === 'GET') {
-    const userId = parts[6];
+  router.get(`${base}/reputation/members/:userId`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const userId = c.req.param('userId');
     if (!SNOWFLAKE_RE.test(userId)) {
-      json(res, 400, { error: 'Identifiant de membre invalide' });
-      return true;
+      return send(c, { error: 'Identifiant de membre invalide' }, 400);
     }
     try {
       const summary = await getMemberReputationSummary(guildId, userId);
       const who = await identityResolver(client, guildId, summary.recent.map((entry) => entry.giverId));
-      json(res, 200, {
+      return send(c, {
         ...summary,
         recent: summary.recent.map((entry) => ({ ...entry, giverName: who.name(entry.giverId) })),
       });
     } catch (err) {
       logger.error('ReputationAPI', 'Error fetching member reputation:', err);
-      jsonFailure(res, err, 'Erreur lors de la récupération de la réputation du membre', 'ReputationAPI');
+      return fail(c, err, 'Erreur lors de la récupération de la réputation du membre', 'ReputationAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /reputation/adjustments
-  if (parts.length === 6 && parts[5] === 'adjustments' && method === 'POST') {
+  router.post(`${base}/reputation/adjustments`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const access = c.var.effectiveAccess;
+    const auditUser = `${user.username} (${user.userId})`;
     if (!access.canManageSettings) {
-      json(res, 403, { error: 'Permissions insuffisantes' });
-      return true;
+      return send(c, { error: 'Permissions insuffisantes' }, 403);
     }
     try {
-      const body = await readJsonBody<{ userId?: unknown; amount?: unknown; reason?: unknown }>(req);
+      const body = await readBody<{ userId?: unknown; amount?: unknown; reason?: unknown }>(c);
       const userId = body?.userId;
       const amount = body?.amount;
       if (typeof userId !== 'string' || !SNOWFLAKE_RE.test(userId)) {
-        json(res, 400, { error: 'Identifiant de membre invalide' });
-        return true;
+        return send(c, { error: 'Identifiant de membre invalide' }, 400);
       }
       if (typeof amount !== 'number' || !Number.isInteger(amount) || amount === 0
         || amount < REPUTATION_ADJUSTMENT.min || amount > REPUTATION_ADJUSTMENT.max) {
-        json(res, 400, { error: `Le nombre de points doit être un entier non nul entre ${REPUTATION_ADJUSTMENT.min} et ${REPUTATION_ADJUSTMENT.max}` });
-        return true;
+        return send(c, { error: `Le nombre de points doit être un entier non nul entre ${REPUTATION_ADJUSTMENT.min} et ${REPUTATION_ADJUSTMENT.max}` }, 400);
       }
       const rawReason = body?.reason ?? null;
       if (rawReason !== null && typeof rawReason !== 'string') {
-        json(res, 400, { error: 'Le motif est invalide' });
-        return true;
+        return send(c, { error: 'Le motif est invalide' }, 400);
       }
       const reason = typeof rawReason === 'string' ? rawReason.trim() || null : null;
       if (reason && reason.length > ADJUSTMENT_REASON_MAX) {
-        json(res, 400, { error: `Le motif ne doit pas dépasser ${ADJUSTMENT_REASON_MAX} caractères` });
-        return true;
+        return send(c, { error: `Le motif ne doit pas dépasser ${ADJUSTMENT_REASON_MAX} caractères` }, 400);
       }
 
       const result = await adjustRep(client, { guildId, staffId: user.userId, userId, amount, reason });
       if (!result.success) {
-        json(res, 409, { error: `Le membre n'a que ${result.total} point(s) : impossible de descendre sous zéro`, total: result.total });
-        return true;
+        return send(c, { error: `Le membre n'a que ${result.total} point(s) : impossible de descendre sous zéro`, total: result.total }, 409);
       }
 
       const who = await identityResolver(client, guildId, [userId]).catch(() => null);
@@ -412,29 +388,29 @@ export async function handleReputationRoutes(
         details: `${amount > 0 ? `+${amount}` : amount} point(s) pour ${who?.label(userId) ?? userId} (${result.before} → ${result.after})${reason ? `, motif : ${reason}` : ''}.`,
         channelId: null,
       });
-      json(res, 200, { before: result.before, after: result.after });
+      return send(c, { before: result.before, after: result.after });
     } catch (err) {
       logger.error('ReputationAPI', 'Error adjusting reputation:', err);
-      jsonFailure(res, err, 'Erreur lors de l\'ajustement', 'ReputationAPI');
+      return fail(c, err, 'Erreur lors de l\'ajustement', 'ReputationAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /reputation/reset
-  if (parts.length === 6 && parts[5] === 'reset' && method === 'POST') {
+  router.post(`${base}/reputation/reset`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const access = c.var.effectiveAccess;
+    const auditUser = `${user.username} (${user.userId})`;
     if (!access.canManageSettings) {
-      json(res, 403, { error: 'Permissions insuffisantes' });
-      return true;
+      return send(c, { error: 'Permissions insuffisantes' }, 403);
     }
     try {
-      const body = await readJsonBody<{ scope?: unknown; userId?: unknown }>(req);
+      const body = await readBody<{ scope?: unknown; userId?: unknown }>(c);
       const scope = body?.scope;
 
       if (scope === 'member') {
         const userId = body?.userId;
         if (typeof userId !== 'string' || !SNOWFLAKE_RE.test(userId)) {
-          json(res, 400, { error: 'Identifiant de membre invalide' });
-          return true;
+          return send(c, { error: 'Identifiant de membre invalide' }, 400);
         }
         const removed = await resetMemberRep(client, guildId, userId);
         const who = await identityResolver(client, guildId, [userId]).catch(() => null);
@@ -447,8 +423,7 @@ export async function handleReputationRoutes(
           details: `Réputation de ${who?.label(userId) ?? userId} remise à zéro (${removed} ligne(s) retirée(s)).`,
           channelId: null,
         });
-        json(res, 200, { removed });
-        return true;
+        return send(c, { removed });
       }
 
       if (scope === 'guild') {
@@ -462,17 +437,16 @@ export async function handleReputationRoutes(
           details: `Toute la réputation du serveur remise à zéro : ${count} ligne(s), ${members} membre(s).`,
           channelId: null,
         });
-        json(res, 200, { removed: count, members });
-        return true;
+        return send(c, { removed: count, members });
       }
 
-      json(res, 400, { error: 'Portée de remise à zéro invalide' });
+      return send(c, { error: 'Portée de remise à zéro invalide' }, 400);
     } catch (err) {
       logger.error('ReputationAPI', 'Error resetting reputation:', err);
-      jsonFailure(res, err, 'Erreur lors de la remise à zéro', 'ReputationAPI');
+      return fail(c, err, 'Erreur lors de la remise à zéro', 'ReputationAPI');
     }
-    return true;
-  }
+  });
 
-  return false;
+  return router;
 }
+

@@ -6,12 +6,11 @@
  * (`mock.module` est global). Il doit charger après les tests de ces services.
  */
 import { describe, expect, test, mock, beforeEach } from 'bun:test';
-import { IncomingMessage, ServerResponse } from 'node:http';
-import { Socket } from 'node:net';
 import path from 'node:path';
 import type { Client } from 'discord.js';
 import { DASHBOARD_ACCESS_ADMIN, DASHBOARD_ACCESS_MODERATOR, type AuthClaims, type DashboardAccess } from '../../api/shared.js';
 import { completeModuleMock } from '../helpers/moduleMock.js';
+import { dashboardCall, mockDashboardGate, setDashboardAccess } from '../helpers/honoDashboard.js';
 
 const mockDb = {
   dashboardAuditLog: { create: mock(async (_args?: unknown) => ({})) },
@@ -103,7 +102,8 @@ for (const suffix of ['../../services/moderation/memberIdentityService.ts', '../
   }));
 }
 
-const { handleReputationRoutes } = await import('../../api/routes/dashboard/reputation.js');
+mockDashboardGate(DASHBOARD_ACCESS_ADMIN, { userId: 'user-1', username: 'Admin' } as AuthClaims);
+const { createReputationRouter } = await import('../../api/routes/dashboard/reputation.js');
 
 const GUILD = '999999999999999999';
 const ROLE = '555555555555555555';
@@ -115,36 +115,10 @@ function cacheGuild(roleIds: string[]) {
 }
 const user: AuthClaims = { userId: 'user-1', username: 'Admin' } as AuthClaims;
 
-interface MockResponse extends ServerResponse { body: string }
-
-function request(method: string, pathAndQuery: string, body?: unknown): { req: IncomingMessage; url: URL; parts: string[] } {
-  const req = new IncomingMessage(new Socket());
-  req.method = method;
-  req.url = pathAndQuery;
-  req.headers = { 'content-type': 'application/json' };
-  req.push(body === undefined ? '' : JSON.stringify(body));
-  req.push(null);
-  const url = new URL(pathAndQuery, 'http://localhost');
-  return { req, url, parts: url.pathname.split('/').filter(Boolean) };
-}
-
-function response(): MockResponse {
-  const res = new ServerResponse(new IncomingMessage(new Socket())) as MockResponse;
-  let status = 200;
-  let body = '';
-  Object.defineProperty(res, 'statusCode', { get: () => status, set: (code: number) => { status = code; } });
-  res.setHeader = () => res;
-  res.getHeader = () => undefined;
-  res.writeHead = (code: number) => { status = code; return res; };
-  res.end = (chunk?: unknown) => { if (chunk) body += String(chunk); res.body = body; return res; };
-  return res;
-}
-
 async function call(method: string, suffix: string, body?: unknown, access: DashboardAccess = DASHBOARD_ACCESS_ADMIN) {
-  const { req, url, parts } = request(method, `/api/dashboard/guilds/${GUILD}/reputation${suffix}`, body);
-  const res = response();
-  const handled = await handleReputationRoutes(req, res, parts, url, client, user, GUILD, access);
-  return { handled, status: res.statusCode, json: res.body ? JSON.parse(res.body) : null };
+  setDashboardAccess(access, user);
+  const { status, body: json } = await dashboardCall(createReputationRouter(client), method, `/api/dashboard/guilds/${GUILD}/reputation${suffix}`, body);
+  return { status, json };
 }
 
 beforeEach(() => {
@@ -463,6 +437,5 @@ describe('POST /reputation/reset', () => {
 });
 
 test('ignore les autres segments', async () => {
-  const { req, url, parts } = request('GET', `/api/dashboard/guilds/${GUILD}/drops`);
-  expect(await handleReputationRoutes(req, response(), parts, url, client, user, GUILD, DASHBOARD_ACCESS_ADMIN)).toBe(false);
+  expect((await dashboardCall(createReputationRouter(client), 'GET', `/api/dashboard/guilds/${GUILD}/drops`)).status).toBe(404);
 });

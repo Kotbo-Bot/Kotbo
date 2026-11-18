@@ -9,7 +9,6 @@ import { auditGlobalAdminWrite, evaluateGuildGate } from './dashboard/guildGate.
 import { handleGeneralRoutes, handleGuildGeneralRoutes } from './dashboard/general.js';
 import { handleAnalyticsRoutes } from './dashboard/analytics.js';
 import { handleRecruitmentWebhookRoute, handleRecruitmentRoutes } from './dashboard/recruitment.js';
-import { handleRecruitmentFormRoutes } from './dashboard/recruitmentForms.js';
 import { handleCustomFormRoutes } from './dashboard/customForms.js';
 import { handleBanAppealRoutes } from './dashboard/banAppeals.js';
 import { handleMembersRoutes } from './dashboard/members.js';
@@ -22,10 +21,7 @@ import { handleCustomBotRoutes } from './dashboard/customBot.js';
 import { handleChannelLinkRoutes } from './dashboard/channelLinks.js';
 import { handleStaffServerRoutes } from './dashboard/staffServer.js';
 import { handleHomeWidgetsRoutes } from './dashboard/homeWidgets.js';
-import { handleReputationRoutes } from './dashboard/reputation.js';
-import { handleSuggestionRoutes } from './dashboard/suggestions.js';
 import { handleRankedRoutes } from './dashboard/ranked.js';
-import { handleMessageLogRoutes } from './dashboard/messageLogs.js';
 import { handleRaidProtectionRoutes } from './dashboard/raidProtection.js';
 import { handleClansRoutes } from './dashboard/clans.js';
 import { handleDropsRoutes } from './dashboard/drops.js';
@@ -94,10 +90,6 @@ export async function handleDashboardRoutes(
       if (method !== 'GET') await cache.invalidateGuild(guildId);
       return true;
     }
-    if (await handleRecruitmentFormRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
-      if (method !== 'GET') await cache.invalidateGuild(guildId);
-      return true;
-    }
     if (await handleCustomFormRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
       if (method !== 'GET') await cache.invalidateGuild(guildId);
       return true;
@@ -159,19 +151,7 @@ export async function handleDashboardRoutes(
     if (await handleHomeWidgetsRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
       return true;
     }
-    if (await handleReputationRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
-      if (method !== 'GET') await cache.invalidateGuild(guildId);
-      return true;
-    }
-    if (await handleSuggestionRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
-      if (method !== 'GET') await cache.invalidateGuild(guildId);
-      return true;
-    }
     if (await handleRankedRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
-      if (method !== 'GET') await cache.invalidateGuild(guildId);
-      return true;
-    }
-    if (await handleMessageLogRoutes(req, res, parts, url, client, user, guildId, effectiveAccess)) {
       if (method !== 'GET') await cache.invalidateGuild(guildId);
       return true;
     }

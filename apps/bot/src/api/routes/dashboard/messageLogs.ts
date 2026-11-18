@@ -1,11 +1,11 @@
-import { IncomingMessage, ServerResponse } from 'node:http';
-import { Client } from 'discord.js';
+import { Hono } from 'hono';
+import { createMiddleware } from 'hono/factory';
+import type { Client } from 'discord.js';
 import prisma from '../../../utils/db.js';
 import { cache } from '../../../utils/cache.js';
 import { logger } from '../../../utils/logger.js';
-import { json, readJsonBody, type AuthClaims, type DashboardAccess } from '../../shared.js';
 
-import { jsonFailure } from '../../shared/failure.js';
+import { fail, guildRoute, readBody, send } from '../../hono/dashboard/kit.js';
 
 /** Au-dela, la recherche annonce « plus de N resultats » au lieu du nombre exact. */
 const SEARCH_COUNT_CAP = 1000;
@@ -20,40 +20,34 @@ const SEARCH_COUNT_CAP = 1000;
  *   DELETE /:messageLogId            → delete a single logged message (admin)
  *   DELETE ?channelId=&before=       → bulk delete logged messages (admin)
  */
-export async function handleMessageLogRoutes(
-  req: IncomingMessage,
-  res: ServerResponse,
-  parts: string[],
-  url: URL,
-  _client: Client,
-  _user: AuthClaims,
-  guildId: string,
-  access: DashboardAccess,
-): Promise<boolean> {
-  const method = req.method;
-  if (parts[4] !== 'message-logs') return false;
-
+export function createMessageLogsRouter(client: Client) {
+  const router = new Hono();
+  const base = '/api/dashboard/guilds/:guildId';
   // Message content can be sensitive → restrict to staff.
-  const isStaff = access.level === 'admin' || access.level === 'moderator';
-  if (!isStaff) {
-    json(res, 403, { error: 'Accès refusé. Réservé au staff.' });
-    return true;
-  }
+  const staffOnly = createMiddleware(async (c, next) => {
+    const level = c.var.effectiveAccess.level;
+    if (level !== 'admin' && level !== 'moderator') {
+      return send(c, { error: 'Accès refusé. Réservé au staff.' }, 403);
+    }
+    await next();
+  });
+  const gate = [...guildRoute(client), staffOnly] as const;
 
-  // GET /message-logs/search
-  if (parts.length === 6 && parts[5] === 'search' && method === 'GET') {
+
+  router.get(`${base}/message-logs/search`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
     try {
-      const q = url.searchParams.get('q')?.trim() || '';
-      const channelId = url.searchParams.get('channelId')?.trim() || '';
-      const authorId = url.searchParams.get('authorId')?.trim() || '';
-      const isBotParam = url.searchParams.get('isBot');
-      const hasAttachmentParam = url.searchParams.get('hasAttachment');
-      const includeDeleted = url.searchParams.get('includeDeleted') === 'true';
-      const from = url.searchParams.get('from');
-      const to = url.searchParams.get('to');
-      const order = url.searchParams.get('order') === 'asc' ? 'asc' : 'desc';
-      const limit = Math.min(Math.max(parseInt(url.searchParams.get('limit') || '50', 10) || 50, 1), 100);
-      const offset = Math.max(parseInt(url.searchParams.get('offset') || '0', 10) || 0, 0);
+      const q = (c.req.query('q') ?? null)?.trim() || '';
+      const channelId = (c.req.query('channelId') ?? null)?.trim() || '';
+      const authorId = (c.req.query('authorId') ?? null)?.trim() || '';
+      const isBotParam = (c.req.query('isBot') ?? null);
+      const hasAttachmentParam = (c.req.query('hasAttachment') ?? null);
+      const includeDeleted = (c.req.query('includeDeleted') ?? null) === 'true';
+      const from = (c.req.query('from') ?? null);
+      const to = (c.req.query('to') ?? null);
+      const order = (c.req.query('order') ?? null) === 'asc' ? 'asc' : 'desc';
+      const limit = Math.min(Math.max(parseInt((c.req.query('limit') ?? null) || '50', 10) || 50, 1), 100);
+      const offset = Math.max(parseInt((c.req.query('offset') ?? null) || '0', 10) || 0, 0);
 
       const where: Record<string, unknown> = { guildId };
       if (q) where.content = { contains: q, mode: 'insensitive' };
@@ -88,19 +82,18 @@ export async function handleMessageLogRoutes(
       const totalCapped = counted > SEARCH_COUNT_CAP;
       const total = totalCapped ? SEARCH_COUNT_CAP : counted;
 
-      json(res, 200, { messages, total, totalCapped, hasMore, limit, offset });
+      return send(c, { messages, total, totalCapped, hasMore, limit, offset });
     } catch (err) {
       logger.error('MessageLogsAPI', 'Erreur lors de la recherche de messages:', err);
-      jsonFailure(res, err, 'Erreur lors de la recherche de messages', 'MessageLogsAPI');
+      return fail(c, err, 'Erreur lors de la recherche de messages', 'MessageLogsAPI');
     }
-    return true;
-  }
+  });
 
-  // GET /message-logs/channels → distinct channels for the filter dropdown
   // ?authorId= narrows the list to the channels a single member actually posted in.
-  if (parts.length === 6 && parts[5] === 'channels' && method === 'GET') {
+  router.get(`${base}/message-logs/channels`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
     try {
-      const authorId = url.searchParams.get('authorId')?.trim() || '';
+      const authorId = (c.req.query('authorId') ?? null)?.trim() || '';
       const rows = await prisma.messageLog.groupBy({
         by: ['channelId', 'channelName'],
         where: authorId ? { guildId, authorId } : { guildId },
@@ -134,16 +127,15 @@ export async function handleMessageLogRoutes(
       const channels = [...merged.values()]
         .sort((a, b) => b.count - a.count)
         .map(({ channelId, channelName, count }) => ({ channelId, channelName, count }));
-      json(res, 200, { channels });
+      return send(c, { channels });
     } catch (err) {
       logger.error('MessageLogsAPI', 'Erreur lors de la récupération des salons:', err);
-      jsonFailure(res, err, 'Erreur lors de la récupération des salons', 'MessageLogsAPI');
+      return fail(c, err, 'Erreur lors de la récupération des salons', 'MessageLogsAPI');
     }
-    return true;
-  }
+  });
 
-  // GET /message-logs/stats → quick overview (total logged, enabled state)
-  if (parts.length === 6 && parts[5] === 'stats' && method === 'GET') {
+  router.get(`${base}/message-logs/stats`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
     try {
       const [total, config] = await Promise.all([
         prisma.messageLog.count({ where: { guildId } }),
@@ -157,7 +149,7 @@ export async function handleMessageLogRoutes(
           },
         }),
       ]);
-      json(res, 200, {
+      return send(c, {
         total,
         enabled: config?.messageLoggingEnabled ?? false,
         retentionDays: config?.messageLoggingRetentionDays ?? 90,
@@ -166,23 +158,22 @@ export async function handleMessageLogRoutes(
       });
     } catch (err) {
       logger.error('MessageLogsAPI', 'Erreur lors de la récupération des statistiques:', err);
-      jsonFailure(res, err, 'Erreur lors de la récupération des statistiques', 'MessageLogsAPI');
+      return fail(c, err, 'Erreur lors de la récupération des statistiques', 'MessageLogsAPI');
     }
-    return true;
-  }
+  });
 
-  // PATCH /message-logs/config - enable/disable logging + retention (admin only)
-  if (parts.length === 6 && parts[5] === 'config' && method === 'PATCH') {
+  router.patch(`${base}/message-logs/config`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const access = c.var.effectiveAccess;
     if (access.level !== 'admin') {
-      json(res, 403, { error: 'Seuls les administrateurs peuvent modifier la configuration.' });
-      return true;
+      return send(c, { error: 'Seuls les administrateurs peuvent modifier la configuration.' }, 403);
     }
     try {
-      const body = await readJsonBody<{
+      const body = await readBody<{
         enabled?: boolean;
         retentionDays?: number;
         ignoredChannels?: string[];
-      }>(req);
+      }>(c);
       const data: Record<string, unknown> = {};
       if (typeof body?.enabled === 'boolean') data.messageLoggingEnabled = body.enabled;
       if (typeof body?.retentionDays === 'number' && Number.isFinite(body.retentionDays)) {
@@ -192,8 +183,7 @@ export async function handleMessageLogRoutes(
         data.messageLoggingIgnoredChannels = body.ignoredChannels.filter((c) => typeof c === 'string');
       }
       if (Object.keys(data).length === 0) {
-        json(res, 400, { error: 'Aucun champ valide fourni.' });
-        return true;
+        return send(c, { error: 'Aucun champ valide fourni.' }, 400);
       }
       const updated = await prisma.guild.update({
         where: { id: guildId },
@@ -212,10 +202,10 @@ export async function handleMessageLogRoutes(
 
       if (body?.enabled === true) {
         const { startMessageLoggingBackfill } = await import('../../../services/features/messageLoggingScraperService.js');
-        void startMessageLoggingBackfill(_client, guildId);
+        void startMessageLoggingBackfill(client, guildId);
       }
 
-      json(res, 200, {
+      return send(c, {
         enabled: updated.messageLoggingEnabled,
         retentionDays: updated.messageLoggingRetentionDays,
         ignoredChannels: updated.messageLoggingIgnoredChannels,
@@ -223,20 +213,19 @@ export async function handleMessageLogRoutes(
       });
     } catch (err) {
       logger.error('MessageLogsAPI', 'Erreur lors de la mise à jour de la configuration:', err);
-      jsonFailure(res, err, 'Erreur lors de la mise à jour de la configuration', 'MessageLogsAPI');
+      return fail(c, err, 'Erreur lors de la mise à jour de la configuration', 'MessageLogsAPI');
     }
-    return true;
-  }
+  });
 
-  // DELETE /message-logs  (bulk, via query params) - admin only
-  if (parts.length === 5 && method === 'DELETE') {
+  router.delete(`${base}/message-logs`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const access = c.var.effectiveAccess;
     if (access.level !== 'admin') {
-      json(res, 403, { error: 'Seuls les administrateurs peuvent supprimer des messages.' });
-      return true;
+      return send(c, { error: 'Seuls les administrateurs peuvent supprimer des messages.' }, 403);
     }
     try {
-      const channelId = url.searchParams.get('channelId')?.trim() || '';
-      const before = url.searchParams.get('before');
+      const channelId = (c.req.query('channelId') ?? null)?.trim() || '';
+      const before = (c.req.query('before') ?? null);
       const where: Record<string, unknown> = { guildId };
       if (channelId) where.channelId = channelId;
       if (before) {
@@ -245,39 +234,36 @@ export async function handleMessageLogRoutes(
       }
       // Guard against wiping the entire guild by accident: require at least one filter.
       if (!channelId && !before) {
-        json(res, 400, { error: 'Précisez au moins un filtre (channelId ou before) pour une suppression groupée.' });
-        return true;
+        return send(c, { error: 'Précisez au moins un filtre (channelId ou before) pour une suppression groupée.' }, 400);
       }
       const { count } = await prisma.messageLog.deleteMany({ where });
-      json(res, 200, { ok: true, deleted: count });
+      return send(c, { ok: true, deleted: count });
     } catch (err) {
       logger.error('MessageLogsAPI', 'Erreur lors de la suppression groupée:', err);
-      jsonFailure(res, err, 'Erreur lors de la suppression groupée', 'MessageLogsAPI');
+      return fail(c, err, 'Erreur lors de la suppression groupée', 'MessageLogsAPI');
     }
-    return true;
-  }
+  });
 
-  // DELETE /message-logs/:messageLogId - admin only
-  if (parts.length === 6 && method === 'DELETE') {
+  router.delete(`${base}/message-logs/:id`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const access = c.var.effectiveAccess;
     if (access.level !== 'admin') {
-      json(res, 403, { error: 'Seuls les administrateurs peuvent supprimer des messages.' });
-      return true;
+      return send(c, { error: 'Seuls les administrateurs peuvent supprimer des messages.' }, 403);
     }
-    const id = parts[5];
+    const id = c.req.param('id');
     try {
       const log = await prisma.messageLog.findUnique({ where: { id }, select: { id: true, guildId: true } });
       if (!log || log.guildId !== guildId) {
-        json(res, 404, { error: 'Message introuvable' });
-        return true;
+        return send(c, { error: 'Message introuvable' }, 404);
       }
       await prisma.messageLog.delete({ where: { id } });
-      json(res, 200, { ok: true });
+      return send(c, { ok: true });
     } catch (err) {
       logger.error('MessageLogsAPI', 'Erreur lors de la suppression du message:', err);
-      jsonFailure(res, err, 'Erreur lors de la suppression du message', 'MessageLogsAPI');
+      return fail(c, err, 'Erreur lors de la suppression du message', 'MessageLogsAPI');
     }
-    return true;
-  }
+  });
 
-  return false;
+  return router;
 }
+
