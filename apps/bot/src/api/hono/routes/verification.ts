@@ -2,6 +2,8 @@ import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
 import type { Client } from 'discord.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requireGuildAccess } from '../middleware/guildAccess.js';
+import { rateLimit } from '../middleware/rateLimit.js';
+import { dashboardSensitiveRateLimiter } from '../../limiters.js';
 import { getVerificationService } from '../../../serviceFactory.js';
 import { getDashboardUrl } from '../../shared.js';
 
@@ -49,6 +51,8 @@ export function createVerificationRouter(client: Client) {
 
   router.use('/api/verify/:guildId/deploy', requireAuth);
   router.use('/api/verify/:guildId/deploy', requireGuildAccess(client, 'moderator'));
+  // Chaque déploiement poste un message du bot : on borne la répétition.
+  router.use('/api/verify/:guildId/deploy', rateLimit(dashboardSensitiveRateLimiter, 5, 60 * 1000));
 
   router.openapi(deployRoute, async (c) => {
     const { guildId } = c.req.valid('param');
