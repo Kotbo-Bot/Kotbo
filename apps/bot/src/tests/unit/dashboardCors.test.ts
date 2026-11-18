@@ -12,6 +12,12 @@ describe('dashboardCors', () => {
       'X-Rank-Card-Preview': 'sample',
     }),
   );
+  app.get('/api/public/forms/sample', () =>
+    new Response(JSON.stringify({ id: 'sample', name: 'Formulaire' }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }),
+  );
 
   test('reflects dash.kotbo.fr origin in Access-Control-Allow-Origin', async () => {
     const res = await app.request('/api/public/stats', {
@@ -54,5 +60,16 @@ describe('dashboardCors', () => {
     expect(res.headers.get('Access-Control-Allow-Origin')).toBe('https://beta.kotbo.fr');
     expect(res.headers.get('Access-Control-Allow-Credentials')).toBe('true');
     expect(res.headers.get('Access-Control-Expose-Headers')).toContain('X-Rank-Card-Preview');
+  });
+
+  test('preserves CORS headers on raw Response for beta.kotbo.fr', async () => {
+    const res = await app.request('/api/public/forms/sample', {
+      headers: { Origin: 'https://beta.kotbo.fr' },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Access-Control-Allow-Origin')).toBe('https://beta.kotbo.fr');
+    expect(res.headers.get('Access-Control-Allow-Credentials')).toBe('true');
+    expect(res.headers.get('X-Frame-Options')).toBe('DENY');
   });
 });
