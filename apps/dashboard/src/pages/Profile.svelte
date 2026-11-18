@@ -1,6 +1,5 @@
 <script lang="ts">
   import { m, dateLocale } from '../lib/i18n';
-  import { isModulePaused } from '@kotbo/contracts';
   import { removeWithUndo, orThrow } from '../lib/undoRemoval';
   import { memberAvatarSrc } from '../lib/discordMedia';
   import { router } from 'tinro';
@@ -68,9 +67,6 @@
   let copiedKeyId = $state('');
   let newKeyCreatedValue = $state('');
   let permRecruitment = $state(false);
-  // Daily Algo en pause : sa permission n'est plus proposee, ni cochee d'office.
-  const dailyAlgoPaused = isModulePaused('daily_algo');
-  let permDailyAlgo = $state(!dailyAlgoPaused);
 
   // Manager Notes Form
   let newNoteContent = $state('');
@@ -250,7 +246,6 @@
     
     const permissions: string[] = [];
     if (permRecruitment) permissions.push('recruitment:forms');
-    if (permDailyAlgo) permissions.push('daily_algo:create_exercise');
 
     if (permissions.length === 0) {
       toast.error(m.pf_select_permission());
@@ -278,7 +273,6 @@
       showNewKeyForm = false;
       newKeyName = m.pf_my_api_key();
       permRecruitment = false;
-      permDailyAlgo = !dailyAlgoPaused;
       toast.success(m.pf_key_created());
     } catch (err) {
       console.error(err);
@@ -955,15 +949,6 @@
                         </span>
                       </span>
                     </label>
-                    {#if !dailyAlgoPaused}
-                    <label class="flex items-start gap-3 rounded-lg border border-outline-variant p-3 cursor-pointer hover:bg-surface-container">
-                      <input type="checkbox" bind:checked={permDailyAlgo} class="mt-0.5 accent-primary" />
-                      <span>
-                        <span class="block text-sm font-medium text-on-surface">Daily Algo API</span>
-                        <span class="block mt-0.5 text-xs text-on-surface-variant leading-relaxed">{m.pf_daily_algo_perm()}</span>
-                      </span>
-                    </label>
-                    {/if}
                   </div>
                 </fieldset>
 
@@ -982,7 +967,7 @@
                         <span class="text-sm font-medium text-on-surface">{key.name}</span>
                         {#each key.permissions as perm}
                           <span class="rounded-md bg-surface-container px-1.5 py-0.5 text-xs text-on-surface-variant">
-                            {perm === 'recruitment:forms' ? 'Recrutement' : perm === 'daily_algo:create_exercise' ? 'Daily Algo' : perm}
+                            {perm === 'recruitment:forms' ? 'Recrutement' : perm}
                           </span>
                         {/each}
                       </div>

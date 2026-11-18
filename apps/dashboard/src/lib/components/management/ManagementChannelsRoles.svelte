@@ -8,7 +8,6 @@
   import { categoryIcons, categoryLabel, groupByCategory } from './ManagementAccess.svelte';
   import { m } from '../../i18n';
   import { moduleName } from '../../moduleLabels';
-  import { isModulePaused } from '@kotbo/contracts';
 
   let {
     features = $bindable([]),
@@ -45,10 +44,6 @@
     { key: 'publicChannelId', label: m.mcr_field_public_label(), desc: m.mcr_field_public_desc() },
     { key: 'configChannelId', label: m.mcr_field_config_label(), desc: m.mcr_field_config_desc() },
     { key: 'newsChannelId', label: m.mcr_field_news_label(), desc: m.mcr_field_news_desc() },
-    // Daily Algo en pause : son salon n'a plus rien a recevoir.
-    ...(isModulePaused('daily_algo')
-      ? []
-      : [{ key: 'dailyAlgoChannelId', label: m.mcr_field_daily_algo_label(), desc: m.mcr_field_daily_algo_desc(), isVoice: false }]),
   ]);
 
   const globalRoleFields = $derived([
@@ -59,8 +54,8 @@
 
   /**
    * Seuls les interrupteurs qui n'appartiennent a aucun module du registre.
-   * `youtubeEnabled`, `digestEnabled`, `translationEnabled`, `codePoliceEnabled`,
-   * `dailyAlgoEnabled` et `analyticsEnabled` sont les colonnes miroir des modules
+   * `youtubeEnabled`, `digestEnabled`, `translationEnabled`, `codePoliceEnabled`
+   * et `analyticsEnabled` sont les colonnes miroir des modules
    * du meme nom : les exposer ici en faisait un second interrupteur, qui ecrasait
    * le premier a l'enregistrement suivant. L'activation se fait sur `/modules`.
    */

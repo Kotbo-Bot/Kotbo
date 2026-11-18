@@ -11,7 +11,6 @@
    * reçoivent d'ici, chargée seulement quand un sous-onglet en a besoin.
    */
   import { untrack } from "svelte";
-  import { isModulePaused } from "@kotbo/contracts";
   import { router } from "tinro";
   import { authStore } from "../lib/stores/auth.svelte";
   import { toast } from "../lib/stores/toast.svelte";
@@ -160,17 +159,6 @@
           icon: "Code",
           scope: "period",
         },
-        // Daily Algo en pause : son onglet sort de la page avec lui.
-        ...(isModulePaused("daily_algo")
-          ? []
-          : [
-              {
-                id: "algo",
-                label: m.an_tab_algo(),
-                icon: "Code",
-                scope: "period" as const,
-              },
-            ]),
       ],
     },
     {
@@ -947,7 +935,7 @@
           <!-- Encadré ci-dessus. -->
         {:else if activeTab === "overview"}
           <OverviewSection onNavigate={goTab} {legacy} />
-        {:else if ["messages", "voice", "heatmap", "pulse", "weekly", "commands", "algo"].includes(activeTab)}
+        {:else if ["messages", "voice", "heatmap", "pulse", "weekly", "commands"].includes(activeTab)}
           <ActivitySection
             view={activeTab as ActivityView}
             {legacy}

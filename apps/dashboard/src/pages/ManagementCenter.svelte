@@ -76,13 +76,13 @@
   const GUILD_SETTINGS_KEYS = [
     'configChannelId', 'regulationChannelId', 'logChannelId', 'publicChannelId',
     'digestChannelId', 'meetingAnnouncementChannelId', 'meetingVoiceChannelId',
-    'newsChannelId', 'dailyAlgoChannelId', 'moderatorRoleId', 'baseStaffRoleId',
+    'newsChannelId', 'moderatorRoleId', 'baseStaffRoleId',
     'testStaffRoleId',
   ] as const;
 
   // Ne figurent ici que les interrupteurs qui n'appartiennent a aucun module.
-  // `youtubeEnabled`, `digestEnabled`, `translationEnabled`, `codePoliceEnabled`,
-  // `dailyAlgoEnabled` et `analyticsEnabled` sont les colonnes miroir de modules
+  // `youtubeEnabled`, `digestEnabled`, `translationEnabled`, `codePoliceEnabled`
+  // et `analyticsEnabled` sont les colonnes miroir de modules
   // du registre : les emporter dans ce brouillon les renvoyait telles quelles a
   // chaque enregistrement, et une bascule faite entre-temps sur `/modules`
   // se trouvait annulee par la sauvegarde suivante.

@@ -198,7 +198,6 @@ function fullAnalytics(period: number) {
       totalStaff: staff.length,
       inactiveMembers: 23,
       avgTenureDays: 164,
-      algoAvgParticipation: 6.4,
       avgMeetingAttendance: 78,
       messagesTrend: older > 0 ? Math.round(((recent - older) / older) * 100) : 0,
     },
@@ -675,29 +674,6 @@ function growth(days: number) {
   };
 }
 
-function dailyAlgo(days: number) {
-  const performers = ['Noé', 'Lina', 'Yanis', 'Inès', 'Maëlle'].map((name, i) => {
-    const p = personByName(name);
-    return { userId: p.id, name: p.displayName, submissions: 18 - i * 3, validated: 15 - i * 3, avgScore: 92 - i * 6, scores: [] };
-  });
-  return {
-    metrics: {
-      totalRuns: Math.round(days * 0.9),
-      totalSubmissions: Math.round(days * 6.4),
-      completedSubmissions: Math.round(days * 4.9),
-      completionRate: 77,
-      avgSubmissionsPerRun: 6.4,
-    },
-    trend: serverSeries(Math.min(days, 30)).map((d, i) => ({ dateKey: d.dateKey, count: 3 + ((i * 7) % 6), submissions: 3 + ((i * 7) % 6) })),
-    topPerformers: performers,
-    difficultyDistribution: [
-      { difficulty: 'EASY', count: Math.round(days * 0.4) },
-      { difficulty: 'MEDIUM', count: Math.round(days * 0.35) },
-      { difficulty: 'HARD', count: Math.round(days * 0.15) },
-    ],
-  };
-}
-
 function interactions() {
   const edges = interactionEdges().filter((e) => e.count >= 2);
   const activity = new Map<string, number>();
@@ -926,7 +902,6 @@ export function registerAnalyticsRoutes(): void {
   route('GET', `${base}/weekly-comparison`, ({ query }) => weekly(Number(query.get('offset')) || 1, query.get('mode') ?? 'week'));
   route('GET', `${base}/growth-retention`, ({ query }) => growth(periodOf(query)));
   route('GET', `${base}/climate`, ({ query }) => climate(periodOf(query)));
-  route('GET', `${base}/daily-algo`, ({ query }) => dailyAlgo(periodOf(query)));
   route('GET', `${base}/interactions`, () => interactions());
   route('GET', `${base}/advanced`, ({ query }) => advanced(query.get('section') ?? ''));
   route('GET', `${base}/members`, ({ query }) => memberDetailed(query.get('userId') ?? '', Number(query.get('period')) || 30));

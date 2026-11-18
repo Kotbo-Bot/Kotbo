@@ -131,14 +131,6 @@ export async function reconfigureAdminShards(payload: { mode: 'auto' | 'fixed'; 
   return response.json();
 }
 
-export async function fetchGlobalDailyAlgoLeaderboard() {
-  const guildId = getGuildId();
-  if (!guildId) return null;
-  const response = await authorizedFetch(`${BASE_URL}/guilds/${guildId}/daily-algo-submissions/global-leaderboard`);
-  if (!response.ok) return null;
-  return response.json();
-}
-
 export async function fetchAdminGuildInvite(guildId: string) {
   const response = await authorizedFetch(`${API_BASE_URL}/api/admin/guilds/${guildId}/invite`, { method: 'POST' });
   if (!response.ok) throw new Error("Erreur lors de la création de l'invitation");

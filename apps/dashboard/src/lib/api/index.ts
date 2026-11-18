@@ -10,7 +10,6 @@ export { DashboardApiError, isDashboardApiError, type ApiErrorKind } from './err
 export * from './guild';
 export * from './members';
 export * from './regulation';
-export * from './dailyAlgo';
 export * from './staff';
 export * from './analytics';
 export * from './tutoring';
@@ -48,6 +47,7 @@ export * from './transcripts';
 export * from './messageLogs';
 export * from './raidProtection';
 export * from './clans';
+export * from './staffApiKeys';
 export * from './drops';
 export * from './ghostMembers';
 export * from './auditEvents';

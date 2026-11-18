@@ -181,19 +181,6 @@ export async function fetchGrowthAndRetention(options: { days?: number, startDat
   });
 }
 
-export async function fetchDailyAlgoAnalytics(options: { days?: number, startDate?: string, endDate?: string } = {}, guildId = authStore.selectedGuildId) {
-  const params = new URLSearchParams();
-  if (options.days) params.append('days', options.days.toString());
-  if (options.startDate) params.append('startDate', options.startDate);
-  if (options.endDate) params.append('endDate', options.endDate);
-
-  return dashboardRequest(`/analytics/daily-algo?${params.toString()}`, {
-    method: 'GET',
-    guildId,
-    errorContext: 'API Error (Daily Algo Analytics):'
-  });
-}
-
 export async function fetchGlobalInteractions(options: { period?: number, startDate?: string, endDate?: string } = {}, guildId = authStore.selectedGuildId) {
   const params = new URLSearchParams();
   if (options.period) params.append('period', options.period.toString());

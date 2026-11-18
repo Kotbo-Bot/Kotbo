@@ -93,7 +93,6 @@ class DashboardStore {
     publicChannelId: '',
     newsChannelId: '',
     digestChannelId: '',
-    dailyAlgoChannelId: '',
     baseStaffRoleId: '',
     testStaffRoleId: '',
     discordChannels: [] as DashboardChannel[],
@@ -109,30 +108,7 @@ class DashboardStore {
     sanctionReportSkipBots: false,
     translationEnabled: false,
     codePoliceEnabled: false,
-    dailyAlgoEnabled: false,
     analyticsEnabled: true,
-    // ── Daily Algo v2 : barème, semaine, sanctions, pont clans ──
-    dailyAlgoTimezone: 'Europe/Paris',
-    dailyAlgoParticipationPoints: 1,
-    dailyAlgoWeekendMultiplier: 1.5,
-    dailyAlgoWeeklyRewardsEnabled: false,
-    dailyAlgoWeekRole1Id: '',
-    dailyAlgoWeekRole2Id: '',
-    dailyAlgoWeekRole3Id: '',
-    dailyAlgoWeekRoleRotate: true,
-    dailyAlgoWeekXp1: 500,
-    dailyAlgoWeekXp2: 300,
-    dailyAlgoWeekXp3: 150,
-    dailyAlgoWeekParticipationXp: 100,
-    dailyAlgoWeekAnnouncementChannelId: '',
-    dailyAlgoSanctionType: 'WARN',
-    dailyAlgoSanctionWeight: 1,
-    dailyAlgoSanctionDurationMinutes: 60,
-    clanPointsFromDailyAlgo: false,
-    clanPointsFromDailyAlgoRate: 1,
-    clanPointsDailyAlgoTop1: 30,
-    clanPointsDailyAlgoTop2: 20,
-    clanPointsDailyAlgoTop3: 10,
     githubReleasesEnabled: false,
     digestEnabled: false,
     youtubeEnabled: false,
@@ -160,7 +136,6 @@ class DashboardStore {
     access: {
       level: 'none',
       canModerateContent: false,
-      canModerateDailyAlgo: false,
       canManageSettings: false
     },
     featureAccess: {} as Record<string, {
@@ -394,7 +369,6 @@ class DashboardStore {
         this.state.publicChannelId = data.publicChannelId || '';
         this.state.newsChannelId = data.newsChannelId || '';
         this.state.digestChannelId = data.digestChannelId || '';
-        this.state.dailyAlgoChannelId = data.dailyAlgoChannelId || '';
         this.state.baseStaffRoleId = data.baseStaffRoleId || '';
         this.state.testStaffRoleId = data.testStaffRoleId || '';
         this.state.discordChannels = data.discordChannels || [];
@@ -410,29 +384,7 @@ class DashboardStore {
         this.state.sanctionReportSkipBots = data.sanctionReportSkipBots ?? false;
         this.state.translationEnabled = data.translationEnabled || false;
         this.state.codePoliceEnabled = data.codePoliceEnabled || false;
-        this.state.dailyAlgoEnabled = data.dailyAlgoEnabled || false;
         this.state.analyticsEnabled = data.analyticsEnabled ?? true;
-        this.state.dailyAlgoTimezone = data.dailyAlgoTimezone || 'Europe/Paris';
-        this.state.dailyAlgoParticipationPoints = data.dailyAlgoParticipationPoints ?? 1;
-        this.state.dailyAlgoWeekendMultiplier = data.dailyAlgoWeekendMultiplier ?? 1.5;
-        this.state.dailyAlgoWeeklyRewardsEnabled = data.dailyAlgoWeeklyRewardsEnabled || false;
-        this.state.dailyAlgoWeekRole1Id = data.dailyAlgoWeekRole1Id || '';
-        this.state.dailyAlgoWeekRole2Id = data.dailyAlgoWeekRole2Id || '';
-        this.state.dailyAlgoWeekRole3Id = data.dailyAlgoWeekRole3Id || '';
-        this.state.dailyAlgoWeekRoleRotate = data.dailyAlgoWeekRoleRotate ?? true;
-        this.state.dailyAlgoWeekXp1 = data.dailyAlgoWeekXp1 ?? 500;
-        this.state.dailyAlgoWeekXp2 = data.dailyAlgoWeekXp2 ?? 300;
-        this.state.dailyAlgoWeekXp3 = data.dailyAlgoWeekXp3 ?? 150;
-        this.state.dailyAlgoWeekParticipationXp = data.dailyAlgoWeekParticipationXp ?? 100;
-        this.state.dailyAlgoWeekAnnouncementChannelId = data.dailyAlgoWeekAnnouncementChannelId || '';
-        this.state.dailyAlgoSanctionType = data.dailyAlgoSanctionType || 'WARN';
-        this.state.dailyAlgoSanctionWeight = data.dailyAlgoSanctionWeight ?? 1;
-        this.state.dailyAlgoSanctionDurationMinutes = data.dailyAlgoSanctionDurationMinutes ?? 60;
-        this.state.clanPointsFromDailyAlgo = data.clanPointsFromDailyAlgo || false;
-        this.state.clanPointsFromDailyAlgoRate = data.clanPointsFromDailyAlgoRate ?? 1;
-        this.state.clanPointsDailyAlgoTop1 = data.clanPointsDailyAlgoTop1 ?? 30;
-        this.state.clanPointsDailyAlgoTop2 = data.clanPointsDailyAlgoTop2 ?? 20;
-        this.state.clanPointsDailyAlgoTop3 = data.clanPointsDailyAlgoTop3 ?? 10;
         this.state.githubReleasesEnabled = data.githubReleasesEnabled || false;
         this.state.digestEnabled = data.digestEnabled || false;
         this.state.youtubeEnabled = data.youtubeEnabled || false;
@@ -460,7 +412,6 @@ class DashboardStore {
         this.state.access = data.access || {
           level: 'none',
           canModerateContent: false,
-          canModerateDailyAlgo: false,
           canManageSettings: false
         };
         this.state.featureAccess = data.featureAccess || {};
