@@ -272,15 +272,15 @@ export function createOgRouter(client: Client): OpenAPIHono {
     };
 
     if (c.req.header('if-none-match') === etag) {
-      return new Response(null, { status: 304, headers: imageHeaders });
+      return c.body(null, 304, imageHeaders);
     }
 
     const png = await tryRenderOgCard(meta.card);
     if (!png) return c.json({ error: 'Rendu indisponible' }, 503);
 
-    return new Response(new Uint8Array(png), {
-      status: 200,
-      headers: { ...imageHeaders, 'Content-Type': 'image/png' },
+    return c.body(new Uint8Array(png), 200, {
+      ...imageHeaders,
+      'Content-Type': 'image/png',
     });
   });
 
