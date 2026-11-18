@@ -109,7 +109,6 @@
         <p class="mt-1 max-w-prose text-sm text-on-surface-variant">{m.me_subtitle()}</p>
       </div>
       <div class="flex items-center flex-wrap gap-2 shrink-0">
-        <Button href="/servers" size="sm" variant="secondary" icon="Server">{m.srv_title()}</Button>
         {#if hasDashboard}
           <Button href="/" size="sm" icon="arrow-left">{m.me_back_dashboard()}</Button>
         {:else}
@@ -118,61 +117,19 @@
       </div>
     </header>
 
-    <!-- Mise en valeur forte de l'ajout de Kotbo sur son propre serveur -->
-    <section
-      class="relative overflow-hidden rounded-2xl border border-primary/30 bg-surface-container-low/60 p-6 sm:p-7 shadow-xs"
-      aria-labelledby="me-invite-heading"
-    >
-      <div
-        class="pointer-events-none absolute -right-12 -top-12 h-52 w-52 rounded-full bg-primary/10 blur-3xl"
-        aria-hidden="true"
-      ></div>
-
-      <div class="relative z-10 space-y-4">
-        <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-2xs font-semibold bg-primary/15 text-primary">
-          <Papicon icon="Sparkles" size={12} />
-          <span>{m.me_server_badge()}</span>
+    <section class="section-card p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <div class="flex items-start gap-3 min-w-0">
+        <div class="w-8 h-8 rounded-lg bg-surface-container text-on-surface-variant flex items-center justify-center shrink-0 mt-0.5">
+          <Papicon icon="Plus" size={16} />
         </div>
-
-        <div>
-          <h2 id="me-invite-heading" class="text-xl sm:text-2xl font-bold font-headline text-on-surface tracking-tight leading-snug">
-            {m.me_manage_server()}
-          </h2>
-          <p class="mt-1.5 text-sm text-on-surface-variant max-w-xl leading-relaxed">
-            {m.me_manage_server_desc()}
-          </p>
+        <div class="min-w-0">
+          <h2 class="text-sm font-semibold text-on-surface leading-tight">{m.me_manage_server()}</h2>
+          <p class="text-body-sm text-on-surface-variant mt-0.5 leading-relaxed">{m.me_manage_server_desc()}</p>
         </div>
-
-        <div class="flex flex-wrap gap-x-5 gap-y-2 text-xs text-on-surface-variant font-medium pt-1">
-          <span class="inline-flex items-center gap-1.5">
-            <Papicon icon="check" size={13} class="text-primary shrink-0" />
-            {m.me_feature_tickets()}
-          </span>
-          <span class="inline-flex items-center gap-1.5">
-            <Papicon icon="check" size={13} class="text-primary shrink-0" />
-            {m.me_feature_moderation()}
-          </span>
-          <span class="inline-flex items-center gap-1.5">
-            <Papicon icon="check" size={13} class="text-primary shrink-0" />
-            {m.me_feature_rank()}
-          </span>
-        </div>
-
-        <div class="flex flex-wrap items-center gap-3 pt-2">
-          <Button
-            size="md"
-            variant="primary"
-            icon="Plus"
-            onclick={openInviteModal}
-            class="shadow-sm font-semibold"
-          >
-            {m.me_add_kotbo_cta()}
-          </Button>
-
-          <Button href="/servers" size="md" variant="secondary" icon="Server">
-            {m.srv_title()}
-          </Button>
-        </div>
+      </div>
+      <div class="flex items-center gap-2 shrink-0 w-full sm:w-auto">
+        <Button href="/servers" size="sm" variant="secondary" icon="Server">{m.srv_title()}</Button>
+        <Button size="sm" variant="primary" icon="Plus" onclick={openInviteModal}>{m.me_add_kotbo_cta()}</Button>
       </div>
     </section>
 
