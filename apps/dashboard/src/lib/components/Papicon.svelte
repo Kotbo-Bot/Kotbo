@@ -47,7 +47,11 @@
       const child = stack.shift();
       if (Array.isArray(child)) {
         stack.unshift(...child);
-      } else if (child != null && typeof child === "object") {
+      } else if (
+        child != null &&
+        typeof child === "object" &&
+        typeof child.type === "string"
+      ) {
         flattened.push(child);
       }
     }
@@ -71,7 +75,10 @@
   const svgProps = $derived(reactIcon?.props ?? {});
   const svgChildren = $derived(flattenChildren(svgProps.children));
 
-  const LucideComponent = $derived(getLucideIcon(requestedIcon));
+  const LucideComponent = $derived.by(() => {
+    const component = getLucideIcon(requestedIcon);
+    return typeof component === "function" ? component : null;
+  });
 
   // Une icone posee dans un conteneur flex se fait ecraser des que la place
   // manque : elle garde ses attributs width/height mais flex-shrink la reduit
@@ -111,6 +118,21 @@
       {/each}
     </svg>
   {:else}
-    <LucideComponent size={size} class={mergedClassName} style={mergedStyle} stroke-width={2.25} aria-hidden="true" />
+    {#if LucideComponent}
+      <LucideComponent size={size} class={mergedClassName} style={mergedStyle} stroke-width={2.25} aria-hidden="true" />
+    {:else}
+      <svg
+        width={size}
+        height={size}
+        viewBox="0 0 24 24"
+        fill="none"
+        class={mergedClassName}
+        style={mergedStyle}
+        aria-hidden="true"
+        focusable="false"
+      >
+        <circle cx="12" cy="12" r="9" fill="currentColor" />
+      </svg>
+    {/if}
   {/if}
 {/key}
