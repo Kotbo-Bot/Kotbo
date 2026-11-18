@@ -10,6 +10,7 @@ import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { readFileSync } from 'node:fs';
+import { completeModuleMock } from '../helpers/moduleMock.js';
 
 /**
  * Source d'une route du dashboard, fins de ligne ramenées à LF : les motifs
@@ -69,7 +70,26 @@ for (const file of ['../../utils/db.ts', '../../utils/db.js']) {
   mock.module(path.resolve(import.meta.dir, file), () => ({ default: mockDb, prisma: mockDb, prismaRead: mockDb, upsertRetryingRace: (upsert: () => Promise<unknown>) => upsert() }));
 }
 
-const { handleEventsRoutes } = await import('../../api/routes/dashboard/events.js');
+// Routes servies par Hono : session et garde serveur simulées, on vérifie la route elle-même.
+const allowAll = { level: 'admin', canViewDashboard: true, canManageSettings: true, canModerateContent: true };
+for (const ext of ['ts', 'js']) {
+  mock.module(path.resolve(import.meta.dir, `../../api/routes/dashboard/guildGate.${ext}`), () =>
+    completeModuleMock(path.resolve(import.meta.dir, '../../api/routes/dashboard/guildGate.ts'), {
+      auditGlobalAdminWrite: async () => {},
+      evaluateGuildGate: async () => ({ denied: null, access: allowAll, effectiveAccess: allowAll }),
+    }));
+  mock.module(path.resolve(import.meta.dir, `../../api/auth/sessionStore.${ext}`), () =>
+    completeModuleMock(path.resolve(import.meta.dir, '../../api/auth/sessionStore.ts'), {
+      sessionIdFromCookieHeader: () => 'sid',
+      getDashboardSession: async () => ({ userId: 'staff-1', username: 'staff' }),
+    }));
+  mock.module(path.resolve(import.meta.dir, `../../utils/cache.${ext}`), () =>
+    completeModuleMock(path.resolve(import.meta.dir, '../../utils/cache.ts'), {
+      cache: { invalidateGuild: async () => {} },
+    }));
+}
+
+const { createEventsRouter } = await import('../../api/routes/dashboard/events.js');
 const { handleStaffServerRoutes } = await import('../../api/routes/dashboard/staffServer.js');
 const { handleInvitationsRoutes } = await import('../../api/routes/dashboard/modules/invitations.js');
 
@@ -103,14 +123,14 @@ beforeEach(() => { writes = []; writeWheres = []; });
 
 describe('accès entre serveurs', () => {
   test('un événement d\'un autre serveur ne se modifie ni ne se supprime', async () => {
-    for (const [method, parts] of [
-      ['PATCH', ['api', 'dashboard', 'guilds', HERE, 'events', 'event-1']],
-      ['DELETE', ['api', 'dashboard', 'guilds', HERE, 'events', 'event-1']],
-      ['GET', ['api', 'dashboard', 'guilds', HERE, 'events', 'event-1']],
-    ] as const) {
-      const res = response();
-      await handleEventsRoutes(request(method, { title: 'x' }), res, [...parts], new URL('http://localhost/'), client, user, HERE, access);
-      expect(res.statusCode).toBe(404);
+    const router = createEventsRouter(client);
+    for (const method of ['PATCH', 'DELETE', 'GET']) {
+      const res = await router.request(`/api/dashboard/guilds/${HERE}/events/event-1`, {
+        method,
+        headers: { cookie: 'kotbo_session=x', 'content-type': 'application/json' },
+        ...(method === 'GET' ? {} : { body: JSON.stringify({ title: 'x' }) }),
+      });
+      expect(res.status).toBe(404);
     }
     expect(writes).toEqual([]);
   });
