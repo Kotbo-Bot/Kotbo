@@ -13,6 +13,7 @@ import { getMemberIdentities, memberProfileIdentity, resolveMemberAvatarUrl, res
 const MAX_IDENTITY_LOOKUP = 100;
 import { findPresenceOptOuts } from '../../../services/core/presencePrivacyService.js';
 import { LinkedAccountType, LinkedAccountStatus } from '@prisma/client';
+import { withInviterAvatars } from '../../../services/analytics/inviterAvatars.js';
 import {
   json,
   readJsonBody,
@@ -1069,26 +1070,7 @@ export async function handleMembersRoutes(
               joinedAt: true,
             },
           });
-          const inviterIds = inviterUsage
-            .map((entry) => entry.inviterId)
-            .filter((id): id is string => !!id);
-          const inviterProfiles = inviterIds.length > 0
-            ? await prisma.memberProfile.findMany({
-                where: { guildId, userId: { in: inviterIds } },
-                select: { userId: true, avatarUrl: true },
-              })
-            : [];
-          const inviterAvatarMap = new Map(
-            inviterProfiles.map((profile) => [profile.userId, profile.avatarUrl])
-          );
-          const enrichedInviterUsage = inviterUsage.map((entry) => ({
-            ...entry,
-            avatarUrl: entry.inviterId
-              ? inviterAvatarMap.get(entry.inviterId)
-                ?? client.users.cache.get(entry.inviterId)?.displayAvatarURL({ size: 128 })
-                ?? null
-              : null,
-          }));
+          const enrichedInviterUsage = await withInviterAvatars(client, guildId, inviterUsage);
           const totalJoined = await prisma.memberInvite.count({
             where: { guildId },
           });
