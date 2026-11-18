@@ -22,7 +22,6 @@ import { handleHomeWidgetsRoutes } from './dashboard/homeWidgets.js';
 import { handleRankedRoutes } from './dashboard/ranked.js';
 import { handleRaidProtectionRoutes } from './dashboard/raidProtection.js';
 import { handleClansRoutes } from './dashboard/clans.js';
-import { handleDropsRoutes } from './dashboard/drops.js';
 import { getCachedFeatureAccess } from './dashboard/featureGate.js';
 
 export async function handleDashboardRoutes(
@@ -147,12 +146,6 @@ export async function handleDashboardRoutes(
     }
     if (parts[4] === 'clans') {
       if (await handleClansRoutes(req, res, parts, client, user, guildId, effectiveAccess)) {
-        if (method !== 'GET') await cache.invalidateGuild(guildId);
-        return true;
-      }
-    }
-    if (parts[4] === 'drops') {
-      if (await handleDropsRoutes(req, res, parts, client, user, guildId, effectiveAccess)) {
         if (method !== 'GET') await cache.invalidateGuild(guildId);
         return true;
       }

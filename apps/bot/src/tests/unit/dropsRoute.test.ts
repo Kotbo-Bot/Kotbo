@@ -1,11 +1,10 @@
 import { describe, expect, test, mock, beforeEach } from 'bun:test';
-import { IncomingMessage, ServerResponse } from 'node:http';
-import { Socket } from 'node:net';
 import path from 'node:path';
 import type { Client } from 'discord.js';
 import { DASHBOARD_ACCESS_ADMIN, type AuthClaims, type DashboardAccess } from '../../api/shared.js';
 import { PlanLockedError } from '../../services/core/moduleActivationService.js';
 import { completeModuleMock } from '../helpers/moduleMock.js';
+import { mockDashboardGate } from '../helpers/honoDashboard.js';
 
 let inOnboardingResult = false;
 const mockSetStatus = mock(async () => ({
@@ -80,52 +79,32 @@ for (const suffix of [
 }
 
 // Import après les mocks
-const { handleDropsRoutes } = await import('../../api/routes/dashboard/drops.js');
+mockDashboardGate(DASHBOARD_ACCESS_ADMIN, { userId: 'user-1', username: 'Admin' });
+const { createDropsRouter } = await import('../../api/routes/dashboard/drops.js');
 
-function createMockRequest(body: Record<string, unknown>, method = 'PUT', url = '/api/dashboard/guilds/guild-123/drops'): IncomingMessage {
-  const socket = new Socket();
-  const req = new IncomingMessage(socket);
-  req.method = method;
-  req.url = url;
-  req.headers = { 'content-type': 'application/json' };
-  const raw = JSON.stringify(body);
-  req.push(raw);
-  req.push(null);
-  return req;
-}
+type MockRequest = { method: string; body: string; url?: string };
+type MockResponse = { statusCode: number; body: string };
 
-interface MockResponse extends ServerResponse {
-  body: string;
+function createMockRequest(body: Record<string, unknown>, method = 'PUT', url?: string): MockRequest {
+  return { method, body: JSON.stringify(body), url };
 }
 
 function createMockResponse(): MockResponse {
-  const socket = new Socket();
-  const res = new ServerResponse(new IncomingMessage(socket)) as MockResponse;
+  return { statusCode: 0, body: '' };
+}
 
-  let _statusCode = 200;
-  let _body = '';
-
-  Object.defineProperty(res, 'statusCode', {
-    get: () => _statusCode,
-    set: (code: number) => {
-      _statusCode = code;
-    },
+/** Garde la forme des appels d'origine, mais passe par le routeur Hono. */
+async function handleDropsRoutes(req: MockRequest, res: MockResponse, parts: string[], client: Client, ..._rest: unknown[]): Promise<boolean> {
+  // L'URL de la requête porte la query ; sinon on la reconstitue depuis le chemin.
+  const target = req.url && req.url.split('?')[0] === `/${parts.join('/')}` ? req.url : `/${parts.join('/')}`;
+  const response = await createDropsRouter(client).request(target, {
+    method: req.method,
+    headers: { cookie: 'kotbo_session=test', 'content-type': 'application/json' },
+    ...(req.method === 'GET' ? {} : { body: req.body }),
   });
-
-  res.setHeader = () => res;
-  res.getHeader = () => undefined;
-  res.writeHead = (statusCode: number) => {
-    _statusCode = statusCode;
-    return res;
-  };
-
-  res.end = (chunk?: unknown) => {
-    if (chunk) _body += String(chunk);
-    res.body = _body;
-    return res;
-  };
-
-  return res;
+  res.statusCode = response.status;
+  res.body = await response.text();
+  return response.status !== 404;
 }
 
 const mockClient = {

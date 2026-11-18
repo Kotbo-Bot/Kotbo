@@ -1,8 +1,8 @@
-import { IncomingMessage, ServerResponse } from 'node:http';
-import { Client } from 'discord.js';
+import { Hono } from 'hono';
+import type { Client } from 'discord.js';
 import prisma from '../../../utils/db.js';
 import { logger } from '../../../utils/logger.js';
-import { json, readJsonBody, getGuildName, pushAudit, broadcastDashboardStateChange, type AuthClaims, type DashboardAccess } from '../../shared.js';
+import { getGuildName, pushAudit, broadcastDashboardStateChange } from '../../shared.js';
 import {
   DROP_ADVICE_WINDOW_DAYS,
   DROP_TYPES,
@@ -26,7 +26,7 @@ import {
 } from '../../../services/features/dropService.js';
 import { resolveGuildLocale } from '../../../utils/i18n.js';
 
-import { jsonFailure } from '../../shared/failure.js';
+import { fail, guildRoute, readBody, send } from '../../hono/dashboard/kit.js';
 /** Drops passés par page de l'historique de l'onglet global. */
 const HISTORY_PAGE_SIZE = 10;
 /** Gagnants listés au dépli d'un drop : un mode fenêtre peut en compter des centaines. */
@@ -179,23 +179,14 @@ function serializeConfig(row: Awaited<ReturnType<typeof getOrCreateDropConfigs>>
   };
 }
 
-export async function handleDropsRoutes(
-  req: IncomingMessage,
-  res: ServerResponse,
-  parts: string[],
-  client: Client,
-  user: AuthClaims,
-  guildId: string,
-  _access: DashboardAccess,
-): Promise<boolean> {
-  const method = req.method;
-  const auditUser = `${user.username} (${user.userId})`;
+export function createDropsRouter(client: Client) {
+  const router = new Hono();
+  const base = '/api/dashboard/guilds/:guildId';
+  const gate = guildRoute(client);
 
-  // Path matches: /api/dashboard/guilds/:guildId/drops/...
-  const subAction = parts[5]; // undefined | XP | RPG_XP | CLAN_POINTS | COINS
 
-  // GET /api/dashboard/guilds/:guildId/drops
-  if (!subAction && method === 'GET') {
+  router.get(`${base}/drops`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
     try {
       const guildData = await prisma.guild.findUnique({
         where: { id: guildId },
@@ -214,8 +205,7 @@ export async function handleDropsRoutes(
       });
 
       if (!guildData) {
-        json(res, 404, { error: 'Serveur non trouvé en base de données.' });
-        return true;
+        return send(c, { error: 'Serveur non trouvé en base de données.' }, 404);
       }
 
       const [configs, weeklyOutcomes, locale, abandonedClaims] = await Promise.all([
@@ -231,7 +221,7 @@ export async function handleDropsRoutes(
 
       const history = await dropHistoryPage(guildId, {});
 
-      json(res, 200, {
+      return send(c, {
         ...normalizeDropGlobalSettings(guildData),
         configs: configs.map(serializeConfig),
         weeklyOutcomes,
@@ -242,37 +232,41 @@ export async function handleDropsRoutes(
       });
     } catch (err) {
       logger.error('DropsAPI', 'Error fetching drops config:', err);
-      jsonFailure(res, err, 'Erreur lors de la récupération de la configuration des drops.', 'DropsAPI');
+      return fail(c, err, 'Erreur lors de la récupération de la configuration des drops.', 'DropsAPI');
     }
-    return true;
-  }
+  });
 
   // GET /api/dashboard/guilds/:guildId/drops/history[?type=&before=] : page suivante ou filtrée
-  // GET /api/dashboard/guilds/:guildId/drops/history/:dropId : gagnants d'un drop
-  if (subAction === 'history' && method === 'GET') {
+  router.get(`${base}/drops/history`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
     try {
-      const dropId = parts[6];
-      if (dropId) {
-        json(res, 200, { winners: await dropWinners(client, guildId, dropId) });
-        return true;
-      }
-      const url = new URL(req.url ?? '', 'http://localhost');
-      const type = url.searchParams.get('type') ?? undefined;
-      json(res, 200, await dropHistoryPage(guildId, {
+      const type = c.req.query('type') ?? undefined;
+      return send(c, await dropHistoryPage(guildId, {
         type: isDropType(type) ? type : undefined,
-        before: parseBefore(url.searchParams.get('before')),
+        before: parseBefore((c.req.query('before') ?? null)),
       }));
     } catch (err) {
       logger.error('DropsAPI', 'Error fetching drop history:', err);
-      jsonFailure(res, err, 'Erreur lors de la récupération de l\'historique des drops.', 'DropsAPI');
+      return fail(c, err, 'Erreur lors de la récupération de l\'historique des drops.', 'DropsAPI');
     }
-    return true;
-  }
+  });
 
-  // PUT /api/dashboard/guilds/:guildId/drops (réglages globaux)
-  if (!subAction && method === 'PUT') {
+  // GET /api/dashboard/guilds/:guildId/drops/history/:dropId : gagnants d'un drop
+  router.get(`${base}/drops/history/:dropId`, ...gate, async (c) => {
     try {
-      const body = await readJsonBody<{
+      return send(c, { winners: await dropWinners(client, c.req.param('guildId'), c.req.param('dropId')) });
+    } catch (err) {
+      logger.error('DropsAPI', 'Error fetching drop history:', err);
+      return fail(c, err, 'Erreur lors de la récupération de l\'historique des drops.', 'DropsAPI');
+    }
+  });
+
+  router.put(`${base}/drops`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const auditUser = `${user.username} (${user.userId})`;
+    try {
+      const body = await readBody<{
         dropsEnabled?: boolean;
         dropChannelId?: string | null;
         dropMentionRoleId?: string | null;
@@ -283,7 +277,7 @@ export async function handleDropsRoutes(
         dropJackpotChance?: number;
         dropJackpotMultiplier?: number;
         dropClaimRules?: Partial<DropClaimRules>;
-      }>(req);
+      }>(c);
 
       const current = await prisma.guild.findUnique({
         where: { id: guildId },
@@ -302,8 +296,7 @@ export async function handleDropsRoutes(
       });
 
       if (!current) {
-        json(res, 404, { error: 'Serveur non trouvé en base de données.' });
-        return true;
+        return send(c, { error: 'Serveur non trouvé en base de données.' }, 404);
       }
 
       // Les bornes viennent de `@kotbo/shared` : le formulaire et l'API refusent
@@ -330,8 +323,7 @@ export async function handleDropsRoutes(
         settings.dropClaimRules.requiredRoleId !== previousRoleId
         && dropClaimRoleMissing(settings.dropClaimRules, cachedGuildRoleIds(client, guildId))
       ) {
-        json(res, 400, { error: 'Le rôle requis pour ramasser n\'existe pas sur ce serveur.' });
-        return true;
+        return send(c, { error: 'Le rôle requis pour ramasser n\'existe pas sur ce serveur.' }, 400);
       }
 
       // L'interrupteur maître passe par la bascule de module plutôt que par la
@@ -371,35 +363,36 @@ export async function handleDropsRoutes(
       });
 
       broadcastDashboardStateChange(guildId, 'drops_updated');
-      json(res, 200, settings);
+      return send(c, settings);
     } catch (err) {
       if (err instanceof PlanLockedError) {
-        json(res, 402, {
+        return send(c, {
           error: err.message,
           code: 'plan_locked',
           moduleKey: err.moduleKey,
           currentPlan: err.currentPlan,
           requiredPlan: err.requiredPlan,
-        });
-        return true;
+        }, 402);
       }
       logger.error('DropsAPI', 'Error updating drops config:', err);
-      jsonFailure(res, err, 'Erreur lors de la mise à jour de la configuration des drops.', 'DropsAPI');
+      return fail(c, err, 'Erreur lors de la mise à jour de la configuration des drops.', 'DropsAPI');
     }
-    return true;
-  }
+  });
 
-  // PUT /api/dashboard/guilds/:guildId/drops/:type (réglages d'une ressource)
-  if (isDropType(subAction) && method === 'PUT') {
+  router.put(`${base}/drops/:subAction`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const auditUser = `${user.username} (${user.userId})`;
+    const subAction = c.req.param('subAction');
+    if (!isDropType(subAction)) return send(c, { error: 'Route introuvable' }, 404);
     try {
-      const body = await readJsonBody<Partial<DropTypeSettings>>(req);
+      const body = await readBody<Partial<DropTypeSettings>>(c);
       const [existing] = await getOrCreateDropConfigs(guildId).then(
         (rows) => rows.filter((row) => row.type === subAction),
       );
 
       if (!existing) {
-        json(res, 404, { error: 'Type de drop inconnu.' });
-        return true;
+        return send(c, { error: 'Type de drop inconnu.' }, 404);
       }
 
       const current = dropSettingsFromRow(existing);
@@ -441,13 +434,13 @@ export async function handleDropsRoutes(
       });
 
       broadcastDashboardStateChange(guildId, 'drops_updated');
-      json(res, 200, serializeConfig(updated));
+      return send(c, serializeConfig(updated));
     } catch (err) {
       logger.error('DropsAPI', `Error updating drop config ${subAction}:`, err);
-      jsonFailure(res, err, 'Erreur lors de la mise à jour de ce type de drop.', 'DropsAPI');
+      return fail(c, err, 'Erreur lors de la mise à jour de ce type de drop.', 'DropsAPI');
     }
-    return true;
-  }
+  });
 
-  return false;
+  return router;
 }
+
