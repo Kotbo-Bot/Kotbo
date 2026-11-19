@@ -4,7 +4,7 @@ import type { Prisma } from '@prisma/client';
 import prisma from '../../../../utils/db.js';
 import { logger } from '../../../../utils/logger.js';
 import { auditUserOf, fail, guildRoute, readBody, send } from '../../../hono/dashboard/kit.js';
-import { canViewFeatureSection } from '../featureGate.js';
+import { canViewFeatureSection, getCachedFeatureAccess } from '../featureGate.js';
 import { getPlanningExtras } from '../../../../services/staff/planningExtrasService.js';
 import { signIcalToken } from '../../../../services/staff/planningIcal.js';
 import { getJwtSecret } from '../../../shared/core.js';
@@ -339,9 +339,19 @@ export function createAbsencesRouter(client: Client) {
   router.patch(`${base}/absences/:absenceId`, ...gate, async (c) => {
     const guildId = c.req.param('guildId');
     const user = c.var.dashboardUser;
+    const access = c.var.effectiveAccess;
     const auditUser = auditUserOf(c);
     const absenceId = c.req.param('absenceId');
     try {
+      // La garde globale laisse passer ce PATCH sans élever les droits : décider
+      // demande « Modérer » ou « Configurer » sur Absences, comme au centre de gestion.
+      if (!access.canManageSettings) {
+        const { absences } = await getCachedFeatureAccess(client, guildId, access, user.userId);
+        if (!absences?.canModerate && !absences?.canConfigure) {
+          return send(c, { error: "Accès refusé. Décision d'absence non autorisée." }, 403);
+        }
+      }
+
       const body = await readBody<{
         status: 'ACKNOWLEDGED' | 'APPROVED' | 'REJECTED' | 'CANCELED' | 'ENDED';
         note?: string;

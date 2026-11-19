@@ -4,6 +4,7 @@ import { describe, expect, mock, test } from 'bun:test';
 import path from 'node:path';
 import type { Client } from 'discord.js';
 import { completeModuleMock } from '../helpers/moduleMock.js';
+import type { FeatureAccess, FeatureAccessMap } from '../../api/shared.js';
 
 const ROOT = path.resolve(import.meta.dir, '../..');
 
@@ -15,8 +16,12 @@ const MODERATOR = {
   canManageSettings: false,
   canManageTutoring: false,
 };
+/** Membre du staff qui consulte le dashboard, sans droit de modération (DASHBOARD_ACCESS_STAFF_VIEWER). */
+const STAFF = { ...MODERATOR, canModerateContent: false };
 
 let roleAccess: typeof MODERATOR = MODERATOR;
+/** Droits du rôle par fonctionnalité du centre de gestion. */
+let featureAccess: FeatureAccessMap = {};
 
 function mockModule(relative: string, overrides: Record<string, unknown>): void {
   for (const ext of ['ts', 'js']) {
@@ -35,7 +40,7 @@ for (const ext of ['ts', 'js']) {
     checkRateLimit: () => true,
     dashboardWriteRateLimiter: new Map(),
     dashboardSensitiveRateLimiter: new Map(),
-    resolveMemberFeatureAccess: async () => ({}),
+    resolveMemberFeatureAccess: async () => featureAccess,
   }));
 }
 mockModule('utils/cache', { cache: { get: async () => null, set: async () => {} } });
@@ -73,5 +78,37 @@ describe('garde des écritures : appels de bannissement', () => {
     expect((await gate('DELETE', 'appeals/blacklist/300000000000000001')).denied).toEqual(ADMIN_ONLY);
     // Même geste, mauvaise méthode : l'exception ne vaut que pour le POST.
     expect((await gate('PATCH', 'appeals/appel-1/decide')).denied).toEqual(ADMIN_ONLY);
+  });
+});
+
+describe('garde des écritures : planning du staff', () => {
+  const MODERATE_ONLY: FeatureAccess = { canView: true, canModerate: true, canConfigure: false, canDelete: false };
+
+  test("un responsable qui n'a que « Modérer » sur Absences peut décider d'une absence", async () => {
+    featureAccess = { absences: MODERATE_ONLY };
+    const result = await gate('PATCH', 'absences/absence-1', STAFF);
+    expect(result.denied).toBeNull();
+    // Sans élévation : absences.ts revérifie lui-même « Modérer » ou « Configurer ».
+    if (result.denied === null) expect(result.effectiveAccess.canManageSettings).toBe(false);
+  });
+
+  test('un membre du staff sans droit de section peut supprimer une absence', async () => {
+    // absences.ts ne laisse ensuite supprimer que sa propre absence.
+    featureAccess = {};
+    expect((await gate('DELETE', 'absences/absence-1', STAFF)).denied).toBeNull();
+  });
+
+  test('un membre du staff peut planifier un appel', async () => {
+    // canUserCreateCall, dans calls.ts, tranche ensuite selon la configuration des appels.
+    featureAccess = {};
+    expect((await gate('POST', 'calls', STAFF)).denied).toBeNull();
+  });
+
+  test('les réglages des absences et la gestion des appels restent réservés aux administrateurs', async () => {
+    featureAccess = { absences: MODERATE_ONLY };
+    expect((await gate('POST', 'absences/config', STAFF)).denied).toEqual(ADMIN_ONLY);
+    expect((await gate('POST', 'calls/config', STAFF)).denied).toEqual(ADMIN_ONLY);
+    expect((await gate('PATCH', 'calls/appel-1', STAFF)).denied).toEqual(ADMIN_ONLY);
+    expect((await gate('DELETE', 'calls/appel-1', STAFF)).denied).toEqual(ADMIN_ONLY);
   });
 });

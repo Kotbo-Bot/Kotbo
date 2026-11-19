@@ -305,6 +305,18 @@ export async function evaluateGuildGate(
       || (parts.length === 8 && parts[6] === 'items')
     );
 
+  // Décider d'une absence (PATCH) ou supprimer la sienne (DELETE) : gestes du
+  // staff, dont absences.ts revérifie le droit exact.
+  const isStaffAbsenceItemAction = parts.length === 6
+    && parts[4] === 'absences'
+    && (method === 'PATCH' || method === 'DELETE');
+
+  // Planifier un appel est ouvert au staff que la configuration des appels
+  // autorise. canUserCreateCall, revérifié dans calls.ts, tranche le droit exact.
+  const isCallCreationAction = parts.length === 5
+    && parts[4] === 'calls'
+    && method === 'POST';
+
   /**
    * Droits « Configurer » et « Supprimer » du centre de gestion.
    *
@@ -351,7 +363,7 @@ export async function evaluateGuildGate(
     ? { ...access, canManageSettings: true }
     : access;
 
-  if (!access.canManageSettings && method !== 'GET' && !hasFeatureWriteRight && !isSanctionAction && !isStaffAbsenceAction && !isStaffResignationAction && !isNotificationAction && !isMeetingAction && !isNewsAction && !isMemberModerationAction && !isGiveawayManagerAction && !isAnalyticsAnnotationAction && !isAegisReviewAction && !isDoingListAction && !isTutoringAction && !isSuggestionDecisionAction && !isStarboardModerationAction && !isBanAppealModerationAction) {
+  if (!access.canManageSettings && method !== 'GET' && !hasFeatureWriteRight && !isSanctionAction && !isStaffAbsenceAction && !isStaffResignationAction && !isNotificationAction && !isMeetingAction && !isNewsAction && !isMemberModerationAction && !isGiveawayManagerAction && !isAnalyticsAnnotationAction && !isAegisReviewAction && !isDoingListAction && !isTutoringAction && !isSuggestionDecisionAction && !isStarboardModerationAction && !isBanAppealModerationAction && !isStaffAbsenceItemAction && !isCallCreationAction) {
     return deny(403, { error: 'Action réservée aux administrateurs du dashboard.' });
   }
 
