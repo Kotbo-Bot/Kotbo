@@ -49,6 +49,7 @@ import {
   type Stripe,
 } from '../../../services/billing/stripeService.js';
 import { syncSubscription, guildIdForSubscription, transferSubscription, TransferError } from '../../../services/billing/subscriptionSync.js';
+import { LIVE_STATUSES } from '../../../services/billing/entitlingStatuses.js';
 import { recordBillingConsent } from '../../../services/billing/consentService.js';
 import {
   recordFailedInvoice,
@@ -338,7 +339,10 @@ export function createBillingRouter(client: Client): OpenAPIHono {
     status: z.string().nullable(),
     currentPeriodEnd: z.string().nullable(),
     cancelAtPeriodEnd: z.boolean(),
+    /** Un abonnement Stripe est rattaché, même clos : portail et factures. */
     hasSubscription: z.boolean(),
+    /** Il vit encore chez Stripe, même impayé : ni second paiement ni code cadeau. */
+    hasLiveSubscription: z.boolean(),
     /** Taille du serveur, `null` si le bot ne la connaît pas encore. */
     memberCount: z.number().nullable(),
     /** Offre imposée par cette taille : la seule souscriptible en ligne. */
@@ -471,6 +475,7 @@ export function createBillingRouter(client: Client): OpenAPIHono {
       currentPeriodEnd: guild?.stripeCurrentPeriodEnd?.toISOString() ?? null,
       cancelAtPeriodEnd: guild?.stripeCancelAtPeriodEnd ?? false,
       hasSubscription: Boolean(guild?.stripeSubscriptionId),
+      hasLiveSubscription: LIVE_STATUSES.has(guild?.stripeSubscriptionStatus ?? ''),
       memberCount,
       eligiblePlan,
       canManage: c.var.billingAccess.canManage,

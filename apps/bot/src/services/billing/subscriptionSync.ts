@@ -20,7 +20,7 @@ import { logger } from '../../utils/logger.js';
 import { getClient } from '../../utils/client.js';
 import { invalidatePlan } from '../system/planService.js';
 import { announceAccessEnded, grantAccess, markAccessExpired, minutesUntil, type AccessType } from '../system/accessService.js';
-import { ENTITLING_STATUSES } from './entitlingStatuses.js';
+import { ENTITLING_STATUSES, LIVE_STATUSES } from './entitlingStatuses.js';
 import { planForPriceId, type Stripe } from './stripeService.js';
 import { confirmTrialStarted } from './trialService.js';
 
@@ -136,7 +136,8 @@ export async function syncSubscription(subscription: Stripe.Subscription): Promi
   await prisma.guild.upsert({
     where: { id: guildId },
     update: {
-      plan,
+      // Seul un abonnement qui couvre ou couvrait le serveur écrit l'offre : après un abonnement clos, un cadeau a pu la poser.
+      plan: entitled || wasEntitled ? plan : undefined,
       stripeCustomerId: customerId ?? undefined,
       stripeSubscriptionId: subscription.id,
       stripeSubscriptionStatus: subscription.status,
@@ -259,7 +260,8 @@ export async function transferSubscription(sourceId: string, targetId: string, u
     prisma.guild.findUnique({ where: { id: sourceId } }),
     prisma.guild.findUnique({ where: { id: targetId }, select: { stripeCustomerId: true, stripeSubscriptionId: true } }),
   ]);
-  if (!source?.stripeSubscriptionId || !source.stripeCustomerId) {
+  // Un abonnement clos ne se transfère pas : la source a pu recevoir un cadeau, que son passage en FREE effacerait.
+  if (!source?.stripeSubscriptionId || !source.stripeCustomerId || !LIVE_STATUSES.has(source.stripeSubscriptionStatus ?? '')) {
     throw new TransferError("Ce serveur n'a pas d'abonnement à transférer.", 404);
   }
   if (target?.stripeSubscriptionId || target?.stripeCustomerId) {
