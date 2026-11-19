@@ -305,7 +305,7 @@
               </select>
             </SettingsRow>
             <SettingsRow label={m.eve_field_trigger_type()} labelFor="ev-trigger">
-              <select id="ev-trigger" class="input w-full sm:w-72" bind:value={event.triggerType}>
+              <select id="ev-trigger" class="input w-full sm:w-72" bind:value={event.triggerType} onchange={() => (event.triggerValue = '')}>
                 <option value={null}>{m.eve_trigger_manual()}</option>
                 <option value="MEMBER_COUNT">{m.eve_trigger_member_count()}</option>
                 <option value="SCHEDULED">{m.eve_trigger_scheduled()}</option>
