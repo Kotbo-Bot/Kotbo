@@ -295,6 +295,16 @@ export async function evaluateGuildGate(
     && (parts[5] === 'annotations' || parts[5] === 'views')
     && (method === 'POST' || method === 'DELETE');
 
+  // Trancher un appel de ban, demander des informations ou statuer sur une
+  // sanction contestée revient aussi aux modérateurs : appealsAccess
+  // (banAppeals.ts) revérifie le droit exact juste après cette garde.
+  const isBanAppealModerationAction = parts[4] === 'appeals'
+    && method === 'POST'
+    && (
+      (parts.length === 7 && (parts[6] === 'decide' || parts[6] === 'request-info'))
+      || (parts.length === 8 && parts[6] === 'items')
+    );
+
   /**
    * Droits « Configurer » et « Supprimer » du centre de gestion.
    *
@@ -341,7 +351,7 @@ export async function evaluateGuildGate(
     ? { ...access, canManageSettings: true }
     : access;
 
-  if (!access.canManageSettings && method !== 'GET' && !hasFeatureWriteRight && !isSanctionAction && !isStaffAbsenceAction && !isStaffResignationAction && !isNotificationAction && !isMeetingAction && !isNewsAction && !isMemberModerationAction && !isGiveawayManagerAction && !isAnalyticsAnnotationAction && !isAegisReviewAction && !isDoingListAction && !isTutoringAction && !isSuggestionDecisionAction && !isStarboardModerationAction) {
+  if (!access.canManageSettings && method !== 'GET' && !hasFeatureWriteRight && !isSanctionAction && !isStaffAbsenceAction && !isStaffResignationAction && !isNotificationAction && !isMeetingAction && !isNewsAction && !isMemberModerationAction && !isGiveawayManagerAction && !isAnalyticsAnnotationAction && !isAegisReviewAction && !isDoingListAction && !isTutoringAction && !isSuggestionDecisionAction && !isStarboardModerationAction && !isBanAppealModerationAction) {
     return deny(403, { error: 'Action réservée aux administrateurs du dashboard.' });
   }
 
