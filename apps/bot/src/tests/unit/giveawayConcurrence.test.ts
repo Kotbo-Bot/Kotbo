@@ -285,3 +285,18 @@ describe('relance simultanée', () => {
     expect([...versements].sort()).toEqual(['bruno', 'chloe']);
   });
 });
+
+describe('relance d\'un concours à validation', () => {
+  test('gagnants validés et en attente sont conservés, seuls les nouveaux reçoivent leur lot', async () => {
+    concours = concoursDeBase({ ended: true, needValidation: true, validationStatus: 'APPROVED', winners: ['alice'] });
+    tirages(0);
+    const { client } = serveur();
+
+    await rerollGiveaway(client, GIVEAWAY_ID);
+    await rerollGiveaway(client, GIVEAWAY_ID);
+    await approveGiveawayWinners(client, GIVEAWAY_ID);
+
+    expect(concours.winners).toEqual(['alice', 'bruno', 'chloe']);
+    expect(versements).toEqual(['bruno', 'chloe']);
+  });
+});

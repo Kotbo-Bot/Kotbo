@@ -1022,8 +1022,8 @@ export async function rerollGiveaway(
 
   const { config, appearance, bonus, itemLabel } = await loadStyle(giveaway.guildId, giveaway);
 
-  // Filtrer les participants qui ne sont pas déjà gagnants validés
-  const remaining = giveaway.participants.filter(id => !giveaway.winners.includes(id));
+  // Filtrer les participants qui ne sont ni gagnants validés ni en attente de validation
+  const remaining = giveaway.participants.filter(id => !giveaway.winners.includes(id) && !giveaway.pendingWinners.includes(id));
   const candidates = await foldLinkedCandidates(giveaway.guildId, remaining, config);
   if (candidates.length === 0) {
     await channel.send({ content: m.gvw_reroll_no_candidate({ prize: giveaway.prize }, { locale: config.locale }), allowedMentions: GIVEAWAY_MENTIONS }).catch(() => null);
@@ -1049,11 +1049,14 @@ export async function rerollGiveaway(
     if (!fresh || !fresh.ended) return null;
 
     if (fresh.needValidation) {
+      // Ajouté à la liste en attente relue sous verrou, sans écraser les autres gagnants proposés.
+      if (fresh.pendingWinners.includes(newWinner)) return null;
+      const updatedPending = [...fresh.pendingWinners, newWinner];
       await tx.giveaway.update({
         where: { id: giveawayId },
-        data: { validationStatus: 'PENDING', pendingWinners: [newWinner] },
+        data: { validationStatus: 'PENDING', pendingWinners: updatedPending },
       });
-      return { updatedWinners: fresh.winners };
+      return { updatedWinners: fresh.winners, updatedPending };
     }
 
     if (fresh.winners.includes(newWinner)) return null;
@@ -1062,10 +1065,11 @@ export async function rerollGiveaway(
       where: { id: giveawayId },
       data: { winners: updatedWinners, validationStatus: 'APPROVED' },
     });
-    return { updatedWinners };
+    return { updatedWinners, updatedPending: fresh.pendingWinners };
   });
 
   if (!committed) return false;
+  const pendingMentions = committed.updatedPending.map(w => `<@${w}>`).join(', ');
 
   if (giveaway.needValidation) {
     if (giveaway.messageId) {
@@ -1076,7 +1080,7 @@ export async function rerollGiveaway(
           buildClosedDescription(
             giveaway,
             m.gvw_label_winner_reroll_pending({}, { locale: config.locale }),
-            `<@${newWinner}>`,
+            pendingMentions,
             giveaway.participants.length,
             config.locale,
           ),
@@ -1084,7 +1088,7 @@ export async function rerollGiveaway(
           appearance,
           giveaway.participants.length,
           config.locale,
-          { winners: `<@${newWinner}>`, itemLabel },
+          { winners: pendingMentions, itemLabel },
         );
 
         const approveBtn = new ButtonBuilder()
@@ -1154,7 +1158,8 @@ export async function approveGiveawayWinners(client: Client, giveawayId: string)
 
   if (!giveaway || !giveaway.ended || giveaway.validationStatus !== 'PENDING') return;
 
-  const winners = giveaway.pendingWinners;
+  // Après un reroll, `winners` porte déjà les gagnants d'une première approbation.
+  const winners = [...new Set([...giveaway.winners, ...giveaway.pendingWinners])];
 
   // Seule l'approbation qui bascule PENDING -> APPROVED distribue : un double
   // clic, ou le bouton et le dashboard ensemble, verseraient sinon deux fois.
@@ -1174,8 +1179,8 @@ export async function approveGiveawayWinners(client: Client, giveawayId: string)
   });
   if (approved.count === 0) return;
 
-  // Distribuer les prix
-  await distributeGiveawayPrizes(giveaway, winners).catch((err) => {
+  // Distribuer les prix aux seuls gagnants fraîchement validés : les autres ont déjà eu le leur
+  await distributeGiveawayPrizes(giveaway, giveaway.pendingWinners).catch((err) => {
     logger.error('GiveawayService', 'Error distributing prizes on approval:', err);
   });
 
