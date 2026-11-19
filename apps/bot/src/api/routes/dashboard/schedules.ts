@@ -6,7 +6,7 @@ import prisma from '../../../utils/db.js';
 import { Prisma } from '@prisma/client';
 import { logger } from '../../../utils/logger.js';
 import { pushAudit } from '../../shared.js';
-import { reloadSchedule, stopSchedule, executeSchedule } from '../../../services/system/scheduleService.js';
+import { executeSchedule, reloadScheduleAcrossShards } from '../../../services/system/scheduleService.js';
 
 import { fail, guildRoute, readBody, send } from '../../hono/dashboard/kit.js';
 import { assertFreeQuota } from '../../../services/system/freeQuota.js';
@@ -122,7 +122,7 @@ export function createSchedulesRouter(client: Client) {
 
       // Register the cron job in scheduleService
       if (schedule.enabled) {
-        await reloadSchedule(client, schedule.id);
+        await reloadScheduleAcrossShards(client, schedule.id);
       }
 
       return send(c, schedule);
@@ -194,12 +194,8 @@ export function createSchedulesRouter(client: Client) {
         details: `Nom: ${updated.name} | Type: ${updated.type} | Cron: ${updated.cron}${updated.targetId ? ` | Cible: ${updated.targetId}` : ''} | Actif: ${updated.enabled}`,
       });
 
-      // Reload or stop the cron job
-      if (updated.enabled) {
-        await reloadSchedule(client, updated.id);
-      } else {
-        stopSchedule(updated.id);
-      }
+      // Arrête le cron de chaque shard, et ne le relance que si la tâche reste active.
+      await reloadScheduleAcrossShards(client, updated.id);
 
       return send(c, updated);
     } catch (error) {
@@ -221,12 +217,11 @@ export function createSchedulesRouter(client: Client) {
         return send(c, { error: 'Planification non trouvée' }, 404);
       }
 
-      // Stop cron job
-      stopSchedule(scheduleId);
-
       await prisma.scheduledTask.delete({
         where: { id: scheduleId },
       });
+      // Sans ligne en base, le rechargement arrête la tâche dans chaque shard.
+      await reloadScheduleAcrossShards(client, scheduleId);
 
       await pushAudit(guildId, {
         channelId: null,
