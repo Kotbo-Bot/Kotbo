@@ -853,6 +853,23 @@ export async function registerBanSanction(params: {
   const now = new Date();
   const expiresAt = isTemporary ? new Date(now.getTime() + (params.temporaryDurationMs as number)) : null;
 
+  // Le dernier bannissement l'emporte : l'échéance d'un TEMP_BAN encore actif ne
+  // doit pas débannir un membre rebanni depuis.
+  await prisma.sanction.updateMany({
+    where: {
+      guildId: params.guildId,
+      targetUserId: params.target.id,
+      type: SanctionType.TEMP_BAN,
+      status: SanctionStatus.ACTIVE,
+    },
+    data: {
+      status: SanctionStatus.RESOLVED,
+      resolvedAt: now,
+      nextActionAt: null,
+      resolutionNote: 'Clôturé par un nouveau bannissement du même membre.',
+    },
+  });
+
   const sanction = await prisma.sanction.create({
     data: {
       guildId: params.guildId,
@@ -1454,6 +1471,37 @@ async function processTempBans(client: Client): Promise<void> {
             resolvedAt: new Date(),
             nextActionAt: null,
             resolutionNote: 'Serveur introuvable pour débannir automatiquement.'
+          }
+        });
+        continue;
+      }
+
+      // Filet de sécurité (ban arrivé par un autre chemin) : ne pas débannir si un ban
+      // définitif postérieur ou un TEMP_BAN actif plus long couvre encore ce membre.
+      const covering = await prisma.sanction.findFirst({
+        where: {
+          guildId: sanction.guildId,
+          targetUserId: sanction.targetUserId,
+          OR: [
+            { type: SanctionType.BAN, createdAt: { gt: sanction.createdAt } },
+            {
+              type: SanctionType.TEMP_BAN,
+              status: SanctionStatus.ACTIVE,
+              expiresAt: { gt: sanction.expiresAt ?? new Date(0) },
+            },
+          ],
+        },
+        select: { id: true },
+      });
+
+      if (covering) {
+        await prisma.sanction.update({
+          where: { id: sanction.id },
+          data: {
+            status: SanctionStatus.RESOLVED,
+            resolvedAt: new Date(),
+            nextActionAt: null,
+            resolutionNote: 'Tempban expiré non levé : un bannissement plus récent ou plus long couvre ce membre.'
           }
         });
         continue;
