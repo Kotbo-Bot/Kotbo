@@ -332,40 +332,53 @@ export async function fightArenaDuel(guildId: string, userId: string, opponentId
   const { turns, winnerId } = runDuel(challenger, opponent);
   const won = winnerId === userId;
 
-  const ratingChange = won
-    ? ratingExchange(challengerRecord.rating, opponentRecord.rating)
-    : ratingExchange(opponentRecord.rating, challengerRecord.rating);
+  // Deux duels peuvent viser le même défenseur : verrou sur les deux lignes (ordre
+  // d'id stable contre l'interblocage), puis notes recalculées sur l'état relu sous
+  // verrou. Le vainqueur ne dépend que des statistiques, pas du classement.
+  const { ratingChange, newRating, opponentNewRating, streak, reward } = await prisma.$transaction(async (tx) => {
+    for (const lockKey of [challengerRecord.id, opponentRecord.id].sort()) {
+      await tx.$queryRaw`SELECT 1 FROM "rpg_arena_records" WHERE "id" = ${lockKey} FOR UPDATE`;
+    }
 
-  const newRating = applyRating(challengerRecord.rating, won ? ratingChange : -ratingChange);
-  const opponentNewRating = applyRating(opponentRecord.rating, won ? -ratingChange : ratingChange);
-  const reward = arenaReward(ratingChange, won);
+    const [challengerFresh, opponentFresh] = await Promise.all([
+      tx.rpgArenaRecord.findUnique({ where: { id: challengerRecord.id } }),
+      tx.rpgArenaRecord.findUnique({ where: { id: opponentRecord.id } }),
+    ]);
+    if (!challengerFresh || !opponentFresh) throw new ArenaError('Classement introuvable.');
 
-  await prisma.$transaction([
-    prisma.rpgArenaRecord.update({
-      where: { id: challengerRecord.id },
+    const ratingChange = won
+      ? ratingExchange(challengerFresh.rating, opponentFresh.rating)
+      : ratingExchange(opponentFresh.rating, challengerFresh.rating);
+    const newRating = applyRating(challengerFresh.rating, won ? ratingChange : -ratingChange);
+    const opponentNewRating = applyRating(opponentFresh.rating, won ? -ratingChange : ratingChange);
+    const streak = nextStreak(challengerFresh.streak, won);
+    const reward = arenaReward(ratingChange, won);
+
+    await tx.rpgArenaRecord.update({
+      where: { id: challengerFresh.id },
       data: {
         rating: newRating,
-        bestRating: Math.max(challengerRecord.bestRating, newRating),
+        bestRating: Math.max(challengerFresh.bestRating, newRating),
         wins: { increment: won ? 1 : 0 },
         losses: { increment: won ? 0 : 1 },
-        streak: nextStreak(challengerRecord.streak, won),
+        streak,
       },
-    }),
-    prisma.rpgArenaRecord.update({
-      where: { id: opponentRecord.id },
+    });
+    await tx.rpgArenaRecord.update({
+      where: { id: opponentFresh.id },
       data: {
         rating: opponentNewRating,
-        bestRating: Math.max(opponentRecord.bestRating, opponentNewRating),
+        bestRating: Math.max(opponentFresh.bestRating, opponentNewRating),
         wins: { increment: won ? 0 : 1 },
         losses: { increment: won ? 1 : 0 },
-        streak: nextStreak(opponentRecord.streak, !won),
+        streak: nextStreak(opponentFresh.streak, !won),
       },
-    }),
-    prisma.rpgProfile.update({
+    });
+    await tx.rpgProfile.update({
       where: { id: challengerProfile.id },
       data: { balance: { increment: reward.coins }, xp: { increment: reward.xp } },
-    }),
-    prisma.rpgArenaMatch.create({
+    });
+    await tx.rpgArenaMatch.create({
       data: {
         guildId,
         challengerId: userId,
@@ -376,8 +389,10 @@ export async function fightArenaDuel(guildId: string, userId: string, opponentId
         opponentRatingAfter: opponentNewRating,
         coinsAwarded: reward.coins,
       },
-    }),
-  ]);
+    });
+
+    return { ratingChange, newRating, opponentNewRating, streak, reward };
+  });
 
   logger.info('RpgArena', `Duel ${userId} vs ${opponentId} sur ${guildId} : ${won ? 'victoire' : 'défaite'} (${ratingChange} pts).`);
 
@@ -388,7 +403,7 @@ export async function fightArenaDuel(guildId: string, userId: string, opponentId
     ratingChange,
     newRating,
     opponentNewRating,
-    streak: nextStreak(challengerRecord.streak, won),
+    streak,
     reward,
     challengerMaxHp: challenger.stats.maxHealth,
     opponentMaxHp: opponent.stats.maxHealth,
