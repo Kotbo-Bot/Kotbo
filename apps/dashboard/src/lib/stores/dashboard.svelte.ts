@@ -416,6 +416,7 @@ class DashboardStore {
         };
         this.state.featureAccess = data.featureAccess || {};
         this.state.modules = data.modules || [];
+        this.state.moduleStates = data.moduleStates || {};
         this.state.notifications = data.notifications || createDefaultNotifications();
         // Le journal se cumule d'un rafraichissement a l'autre pour ne pas
         // perdre les lignes qu'une charge allegee n'a pas renvoyees. Mais il
