@@ -226,3 +226,20 @@ describe('levée automatique d\'un tempban couvert par un bannissement plus réc
     expect(sanctions.find((row) => row.id === tempBan.id)?.status).toBe('RESOLVED');
   });
 });
+
+describe('échec de la levée automatique d\'un tempban', () => {
+  test('un débannissement refusé par Discord laisse le tempban en échec, pas résolu', async () => {
+    const tempBan = seed({
+      type: 'TEMP_BAN',
+      status: 'ACTIVE',
+      createdAt: new Date(T0 - 3 * HOUR_MS),
+      expiresAt: new Date(T0 - 60_000),
+      nextActionAt: new Date(T0 - 60_000),
+    });
+    unban.mockImplementationOnce(async () => { throw new Error('Missing Permissions'); });
+
+    await processScheduledSanctions(fakeClient());
+
+    expect(sanctions.find((row) => row.id === tempBan.id)?.status).toBe('FAILED');
+  });
+});

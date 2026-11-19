@@ -1,5 +1,5 @@
 import type { Sanction } from '@prisma/client';
-import { EmbedBuilder, Guild, GuildMember, type Client } from 'discord.js';
+import { DiscordAPIError, EmbedBuilder, Guild, GuildMember, RESTJSONErrorCodes, type Client } from 'discord.js';
 import { Prisma, SanctionStatus, SanctionType } from '@prisma/client';
 import { kotboEventBus } from '@kotbo/core';
 import prisma from '../../utils/db.js';
@@ -1507,7 +1507,12 @@ async function processTempBans(client: Client): Promise<void> {
         continue;
       }
 
-      await guild.members.unban(sanction.targetUserId, 'Tempban expiré automatiquement').catch(() => null);
+      await guild.members.unban(sanction.targetUserId, 'Tempban expiré automatiquement').catch((err) => {
+        // Seul 10026 (Unknown Ban) vaut levée : toute autre erreur remonte vers le
+        // catch qui marque FAILED, pour ne pas annoncer « levé » un membre resté banni.
+        if (err instanceof DiscordAPIError && err.code === RESTJSONErrorCodes.UnknownBan) return;
+        throw err;
+      });
 
       await prisma.sanction.update({
         where: { id: sanction.id },
