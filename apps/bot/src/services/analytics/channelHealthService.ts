@@ -81,6 +81,9 @@ export async function analyzeGuildChannelHealth(
     if (!entry) {
       const channel = guild.channels.cache.get(stat.channelId);
       if (!channel || channel.type !== ChannelType.GuildText) continue;
+      // Un salon archivé reste un GuildText avec des stats dans la fenêtre : il
+      // ressortirait DEAD et serait ré-archivé chaque nuit.
+      if (config.archiveCategoryId && channel.parentId === config.archiveCategoryId) continue;
       entry = { messages: 0, authors: new Set(), dailyCounts: [], name: channel.name };
       channelMap.set(stat.channelId, entry);
     }
@@ -292,13 +295,21 @@ export async function runChannelHealthAnalysis(client: Client): Promise<void> {
       const config = await prismaRead.channelHealthConfig.findUnique({ where: { guildId } });
       if (!config) continue;
 
+      // Une action AUTO crée son alerte déjà APPLIED : une APPLIED récente
+      // bloque, comme une PENDING, le temps d'une période d'analyse.
+      const recentCutoff = new Date(Date.now() - config.analysisPeriodDays * 24 * 60 * 60 * 1000);
+      const pendingOrRecent: Prisma.ChannelHealthAlertWhereInput[] = [
+        { status: 'PENDING' },
+        { status: 'APPLIED', createdAt: { gte: recentCutoff } },
+      ];
+
       for (const ch of summary.overloaded) {
         const existing = await prismaRead.channelHealthAlert.findFirst({
           where: {
             guildId,
             channelId: ch.channelId,
             type: { in: ['SPLIT_SUGGESTED', 'SPLIT_AUTO'] },
-            status: 'PENDING',
+            OR: pendingOrRecent,
           },
         });
         if (existing) continue;
@@ -336,7 +347,7 @@ export async function runChannelHealthAnalysis(client: Client): Promise<void> {
             guildId,
             channelId: ch.channelId,
             type: { in: ['ARCHIVE_SUGGESTED', 'ARCHIVE_AUTO', 'MERGE_SUGGESTED'] },
-            status: 'PENDING',
+            OR: pendingOrRecent,
           },
         });
         if (existing) continue;
