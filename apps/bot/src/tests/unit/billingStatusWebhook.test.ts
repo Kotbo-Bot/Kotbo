@@ -1,5 +1,6 @@
-// `hasSubscription` suit le statut, pas `stripeSubscriptionId` que Stripe garde
-// après une résiliation. Le webhook ne traite en doublon qu'une clé en double :
+// `hasSubscription` suit `stripeSubscriptionId`, que Stripe garde après une
+// résiliation ; `hasLiveSubscription` et le refus d'un second paiement suivent
+// le statut. Le webhook ne traite en doublon qu'une clé en double :
 // une panne de base doit faire rejouer Stripe. Seuls la session, l'accès au
 // serveur, la signature Stripe et les services voisins sont simulés.
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test';
@@ -24,6 +25,7 @@ const fakePrisma = {
   guild: {
     findUnique: mock(async ({ select }: { select?: Record<string, boolean> }) =>
       (select ? Object.fromEntries(Object.keys(select).map((key) => [key, guildRow[key] ?? null])) : guildRow)),
+    upsert: mock(async () => guildRow),
   },
   billingEvent: {
     create: mock(async ({ data }: { data: { id: string } }) => {
@@ -61,6 +63,8 @@ mockModule('../../services/billing/stripeService', {
   sellablePlans: () => ['PLUS'],
   // Signature acceptée : l'événement est le corps reçu.
   getStripe: () => ({ webhooks: { constructEventAsync: async (rawBody: string) => JSON.parse(rawBody) } }),
+  ensureCustomer: async () => 'cus_1',
+  createCheckoutSession: async () => ({ id: 'cs_1', url: 'https://checkout.stripe.test/cs_1' }),
 });
 mockModule('../../services/billing/trialService', {
   TRIAL_DAYS: 15,
@@ -77,7 +81,7 @@ mockModule('../../services/billing/referralService', {
 });
 mockModule('../../services/billing/consentService', {});
 mockModule('../../services/billing/billingAnalytics', {});
-mockModule('../../services/analytics/acquisitionService', {});
+mockModule('../../services/analytics/acquisitionService', { trackAcquisitionStep: () => {} });
 mockModule('../../services/system/planService', {});
 mockModule('../../services/system/accessService', {});
 
@@ -113,6 +117,30 @@ describe('état de facturation renvoyé au dashboard', () => {
   test('un abonnement vivant chez Stripe, même impayé, compte comme tel et garde le portail pour se régulariser', async () => {
     for (const status of ['active', 'trialing', 'past_due', 'unpaid', 'incomplete', 'paused']) {
       expect(await billingStatus(status)).toEqual({ status, hasSubscription: true, hasLiveSubscription: true });
+    }
+  });
+});
+
+describe('ouverture du paiement', () => {
+  async function checkout(subscriptionStatus: string) {
+    guildRow = { id: GUILD_ID, stripeCustomerId: 'cus_1', stripeSubscriptionId: 'sub_1', stripeSubscriptionStatus: subscriptionStatus };
+    const res = await router.request(`/api/dashboard/guilds/${GUILD_ID}/billing/checkout`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-forwarded-for': '127.0.0.1' },
+      body: JSON.stringify({ plan: 'PLUS', interval: 'month' }),
+    });
+    return { status: subscriptionStatus, code: res.status };
+  }
+
+  test("un abonnement encore vivant chez Stripe, même impayé ou incomplet, reçoit 409 au lieu d'en ouvrir un second", async () => {
+    for (const status of ['active', 'trialing', 'past_due', 'unpaid', 'incomplete', 'paused']) {
+      expect(await checkout(status)).toEqual({ status, code: 409 });
+    }
+  });
+
+  test('un abonnement résilié ou expiré laisse payer un nouvel abonnement', async () => {
+    for (const status of ['canceled', 'incomplete_expired']) {
+      expect(await checkout(status)).toEqual({ status, code: 200 });
     }
   });
 });

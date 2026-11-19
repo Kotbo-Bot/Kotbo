@@ -201,4 +201,13 @@ describe("fin d'un abonnement Stripe", () => {
 
     expect(notices()).toEqual([]);
   });
+
+  test("la clôture d'un abonnement en double laisse le serveur sur celui qui le couvre", async () => {
+    const before = { ...row };
+
+    await syncSubscription({ ...abonnement('canceled'), id: 'sub_2' });
+
+    expect(row).toEqual(before);
+    expect(notices()).toEqual([]);
+  });
 });

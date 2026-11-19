@@ -133,6 +133,22 @@ export async function syncSubscription(subscription: Stripe.Subscription): Promi
     && !!previous.stripeSubscriptionStatus
     && ENTITLING_STATUSES.has(previous.stripeSubscriptionStatus as Stripe.Subscription.Status);
 
+  // Un abonnement qui n'ouvre pas le service (doublon fermé par Stripe) n'écrase
+  // pas un AUTRE abonnement qui couvre encore le serveur : son deleted fermera l'accès.
+  if (
+    !entitled &&
+    previous?.stripeSubscriptionId &&
+    previous.stripeSubscriptionId !== subscription.id &&
+    ENTITLING_STATUSES.has(previous.stripeSubscriptionStatus ?? '')
+  ) {
+    logger.warn(
+      'Billing',
+      `Abonnement ${subscription.id} (${subscription.status}) ignoré pour ${guildId} : ` +
+        `le serveur reste couvert par l'abonnement ${previous.stripeSubscriptionId}.`,
+    );
+    return;
+  }
+
   await prisma.guild.upsert({
     where: { id: guildId },
     update: {

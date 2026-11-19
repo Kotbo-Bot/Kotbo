@@ -557,8 +557,14 @@ export function createBillingRouter(client: Client): OpenAPIHono {
 
     const guild = await prisma.guild.findUnique({
       where: { id: guildId },
-      select: { stripeCustomerId: true },
+      select: { stripeCustomerId: true, stripeSubscriptionStatus: true },
     });
+
+    // Un abonnement encore vivant, même impayé, se gère dans le portail Stripe
+    // (offre, prorata, régularisation) : un second serait payé en double.
+    if (LIVE_STATUSES.has(guild?.stripeSubscriptionStatus ?? '')) {
+      return c.json({ error: 'Ce serveur a déjà un abonnement en cours : gère-le depuis le portail de facturation.' }, 409);
+    }
 
     const discordGuild = client.guilds.cache.get(guildId) ?? null;
 
