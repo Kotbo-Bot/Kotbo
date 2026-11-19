@@ -2,23 +2,36 @@ import prisma, { prismaRead } from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 
 export async function generateStaffEvaluation(guildId: string, staffUserId: string, periodDays = 30) {
+  // Une période nulle ou négative viderait la fenêtre et ferait diviser par zéro
+  // (absenceRatio), d'où des scores NaN : on la borne.
+  const days = Math.min(365, Math.max(1, Math.floor(periodDays) || 30));
   const periodEnd = new Date();
   const periodStart = new Date();
-  periodStart.setDate(periodStart.getDate() - periodDays);
+  periodStart.setDate(periodStart.getDate() - days);
+
+  // L'appelant passe l'ID Discord (commande, MCP) ou celui du StaffMember
+  // (dashboard) : activité, présences et absences référencent StaffMember.id,
+  // sanctions, tickets et évaluations l'ID Discord.
+  const staffMember = await prismaRead.staffMember.findFirst({
+    where: { guildId, OR: [{ userId: staffUserId }, { id: staffUserId }] },
+    select: { id: true, userId: true },
+  });
+  const staffMemberId = staffMember?.id ?? staffUserId;
+  const discordUserId = staffMember?.userId ?? staffUserId;
 
   const [activity, sanctions, tickets, meetings, absences, previousEval] = await Promise.all([
     prismaRead.staffActivity.findMany({
-      where: { guildId, staffUserId, activityDate: { gte: periodStart, lte: periodEnd } },
+      where: { guildId, staffUserId: staffMemberId, activityDate: { gte: periodStart, lte: periodEnd } },
     }),
     prismaRead.sanction.count({
-      where: { guildId, moderatorUserId: staffUserId, createdAt: { gte: periodStart, lte: periodEnd } },
+      where: { guildId, moderatorUserId: discordUserId, createdAt: { gte: periodStart, lte: periodEnd } },
     }),
     prismaRead.ticket.count({
-      where: { guildId, claimedById: staffUserId, status: 'CLOSED', updatedAt: { gte: periodStart, lte: periodEnd } },
+      where: { guildId, claimedById: discordUserId, status: 'CLOSED', updatedAt: { gte: periodStart, lte: periodEnd } },
     }),
     prismaRead.staffMeetingPresence.findMany({
       where: {
-        staffUserId,
+        staffUserId: staffMemberId,
         meeting: { guildId, scheduledAt: { gte: periodStart, lte: periodEnd } },
       },
       include: { meeting: { select: { id: true } } },
@@ -26,14 +39,14 @@ export async function generateStaffEvaluation(guildId: string, staffUserId: stri
     prismaRead.staffAbsence.findMany({
       where: {
         guildId,
-        staffUserId,
+        staffUserId: staffMemberId,
         status: 'APPROVED',
         startDate: { lte: periodEnd },
         OR: [{ endDate: { gte: periodStart } }, { endDate: null }],
       },
     }),
     prismaRead.staffEvaluation.findFirst({
-      where: { guildId, staffUserId },
+      where: { guildId, staffUserId: discordUserId },
       orderBy: { periodEnd: 'desc' },
     }),
   ]);
@@ -55,7 +68,7 @@ export async function generateStaffEvaluation(guildId: string, staffUserId: stri
     absenceDays += Math.ceil((end.getTime() - start.getTime()) / 86400000);
   }
 
-  const activeDays = Math.max(1, periodDays - absenceDays);
+  const activeDays = Math.max(1, days - absenceDays);
 
   // Activity score: messages + voice relative to active days
   const msgPerDay = totalMessages / activeDays;
@@ -70,7 +83,7 @@ export async function generateStaffEvaluation(guildId: string, staffUserId: stri
 
   // Presence score: meetings attended + absence ratio
   const meetingRatio = meetingsTotal > 0 ? meetingsAttended / meetingsTotal : 1;
-  const absenceRatio = absenceDays / periodDays;
+  const absenceRatio = absenceDays / days;
   const presenceScore = Math.min(100, Math.round(meetingRatio * 60 + (1 - absenceRatio) * 40));
 
   const overallScore = Math.round(activityScore * 0.4 + moderationScore * 0.3 + presenceScore * 0.3);
@@ -82,7 +95,7 @@ export async function generateStaffEvaluation(guildId: string, staffUserId: stri
   const evaluation = await prisma.staffEvaluation.create({
     data: {
       guildId,
-      staffUserId,
+      staffUserId: discordUserId,
       periodStart,
       periodEnd,
       totalMessages,
@@ -101,7 +114,7 @@ export async function generateStaffEvaluation(guildId: string, staffUserId: stri
     },
   });
 
-  logger.info('StaffEval', `Évaluation générée pour ${staffUserId} (guild: ${guildId}): score=${overallScore}`);
+  logger.info('StaffEval', `Évaluation générée pour ${discordUserId} (guild: ${guildId}): score=${overallScore}`);
   return evaluation;
 }
 
