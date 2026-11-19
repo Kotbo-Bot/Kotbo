@@ -226,6 +226,8 @@ async function memberLevel(guildId: string, userId: string): Promise<number> {
 }
 
 const OPEN_STATUSES = ['PENDING', 'COMPLETED'] as const;
+/** Au-delà, une commande terminée est livrée ou remboursée : Discord a répondu, relances comprises. */
+const DELIVERY_MS = 5 * 60_000;
 
 /**
  * Ce qui empêche ce bénéficiaire d'obtenir l'offre, ou `null`. Le stock et le
@@ -323,6 +325,32 @@ export async function purchaseShopOffer(client: Client, guildId: string, buyerId
     if (offer.perMemberLimit !== null) {
       const count = await tx.shopOrder.count({ where: { offerId: offer.id, recipientId, status: { in: [...OPEN_STATUSES] }, source: { not: 'renewal' } } });
       if (count >= offer.perMemberLimit) throw new ShopError('limit_reached');
+    }
+    // Un abonnement ou un rôle permanent ne se paie qu'une fois : ni une commande en
+    // attente ni un double clic ne doivent débiter le membre une seconde fois.
+    if (offer.kind === 'SUBSCRIPTION') {
+      const sub = await tx.shopSubscription.findUnique({ where: { offerId_userId: { offerId: offer.id, userId: recipientId } }, select: { status: true, endedAt: true } });
+      if (sub && sub.status !== 'ENDED') throw new ShopError('already_subscribed');
+      // Une commande passée depuis la fin du dernier abonnement est en attente ou en
+      // cours de livraison (l'abonnement n'est écrit qu'à la livraison) : un abonnement
+      // terminé reste rachetable.
+      const inFlight = await tx.shopOrder.count({
+        where: { offerId: offer.id, recipientId, status: { in: [...OPEN_STATUSES] }, source: { not: 'renewal' }, createdAt: { gt: sub?.endedAt ?? new Date(0) } },
+      });
+      if (inFlight > 0) throw new ShopError('already_subscribed');
+    } else if (offer.kind === 'ROLE' && offer.durationDays === null) {
+      // Le rôle n'est posé qu'après la commande, qui peut donc être en cours de livraison.
+      // Livrée, elle ne bloque que si le rôle est encore porté (offerBlocker) : un rôle perdu se rachète.
+      const since = new Date(Date.now() - DELIVERY_MS);
+      const owned = await tx.shopOrder.count({
+        where: {
+          offerId: offer.id,
+          recipientId,
+          source: { not: 'renewal' },
+          OR: [{ status: 'PENDING' }, { status: 'COMPLETED', OR: [{ createdAt: { gt: since } }, { decidedAt: { gt: since } }] }],
+        },
+      });
+      if (owned > 0) throw new ShopError('already_owned');
     }
     if (offer.stock !== null) {
       const taken = await tx.shopOffer.updateMany({ where: { id: offer.id, stock: { gt: 0 } }, data: { stock: { decrement: 1 } } });
