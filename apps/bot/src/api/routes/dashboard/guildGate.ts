@@ -200,10 +200,12 @@ export async function evaluateGuildGate(
   }
 
   // Gating check for write actions
-  const isSanctionAction = (parts.length === 6 || parts.length === 7)
-    && parts[4] === 'sanctions'
-    && parts[5] === 'reports'
-    && (method === 'POST' || method === 'PATCH');
+  const isSanctionAction = parts[4] === 'sanctions'
+    && (
+      ((parts.length === 6 || parts.length === 7) && parts[5] === 'reports' && (method === 'POST' || method === 'PATCH'))
+      // Pièces de preuve : téléversement et suppression, revérifiés dans sanctions.ts.
+      || (parts[5] === 'evidence-files' && ((method === 'POST' && parts.length === 6) || (method === 'DELETE' && parts.length === 7)))
+    );
 
   const isStaffAbsenceAction = parts.length === 5
     && parts[4] === 'absences'

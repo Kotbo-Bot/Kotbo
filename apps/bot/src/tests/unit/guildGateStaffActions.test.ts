@@ -112,3 +112,20 @@ describe('garde des écritures : planning du staff', () => {
     expect((await gate('DELETE', 'calls/appel-1', STAFF)).denied).toEqual(ADMIN_ONLY);
   });
 });
+
+describe('garde des écritures : preuves de sanction', () => {
+  test('un modérateur peut téléverser et supprimer une pièce de preuve', async () => {
+    featureAccess = {};
+    const result = await gate('POST', 'sanctions/evidence-files');
+    expect(result.denied).toBeNull();
+    // sanctions.ts revérifie ensuite canModerateSanctions avec l'accès réel.
+    if (result.denied === null) expect(result.effectiveAccess.canManageSettings).toBe(false);
+    expect((await gate('DELETE', 'sanctions/evidence-files/rapport-1')).denied).toBeNull();
+  });
+
+  test('les barèmes et le retrait d\'une sanction restent réservés aux administrateurs', async () => {
+    featureAccess = {};
+    expect((await gate('PUT', 'sanctions/tables')).denied).toEqual(ADMIN_ONLY);
+    expect((await gate('DELETE', 'sanctions/sanction-1')).denied).toEqual(ADMIN_ONLY);
+  });
+});
