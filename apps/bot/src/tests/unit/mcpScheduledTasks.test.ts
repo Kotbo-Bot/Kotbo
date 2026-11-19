@@ -12,6 +12,7 @@ type Ligne = { id: string; guildId: string; name: string; type: string; cron: st
 
 /** Table `scheduledTask` en mémoire : chaque lecture rend une copie. */
 const taches = new Map<string, Ligne>();
+const reponses = new Map<string, Record<string, unknown>>();
 let prochainId = 0;
 
 const fauxPrisma = {
@@ -43,6 +44,20 @@ const fauxPrisma = {
       taches.delete(where.id);
       return ligne;
     }),
+  },
+  autoResponse: {
+    create: async ({ data }: { data: Record<string, unknown> }) => {
+      const ligne = { id: `reponse-${++prochainId}`, ...data };
+      reponses.set(ligne.id, ligne);
+      return ligne;
+    },
+    findMany: async () => [...reponses.values()].filter((ligne) => ligne.enabled),
+    findFirst: async ({ where }: { where: { id: string } }) => reponses.get(where.id) ?? null,
+    // Comme Prisma, un champ `undefined` reste inchangé.
+    update: async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) =>
+      reponses.set(where.id, { ...reponses.get(where.id), ...Object.fromEntries(Object.entries(data).filter(([, valeur]) => valeur !== undefined)) }),
+    delete: async ({ where }: { where: { id: string } }) => reponses.delete(where.id),
+    deleteMany: async ({ where }: { where: { id: string } }) => ({ count: reponses.delete(where.id) ? 1 : 0 }),
   },
 };
 
@@ -82,9 +97,11 @@ for (const [module, overrides] of [
   }
 }
 const { createSchedulesRouter } = await import('../../api/routes/dashboard/schedules.js');
+const { createGeneralistModulesRouter } = await import('../../api/routes/dashboard/generalistModules.js');
 
 const { registerWriteCommunityNewTools } = await import('../../api/mcp/tools/write-community-new.js');
 const { initializeScheduler } = await import('../../services/system/scheduleService.js');
+const { getAutoResponsesForGuild } = await import('../../services/features/autoResponseService.js');
 
 type Resultat = { isError?: boolean; content: Array<{ text: string }> };
 const outils = new Map<string, (args: Record<string, unknown>) => Promise<Resultat>>();
@@ -294,5 +311,53 @@ describe('tâches planifiées écrites par MCP ou le dashboard', () => {
     await surDeuxShards(() => dashboard('DELETE', `/schedules/${supprimee.id}`));
     expect(supprimee.job.stop).toHaveBeenCalledTimes(1);
     expect(taches.has(supprimee.id)).toBe(false);
+  });
+});
+
+describe('réponses automatiques écrites par MCP ou le dashboard', () => {
+  test('une règle créée, modifiée puis supprimée par MCP prend effet sans redémarrage', async () => {
+    const declencheurs = async () => (await getAutoResponsesForGuild(GUILD_ID)).map((reponse) => reponse.trigger);
+    expect(await declencheurs()).toEqual([]);
+
+    await outil('create_auto_response')({ trigger: 'bonjour', response: 'Salut !', match_type: 'CONTAINS' });
+    expect(await declencheurs()).toEqual(['bonjour']);
+
+    const [id] = reponses.keys();
+    await outil('update_auto_response')({ auto_response_id: id, trigger: 'salut' });
+    expect(await declencheurs()).toEqual(['salut']);
+
+    await outil('delete_auto_response')({ auto_response_id: id });
+    expect(await declencheurs()).toEqual([]);
+  });
+
+  test('une règle écrite par MCP prend effet sur le shard du serveur, pas seulement sur celui de MCP', async () => {
+    // Le serveur vit sur le shard 1, qui a déjà mis ses règles en cache.
+    const shard1 = await import(`${path.resolve(import.meta.dir, '../../services/features/autoResponseService.ts')}${SHARD_1}`);
+    expect(await shard1.getAutoResponsesForGuild(GUILD_ID)).toEqual([]);
+
+    await surDeuxShards(() => outil('create_auto_response')({ trigger: 'bonjour', response: 'Salut !', match_type: 'CONTAINS' }));
+
+    expect((await shard1.getAutoResponsesForGuild(GUILD_ID)).map((reponse: { trigger: string }) => reponse.trigger)).toEqual(['bonjour']);
+  });
+
+  test('une règle écrite depuis le dashboard prend effet sur le shard du serveur, pas seulement sur le sien', async () => {
+    // Le serveur vit sur le shard 1, qui a mis en cache une liste vide.
+    const shard1 = await import(`${path.resolve(import.meta.dir, '../../services/features/autoResponseService.ts')}${SHARD_1}`);
+    reponses.clear();
+    shard1.invalidateAutoResponseCache(GUILD_ID);
+    const declencheurs = async () => (await shard1.getAutoResponsesForGuild(GUILD_ID)).map((reponse: { trigger: string }) => reponse.trigger);
+    expect(await declencheurs()).toEqual([]);
+    const dashboard = (method: string, chemin: string, corps?: unknown) =>
+      surDeuxShards(() => ecrireDepuisDashboard(createGeneralistModulesRouter, method, chemin, corps));
+
+    await dashboard('POST', '/triggers', { trigger: 'bonjour', response: 'Salut !' });
+    expect(await declencheurs()).toEqual(['bonjour']);
+
+    const [id] = reponses.keys();
+    await dashboard('PATCH', `/triggers/${id}`, { trigger: 'salut' });
+    expect(await declencheurs()).toEqual(['salut']);
+
+    await dashboard('DELETE', `/triggers/${id}`);
+    expect(await declencheurs()).toEqual([]);
   });
 });

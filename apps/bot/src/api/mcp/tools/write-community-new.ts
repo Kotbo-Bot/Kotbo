@@ -3,6 +3,7 @@ import { createCustomForm, deleteCustomForm } from '../../../services/features/c
 import { createCustomEvent } from '../../../services/features/eventService.js';
 import { invalidateActiveQuests } from '../../../services/community/questService.js';
 import { createGiveaway, deleteGiveaway, endGiveaway, refreshActiveGiveaways, rerollGiveaway } from '../../../services/features/giveawayService.js';
+import { invalidateAutoResponseCacheAcrossShards } from '../../../services/features/autoResponseService.js';
 import prisma from '../../../utils/db.js';
 import { sanitizeCustomCss, sanitizeFormTheme } from '../../../utils/formCustomization.js';
 import { Prisma } from '@prisma/client';
@@ -424,6 +425,7 @@ export function registerWriteCommunityNewTools(ctx: McpToolContext) {
             }
           });
 
+          await invalidateAutoResponseCacheAcrossShards(client, guildId);
           await audit(key_name, 'Création AutoResponse MCP', trigger, `Type: ${trigger_type}`);
           return ok({ ok: true, autoResponseId: autoRes.id });
         } catch (e) {
@@ -889,6 +891,7 @@ export function registerWriteCommunityNewTools(ctx: McpToolContext) {
             data: updateData,
           });
 
+          await invalidateAutoResponseCacheAcrossShards(client, guildId);
           await audit(key_name, 'Mise à jour AutoResponse MCP', trigger || existing.trigger, `ID: ${auto_response_id}`);
           return ok({ ok: true, autoResponseId: auto_response_id });
         } catch (e) {
@@ -913,6 +916,7 @@ export function registerWriteCommunityNewTools(ctx: McpToolContext) {
           if (!existing) return err('Réponse automatique introuvable');
 
           await prisma.autoResponse.delete({ where: { id: auto_response_id } });
+          await invalidateAutoResponseCacheAcrossShards(client, guildId);
           await audit(key_name, 'Suppression AutoResponse MCP', existing.trigger, `ID: ${auto_response_id}`);
           return ok({ ok: true });
         } catch (e) {
