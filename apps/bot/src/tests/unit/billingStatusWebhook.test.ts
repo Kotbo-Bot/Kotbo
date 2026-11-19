@@ -1,9 +1,11 @@
 // `hasSubscription` suit le statut, pas `stripeSubscriptionId` que Stripe garde
-// après une résiliation. Seuls la session, l'accès au serveur et les services
-// voisins sont simulés.
-import { describe, expect, mock, test } from 'bun:test';
+// après une résiliation. Le webhook ne traite en doublon qu'une clé en double :
+// une panne de base doit faire rejouer Stripe. Seuls la session, l'accès au
+// serveur, la signature Stripe et les services voisins sont simulés.
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test';
 import path from 'node:path';
 import { createMiddleware } from 'hono/factory';
+import { Prisma } from '@prisma/client';
 import type { Client } from 'discord.js';
 import { completeModuleMock } from '../helpers/moduleMock.js';
 
@@ -14,10 +16,23 @@ type Row = Record<string, unknown>;
 /** Ligne `Guild` complète : la route n'en reçoit que les colonnes qu'elle demande. */
 let guildRow: Row = {};
 
+/** Erreur levée par l'insertion d'idempotence du webhook, `null` si elle réussit. */
+let insertError: unknown = null;
+const recordedEvents: string[] = [];
+
 const fakePrisma = {
   guild: {
     findUnique: mock(async ({ select }: { select?: Record<string, boolean> }) =>
       (select ? Object.fromEntries(Object.keys(select).map((key) => [key, guildRow[key] ?? null])) : guildRow)),
+  },
+  billingEvent: {
+    create: mock(async ({ data }: { data: { id: string } }) => {
+      if (insertError) throw insertError;
+      recordedEvents.push(data.id);
+      return data;
+    }),
+    update: mock(async () => ({})),
+    delete: mock(async () => ({})),
   },
 };
 
@@ -44,6 +59,8 @@ mockModule('../../api/hono/middleware/guildAccess', {
 mockModule('../../services/billing/stripeService', {
   isBillingEnabled: () => true,
   sellablePlans: () => ['PLUS'],
+  // Signature acceptée : l'événement est le corps reçu.
+  getStripe: () => ({ webhooks: { constructEventAsync: async (rawBody: string) => JSON.parse(rawBody) } }),
 });
 mockModule('../../services/billing/trialService', {
   TRIAL_DAYS: 15,
@@ -65,6 +82,7 @@ mockModule('../../services/system/planService', {});
 mockModule('../../services/system/accessService', {});
 
 const { createBillingRouter } = await import('../../api/hono/routes/billing.js');
+const { logger } = await import('../../utils/logger.js');
 
 const client = { guilds: { cache: new Map([[GUILD_ID, { memberCount: 40 }]]) } } as unknown as Client;
 const router = createBillingRouter(client);
@@ -96,5 +114,71 @@ describe('état de facturation renvoyé au dashboard', () => {
     for (const status of ['active', 'trialing', 'past_due', 'unpaid', 'incomplete', 'paused']) {
       expect(await billingStatus(status)).toEqual({ status, hasSubscription: true, hasLiveSubscription: true });
     }
+  });
+});
+
+describe('webhook Stripe : idempotence', () => {
+  const previousSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  const originalError = logger.error;
+  let loggedErrors: string[] = [];
+
+  beforeAll(() => {
+    process.env.STRIPE_WEBHOOK_SECRET = 'whsec_test';
+  });
+  afterAll(() => {
+    if (previousSecret === undefined) delete process.env.STRIPE_WEBHOOK_SECRET;
+    else process.env.STRIPE_WEBHOOK_SECRET = previousSecret;
+  });
+  beforeEach(() => {
+    insertError = null;
+    recordedEvents.length = 0;
+    loggedErrors = [];
+    logger.error = (tag: string, ...args: unknown[]) => {
+      loggedErrors.push(`${tag} ${args.map((arg) => String(arg)).join(' ')}`);
+    };
+  });
+  afterEach(() => {
+    logger.error = originalError;
+  });
+
+  async function deliver(eventId: string) {
+    const res = await router.request('/api/billing/webhook', {
+      method: 'POST',
+      headers: { 'stripe-signature': 't=1,v1=signature', 'content-type': 'application/json' },
+      body: JSON.stringify({ id: eventId, type: 'customer.created', data: { object: {} } }),
+    });
+    return { status: res.status, body: await res.json() };
+  }
+
+  test("une panne de la base n'est pas prise pour un doublon : 500, pour que Stripe rejoue l'événement", async () => {
+    for (const err of [
+      new Prisma.PrismaClientKnownRequestError('Timed out fetching a new connection from the connection pool.', {
+        code: 'P2024',
+        clientVersion: 'test',
+      }),
+      new Error("Can't reach database server at 127.0.0.1:5432"),
+    ]) {
+      insertError = err;
+      const { status, body } = await deliver('evt_panne');
+      expect(status).toBe(500);
+      expect(body).not.toHaveProperty('duplicate');
+    }
+    // La panne est journalisée, et non passée sous silence comme un doublon.
+    expect(loggedErrors).toHaveLength(2);
+    expect(loggedErrors.every((line) => line.includes('evt_panne'))).toBe(true);
+  });
+
+  test('un événement déjà reçu (clé primaire en double) est acquitté comme doublon', async () => {
+    insertError = new Prisma.PrismaClientKnownRequestError('Unique constraint failed on the fields: (`id`)', {
+      code: 'P2002',
+      clientVersion: 'test',
+    });
+    expect(await deliver('evt_rejoue')).toEqual({ status: 200, body: { received: true, duplicate: true } });
+    expect(loggedErrors).toEqual([]);
+  });
+
+  test('un événement neuf est enregistré puis acquitté', async () => {
+    expect(await deliver('evt_neuf')).toEqual({ status: 200, body: { received: true } });
+    expect(recordedEvents).toEqual(['evt_neuf']);
   });
 });

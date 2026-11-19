@@ -33,6 +33,7 @@ import {
   planForMemberCount,
   type PlanKey,
 } from '@kotbo/contracts';
+import { Prisma } from '@prisma/client';
 import prisma from '../../../utils/db.js';
 import { logger } from '../../../utils/logger.js';
 import { requireAuth } from '../middleware/auth.js';
@@ -142,9 +143,15 @@ export function createBillingRouter(client: Client): OpenAPIHono {
       await prisma.billingEvent.create({
         data: { id: event.id, type: event.type, payload: event as unknown as object },
       });
-    } catch {
-      logger.debug('Billing', `Événement ${event.id} déjà traité, ignoré.`);
-      return c.json({ received: true, duplicate: true }, 200);
+    } catch (err) {
+      // Seule une clé primaire en double (P2002) prouve un doublon : toute autre
+      // erreur renvoie 500 pour que Stripe rejoue l'événement au lieu de le perdre.
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        logger.debug('Billing', `Événement ${event.id} déjà traité, ignoré.`);
+        return c.json({ received: true, duplicate: true }, 200);
+      }
+      logger.error('Billing', `Enregistrement de l'idempotence de ${event.id} impossible :`, err);
+      return c.json({ error: 'Enregistrement en échec' }, 500);
     }
 
     try {
