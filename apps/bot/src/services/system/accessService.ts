@@ -26,6 +26,7 @@ import {
 import { v2Message } from '@arcscord/components';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
+import { ENTITLING_STATUSES } from '../billing/entitlingStatuses.js';
 import { kotboContainer, COLORS_RAW } from '../../utils/embeds.js';
 import { E } from '../../utils/emojis.js';
 import { resolveGuildLocale } from '../../utils/i18n.js';
@@ -655,6 +656,9 @@ export async function processReminder(
   logger.info('Access', `Rappel « ${formatDuration(milestone)} restantes » envoyé à ${guildId}.`);
 }
 
+/** Marge laissée au webhook de renouvellement pour repousser `accessExpiresAt`. */
+const SUBSCRIPTION_RENEWAL_GRACE_MS = 48 * 60 * 60 * 1000;
+
 /**
  * Balayage du cycle de vie : envoie les rappels dus et coupe les accès arrivés à
  * échéance. Idempotent : un double passage ne renvoie rien deux fois.
@@ -681,6 +685,8 @@ export async function runAccessLifecycleCheck(client: Client): Promise<void> {
       accessExpiredAt: true,
       accessDurationMinutes: true,
       accessRemindersSent: true,
+      stripeSubscriptionStatus: true,
+      stripeCancelAtPeriodEnd: true,
     },
   });
 
@@ -689,11 +695,19 @@ export async function runAccessLifecycleCheck(client: Client): Promise<void> {
 
   for (const row of candidates) {
     const status = toStatus(row.id, row, now);
+
+    // Un abonnement actif et non résilié se reconduit : sa fin de période n'est
+    // qu'un jalon que le webhook repousse. Ni rappel, ni coupure avant la marge.
+    const autoRenewing = ENTITLING_STATUSES.has(row.stripeSubscriptionStatus ?? '') && !row.stripeCancelAtPeriodEnd;
+
     try {
       if (status.expired) {
+        if (autoRenewing && now.getTime() - row.accessExpiresAt!.getTime() < SUBSCRIPTION_RENEWAL_GRACE_MS) continue;
         await expireAccess(client, row.id);
         continue;
       }
+
+      if (autoRenewing) continue;
 
       await processReminder(client, row.id, status);
     } catch (err) {

@@ -20,19 +20,10 @@ import { logger } from '../../utils/logger.js';
 import { getClient } from '../../utils/client.js';
 import { invalidatePlan } from '../system/planService.js';
 import { grantAccess, minutesUntil } from '../system/accessService.js';
+import { ENTITLING_STATUSES } from './entitlingStatuses.js';
 import { planForPriceId, type Stripe } from './stripeService.js';
 import { confirmTrialStarted } from './trialService.js';
 
-/**
- * Statuts Stripe qui ouvrent le service.
- *
- * `past_due` en fait partie volontairement : le premier prélèvement a échoué
- * mais Stripe va réessayer plusieurs jours. Couper immédiatement un serveur
- * pour une carte expirée serait une brutalité commerciale, et l'accès s'arrête
- * de toute façon à `accessExpiresAt` si les relances échouent toutes. Passé ce
- * délai Stripe bascule l'abonnement en `canceled` ou `unpaid`, qui ferment.
- */
-const ENTITLING_STATUSES = new Set<Stripe.Subscription.Status>(['active', 'trialing', 'past_due']);
 
 /**
  * Fin de la période payée.
