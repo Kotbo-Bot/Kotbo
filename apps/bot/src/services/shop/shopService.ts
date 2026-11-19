@@ -29,6 +29,7 @@ import { adminSpawnItem, creditBalance, getOrCreateRpgProfile } from '../feature
 import { addXp, getGuildLevelCurve, getLevelFromXp } from '../progression/levelingService.js';
 import { publishGuildSignal } from '../site/siteLive.js';
 import { UserFacingError } from '../../utils/userFacingError.js';
+import { classifyFailure } from '../../utils/failureKind.js';
 
 export type ShopErrorCode =
   | ShopOfferError
@@ -613,6 +614,27 @@ async function renewSubscription(client: Client, sub: ShopSubscriptionRow, now: 
       body: m.shop_notify_sub_ended_body({ name }, { locale }),
     });
     return 'ended';
+  }
+
+  // Un membre parti ne porte plus le rôle : on clôt sans débiter. Une panne
+  // passagère (quota, réseau) n'est pas un départ, on réessaiera au passage suivant.
+  const guild = client.guilds.cache.get(sub.guildId);
+  if (!guild) return 'waiting';
+  if (!guild.members.cache.has(sub.userId)) {
+    try {
+      await guild.members.fetch(sub.userId);
+    } catch (err) {
+      if (classifyFailure(err).code !== 'discord_unknown_resource') {
+        logger.warn('Shop', `Membre introuvable (passager) pour le prélèvement (${sub.id}) :`, err);
+        return 'waiting';
+      }
+      await endSubscription(client, sub, now);
+      await notifyShopMember(sub.guildId, sub.userId, {
+        title: m.shop_notify_sub_ended_title({}, { locale }),
+        body: m.shop_notify_sub_ended_body({ name }, { locale }),
+      });
+      return 'ended';
+    }
   }
 
   const profile = await getOrCreateRpgProfile(sub.guildId, sub.userId);

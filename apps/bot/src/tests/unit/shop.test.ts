@@ -3,6 +3,7 @@
  */
 import { describe, expect, mock, test } from 'bun:test';
 import path from 'node:path';
+import { DiscordAPIError } from 'discord.js';
 import { discountedShopPrice, normalizeShopCode, normalizeShopOffer } from '@kotbo/shared';
 import { completeModuleMock } from '../helpers/moduleMock.js';
 
@@ -19,19 +20,22 @@ const matches = (o: OrderRow, w: OrderWhere = {}): boolean =>
 let offerRow: unknown = null;
 mock.module('../../utils/db.js', () => {
   const db = {
+    guild: { findUnique: async () => null },
     shopOrder: {
       count: async ({ where }: { where?: OrderWhere } = {}) => counts.orders + orderRows.filter((o) => matches(o, where)).length,
       create: async ({ data }: { data: OrderRow }) => { orderRows.push({ ...data, createdAt: new Date() }); return data; },
     },
     shopSubscription: {
       findUnique: async () => counts.subscription,
+      findMany: async () => [{ id: 'sub1', guildId: 'g', userId: 'parti', offerId: 'offer1', roleId: 'role', price: 100, status: 'ACTIVE', cancelAtPeriodEnd: false, nextChargeAt: new Date(0), periodDays: 30 }],
       update: async () => ({}),
       upsert: async () => ({}),
       create: async () => ({}),
     },
+    shopRoleGrant: { count: async () => 0, findMany: async () => [] },
     memberLevel: { findUnique: async () => null },
     shopSettings: { findUnique: async () => null },
-    shopOffer: { findFirst: async () => offerRow },
+    shopOffer: { findFirst: async () => offerRow, findUnique: async () => ({ id: 'offer1', name: 'VIP' }) },
     rpgProfile: { updateMany: async () => { counts.debits += 1; return { count: 1 }; } },
     $executeRaw: async () => 0,
     $transaction: (fn: (tx: unknown) => unknown) => fn(db),
@@ -45,7 +49,7 @@ for (const [module, overrides] of [
   mock.module(`../../services/${module}.js`, () => completeModuleMock(path.resolve(import.meta.dir, `../../services/${module}.ts`), overrides));
 }
 
-const { offerBlocker, purchaseShopOffer } = await import('../../services/shop/shopService.js');
+const { offerBlocker, processShopRenewals, purchaseShopOffer } = await import('../../services/shop/shopService.js');
 
 const ROLE = '111111111111111111';
 const OTHER_ROLE = '222222222222222222';
@@ -178,5 +182,14 @@ describe('accès à une offre', () => {
     orderRows = [{ status: 'COMPLETED', source: 'discord', createdAt: hier, decidedAt: null }];
     await purchaseShopOffer(client, 'g', buyer.id, 'offer1', { source: 'discord' });
     expect(counts.debits).toBe(1);
+  });
+});
+
+describe('prélèvement des abonnements', () => {
+  test("un membre parti n'est plus prélevé : son abonnement est clos", async () => {
+    const parti = new DiscordAPIError({ code: 10007, message: 'Unknown Member' }, 10007, 404, 'GET', '/guilds/g/members/parti', { body: undefined, files: undefined });
+    const guild = { members: { cache: new Map(), fetch: async () => { throw parti; } } };
+    const client = { guilds: { cache: new Map([['g', guild]]) } };
+    expect(await processShopRenewals(client as never)).toEqual({ charged: 0, ended: 1, expired: 0 });
   });
 });
