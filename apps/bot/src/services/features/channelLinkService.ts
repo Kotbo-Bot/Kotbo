@@ -2,7 +2,7 @@ import { type APIEmbed, type Client, type Message, type MessageReaction, type Te
 import { canManageGuild } from '../../utils/guildAdmin.js';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
-import { COLORS } from '../../utils/embeds.js';
+import { COLORS, truncate } from '../../utils/embeds.js';
 import { cache } from '../../utils/cache.js';
 import { randomBytes } from 'node:crypto';
 import type { ChannelLinkGroup, ChannelLinkGroupMember, ChannelLinkInvite } from '@prisma/client';
@@ -905,6 +905,9 @@ const EMOJI_IMAGE_FALLBACK_LIMIT = 5;
 // entier : les images d'emoji, qui sont un pis-aller, cedent la place aux
 // fichiers du message plutot que de le faire echouer.
 const DISCORD_MAX_ATTACHMENTS = 10;
+// Au-delà, Discord refuse le contenu d'un message (50035) ou la description d'un embed.
+const DISCORD_CONTENT_MAX = 2000;
+const DISCORD_EMBED_DESC_MAX = 4096;
 
 /**
  * Salons où Discord a été vu retirer des emojis, et dernier avertissement émis.
@@ -1244,7 +1247,7 @@ export async function relayMessage(message: Message, client: Client): Promise<vo
             }
 
             const sent = await webhookClient.send({
-              content: neutralizeMassMentions(fullContent) || undefined,
+              content: truncate(neutralizeMassMentions(fullContent), DISCORD_CONTENT_MAX) || undefined,
               username: message.author.displayName || message.author.username,
               avatarURL: message.author.displayAvatarURL(),
               files: files.slice(0, DISCORD_MAX_ATTACHMENTS),
@@ -1273,7 +1276,7 @@ export async function relayMessage(message: Message, client: Client): Promise<vo
             if (forwarded.text) desc += `${FORWARD_HEADER}\n${forwarded.text}\n`;
             if (ownText) desc += ownText;
             if (stickers.note) desc += `${desc ? '\n' : ''}${stickers.note}`;
-            if (desc) embed.setDescription(desc);
+            if (desc) embed.setDescription(truncate(desc, DISCORD_EMBED_DESC_MAX));
 
             const ownImage = group.relayImages
               ? message.attachments.find((a) => a.contentType?.startsWith('image/'))
@@ -1364,7 +1367,7 @@ export async function relayMessageEdit(message: Message, client: Client): Promis
             }
 
             await webhookClient.editMessage(copy.relayedMessageId, {
-              content: neutralizeMassMentions(message.content) || undefined,
+              content: truncate(neutralizeMassMentions(message.content), DISCORD_CONTENT_MAX) || undefined,
               allowedMentions: { parse: [] },
             }).catch((err) => logger.warn(TAG, `Impossible d'éditer le message webhook ${copy.relayedMessageId}`, err));
 
@@ -1384,7 +1387,7 @@ export async function relayMessageEdit(message: Message, client: Client): Promis
                 })
                 .setTimestamp(message.createdAt)
                 .setFooter({ text: `🔗 ${sourceGuild.name}`, iconURL: sourceGuild.iconURL() ?? undefined })
-                .setDescription(message.content || '*[vide]*');
+                .setDescription(truncate(message.content || '*[vide]*', DISCORD_EMBED_DESC_MAX));
               await relayedMsg.edit({ embeds: [newEmbed] }).catch(() => null);
             }
           }
@@ -1740,7 +1743,7 @@ export async function relayThreadCreate(thread: ThreadChannel, client: Client): 
             const webhookClient = starterWebhookId ? await getWebhookClient(textChannel, starterWebhookId) : null;
             if (webhookClient) {
               await webhookClient.send({
-                content: neutralizeMassMentions(starterMessage.content),
+                content: truncate(neutralizeMassMentions(starterMessage.content), DISCORD_CONTENT_MAX),
                 username: starterMessage.author.displayName || starterMessage.author.username,
                 avatarURL: starterMessage.author.displayAvatarURL(),
                 threadId: newThread.id,
@@ -1756,7 +1759,7 @@ export async function relayThreadCreate(thread: ThreadChannel, client: Client): 
                     name: `${starterMessage.author.displayName || starterMessage.author.username} • ${thread.guild.name}`,
                     iconURL: starterMessage.author.displayAvatarURL(),
                   })
-                  .setDescription(starterMessage.content)
+                  .setDescription(truncate(starterMessage.content, DISCORD_EMBED_DESC_MAX))
                   .setTimestamp(starterMessage.createdAt)],
               }).catch(() => null);
             }
@@ -1839,7 +1842,7 @@ export async function relayThreadMessage(message: Message, client: Client): Prom
               }
 
               await webhookClient.send({
-                content: neutralizeMassMentions(threadContent) || undefined,
+                content: truncate(neutralizeMassMentions(threadContent), DISCORD_CONTENT_MAX) || undefined,
                 username: message.author.displayName || message.author.username,
                 avatarURL: message.author.displayAvatarURL(),
                 threadId: destThread.id,
@@ -1858,7 +1861,7 @@ export async function relayThreadMessage(message: Message, client: Client): Prom
               name: `${message.author.displayName || message.author.username} • ${message.guild.name}`,
               iconURL: message.author.displayAvatarURL(),
             })
-            .setDescription([message.content, stickers.note].filter(Boolean).join('\n') || '*[vide]*')
+            .setDescription(truncate([message.content, stickers.note].filter(Boolean).join('\n') || '*[vide]*', DISCORD_EMBED_DESC_MAX))
             .setTimestamp(message.createdAt);
 
           const img = group.relayImages ? message.attachments.find((a) => a.contentType?.startsWith('image/')) : undefined;
