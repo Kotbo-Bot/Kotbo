@@ -42,6 +42,13 @@ const fauxPrisma = {
       ligne = { ...ligne, ...data } as LigneGuild;
       return { ...ligne };
     }),
+    // Seul usage : marquer l'accès expiré s'il ne l'est pas déjà.
+    updateMany: mock(async ({ data }: { data: Record<string, unknown> }) => {
+      if (ligne.accessExpiredAt) return { count: 0 };
+      ecritures.push(data);
+      ligne = { ...ligne, ...data } as LigneGuild;
+      return { count: 1 };
+    }),
   },
 };
 
