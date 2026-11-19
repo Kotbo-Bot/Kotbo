@@ -12,6 +12,7 @@ import {
 } from 'discord.js';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
+import { joinFieldEntries, truncate } from '../../utils/embeds.js';
 import { broadcastDashboardStateChange } from '../../api/shared/sharding.js';
 import { notify, notifyMany } from '../notifications/notifyService.js';
 
@@ -646,7 +647,10 @@ export const createMeeting = async (
     });
 
     // On met à jour l'annonce immédiatement pour afficher les stats initiales (ex: ceux déjà en congé)
-    await updateMeetingAnnouncement(client, meeting.id);
+    // Son échec ne doit pas faire échouer une réunion déjà créée et annoncée.
+    await updateMeetingAnnouncement(client, meeting.id).catch(err =>
+      logger.error('Meeting', `Échec de la mise à jour de l'annonce pour ${meeting.id}:`, err),
+    );
 
     broadcastDashboardStateChange(guildId, 'meetings_updated');
     return { ...meeting, discordMessageId: announcementMessage.id };
@@ -909,11 +913,14 @@ function buildMeetingAnnouncementEmbed(meeting: {
 
     const excuses = meeting.presences
       .filter(p => p.status === 'EXCUSED' && p.note)
-      .map(p => `- <@${p.staffMember.userId}> : *${p.note}*`)
-      .join('\n');
+      .map(p => `- <@${p.staffMember.userId}> : *${truncate(p.note ?? '', 150)}*`);
 
-    if (excuses) {
-      embed.addFields({ name: '📝 Justifications', value: excuses, inline: false });
+    if (excuses.length > 0) {
+      embed.addFields({
+        name: '📝 Justifications',
+        value: joinFieldEntries(excuses, { more: (count) => `… et ${count} autre${count > 1 ? 's' : ''}` }),
+        inline: false,
+      });
     }
   }
 
