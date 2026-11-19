@@ -72,7 +72,7 @@ export async function analyzeGuildChannelHealth(
 
   const excludedIds = new Set(config.excludedChannelIds);
 
-  const channelMap = new Map<string, { messages: number; authors: Set<number>; dailyCounts: number[]; name: string }>();
+  const channelMap = new Map<string, { messages: number; authors: number[]; dailyCounts: number[]; name: string }>();
 
   for (const stat of channelStats) {
     if (excludedIds.has(stat.channelId)) continue;
@@ -84,13 +84,13 @@ export async function analyzeGuildChannelHealth(
       // Un salon archivé reste un GuildText avec des stats dans la fenêtre : il
       // ressortirait DEAD et serait ré-archivé chaque nuit.
       if (config.archiveCategoryId && channel.parentId === config.archiveCategoryId) continue;
-      entry = { messages: 0, authors: new Set(), dailyCounts: [], name: channel.name };
+      entry = { messages: 0, authors: [], dailyCounts: [], name: channel.name };
       channelMap.set(stat.channelId, entry);
     }
 
     entry.messages += stat.messagesCount;
     entry.dailyCounts.push(stat.messagesCount);
-    if (stat.uniqueAuthors > 0) entry.authors.add(stat.uniqueAuthors);
+    if (stat.uniqueAuthors > 0) entry.authors.push(stat.uniqueAuthors);
   }
 
   const hourlyStats = await prismaRead.guildHourlyStat.findMany({
@@ -113,8 +113,8 @@ export async function analyzeGuildChannelHealth(
   for (const [channelId, data] of channelMap) {
     const avgMsgPerDay = data.messages / periodDays;
     const avgMsgPerHour = avgMsgPerDay / 24;
-    const uniqueUsersAvg = data.authors.size > 0
-      ? [...data.authors].reduce((a, b) => a + b, 0) / data.authors.size
+    const uniqueUsersAvg = data.authors.length > 0
+      ? data.authors.reduce((a, b) => a + b, 0) / data.authors.length
       : 0;
 
     const halfPoint = Math.floor(data.dailyCounts.length / 2);

@@ -148,6 +148,17 @@ function week(channelId: string, messagesCount: number, uniqueAuthors: number): 
   }));
 }
 
+/** Une ligne de statistiques par jour jusqu'à la veille de T0 : [messages, auteurs uniques]. */
+function days(channelId: string, perDay: Array<[number, number]>): StatRow[] {
+  return perDay.map(([messagesCount, uniqueAuthors], index) => ({
+    guildId: GUILD_ID,
+    channelId,
+    dateKey: dateKey(T0 - (perDay.length - index) * DAY_MS),
+    messagesCount,
+    uniqueAuthors,
+  }));
+}
+
 beforeEach(() => {
   setSystemTime(new Date(T0));
   config = {
@@ -237,5 +248,18 @@ describe('analyse nocturne en mode AUTO : une action par salon, pas une par nuit
     await runChannelHealthAnalysis(client);
 
     expect(createdChannels).toHaveLength(1);
+  });
+});
+
+describe('moyenne journalière d\'auteurs uniques', () => {
+  test('deux jours au même nombre d\'auteurs comptent chacun dans la moyenne', async () => {
+    // 12, 12 puis 6 auteurs, le jour sans message n'étant pas compté : 10 par jour, et non 9
+    // sur les seules valeurs distinctes. C'est cette moyenne qui décide d'un split automatique.
+    stats = days(BUSY_CHANNEL_ID, [[2_400, 12], [0, 0], [2_400, 12], [2_400, 6]]);
+    config.overloadUniqueUsers = 10;
+
+    const summary = await analyzeGuildChannelHealth(client, GUILD_ID);
+
+    expect(summary?.channels[0]).toMatchObject({ uniqueUsersAvg: 10, status: 'OVERLOADED' });
   });
 });
