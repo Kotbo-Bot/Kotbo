@@ -2,6 +2,7 @@
   import { createEventDispatcher } from 'svelte';
   import { m } from '../i18n';
   import Papicon from './Papicon.svelte';
+  import { displayedText, filterOptions } from './searchableSelectModel';
 
   export let id: string = '';
   /** Id de l'aide ou de l'erreur du champ (`describedBy` de Field, RGAA 11.2). */
@@ -82,11 +83,7 @@
     };
   }
 
-  function normalize(text: string) {
-    return (text || '').toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
-  }
-
-  $: filtered = (options || []).filter((o) => normalize(o.name).includes(normalize(query)) || (o.id ?? '').includes(query)).filter((o, i, arr) => arr.findIndex((x) => x.id === o.id) === i);
+  $: filtered = filterOptions(options, query, selected?.name ?? null);
   $: if (filtered) highlighted = 0; // reset highlight when list changes
 
   function select(opt: { id: string; name: string }) {
@@ -128,7 +125,7 @@
         void create();
       }
     } else if (e.key === 'Escape') {
-      open = false;
+      close();
     }
   }
 
@@ -143,16 +140,24 @@
   $: selected = options.find((o) => o.id === value) ?? null;
   $: adorned = !!(selected && (selected.color || selected.icon));
 
-  // Synchronise le texte affiché dès que `value` ou `options` changent.
-  // onMount ne suffit pas car les options peuvent arriver après le montage (chargement asynchrone).
-  $: {
-    if (value && options.length > 0) {
-      const sel = options.find((o) => o.id === value);
-      if (sel && query !== sel.name) query = sel.name;
-    } else if (!value) {
-      // Si la valeur est vidée de l'extérieur, on efface aussi le texte affiché
-      if (query && !open) query = '';
-    }
+  // Recale le texte affiché quand `value` ou `options` changent (les options
+  // peuvent arriver après le montage). Passer par une fonction garde `query` et
+  // `open` hors des dépendances du bloc : quand il les lisait directement, il se
+  // relançait à chaque frappe et remettait le nom du choix courant, si bien
+  // qu'on ne pouvait plus chercher un autre salon sans passer par la croix.
+  $: syncQuery(value, options);
+
+  function syncQuery(current: string | null, opts: typeof options) {
+    if (open) return; // saisie en cours : ne pas écraser ce que tape l'utilisateur
+    const text = displayedText(current, opts);
+    if (text !== null && query !== text) query = text;
+  }
+
+  // À la fermeture sans choix, le champ reprend le nom du choix courant au lieu
+  // de garder une recherche abandonnée.
+  function close() {
+    open = false;
+    syncQuery(value, options);
   }
 </script>
 
@@ -175,7 +180,7 @@
     bind:value={query}
     on:input={() => { if (!disabled) { open = true; highlighted = 0; } }}
     on:focus={() => !disabled && (open = true)}
-    on:blur={() => setTimeout(() => (open = false), 150)}
+    on:blur={() => setTimeout(close, 150)}
     on:keydown={handleKeydown}
     class="w-full bg-surface-container-high text-on-surface text-sm {adorned ? 'pl-9 pr-4' : 'px-4'} py-2.5 rounded-xl border border-field-border outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
     autocomplete="off"
@@ -197,7 +202,13 @@
   {/if}
 
   {#if open}
-    <div use:dropdown class="app-popover rounded-lg border border-outline-variant/20 bg-surface-container-high text-on-surface p-2 shadow-lg overflow-auto">
+    <!-- mousedown|preventDefault sur toute la liste : le champ garde le focus.
+         Sans cela, un appui un peu long sur un choix, ou un clic sur la barre de
+         défilement (la liste en overflow-auto prend le focus dans Firefox),
+         faisait perdre le focus au champ, et la liste se fermait 150 ms plus
+         tard, avant que le click du choix n'arrive au relâchement. -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -- le clavier reste sur le champ, la liste ne fait que garder le focus -->
+    <div use:dropdown on:mousedown|preventDefault class="app-popover rounded-lg border border-outline-variant/20 bg-surface-container-high text-on-surface p-2 shadow-lg overflow-auto">
       {#if canCreate}
         <!-- mousedown : le clic doit passer avant le blur du champ, qui ferme la liste. -->
         <button
