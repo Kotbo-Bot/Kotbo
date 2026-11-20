@@ -1102,6 +1102,25 @@ describe('Modular Routers Unit Tests', () => {
       expect(data.resource).toBe('https://api-kotbo.example/api/mcp/112233445566778899');
       expect(data.authorization_servers).toEqual(['https://api-kotbo.example/api/mcp/112233445566778899']);
     });
+
+    test('le transport web répond à une méthode JSON-RPC hors du mode compat', async () => {
+      const token = makeMcpDirectToken('112233445566778899', 'direct-key-id');
+      mockMcpKeyService.getActiveMcpKeyById.mockImplementation(() => Promise.resolve({
+        id: 'direct-key-id',
+        guildId: '112233445566778899',
+        permissions: ['READ_STATS'],
+        isActive: true,
+      } as unknown));
+      const res = await createMcpServerRouter(mockClient).request(`/api/mcp-direct/112233445566778899/${token}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 7, method: 'resources/list' }),
+      });
+      expect(res.status).toBe(200);
+      const data = await res.json() as { jsonrpc: string; id: number };
+      expect(data.jsonrpc).toBe('2.0');
+      expect(data.id).toBe(7);
+    });
   });
 
   describe('2. Auth Routes', () => {

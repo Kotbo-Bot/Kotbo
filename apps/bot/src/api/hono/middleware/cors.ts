@@ -23,7 +23,7 @@ export function dashboardCors(): MiddlewareHandler {
   return async (c, next) => {
     // Matérialise l'instance de réponse Hono pour que ses en-têtes (CORS,
     // sécurité) soient fusionnés même si une route aval renvoie directement
-    // un objet Response natif (ex. BunServerResponse pour les routes publiques legacy).
+    // un objet Response natif (ex. une route qui construit sa propre Response).
     c.res;
 
     const isMcpPath =

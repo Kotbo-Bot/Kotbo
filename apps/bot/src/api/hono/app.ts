@@ -69,6 +69,8 @@ export function createHonoApp(client: Client): OpenAPIHono {
   // L'ancien pont gzipait les réponses > 1 Ko ; les pages publiques lourdes (clans, RPG) en dépendent.
   app.use('/api/public/*', compress());
   app.use('/api/admin/*', compress());
+  app.use('/api/mcp/*', compress());
+  app.use('/api/mcp-direct/*', compress());
 
   app.route('/', createHealthRouter(client));
   app.route('/', configRouter);

@@ -11,8 +11,6 @@
  * texte : « Erreur lors de la mise a jour » n'aide personne quand la base est
  * tombee.
  */
-import type { ServerResponse } from 'node:http';
-import { json } from './core.js';
 import { logger } from '../../utils/logger.js';
 import { errorMessage } from '../../utils/errors.js';
 import { captureException } from '../../observability/sentry.js';
@@ -21,16 +19,6 @@ import { isUserFacing } from '../../utils/publicError.js';
 
 export { classifyFailure, type FailureCode } from '../../utils/failureKind.js';
 import type { FailureCode } from '../../utils/failureKind.js';
-
-export function jsonFailure(
-  res: ServerResponse,
-  err: unknown,
-  fallbackMessage: string,
-  scope = 'API',
-): void {
-  const { status, body } = failurePayload(err, fallbackMessage, scope);
-  json(res, status, body);
-}
 
 /** Statut et corps d'un echec, journalisation comprise ; partage avec Hono. */
 export function failurePayload(
