@@ -29,6 +29,8 @@
   import { toast } from '../lib/stores/toast.svelte';
   import { confirmDialog } from '../lib/stores/confirmDialog.svelte';
   import { m, dateLocale } from '../lib/i18n';
+  import TagJoinsCard from '../lib/components/analytics/TagJoinsCard.svelte';
+  import { fetchMemberOverview, type MemberOverview } from '../lib/api';
 
   import { errorMessage } from '@kotbo/shared';
   type InviteStatus = 'active' | 'suspended' | 'deleted' | 'expired';
@@ -217,7 +219,18 @@
   });
 
 
+  // undefined = pas encore chargé ; null = aucun relevé du tag. Échec : la carte reste masquée.
+  let tagEstimate = $state<MemberOverview['tag'] | undefined>(undefined);
+  async function loadTagEstimate() {
+    try {
+      tagEstimate = (await fetchMemberOverview({ period: 30 }))?.tag ?? null;
+    } catch {
+      tagEstimate = undefined;
+    }
+  }
+
   async function loadInvitations() {
+    void loadTagEstimate();
     if (!authStore.selectedGuildId) return;
     loading = true;
     error = '';
@@ -821,6 +834,9 @@
       </div>
     {:else if activeTab === 'sources'}
       <div class="space-y-5">
+        {#if tagEstimate !== undefined}
+          <TagJoinsCard tag={tagEstimate} />
+        {/if}
         <section class="source-overview">
           <div class="max-w-2xl">
             <div class="flex items-center gap-2 text-cyan-500 mb-3">

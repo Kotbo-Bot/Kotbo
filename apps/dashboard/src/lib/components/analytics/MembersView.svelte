@@ -14,6 +14,7 @@
   import TopList from './TopList.svelte';
   import BarList from './BarList.svelte';
   import AnalyticsSkeleton from './AnalyticsSkeleton.svelte';
+  import TagJoinsCard from './TagJoinsCard.svelte';
   import {
     fetchActivityRankings,
     fetchMemberOverview,
@@ -118,8 +119,10 @@
         prevDaily: s.map((d) => d.prevPeakOnline),
       },
     ];
-    if (legacy?.clanTag && tagByDay.size > 0) {
-      const tagged = s.map((d) => tagByDay.get(d.dateKey) ?? 0);
+    const measured = data.tag !== null;
+    if (legacy?.clanTag && (measured || tagByDay.size > 0)) {
+      // Relevés du soir quand ils existent, sinon reconstitution depuis les dates d'arrivée.
+      const tagged = s.map((d) => (measured ? d.tagHolders ?? 0 : tagByDay.get(d.dateKey) ?? 0));
       list.push({
         id: 'tag',
         label: m.mcm_server_tag(),
@@ -217,6 +220,10 @@
       busy={loader.loading}
       forecastAllowed={false}
     />
+
+    {#if legacy?.clanTag}
+      <TagJoinsCard tag={data.tag} />
+    {/if}
 
     <div class="mem-grid">
       <SectionCard title={m.anx_mem_sources_title()} description={m.anx_mem_sources_desc({ count: fmtNumber(data.sources.tracked) })}>

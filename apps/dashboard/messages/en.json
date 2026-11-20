@@ -19327,5 +19327,13 @@
   "svdx_recent_title": "Latest sanctions",
   "svdx_journal_title": "Automod decisions",
   "svdx_journal_desc": "Linked to this tag on your server. Waves detected: {waves}.",
-  "tam_sff_hint": "For more on tags (ticket, escalation, join waves, shared list), use the Tags tab."
+  "tam_sff_hint": "For more on tags (ticket, escalation, join waves, shared list), use the Tags tab.",
+  "tjc_title": "Is the tag bringing in members?",
+  "tjc_desc": "Estimate: Discord does not link a join to a tag. We compare tag holders with joins whose source is unknown.",
+  "tjc_holders": "Tag holders",
+  "tjc_gained": "Change over the period",
+  "tjc_unknown": "Joins with no source",
+  "tjc_unknown_hint": "{count} over the period ({pct} of tracked joins). The tag, discovery or an expired link end up here.",
+  "tjc_days": "Measured every evening for {days} days. History starts at setup, the past is not backfilled.",
+  "tjc_empty": "No reading yet. Tag holders are counted every evening at 11:50 pm; the curve appears after the first reading."
 }

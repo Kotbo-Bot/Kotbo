@@ -19331,5 +19331,13 @@
   "svdx_recent_title": "Dernières sanctions",
   "svdx_journal_title": "Décisions de l'automod",
   "svdx_journal_desc": "Liées à ce tag chez toi. Vagues détectées : {waves}.",
-  "tam_sff_hint": "Pour aller plus loin sur les tags (ticket, escalade, vagues d'arrivées, liste partagée), utilise l'onglet Tags."
+  "tam_sff_hint": "Pour aller plus loin sur les tags (ticket, escalade, vagues d'arrivées, liste partagée), utilise l'onglet Tags.",
+  "tjc_title": "Le tag amène-t-il des membres ?",
+  "tjc_desc": "Estimation : Discord ne relie pas une arrivée à un tag. On compare les porteurs du tag aux arrivées sans source connue.",
+  "tjc_holders": "Porteurs du tag",
+  "tjc_gained": "Évolution sur la période",
+  "tjc_unknown": "Arrivées sans source",
+  "tjc_unknown_hint": "{count} sur la période ({pct} des arrivées suivies). Le tag, la découverte ou un lien expiré arrivent ici.",
+  "tjc_days": "Relevé chaque soir depuis {days} jours. L'historique commence à la mise en place, il n'y a pas de rattrapage du passé.",
+  "tjc_empty": "Aucun relevé pour l'instant. Le nombre de porteurs du tag est mesuré chaque soir à 23 h 50, la courbe apparaîtra dès le premier relevé."
 }

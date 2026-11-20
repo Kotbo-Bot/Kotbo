@@ -801,9 +801,11 @@ export const deleteSavedView = (id: string) => req<{ ok: boolean }>(`/analytics/
 export interface MemberOverview {
   memberCount: number | null;
   series: Array<{
-    dateKey: string; members: number; joined: number; left: number; peakOnline: number; onlineMembers: number;
+    dateKey: string; members: number; joined: number; left: number; peakOnline: number; onlineMembers: number; tagHolders: number | null;
     prevMembers: number; prevJoined: number; prevLeft: number; prevPeakOnline: number; prevOnlineMembers: number;
   }>;
+  /** Estimation : Discord ne relie pas une arrivée à un tag. null tant qu'aucun relevé du soir n'existe. */
+  tag: { holders: number; gained: number; unknownJoins: number; unknownShare: number | null; daysMeasured: number } | null;
   sources: {
     tracked: number;
     kinds: Array<{ kind: 'invite' | 'vanity' | 'label' | 'unknown'; joined: number; retention: number | null }>;
