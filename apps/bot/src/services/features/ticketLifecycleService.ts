@@ -158,12 +158,12 @@ function buildArchivePermissionOverwrites(
 }
 
 function archivedChannelName(current: string): string {
-  const base = current.replace(/^(ticket|fermer|archive)-/, '');
+  const base = current.replace(/^(ticket|fermé|fermer|archive)-/, '');
   return `archive-${base}`.slice(0, 100);
 }
 
 function activeChannelName(current: string): string {
-  const base = current.replace(/^(ticket|fermer|archive)-/, '');
+  const base = current.replace(/^(ticket|fermé|fermer|archive)-/, '');
   return `fermé-${base}`.slice(0, 100);
 }
 
