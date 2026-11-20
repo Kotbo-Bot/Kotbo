@@ -323,6 +323,13 @@ export async function evaluateGuildGate(
   // n'écrit que les lignes de la personne qui la demande.
   const isPersonalPreferenceAction = parts[4] === 'user-settings' || parts[4] === 'layout-presets';
 
+  // Widget de profil : ces gestes ne touchent que la ligne de l'appelant.
+  // `refresh-all`, qui pousse les widgets de tout le staff, reste aux administrateurs.
+  const isOwnWidgetAction = parts.length === 6
+    && parts[4] === 'widget'
+    && ['activate', 'deactivate', 'refresh', 'rotate-token'].includes(parts[5] ?? '')
+    && method === 'POST';
+
   /**
    * Droits « Configurer » et « Supprimer » du centre de gestion.
    *
@@ -369,7 +376,7 @@ export async function evaluateGuildGate(
     ? { ...access, canManageSettings: true }
     : access;
 
-  if (!access.canManageSettings && method !== 'GET' && !hasFeatureWriteRight && !isSanctionAction && !isStaffAbsenceAction && !isStaffResignationAction && !isNotificationAction && !isMeetingAction && !isNewsAction && !isMemberModerationAction && !isGiveawayManagerAction && !isAnalyticsAnnotationAction && !isAegisReviewAction && !isDoingListAction && !isTutoringAction && !isSuggestionDecisionAction && !isStarboardModerationAction && !isBanAppealModerationAction && !isStaffAbsenceItemAction && !isCallCreationAction && !isPersonalPreferenceAction) {
+  if (!access.canManageSettings && method !== 'GET' && !hasFeatureWriteRight && !isSanctionAction && !isStaffAbsenceAction && !isStaffResignationAction && !isNotificationAction && !isMeetingAction && !isNewsAction && !isMemberModerationAction && !isGiveawayManagerAction && !isAnalyticsAnnotationAction && !isAegisReviewAction && !isDoingListAction && !isTutoringAction && !isSuggestionDecisionAction && !isStarboardModerationAction && !isBanAppealModerationAction && !isStaffAbsenceItemAction && !isCallCreationAction && !isPersonalPreferenceAction && !isOwnWidgetAction) {
     return deny(403, { error: 'Action réservée aux administrateurs du dashboard.' });
   }
 

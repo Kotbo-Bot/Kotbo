@@ -138,3 +138,13 @@ describe('garde des écritures : préférences du lecteur', () => {
     }
   });
 });
+
+describe('garde des écritures : widget de profil', () => {
+  test('un membre du staff gère son propre widget, pas le rafraîchissement de tout le staff', async () => {
+    featureAccess = {};
+    for (const action of ['activate', 'deactivate', 'refresh', 'rotate-token']) {
+      expect({ action, denied: (await gate('POST', `widget/${action}`, STAFF)).denied }).toEqual({ action, denied: null });
+    }
+    expect((await gate('POST', 'widget/refresh-all', STAFF)).denied).toEqual(ADMIN_ONLY);
+  });
+});
