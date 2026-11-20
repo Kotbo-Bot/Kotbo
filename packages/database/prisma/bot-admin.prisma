@@ -104,6 +104,9 @@ model BroadcastLog {
   // Demande d'avis : libellé du bouton qui ouvre un formulaire (exclusif avec le sondage).
   feedbackLabel String?
 
+  // Variantes par langue : { en: { title?, message?, footerText? } }. Le texte de base est en français.
+  translations Json?
+
   successCount Int       @default(0)
   failCount    Int       @default(0)
   totalTargeted Int      @default(0)
@@ -165,6 +168,7 @@ model BroadcastTemplate {
   target       String   @default("ALL")
   targetGuilds String[] @default([])
   channelPref  String   @default("AUTO")
+  translations Json?
 
   createdBy String
   createdAt DateTime @default(now())
