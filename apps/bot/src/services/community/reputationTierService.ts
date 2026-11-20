@@ -6,10 +6,11 @@
  * au-dessus du sien) est sauté et journalisé : un vote ne doit jamais échouer
  * pour un palier mal réglé. Le dashboard signale ces rôles sur l'onglet Paliers.
  */
-import { EmbedBuilder, PermissionFlagsBits, type Client, type Guild, type GuildMember, type Role } from 'discord.js';
+import { EmbedBuilder, type Client, type Guild, type GuildMember, type Role } from 'discord.js';
 import { reachedTiers, tiersAbove, type ReputationTier } from '@kotbo/shared';
 import { COLORS } from '../../utils/embeds.js';
 import { logger } from '../../utils/logger.js';
+import { isAutoGrantableRole } from '../../utils/adminLockPermissions.js';
 import { resolveGuildLocale, type BotLocale } from '../../utils/i18n.js';
 import * as m from '../../lib/paraglide/messages.js';
 import { getReputationConfig } from './reputationService.js';
@@ -29,7 +30,7 @@ export function manageableRole(guild: Pick<Guild, 'roles'>, roleId: string): Rol
   if (!role || role.managed || !role.editable) return null;
   // Un rôle Administrateur ne passe jamais par un palier : le bot ne distribue
   // pas l'admin sans l'Admin Lock, ici comme pour toute autre attribution.
-  if (role.permissions.has(PermissionFlagsBits.Administrator)) return null;
+  if (!isAutoGrantableRole(role)) return null;
   return role;
 }
 
