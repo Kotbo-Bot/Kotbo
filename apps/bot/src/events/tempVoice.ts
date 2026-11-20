@@ -7187,6 +7187,7 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
       // requête même quand il la met en attente, et c'est justement ce cas que le
       // bouton doit annoncer.
       noterRenommage(channel.id);
+      await persisterEtatSalon(guildId, channel.id);
       const renamed = await settleWithin(channel.setName(newName), RENAME_TIMEOUT_MS);
 
       if (renamed.status === 'failed') {

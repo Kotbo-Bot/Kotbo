@@ -2304,6 +2304,20 @@ describe('câblage du panneau refondu', () => {
     tempChannels.delete(CHANNEL);
   });
 
+  test('un renommage est écrit en base, pour que le quota survive à un redémarrage', async () => {
+    guildConfig = { tempVoiceEnabled: true, baseStaffRoleId: null, moderatorRoleId: null, testStaffRoleId: null };
+    const { channel, listeners } = scene({ creatorId: OWNER });
+    prismaMock.tempVoiceChannel.update.mockClear();
+
+    await renomme(channel, fakeGuild(new Map()), listeners, 'Un');
+
+    expect(prismaMock.tempVoiceChannel.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: CHANNEL },
+      data: expect.objectContaining({ renameHistory: expect.arrayContaining([expect.any(Number)]) }),
+    }));
+    tempChannels.delete(CHANNEL);
+  });
+
   test('le bouton « Demander l\'accès » suit le réglage du serveur', async () => {
     // `boutonDemanderAccesVisible` décide ; encore faut-il que la rangée
     // l'appelle, et avec la config. Un salon ouvert n'a que trois portes, et un
