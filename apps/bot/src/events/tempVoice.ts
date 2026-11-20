@@ -88,7 +88,6 @@ import {
   REGLAGES_MODERATEUR,
   sujetReglage,
   type ReglageModerateur,
-  normaliserEtatDemandes,
   normaliserHistoriqueRenommage,
   membresSansLeRole,
   planDebordement,

@@ -4,7 +4,7 @@ import { promisify } from 'node:util';
 import { gzip } from 'node:zlib';
 import { Client, type Guild } from 'discord.js';
 import { Hono, type Context } from 'hono';
-import { LinkedAccountStatus, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { buildBettorStandings, buildSeasonLaureates, firmDebtOf, normalizeLevelCurve } from '@kotbo/shared';
 import { getRaidRecap, RAID_RECAP_PUBLIC_WINDOW_MS } from '../../services/features/rpg/rpgRaidService.js';
 import { getEngagedBetCredit, getEngagedBetCreditTotal } from '../../services/community/clanBetService.js';

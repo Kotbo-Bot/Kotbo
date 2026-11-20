@@ -31,7 +31,7 @@ import { getCrossServerSanctionSummary, type CrossServerSanctionSummary } from '
 import { getCrossServerLinkSummary, type CrossServerLinkSummary } from '../../services/moderation/crossServerLinkService.js';
 import { extractPrimaryGuildTag, guildTagBadgeUrl, resolveExternalGuild } from '../../services/core/serverTagService.js';
 import { getMemberBoostStats } from '../../services/analytics/boostService.js';
-import { getMemberIdentityHistory, compareAndRecordIdentityChanges } from '../../services/moderation/memberHistoryService.js';
+import { getMemberIdentityHistory } from '../../services/moderation/memberHistoryService.js';
 import { extractMessageId, extractMessagePreview, fetchMemberConnections, mapGuildRolePermissions, parseInviteFromDetails, safeIsoDate } from './core.js';
 import type { AuthClaims } from './core.js';
 import { formatChannelName, renderMentionsAsText } from './markdown.js';

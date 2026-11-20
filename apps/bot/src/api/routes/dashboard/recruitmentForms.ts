@@ -191,9 +191,7 @@ export function createRecruitmentFormsRouter(client: Client) {
       const result = await regenerateFormAPIKey(formId, guildId, staffMember.id);
       return send(c, { apiKey: result.apiKey, displayKey: result.displayKey });
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
       logger.error('RecruitmentFormAPI', 'Error regenerating API key:', err);
-      // Include real error in response for debugging (remove in prod)
       return fail(c, err, 'Erreur lors de la régénération de la clé API', 'RecruitmentFormAPI');
     }
   });

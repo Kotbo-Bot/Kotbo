@@ -12,7 +12,7 @@ import * as m from '../../../../lib/paraglide/messages.js';
 import { broadcastDashboardStateChange, extractMediaUrls, getDashboardUrl, getGuildName, parseDiscordMarkdown, pushAudit, resolveMemberFeatureAccess, type FeatureAccessMap } from '../../../shared.js';
 import { type ProvisionedEntry, acquireProvisionLock, missingProvisionPermissions, provisionCooldown, provisionCooldownMessage, releaseProvisionLock, startProvisionCooldown } from '../../../../services/core/channelProvisioningService.js';
 import { Prisma } from '@prisma/client';
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, type ColorResolvable, EmbedBuilder, type OverwriteResolvable, PermissionFlagsBits, TextChannel } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, type ColorResolvable, EmbedBuilder, PermissionFlagsBits, TextChannel } from 'discord.js';
 import { msgComponentsV2Map, msgEmbedsMap, msgReactionsMap } from './_shared.js';
 import { parseTranscriptHtml } from '../../../../services/features/transcriptService.js';
 import { clampCommentTimeout } from '../../../../services/features/ticketSatisfactionService.js';

@@ -401,7 +401,6 @@ export function createEventsRouter(client: Client) {
   router.delete(`${base}/events/:eventId/registrations/:userId`, ...gate, async (c) => {
     const guildId = c.req.param('guildId');
     const eventId = c.req.param('eventId');
-    const userId = c.req.param('userId');
     try {
       await removeEventRegistration(eventId, c.req.param('userId'));
       broadcastDashboardStateChange(guildId, 'events_updated');

@@ -22,7 +22,6 @@ import {
   sendPing,
 } from '../../../services/integrations/outgoingWebhookService.js';
 
-const SEGMENT = 'outgoing-webhooks';
 const LOG = 'OutgoingWebhooksAPI';
 const NAME_MAX = 60;
 const DELIVERY_PAGE = 50;

@@ -72,7 +72,6 @@ export function createVerificationModuleRouter(client: Client) {
 
   router.patch(`${base}/verification`, ...gate, async (c) => {
     const guildId = c.req.param('guildId');
-    const user = c.var.dashboardUser;
     const auditUser = auditUserOf(c);
     try {
       const body = await readBody<{

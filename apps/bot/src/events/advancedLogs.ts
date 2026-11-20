@@ -1,8 +1,5 @@
-import type { GuildLogEventConfig } from '@prisma/client';
 import {
   AuditLogEvent,
-  ActionRowBuilder,
-  ButtonBuilder,
   EmbedBuilder,
   Events,
   Guild,
@@ -22,7 +19,6 @@ import { upsertRetryingRace } from '../utils/upsertRetry.js';
 import { logger } from '../utils/logger.js';
 import { isLogEventEnabled, isLogIgnoredChannel, sendLogEmbed } from '../utils/logDispatch.js';
 import { queueAuditLog } from '../utils/auditLogger.js';
-import { cache, getCachedGuild } from '../utils/cache.js';
 import { prendreIntentionVocale } from '../services/moderation/voiceIntentRegistry.js';
 import { recordStaffActivity, syncStaffHierarchyMembership } from '../services/staff/staffManagementService.js';
 import { resolveOnlineMembersCount } from '../services/core/presenceDetectionService.js';
@@ -391,28 +387,6 @@ async function processSingleGuildSnapshot(guild: Guild, dateKey: string, hour: n
 function truncate(value: string, max = 1000): string {
   if (value.length <= max) return value;
   return `${value.slice(0, max - 1)}…`;
-}
-
-function stripLeadingEmoji(value: string): string {
-  return value.replace(/^[^\p{L}\p{N}]+/u, '').trim();
-}
-
-function embedSummary(embed: EmbedBuilder): { action: string; details: string } {
-  const payload = embed.toJSON();
-  const rawTitle = payload.title?.trim() || 'Événement Discord';
-  const action = stripLeadingEmoji(rawTitle) || rawTitle;
-  const description = payload.description?.trim() || '';
-  const fieldPreview = (payload.fields ?? [])
-    .slice(0, 4)
-    .map((field) => {
-      const fieldName = field.name.trim().toLowerCase();
-      if (fieldName.startsWith('membre')) return `${field.value}`;
-      return `${field.name}: ${field.value}`;
-    })
-    .join(' | ');
-
-  const details = truncate([description, fieldPreview].filter(Boolean).join(' | '), 900) || 'Aucun détail.';
-  return { action, details };
 }
 
 function formatUser(id: string, tag: string): string {
