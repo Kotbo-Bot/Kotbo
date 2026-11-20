@@ -222,16 +222,22 @@ export async function getKnownGuildNames(
     }
   }
 
-  // Tente la resolution API Discord pour les serveurs encore inconnus
+  // Tente la resolution API Discord pour les serveurs encore inconnus,
+  // bornee en nombre et en temps pour ne pas bloquer les listes admin.
   const unresolved = uniqueMissing.filter((id) => !result.has(id));
   if (unresolved.length > 0) {
-    const fetched = await Promise.all(
-      unresolved.map((id) => resolveExternalGuild(client, id).catch(() => null)),
+    const batch = unresolved.slice(0, 10);
+    const resolveBatch = Promise.all(
+      batch.map((id) => resolveExternalGuild(client, id).catch(() => null)),
     );
-    for (const item of fetched) {
-      if (item?.name) {
-        guildNameCache.set(item.guildId, item.name);
-        result.set(item.guildId, item.name);
+    const timeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 1500));
+    const fetched = await Promise.race([resolveBatch, timeout]);
+    if (fetched) {
+      for (const item of fetched) {
+        if (item?.name) {
+          guildNameCache.set(item.guildId, item.name);
+          result.set(item.guildId, item.name);
+        }
       }
     }
   }
