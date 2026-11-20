@@ -20,7 +20,7 @@ import { isGuildActivated } from '../../../utils/activation.js';
 import { isModuleEnabled } from '../../../services/core/moduleGate.js';
 import { trackDashboardVisit } from '../../../services/analytics/ghostActivityTracker.js';
 import { recordAdminAudit } from '../../../services/system/adminAuditService.js';
-import { featureKeysForSegment, getCachedFeatureAccess, isModuleUngatedSubroute, sharedModulesForSegment } from './featureGate.js';
+import { featureKeysForSegment, getCachedFeatureAccess, isModuleUngatedSubroute, sharedModulesForSegment, writeFeatureKeysForSegment } from './featureGate.js';
 
 export const READ_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
@@ -315,7 +315,7 @@ export async function evaluateGuildGate(
    * sans ouvrir l'effacement.
    */
   const writeFeatureKeys = method !== 'GET' && !access.canManageSettings
-    ? featureKeysForSegment(parts[4], parts[5])
+    ? writeFeatureKeysForSegment(method, parts[4], parts[5])
     : undefined;
 
   let hasFeatureWriteRight = false;
