@@ -190,7 +190,7 @@ describe('changement de langue sans rechargement', () => {
 
   test('aucun libelle de l\'interface n\'est fige dans la langue du chargement', () => {
     expect(frozenSites()).toEqual([]);
-  });
+  }, 30_000); // parcourt toutes les sources : dépasse les 5 s par défaut quand la machine est chargée
 
   test('i18n.ts reste importable par les tests Bun, qui ne compilent pas les runes', () => {
     const code = readFileSync(join(SRC, 'lib', 'i18n.ts'), 'utf-8');
