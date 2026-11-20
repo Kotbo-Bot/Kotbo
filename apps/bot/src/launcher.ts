@@ -232,10 +232,24 @@ async function spawnInstance(instance: ResolvedInstance): Promise<ShardingManage
     return m;
   };
 
+  const spawnIgnoringReadyTimeout = async (m: ShardingManager, spawnTimeout: number) => {
+    try {
+      await m.spawn({ timeout: spawnTimeout });
+    } catch (spawnErr) {
+      // Un shard peut attendre un 429 Discord (/gateway/bot) plus longtemps que
+      // SHARD_READY_TIMEOUT tout en servant deja l'API : ne pas tuer le launcher.
+      if ((spawnErr as { code?: string })?.code === 'ShardingReadyTimeout') {
+        logger.warn('Sharding', `[${label}] Le shard met du temps à devenir prêt (rate-limit Discord probable) ; maintien du processus.`);
+        return;
+      }
+      throw spawnErr;
+    }
+  };
+
   let manager = createManager(totalShards);
   const timeout = process.env.SHARD_READY_TIMEOUT ? Number(process.env.SHARD_READY_TIMEOUT) : 120_000;
   try {
-    await manager.spawn({ timeout });
+    await spawnIgnoringReadyTimeout(manager, timeout);
   } catch (err) {
     // Quand totalShards === 'auto', discord.js appelle GET /gateway/bot et
     // rejette avec l'objet Response brut en cas de 429/5xx. On retombe sur
@@ -243,6 +257,10 @@ async function spawnInstance(instance: ResolvedInstance): Promise<ShardingManage
     if (totalShards !== 'auto' || !(err instanceof Response)) throw err;
 
     const retryAfter = err.headers.get('retry-after');
+    const retryAfterMs = retryAfter ? Number(retryAfter) * 1000 : 0;
+    const fallbackTimeout = Number.isFinite(retryAfterMs) && retryAfterMs > 0
+      ? Math.max(timeout, retryAfterMs + 120_000)
+      : timeout;
     logger.warn(
       'Sharding',
       `[${label}] GET /gateway/bot a répondu HTTP ${err.status}${retryAfter ? ` (retry-after: ${retryAfter}s)` : ''} ; repli sur 1 shard.`,
@@ -251,7 +269,7 @@ async function spawnInstance(instance: ResolvedInstance): Promise<ShardingManage
     if (idx !== -1) activeManagers.splice(idx, 1);
 
     manager = createManager(1);
-    await manager.spawn({ timeout });
+    await spawnIgnoringReadyTimeout(manager, fallbackTimeout);
   }
   logger.success('Sharding', `[${label}] Bot lancé avec ${manager.totalShards} shard(s) - port API ${instance.apiPort}`);
 
