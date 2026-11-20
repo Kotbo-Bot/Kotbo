@@ -724,6 +724,21 @@ describe('fin de vie d\'un salon', () => {
 
     expect(channel.delete).not.toHaveBeenCalled();
   });
+
+  test('supprime le salon vidé en rejoignant un générateur réservé à un autre rôle', async () => {
+    guildConfig = { ...generatorConfig(), tempVoiceRequiredRoleId: '910000000000000000' };
+    const { channel } = fakeChannel();
+    const { client, listeners } = fakeClient();
+    registerTempVoiceListener(client);
+    tempChannels.set(CHANNEL, { creatorId: OWNER });
+
+    const newState = { channelId: GENERATOR, channel: null, guild: { id: GUILD }, member: fakeTarget(OWNER, false), disconnect: mock(async () => undefined) };
+    await listeners.get(Events.VoiceStateUpdate)?.({ channelId: CHANNEL, channel }, newState);
+    tempChannels.delete(CHANNEL);
+
+    expect(newState.disconnect).toHaveBeenCalled();
+    expect(channel.delete).toHaveBeenCalled();
+  });
 });
 
 describe('acquittement des interactions', () => {

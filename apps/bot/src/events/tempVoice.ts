@@ -4036,7 +4036,10 @@ export function registerTempVoiceListener(client: Client): void {
         const generators = resolveTempVoiceGenerators(guildConfig as unknown as TempVoiceGuildConfig, guild.id);
         const generator = generators.find((entry) => entry.channelId === newState.channelId);
 
+        // Pas de `return` ici : un membre venu d'un salon temporaire passe encore
+        // par la sortie plus bas, qui supprime ce salon s'il est resté vide.
         if (generator) {
+          const inFlightKey = `${guild.id}:${member.id}`;
           if (generator.requiredRoleId && !member.roles.cache.has(generator.requiredRoleId)) {
             const locale = await resolveGuildLocale(guild.id, guild.preferredLocale ?? null);
             const oublierRefus = annoncerIntentionVocale(guild.id, member.id, 'disconnect', {
@@ -4048,16 +4051,13 @@ export function registerTempVoiceListener(client: Client): void {
             await member
               .send(m.panel_tempvoice_dm_missing_role({ guild: guild.name }, { locale }))
               .catch(() => null);
-            return;
-          }
-
-          const inFlightKey = `${guild.id}:${member.id}`;
-          if (creationInFlight.has(inFlightKey)) return;
-          creationInFlight.add(inFlightKey);
-          try {
-            await createTempChannel(newState, member, generator);
-          } finally {
-            creationInFlight.delete(inFlightKey);
+          } else if (!creationInFlight.has(inFlightKey)) {
+            creationInFlight.add(inFlightKey);
+            try {
+              await createTempChannel(newState, member, generator);
+            } finally {
+              creationInFlight.delete(inFlightKey);
+            }
           }
         }
       }
