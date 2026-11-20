@@ -692,9 +692,13 @@ export function createBillingRouter(client: Client): OpenAPIHono {
     // L'appelant doit pouvoir administrer aussi le serveur cible : sans cela,
     // n'importe quel administrateur pourrait loger son abonnement chez un tiers.
     const target = client.guilds.cache.get(targetGuildId) ?? (await client.guilds.fetch(targetGuildId).catch(() => null));
-    const member = target ? await target.members.fetch(userId).catch(() => null) : null;
-    if (!target || !member) {
-      throw new HTTPException(404, { message: 'Serveur introuvable ou bot non présent.' });
+    if (!target) {
+      throw new HTTPException(404, { message: 'Serveur introuvable ou Kotbo n\'y est pas présent.' });
+    }
+    // 1) L'appelant est-il sur le serveur ? 2) Y est-il administrateur ?
+    const member = await target.members.fetch(userId).catch(() => null);
+    if (!member) {
+      throw new HTTPException(403, { message: "Tu n'es pas membre du serveur de destination." });
     }
     if (member.id !== target.ownerId && !member.permissions.has('Administrator') && !member.permissions.has('ManageGuild')) {
       throw new HTTPException(403, { message: "Tu dois administrer le serveur de destination." });
