@@ -496,6 +496,13 @@ export async function handleButton(interaction: Interaction, client: Client): Pr
     return;
   }
 
+  // ── Demande d'avis des annonces globales : le bouton ouvre le formulaire ──
+  if (customId.startsWith('bcfb:')) {
+    const { handleBroadcastFeedbackButton } = await import('../services/system/broadcastService.js');
+    await handleBroadcastFeedbackButton(interaction);
+    return;
+  }
+
   // ── Paris entre membres (points de clan) ────────────────────────────
   if (customId.startsWith('bet:')) {
     const { handleBetButton } = await import('../services/community/clanBetService.js');
@@ -1500,6 +1507,12 @@ export async function handleModalSubmit(interaction: ModalSubmitInteraction, cli
   if (customId.startsWith('help_')) {
     const { handleHelpInteraction } = await import('../commands/utility/help.js');
     await handleHelpInteraction(interaction);
+    return;
+  }
+
+  if (customId.startsWith('bcfbm:')) {
+    const { handleBroadcastFeedbackSubmit } = await import('../services/system/broadcastService.js');
+    await handleBroadcastFeedbackSubmit(interaction);
     return;
   }
 

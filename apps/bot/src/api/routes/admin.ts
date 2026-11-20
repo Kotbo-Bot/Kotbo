@@ -104,6 +104,7 @@ interface BroadcastRequestBody {
   channelPref?: BroadcastChannelPref;
   pollOptions?: string[];
   pollClosesAt?: string;
+  feedbackLabel?: string;
   dryRun?: boolean;
   /** ISO 8601. Present = annonce programmee au lieu d'un envoi immediat. */
   scheduledAt?: string;
@@ -1260,6 +1261,36 @@ export async function handleAdminRoutes(
       return true;
     }
 
+    // GET /api/admin/broadcast/:id/feedback - Retours reçus via la demande d'avis
+    if (method === 'GET' && parts.length === 5 && parts[4] === 'feedback') {
+      try {
+        const rows = await prisma.broadcastFeedback.findMany({
+          where: { broadcastId: parts[3] },
+          orderBy: { createdAt: 'desc' },
+          take: 200,
+        });
+        const names = await prisma.broadcastDelivery.findMany({
+          where: { broadcastId: parts[3], guildId: { in: [...new Set(rows.map((row) => row.guildId))] } },
+          select: { guildId: true, guildName: true },
+        });
+        const nameById = new Map(names.map((row) => [row.guildId, row.guildName]));
+        json(res, 200, {
+          feedbacks: rows.map((row) => ({
+            id: row.id,
+            userId: row.userId,
+            guildId: row.guildId,
+            guildName: nameById.get(row.guildId) ?? row.guildId,
+            content: row.content,
+            createdAt: row.createdAt.toISOString(),
+          })),
+        });
+      } catch (err) {
+        logger.error('AdminAPI', 'GET broadcast feedback error:', err);
+        jsonFailure(res, err, 'Erreur lors du chargement des retours', 'AdminAPI');
+      }
+      return true;
+    }
+
     // POST /api/admin/broadcast/:id/cancel - Annule une annonce programmee
     if (method === 'POST' && parts.length === 5 && parts[4] === 'cancel') {
       try {
@@ -1511,6 +1542,7 @@ export async function handleAdminRoutes(
             channelPref: normalized.channelPref,
             pollOptions: normalized.pollOptions,
             pollClosesAt: normalized.pollClosesAt,
+            feedbackLabel: normalized.feedbackLabel,
             totalTargeted,
             status: scheduledAt ? 'SCHEDULED' : 'SENDING',
             scheduledAt,
@@ -1549,6 +1581,7 @@ export async function handleAdminRoutes(
           allowedIds: [...allowedGuildIds],
           channelMap,
           poll: { broadcastId: record.id, options: normalized.pollOptions },
+          feedback: normalized.feedbackLabel ? { broadcastId: record.id, label: normalized.feedbackLabel } : undefined,
         });
 
         const { successCount, failCount } = await finalizeBroadcast(record.id, deliveries, totalTargeted);
