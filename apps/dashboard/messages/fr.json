@@ -3844,6 +3844,7 @@
   "an_commands_empty_desc": "Les statistiques de commandes apparaîtront automatiquement dès qu'un membre utilisera des commandes du bot.",
   "an_error_interactions": "Impossible de récupérer les interactions. Réessaie.",
   "an_error_generic": "Erreur",
+  "abil_transfer_invalid_guild": "Identifiant de serveur invalide.",
   "an_member_fallback": "Membre",
   "an_loading_short": "Chargement…",
   "an_export_button": "Exporter",

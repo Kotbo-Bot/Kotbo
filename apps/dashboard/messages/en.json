@@ -3844,6 +3844,7 @@
   "an_commands_empty_desc": "Command statistics will show up automatically as soon as a member uses the bot's commands.",
   "an_error_interactions": "Failed to load interactions",
   "an_error_generic": "Error",
+  "abil_transfer_invalid_guild": "Invalid server ID.",
   "an_member_fallback": "Member",
   "an_loading_short": "Loading…",
   "an_export_button": "Export",

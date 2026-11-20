@@ -161,7 +161,7 @@
   async function transfer(guild: AdminBillingGuild) {
     const target = transferTarget.trim();
     if (!/^\d{15,25}$/.test(target)) {
-      toast.error('Identifiant de serveur invalide.');
+      toast.error(m.abil_transfer_invalid_guild());
       return;
     }
     if (!(await confirmDialog.ask({
