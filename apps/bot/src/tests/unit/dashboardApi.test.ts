@@ -206,7 +206,8 @@ mock.module(path.resolve(import.meta.dir, '../../services/system/planService.js'
 
 // Import router modules and helpers after mocks are set up
 import { JWT_SECRET, splitPath, resolveDashboardAccess } from '../../api/shared.js';
-import { handlePublicRoutes, createPublicLegacyRouter } from '../../api/routes/public.js';
+import { createPublicMiscRouter } from '../../api/hono/routes/public/publicMisc.js';
+import { createPublicCommunityRouter } from '../../api/hono/routes/public/publicCommunity.js';
 import { authRouter } from '../../api/hono/routes/auth.js';
 import { createReportErrorRouter } from '../../api/routes/error.js';
 import { createUserRouter } from '../../api/routes/user.js';
@@ -526,87 +527,29 @@ describe('Modular Routers Unit Tests', () => {
   });
 
   describe('1. Public Routes', () => {
-    test('GET /health returns service status', async () => {
-      const req = createMockRequest({ method: 'GET', url: '/health' });
-      const res = createMockResponse();
-      const parts = splitPath(req.url!);
-      const url = new URL(req.url!, 'http://localhost');
-
-      const handled = await handlePublicRoutes(req, res, parts, url, mockClient);
-      expect(handled).toBeTrue();
-      expect(res.statusCode).toBe(200);
-      const data = JSON.parse(res.body);
-      expect(data.ok).toBeTrue();
-      expect(data.service).toBe('kotbo-dashboard-api');
-    });
-
-    test('GET /api/config returns client info', async () => {
-      const req = createMockRequest({ method: 'GET', url: '/api/config' });
-      const res = createMockResponse();
-      const parts = splitPath(req.url!);
-      const url = new URL(req.url!, 'http://localhost');
-
-      // Set client ID to bypass empty checks
-      process.env.DISCORD_CLIENT_ID = 'test-client-id';
-      process.env.DISCORD_REDIRECT_URI = 'http://localhost';
-
-      const handled = await handlePublicRoutes(req, res, parts, url, mockClient);
-      expect(handled).toBeTrue();
-      expect(res.statusCode).toBe(200);
-      const data = JSON.parse(res.body);
-      expect(data.discordClientId).toBe('test-client-id');
-    });
+    const fwd = { 'x-forwarded-proto': 'https', 'x-forwarded-host': 'api-kotbo.example' };
+    const publicApp = () => createPublicMiscRouter(mockClient);
 
     test('GET root OAuth discovery refuses templated MCP endpoints', async () => {
-      const req = createMockRequest({
-        method: 'GET',
-        url: '/.well-known/oauth-authorization-server',
-        headers: { 'x-forwarded-proto': 'https', 'x-forwarded-host': 'api-kotbo.example' },
-      });
-      const res = createMockResponse();
-      const parts = splitPath(req.url!);
-      const url = new URL(req.url!, 'http://localhost');
-
-      const handled = await handlePublicRoutes(req, res, parts, url, mockClient);
-      expect(handled).toBeTrue();
-      expect(res.statusCode).toBe(400);
-      const data = JSON.parse(res.body);
+      const res = await publicApp().request('/.well-known/oauth-authorization-server', { headers: fwd });
+      expect(res.status).toBe(400);
+      const data = await res.json() as { error: string; endpoint_format: string };
       expect(data.error).toBe('guild_scoped_mcp_endpoint_required');
       expect(data.endpoint_format).toBe('https://api-kotbo.example/api/mcp/:guildId');
     });
 
     test('GET standard MCP protected resource metadata returns guild-scoped issuer', async () => {
-      const req = createMockRequest({
-        method: 'GET',
-        url: '/.well-known/oauth-protected-resource/api/mcp/112233445566778899',
-        headers: { 'x-forwarded-proto': 'https', 'x-forwarded-host': 'api-kotbo.example' },
-      });
-      const res = createMockResponse();
-      const parts = splitPath(req.url!);
-      const url = new URL(req.url!, 'http://localhost');
-
-      const handled = await handlePublicRoutes(req, res, parts, url, mockClient);
-      expect(handled).toBeTrue();
-      expect(res.statusCode).toBe(200);
-      const data = JSON.parse(res.body);
+      const res = await publicApp().request('/.well-known/oauth-protected-resource/api/mcp/112233445566778899', { headers: fwd });
+      expect(res.status).toBe(200);
+      const data = await res.json() as { resource: string; authorization_servers: string[] };
       expect(data.resource).toBe('https://api-kotbo.example/api/mcp/112233445566778899');
       expect(data.authorization_servers).toEqual(['https://api-kotbo.example/api/mcp/112233445566778899']);
     });
 
     test('GET standard MCP authorization server metadata returns concrete endpoints', async () => {
-      const req = createMockRequest({
-        method: 'GET',
-        url: '/.well-known/oauth-authorization-server/api/mcp/112233445566778899',
-        headers: { 'x-forwarded-proto': 'https', 'x-forwarded-host': 'api-kotbo.example' },
-      });
-      const res = createMockResponse();
-      const parts = splitPath(req.url!);
-      const url = new URL(req.url!, 'http://localhost');
-
-      const handled = await handlePublicRoutes(req, res, parts, url, mockClient);
-      expect(handled).toBeTrue();
-      expect(res.statusCode).toBe(200);
-      const data = JSON.parse(res.body);
+      const res = await publicApp().request('/.well-known/oauth-authorization-server/api/mcp/112233445566778899', { headers: fwd });
+      expect(res.status).toBe(200);
+      const data = await res.json() as Record<string, any>;
       expect(data.issuer).toBe('https://api-kotbo.example/api/mcp/112233445566778899');
       expect(data.authorization_endpoint).toBe('https://api-kotbo.example/api/mcp/112233445566778899/oauth/authorize');
       expect(data.token_endpoint).toBe('https://api-kotbo.example/api/mcp/112233445566778899/oauth/token');
@@ -616,66 +559,44 @@ describe('Modular Routers Unit Tests', () => {
       expect(data.client_id_metadata_document_supported).toBe(true);
     });
 
-    test('GET root protected resource metadata supports resource query parameter', async () => {
-      const req = createMockRequest({
-        method: 'GET',
-        url: '/.well-known/oauth-protected-resource?resource=https%3A%2F%2Fapi-kotbo.example%2Fapi%2Fmcp%2F112233445566778899',
-      });
-      const res = createMockResponse();
-      const parts = splitPath(new URL(req.url!, 'http://localhost').pathname);
-      const url = new URL(req.url!, 'http://localhost');
+    test('GET well-known with an invalid guild id answers 400', async () => {
+      const res = await publicApp().request('/.well-known/oauth-protected-resource/api/mcp/abc', { headers: fwd });
+      expect(res.status).toBe(400);
+    });
 
-      const handled = await handlePublicRoutes(req, res, parts, url, mockClient);
-      expect(handled).toBeTrue();
-      expect(res.statusCode).toBe(200);
-      const data = JSON.parse(res.body);
+    test('GET root protected resource metadata supports resource query parameter', async () => {
+      const res = await publicApp().request('/.well-known/oauth-protected-resource?resource=https%3A%2F%2Fapi-kotbo.example%2Fapi%2Fmcp%2F112233445566778899');
+      expect(res.status).toBe(200);
+      const data = await res.json() as { resource: string };
       expect(data.resource).toBe('https://api-kotbo.example/api/mcp/112233445566778899');
     });
 
     test('GET root authorization server metadata supports resource query parameter', async () => {
-      const req = createMockRequest({
-        method: 'GET',
-        url: '/.well-known/oauth-authorization-server?resource=https%3A%2F%2Fapi-kotbo.example%2Fapi%2Fmcp%2F112233445566778899',
-      });
-      const res = createMockResponse();
-      const parts = splitPath(new URL(req.url!, 'http://localhost').pathname);
-      const url = new URL(req.url!, 'http://localhost');
-
-      const handled = await handlePublicRoutes(req, res, parts, url, mockClient);
-      expect(handled).toBeTrue();
-      expect(res.statusCode).toBe(200);
-      const data = JSON.parse(res.body);
+      const res = await publicApp().request('/.well-known/oauth-authorization-server?resource=https%3A%2F%2Fapi-kotbo.example%2Fapi%2Fmcp%2F112233445566778899');
+      expect(res.status).toBe(200);
+      const data = await res.json() as { issuer: string };
       expect(data.issuer).toBe('https://api-kotbo.example/api/mcp/112233445566778899');
     });
 
     test('GET root authorization server metadata supports signed direct MCP resource URLs', async () => {
       const directToken = makeMcpDirectToken('112233445566778899', 'direct-key-id');
       const directResource = `https://api-kotbo.example/api/mcp-direct/112233445566778899/${directToken}`;
-      const req = createMockRequest({
-        method: 'GET',
-        url: `/.well-known/oauth-authorization-server?resource=${encodeURIComponent(directResource)}`,
-      });
-      const res = createMockResponse();
-      const parts = splitPath(new URL(req.url!, 'http://localhost').pathname);
-      const url = new URL(req.url!, 'http://localhost');
-
-      const handled = await handlePublicRoutes(req, res, parts, url, mockClient);
-      expect(handled).toBeTrue();
-      expect(res.statusCode).toBe(200);
-      const data = JSON.parse(res.body);
+      const res = await publicApp().request(`/.well-known/oauth-authorization-server?resource=${encodeURIComponent(directResource)}`);
+      expect(res.status).toBe(200);
+      const data = await res.json() as Record<string, string>;
       expect(data.issuer).toBe(directResource);
       expect(data.registration_endpoint).toBe(`${directResource}/oauth/register`);
       expect(data.authorization_endpoint).toBe(`${directResource}/oauth/authorize`);
       expect(data.token_endpoint).toBe(`${directResource}/oauth/token`);
     });
 
-    test('createPublicLegacyRouter routes public requests correctly through Hono', async () => {
-      const router = createPublicLegacyRouter(mockClient);
-      const res = await router.request('/health');
-      expect(res.status).toBe(200);
-      const data = await res.json() as { ok: boolean; service: string };
-      expect(data.ok).toBeTrue();
-      expect(data.service).toBe('kotbo-dashboard-api');
+    test('public pages refuse a malformed guild id before touching the database', async () => {
+      const misc = createPublicMiscRouter(mockClient);
+      const community = createPublicCommunityRouter(mockClient);
+      expect((await misc.request('/api/public/guilds/abc/news')).status).toBe(400);
+      expect((await misc.request('/api/public/rss/abc')).status).toBe(400);
+      expect((await community.request('/api/public/guilds/abc/giveaways')).status).toBe(400);
+      expect((await community.request('/api/public/guilds/abc/quizzes/q1', { method: 'GET' })).status).toBe(400);
     });
   });
 

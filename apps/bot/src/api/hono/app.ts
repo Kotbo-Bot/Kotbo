@@ -1,6 +1,7 @@
 import { OpenAPIHono } from '@hono/zod-openapi';
 import { swaggerUI } from '@hono/swagger-ui';
 import { HTTPException } from 'hono/http-exception';
+import { compress } from 'hono/compress';
 import type { Client } from 'discord.js';
 import { dashboardCors } from './middleware/cors.js';
 import { createHealthRouter } from './routes/health.js';
@@ -31,7 +32,11 @@ import { createReportErrorRouter } from '../routes/error.js';
 import { createReportFeedbackRouter } from '../routes/feedback.js';
 import { createRestApiRouter } from '../mcp/restApi.js';
 import { createMcpServerRouter } from '../mcp/mcpServer.js';
-import { createPublicLegacyRouter } from '../routes/public.js';
+import { createPublicMiscRouter } from './routes/public/publicMisc.js';
+import { createPublicCommunityRouter } from './routes/public/publicCommunity.js';
+import { createPublicRpgClansRouter } from './routes/public/publicRpgClans.js';
+import { createPublicFilesRouter } from './routes/public/publicFiles.js';
+import { createPublicFormsRouter } from './routes/public/publicForms.js';
 import { fail } from './dashboard/kit.js';
 
 /**
@@ -61,6 +66,9 @@ export function createHonoApp(client: Client): OpenAPIHono {
   // Routes
   // ---------------------------------------------------------------------------
 
+  // L'ancien pont gzipait les réponses > 1 Ko ; les pages publiques lourdes (clans, RPG) en dépendent.
+  app.use('/api/public/*', compress());
+
   app.route('/', createHealthRouter(client));
   app.route('/', configRouter);
   app.route('/', eventBusRouter);
@@ -89,7 +97,11 @@ export function createHonoApp(client: Client): OpenAPIHono {
   app.route('/', createReportFeedbackRouter(client));
   app.route('/', createRestApiRouter(client));
   app.route('/', createMcpServerRouter(client));
-  app.route('/', createPublicLegacyRouter(client));
+  app.route('/', createPublicMiscRouter(client));
+  app.route('/', createPublicCommunityRouter(client));
+  app.route('/', createPublicRpgClansRouter(client));
+  app.route('/', createPublicFilesRouter());
+  app.route('/', createPublicFormsRouter(client));
   app.route('/', createDashboardRouter(client));
 
   // ---------------------------------------------------------------------------
