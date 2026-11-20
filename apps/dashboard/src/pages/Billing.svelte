@@ -22,7 +22,7 @@
   import type { BillingInterval, BillingStatus, PlanCard, PlanKey } from '../lib/api/billing';
   import { toast } from '../lib/stores/toast.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
-  import SearchableSelect from '../lib/components/SearchableSelect.svelte';
+  import GuildSelect from '../lib/components/GuildSelect.svelte';
   import Callout from '../lib/components/ui/Callout.svelte';
   import Button from '../lib/components/ui/Button.svelte';
   import { confetti } from '../lib/onboarding/celebrate';
@@ -349,13 +349,12 @@
             <div class="flex flex-wrap items-end gap-3">
               <div class="space-y-1 text-xs text-on-surface-variant">
                 <label for="transfer-target">{m.bill_transfer_target()}</label>
-                <SearchableSelect
+                <GuildSelect
                   id="transfer-target"
                   className="w-full min-w-56"
                   bind:value={transferTarget}
-                  options={transferTargets.map((g) => ({ id: g.id, name: g.name }))}
+                  guilds={transferTargets}
                   placeholder={m.bill_transfer_pick()}
-                  showId={false}
                 />
               </div>
               <Button variant="primary" size="sm" disabled={!transferTarget} onclick={() => (confirmTransfer = true)}>{m.bill_transfer_confirm_btn()}</Button>
