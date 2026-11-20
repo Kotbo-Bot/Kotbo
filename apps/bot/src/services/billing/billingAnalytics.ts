@@ -16,8 +16,8 @@
  *
  * Comme le reste du tunnel, ce module n'échoue jamais bruyamment : une facture
  * non recopiée est un trou dans une courbe, pas une raison de faire échouer un
- * webhook portant un paiement déjà encaissé. Le cron `billing-invoice-sync` la
- * rattrapera.
+ * webhook portant un paiement déjà encaissé. Seule la reprise manuelle
+ * `scripts/backfill-acquisition.ts` la rattrape.
  */
 
 import { normalizePlanKey, type BillingInterval, type PlanKey } from '@kotbo/contracts';
