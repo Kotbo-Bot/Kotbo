@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, mock, setSystemTime, test } from 'bun:test';
 import path from 'node:path';
-import type { Client } from 'discord.js';
+import type { Client, EmbedBuilder } from 'discord.js';
 import { completeModuleMock } from '../helpers/moduleMock.js';
 
 const GUILD_ID = '987654321098765432';
@@ -104,6 +104,10 @@ const prismaMock = {
     }),
   },
   memberJail: { findMany: mock(async () => []) },
+  guild: {
+    findUnique: mock(async () => ({ propagateSanctions: true })),
+    findMany: mock(async () => [{ id: 'destination', sanctionAlertChannelId: 'alertes' }]),
+  },
 };
 
 function mockerModule(relatif: string, overrides: Record<string, unknown>): void {
@@ -241,5 +245,26 @@ describe('échec de la levée automatique d\'un tempban', () => {
     await processScheduledSanctions(fakeClient());
 
     expect(sanctions.find((row) => row.id === tempBan.id)?.status).toBe('FAILED');
+  });
+});
+
+describe("propagation d'une sanction aux autres serveurs", () => {
+  test('le champ Source nomme le serveur où la sanction a été prise', async () => {
+    const send = mock(async (_message: { embeds: EmbedBuilder[] }) => undefined);
+    const client = {
+      guilds: {
+        cache: new Map([
+          [GUILD_ID, { id: GUILD_ID, name: 'Serveur source' }],
+          ['destination', { id: 'destination', name: 'Serveur destinataire', channels: { cache: new Map([['alertes', { send }]]) } }],
+        ]),
+      },
+    } as unknown as Client;
+
+    await registerBanSanction({ guildId: GUILD_ID, target: TARGET, moderator: MODERATOR, reason: 'raid', client });
+    // La propagation part sans être attendue.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const fields = send.mock.calls[0][0].embeds[0].toJSON().fields;
+    expect(fields?.find((field) => field.name === 'Source')?.value).toBe('Serveur source');
   });
 });

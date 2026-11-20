@@ -579,6 +579,8 @@ async function propagateSanction(client: Client, originalGuildId: string, sancti
 
   if (!originalGuild?.propagateSanctions) return;
 
+  const sourceName = client.guilds.cache.get(originalGuildId)?.name ?? originalGuildId;
+
   const otherGuilds = await prisma.guild.findMany({
     where: {
       id: { not: originalGuildId },
@@ -611,7 +613,7 @@ async function propagateSanction(client: Client, originalGuildId: string, sancti
           { name: 'Utilisateur', value: `${sanction.targetTag} (<@${sanction.targetUserId}>)`, inline: true },
           { name: 'Type', value: typeLabel, inline: true },
           { name: 'Raison', value: sanction.reason || 'Aucune raison fournie', inline: false },
-          { name: 'Source', value: guild.name, inline: true }
+          { name: 'Source', value: sourceName, inline: true }
         )
         .setTimestamp();
 
