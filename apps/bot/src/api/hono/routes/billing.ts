@@ -22,7 +22,6 @@ import { HTTPException } from 'hono/http-exception';
 import { createMiddleware } from 'hono/factory';
 import type { Client } from 'discord.js';
 import {
-  GIFT_DURATIONS_MONTHS,
   PLAN_KEYS,
   PLAN_REGISTRY,
   REFERRAL_DISCOUNT_PERCENT,
