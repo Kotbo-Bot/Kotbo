@@ -1,6 +1,7 @@
 import { Message, EmbedBuilder, Client, ChannelType, PermissionFlagsBits, type TextBasedChannel, type GuildMember, type User } from 'discord.js';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
+import { neutralizeMassMentions } from '../../utils/mentions.js';
 import { firstKillRoleProblem } from './rpg/rpgFirstKillService.js';
 
 import { testSafeRegex } from '../../utils/safeRegex.js';
@@ -49,8 +50,10 @@ function resolveResponsePlaceholders(
 ): string {
   if (!text.includes('{')) return text;
 
-  const username = ctx.member?.displayName || ctx.user?.username || 'Utilisateur';
-  const tag = ctx.user?.username || ctx.member?.user.username || 'inconnu';
+  // Pseudo et tag viennent du membre : neutralisés pour qu'un « @everyone »
+  // glissé dedans ne notifie pas tout le serveur.
+  const username = neutralizeMassMentions(ctx.member?.displayName || ctx.user?.username || 'Utilisateur');
+  const tag = neutralizeMassMentions(ctx.user?.username || ctx.member?.user.username || 'inconnu');
   const channelMention = ctx.channel && 'toString' in ctx.channel ? ctx.channel.toString() : '';
 
   return text
