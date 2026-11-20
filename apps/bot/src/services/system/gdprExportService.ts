@@ -232,6 +232,7 @@ const STATIC_SOURCES: GdprSource[] = [
   { category: 'engagement', key: 'rankedSeasonEntry', label: 'Saisons classées', model: 'rankedSeasonEntry', where: ({ discordId }) => ({ userId: discordId }) },
   { category: 'engagement', key: 'funCountingPlayer', label: 'Jeu du comptage', model: 'funCountingPlayer', where: ({ discordId }) => ({ userId: discordId }) },
   { category: 'engagement', key: 'broadcastPollVote', label: 'Votes aux sondages diffusés', model: 'broadcastPollVote', where: ({ discordId }) => ({ userId: discordId }) },
+  { category: 'engagement', key: 'broadcastFeedback', label: 'Avis laissés sur les annonces diffusées', model: 'broadcastFeedback', where: ({ discordId }) => ({ userId: discordId }) },
   { category: 'engagement', key: 'eventQuizResponse', label: 'Réponses aux quiz', model: 'eventQuizResponse', where: ({ discordId }) => ({ participant: { userId: discordId } }) },
   { category: 'engagement', key: 'eventCtfSolve', label: 'Épreuves CTF résolues', model: 'eventCtfSolve', where: ({ discordId }) => ({ participant: { userId: discordId } }) },
   { category: 'engagement', key: 'siteVote', label: 'Votes sur le site', model: 'siteVote', where: ({ discordId }) => ({ userId: discordId }) },
