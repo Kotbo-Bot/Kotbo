@@ -22,6 +22,7 @@
   import type { BillingInterval, BillingStatus, PlanCard, PlanKey } from '../lib/api/billing';
   import { toast } from '../lib/stores/toast.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
+  import SearchableSelect from '../lib/components/SearchableSelect.svelte';
   import Callout from '../lib/components/ui/Callout.svelte';
   import Button from '../lib/components/ui/Button.svelte';
   import { confetti } from '../lib/onboarding/celebrate';
@@ -184,12 +185,13 @@
     authStore.guilds.filter((g) => g.billingAccess && !g.isStaffServer && g.id !== authStore.selectedGuildId),
   );
   let transferOpen = $state(false);
-  let transferTarget = $state('');
+  let transferTarget = $state<string | null>(null);
   let confirmTransfer = $state(false);
   let transferring = $state(false);
   const transferTargetName = $derived(transferTargets.find((g) => g.id === transferTarget)?.name ?? '');
 
   async function transfer() {
+    if (!transferTarget) return;
     transferring = true;
     try {
       await transferSubscription(transferTarget);
@@ -345,18 +347,17 @@
           </button>
           {#if transferOpen}
             <div class="flex flex-wrap items-end gap-3">
-              <label class="space-y-1 text-xs text-on-surface-variant">
-                {m.bill_transfer_target()}
-                <select
+              <div class="space-y-1 text-xs text-on-surface-variant">
+                <label for="transfer-target">{m.bill_transfer_target()}</label>
+                <SearchableSelect
+                  id="transfer-target"
+                  className="w-full min-w-56"
                   bind:value={transferTarget}
-                  class="block w-full min-w-56 rounded-lg border border-field-border bg-surface-container px-3 py-2 text-body-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/40"
-                >
-                  <option value="" disabled>{m.bill_transfer_pick()}</option>
-                  {#each transferTargets as guild (guild.id)}
-                    <option value={guild.id}>{guild.name}</option>
-                  {/each}
-                </select>
-              </label>
+                  options={transferTargets.map((g) => ({ id: g.id, name: g.name }))}
+                  placeholder={m.bill_transfer_pick()}
+                  showId={false}
+                />
+              </div>
               <Button variant="primary" size="sm" disabled={!transferTarget} onclick={() => (confirmTransfer = true)}>{m.bill_transfer_confirm_btn()}</Button>
             </div>
           {/if}
