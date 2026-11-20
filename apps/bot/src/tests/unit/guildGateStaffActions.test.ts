@@ -129,3 +129,12 @@ describe('garde des écritures : preuves de sanction', () => {
     expect((await gate('DELETE', 'sanctions/sanction-1')).denied).toEqual(ADMIN_ONLY);
   });
 });
+
+describe('garde des écritures : préférences du lecteur', () => {
+  test('un modérateur peut enregistrer sa disposition et gérer ses préréglages', async () => {
+    featureAccess = {};
+    for (const [method, route] of [['PUT', 'user-settings'], ['POST', 'layout-presets/import'], ['DELETE', 'layout-presets/preset-1'], ['POST', 'layout-presets/preset-1/apply']]) {
+      expect({ route, denied: (await gate(method, route)).denied }).toEqual({ route, denied: null });
+    }
+  });
+});

@@ -319,6 +319,10 @@ export async function evaluateGuildGate(
     && parts[4] === 'calls'
     && method === 'POST';
 
+  // Préférences du lecteur (thème, disposition, préréglages) : chaque route
+  // n'écrit que les lignes de la personne qui la demande.
+  const isPersonalPreferenceAction = parts[4] === 'user-settings' || parts[4] === 'layout-presets';
+
   /**
    * Droits « Configurer » et « Supprimer » du centre de gestion.
    *
@@ -365,7 +369,7 @@ export async function evaluateGuildGate(
     ? { ...access, canManageSettings: true }
     : access;
 
-  if (!access.canManageSettings && method !== 'GET' && !hasFeatureWriteRight && !isSanctionAction && !isStaffAbsenceAction && !isStaffResignationAction && !isNotificationAction && !isMeetingAction && !isNewsAction && !isMemberModerationAction && !isGiveawayManagerAction && !isAnalyticsAnnotationAction && !isAegisReviewAction && !isDoingListAction && !isTutoringAction && !isSuggestionDecisionAction && !isStarboardModerationAction && !isBanAppealModerationAction && !isStaffAbsenceItemAction && !isCallCreationAction) {
+  if (!access.canManageSettings && method !== 'GET' && !hasFeatureWriteRight && !isSanctionAction && !isStaffAbsenceAction && !isStaffResignationAction && !isNotificationAction && !isMeetingAction && !isNewsAction && !isMemberModerationAction && !isGiveawayManagerAction && !isAnalyticsAnnotationAction && !isAegisReviewAction && !isDoingListAction && !isTutoringAction && !isSuggestionDecisionAction && !isStarboardModerationAction && !isBanAppealModerationAction && !isStaffAbsenceItemAction && !isCallCreationAction && !isPersonalPreferenceAction) {
     return deny(403, { error: 'Action réservée aux administrateurs du dashboard.' });
   }
 
