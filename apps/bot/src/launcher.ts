@@ -218,20 +218,41 @@ async function spawnInstance(instance: ResolvedInstance): Promise<ShardingManage
     totalShards = 1;
   }
 
-  const manager = new ShardingManager(workerPath, {
-    token: instance.discordToken,
-    totalShards,
-    respawn: true,
-    shardArgs: [`--instance-id=${instance.id}`],
-    execArgv: [],
-  });
+  const createManager = (shardCount: number | 'auto') => {
+    const m = new ShardingManager(workerPath, {
+      token: instance.discordToken,
+      totalShards: shardCount,
+      respawn: true,
+      shardArgs: [`--instance-id=${instance.id}`],
+      execArgv: [],
+    });
+    setupShardListeners(m, label);
+    activeManagers.push(m);
+    managersByInstance.set(instance.id, m);
+    return m;
+  };
 
-  setupShardListeners(manager, label);
-  activeManagers.push(manager);
-  managersByInstance.set(instance.id, manager);
-
+  let manager = createManager(totalShards);
   const timeout = process.env.SHARD_READY_TIMEOUT ? Number(process.env.SHARD_READY_TIMEOUT) : 120_000;
-  await manager.spawn({ timeout });
+  try {
+    await manager.spawn({ timeout });
+  } catch (err) {
+    // Quand totalShards === 'auto', discord.js appelle GET /gateway/bot et
+    // rejette avec l'objet Response brut en cas de 429/5xx. On retombe sur
+    // 1 shard pour ne pas bloquer le demarrage du bot en boucle.
+    if (totalShards !== 'auto' || !(err instanceof Response)) throw err;
+
+    const retryAfter = err.headers.get('retry-after');
+    logger.warn(
+      'Sharding',
+      `[${label}] GET /gateway/bot a répondu HTTP ${err.status}${retryAfter ? ` (retry-after: ${retryAfter}s)` : ''} ; repli sur 1 shard.`,
+    );
+    const idx = activeManagers.indexOf(manager);
+    if (idx !== -1) activeManagers.splice(idx, 1);
+
+    manager = createManager(1);
+    await manager.spawn({ timeout });
+  }
   logger.success('Sharding', `[${label}] Bot lancé avec ${manager.totalShards} shard(s) - port API ${instance.apiPort}`);
 
   return manager;
@@ -329,6 +350,7 @@ main().catch((error) => {
   // Tuer un shard en cours de demarrage fait rejeter `manager.spawn` : c'est
   // alors shutdown() qui doit decider de la sortie, apres l'attente des shards.
   if (shuttingDown) return;
-  logger.error('Sharding', 'Impossible de démarrer le manager de sharding.', error);
+  const detail = error instanceof Response ? `HTTP ${error.status} ${error.statusText}` : error;
+  logger.error('Sharding', 'Impossible de démarrer le manager de sharding.', detail);
   process.exit(1);
 });
