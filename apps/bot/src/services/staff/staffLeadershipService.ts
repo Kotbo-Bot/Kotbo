@@ -842,16 +842,21 @@ export const checkInMeeting = async (
 
   // Gérer la création d'une absence automatique si marqué comme ABSENT
   if (status === 'ABSENT') {
-    await prisma.staffAbsence.create({
-      data: {
-        guildId: result.meeting.guildId,
-        staffUserId: staffUserId,
-        startDate: result.meeting.scheduledAt,
-        endDate: new Date(result.meeting.scheduledAt.getTime() + 60 * 60 * 1000), // 1h par défaut
-        reason: `Absent à la réunion : ${result.meeting.title}`,
-        type: 'Réunion (Absent)',
-        status: 'ACKNOWLEDGED'
-      }
+    // Une absence automatique par membre et par réunion, reconnue à son type et à son
+    // début (l'heure de la réunion) ; le verrou sérialise deux clics simultanés.
+    const absence = { guildId: result.meeting.guildId, staffUserId, type: 'Réunion (Absent)', startDate: result.meeting.scheduledAt };
+    await prisma.$transaction(async (tx) => {
+      // `$executeRaw` et non `$queryRaw` : l'adaptateur pg refuse de lire une colonne `void`.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`meeting-absence:${meetingId}:${staffUserId}`}))`;
+      if (await tx.staffAbsence.findFirst({ where: absence, select: { id: true } })) return;
+      await tx.staffAbsence.create({
+        data: {
+          ...absence,
+          endDate: new Date(result.meeting.scheduledAt.getTime() + 60 * 60 * 1000), // 1h par défaut
+          reason: `Absent à la réunion : ${result.meeting.title}`,
+          status: 'ACKNOWLEDGED'
+        }
+      });
     });
   } else {
     // Si l'utilisateur re-change de statut, on pourrait supprimer l'absence automatique ?
