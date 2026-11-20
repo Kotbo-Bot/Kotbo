@@ -309,6 +309,8 @@ export interface BroadcastPayload {
   pollOptions?: string[];
   /** ISO 8601. */
   pollClosesAt?: string;
+  /** Libellé du bouton = demande d'avis (bouton → formulaire), exclusif avec le sondage. */
+  feedbackLabel?: string;
   dryRun?: boolean;
   /** ISO 8601. Present = annonce programmee au lieu d'un envoi immediat. */
   scheduledAt?: string;
@@ -379,6 +381,7 @@ export interface BroadcastLogEntry {
   channelPref: string;
   pollOptions: string[];
   pollClosesAt: string | null;
+  feedbackLabel: string | null;
   successCount: number;
   failCount: number;
   totalTargeted: number;
@@ -420,6 +423,21 @@ export interface BroadcastPollResults {
 export async function fetchBroadcastPoll(broadcastId: string): Promise<BroadcastPollResults> {
   const response = await authorizedFetch(`${API_BASE_URL}/api/admin/broadcast/${broadcastId}/poll`);
   if (!response.ok) throw new Error('Erreur chargement des résultats');
+  return response.json();
+}
+
+export interface BroadcastFeedbackEntry {
+  id: string;
+  userId: string;
+  guildId: string;
+  guildName: string;
+  content: string;
+  createdAt: string;
+}
+
+export async function fetchBroadcastFeedback(broadcastId: string): Promise<{ feedbacks: BroadcastFeedbackEntry[] }> {
+  const response = await authorizedFetch(`${API_BASE_URL}/api/admin/broadcast/${broadcastId}/feedback`);
+  if (!response.ok) throw new Error('Erreur chargement des retours');
   return response.json();
 }
 

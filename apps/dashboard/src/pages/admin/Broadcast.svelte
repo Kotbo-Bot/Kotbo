@@ -29,6 +29,8 @@
     deleteBroadcastTemplate,
     fetchBroadcastDeliveries,
     fetchBroadcastPoll,
+    fetchBroadcastFeedback,
+    type BroadcastFeedbackEntry,
     cancelScheduledBroadcast,
     type BroadcastPollResults,
     type BroadcastPayload,
@@ -70,6 +72,9 @@
   let pollEnabled = $state(false);
   let pollOptions = $state(['', '']);
   let pollClosesAt = $state('');
+  let feedbackEnabled = $state(false);
+  let feedbackLabel = $state('Donner mon avis');
+  let feedbackEntries = $state<BroadcastFeedbackEntry[] | null>(null);
 
   // ── État de page ──────────────────────────────────────────────────────────
   let activeTab = $state<Tab>('compose');
@@ -170,11 +175,17 @@
       || (pollClosesAt !== '' && new Date(pollClosesAt).getTime() <= Date.now())
     ),
   );
+  const feedbackInvalid = $derived(
+    feedbackEnabled && (
+      feedbackLabel.trim() === ''
+      || (pollClosesAt !== '' && new Date(pollClosesAt).getTime() <= Date.now())
+    ),
+  );
 
   const canSend = $derived(
     message.trim().length > 0
       && !titleOver && !messageOver && !footerOver
-      && !scheduleInvalid && !pollInvalid
+      && !scheduleInvalid && !pollInvalid && !feedbackInvalid
       && !(target === 'CUSTOM' && selectedGuilds.length === 0),
   );
 
@@ -185,6 +196,7 @@
     if (footerOver) return 'Le pied de page dépasse la limite de 2048 caractères';
     if (scheduleInvalid) return 'La date de programmation doit être dans le futur';
     if (pollInvalid) return 'Le sondage requiert au moins 2 options valides distinctes';
+    if (feedbackInvalid) return 'La demande d’avis requiert un libellé de bouton et, si fixée, une clôture future';
     if (target === 'CUSTOM' && selectedGuilds.length === 0) return 'Sélectionnez au moins un serveur destinataire';
     return '';
   });
@@ -243,6 +255,13 @@
       value: `${filledPollOptions.length} option(s)`,
       subvalue: pollClosesAt ? `Clôture le ${new Date(pollClosesAt).toLocaleDateString('fr-FR')}` : 'Sans clôture',
       tone: pollInvalid ? ('danger' as AdminTone) : ('success' as AdminTone),
+      icon: 'ListChecks',
+    }] : []),
+    ...(feedbackEnabled ? [{
+      label: 'Demande d’avis',
+      value: `Bouton « ${feedbackLabel.trim() || '…'} »`,
+      subvalue: pollClosesAt ? `Clôture le ${new Date(pollClosesAt).toLocaleDateString('fr-FR')}` : 'Sans clôture',
+      tone: feedbackInvalid ? ('danger' as AdminTone) : ('success' as AdminTone),
       icon: 'ListChecks',
     }] : []),
   ]);
@@ -449,6 +468,8 @@
     pollEnabled = false;
     pollOptions = ['', ''];
     pollClosesAt = '';
+    feedbackEnabled = false;
+    feedbackLabel = 'Donner mon avis';
     lastResult = null;
     toast.success(m.bcast_draft_reset());
   }
@@ -497,7 +518,8 @@
       targetGuilds: target === 'CUSTOM' ? selectedGuilds : undefined,
       channelPref,
       pollOptions: pollEnabled ? filledPollOptions : undefined,
-      pollClosesAt: pollEnabled && pollClosesAt ? new Date(pollClosesAt).toISOString() : undefined,
+      pollClosesAt: (pollEnabled || feedbackEnabled) && pollClosesAt ? new Date(pollClosesAt).toISOString() : undefined,
+      feedbackLabel: feedbackEnabled ? feedbackLabel.trim() : undefined,
       dryRun,
       scheduledAt: !dryRun && scheduleEnabled && scheduledAt ? new Date(scheduledAt).toISOString() : undefined,
     };
@@ -550,10 +572,12 @@
     deliveryDrawerOpen = true;
     deliveriesLoading = true;
     pollResults = null;
+    feedbackEntries = null;
     try {
-      [deliveries, pollResults] = await Promise.all([
+      [deliveries, pollResults, feedbackEntries] = await Promise.all([
         fetchBroadcastDeliveries(log.id).then((r) => r.deliveries),
         log.pollOptions?.length ? fetchBroadcastPoll(log.id) : Promise.resolve(null),
+        log.feedbackLabel ? fetchBroadcastFeedback(log.id).then((r) => r.feedbacks) : Promise.resolve(null),
       ]);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : m.abc_report_load_error());
@@ -599,6 +623,8 @@
     pollEnabled = Boolean((log as BroadcastLogEntry).pollOptions?.length);
     pollOptions = pollEnabled ? [...(log as BroadcastLogEntry).pollOptions] : ['', ''];
     pollClosesAt = '';
+    feedbackEnabled = Boolean((log as BroadcastLogEntry).feedbackLabel);
+    feedbackLabel = (log as BroadcastLogEntry).feedbackLabel ?? 'Donner mon avis';
     scheduleEnabled = false;
     activeTab = 'compose';
     toast.success(m.abc_content_loaded());
@@ -1068,16 +1094,58 @@
 
           <!-- 3. Options avancées : Sondage & Ciblage & Programmation -->
           <AdminCard
-            title="Sondage interserveur"
-            description="Boutons interactifs sous l'annonce pour recueillir les votes de tous les serveurs Kotbo."
+            title="Sondage ou demande d’avis"
+            description="Boutons interactifs sous l'annonce pour recueillir les votes ou les retours de tous les serveurs Kotbo."
             icon="ListChecks"
             tone="success"
           >
             <div class="space-y-3">
               <label class="flex items-center gap-2.5 cursor-pointer">
-                <input type="checkbox" bind:checked={pollEnabled} class="w-4 h-4 rounded accent-(--primary-color)" />
+                <input
+                  type="checkbox"
+                  bind:checked={pollEnabled}
+                  onchange={() => { if (pollEnabled) feedbackEnabled = false; }}
+                  class="w-4 h-4 rounded accent-(--primary-color)"
+                />
                 <span class="text-body-sm font-semibold text-on-surface">Ajouter un sondage interactif</span>
               </label>
+              <label class="flex items-center gap-2.5 cursor-pointer">
+                <input
+                  type="checkbox"
+                  bind:checked={feedbackEnabled}
+                  onchange={() => { if (feedbackEnabled) pollEnabled = false; }}
+                  class="w-4 h-4 rounded accent-(--primary-color)"
+                />
+                <span class="text-body-sm font-semibold text-on-surface">Ajouter une demande d’avis (bouton + formulaire)</span>
+              </label>
+
+              {#if feedbackEnabled}
+                <div class="space-y-2 pt-1">
+                  <label for="bc-feedback-label" class="text-xs font-semibold text-on-surface-variant block">
+                    Libellé du bouton
+                  </label>
+                  <input
+                    id="bc-feedback-label"
+                    bind:value={feedbackLabel}
+                    maxlength="80"
+                    class="w-full h-10 px-3 rounded-xl bg-surface-container-low/70 border border-field-border text-sm text-on-surface focus:outline-none focus:border-primary/60"
+                  />
+                  <label for="bc-feedback-close" class="text-xs font-semibold text-on-surface-variant block pt-1">
+                    Clôture automatique (facultatif)
+                  </label>
+                  <input
+                    id="bc-feedback-close"
+                    type="datetime-local"
+                    bind:value={pollClosesAt}
+                    class="w-full h-10 px-3 rounded-xl bg-surface-container-lowest border border-field-border text-sm text-on-surface focus:outline-none focus:border-primary/60"
+                  />
+                  {#if feedbackInvalid}
+                    <p class="text-xs text-error font-medium">
+                      Renseignez un libellé et, si vous fixez une clôture, une date future.
+                    </p>
+                  {/if}
+                </div>
+              {/if}
 
               {#if pollEnabled}
                 <div class="space-y-2 pt-1">
@@ -1725,6 +1793,23 @@
   subtitle={deliveryLog?.title ?? ''}
 >
   <div class="space-y-4">
+    {#if feedbackEntries}
+      <div class="rounded-xl border border-outline-variant/25 bg-surface-container-low/40 p-3.5 space-y-3">
+        <div class="flex items-center justify-between">
+          <p class="text-body-sm font-semibold text-on-surface">Retours reçus</p>
+          <span class="text-2xs text-on-surface-variant tabular-nums">{feedbackEntries.length}</span>
+        </div>
+        {#each feedbackEntries as entry (entry.id)}
+          <div class="rounded-lg bg-on-surface/4 p-2.5">
+            <p class="text-xs text-on-surface whitespace-pre-wrap wrap-break-word">{entry.content}</p>
+            <p class="text-2xs text-on-surface-variant mt-1">{entry.guildName} · {formatDate(entry.createdAt)}</p>
+          </div>
+        {:else}
+          <p class="text-xs text-on-surface-variant">Aucun retour pour l’instant.</p>
+        {/each}
+      </div>
+    {/if}
+
     {#if pollResults}
       <div class="rounded-xl border border-outline-variant/25 bg-surface-container-low/40 p-3.5 space-y-3">
         <div class="flex items-center justify-between">
