@@ -24,6 +24,11 @@
   import { SERIES, fmtNumber } from '../../lib/components/analytics/analyticsFormat';
   import { Button, EmptyState, FilterPills } from '../../lib/components/ui';
   import type { AdminTone } from '../../lib/components/admin/types';
+  import {
+    auditActionLabel,
+    auditDomain,
+    auditTargetType,
+  } from '../../lib/components/admin/auditLabels';
 
   let entries = $state<AdminAuditEntry[]>([]);
   let actionTypes = $state<{ action: string; count: number }[]>([]);
@@ -106,9 +111,21 @@
   });
 
   function applyFilter(action: string) {
-    actionFilter = actionFilter === action ? '' : action;
+    actionFilter = action;
     void load();
   }
+
+  /** Types d'action regroupés par domaine, pour un sélecteur lisible. */
+  const actionGroups = $derived.by(() => {
+    const map = new Map<string, { action: string; count: number }[]>();
+    for (const entry of actionTypes) {
+      const domain = auditDomain(entry.action);
+      const bucket = map.get(domain);
+      if (bucket) bucket.push(entry);
+      else map.set(domain, [entry]);
+    }
+    return [...map.entries()].sort(([a], [b]) => a.localeCompare(b, 'fr'));
+  });
 
   function applyOutcome(outcome: string) {
     outcomeFilter = outcome;
@@ -124,13 +141,19 @@
   const failedCount = $derived(entries.filter((entry) => entry.outcome === 'FAILED').length);
   const actorCount = $derived(new Set(entries.map((entry) => entry.actorId)).size);
 
+  const startOfDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+
   /** Regroupe par jour : un journal brut de 60 lignes se lit mal sans repères. */
   const grouped = $derived.by(() => {
     const map = new Map<string, AdminAuditEntry[]>();
     for (const entry of entries) {
-      const day = new Date(entry.createdAt).toLocaleDateString('fr-FR', {
-        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
-      });
+      const date = new Date(entry.createdAt);
+      const daysAgo = Math.round((startOfDay(new Date()) - startOfDay(date)) / 86_400_000);
+      const day = daysAgo === 0 ? 'Aujourd’hui'
+        : daysAgo === 1 ? 'Hier'
+          : date.toLocaleDateString('fr-FR', {
+            weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+          });
       const bucket = map.get(day);
       if (bucket) bucket.push(entry);
       else map.set(day, [entry]);
@@ -150,6 +173,8 @@
       case 'blacklist': return { tone: 'danger', icon: 'Ban' };
       case 'whitelabel': return { tone: 'info', icon: 'Layers' };
       case 'gdpr': return { tone: 'neutral', icon: 'ShieldCheck' };
+      case 'site': return { tone: 'primary', icon: 'Layers' };
+      case 'banned_word': return { tone: 'warning', icon: 'Ban' };
       default: return { tone: 'neutral', icon: 'ClipboardList' };
     }
   }
@@ -197,7 +222,7 @@
 
 <AdminShell
   title="Journal d’audit"
-  description="Trace horodatée des actions sensibles réalisées depuis la console admin globale."
+  description="Qui a fait quoi, quand et sur quoi : chaque action sensible faite depuis la console admin. Clique sur une ligne pour voir le détail."
 >
   {#snippet actions()}
     <Button
@@ -247,22 +272,23 @@
     </AdminToolbar>
 
     {#if actionTypes.length > 0}
-      <div class="flex flex-wrap gap-1.5">
-        {#each actionTypes as entry (entry.action)}
-          <button
-            type="button"
-            onclick={() => applyFilter(entry.action)}
-            aria-pressed={actionFilter === entry.action}
-            class="admin-press inline-flex items-center gap-1.5 h-7 px-3 rounded-full text-xs font-mono font-medium transition
-              {actionFilter === entry.action
-                ? 'bg-on-surface text-background'
-                : 'bg-surface-container text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'}"
-          >
-            {entry.action}
-            <span class="tabular-nums text-2xs opacity-70">{entry.count}</span>
-          </button>
-        {/each}
-      </div>
+      <label class="inline-flex items-center gap-2 text-xs text-on-surface-variant self-start">
+        Type d’action
+        <select
+          value={actionFilter}
+          onchange={(event) => applyFilter(event.currentTarget.value)}
+          class="h-8 rounded-lg bg-surface-container border border-outline-variant/25 px-2.5 text-xs text-on-surface"
+        >
+          <option value="">Toutes les actions</option>
+          {#each actionGroups as [domain, items] (domain)}
+            <optgroup label={domain}>
+              {#each items as item (item.action)}
+                <option value={item.action}>{auditActionLabel(item.action)} ({item.count})</option>
+              {/each}
+            </optgroup>
+          {/each}
+        </select>
+      </label>
     {/if}
   </div>
 
@@ -311,14 +337,13 @@
                   </div>
 
                   <div class="min-w-0 flex-1">
-                    <p class="text-body-sm text-on-surface leading-snug">{entry.summary}</p>
-                    <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1 mt-1">
-                      <span class="text-2xs font-mono text-on-surface-variant">{entry.action}</span>
-                      <span class="text-2xs text-on-surface-variant">·</span>
-                      <span class="text-2xs text-on-surface-variant">{entry.actorName ?? entry.actorId}</span>
+                    <p class="text-body-sm font-medium text-on-surface leading-snug">{auditActionLabel(entry.action)}</p>
+                    <p class="text-xs text-on-surface-variant leading-snug mt-0.5">{entry.summary}</p>
+                    <div class="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1.5 text-2xs text-on-surface-variant">
+                      <span>par <span class="font-medium text-on-surface">{entry.actorName ?? entry.actorId}</span></span>
                       {#if entry.targetId}
-                        <span class="text-2xs text-on-surface-variant">·</span>
-                        <span class="text-2xs font-mono text-on-surface-variant truncate max-w-40">{entry.targetId}</span>
+                        <span aria-hidden="true">·</span>
+                        <span>{auditTargetType(entry.targetType) ?? 'Cible'} <span class="font-mono truncate max-w-40 align-bottom inline-block">{entry.targetId}</span></span>
                       {/if}
                     </div>
                   </div>
@@ -355,7 +380,7 @@
   {/if}
 </AdminShell>
 
-<AdminDrawer bind:open={detailOpen} width="sm" title="Détail de l’action" subtitle={selected?.action ?? ''}>
+<AdminDrawer bind:open={detailOpen} width="sm" title={selected ? auditActionLabel(selected.action) : 'Détail de l’action'} subtitle={selected ? auditDomain(selected.action) : ''}>
   {#if selected}
     {@const entry = selected}
     <div class="space-y-4">
@@ -365,14 +390,14 @@
 
       <dl class="space-y-2.5">
         {#each [
-          { label: 'Action', value: entry.action, mono: true },
+          { label: 'Date', value: formatFull(entry.createdAt), mono: false },
           { label: 'Résultat', value: entry.outcome === 'OK' ? 'Réussie' : 'En échec', mono: false },
           { label: 'Auteur', value: entry.actorName ?? '-', mono: false },
-          { label: 'ID auteur', value: entry.actorId, mono: true },
-          { label: 'Type de cible', value: entry.targetType ?? '-', mono: false },
-          { label: 'ID cible', value: entry.targetId ?? '-', mono: true },
+          { label: 'ID de l’auteur', value: entry.actorId, mono: true },
+          { label: 'Cible', value: auditTargetType(entry.targetType) ?? '-', mono: false },
+          { label: 'ID de la cible', value: entry.targetId ?? '-', mono: true },
           { label: 'Adresse IP', value: entry.ip ?? '-', mono: true },
-          { label: 'Horodatage', value: formatFull(entry.createdAt), mono: false },
+          { label: 'Code technique', value: entry.action, mono: true },
         ] as field (field.label)}
           <div class="flex items-start justify-between gap-3">
             <dt class="text-xs text-on-surface-variant shrink-0">{field.label}</dt>
