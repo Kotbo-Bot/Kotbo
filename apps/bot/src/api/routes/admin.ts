@@ -60,6 +60,7 @@ import {
   resolveTargetGuildIds,
   type BroadcastChannelPref,
   type BroadcastTarget,
+  type BroadcastTranslations,
 } from '../../services/system/broadcastService.js';
 import {
   listAdminAudit,
@@ -105,6 +106,7 @@ interface BroadcastRequestBody {
   pollOptions?: string[];
   pollClosesAt?: string;
   feedbackLabel?: string;
+  translations?: BroadcastTranslations;
   dryRun?: boolean;
   /** ISO 8601. Present = annonce programmee au lieu d'un envoi immediat. */
   scheduledAt?: string;
@@ -1199,6 +1201,8 @@ export async function handleAdminRoutes(
             target: body.target || 'ALL',
             targetGuilds: Array.isArray(body.targetGuilds) ? body.targetGuilds : [],
             channelPref: body.channelPref || 'AUTO',
+            // Valide comme a l'envoi (longueurs, message requis) ; erreur 400 geree plus bas.
+            translations: normalizeBroadcastContent({ message: body.message, translations: body.translations }).translations ?? undefined,
             createdBy: user.userId,
           },
         });
@@ -1543,6 +1547,7 @@ export async function handleAdminRoutes(
             pollOptions: normalized.pollOptions,
             pollClosesAt: normalized.pollClosesAt,
             feedbackLabel: normalized.feedbackLabel,
+            translations: normalized.translations ?? undefined,
             totalTargeted,
             status: scheduledAt ? 'SCHEDULED' : 'SENDING',
             scheduledAt,
@@ -1580,6 +1585,7 @@ export async function handleAdminRoutes(
           channelPref: normalized.channelPref,
           allowedIds: [...allowedGuildIds],
           channelMap,
+          translations: normalized.translations,
           poll: { broadcastId: record.id, options: normalized.pollOptions },
           feedback: normalized.feedbackLabel ? { broadcastId: record.id, label: normalized.feedbackLabel } : undefined,
         });
