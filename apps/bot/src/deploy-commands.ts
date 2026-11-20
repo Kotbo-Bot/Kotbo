@@ -20,7 +20,9 @@ if (!token || !clientId) {
   process.exit(1);
 }
 
-const rest = new REST().setToken(token);
+// Sans rejectOnRateLimit ni timeout global, un 429 ou une connexion figée
+// bloque indéfiniment le démarrage du conteneur avant même le lancement du bot.
+const rest = new REST({ timeout: 15_000, rejectOnRateLimit: () => true }).setToken(token);
 
 /**
  * Les commandes vivent désormais au scope guilde, et la liste envoyée dépend des
@@ -50,7 +52,13 @@ try {
   // ── Commandes globales ────────────────────────────────────────────────
   const globalPayload = buildGlobalCommandPayload();
   logger.info('Déploiement', `Déploiement de ${globalPayload.length} commandes globales...`);
-  await rest.put(Routes.applicationCommands(clientId), { body: globalPayload });
+  const globalTimeout = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error('Délai dépassé (20s) lors du déploiement des commandes globales.')), 20_000),
+  );
+  await Promise.race([
+    rest.put(Routes.applicationCommands(clientId), { body: globalPayload, signal: AbortSignal.timeout(20_000) }),
+    globalTimeout,
+  ]);
   logger.success('Déploiement', `✓ ${globalPayload.length} commandes globales déployées.`);
 
   if (!process.argv.includes('--guilds')) {
