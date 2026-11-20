@@ -260,7 +260,7 @@ export async function acceptLinkInvite(opts: {
     return { error: 'Impossible de lier un salon à lui-même.' };
   }
 
-  let group = invite.groupId ? await loadGroup(invite.groupId) : null;
+  const group = invite.groupId ? await loadGroup(invite.groupId) : null;
 
   if (group) {
     if (memberFor(group, opts.targetGuildId, opts.targetChannelId)) {
@@ -292,59 +292,80 @@ export async function acceptLinkInvite(opts: {
   const shouldUpdateTopic = opts.updateTopic ?? true;
   const includeLink = opts.includeTopicLink ?? true;
 
-  if (!group) {
-    const inviterWebhookId = await createRelayWebhook(opts.client, invite.guildId, invite.channelId);
-    const created = await prisma.channelLinkGroup.create({
-      data: {
-        ownerGuildId: invite.guildId,
-        relayText: invite.relayText,
-        relayImages: invite.relayImages,
-        relayEmbeds: invite.relayEmbeds,
-        relayReactions: invite.relayReactions,
-        relayEdits: invite.relayEdits,
-        relayDeletes: invite.relayDeletes,
-        relayThreads: invite.relayThreads,
-        relayPolls: invite.relayPolls,
-        relayPins: invite.relayPins,
-        updateTopic: shouldUpdateTopic,
-        createdByUserId: invite.createdByUserId,
-        members: {
-          create: {
-            guildId: invite.guildId,
-            channelId: invite.channelId,
-            mode: invite.direction === 'UNIDIRECTIONAL' ? 'SEND_ONLY' : 'BOTH',
-            relayMode: invite.relayMode,
-            webhookId: inviterWebhookId,
-            addedByUserId: invite.createdByUserId,
+  // Les webhooks passent par Discord : on les prépare avant la transaction.
+  const inviterWebhookId = group ? null : await createRelayWebhook(opts.client, invite.guildId, invite.channelId);
+  const targetWebhookId = await createRelayWebhook(opts.client, opts.targetGuildId, opts.targetChannelId);
+
+  // Une acceptation à la fois par code, l'invitation relue sous le verrou : deux
+  // acceptations simultanées n'ouvrent qu'un pont et `uses` ne dépasse pas `maxUses`.
+  const joined = await prisma.$transaction(async (tx): Promise<{ groupId: string } | { error: string }> => {
+    // `$executeRaw` et non `$queryRaw` : l'adaptateur pg refuse de lire une colonne `void`.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`channel-link-invite:${invite.id}`}))`;
+    const current = await tx.channelLinkInvite.findUnique({ where: { id: invite.id } });
+    if (!current || current.status !== 'PENDING' || current.uses >= current.maxUses) {
+      return { error: 'Cette invitation a déjà été utilisée ou révoquée.' };
+    }
+
+    let groupId = current.groupId;
+    if (groupId) {
+      const alreadyMember = await tx.channelLinkGroupMember.findFirst({
+        where: { groupId, guildId: opts.targetGuildId, channelId: opts.targetChannelId },
+        select: { id: true },
+      });
+      if (alreadyMember) return { error: 'Ce salon fait déjà partie de ce pont.' };
+    } else {
+      const created = await tx.channelLinkGroup.create({
+        data: {
+          ownerGuildId: invite.guildId,
+          relayText: invite.relayText,
+          relayImages: invite.relayImages,
+          relayEmbeds: invite.relayEmbeds,
+          relayReactions: invite.relayReactions,
+          relayEdits: invite.relayEdits,
+          relayDeletes: invite.relayDeletes,
+          relayThreads: invite.relayThreads,
+          relayPolls: invite.relayPolls,
+          relayPins: invite.relayPins,
+          updateTopic: shouldUpdateTopic,
+          createdByUserId: invite.createdByUserId,
+          members: {
+            create: {
+              guildId: invite.guildId,
+              channelId: invite.channelId,
+              mode: invite.direction === 'UNIDIRECTIONAL' ? 'SEND_ONLY' : 'BOTH',
+              relayMode: invite.relayMode,
+              webhookId: inviterWebhookId,
+              addedByUserId: invite.createdByUserId,
+            },
           },
         },
+        select: { id: true },
+      });
+      groupId = created.id;
+    }
+
+    await tx.channelLinkGroupMember.create({
+      data: {
+        groupId,
+        guildId: opts.targetGuildId,
+        channelId: opts.targetChannelId,
+        mode: invite.memberMode,
+        relayMode: invite.relayMode,
+        webhookId: targetWebhookId,
+        addedByUserId: invite.createdByUserId,
       },
-      include: { members: true },
     });
-    group = created;
-    await prisma.channelLinkInvite.update({ where: { id: invite.id }, data: { groupId: created.id } });
-  }
 
-  const targetWebhookId = await createRelayWebhook(opts.client, opts.targetGuildId, opts.targetChannelId);
-  await prisma.channelLinkGroupMember.create({
-    data: {
-      groupId: group.id,
-      guildId: opts.targetGuildId,
-      channelId: opts.targetChannelId,
-      mode: invite.memberMode,
-      relayMode: invite.relayMode,
-      webhookId: targetWebhookId,
-      addedByUserId: invite.createdByUserId,
-    },
+    const uses = current.uses + 1;
+    await tx.channelLinkInvite.update({
+      where: { id: invite.id },
+      data: { groupId, status: uses >= current.maxUses ? 'ACCEPTED' : 'PENDING', uses },
+    });
+    return { groupId };
   });
+  if ('error' in joined) return joined;
 
-  const uses = invite.uses + 1;
-  await prisma.channelLinkInvite.update({
-    where: { id: invite.id },
-    data: { status: uses >= invite.maxUses ? 'ACCEPTED' : 'PENDING', uses },
-  });
-
-  const refreshed = (await loadGroup(group.id))!;
+  const refreshed = (await loadGroup(joined.groupId))!;
   await invalidateGroupCache(refreshed);
 
   // Le serveur qui vient d'accepter sans code devient un serveur invité : le
