@@ -64,6 +64,10 @@
   let thumbnailUrl = $state('');
   let imageUrl = $state('');
   let footerText = $state("Système d'annonce globale Kotbo");
+  // Variante anglaise : envoyée aux serveurs configurés en anglais (vide = texte français pour tous).
+  let enTitle = $state('');
+  let enMessage = $state('');
+  let enFooter = $state('');
   let target = $state<'ALL' | 'ACTIVATED' | 'CUSTOM'>('ALL');
   let channelPref = $state<'AUTO' | 'NEWS' | 'PUBLIC' | 'STAFF' | 'FALLBACK'>('AUTO');
   let selectedGuilds = $state<string[]>([]);
@@ -460,6 +464,9 @@
     thumbnailUrl = '';
     imageUrl = '';
     footerText = "Système d'annonce globale Kotbo";
+    enTitle = '';
+    enMessage = '';
+    enFooter = '';
     target = 'ALL';
     selectedGuilds = [];
     channelPref = 'AUTO';
@@ -514,6 +521,9 @@
       thumbnailUrl: thumbnailUrl.trim() || undefined,
       imageUrl: imageUrl.trim() || undefined,
       footerText: footerText.trim() || undefined,
+      translations: enTitle.trim() || enMessage.trim() || enFooter.trim()
+        ? { en: { title: enTitle.trim() || undefined, message: enMessage.trim(), footerText: enFooter.trim() || undefined } }
+        : undefined,
       target,
       targetGuilds: target === 'CUSTOM' ? selectedGuilds : undefined,
       channelPref,
@@ -616,6 +626,9 @@
     thumbnailUrl = log.thumbnailUrl ?? '';
     imageUrl = log.imageUrl ?? '';
     footerText = log.footerText ?? '';
+    enTitle = log.translations?.en?.title ?? '';
+    enMessage = log.translations?.en?.message ?? '';
+    enFooter = log.translations?.en?.footerText ?? '';
     target = (log.target as typeof target) ?? 'ALL';
     selectedGuilds = log.targetGuilds ?? [];
     channelPref = (log.channelPref as typeof channelPref) ?? 'AUTO';
@@ -1017,6 +1030,41 @@
                     {footerOver ? 'border-error/50' : 'border-field-border focus:border-primary/60'}"
                 />
               </div>
+
+              <!-- Version anglaise -->
+              <details class="rounded-xl border border-field-border bg-surface-container-low/40" open={Boolean(enMessage)}>
+                <summary class="cursor-pointer select-none px-3 py-2.5 text-xs font-semibold text-on-surface-variant">
+                  Version anglaise (serveurs configurés en anglais)
+                </summary>
+                <div class="px-3 pb-3 space-y-3">
+                  <p class="text-2xs text-on-surface-variant">
+                    Chaque serveur reçoit la langue de sa configuration, sinon celle de sa communauté Discord, sinon l’anglais.
+                    Sans message anglais, tous les serveurs reçoivent le texte français ci-dessus.
+                  </p>
+                  <input
+                    aria-label="Titre en anglais"
+                    bind:value={enTitle}
+                    maxlength="256"
+                    placeholder="Titre (vide = titre anglais par défaut)"
+                    class="w-full h-10 px-3 rounded-xl bg-surface-container-low/70 border border-field-border text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/15 focus:border-primary/60 transition"
+                  />
+                  <textarea
+                    aria-label="Message en anglais"
+                    bind:value={enMessage}
+                    rows="6"
+                    maxlength="4000"
+                    placeholder="Announcement text in English"
+                    class="w-full px-3 py-2.5 rounded-xl bg-surface-container-low/70 border border-field-border text-sm text-on-surface leading-relaxed resize-y focus:outline-none focus:ring-2 focus:ring-primary/15 focus:border-primary/60 transition"
+                  ></textarea>
+                  <input
+                    aria-label="Pied de page en anglais"
+                    bind:value={enFooter}
+                    maxlength="2048"
+                    placeholder="Pied de page (vide = pied anglais par défaut)"
+                    class="w-full h-10 px-3 rounded-xl bg-surface-container-low/70 border border-field-border text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/15 focus:border-primary/60 transition"
+                  />
+                </div>
+              </details>
 
               <!-- Couleur de l'embed -->
               <div>

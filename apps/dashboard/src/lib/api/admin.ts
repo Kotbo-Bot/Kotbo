@@ -295,6 +295,10 @@ export async function clearBotErrors(groupId?: string) {
 
 // ─── Broadcast System ───
 
+export interface BroadcastTranslations {
+  en?: { title?: string; message?: string; footerText?: string };
+}
+
 export interface BroadcastPayload {
   title?: string;
   message: string;
@@ -311,6 +315,8 @@ export interface BroadcastPayload {
   pollClosesAt?: string;
   /** Libellé du bouton = demande d'avis (bouton → formulaire), exclusif avec le sondage. */
   feedbackLabel?: string;
+  /** Variante anglaise, envoyée aux serveurs configurés en anglais. */
+  translations?: BroadcastTranslations;
   dryRun?: boolean;
   /** ISO 8601. Present = annonce programmee au lieu d'un envoi immediat. */
   scheduledAt?: string;
@@ -382,6 +388,7 @@ export interface BroadcastLogEntry {
   pollOptions: string[];
   pollClosesAt: string | null;
   feedbackLabel: string | null;
+  translations: BroadcastTranslations | null;
   successCount: number;
   failCount: number;
   totalTargeted: number;
@@ -707,6 +714,7 @@ export interface BroadcastTemplate {
   target: string;
   targetGuilds: string[];
   channelPref: string;
+  translations: BroadcastTranslations | null;
   createdBy: string;
   createdAt: string;
   updatedAt: string;
