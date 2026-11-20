@@ -206,8 +206,9 @@
          Sans cela, un appui un peu long sur un choix, ou un clic sur la barre de
          défilement (la liste en overflow-auto prend le focus dans Firefox),
          faisait perdre le focus au champ, et la liste se fermait 150 ms plus
-         tard, avant que le click du choix n'arrive au relâchement. -->
-    <!-- svelte-ignore a11y_no_static_element_interactions -- le clavier reste sur le champ, la liste ne fait que garder le focus -->
+         tard, avant que le click du choix n'arrive au relâchement.
+         Le clavier reste sur le champ : la liste ne fait que garder le focus. -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div use:dropdown on:mousedown|preventDefault class="app-popover rounded-lg border border-outline-variant/20 bg-surface-container-high text-on-surface p-2 shadow-lg overflow-auto">
       {#if canCreate}
         <!-- mousedown : le clic doit passer avant le blur du champ, qui ferme la liste. -->
