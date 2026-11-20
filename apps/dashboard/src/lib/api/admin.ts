@@ -99,6 +99,10 @@ export function resetAdminGuildBillingTrial(guildId: string) {
   return adminBillingMutation(`/api/admin/guilds/${guildId}/billing/trial-reset`, 'POST');
 }
 
+export function transferAdminGuildBilling(guildId: string, targetGuildId: string) {
+  return adminBillingMutation(`/api/admin/guilds/${guildId}/billing/transfer`, 'POST', { targetGuildId });
+}
+
 export function resyncAdminGuildBilling(guildId: string) {
   return adminBillingMutation(`/api/admin/guilds/${guildId}/billing/resync`, 'POST');
 }

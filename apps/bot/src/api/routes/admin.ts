@@ -1909,6 +1909,47 @@ export async function handleAdminRoutes(
     return true;
   }
 
+  // POST /api/admin/guilds/:guildId/billing/transfer : déplace l'abonnement vers un autre serveur
+  if (parts.length === 6 && parts[2] === 'guilds' && parts[4] === 'billing' && parts[5] === 'transfer' && method === 'POST') {
+    const guildId = parts[3];
+    try {
+      const body = await readJsonBody<{ targetGuildId?: string }>(req);
+      const targetGuildId = typeof body?.targetGuildId === 'string' ? body.targetGuildId.trim() : '';
+      if (!/^\d{15,25}$/.test(targetGuildId)) {
+        json(res, 400, { error: 'Identifiant du serveur de destination invalide.' });
+        return true;
+      }
+
+      // Pas de contrôle d'appartenance ici : c'est le rôle du transfert manuel.
+      // Le propriétaire de facturation reste celui d'origine (l'admin ne le devient pas).
+      const { transferSubscription, TransferError } = await import('../../services/billing/subscriptionSync.js');
+      try {
+        await transferSubscription(guildId, targetGuildId, null);
+      } catch (err) {
+        if (err instanceof TransferError) {
+          json(res, err.status, { error: err.message });
+          return true;
+        }
+        throw err;
+      }
+      await Promise.all([invalidatePlan(guildId), invalidatePlan(targetGuildId)]);
+
+      await audit({
+        action: 'guild.billing.transfer',
+        targetType: 'guild',
+        targetId: guildId,
+        summary: `Abonnement de ${await getGuildName(client, guildId)} transféré vers ${await getGuildName(client, targetGuildId)}`,
+        metadata: { targetGuildId, manual: true },
+      });
+
+      json(res, 200, { ok: true, message: 'Abonnement transféré.' });
+    } catch (err) {
+      logger.error('AdminAPI', "Erreur lors du transfert d'abonnement :", err);
+      jsonFailure(res, err, "Erreur lors du transfert d'abonnement.", 'AdminAPI');
+    }
+    return true;
+  }
+
   // POST /api/admin/guilds/:guildId/billing/resync : relit l'abonnement Stripe
   if (parts.length === 6 && parts[2] === 'guilds' && parts[4] === 'billing' && parts[5] === 'resync' && method === 'POST') {
     const guildId = parts[3];

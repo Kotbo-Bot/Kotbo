@@ -245,7 +245,7 @@ const STRIPE_FIELDS = {
  * cible doit être libre), puis les métadonnées Stripe qui servent au webhook à
  * retrouver le serveur. Si Stripe refuse, la base est remise comme avant.
  */
-export async function transferSubscription(sourceId: string, targetId: string, userId: string): Promise<void> {
+export async function transferSubscription(sourceId: string, targetId: string, userId: string | null): Promise<void> {
   if (sourceId === targetId) throw new TransferError('Choisis un autre serveur que celui-ci.');
 
   const [source, target] = await Promise.all([

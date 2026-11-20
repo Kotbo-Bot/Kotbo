@@ -7,6 +7,7 @@
     resetAdminGuildBillingTrial,
     resyncAdminGuildBilling,
     setAdminGuildPlan,
+    transferAdminGuildBilling,
     type AdminBillingGuild,
     type AdminBillingState,
     type AdminPlanKey,
@@ -153,6 +154,24 @@
       variant: 'warning',
     }))) return;
     await run(guild, () => resetAdminGuildBillingTrial(guild.id));
+  }
+
+  let transferTarget = $state('');
+
+  async function transfer(guild: AdminBillingGuild) {
+    const target = transferTarget.trim();
+    if (!/^\d{15,25}$/.test(target)) {
+      toast.error('Identifiant de serveur invalide.');
+      return;
+    }
+    if (!(await confirmDialog.ask({
+      title: `Transférer l'abonnement de ${guild.name ?? guild.id} ?`,
+      description: `L'abonnement Stripe sera déplacé vers le serveur ${target}. ${guild.name ?? guild.id} repassera en gratuit.`,
+      confirmLabel: "Transférer l'abonnement",
+      variant: 'warning',
+    }))) return;
+    await run(guild, () => transferAdminGuildBilling(guild.id, target));
+    transferTarget = '';
   }
 
   async function resync(guild: AdminBillingGuild) {
@@ -428,6 +447,33 @@
           </Button>
         </div>
       </div>
+
+      {#if selectedGuild.stripeSubscriptionId}
+        <div class="h-px bg-outline-variant/40"></div>
+        <div class="space-y-3">
+          <h3 class="text-sm font-semibold text-on-surface">Transférer l’abonnement</h3>
+          <Field label="ID du serveur de destination" id="billing-transfer-target">
+            <input
+              id="billing-transfer-target"
+              bind:value={transferTarget}
+              inputmode="numeric"
+              placeholder="Ex. 123456789012345678"
+              class="input w-full px-3 py-2 text-sm font-mono text-on-surface"
+            />
+          </Field>
+          <Button
+            size="sm"
+            variant="secondary"
+            icon="ArrowLeftRight"
+            loading={isBusy}
+            disabled={!billingState?.enabled || !transferTarget.trim()}
+            disabledReason={!billingState?.enabled ? 'Stripe non configuré.' : 'Renseigne le serveur de destination.'}
+            onclick={() => transfer(selectedGuild)}
+          >
+            Transférer
+          </Button>
+        </div>
+      {/if}
 
       <div class="pt-2">
         <a href="/admin/servers/{selectedGuild.id}" class="text-body-sm font-semibold text-primary hover:underline">
