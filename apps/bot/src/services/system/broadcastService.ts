@@ -9,7 +9,8 @@
  */
 import type { ButtonInteraction, Client, ModalSubmitInteraction } from 'discord.js';
 import {
-  ActionRowBuilder, EmbedBuilder, MessageFlags, ModalBuilder, TextInputBuilder, TextInputStyle,
+  ActionRowBuilder, ChannelType, EmbedBuilder, MessageFlags, ModalBuilder,
+  PermissionFlagsBits, Routes, TextInputBuilder, TextInputStyle, WebhookType,
   type ColorResolvable,
 } from 'discord.js';
 import prisma from '../../utils/db.js';
@@ -715,6 +716,554 @@ export async function finalizeBroadcast(
   return { successCount, failCount };
 }
 
+export const BROADCAST_SOURCE_CHANNEL_KEY = 'BROADCAST_SOURCE_CHANNEL';
+
+export interface BroadcastSourceConfig {
+  guildId: string;
+  channelId: string;
+}
+
+export interface BroadcastSubscribeResult {
+  guildId: string;
+  guildName: string;
+  channelId: string | null;
+  channelName: string | null;
+  status: 'SUBSCRIBED' | 'ALREADY_SUBSCRIBED' | 'SKIPPED' | 'FAILED';
+  reason: string | null;
+}
+
+export interface BroadcastSubscribeAllSummary {
+  total: number;
+  subscribed: number;
+  alreadySubscribed: number;
+  skipped: number;
+  failed: number;
+  results: BroadcastSubscribeResult[];
+}
+
+export async function getBroadcastSourceConfig(): Promise<BroadcastSourceConfig | null> {
+  const row = await prisma.botGlobalConfig.findUnique({ where: { key: BROADCAST_SOURCE_CHANNEL_KEY } });
+  if (!row?.value) return null;
+  try {
+    const parsed = JSON.parse(row.value) as Partial<BroadcastSourceConfig>;
+    if (typeof parsed.guildId === 'string' && typeof parsed.channelId === 'string' && parsed.guildId && parsed.channelId) {
+      return { guildId: parsed.guildId, channelId: parsed.channelId };
+    }
+  } catch {
+    // Valeur corrompue en base : ignoree.
+  }
+  return null;
+}
+
+export async function setBroadcastSourceConfig(config: BroadcastSourceConfig | null): Promise<void> {
+  if (!config) {
+    await prisma.botGlobalConfig.deleteMany({ where: { key: BROADCAST_SOURCE_CHANNEL_KEY } });
+    return;
+  }
+  const value = JSON.stringify({ guildId: config.guildId, channelId: config.channelId });
+  await prisma.botGlobalConfig.upsert({
+    where: { key: BROADCAST_SOURCE_CHANNEL_KEY },
+    update: { value },
+    create: { key: BROADCAST_SOURCE_CHANNEL_KEY, value },
+  });
+}
+
+/** Verifie que le salon source existe, est un salon d'annonce (type 5) et reste accessible au bot. */
+export async function validateBroadcastSourceChannel(
+  client: Client,
+  guildId: string,
+  channelId: string,
+): Promise<{ ok: true; guildName: string; channelName: string } | { ok: false; error: string }> {
+  type CheckResult = { ok: true; guildName: string; channelName: string } | { ok: false; error: string } | null;
+
+  let result: CheckResult = null;
+  if (client.shard) {
+    const results = await client.shard.broadcastEval<CheckResult, { guildId: string; channelId: string }>(
+      (shardClient, ctx) => {
+        const guild = shardClient.guilds.cache.get(ctx.guildId);
+        if (!guild) return null;
+        const ch = guild.channels.cache.get(ctx.channelId);
+        if (!ch) return { ok: false, error: 'Salon introuvable sur ce serveur.' };
+        if (ch.type !== 5) return { ok: false, error: "Le salon sélectionné doit être un salon d'annonces Discord." };
+        const perms = shardClient.user ? ch.permissionsFor(shardClient.user) : null;
+        if (!perms?.has(['ViewChannel', 'SendMessages', 'EmbedLinks'])) {
+          return { ok: false, error: "Le bot n'a pas les permissions Voir, Envoyer et Intégrer des liens dans ce salon." };
+        }
+        return { ok: true, guildName: guild.name, channelName: ch.name };
+      },
+      { context: { guildId, channelId } },
+    );
+    result = results.find((r) => r !== null) ?? null;
+  } else {
+    const guild = client.guilds.cache.get(guildId);
+    if (guild) {
+      const ch = guild.channels.cache.get(channelId);
+      if (!ch) result = { ok: false, error: 'Salon introuvable sur ce serveur.' };
+      else if (ch.type !== ChannelType.GuildAnnouncement) result = { ok: false, error: "Le salon sélectionné doit être un salon d'annonces Discord." };
+      else {
+        const perms = client.user ? ch.permissionsFor(client.user) : null;
+        if (!perms?.has([PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks])) {
+          result = { ok: false, error: "Le bot n'a pas les permissions Voir, Envoyer et Intégrer des liens dans ce salon." };
+        } else {
+          result = { ok: true, guildName: guild.name, channelName: ch.name };
+        }
+      }
+    }
+  }
+
+  return result ?? { ok: false, error: 'Serveur introuvable dans le cache du bot.' };
+}
+
+/**
+ * Publie l'annonce une seule fois dans le salon d'annonces source puis la
+ * crossposte : Discord se charge ensuite de la diffuser a tous les serveurs abonnes.
+ */
+export async function deliverBroadcastViaSource(
+  client: Client,
+  source: BroadcastSourceConfig,
+  params: {
+    title: string;
+    message: string;
+    color: string;
+    thumbnailUrl: string | null;
+    imageUrl: string | null;
+    footerText: string;
+  },
+): Promise<DeliveryResult[]> {
+  if (client.shard) {
+    const results = await client.shard.broadcastEval<DeliveryResult | null, {
+      guildId: string;
+      channelId: string;
+      embed: typeof params;
+    }>(
+      async (shardClient, ctx) => {
+        const guild = shardClient.guilds.cache.get(ctx.guildId);
+        if (!guild) return null;
+        const ch = guild.channels.cache.get(ctx.channelId);
+        if (!ch || ch.type !== 5) {
+          return {
+            guildId: guild.id,
+            guildName: guild.name,
+            channelId: ctx.channelId,
+            channelName: ch?.name ?? null,
+            status: 'FAILED',
+            reason: "Salon d'annonces source introuvable ou invalide.",
+            messageId: null,
+          };
+        }
+
+        try {
+          const { EmbedBuilder: ShardEmbed } = await import('discord.js');
+          const embed = new ShardEmbed()
+            .setTitle(ctx.embed.title)
+            .setDescription(ctx.embed.message)
+            .setColor(parseInt(ctx.embed.color.replace('#', ''), 16))
+            .setFooter({ text: ctx.embed.footerText })
+            .setTimestamp();
+          if (ctx.embed.thumbnailUrl) embed.setThumbnail(ctx.embed.thumbnailUrl);
+          if (ctx.embed.imageUrl) embed.setImage(ctx.embed.imageUrl);
+
+          const sent = await (ch as import('discord.js').NewsChannel).send({ embeds: [embed] });
+          await sent.crosspost().catch((err: unknown) => {
+            throw new Error(`Message envoyé mais publication (crosspost) refusée : ${(err as Error).message}`);
+          });
+          return {
+            guildId: guild.id,
+            guildName: guild.name,
+            channelId: ch.id,
+            channelName: ch.name,
+            status: 'SENT',
+            reason: null,
+            messageId: sent.id,
+          };
+        } catch (err) {
+          return {
+            guildId: guild.id,
+            guildName: guild.name,
+            channelId: ch.id,
+            channelName: ch.name,
+            status: 'FAILED',
+            reason: (err as Error).message?.slice(0, 300) ?? 'Erreur inconnue',
+            messageId: null,
+          };
+        }
+      },
+      { context: { guildId: source.guildId, channelId: source.channelId, embed: params } },
+    );
+
+    const found = results.find((r) => r !== null);
+    return found ? [found] : [{
+      guildId: source.guildId,
+      guildName: source.guildId,
+      channelId: source.channelId,
+      channelName: null,
+      status: 'FAILED',
+      reason: 'Serveur source introuvable sur les shards.',
+      messageId: null,
+    }];
+  }
+
+  const guild = client.guilds.cache.get(source.guildId);
+  if (!guild) {
+    return [{
+      guildId: source.guildId,
+      guildName: source.guildId,
+      channelId: source.channelId,
+      channelName: null,
+      status: 'FAILED',
+      reason: 'Serveur source introuvable.',
+      messageId: null,
+    }];
+  }
+
+  const ch = guild.channels.cache.get(source.channelId);
+  if (!ch || ch.type !== ChannelType.GuildAnnouncement) {
+    return [{
+      guildId: guild.id,
+      guildName: guild.name,
+      channelId: source.channelId,
+      channelName: ch?.name ?? null,
+      status: 'FAILED',
+      reason: "Salon d'annonces source introuvable ou invalide.",
+      messageId: null,
+    }];
+  }
+
+  try {
+    const embed = new EmbedBuilder()
+      .setTitle(params.title)
+      .setDescription(params.message)
+      .setColor(params.color as ColorResolvable)
+      .setFooter({ text: params.footerText })
+      .setTimestamp();
+    if (params.thumbnailUrl) embed.setThumbnail(params.thumbnailUrl);
+    if (params.imageUrl) embed.setImage(params.imageUrl);
+
+    const sent = await ch.send({ embeds: [embed] });
+    await sent.crosspost();
+    return [{
+      guildId: guild.id,
+      guildName: guild.name,
+      channelId: ch.id,
+      channelName: ch.name,
+      status: 'SENT',
+      reason: null,
+      messageId: sent.id,
+    }];
+  } catch (err) {
+    return [{
+      guildId: guild.id,
+      guildName: guild.name,
+      channelId: ch.id,
+      channelName: ch.name,
+      status: 'FAILED',
+      reason: (err as Error).message?.slice(0, 300) ?? 'Erreur inconnue',
+      messageId: null,
+    }];
+  }
+}
+
+interface TargetChannelResolution {
+  guildId: string;
+  guildName: string;
+  channelId: string | null;
+  channelName: string | null;
+  alreadySubscribed: boolean;
+  skipReason?: string;
+}
+
+/**
+ * Resout le salon cible d'un serveur et verifie s'il suit deja `sourceChannelId`.
+ * Execute cote shard (ou localement) pour acceder au cache des salons et aux webhooks.
+ */
+async function resolveTargetChannelForFollow(
+  client: Client,
+  guildId: string,
+  sourceChannelId: string,
+  candidateIds: (string | null | undefined)[],
+): Promise<TargetChannelResolution | null> {
+  const candidates = candidateIds.filter((id): id is string => Boolean(id));
+
+  if (client.shard) {
+    const results = await client.shard.broadcastEval<TargetChannelResolution | null, {
+      guildId: string;
+      sourceChannelId: string;
+      candidates: string[];
+    }>(
+      async (shardClient, ctx) => {
+        const guild = shardClient.guilds.cache.get(ctx.guildId);
+        if (!guild || !shardClient.user) return null;
+
+        const hasWebhookPerms = (ch: import('discord.js').GuildBasedChannel) =>
+          (ch.type === 0 || ch.type === 5)
+          && ch.id !== ctx.sourceChannelId
+          && Boolean(ch.permissionsFor(shardClient.user!)?.has(['ViewChannel', 'ManageWebhooks']));
+
+        let target: import('discord.js').TextChannel | import('discord.js').NewsChannel | null = null;
+        for (const id of ctx.candidates) {
+          const ch = guild.channels.cache.get(id);
+          if (ch && hasWebhookPerms(ch)) {
+            target = ch as import('discord.js').TextChannel | import('discord.js').NewsChannel;
+            break;
+          }
+        }
+
+        if (!target && guild.systemChannelId) {
+          const sys = guild.channels.cache.get(guild.systemChannelId);
+          if (sys && hasWebhookPerms(sys)) {
+            target = sys as import('discord.js').TextChannel | import('discord.js').NewsChannel;
+          }
+        }
+
+        if (!target) {
+          const everyoneRole = guild.roles.everyone;
+          const eligible = guild.channels.cache
+            .filter((ch): ch is import('discord.js').TextChannel | import('discord.js').NewsChannel => hasWebhookPerms(ch))
+            .sort((a, b) => a.rawPosition - b.rawPosition);
+          target = eligible.find((ch) => Boolean(ch.permissionsFor(everyoneRole)?.has('ViewChannel')))
+            ?? eligible.first()
+            ?? null;
+        }
+
+        if (!target) {
+          return {
+            guildId: guild.id,
+            guildName: guild.name,
+            channelId: null,
+            channelName: null,
+            alreadySubscribed: false,
+            skipReason: 'Aucun salon avec la permission Gérer les webhooks.',
+          };
+        }
+
+        try {
+          const webhooks = await target.fetchWebhooks();
+          const already = webhooks.some((w) => w.type === 2 && w.sourceChannel?.id === ctx.sourceChannelId);
+          return {
+            guildId: guild.id,
+            guildName: guild.name,
+            channelId: target.id,
+            channelName: target.name,
+            alreadySubscribed: already,
+          };
+        } catch (err) {
+          return {
+            guildId: guild.id,
+            guildName: guild.name,
+            channelId: target.id,
+            channelName: target.name,
+            alreadySubscribed: false,
+            skipReason: (err as Error).message?.slice(0, 200) ?? 'Lecture des webhooks impossible.',
+          };
+        }
+      },
+      { context: { guildId, sourceChannelId, candidates } },
+    );
+    return results.find((r) => r !== null) ?? null;
+  }
+
+  const guild = client.guilds.cache.get(guildId);
+  if (!guild || !client.user) return null;
+
+  const hasWebhookPerms = (ch: import('discord.js').GuildBasedChannel): ch is import('discord.js').TextChannel | import('discord.js').NewsChannel =>
+    (ch.type === ChannelType.GuildText || ch.type === ChannelType.GuildAnnouncement)
+    && ch.id !== sourceChannelId
+    && Boolean(ch.permissionsFor(client.user!)?.has([PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ManageWebhooks]));
+
+  let target = candidates
+    .map((id) => guild.channels.cache.get(id))
+    .find((ch) => ch && hasWebhookPerms(ch));
+
+  if (!target && guild.systemChannelId) {
+    const sys = guild.channels.cache.get(guild.systemChannelId);
+    if (sys && hasWebhookPerms(sys)) target = sys;
+  }
+
+  if (!target) {
+    const everyoneRole = guild.roles.everyone;
+    const eligible = guild.channels.cache
+      .filter((ch) => hasWebhookPerms(ch))
+      .sort((a, b) => a.rawPosition - b.rawPosition);
+    target = eligible.find((ch) => Boolean(ch.permissionsFor(everyoneRole)?.has(PermissionFlagsBits.ViewChannel)))
+      ?? eligible.first();
+  }
+
+  if (!target || (target.type !== ChannelType.GuildText && target.type !== ChannelType.GuildAnnouncement)) {
+    return {
+      guildId: guild.id,
+      guildName: guild.name,
+      channelId: null,
+      channelName: null,
+      alreadySubscribed: false,
+      skipReason: 'Aucun salon avec la permission Gérer les webhooks.',
+    };
+  }
+
+  try {
+    const webhooks = await target.fetchWebhooks();
+    const already = webhooks.some((w) => w.type === WebhookType.ChannelFollower && w.sourceChannel?.id === sourceChannelId);
+    return {
+      guildId: guild.id,
+      guildName: guild.name,
+      channelId: target.id,
+      channelName: target.name,
+      alreadySubscribed: already,
+    };
+  } catch (err) {
+    return {
+      guildId: guild.id,
+      guildName: guild.name,
+      channelId: target.id,
+      channelName: target.name,
+      alreadySubscribed: false,
+      skipReason: (err as Error).message?.slice(0, 200) ?? 'Lecture des webhooks impossible.',
+    };
+  }
+}
+
+/**
+ * Abonne un serveur au salon d'annonces source via Discord Channel Following.
+ * Enregistre le salon retenu dans `Guild.broadcastChannelId` s'il n'etait pas encore defini.
+ */
+export async function subscribeGuildToBroadcastSource(
+  client: Client,
+  guildId: string,
+  sourceChannelId: string,
+  explicitChannelId?: string | null,
+): Promise<BroadcastSubscribeResult> {
+  const dbGuild = await prisma.guild.findUnique({
+    where: { id: guildId },
+    select: {
+      broadcastChannelId: true,
+      newsChannelId: true,
+      publicChannelId: true,
+      staffAnnouncementChannelId: true,
+    },
+  });
+
+  const candidates = explicitChannelId
+    ? [explicitChannelId]
+    : [
+        dbGuild?.broadcastChannelId,
+        dbGuild?.newsChannelId,
+        dbGuild?.publicChannelId,
+        dbGuild?.staffAnnouncementChannelId,
+      ];
+
+  const resolved = await resolveTargetChannelForFollow(client, guildId, sourceChannelId, candidates);
+  if (!resolved) {
+    return {
+      guildId,
+      guildName: guildId,
+      channelId: null,
+      channelName: null,
+      status: 'SKIPPED',
+      reason: 'Serveur introuvable dans le cache du bot.',
+    };
+  }
+
+  if (!resolved.channelId || resolved.skipReason) {
+    return {
+      guildId: resolved.guildId,
+      guildName: resolved.guildName,
+      channelId: resolved.channelId,
+      channelName: resolved.channelName,
+      status: 'SKIPPED',
+      reason: resolved.skipReason ?? 'Aucun salon compatible.',
+    };
+  }
+
+  if (resolved.alreadySubscribed) {
+    if (!dbGuild?.broadcastChannelId) {
+      await prisma.guild.upsert({
+        where: { id: guildId },
+        update: { broadcastChannelId: resolved.channelId },
+        create: { id: guildId, broadcastChannelId: resolved.channelId },
+      }).catch(() => {});
+    }
+    return {
+      guildId: resolved.guildId,
+      guildName: resolved.guildName,
+      channelId: resolved.channelId,
+      channelName: resolved.channelName,
+      status: 'ALREADY_SUBSCRIBED',
+      reason: null,
+    };
+  }
+
+  try {
+    await client.rest.post(Routes.channelFollowers(sourceChannelId), {
+      body: { webhook_channel_id: resolved.channelId },
+      reason: 'Abonnement aux annonces globales Kotbo',
+    });
+
+    if (!dbGuild?.broadcastChannelId) {
+      await prisma.guild.upsert({
+        where: { id: guildId },
+        update: { broadcastChannelId: resolved.channelId },
+        create: { id: guildId, broadcastChannelId: resolved.channelId },
+      }).catch(() => {});
+    }
+
+    return {
+      guildId: resolved.guildId,
+      guildName: resolved.guildName,
+      channelId: resolved.channelId,
+      channelName: resolved.channelName,
+      status: 'SUBSCRIBED',
+      reason: null,
+    };
+  } catch (err) {
+    return {
+      guildId: resolved.guildId,
+      guildName: resolved.guildName,
+      channelId: resolved.channelId,
+      channelName: resolved.channelName,
+      status: 'FAILED',
+      reason: (err as Error).message?.slice(0, 300) ?? "Échec de l'abonnement Discord.",
+    };
+  }
+}
+
+/** Abonne tous les serveurs connus du bot au salon d'annonces source configure. */
+export async function subscribeAllGuildsToBroadcastSource(
+  client: Client,
+  sourceChannelId: string,
+): Promise<BroadcastSubscribeAllSummary> {
+  const guildIds: string[] = client.shard
+    ? (await client.shard.broadcastEval((c) => [...c.guilds.cache.keys()])).flat()
+    : [...client.guilds.cache.keys()];
+
+  const uniqueIds = [...new Set(guildIds)];
+  const results: BroadcastSubscribeResult[] = [];
+
+  // Traitement sequentiel : `client.rest` gere le rate-limit Discord sans saturer les webhooks.
+  for (const guildId of uniqueIds) {
+    results.push(await subscribeGuildToBroadcastSource(client, guildId, sourceChannelId));
+  }
+
+  return {
+    total: results.length,
+    subscribed: results.filter((r) => r.status === 'SUBSCRIBED').length,
+    alreadySubscribed: results.filter((r) => r.status === 'ALREADY_SUBSCRIBED').length,
+    skipped: results.filter((r) => r.status === 'SKIPPED').length,
+    failed: results.filter((r) => r.status === 'FAILED').length,
+    results,
+  };
+}
+
+/** Abonne automatiquement un serveur nouvellement rejoint si un salon source est configure. */
+export async function subscribeGuildIfBroadcastSourceConfigured(client: Client, guildId: string): Promise<void> {
+  const source = await getBroadcastSourceConfig();
+  if (!source) return;
+  const res = await subscribeGuildToBroadcastSource(client, guildId, source.channelId);
+  if (res.status === 'SUBSCRIBED') {
+    logger.info('Broadcast', `Serveur ${res.guildName} (${guildId}) abonné automatiquement au salon source (${res.channelName ?? res.channelId}).`);
+  } else if (res.status === 'FAILED') {
+    logger.warn('Broadcast', `Abonnement auto échoué pour ${res.guildName} (${guildId}) : ${res.reason}`);
+  }
+}
+
 /**
  * Reprend les annonces programmees arrivees a echeance.
  *
@@ -745,31 +1294,53 @@ export function startBroadcastScheduler(
         if (claimed.count === 0) continue;
 
         try {
-          const allowed = await resolveTargetGuildIds(
-            client,
-            broadcast.target as BroadcastTarget,
-            broadcast.targetGuilds,
-            collectShardGuilds,
+          const sourceConfig = await getBroadcastSourceConfig();
+          const useSourceChannel = Boolean(
+            sourceConfig
+            && broadcast.target === 'ALL'
+            && broadcast.pollOptions.length === 0
+            && !broadcast.feedbackLabel,
           );
-          const channelMap = await loadGuildChannelMap();
-          const deliveries = await deliverBroadcast(client, {
-            title: broadcast.title,
-            message: resolveEmojiShortcodes(broadcast.message),
-            color: broadcast.color,
-            thumbnailUrl: broadcast.thumbnailUrl,
-            imageUrl: broadcast.imageUrl,
-            footerText: broadcast.footerText ?? DEFAULT_BROADCAST_FOOTER,
-            channelPref: broadcast.channelPref as BroadcastChannelPref,
-            allowedIds: [...allowed],
-            channelMap,
-            translations: broadcast.translations as BroadcastTranslations | null,
-            poll: { broadcastId: broadcast.id, options: broadcast.pollOptions },
-            feedback: broadcast.feedbackLabel ? { broadcastId: broadcast.id, label: broadcast.feedbackLabel } : undefined,
-          });
 
-          await finalizeBroadcast(broadcast.id, deliveries, allowed.size);
-          await markBroadcastMediaUsed([broadcast.imageUrl, broadcast.thumbnailUrl]);
-          logger.info('Broadcast', `Annonce programmee ${broadcast.id} envoyee (${deliveries.length} serveurs)`);
+          if (useSourceChannel && sourceConfig) {
+            const deliveries = await deliverBroadcastViaSource(client, sourceConfig, {
+              title: broadcast.title,
+              message: resolveEmojiShortcodes(broadcast.message),
+              color: broadcast.color,
+              thumbnailUrl: broadcast.thumbnailUrl,
+              imageUrl: broadcast.imageUrl,
+              footerText: broadcast.footerText ?? DEFAULT_BROADCAST_FOOTER,
+            });
+            await finalizeBroadcast(broadcast.id, deliveries, deliveries.length);
+            await markBroadcastMediaUsed([broadcast.imageUrl, broadcast.thumbnailUrl]);
+            logger.info('Broadcast', `Annonce programmee ${broadcast.id} publiee sur le salon source ${sourceConfig.channelId}`);
+          } else {
+            const allowed = await resolveTargetGuildIds(
+              client,
+              broadcast.target as BroadcastTarget,
+              broadcast.targetGuilds,
+              collectShardGuilds,
+            );
+            const channelMap = await loadGuildChannelMap();
+            const deliveries = await deliverBroadcast(client, {
+              title: broadcast.title,
+              message: resolveEmojiShortcodes(broadcast.message),
+              color: broadcast.color,
+              thumbnailUrl: broadcast.thumbnailUrl,
+              imageUrl: broadcast.imageUrl,
+              footerText: broadcast.footerText ?? DEFAULT_BROADCAST_FOOTER,
+              channelPref: broadcast.channelPref as BroadcastChannelPref,
+              allowedIds: [...allowed],
+              channelMap,
+              translations: broadcast.translations as BroadcastTranslations | null,
+              poll: { broadcastId: broadcast.id, options: broadcast.pollOptions },
+              feedback: broadcast.feedbackLabel ? { broadcastId: broadcast.id, label: broadcast.feedbackLabel } : undefined,
+            });
+
+            await finalizeBroadcast(broadcast.id, deliveries, allowed.size);
+            await markBroadcastMediaUsed([broadcast.imageUrl, broadcast.thumbnailUrl]);
+            logger.info('Broadcast', `Annonce programmee ${broadcast.id} envoyee (${deliveries.length} serveurs)`);
+          }
         } catch (err) {
           await prisma.broadcastLog.update({
             where: { id: broadcast.id },

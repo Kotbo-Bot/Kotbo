@@ -747,6 +747,10 @@ client.on(Events.GuildCreate, async (guild) => {
     scheduleGuildDataSync(client, guild.id);
   }
 
+  void import('./services/system/broadcastService.js')
+    .then(({ subscribeGuildIfBroadcastSourceConfigured }) => subscribeGuildIfBroadcastSourceConfigured(client, guild.id))
+    .catch((err) => logger.warn('Broadcast', `Abonnement auto impossible pour ${guild.id}:`, err));
+
   // Le site communautaire existe des l'arrivee, hors ligne : le proprietaire le
   // decouvre en apercu prive depuis le dashboard et le met en ligne d'un clic.
   if (justActivated) {
