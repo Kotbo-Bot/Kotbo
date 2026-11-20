@@ -13,6 +13,7 @@ import { getUppercasePercentage } from './capsDetection.js';
 import { classifyLink, findKeywordRanges, findLiteralRanges, INVITE_KEYWORDS, LINK_KEYWORDS, type CensorKind, type CensorRange } from './censorship.js';
 import { queueCensoredRepost, repostCensored } from './censorService.js';
 import { handleGroupSpam, handlePreventiveSlowmode } from './groupSpamSlowmode.js';
+import { handleEmojiBan } from './emojiBanService.js';
 
 // Cache for AutoMod configs: key is guildId, value is the config object
 const autoModConfigsCache = new Map<string, AutoModConfig>();
@@ -787,6 +788,9 @@ export async function handleAutoMod(message: Message, client: Client): Promise<b
         return true;
       }
     }
+
+    // 3b. Emojis, stickers et serveurs d'origine interdits (sanction par règle)
+    if (await handleEmojiBan(message, client)) return true;
 
     // 4. Limite d'émojis
     if (config.emojisEnabled) {

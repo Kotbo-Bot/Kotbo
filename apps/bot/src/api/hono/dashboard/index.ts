@@ -33,6 +33,7 @@ import { createServerTemplateRouter } from '../../routes/dashboard/modules/serve
 import { createThreadPanelsRouter } from '../../routes/dashboard/modules/auto-thread-panels.js';
 import { createAutoThreadRouter } from '../../routes/dashboard/modules/auto-thread.js';
 import { createTagAutomodRouter } from '../../routes/dashboard/modules/tag-automod.js';
+import { createEmojiBansRouter } from '../../routes/dashboard/modules/emoji-bans.js';
 import { createStarboardRouter } from '../../routes/dashboard/modules/starboard.js';
 import { createSettingsRouter } from '../../routes/dashboard/modules/settings.js';
 import { createNicknameModerationRouter } from '../../routes/dashboard/modules/nickname-moderation.js';
@@ -164,6 +165,7 @@ export function createDashboardRouter(client: Client) {
   router.route('/', createSettingsRouter(client));
   router.route('/', createStarboardRouter(client));
   router.route('/', createTagAutomodRouter(client));
+  router.route('/', createEmojiBansRouter(client));
   router.route('/', createAutoThreadRouter(client));
   router.route('/', createThreadPanelsRouter(client));
   router.route('/', createServerTemplateRouter(client));

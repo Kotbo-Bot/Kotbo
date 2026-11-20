@@ -1379,6 +1379,13 @@ export async function handleSelectMenu(interaction: AnySelectMenuInteraction, cl
     return;
   }
 
+  // Panneau « Interdire des emojis / stickers » ouvert depuis le hub
+  if (customId.startsWith('emojiban:') && interaction.isStringSelectMenu()) {
+    const { handleEmojiBanSelect } = await import('../services/moderation/emojiBanPanel.js');
+    await handleEmojiBanSelect(interaction);
+    return;
+  }
+
   // Verdict d'un pari, réservé aux administrateurs
   if (customId.startsWith('bet:winner:') && interaction.isStringSelectMenu()) {
     const { handleBetWinnerSelect } = await import('../services/community/clanBetService.js');

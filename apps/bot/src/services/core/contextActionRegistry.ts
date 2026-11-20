@@ -530,6 +530,19 @@ const messageActions: MessageAction[] = [
       );
     },
   },
+  {
+    id: 'emoji-ban',
+    scope: 'message',
+    label: 'Interdire des emojis / stickers',
+    emoji: '🚫',
+    description: 'Interdit les emojis, stickers ou serveurs d\'origine de ce message',
+    category: 'Modération',
+    permission: PermissionFlagsBits.ManageGuild,
+    async run(ctx) {
+      const { buildEmojiBanPicker } = await import('../moderation/emojiBanPanel.js');
+      return { container: await buildEmojiBanPicker(ctx.message, ctx.invoker.id) };
+    },
+  },
 ];
 
 // ─────────────────────────────────────────────────────────────
