@@ -3048,9 +3048,7 @@ export function createPublicLegacyRouter(client: Client): Hono {
       const res = new BunServerResponse(req, resolve);
       handlePublicRoutes(req as IncomingMessage & { bodyText?: string }, res, parts, url, client)
         .then((handled) => {
-          if (!handled) {
-            next().then(resolve);
-          }
+          if (!handled) return next().then(resolve);
         })
         .catch((err) => {
           logger.error('PublicAPI', err);
