@@ -27,6 +27,10 @@ export function registerWorkflowBusSubscribers(client: Client): void {
     await dispatchEvent(client, payload.guildId, 'member:leave', payload as never);
   }, MODULE_NAME);
 
+  subscribeForModule('workflows', 'member:tag', async (payload) => {
+    await dispatchEvent(client, payload.guildId, 'member:tag', payload as never);
+  }, MODULE_NAME);
+
   /**
    * Discord ne publie pas d'événement dédié aux rôles : `member:update`
    * transporte déjà les rôles gagnés et perdus, on en dérive donc deux
@@ -99,20 +103,6 @@ export function registerWorkflowBusSubscribers(client: Client): void {
     await dispatchEvent(client, payload.guildId, 'thread:create', payload as never);
   }, MODULE_NAME);
 
-  // Partenariats : trois declencheurs. Le module « workflows » suffit a les
-  // garder - si le module Partenariats est eteint, plus rien n'est publie.
-  subscribeForModule('workflows', 'partnership:stage', async (payload) => {
-    await dispatchEvent(client, payload.guildId, 'partnership:stage', payload as never);
-  }, MODULE_NAME);
-
-  subscribeForModule('workflows', 'partnership:commitment-failed', async (payload) => {
-    await dispatchEvent(client, payload.guildId, 'partnership:commitment-failed', payload as never);
-  }, MODULE_NAME);
-
-  subscribeForModule('workflows', 'partnership:referral', async (payload) => {
-    await dispatchEvent(client, payload.guildId, 'partnership:referral', payload as never);
-  }, MODULE_NAME);
-
   subscribeForModule('workflows', 'giveaway:entry', async (payload) => {
     await dispatchEvent(client, payload.guildId, 'giveaway:entry', payload as never);
   }, MODULE_NAME);
@@ -125,6 +115,32 @@ export function registerWorkflowBusSubscribers(client: Client): void {
     await dispatchEvent(client, payload.guildId, 'giveaway:ended', payload as never);
   }, MODULE_NAME);
 
+  // Un seul événement pour deux déclencheurs : « remercier » et « être remercié »
+  // lisent le même vote, chacun du côté de son membre. Module Réputation
+  // éteint : aucun vote, donc rien de publié.
+  subscribeForModule('workflows', 'reputation:given', async (payload) => {
+    await dispatchEvent(client, payload.guildId, 'reputation:given', payload as never);
+  }, MODULE_NAME);
+
+  // Saisons : module éteint, ni ouverture ni clôture, donc rien de publié.
+  subscribeForModule('workflows', 'season:started', async (payload) => {
+    await dispatchEvent(client, payload.guildId, 'season:started', payload as never);
+  }, MODULE_NAME);
+
+  subscribeForModule('workflows', 'season:ended', async (payload) => {
+    await dispatchEvent(client, payload.guildId, 'season:ended', payload as never);
+  }, MODULE_NAME);
+
+  // Starlight : premier passage à la une et retrait. Module éteint : rien
+  // n'est publié, donc rien ne part.
+  subscribeForModule('workflows', 'starboard:featured', async (payload) => {
+    await dispatchEvent(client, payload.guildId, 'starboard:featured', payload as never);
+  }, MODULE_NAME);
+
+  subscribeForModule('workflows', 'starboard:removed', async (payload) => {
+    await dispatchEvent(client, payload.guildId, 'starboard:removed', payload as never);
+  }, MODULE_NAME);
+
   subscribeForModule('workflows', 'form:submitted', async (payload) => {
     await dispatchEvent(client, payload.guildId, 'form:submitted', payload as never);
   }, MODULE_NAME);
@@ -135,6 +151,11 @@ export function registerWorkflowBusSubscribers(client: Client): void {
 
   subscribeForModule('workflows', 'suggestion:resolved', async (payload) => {
     await dispatchEvent(client, payload.guildId, 'suggestion:resolved', payload as never);
+  }, MODULE_NAME);
+
+  // Publié une seule fois par suggestion, au vote qui franchit le seuil.
+  subscribeForModule('workflows', 'suggestion:threshold-reached', async (payload) => {
+    await dispatchEvent(client, payload.guildId, 'suggestion:threshold-reached', payload as never);
   }, MODULE_NAME);
 
   subscribeForModule('workflows', 'sanction:applied', async (payload) => {

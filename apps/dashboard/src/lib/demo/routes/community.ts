@@ -1,13 +1,14 @@
 /**
- * Les pages communautaires : saisons, réputation, marketplace, quêtes.
+ * Les pages communautaires : saisons, réputation, suggestions, marketplace, quêtes.
  *
- * Formes reprises des routes `/seasons`, `/reputation`, `/marketplace` et
- * `/quests` du bot. Les classements viennent des membres de démo : le même
+ * Formes reprises des routes `/seasons`, `/reputation`, `/suggestions`,
+ * `/marketplace` et `/quests` du bot. Les classements viennent des membres de démo : le même
  * Arka, la même Lena que dans le reste du dashboard.
  */
 import { route } from '../backend';
 import { demoDb } from '../db';
-import { DAY, PEOPLE, ago } from '../fixtures';
+import { STARBOARD_STATS_DAYS, defaultStarboardSettings, isStarboardPeriod, starboardPeriodStart } from '@kotbo/shared';
+import { DAY, PEOPLE, ago, channelByName } from '../fixtures';
 
 const members = () => PEOPLE.filter((p) => !p.bot);
 const byXp = () => [...members()].sort((a, b) => b.xp - a.xp);
@@ -48,17 +49,53 @@ const ITEMS = [
 
 export function registerCommunityRoutes(): void {
   route('GET', '/api/dashboard/guilds/:guildId/seasons', () => {
-    const ranked = byXp().slice(0, 10);
+    // XP gagnée depuis l'ouverture de la saison, pas l'XP totale.
+    const ranked = byXp().slice(0, 10).map((p, i) => ({ ...p, seasonXp: Math.max(40, Math.round(p.xp * 0.18) - i * 35) }));
+    const active = {
+      id: 'season-3',
+      number: 3,
+      name: 'Saison d’automne',
+      startDate: ago(30 * 24 * 60),
+      endDate: ago(-60 * 24 * 60),
+      status: 'ACTIVE',
+      rewards: [{ rank: 1, roleId: null, coins: 5_000 }, { rank: 2, roleId: null, coins: 2_500 }, { rank: 3, roleId: null, coins: 1_000 }],
+      topRoleId: null,
+      autoRenew: true,
+      remindBeforeEnd: false,
+      grantedRewards: [],
+      _count: { snapshots: 0 },
+    };
     return {
-      activeSeason: { id: 'season-3', name: 'Saison d’automne', startDate: ago(30 * 24 * 60), endDate: ago(-60 * 24 * 60), status: 'ACTIVE' },
+      activeSeason: active,
       activeLeaderboard: ranked.map((p, i) => ({
         rank: i + 1,
         userId: p.id,
         displayName: p.displayName,
         avatarUrl: null,
         level: p.level,
-        xp: p.xp,
+        xp: p.seasonXp,
+        messagesCount: 420 - i * 31,
+        voiceMinutes: 260 - i * 18,
       })),
+      activeTotals: { participants: members().length, totalXp: ranked.reduce((sum, p) => sum + p.seasonXp, 0) },
+      announcement: {
+        locale: 'fr',
+        startTitle: 'Saison #{number} · {name} ouverte',
+        startBody: 'Le classement compte l’XP gagnée à partir de maintenant, jusqu’au {date}. Les niveaux ne sont pas remis à zéro.',
+        rewardsHeading: 'Récompenses',
+        topRoleLine: 'Premier · {role}',
+        rewardCoins: '{coins} pièces',
+        endTitle: 'Saison #{number} · {name} terminée',
+        endLine: '**#{rank}** {user} · +{xp} XP',
+        endEmpty: 'Personne n’a gagné d’XP pendant cette saison.',
+        rewardsGivenHeading: 'Récompenses distribuées',
+        reminderTitle: 'Saison #{number} · {name} : dernières 24 h',
+        reminderBody: 'La saison se termine {date} : chaque XP compte encore.',
+        tiersHeading: 'Paliers',
+        tierLine: 'Dès {xp} XP · {reward}',
+        tierReachedLine: '{xp} XP · {count} membre(s)',
+      },
+      botRoleAccess: { canManageRoles: true, topPosition: 100 },
       activeRankedLeaderboard: ranked.slice(0, 8).map((p, i) => ({
         rank: i + 1,
         userId: p.id,
@@ -68,25 +105,62 @@ export function registerCommunityRoutes(): void {
         rp: 2_400 - i * 260,
       })),
       seasons: [
-        { id: 'season-3', number: 3, name: 'Saison d’automne', status: 'ACTIVE', startDate: ago(30 * 24 * 60), endDate: ago(-60 * 24 * 60), _count: { snapshots: members().length } },
-        { id: 'season-2', number: 2, name: 'Saison d’été', status: 'ENDED', startDate: ago(120 * 24 * 60), endDate: ago(31 * 24 * 60), _count: { snapshots: members().length - 1 } },
-        { id: 'season-1', number: 1, name: 'Lancement', status: 'ARCHIVED', startDate: ago(210 * 24 * 60), endDate: ago(121 * 24 * 60), _count: { snapshots: Math.max(1, members().length - 3) } },
+        active,
+        { id: 'season-2', number: 2, name: 'Saison d’été', status: 'ENDED', startDate: ago(120 * 24 * 60), endDate: ago(31 * 24 * 60), rewards: [{ rank: 1, roleId: null, coins: 3_000 }], topRoleId: null, grantedRewards: [{ userId: byXp()[0]?.id ?? '1', rank: 1, roleId: null, coins: 3_000, roleStatus: null, coinsStatus: 'given' }], stats: { participants: Math.max(1, members().length - 1), totalXp: 41_200, topXp: 3_850 }, _count: { snapshots: members().length - 1 } },
+        { id: 'season-1', number: 1, name: 'Lancement', status: 'ENDED', startDate: ago(210 * 24 * 60), endDate: ago(121 * 24 * 60), rewards: [], topRoleId: null, grantedRewards: [], stats: { participants: Math.max(1, members().length - 3), totalXp: 28_900, topXp: 2_640 }, _count: { snapshots: Math.max(1, members().length - 3) } },
       ],
     };
   });
 
   route('GET', '/api/dashboard/guilds/:guildId/seasons/:seasonId/leaderboard', () => ({
-    leaderboard: byXp().slice(0, 10).map((p, i) => ({ rank: i + 1, userId: p.id, displayName: p.displayName, avatarUrl: null, level: p.level, xp: p.xp })),
+    leaderboard: byXp().slice(0, 10).map((p, i) => ({
+      rank: i + 1,
+      userId: p.id,
+      displayName: p.displayName,
+      avatarUrl: null,
+      level: p.level,
+      xp: Math.max(40, Math.round(p.xp * 0.2) - i * 30),
+      messagesCount: 380 - i * 27,
+      voiceMinutes: 210 - i * 15,
+    })),
   }));
 
-  route('GET', '/api/dashboard/guilds/:guildId/reputation', () => {
-    const people = members();
-    const pool = people.slice(0, 8);
-    const entries = pool.map((p, i) => ({ rank: i + 1, userId: p.id, displayName: p.displayName, avatarUrl: null, totalRep: 64 - i * 7 }));
-    const recent = pool.slice(1, 6).map((receiver, i) => {
+  const repConfig: {
+    dailyLimit: number;
+    reactionEnabled: boolean;
+    reactionEmoji: string | null;
+    xpPerRep: number;
+    coinsPerRep: number;
+    announceChannelId: string | null;
+    minAccountAgeDays: number;
+    minMemberDays: number;
+    sameMemberCooldownDays: number;
+    excludedRoleIds: string[];
+    excludedChannelIds: string[];
+    tiers: Array<{ threshold: number; roleId: string }>;
+  } = {
+    dailyLimit: 3,
+    reactionEnabled: false,
+    reactionEmoji: null,
+    xpPerRep: 0,
+    coinsPerRep: 0,
+    announceChannelId: null,
+    minAccountAgeDays: 0,
+    minMemberDays: 0,
+    sameMemberCooldownDays: 1,
+    excludedRoleIds: [],
+    excludedChannelIds: [],
+    tiers: [],
+  };
+  const repPool = () => members().slice(0, 8);
+  const repVotes = () => {
+    const pool = repPool();
+    return pool.slice(1, 6).map((receiver, i) => {
       const giver = pool[(i + 3) % pool.length];
       return {
         id: `rep-${i}`,
+        kind: 'VOTE' as const,
+        value: 1,
         giverId: giver.id,
         giverName: giver.displayName,
         giverAvatarUrl: null,
@@ -94,11 +168,224 @@ export function registerCommunityRoutes(): void {
         receiverName: receiver.displayName,
         receiverAvatarUrl: null,
         reason: ['Merci pour l’aide sur le règlement', 'Super animation hier soir', 'A bien accueilli les nouveaux', 'Partie très fair-play', 'A répondu en 5 minutes'][i],
+        channelId: null,
+        messageId: null,
+        messageUrl: null,
         createdAt: ago(90 * (i + 1)),
       };
     });
-    return { totalVotes: 412, leaderboard: { totalVoters: pool.length + 14, entries }, recentVotes: recent };
+  };
+
+  route('GET', '/api/dashboard/guilds/:guildId/reputation', ({ query }) => {
+    // Les périodes courtes ne gardent que le haut du classement, pour que le filtre se voie.
+    const keep = query.get('period') === 'week' ? 3 : query.get('period') === 'month' ? 5 : 8;
+    const entries = repPool().slice(0, keep).map((p, i) => ({ rank: i + 1, userId: p.id, displayName: p.displayName, avatarUrl: null, totalRep: 64 - i * 7 }));
+    return {
+      config: { ...repConfig },
+      leaderboard: { totalVoters: entries.length + 14, entries },
+      stats: { totalVotes: 412, votesLast7Days: 23, activeGivers7Days: 11, lastVoteAt: ago(90) },
+      announcement: {
+        locale: 'fr',
+        title: 'Nouveau palier de réputation',
+        body: '{user} atteint **{threshold}** points de réputation et reçoit le rôle {role}.',
+      },
+      unmanageableTierRoleIds: [],
+    };
   });
+
+  route('GET', '/api/dashboard/guilds/:guildId/reputation/votes', ({ query }) => {
+    const userId = query.get('userId');
+    const votes = repVotes().filter((v) => !userId || v.giverId === userId || v.receiverId === userId);
+    return { votes, nextCursor: null };
+  });
+
+  route('PATCH', '/api/dashboard/guilds/:guildId/reputation/config', ({ body }) => {
+    for (const key of ['dailyLimit', 'xpPerRep', 'coinsPerRep', 'minAccountAgeDays', 'minMemberDays', 'sameMemberCooldownDays'] as const) {
+      if (typeof body?.[key] === 'number') repConfig[key] = body[key];
+    }
+    for (const key of ['excludedRoleIds', 'excludedChannelIds'] as const) {
+      if (Array.isArray(body?.[key])) repConfig[key] = [...body[key]];
+    }
+    if (typeof body?.reactionEnabled === 'boolean') repConfig.reactionEnabled = body.reactionEnabled;
+    if (body && 'reactionEmoji' in body) repConfig.reactionEmoji = body.reactionEmoji;
+    if (body && 'announceChannelId' in body) repConfig.announceChannelId = body.announceChannelId;
+    if (Array.isArray(body?.tiers)) repConfig.tiers = [...body.tiers].sort((a, b) => a.threshold - b.threshold);
+    return { config: { ...repConfig } };
+  });
+
+  route('DELETE', '/api/dashboard/guilds/:guildId/reputation/votes/:voteId', () => ({ deleted: true }));
+
+  route('GET', '/api/dashboard/guilds/:guildId/reputation/members/:userId', ({ params }) => {
+    const received = repVotes().filter((v) => v.receiverId === params.userId);
+    return {
+      totalRep: 12 + received.length,
+      rank: 4,
+      receivedVotes: 12 + received.length,
+      givenVotes: 7,
+      receivedLast7Days: received.length,
+      recent: received.map((v) => ({ id: v.id, kind: v.kind, value: v.value, giverId: v.giverId, giverName: v.giverName, reason: v.reason, createdAt: v.createdAt })),
+    };
+  });
+
+  route('POST', '/api/dashboard/guilds/:guildId/reputation/adjustments', ({ body }) => {
+    const amount = typeof body?.amount === 'number' ? body.amount : 0;
+    return { before: 12, after: Math.max(0, 12 + amount) };
+  });
+
+  route('POST', '/api/dashboard/guilds/:guildId/reputation/reset', ({ body }) => (
+    body?.scope === 'guild' ? { removed: 412, members: 37 } : { removed: 12 }
+  ));
+
+  // ── Suggestions ────────────────────────────────────────────────────────────
+  // Une file avec une suggestion en souffrance, pour que le conseil se voie.
+  const suggestionConfig = {
+    channelId: '900000000000000320',
+    requireComment: true,
+    voteWhileApproved: false,
+    allowedRoleIds: [] as string[],
+    cooldownMinutes: 30,
+    minAccountAgeDays: 0,
+    minMemberDays: 0,
+    notifyAuthor: true,
+    createThread: true,
+    voteThreshold: 10 as number | null,
+    pinAtThreshold: false,
+    rewardXp: 200,
+    rewardCoins: 500,
+    categories: ['Événements', 'Salons', 'Bot'],
+    showVoters: true,
+  };
+  const suggestionSeed: Array<[string | null, string | null, string, string, number, number, string, string | null]> = [
+    ['Soirée film mensuelle', 'Événements', 'Une soirée film par mois dans le salon vocal.', 'PENDING', 14, 2, ago(3 * 60), null],
+    [null, 'Salons', 'Un salon dédié aux memes, pour aérer le général.', 'PENDING', 9, 4, ago(10 * DAY), null],
+    ['Bot musique', 'Bot', 'Ajouter un bot musique pour les soirées.', 'PENDING', 3, 6, ago(26 * 60), null],
+    ['Rôles de couleur', null, 'Des rôles de couleur à débloquer avec les niveaux.', 'IMPLEMENTED', 22, 1, ago(18 * DAY), 'C’est en place : rendez-vous dans le salon des rôles.'],
+    [null, 'Événements', 'Un tournoi mensuel avec des récompenses.', 'IN_PROGRESS', 17, 3, ago(9 * DAY), 'Bonne idée, on prépare le premier pour la fin du mois.'],
+    [null, 'Salons', 'Supprimer le mode lent du salon général.', 'REJECTED', 5, 11, ago(6 * DAY), 'Le mode lent reste : il limite le spam aux heures de pointe.'],
+  ];
+  const acceptedStatuses = ['APPROVED', 'IN_PROGRESS', 'IMPLEMENTED'];
+  let suggestions = suggestionSeed.map(([title, category, content, status, upvotes, downvotes, createdAt, responseText], i) => {
+    const author = members()[(i * 3 + 1) % members().length];
+    const decided = status !== 'PENDING';
+    return {
+      id: `demo-suggestion-${i + 1}`,
+      userId: author.id,
+      username: author.displayName,
+      avatarUrl: null,
+      title,
+      category,
+      content,
+      status,
+      responseText,
+      respondedById: decided ? members()[1].id : null,
+      respondedByName: decided ? members()[1].displayName : null,
+      respondedAt: decided ? new Date(Date.parse(createdAt) + 2 * DAY * 60_000).toISOString() : null,
+      upvotes,
+      downvotes,
+      createdAt,
+      messageUrl: null,
+      threadUrl: null,
+      thresholdReachedAt: upvotes >= 10 ? createdAt : null,
+      rewarded: acceptedStatuses.includes(status) ? { xp: 200, coins: 500 } : { xp: 0, coins: 0 },
+    };
+  });
+
+  const categoryStats = () => {
+    const byCategory = new Map<string | null, { category: string | null; total: number; pending: number; accepted: number }>();
+    for (const s of suggestions) {
+      const entry = byCategory.get(s.category) ?? { category: s.category, total: 0, pending: 0, accepted: 0 };
+      entry.total += 1;
+      if (s.status === 'PENDING') entry.pending += 1;
+      else if (acceptedStatuses.includes(s.status)) entry.accepted += 1;
+      byCategory.set(s.category, entry);
+    }
+    return [...byCategory.values()].sort((a, b) => b.total - a.total);
+  };
+
+  route('GET', '/api/dashboard/guilds/:guildId/suggestions', () => {
+    const pending = suggestions.filter((s) => s.status === 'PENDING');
+    return {
+      config: { ...suggestionConfig, allowedRoleIds: [...suggestionConfig.allowedRoleIds], categories: [...suggestionConfig.categories] },
+      stats: { pending: pending.length, stalePending: 1, createdRecent: 11, resolvedRecent: 8, acceptanceRate: 0.63, avgResponseHours: 31, lastCreatedAt: ago(3 * 60) },
+      queue: [...pending].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt)),
+      queueTruncated: false,
+      categoryStats: categoryStats(),
+      messageLabels: {
+        locale: 'fr',
+        title: 'Nouvelle suggestion',
+        statusField: 'Statut',
+        votesField: 'Votes',
+        finalVotesField: 'Votes finaux',
+        votesValue: 'Pour : `{up}` | Contre : `{down}`',
+        responseField: 'Réponse de la modération',
+        noResponse: 'Aucun commentaire.',
+        categoryField: 'Catégorie',
+        voteUp: 'Pour',
+        voteDown: 'Contre',
+        footer: 'ID de la suggestion : {id}',
+        status: { PENDING: 'En cours d’évaluation', APPROVED: 'Approuvée par le staff', IN_PROGRESS: 'En cours de réalisation', REJECTED: 'Refusée par le staff', IMPLEMENTED: 'Mise en place' },
+      },
+    };
+  });
+
+  route('GET', '/api/dashboard/guilds/:guildId/suggestions/list', ({ query }) => {
+    const status = query.get('status');
+    const userId = query.get('userId');
+    const category = query.get('category');
+    const list = suggestions
+      .filter((s) => (!status || s.status === status) && (!userId || s.userId === userId))
+      .filter((s) => !category || (category === 'none' ? s.category === null : s.category === category))
+      .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+    return { suggestions: list, nextCursor: null };
+  });
+
+  route('PATCH', '/api/dashboard/guilds/:guildId/suggestions/config', ({ body }) => {
+    if (body && 'channelId' in body) suggestionConfig.channelId = body.channelId;
+    for (const key of ['requireComment', 'voteWhileApproved', 'notifyAuthor', 'createThread', 'pinAtThreshold', 'showVoters'] as const) {
+      if (typeof body?.[key] === 'boolean') suggestionConfig[key] = body[key];
+    }
+    if (Array.isArray(body?.categories)) suggestionConfig.categories = [...body.categories];
+    for (const key of ['cooldownMinutes', 'minAccountAgeDays', 'minMemberDays', 'rewardXp', 'rewardCoins'] as const) {
+      if (typeof body?.[key] === 'number') suggestionConfig[key] = body[key];
+    }
+    if (body && 'voteThreshold' in body) suggestionConfig.voteThreshold = body.voteThreshold;
+    if (Array.isArray(body?.allowedRoleIds)) suggestionConfig.allowedRoleIds = [...body.allowedRoleIds];
+    return { config: { ...suggestionConfig, allowedRoleIds: [...suggestionConfig.allowedRoleIds], categories: [...suggestionConfig.categories] } };
+  });
+
+  route('POST', '/api/dashboard/guilds/:guildId/suggestions/:suggestionId/resolve', ({ params, body }) => {
+    const suggestion = suggestions.find((s) => s.id === params.suggestionId);
+    if (!suggestion) return { error: 'Suggestion introuvable' };
+    const reopen = body?.status === 'PENDING';
+    Object.assign(suggestion, {
+      status: body?.status ?? suggestion.status,
+      responseText: reopen ? null : body?.responseText ?? null,
+      respondedById: reopen ? null : PEOPLE[0].id,
+      respondedByName: reopen ? null : PEOPLE[0].displayName,
+      respondedAt: reopen ? null : new Date().toISOString(),
+    });
+    return { suggestion: { ...suggestion } };
+  });
+
+  route('DELETE', '/api/dashboard/guilds/:guildId/suggestions/:suggestionId', ({ params }) => {
+    suggestions = suggestions.filter((s) => s.id !== params.suggestionId);
+    return { deleted: true };
+  });
+
+  route('GET', '/api/dashboard/guilds/:guildId/suggestions/:suggestionId/voters', ({ params }) => {
+    const suggestion = suggestions.find((s) => s.id === params.suggestionId);
+    const pool = members();
+    const voter = (p: (typeof pool)[number]) => ({ userId: p.id, name: p.displayName, avatarUrl: null });
+    return {
+      up: pool.slice(0, suggestion?.upvotes ?? 0).map(voter),
+      // Les derniers membres de la liste, pour ne pas recroiser les votes pour.
+      down: pool.slice(pool.length - Math.min(suggestion?.downvotes ?? 0, pool.length)).map(voter),
+    };
+  });
+
+  route('POST', '/api/dashboard/guilds/:guildId/suggestions/refresh', () => ({
+    total: suggestions.length,
+  }));
 
   route('GET', '/api/dashboard/guilds/:guildId/marketplace', () => {
     const sellers = members().slice(0, 5);
@@ -151,5 +438,115 @@ export function registerCommunityRoutes(): void {
   route('DELETE', '/api/dashboard/guilds/:guildId/quests/:questId', ({ params }) => {
     demoDb.update<Quest[]>('quests', questsSeed, (list) => list.filter((q) => q.id !== params.questId));
     return { success: true };
+  });
+
+  // ── Starlight (messages à la une) ─────────────────────────────────────────
+  const starboardConfig = {
+    ...defaultStarboardSettings(),
+    channelId: channelByName('annonces').id,
+    threshold: 6,
+    upvoteEmojis: ['⭐', '🔥'],
+    maxMessageAgeDays: 14,
+    channelThresholds: { [channelByName('général').id]: 10 },
+    rewardXp: 50,
+    rewardCoins: 100,
+    notifyAuthor: true,
+  };
+  const starSeed: Array<[string, string, number, number, number, number, boolean]> = [
+    ['général', 'Petit rappel : la soirée jeux commence à 21 h, venez nombreux !', 14, 1, 16, 2 * 60, true],
+    ['recherche-de-groupe', 'Qui pour un raid ce soir ? On cherche encore un soigneur.', 9, 0, 11, 26 * 60, true],
+    ['général', 'J’ai enfin fini le donjon en difficile, merci à toute l’équipe.', 21, 2, 24, 3 * DAY, true],
+    ['niveaux', 'Niveau 50 atteint, il en aura fallu des messages.', 7, 1, 10, 6 * DAY, false],
+    ['général', 'Le meilleur conseil que j’ai reçu ici : toujours lire le salon des annonces.', 12, 0, 12, 12 * DAY, true],
+    ['boutique', 'Le nouveau rôle de couleur est magnifique.', 8, 2, 9, 40 * DAY, true],
+  ];
+  const starEntries = starSeed.map(([channelName, excerpt, upvotes, downvotes, peakScore, minutesAgo, onBoard], i) => {
+    const author = members()[(i * 2 + 1) % members().length];
+    const createdAt = ago(minutesAgo);
+    return {
+      id: `demo-star-${i + 1}`,
+      channelId: channelByName(channelName).id,
+      authorId: author.id,
+      authorName: author.displayName,
+      avatarUrl: null,
+      excerpt,
+      imageUrl: null,
+      upvotes,
+      downvotes,
+      score: upvotes - downvotes,
+      peakScore,
+      onBoard,
+      blocked: false,
+      createdAt,
+      postedAt: onBoard ? createdAt : null,
+      messageUrl: 'https://discord.com',
+      starUrl: onBoard ? 'https://discord.com' : null,
+    };
+  });
+
+  route('GET', '/api/dashboard/guilds/:guildId/starboard', () => {
+    const since = Date.parse(ago(STARBOARD_STATS_DAYS * DAY));
+    const recent = starEntries.filter((e) => Date.parse(e.createdAt) >= since);
+    const byChannel = new Map<string, number>();
+    for (const e of recent) byChannel.set(e.channelId, (byChannel.get(e.channelId) ?? 0) + 1);
+    return {
+      config: structuredClone(starboardConfig),
+      stats: {
+        postedRecent: recent.length,
+        avgPeakRecent: recent.length ? recent.reduce((sum, e) => sum + e.peakScore, 0) / recent.length : null,
+        bestPeakRecent: recent.length ? Math.max(...recent.map((e) => e.peakScore)) : null,
+        onBoard: starEntries.filter((e) => e.onBoard).length,
+        lastPostedAt: starEntries[0]?.createdAt ?? null,
+      },
+      topEntries: [...recent].sort((a, b) => b.peakScore - a.peakScore).slice(0, 5),
+      channelStats: [...byChannel].map(([channelId, count]) => ({ channelId, count })).sort((a, b) => b.count - a.count),
+      health: { channelFound: true, missingPermissions: [] },
+      messageLabels: { locale: 'fr', jumpButton: 'Aller au message', footerVotes: '{up} pour · {down} contre', attachmentsField: 'Pièces jointes' },
+      topAuthors: (() => {
+        const byAuthor = new Map<string, { authorId: string; name: string; avatarUrl: null; count: number; bestScore: number }>();
+        for (const e of recent.filter((entry) => !entry.blocked)) {
+          const row = byAuthor.get(e.authorId) ?? { authorId: e.authorId, name: e.authorName, avatarUrl: null, count: 0, bestScore: 0 };
+          row.count += 1;
+          row.bestScore = Math.max(row.bestScore, e.peakScore);
+          byAuthor.set(e.authorId, row);
+        }
+        return [...byAuthor.values()].sort((a, b) => b.count - a.count || b.bestScore - a.bestScore);
+      })(),
+      unmanageableTierRoleIds: [],
+      blockedMembers: starboardConfig.blockedUserIds.map((userId) => {
+        const person = members().find((p) => p.id === userId);
+        return { userId, name: person?.displayName ?? null, avatarUrl: null };
+      }),
+    };
+  });
+
+  route('GET', '/api/dashboard/guilds/:guildId/starboard/entries', ({ query }) => {
+    const period = query.get('period');
+    const since = isStarboardPeriod(period) ? starboardPeriodStart(period) : null;
+    const channelId = query.get('channelId');
+    const authorId = query.get('authorId');
+    const entries = starEntries
+      .filter((e) => (!since || Date.parse(e.createdAt) >= since.getTime()))
+      .filter((e) => (!channelId || e.channelId === channelId) && (!authorId || e.authorId === authorId))
+      .sort((a, b) => query.get('sort') === 'score'
+        ? b.peakScore - a.peakScore
+        : Date.parse(b.createdAt) - Date.parse(a.createdAt));
+    return { entries, nextCursor: null };
+  });
+
+  for (const action of ['block', 'unblock'] as const) {
+    route('POST', `/api/dashboard/guilds/:guildId/starboard/entries/:entryId/${action}`, ({ params }) => {
+      const entry = starEntries.find((e) => e.id === params.entryId);
+      if (!entry) return { error: 'Message introuvable' };
+      Object.assign(entry, { blocked: action === 'block', onBoard: action === 'unblock', starUrl: action === 'unblock' ? 'https://discord.com' : null });
+      return { entry };
+    });
+  }
+
+  route('PATCH', '/api/dashboard/guilds/:guildId/starboard', ({ body }) => {
+    for (const key of Object.keys(starboardConfig) as Array<keyof typeof starboardConfig>) {
+      if (body && key in body) (starboardConfig as Record<string, unknown>)[key] = structuredClone(body[key]);
+    }
+    return { config: structuredClone(starboardConfig) };
   });
 }

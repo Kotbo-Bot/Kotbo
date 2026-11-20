@@ -1,4 +1,3 @@
-import { isModulePaused } from '@kotbo/contracts';
 import type { SlashCommandDefinition } from '../../commands.js';
 import {
   SlashCommandBuilder,
@@ -7,7 +6,7 @@ import {
   PermissionFlagsBits,
   MessageFlags,
 } from 'discord.js';
-import { errorContainer, infoContainer, kotboContainer, successContainer } from '../../utils/embeds.js';
+import { errorContainer, kotboContainer, successContainer } from '../../utils/embeds.js';
 import { E } from '../../utils/emojis.js';
 import prisma from '../../utils/db.js';
 import { upsertRetryingRace } from '../../utils/upsertRetry.js';
@@ -23,32 +22,6 @@ import * as m from '../../lib/paraglide/messages.js';
 const data = localized(new SlashCommandBuilder(), 'adm')
   .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
   .addSubcommand(sub => localized(sub, 'adm_info'));
-
-// Daily Algo en pause : ses sous-commandes ne sont pas declarees, et donc
-// pas deployees.
-const DAILY_ALGO_PAUSED = isModulePaused('daily_algo');
-if (!DAILY_ALGO_PAUSED) {
-  data
-    .addSubcommand(sub =>
-      localized(sub, 'adm_add_algo')
-        .addStringOption(option => localized(option, 'adm_opt_title').setRequired(true))
-        .addStringOption(option => localized(option, 'adm_opt_question').setRequired(true))
-        .addStringOption(option => localized(option, 'adm_opt_solution').setRequired(true))
-        .addStringOption(option =>
-          localized(option, 'adm_opt_difficulty')
-            .addChoices(
-              localizedChoice('adm_choice_easy', 'facile'),
-              localizedChoice('adm_choice_medium', 'moyen'),
-              localizedChoice('adm_choice_hard', 'difficile'),
-            )
-            .setRequired(true),
-        )
-    )
-    .addSubcommand(sub =>
-      localized(sub, 'adm_algo_channel')
-        .addChannelOption(option => localized(option, 'adm_opt_algo_channel').setRequired(true))
-    );
-}
 
 data
   .addSubcommand(sub =>
@@ -120,24 +93,12 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
     return;
   }
 
-  if (DAILY_ALGO_PAUSED && (subcommand === 'add-daily-algo' || subcommand === 'set-algo-channel')) {
-    await interaction.reply(v2Message(
-      { flags: MessageFlags.Ephemeral },
-      errorContainer('Daily Algo', t('adm_algo_paused')),
-    ));
-    return;
-  }
-
   await upsertRetryingRace(() => prisma.guild.upsert({ where: { id: guildId }, update: {}, create: { id: guildId } }));
 
   if (subcommand === 'info') {
     const guild = await prisma.guild.findUnique({
       where: { id: guildId },
       select: {
-        dailyAlgoChannelId: true,
-        dailyAlgoValidationChannelId: true,
-        dailyAlgoEnabled: true,
-        dailyAlgoTime: true,
         githubReleasesChannelId: true,
         githubReleasesEnabled: true,
         githubRepositories: true,
@@ -152,77 +113,11 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
         fields: [
           t('adm_info_subtitle'),
           separator({ divider: true, spacing: 'small' }),
-          ...(DAILY_ALGO_PAUSED ? [] : [
-            `**${t('adm_info_algo_channel')}**\n${guild?.dailyAlgoChannelId ? `<#${guild.dailyAlgoChannelId}>` : notSet}`,
-            `**${t('adm_info_algo_validation')}**\n${guild?.dailyAlgoValidationChannelId ? `<#${guild.dailyAlgoValidationChannelId}>` : notSet}`,
-          ]),
           `**${t('adm_info_releases_channel')}**\n${guild?.githubReleasesChannelId ? `<#${guild.githubReleasesChannelId}>` : notSet}`,
-          ...(DAILY_ALGO_PAUSED ? [] : [
-            `**Daily Algo**\n${onOff(!!guild?.dailyAlgoEnabled, ` (${guild?.dailyAlgoTime} UTC)`)}`,
-          ]),
           `**${t('adm_info_releases')}**\n${onOff(!!guild?.githubReleasesEnabled, ` (${guild?.githubRepositories.length} repos)`)}`,
         ],
       }),
     ));
-  } else if (subcommand === 'add-daily-algo') {
-    const titre = interaction.options.getString('title', true).trim();
-    const question = interaction.options.getString('question', true).trim();
-    const solution = interaction.options.getString('solution', true).trim();
-    const difficulte = interaction.options.getString('difficulty', true).trim();
-
-    const existing = await prisma.dailyAlgoProblem.findFirst({
-      where: {
-        title: titre,
-        language: 'fr',
-      },
-    });
-
-    if (existing) {
-      await interaction.reply(v2Message(
-        { flags: MessageFlags.Ephemeral },
-        infoContainer(t('adm_algo_exists_title'), t('adm_algo_exists_desc', { title: titre })),
-      ));
-      return;
-    }
-
-    await prisma.dailyAlgoProblem.create({
-      data: {
-        title: titre,
-        description: question,
-        solution,
-        difficulty: difficulte,
-        language: 'fr',
-        functionName: 'solve',
-        functionArgs: [{ name: 'input', type: 'unknown' }],
-        unitTests: [{ name: 'placeholder', args: [null], expected: null }],
-        allowedLanguages: ['javascript', 'typescript', 'python'],
-      },
-    });
-
-    await interaction.reply(v2Message(
-      { flags: MessageFlags.Ephemeral },
-      successContainer(t('adm_algo_added_title'), t('adm_algo_added_desc', { title: titre })),
-    ));
-  } else if (subcommand === 'set-algo-channel') {
-    const channel = interaction.options.getChannel('channel', true);
-
-    if (channel.type !== 0 && channel.type !== 5) { // 5 = GUILD_NEWS (announce channel)
-      await interaction.reply(v2Message(
-        { flags: MessageFlags.Ephemeral },
-        errorContainer(errTitle, t('adm_not_text')),
-      ));
-      return;
-    }
-
-    await interaction.reply(v2Message(
-      { flags: MessageFlags.Ephemeral },
-      successContainer(t('adm_algo_channel_set_title'), t('adm_algo_channel_set_desc', { channel: channel.toString() })),
-    ));
-
-    await prisma.guild.update({
-      where: { id: guildId },
-      data: { dailyAlgoChannelId: channel.id },
-    });
   } else if (subcommand === 'set-releases-channel') {
     const channel = interaction.options.getChannel('channel', true);
 
@@ -274,7 +169,6 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
         const userCount = totalMembers.reduce((acc, g) => acc + g._count, 0);
 
         const activeSanctions = await prisma.sanction.count({ where: { status: 'ACTIVE' } });
-        const dailyAlgoSubmissions = await prisma.dailyAlgoSubmission.count();
 
         const uptime = Math.floor(process.uptime());
         const uptimeHours = Math.floor(uptime / 3600);
@@ -294,7 +188,6 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
               `**${t('adm_global_servers')}**\n${guildCount}`,
               `**${t('adm_global_users')}**\n${userCount}`,
               `**${t('adm_global_sanctions')}**\n${activeSanctions}`,
-              `**${t('adm_global_submissions')}**\n${dailyAlgoSubmissions}`,
               `**Uptime**\n${uptimeHours}h ${uptimeMinutes}m ${uptimeSeconds}s`,
               `**${t('adm_global_memory')}**\n${memoryMB} MB`,
             ],

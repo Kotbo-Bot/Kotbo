@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { dialogFocus } from '../actions/dialogFocus';
+  import { portal } from '../actions/portal';
   import { m } from '../i18n';
   import { router } from 'tinro';
   import Papicon from './Papicon.svelte';
@@ -11,6 +13,7 @@
   import { navigationStore } from '../stores/navigation.svelte';
   import { tabsForPage } from '../config/pageTabs';
   import { markNavigationSource, trackEvent } from '../telemetry/telemetry';
+  import { fuzzyScore, moduleKeywords, normalize, score } from '../utils/paletteSearch';
 
   const GROUP_ICONS: Record<string, string> = {
     general: 'home',
@@ -27,12 +30,12 @@
   };
 
   // Libelles de groupe : affiches, et cles de regroupement des resultats.
-  const GROUP_ACCOUNT = m.cp_group_account();
-  const GROUP_ACTIONS = m.cp_group_actions();
-  const GROUP_ADMIN = m.cp_group_admin();
-  const GROUP_PINNED = m.cp_group_pinned();
-  const GROUP_RECENT = m.cp_group_recent();
-  const GROUP_MISSING = m.cp_group_missing();
+  const GROUP_ACCOUNT = $derived(m.cp_group_account());
+  const GROUP_ACTIONS = $derived(m.cp_group_actions());
+  const GROUP_ADMIN = $derived(m.cp_group_admin());
+  const GROUP_PINNED = $derived(m.cp_group_pinned());
+  const GROUP_RECENT = $derived(m.cp_group_recent());
+  const GROUP_MISSING = $derived(m.cp_group_missing());
 
   interface PaletteItem {
     id: string;
@@ -40,6 +43,8 @@
     sublabel?: string;
     icon: string;
     group: string;
+    keywords?: string;
+    href?: string;
     action: () => void;
   }
 
@@ -76,6 +81,8 @@
       sublabel: m.cp_page_in({ group }),
       icon: item.icon || fallbackIcon,
       group,
+      keywords: moduleKeywords(item.href),
+      href: item.href,
       action: () => router.goto(item.href)
     });
 
@@ -86,6 +93,7 @@
         sublabel: m.cp_tab_of({ page: item.name }),
         icon: tab.icon || item.icon || fallbackIcon,
         group,
+        keywords: moduleKeywords(tab.href),
         action: () => router.goto(tab.href)
       });
     }
@@ -106,8 +114,8 @@
       items.push({ id: 'admin-servers',  label: m.cp_adm_servers(), sublabel: m.cp_adm_servers_sub(), icon: 'Server', group: GROUP_ADMIN, action: () => router.goto('/admin/servers') });
       items.push({ id: 'admin-shards',   label: m.cp_adm_shards(), sublabel: m.cp_adm_shards_sub(), icon: 'Zap', group: GROUP_ADMIN, action: () => router.goto('/admin/shards') });
       items.push({ id: 'admin-analytics', label: m.cp_adm_analytics(), sublabel: m.cp_adm_analytics_sub(), icon: 'TrendingUp', group: GROUP_ADMIN, action: () => router.goto('/admin/analytics') });
-      items.push({ id: 'admin-dashboard-usage', label: m.cp_adm_usage(), sublabel: m.cp_adm_usage_sub(), icon: 'Eye', group: GROUP_ADMIN, action: () => router.goto('/admin/analytics?tab=usage') });
-      items.push({ id: 'admin-modules',  label: m.cp_adm_modules(), sublabel: m.cp_adm_modules_sub(), icon: 'Box', group: GROUP_ADMIN, action: () => router.goto('/admin/analytics?tab=modules') });
+      items.push({ id: 'admin-dashboard-usage', label: m.cp_adm_usage(), sublabel: m.cp_adm_usage_sub(), icon: 'Eye', group: GROUP_ADMIN, action: () => router.goto('/admin/analytics/usage') });
+      items.push({ id: 'admin-modules',  label: m.cp_adm_modules(), sublabel: m.cp_adm_modules_sub(), icon: 'Box', group: GROUP_ADMIN, action: () => router.goto('/admin/analytics/modules') });
       items.push({ id: 'admin-broadcast', label: m.cp_adm_broadcast(), sublabel: m.cp_adm_broadcast_sub(), icon: 'Megaphone', group: GROUP_ADMIN, action: () => router.goto('/admin/broadcast') });
       items.push({ id: 'admin-security', label: m.cp_adm_security(), sublabel: m.cp_adm_security_sub(), icon: 'ShieldCheck', group: GROUP_ADMIN, action: () => router.goto('/admin/security') });
       items.push({ id: 'admin-content',  label: m.cp_adm_content(), sublabel: m.cp_adm_content_sub(), icon: 'filter', group: GROUP_ADMIN, action: () => router.goto('/admin/content') });
@@ -186,27 +194,16 @@
     return items;
   });
 
-  const normalize = (value: string): string =>
-    value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
-
   /**
-   * Pertinence d'un element pour la saisie. Un mot qui commence par la saisie
-   * passe avant une saisie trouvee au milieu d'un mot : « sanc » trouvait
-   * d'abord « Statistiques > Croissance » (cro-issanc-e), parce que les
-   * groupes etaient affiches dans l'ordre du menu et non par pertinence.
-   * Une page passe avant ses onglets.
+   * A pertinence egale, ce que la personne ouvre souvent passe devant : une
+   * page epinglee ou consultee recemment l'emporte sur sa voisine.
    */
-  function score(item: PaletteItem, q: string): number {
-    const label = normalize(item.label);
-    const words = label.split(/[\s›>/'-]+/);
-    let value = 0;
-    if (label.startsWith(q)) value = 100;
-    else if (words.some((word) => word.startsWith(q))) value = 80;
-    else if (label.includes(q)) value = 40;
-    else if (normalize(item.sublabel ?? '').includes(q) || normalize(item.group).includes(q)) value = 20;
-    if (value > 0 && !item.label.includes('›')) value += 10;
-    return value;
-  }
+  const habitBonus = $derived.by(() => {
+    const bonus = new Map<string, number>();
+    navigationStore.recentItems.forEach((page, index) => bonus.set(page.href, 6 - index));
+    for (const page of navigationStore.favoriteItems) bonus.set(page.href, (bonus.get(page.href) ?? 0) + 5);
+    return bonus;
+  });
 
   /**
    * Sans saisie, la palette listait toutes les pages et tous leurs onglets,
@@ -236,44 +233,16 @@
     return groups;
   });
 
-  /** Distance d'edition entre deux mots courts (insertion, suppression, substitution). */
-  function editDistance(a: string, b: string): number {
-    const row = Array.from({ length: b.length + 1 }, (_, i) => i);
-    for (let i = 1; i <= a.length; i++) {
-      let previous = row[0];
-      row[0] = i;
-      for (let j = 1; j <= b.length; j++) {
-        const current = row[j];
-        row[j] = Math.min(row[j] + 1, row[j - 1] + 1, previous + (a[i - 1] === b[j - 1] ? 0 : 1));
-        previous = current;
-      }
-    }
-    return row[b.length];
-  }
-
-  /**
-   * Seconde chance quand la recherche exacte ne trouve rien : « sactions » ou
-   * « anti raid » doivent mener a Sanctions et a Anti-raid. On compare la saisie
-   * au debut de chaque mot, avec une faute toleree (deux au-dela de 6 lettres).
-   */
-  function fuzzyScore(item: PaletteItem, q: string): number {
-    if (q.length < 3) return 0;
-    const tolerance = q.length >= 6 ? 2 : 1;
-    const compact = q.replace(/[\s-]+/g, '');
-    const words = normalize(item.label).split(/[\s›>/'-]+/).filter(Boolean);
-    const joined = words.join('');
-    const candidates = [...words.map((word) => word.slice(0, q.length)), joined.slice(0, compact.length)];
-    const best = Math.min(...candidates.map((word) => editDistance(compact, word.replace(/[\s-]+/g, ''))));
-    return best <= tolerance ? 10 - best : 0;
-  }
-
   /** Resultats classes pour la saisie : exacts d'abord, sinon avec une faute toleree. */
   const ranked = $derived.by(() => {
     const q = normalize(query);
     if (!q) return [];
 
     const exact = allPaletteItems
-      .map((item) => ({ item, value: score(item, q) }))
+      .map((item) => {
+        const value = score(item, q);
+        return { item, value: value > 0 ? value + (habitBonus.get(item.href ?? '') ?? 0) : 0 };
+      })
       .filter((entry) => entry.value > 0)
       .sort((x, y) => y.value - x.value);
 
@@ -399,10 +368,12 @@
 
 {#if open}
   <div
-    class="command-palette fixed inset-0 z-100 flex items-start justify-center pt-[15vh] px-4"
+    class="command-palette layer-command fixed inset-0 flex items-start justify-center pt-[15vh] px-4"
+    use:portal
+    use:dialogFocus={{}}
     role="dialog"
     aria-modal="true"
-    aria-label="Palette de commandes"
+    aria-label={m.a11y_command_palette()}
     tabindex="-1"
     onkeydown={(e) => { if (e.key === 'Escape') close(); }}
   >
@@ -422,14 +393,14 @@
       <!-- Search input -->
       <div class="flex items-center gap-2.5 px-3 py-2.5 border-b border-outline-variant">
         <Papicon icon="Search" size={15} class="text-on-surface-variant/40 shrink-0" />
-        <input
+        <input aria-label={m.cp_search_ph()}
           bind:this={inputEl}
           bind:value={query}
           oninput={() => selectedIndex = 0}
           onkeydown={handleKeydown}
           type="text"
           placeholder={m.cp_search_ph()}
-          class="flex-1 bg-transparent text-sm text-on-surface placeholder-on-surface-variant/40 focus:outline-none"
+          class="flex-1 bg-transparent text-sm text-on-surface placeholder-on-surface-variant/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         />
         <kbd class="hidden sm:flex px-1.5 py-0.5 rounded bg-surface-container border border-outline-variant text-2xs font-medium text-on-surface-variant/40 leading-none">
           ESC

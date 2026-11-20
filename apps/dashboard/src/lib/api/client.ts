@@ -51,7 +51,25 @@ function getBrowserOrigin() {
   return '';
 }
 
-export const API_BASE_URL = envApiUrl;
+/**
+ * Sur le domaine perso d'un serveur (panel.monserveur.fr), Traefik sert l'API
+ * sous /api du même domaine : on l'appelle là, sinon le cookie de session
+ * serait un cookie tiers que Safari et Firefox refusent.
+ */
+function resolveApiBase(): string {
+  if (!envApiUrl || typeof window === 'undefined') return envApiUrl;
+  try {
+    const site = (host: string) => host.split('.').slice(-2).join('.');
+    const page = window.location.hostname;
+    const isLocal = page === 'localhost' || page === '127.0.0.1';
+    if (!isLocal && site(page) !== site(new URL(envApiUrl).hostname)) return '';
+  } catch {
+    // VITE_API_URL mal formée : on garde la valeur du build.
+  }
+  return envApiUrl;
+}
+
+export const API_BASE_URL = resolveApiBase();
 const wsBaseUrl = API_BASE_URL
   ? API_BASE_URL.replace(/^http/i, 'ws')
   : getBrowserOrigin().replace(/^http/i, 'ws');

@@ -20,6 +20,7 @@
 import { Prisma } from '@prisma/client';
 import type { Client } from 'discord.js';
 import { prismaRead } from '../../utils/db.js';
+import { extractPrimaryGuildTag } from '../core/serverTagService.js';
 import { addDays, dayKeys, scopeSql, type AnalyticsScope, type DateRange } from './contentAnalyticsService.js';
 
 const DAY_MS = 24 * 3600 * 1000;
@@ -363,6 +364,7 @@ export async function getLifecycle(client: Client, guildId: string, range: DateR
     if (list) {
       const w = now.get(p.userId);
       const member = guild?.members.cache.get(p.userId);
+      const tag = extractPrimaryGuildTag(member?.user);
       list.push({
         userId: p.userId,
         name: member?.displayName ?? p.displayName ?? p.globalName ?? p.username ?? null,
@@ -371,6 +373,7 @@ export async function getLifecycle(client: Client, guildId: string, range: DateR
         recentDays: w?.a28 ?? 0,
         previousDays: w?.p28 ?? 0,
         joinedAt: p.guildJoinedAt?.toISOString() ?? null,
+        serverTag: tag ? { tag: tag.tag, badgeUrl: tag.badgeUrl } : null,
       });
     }
   }

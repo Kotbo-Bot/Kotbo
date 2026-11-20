@@ -1,4 +1,5 @@
 import { type APIEmbed, type Client, type Message, type MessageReaction, type TextChannel, type NewsChannel, type ThreadChannel, type User, EmbedBuilder, PermissionFlagsBits, StickerFormatType, WebhookClient } from 'discord.js';
+import { canManageGuild } from '../../utils/guildAdmin.js';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { COLORS } from '../../utils/embeds.js';
@@ -7,6 +8,7 @@ import { randomBytes } from 'node:crypto';
 import type { ChannelLinkGroup, ChannelLinkGroupMember, ChannelLinkInvite } from '@prisma/client';
 import { isGuildActivated } from '../../utils/activation.js';
 import { refreshLinkGuestGuilds } from './channelLinkGuestService.js';
+import { creerIssueCopie, recordLinkTraffic } from './channelLinkStatsService.js';
 import { INVITE_SOURCE, recordBotInvite } from '../analytics/inviteService.js';
 
 const TAG = 'ChannelLink';
@@ -357,6 +359,10 @@ export async function acceptLinkInvite(opts: {
 
 // ── Création directe (admin des serveurs concernés) ─────────
 
+export { canManageGuild };
+
+const NOT_ADMIN_OF_TARGET = 'Vous devez être admin de chacun des serveurs reliés.';
+
 export async function createDirectGroup(opts: {
   ownerGuildId: string;
   ownerChannelId: string;
@@ -385,6 +391,13 @@ export async function createDirectGroup(opts: {
 
   const guildIds = [opts.ownerGuildId, ...targets.map((t) => t.guildId)];
   if (!hasActivatedMember(guildIds)) return { error: LINK_NEEDS_ACTIVATED_SIDE };
+
+  // Garde de service : aucun appelant (commande, API, futur code) ne relie le salon d'un
+  // serveur qu'il n'administre pas. Le serveur propriétaire est déjà contrôlé par l'appelant.
+  for (const guildId of new Set(targets.map((t) => t.guildId))) {
+    if (guildId === opts.ownerGuildId) continue;
+    if (!(await canManageGuild(opts.client, guildId, opts.createdByUserId))) return { error: NOT_ADMIN_OF_TARGET };
+  }
 
   const alreadyLinked = await prisma.channelLinkGroupMember.findFirst({
     where: {
@@ -452,6 +465,12 @@ export async function addGroupMember(opts: {
   }
   if (!hasActivatedMember([...group.members.map((m) => m.guildId), opts.guildId])) {
     return { error: LINK_NEEDS_ACTIVATED_SIDE };
+  }
+  if (
+    !group.members.some((m) => m.guildId === opts.guildId) &&
+    !(await canManageGuild(opts.client, opts.guildId, opts.addedByUserId))
+  ) {
+    return { error: NOT_ADMIN_OF_TARGET };
   }
 
   const webhookId = await createRelayWebhook(opts.client, opts.guildId, opts.channelId);
@@ -623,6 +642,20 @@ function stripLinkTopic(topic: string): string {
   // L'ancien pont posait aussi l'invitation seule, hors marqueurs : sans ce
   // second passage, elle resterait indéfiniment sous le bloc réécrit.
   return topic.replace(regex, '').replace(/\n?🔗 https:\/\/discord\.gg\/\S+/g, '').trim();
+}
+
+/**
+ * Permissions d'un salon créé pour un pont. Une source que @everyone ne voit
+ * pas ne doit pas ressortir dans un salon public du serveur d'en face : le
+ * salon y reste caché, et ses admins l'ouvrent à qui ils veulent. L'id du
+ * rôle @everyone est celui du serveur.
+ */
+export function permissionsSalonDePont(sourcePublique: boolean, guildId: string, botId: string) {
+  if (sourcePublique) return [];
+  return [
+    { id: guildId, deny: [PermissionFlagsBits.ViewChannel] },
+    { id: botId, allow: [PermissionFlagsBits.ViewChannel] },
+  ];
 }
 
 /**
@@ -1152,8 +1185,10 @@ export async function relayMessage(message: Message, client: Client): Promise<vo
         ? await messageLocations(group.id, repliedTo.messageId, repliedTo.channelId)
         : null;
       const refMsg = repliedTo ? await message.fetchReference().catch(() => null) : null;
+      let delivered = 0;
 
       for (const target of resolved.targets) {
+        const issue = creerIssueCopie((counter) => void recordLinkTraffic(group, target.guildId, target.channelId, counter));
         try {
           const destGuild = client.guilds.cache.get(target.guildId);
           if (!destGuild) continue;
@@ -1218,6 +1253,8 @@ export async function relayMessage(message: Message, client: Client): Promise<vo
             });
 
             warnOnStrippedEmojis(client, target, fullContent, sent.content);
+            delivered += 1;
+            issue.livree();
             await saveMessageMapping(group, message.id, message.channel.id, target, sent.id, activeWebhookId);
             webhookClient.destroy();
           } else {
@@ -1281,12 +1318,16 @@ export async function relayMessage(message: Message, client: Client): Promise<vo
               files: files.slice(0, DISCORD_MAX_ATTACHMENTS),
               allowedMentions: { parse: [] },
             });
+            delivered += 1;
+            issue.livree();
             await saveMessageMapping(group, message.id, message.channel.id, target, sent.id);
           }
         } catch (err) {
+          issue.echouee();
           logger.error(TAG, `Erreur relay message ${message.id} vers ${target.guildId}/${target.channelId}`, err);
         }
       }
+      if (delivered > 0) void recordLinkTraffic(group, message.guild.id, message.channel.id, 'sent');
     } catch (err) {
       logger.error(TAG, `Erreur relay message ${message.id} sur le pont ${group.id}`, err);
     }

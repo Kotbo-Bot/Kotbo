@@ -14,8 +14,6 @@
 
 import { describe, expect, mock, test, beforeEach } from 'bun:test';
 import path from 'node:path';
-import { IncomingMessage, ServerResponse } from 'node:http';
-import { Socket } from 'node:net';
 import type { Client } from 'discord.js';
 
 // ── Fixtures configurables par test ────────────────────────────────────────
@@ -148,7 +146,6 @@ const mockDb: any = {
   staffMember: { count: mock(async () => 0), findMany: mock(async () => []) },
   staffMeeting: { findMany: mock(async () => []) },
   recruitmentCandidature: { groupBy: mock(async () => []) },
-  dailyAlgoRun: { findMany: mock(async () => []) },
   memberInvite: { groupBy: mock(async () => []), findMany: mock(async () => []) },
   dashboardCommandUsage: { findMany: mock(async () => []) },
   guild: { findUnique: mock(async () => null) },
@@ -163,56 +160,19 @@ mock.module(dbPath, () => ({ default: mockDb, prisma: mockDb, prismaRead: mockDb
 mock.module(dbJsPath, () => ({ default: mockDb, prisma: mockDb, prismaRead: mockDb }));
 
 // Importe APRES les mock.module (meme convention que dashboardApi.test.ts).
-import { splitPath } from '../../api/shared.js';
-import { handleAnalyticsRoutes } from '../../api/routes/dashboard/analytics.js';
+import { DASHBOARD_ACCESS_ADMIN } from '../../api/shared.js';
+import { dashboardCall, mockDashboardGate } from '../helpers/honoDashboard.js';
 
-function createMockRequest(url: string): IncomingMessage {
-  const req = new IncomingMessage(new Socket());
-  req.method = 'GET';
-  req.url = url;
-  req.headers = {};
-  req.push(null);
-  return req;
-}
-
-interface MockResponse extends ServerResponse {
-  body: string;
-}
-
-function createMockResponse(): MockResponse {
-  const res = new ServerResponse(new IncomingMessage(new Socket())) as MockResponse;
-  let _statusCode = 200;
-  let _body = '';
-  Object.defineProperty(res, 'statusCode', {
-    get: () => _statusCode,
-    set: (code: number) => { _statusCode = code; },
-  });
-  res.setHeader = () => res;
-  res.writeHead = (code: number) => { _statusCode = code; return res; };
-  res.write = (chunk: unknown) => { _body += String(chunk); return true; };
-  res.end = (chunk?: unknown) => {
-    if (chunk) _body += String(chunk);
-    (res as unknown as { finished: boolean }).finished = true;
-    res.body = _body;
-    return res;
-  };
-  return res;
-}
+mockDashboardGate(DASHBOARD_ACCESS_ADMIN, { userId: 'viewer', username: 'viewer' });
+const { createAnalyticsRouter } = await import('../../api/routes/dashboard/analytics.js');
 
 const mockClient = { guilds: { cache: { get: () => undefined } } } as unknown as Client;
 
-/** Appelle la route "GET /analytics" complete (parts.length === 5). */
+/** Appelle la route "GET /analytics" complete. */
 async function runAnalytics(guildId: string, query = 'period=7&tz=UTC'): Promise<any> {
-  const pathname = `/api/dashboard/guilds/${guildId}/analytics`;
-  const url = new URL(`http://localhost${pathname}?${query}`);
-  const parts = splitPath(url.pathname);
-  const req = createMockRequest(`${pathname}?${query}`);
-  const res = createMockResponse();
-
-  const handled = await handleAnalyticsRoutes(req, res, parts, url, mockClient, {} as any, guildId, {} as any);
-  expect(handled).toBe(true);
-  expect(res.statusCode).toBe(200);
-  return JSON.parse(res.body);
+  const { status, body } = await dashboardCall(createAnalyticsRouter(mockClient), 'GET', `/api/dashboard/guilds/${guildId}/analytics?${query}`);
+  expect(status).toBe(200);
+  return body;
 }
 
 /** `dateKey` au meme format que la route (annee-mois-jour en heure locale). */

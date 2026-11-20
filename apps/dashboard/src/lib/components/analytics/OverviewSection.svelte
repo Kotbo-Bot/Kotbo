@@ -173,12 +173,12 @@
                 <div>
                   <dt>{m.anx_fact_peak_online()}</dt>
                   <dd>{fmtNumber(peakOnline.value)}</dd>
-                  {#if peakOnline.date}<span class="fact-sub">{shortDate(peakOnline.date)}</span>{/if}
+                  {#if peakOnline.date}<dd class="fact-sub">{shortDate(peakOnline.date)}</dd>{/if}
                 </div>
                 <div>
                   <dt>{m.anx_fact_peak_voice()}</dt>
                   <dd>{fmtNumber(peakVoice.value)}</dd>
-                  {#if peakVoice.date}<span class="fact-sub">{shortDate(peakVoice.date)}</span>{/if}
+                  {#if peakVoice.date}<dd class="fact-sub">{shortDate(peakVoice.date)}</dd>{/if}
                 </div>
                 <div><dt>{m.anx_fact_trend()}</dt><dd class={(totals.messagesTrend ?? 0) >= 0 ? 'text-success' : 'text-error'}>{(totals.messagesTrend ?? 0) >= 0 ? '+' : '−'}{Math.abs(totals.messagesTrend ?? 0)} %</dd></div>
               </dl>
@@ -286,8 +286,12 @@
     color: var(--color-error);
   }
 
-  .fact-sub {
+  /* Date du pic : second <dd>, seuls dt et dd sont permis dans un groupe de <dl> (RGAA 9.3). */
+  .fact-grid dd.fact-sub {
+    margin: 0;
+    font-family: inherit;
     font-size: 0.75rem;
+    font-weight: 400;
     color: var(--color-on-surface-variant);
   }
 

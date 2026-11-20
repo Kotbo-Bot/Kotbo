@@ -1,4 +1,5 @@
 <script lang="ts">
+  import MemberTag from '../lib/components/MemberTag.svelte';
   import { onMount } from 'svelte';
   import { canViewFeature } from '../lib/permissions.svelte';
   import { router } from 'tinro';
@@ -261,7 +262,7 @@
           oninput={updateQuery}
           placeholder={m.mb_search_placeholder()}
           aria-label={m.mb_search_placeholder()}
-          class="w-full h-10 rounded-lg border border-outline-variant/40 bg-surface-container-low pl-9 pr-9 text-sm text-on-surface placeholder:text-on-surface-variant outline-hidden focus:border-primary/40 focus:ring-2 focus:ring-primary/40"
+          class="w-full h-10 rounded-lg border border-field-border bg-surface-container-low pl-9 pr-9 text-sm text-on-surface placeholder:text-on-surface-variant outline-hidden focus:border-primary/40 focus:ring-2 focus:ring-primary/40"
         />
         {#if loadingSearch}
           <span class="absolute inset-y-0 right-3 flex items-center text-on-surface-variant">
@@ -276,7 +277,7 @@
             value={sortBy}
             aria-label={m.mb_sort_label()}
             onchange={(event) => changeFilter((value) => { sortBy = value; }, (event.currentTarget as HTMLSelectElement).value as typeof sortBy)}
-            class="w-full h-10 appearance-none rounded-lg border border-outline-variant/40 bg-surface-container-low pl-3 pr-9 text-sm text-on-surface transition-colors hover:bg-surface-container focus:border-primary/40"
+            class="w-full h-10 appearance-none rounded-lg border border-field-border bg-surface-container-low pl-3 pr-9 text-sm text-on-surface transition-colors hover:bg-surface-container focus:border-primary/40"
           >
             {#each sortOptions as option}
               <option value={option.value}>{option.label}</option>
@@ -344,7 +345,7 @@
               limit = Number((event.currentTarget as HTMLSelectElement).value);
               void search(true);
             }}
-            class="h-8 rounded-md border border-outline-variant/40 bg-surface-container-low px-2 text-xs text-on-surface outline-hidden"
+            class="h-8 rounded-md border border-field-border bg-surface-container-low px-2 text-xs text-on-surface outline-hidden focus-visible:ring-2 focus-visible:ring-primary"
           >
             <!-- Valeurs numeriques : avec des chaines, `limit` (number) ne
                  correspond a aucune option et le select s'affiche vide. -->
@@ -371,13 +372,13 @@
   </section>
 
   {#if searchError}
-    <div class="rounded-lg border border-error/20 bg-error/5 px-4 py-3 text-sm font-medium text-error flex items-center gap-3">
+    <div class="rounded-lg border border-error/20 bg-error/5 px-4 py-3 text-sm font-medium text-on-error-container flex items-center gap-3">
       <Papicon icon="alert-circle" size={18} />
       {searchError}
     </div>
   {/if}
 
-  <!-- Grille de résultats (la coque porte deja le <main> de la page) -->
+  <!-- Grille de résultats (la coque porte deja la zone `main` de la page) -->
   <div>
     {#if loadingSearch && members.length === 0}
       <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -433,7 +434,10 @@
               </div>
 
               <div class="min-w-0 flex-1">
-                <h3 class="truncate text-sm font-semibold text-on-surface group-hover:text-primary transition-colors">{member.displayName || m.mb_no_name()}</h3>
+                <div class="flex min-w-0 items-center gap-1.5">
+                  <h3 class="truncate text-sm font-semibold text-on-surface group-hover:text-primary transition-colors">{member.displayName || m.mb_no_name()}</h3>
+                  <MemberTag userId={member.id} />
+                </div>
                 <p class="truncate text-xs text-on-surface-variant">@{member.username || member.id.slice(0, 8)}</p>
               </div>
               <!-- Indique que la carte s'ouvre sur la fiche -->

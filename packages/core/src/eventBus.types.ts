@@ -129,6 +129,20 @@ export interface MemberUpdateEvent {
   timestamp: number;
 }
 
+export interface MemberTagEvent {
+  guildId: string;
+  userId: string;
+  userTag: string;
+  oldGuildId: string | null;
+  oldTag: string | null;
+  oldBadge: string | null;
+  newGuildId: string | null;
+  newTag: string | null;
+  newBadge: string | null;
+  isOwnGuild: boolean;
+  timestamp: number;
+}
+
 // ── Moderation Events ───────────────────────────────────────────
 export interface SanctionAppliedEvent {
   guildId: string;
@@ -276,6 +290,10 @@ export interface SuggestionCreatedEvent {
   suggestionId: string;
   userId: string;
   username: string;
+  /** Titre saisi dans la fenêtre de proposition, sinon null. */
+  title: string | null;
+  /** Catégorie choisie parmi celles du serveur, sinon null. */
+  category: string | null;
   content: string;
   channelId: string;
   /** Null quand le bot n'a pas pu poster la suggestion. */
@@ -283,18 +301,75 @@ export interface SuggestionCreatedEvent {
   timestamp: number;
 }
 
+/** Décision du staff : publiée à chaque changement de statut, jamais pour une remise en attente. */
 export interface SuggestionResolvedEvent {
   guildId: string;
   suggestionId: string;
   userId: string;
   username: string;
+  title: string | null;
+  category: string | null;
   content: string;
-  status: 'APPROVED' | 'REJECTED' | 'IMPLEMENTED';
+  status: 'APPROVED' | 'IN_PROGRESS' | 'REJECTED' | 'IMPLEMENTED';
+  /** Statut avant cette décision : `PENDING` pour une première décision. */
+  previousStatus: 'PENDING' | 'APPROVED' | 'IN_PROGRESS' | 'REJECTED' | 'IMPLEMENTED';
   responseText: string;
   /** Null pour une réponse de l'assistant MCP. */
   respondedById: string | null;
   upvotes: number;
   downvotes: number;
+  timestamp: number;
+}
+
+/** Une suggestion vient d'atteindre le seuil de votes « pour » du serveur, une seule fois. */
+export interface SuggestionThresholdReachedEvent {
+  guildId: string;
+  suggestionId: string;
+  userId: string;
+  username: string;
+  title: string | null;
+  category: string | null;
+  content: string;
+  upvotes: number;
+  downvotes: number;
+  threshold: number;
+  /** Message public de la suggestion, `null` si l'envoi a échoué. */
+  channelId: string | null;
+  messageId: string | null;
+  timestamp: number;
+}
+
+/**
+ * Un message vient de passer à la une pour la première fois (ou de nouveau
+ * après un retrait du staff annulé). Ses suites pour l'auteur (gains, paliers)
+ * sont déjà appliquées.
+ */
+export interface StarboardFeaturedEvent {
+  guildId: string;
+  entryId: string;
+  authorId: string;
+  /** Salon (ou fil) du message d'origine. */
+  channelId: string;
+  messageId: string;
+  /** Republication dans le salon des messages à la une. */
+  starChannelId: string;
+  starMessageId: string;
+  score: number;
+  /** Messages de l'auteur passés à la une, celui-ci compris. */
+  featuredCount: number;
+  timestamp: number;
+}
+
+/** Un message affiché à la une vient d'en être retiré. */
+export interface StarboardRemovedEvent {
+  guildId: string;
+  entryId: string;
+  authorId: string;
+  channelId: string;
+  messageId: string;
+  /** `BELOW_THRESHOLD`, `STAFF`, `GUARD` (auteur exclu, salon NSFW) ou `SOURCE_DELETED`. */
+  reason: string;
+  score: number;
   timestamp: number;
 }
 
@@ -435,6 +510,51 @@ export interface FunGameWonEvent {
   timestamp: number;
 }
 
+/**
+ * Un membre vient d'en remercier un autre (commande, menu contextuel ou
+ * réaction), vote accepté. Les ajustements du staff ne sont pas publiés : ce
+ * ne sont pas des remerciements.
+ */
+export interface ReputationGivenEvent {
+  guildId: string;
+  voteId: string;
+  giverId: string;
+  receiverId: string;
+  reason: string | null;
+  /** Salon du remerciement, `null` s'il est inconnu. */
+  channelId: string | null;
+  /** Message remercié, quand le vote en vient. */
+  messageId: string | null;
+  /** Réputation du membre remercié après ce vote. */
+  total: number;
+  timestamp: number;
+}
+
+/** Une saison de leveling vient de s'ouvrir (à la main, par le planning ou par enchaînement). */
+export interface SeasonStartedEvent {
+  guildId: string;
+  seasonId: string;
+  number: number;
+  name: string;
+  /** Fin prévue, ISO 8601. */
+  endDate: string;
+  timestamp: number;
+}
+
+/** Une saison de leveling vient d'être clôturée : classement figé, récompenses données. */
+export interface SeasonEndedEvent {
+  guildId: string;
+  seasonId: string;
+  number: number;
+  name: string;
+  /** Membres ayant gagné au moins 1 XP pendant la saison. */
+  participants: number;
+  /** Premier du classement, `null` si personne n'a gagné d'XP. */
+  winnerId: string | null;
+  winnerXp: number;
+  timestamp: number;
+}
+
 /** Un concours vient d'être clôturé, avec ou sans gagnant. */
 export interface GiveawayEndedEvent {
   guildId: string;
@@ -443,52 +563,6 @@ export interface GiveawayEndedEvent {
   channelId: string;
   participantCount: number;
   winnerCount: number;
-  timestamp: number;
-}
-
-// ── Partenariats ────────────────────────────────────────────────
-
-/**
- * Un partenariat vient de changer d'etape.
- *
- * Publie apres l'ecriture et apres l'application des avantages : un workflow
- * qui reagit a l'activation trouve donc le role deja pose, et non une seconde
- * avant.
- */
-export interface PartnershipStageEvent {
-  guildId: string;
-  partnershipId: string;
-  partnerId: string;
-  partnerName: string;
-  /** Serveur du partenaire, quand il s'agit d'une communaute Discord. */
-  partnerGuildId: string | null;
-  type: string;
-  fromStage: string;
-  toStage: string;
-  reason: string | null;
-  timestamp: number;
-}
-
-/** Un engagement n'a pas ete tenu sur la periode ecoulee. */
-export interface PartnershipCommitmentEvent {
-  guildId: string;
-  partnershipId: string;
-  partnerName: string;
-  commitmentId: string;
-  kind: string;
-  label: string | null;
-  /** Nombre de periodes manquees d'affilee. */
-  failureStreak: number;
-  timestamp: number;
-}
-
-/** Une arrivee vient d'etre attribuee a un partenariat. */
-export interface PartnershipReferralEvent {
-  guildId: string;
-  userId: string;
-  partnershipId: string;
-  partnerId: string;
-  partnerName: string;
   timestamp: number;
 }
 
@@ -502,11 +576,9 @@ export interface KotboEventMap {
   'voice:move': VoiceMoveEvent;
   'member:join': MemberJoinEvent;
   'member:join:invite': MemberJoinInviteEvent;
-  'partnership:stage': PartnershipStageEvent;
-  'partnership:commitment-failed': PartnershipCommitmentEvent;
-  'partnership:referral': PartnershipReferralEvent;
   'member:leave': MemberLeaveEvent;
   'member:update': MemberUpdateEvent;
+  'member:tag': MemberTagEvent;
   'sanction:applied': SanctionAppliedEvent;
   'sanction:revoked': SanctionRevokedEvent;
   'automod:triggered': AutoModTriggeredEvent;
@@ -515,6 +587,7 @@ export interface KotboEventMap {
   'form:submitted': FormSubmittedEvent;
   'suggestion:created': SuggestionCreatedEvent;
   'suggestion:resolved': SuggestionResolvedEvent;
+  'suggestion:threshold-reached': SuggestionThresholdReachedEvent;
   'ticket:created': TicketCreatedEvent;
   'ticket:closed': TicketClosedEvent;
   'ticket:rated': TicketRatedEvent;
@@ -532,6 +605,11 @@ export interface KotboEventMap {
   'giveaway:winner': GiveawayWinnerEvent;
   'giveaway:ended': GiveawayEndedEvent;
   'fun:game-won': FunGameWonEvent;
+  'reputation:given': ReputationGivenEvent;
+  'starboard:featured': StarboardFeaturedEvent;
+  'starboard:removed': StarboardRemovedEvent;
+  'season:started': SeasonStartedEvent;
+  'season:ended': SeasonEndedEvent;
 }
 
 export type KotboEventName = keyof KotboEventMap;

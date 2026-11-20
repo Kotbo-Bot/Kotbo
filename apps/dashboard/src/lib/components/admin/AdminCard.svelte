@@ -33,26 +33,26 @@
   const toneClasses: Record<AdminTone, string> = {
     neutral: 'bg-on-surface/6 text-on-surface-variant',
     primary: 'bg-primary/12 text-primary',
-    success: 'bg-success/12 text-success',
-    warning: 'bg-warning/12 text-warning',
-    danger: 'bg-error/12 text-error',
+    success: 'bg-success/12 text-on-success-container',
+    warning: 'bg-warning/12 text-on-warning-container',
+    danger: 'bg-error/12 text-on-error-container',
     info: 'bg-sky-500/12 text-sky-500',
   };
 </script>
 
 <section
-  class="rounded-2xl border border-outline-variant/25 bg-surface-container-lowest/70 backdrop-blur-sm overflow-hidden {className}"
+  class="admin-surface overflow-hidden {className}"
 >
   {#if title || actions}
-    <header class="flex flex-wrap items-start justify-between gap-3 px-5 py-4 border-b border-outline-variant/20">
+    <header class="flex flex-wrap items-start justify-between gap-3 px-6 pt-5 pb-1">
       <div class="flex items-start gap-3 min-w-0">
         {#if icon}
-          <div class="w-9 h-9 shrink-0 rounded-xl flex items-center justify-center {toneClasses[tone]}">
+          <div class="w-9 h-9 shrink-0 rounded-[11px] flex items-center justify-center {toneClasses[tone]}">
             <Papicon {icon} size={17} />
           </div>
         {/if}
         <div class="min-w-0">
-          <h2 class="text-[15px] font-semibold text-on-surface leading-tight">{title}</h2>
+          <h2 class="font-headline text-[19px] font-bold tracking-tight text-on-surface leading-tight">{title}</h2>
           {#if description}
             <p class="text-body-sm text-on-surface-variant mt-0.5 leading-snug">{description}</p>
           {/if}
@@ -64,7 +64,7 @@
     </header>
   {/if}
 
-  <div class={padded ? 'p-5' : ''}>
+  <div class={padded ? 'px-6 pb-6 pt-4' : title || actions ? 'pt-3' : ''}>
     {@render children?.()}
   </div>
 </section>

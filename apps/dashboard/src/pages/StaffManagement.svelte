@@ -241,6 +241,7 @@
   initialTab={caseIsStaff ? 'extra' : 'resume'}
   userId={memberCase.userId}
   userName={memberCase.userName}
+  caseGuildId={staff.guildId}
   caseData={memberCase.caseData}
   loading={memberCase.loading}
   error={memberCase.error}

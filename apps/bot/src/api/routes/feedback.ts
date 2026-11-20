@@ -1,44 +1,30 @@
-import { IncomingMessage, ServerResponse } from 'node:http';
+import { Hono } from 'hono';
 import { Client, EmbedBuilder } from 'discord.js';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import {
-  json,
-  verifyAuth,
-  readJsonBody,
-  getClientIp,
   checkRateLimit,
   feedbackReportRateLimiter,
 } from '../shared.js';
+import { dashboardAuth, readBody, requestIp, send } from '../hono/dashboard/kit.js';
 
-export async function handleReportFeedbackRoute(
-  req: IncomingMessage,
-  res: ServerResponse,
-  parts: string[],
-  url: URL,
-  client: Client
-): Promise<boolean> {
-  const method = req.method;
-
-  if (parts[0] !== 'api' || parts[1] !== 'report-feedback') {
-    return false;
-  }
+export function createReportFeedbackRouter(client: Client) {
+  const router = new Hono();
 
   // POST /api/report-feedback
-  if (method === 'POST') {
-    const ip = getClientIp(req);
+  router.post('/api/report-feedback', dashboardAuth, async (c) => {
+    const ip = requestIp(c) || '127.0.0.1';
     if (!checkRateLimit(feedbackReportRateLimiter, ip, 5, 15 * 60 * 1000)) {
-      json(res, 429, { error: 'Trop de retours envoyés. Veuillez réessayer plus tard.' });
-      return true;
+      return send(c, { error: 'Trop de retours envoyés. Veuillez réessayer plus tard.' }, 429);
     }
 
     try {
-      const payload = await readJsonBody<{
+      const payload = await readBody<{
         type: 'retour' | 'bloquage' | 'suggestion' | 'autre';
         message: string;
         url: string;
         guildId?: string | null;
-      }>(req);
+      }>(c);
 
       if (
         !payload ||
@@ -49,8 +35,7 @@ export async function handleReportFeedbackRoute(
         typeof payload.url !== 'string' ||
         (payload.guildId !== undefined && payload.guildId !== null && typeof payload.guildId !== 'string')
       ) {
-        json(res, 400, { error: 'Payload invalide' });
-        return true;
+        return send(c, { error: 'Payload invalide' }, 400);
       }
 
       const messageStr = payload.message.slice(0, 2000);
@@ -59,22 +44,17 @@ export async function handleReportFeedbackRoute(
 
       const allowedOriginPattern = /^(https?:\/\/)?([a-zA-Z0-9-]+\.)*(kotbo\.fr|localhost)(:\d+)?(\/.*)?$/;
       if (payload.url && !allowedOriginPattern.test(payload.url)) {
-        json(res, 400, { error: 'URL non autorisée' });
-        return true;
+        return send(c, { error: 'URL non autorisée' }, 400);
       }
 
       const sanitizeMarkdown = (str: string) => str.replace(/`/g, '\\`');
 
-      const user = await verifyAuth(req);
-      if (!user) {
-        json(res, 401, { error: 'Non authentifié' });
-        return true;
-      }
+      const user = c.var.dashboardUser;
       const userInfo = `**Utilisateur:** <@${user.userId}> (${user.username} - ID: ${user.userId})`;
 
       const ownerId = process.env.DISCORD_CLIENT_OWNER_ID;
       const adminsFromDb = await prisma.globalAdmin.findMany({
-        select: { userId: true }
+        select: { userId: true },
       });
       const adminIds = new Set<string>();
       if (ownerId) {
@@ -86,33 +66,32 @@ export async function handleReportFeedbackRoute(
 
       if (adminIds.size === 0) {
         logger.error('Aucun administrateur configuré pour recevoir le retour.');
-        json(res, 500, { error: 'Aucun administrateur configuré' });
-        return true;
+        return send(c, { error: 'Aucun administrateur configuré' }, 500);
       }
 
       const typeLabels: Record<string, string> = {
         retour: "📬 Retour d'expérience",
         bloquage: '🛑 Bloquage / Bug',
         suggestion: "💡 Suggestion d'amélioration",
-        autre: '💬 Autre retour'
+        autre: '💬 Autre retour',
       };
 
       const typeColors: Record<string, number> = {
-        retour: 0x3B82F6,      // Blue
-        bloquage: 0xEF4444,    // Red
-        suggestion: 0x10B981,  // Emerald green
-        autre: 0x8B5CF6        // Purple
+        retour: 0x3b82f6,      // Blue
+        bloquage: 0xef4444,    // Red
+        suggestion: 0x10b981,  // Emerald green
+        autre: 0x8b5cf6,       // Purple
       };
 
       const embed = new EmbedBuilder()
         .setTitle(`💬 Nouveau retour : ${typeLabels[payload.type] || payload.type}`)
-        .setColor(typeColors[payload.type] || 0x8B5CF6)
+        .setColor(typeColors[payload.type] || 0x8b5cf6)
         .setTimestamp()
         .addFields(
           { name: '👤 Utilisateur', value: userInfo },
           { name: '🌐 Page / URL', value: `\`${sanitizeMarkdown(urlStr)}\`` },
           { name: '🏰 Serveur sélectionné', value: `\`${sanitizeMarkdown(guildIdStr)}\`` },
-          { name: '📝 Message / Description', value: messageStr }
+          { name: '📝 Message / Description', value: messageStr },
         );
 
       let sentCount = 0;
@@ -132,18 +111,16 @@ export async function handleReportFeedbackRoute(
       }
 
       if (sentCount === 0) {
-        json(res, 500, { error: "Impossible d'envoyer le retour aux administrateurs" });
-        return true;
+        return send(c, { error: "Impossible d'envoyer le retour aux administrateurs" }, 500);
       }
 
-      json(res, 200, { success: true });
+      return send(c, { success: true }, 200);
     } catch (err: unknown) {
       const errMessage = err instanceof Error ? err.message : String(err);
       logger.error('ReportFeedback', `Erreur lors de la transmission du retour: ${errMessage}`);
-      json(res, 500, { error: 'Erreur lors de la transmission' });
+      return send(c, { error: 'Erreur lors de la transmission' }, 500);
     }
-    return true;
-  }
+  });
 
-  return false;
+  return router;
 }

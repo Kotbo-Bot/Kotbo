@@ -226,8 +226,8 @@ export type QrDetection = {
  * regroupe les candidats proches : un vrai motif produit des détections sur
  * plusieurs lignes consécutives, là où le bruit en produit une isolée.
  *
- * On exige deux motifs distincts plutôt que trois : un QR partiellement
- * recadré ou incrusté dans un visuel en perd souvent un.
+ * On exige les trois motifs, en équerre : un QR qui en a perdu un ne se scanne
+ * plus, et deux motifs seuls se trouvent dans presque toute capture de texte.
  */
 export function detectQrCode(image: GrayscaleImage): QrDetection {
   const { data, width, height } = image;
@@ -281,7 +281,7 @@ export function detectQrCode(image: GrayscaleImage): QrDetection {
 
   // Regroupe les candidats en motifs : même abscisse à un module près, lignes
   // proches. Un motif isolé sur une seule ligne est du bruit.
-  type Cluster = { x: number; y: number; size: number; hits: number };
+  type Cluster = { x: number; y: number; size: number; hits: number; top: number };
   const clusters: Cluster[] = [];
 
   for (const candidate of candidates) {
@@ -297,12 +297,46 @@ export function detectQrCode(image: GrayscaleImage): QrDetection {
       cluster.y = candidate.y;
       cluster.hits++;
     } else {
-      clusters.push({ ...candidate, hits: 1 });
+      clusters.push({ ...candidate, hits: 1, top: candidate.y });
     }
   }
 
-  const solid = clusters.filter((c) => c.hits >= 3);
-  return { detected: solid.length >= 2, patterns: solid.length };
+  // Une ligne de texte produit elle aussi du 1:1:3:1:1 à l'horizontale : un vrai
+  // motif le reproduit à la verticale, par son centre.
+  const isDark = (x: number, y: number) => data[y * width + x] <= threshold;
+  const crossesVertically = (c: Cluster): boolean => {
+    const x = Math.min(width - 1, Math.max(0, Math.round(c.x)));
+    const cy = Math.min(height - 1, Math.round((c.top + c.y) / 2));
+    if (!isDark(x, cy)) return false;
+    const counts = [0, 0, 0, 0, 0];
+    let y = cy;
+    for (const [band, dark] of [[2, true], [1, false], [0, true]] as const) {
+      while (y >= 0 && isDark(x, y) === dark) (counts[band]++, y--);
+    }
+    y = cy + 1;
+    for (const [band, dark] of [[2, true], [3, false], [4, true]] as const) {
+      while (y < height && isDark(x, y) === dark) (counts[band]++, y++);
+    }
+    const total = counts.reduce((s, n) => s + n, 0);
+    return matchesFinderRatio(counts) && Math.abs(total - c.size) < c.size / 2;
+  };
+  const solid = clusters.filter((c) => c.hits >= 3 && crossesVertically(c));
+
+  // Trois motifs de même taille en équerre : c'est la géométrie d'un QR, que
+  // ne reproduisent ni une grille, ni des icônes, ni une page de texte.
+  const dist = (a: Cluster, b: Cluster) => Math.hypot(a.x - b.x, (a.top + a.y) / 2 - (b.top + b.y) / 2);
+  const isQr = solid.some((corner) =>
+    solid.some((a) =>
+      solid.some((b) => {
+        if (a === corner || b === corner || a === b) return false;
+        const sizes = [corner.size, a.size, b.size];
+        if (Math.max(...sizes) > Math.min(...sizes) * 1.4) return false;
+        const [la, lb, hyp] = [dist(corner, a), dist(corner, b), dist(a, b)];
+        return la > corner.size * 1.5 && Math.abs(la - lb) < la * 0.2 && Math.abs(hyp - la * Math.SQRT2) < la * 0.25;
+      })
+    )
+  );
+  return { detected: isQr, patterns: solid.length };
 }
 
 // ─── Empreinte Kotbo Vision v2 ─────────────────────────────────────────────────────
@@ -346,7 +380,11 @@ export type ParsedFingerprint = {
   /** Image quasi unie : ses hash sont dégénérés, seule l'égalité exacte compte. */
   flat: boolean;
   views: Record<ViewName, ViewHashes>;
+  /** Image rognée réduite à 32×32 : départage une copie d'une image de même mise en page. */
+  signature?: Uint8Array;
 };
+
+const SIGNATURE_SIZE = 32;
 
 function hexToHash(hex: string): Hash64 | null {
   if (!/^[0-9a-f]{16}$/.test(hex)) return null;
@@ -550,7 +588,49 @@ export function computeFingerprint(image: GrayscaleImage): ParsedFingerprint {
     const cy = Math.floor(image.height * inset);
     views[name] = pickHashes(viewHashes(crop(image, cx, cy, image.width - cx, image.height - cy)));
   }
-  return { aspect: trimmed.width / trimmed.height, rawAspect: image.width / image.height, flat: full.flat, views };
+  return {
+    aspect: trimmed.width / trimmed.height,
+    rawAspect: image.width / image.height,
+    flat: full.flat,
+    views,
+    signature: resizeGray(trimmed, SIGNATURE_SIZE, SIGNATURE_SIZE),
+  };
+}
+
+/**
+ * Corrélation (de -1 à 1) entre deux signatures, insensible à la luminosité et
+ * au contraste. Le meilleur décalage d'un pixel est retenu : le rognage des
+ * bords ne tombe pas toujours au même pixel sur l'original et sur sa copie.
+ */
+export function signatureSimilarity(a: Uint8Array, b: Uint8Array): number {
+  const n = SIGNATURE_SIZE;
+  let best = -1;
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      let sa = 0;
+      let sb = 0;
+      let saa = 0;
+      let sbb = 0;
+      let sab = 0;
+      let count = 0;
+      for (let y = Math.max(0, -dy); y < Math.min(n, n - dy); y++) {
+        for (let x = Math.max(0, -dx); x < Math.min(n, n - dx); x++) {
+          const va = a[y * n + x];
+          const vb = b[(y + dy) * n + x + dx];
+          sa += va;
+          sb += vb;
+          saa += va * va;
+          sbb += vb * vb;
+          sab += va * vb;
+          count++;
+        }
+      }
+      const varA = saa - (sa * sa) / count;
+      const varB = sbb - (sb * sb) / count;
+      if (varA > 0 && varB > 0) best = Math.max(best, (sab - (sa * sb) / count) / Math.sqrt(varA * varB));
+    }
+  }
+  return best;
 }
 
 const viewToString = (v: ViewHashes) => `${hashToHex(v.dh)}.${hashToHex(v.dv)}.${hashToHex(v.ph)}`;
@@ -558,7 +638,9 @@ const viewToString = (v: ViewHashes) => `${hashToHex(v.dh)}.${hashToHex(v.dv)}.$
 /** Sérialisation stockée en base (colonne `fingerprint`). */
 export function serializeFingerprint(fp: ParsedFingerprint): string {
   const aspects = `${Math.round(fp.aspect * 1000)}/${Math.round(fp.rawAspect * 1000)}`;
-  return ['v2', aspects, fp.flat ? 1 : 0, ...VIEW_NAMES.map((n) => viewToString(fp.views[n]))].join(';');
+  const parts = ['v2', aspects, fp.flat ? 1 : 0, ...VIEW_NAMES.map((n) => viewToString(fp.views[n]))];
+  if (fp.signature) parts.push(Buffer.from(fp.signature).toString('base64'));
+  return parts.join(';');
 }
 
 function parseView(text: string | undefined): ViewHashes | null {
@@ -571,7 +653,8 @@ function parseView(text: string | undefined): ViewHashes | null {
 export function parseFingerprint(text: string | null | undefined): ParsedFingerprint | null {
   if (!text) return null;
   const parts = text.split(';');
-  if (parts[0] !== 'v2' || parts.length !== 3 + VIEW_NAMES.length) return null;
+  // La signature (dernier champ) manque aux entrées antérieures.
+  if (parts[0] !== 'v2' || parts.length < 3 + VIEW_NAMES.length) return null;
   const views = {} as Record<ViewName, ViewHashes>;
   for (let i = 0; i < VIEW_NAMES.length; i++) {
     const view = parseView(parts[3 + i]);
@@ -580,12 +663,8 @@ export function parseFingerprint(text: string | null | undefined): ParsedFingerp
   }
   const [aspect, rawAspect] = parts[1].split('/').map((n) => Number(n) / 1000);
   if (!aspect || !rawAspect) return null;
-  return { aspect, rawAspect, flat: parts[2] === '1', views };
-}
-
-/** Empreinte v1 (dHash seul, colonne `phash`) rendue comparable. */
-export function parseLegacyHash(hex: string | null | undefined): Hash64 | null {
-  return hex ? hexToHash(hex) : null;
+  const signature = parts[3 + VIEW_NAMES.length] ? new Uint8Array(Buffer.from(parts[3 + VIEW_NAMES.length], 'base64')) : undefined;
+  return { aspect, rawAspect, flat: parts[2] === '1', views, signature: signature?.length === SIGNATURE_SIZE ** 2 ? signature : undefined };
 }
 
 export type MatchVerdict = 'CERTAIN' | 'UNCERTAIN';
@@ -602,8 +681,10 @@ export type FingerprintComparison = {
 // bits de distance ; une recompression sous 4 ; un recadrage léger vers 6-10.
 const CERTAIN_MAX = 7;
 const UNCERTAIN_MAX = 12;
-const LEGACY_CERTAIN_MAX = 6;
-const LEGACY_UNCERTAIN_MAX = 10;
+// Mesuré par scripts/calibrate-vision.ts : une copie recompressée, réduite ou
+// encadrée reste au-dessus de 0,72 ; deux images distinctes de même gabarit
+// (mèmes, pages de texte) ne dépassent pas 0,66.
+const SIGNATURE_CERTAIN_MIN = 0.75;
 
 function compareViews(a: ViewHashes, b: ViewHashes): { score: number; ph: number; worst: number } {
   const dh = distance64(a.dh, b.dh);
@@ -666,13 +747,14 @@ export function compareFingerprints(incoming: ParsedFingerprint, known: ParsedFi
   const ratio = Math.max(incoming.aspect, known.aspect) / Math.min(incoming.aspect, known.aspect);
   const sameShape = !best.sameFrame || ratio < 1.35;
 
-  return toComparison(best.score, CERTAIN_MAX, UNCERTAIN_MAX, coherent && sameShape);
-}
+  // Les hash ne voient que la mise en page : seule une signature de pixels
+  // voisine prouve la copie. Sans elle (entrée ancienne), le staff tranche.
+  const sameImage =
+    incoming.signature !== undefined &&
+    known.signature !== undefined &&
+    signatureSimilarity(incoming.signature, known.signature) >= SIGNATURE_CERTAIN_MIN;
 
-/** Comparaison avec une entrée v1, qui n'a que le dHash de l'image brute. */
-export function compareWithLegacy(incoming: ParsedFingerprint, legacy: Hash64): FingerprintComparison {
-  if (incoming.flat) return NO_MATCH;
-  return toComparison(distance64(incoming.views.raw.dh, legacy), LEGACY_CERTAIN_MAX, LEGACY_UNCERTAIN_MAX);
+  return toComparison(best.score, CERTAIN_MAX, UNCERTAIN_MAX, coherent && sameShape && sameImage);
 }
 
 // ─── Recherche par fenêtres (image incrustée dans une capture) ─────────────────
@@ -810,9 +892,8 @@ export function computeWindowHashes(image: GrayscaleImage, extraShapes: number[]
   return out;
 }
 
-// Plus de fenêtres = plus de chances de coïncidence : les seuils sont plus
-// serrés que pour la comparaison d'image à image.
-const WINDOW_CERTAIN_MAX = 4.5;
+// Plus de fenêtres = plus de chances de coïncidence : le seuil est plus serré
+// que pour la comparaison d'image à image, et le verdict jamais certain.
 const WINDOW_UNCERTAIN_MAX = 9;
 const WINDOW_PH_MAX = 7;
 
@@ -837,7 +918,8 @@ export function compareWindows(windows: WindowHashes, known: ParsedFingerprint):
     }
   }
   if (best.score === Number.POSITIVE_INFINITY) return NO_MATCH;
-  return toComparison(best.score, WINDOW_CERTAIN_MAX, WINDOW_UNCERTAIN_MAX, best.dh <= 12);
+  if (best.dh > 12) return NO_MATCH;
+  return toComparison(best.score, 0, WINDOW_UNCERTAIN_MAX, false);
 }
 
 export type ImageAnalysis = {

@@ -7,8 +7,11 @@
  *   - un cycle de vie (brouillon, programme, en cours, envoye, annule) ;
  *   - la validation des URL d'image avant diffusion.
  */
-import type { ButtonInteraction, Client } from 'discord.js';
-import { EmbedBuilder, MessageFlags, type ColorResolvable } from 'discord.js';
+import type { ButtonInteraction, Client, ModalSubmitInteraction } from 'discord.js';
+import {
+  ActionRowBuilder, EmbedBuilder, MessageFlags, ModalBuilder, TextInputBuilder, TextInputStyle,
+  type ColorResolvable,
+} from 'discord.js';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { resolveEmojiShortcodes, resolveEmojiShortcodesToUnicode } from '../../utils/emojis.js';
@@ -33,16 +36,52 @@ export interface BroadcastContent {
   pollOptions?: string[];
   /** ISO 8601. Passe cette date, les votes sont refuses. */
   pollClosesAt?: string | null;
+  /** Libelle du bouton : present = demande d'avis (bouton -> formulaire) au lieu d'un sondage. */
+  feedbackLabel?: string | null;
+  /** Variante anglaise ; le texte de base est en français. */
+  translations?: BroadcastTranslations | null;
 }
+
+// `type` et non `interface` : Prisma exige une signature d'index pour les colonnes JSON.
+export type BroadcastTranslation = { title?: string; message?: string; footerText?: string };
+export type BroadcastTranslations = { en?: BroadcastTranslation };
+/** Textes d'une langue une fois resolus (rien d'optionnel). */
+export interface BroadcastText { title: string; message: string; footerText: string }
 
 export const POLL_MIN_OPTIONS = 2;
 export const POLL_MAX_OPTIONS = 5;
 export const POLL_BUTTON_PREFIX = 'bcpoll:';
+export const FEEDBACK_BUTTON_PREFIX = 'bcfb:';
+export const FEEDBACK_MODAL_PREFIX = 'bcfbm:';
 
 export const DEFAULT_BROADCAST_TITLE = '📢 Annonce Globale Kotbo';
 export const DEFAULT_BROADCAST_FOOTER = "Système d'annonce globale Kotbo";
+export const DEFAULT_BROADCAST_TITLE_EN = '📢 Kotbo Global Announcement';
+export const DEFAULT_BROADCAST_FOOTER_EN = 'Kotbo global announcement system';
+
+/**
+ * Langue d'un serveur : choix explicite (`Guild.language`), sinon langue
+ * Discord du serveur, sinon anglais. Meme cascade que `resolveGuildLocale`.
+ */
+export function pickBroadcastLocale(language: string | null | undefined, preferredLocale: string | null | undefined): 'fr' | 'en' {
+  if (language === 'fr' || language === 'en') return language;
+  return (preferredLocale ?? '').toLowerCase().startsWith('fr') ? 'fr' : 'en';
+}
+
+/** Texte a envoyer a un serveur : la variante anglaise si elle existe, le texte de base sinon. */
+export function pickBroadcastText(
+  base: BroadcastText,
+  translations: BroadcastTranslations | null | undefined,
+  locale: 'fr' | 'en',
+): BroadcastText {
+  const en = translations?.en;
+  return locale === 'en' && en?.message
+    ? { title: en.title || base.title, message: en.message, footerText: en.footerText || base.footerText }
+    : base;
+}
 
 interface GuildChannelConfig {
+  language: string | null;
   broadcastChannelId: string | null;
   newsChannelId: string | null;
   publicChannelId: string | null;
@@ -82,6 +121,8 @@ export function normalizeBroadcastContent(content: BroadcastContent): {
   channelPref: BroadcastChannelPref;
   pollOptions: string[];
   pollClosesAt: Date | null;
+  feedbackLabel: string | null;
+  translations: BroadcastTranslations | null;
   warnings: string[];
 } {
   const message = content.message?.trim();
@@ -130,12 +171,41 @@ export function normalizeBroadcastContent(content: BroadcastContent): {
     throw new BroadcastValidationError('Une option de sondage dépasse 80 caractères.', 'pollOptions');
   }
 
+  const feedbackLabel = content.feedbackLabel?.trim() || null;
+  if (feedbackLabel && feedbackLabel.length > 80) {
+    throw new BroadcastValidationError('Le libellé du bouton dépasse 80 caractères.', 'feedbackLabel');
+  }
+  if (feedbackLabel && pollOptions.length > 0) {
+    throw new BroadcastValidationError('Une annonce porte un sondage ou une demande d’avis, pas les deux.', 'feedbackLabel');
+  }
+
   let pollClosesAt: Date | null = null;
-  if (pollOptions.length > 0 && content.pollClosesAt) {
+  if ((pollOptions.length > 0 || feedbackLabel) && content.pollClosesAt) {
     pollClosesAt = new Date(content.pollClosesAt);
     if (Number.isNaN(pollClosesAt.getTime()) || pollClosesAt.getTime() <= Date.now()) {
       throw new BroadcastValidationError('La clôture du sondage doit être dans le futur.', 'pollClosesAt');
     }
+  }
+
+  // Variante anglaise : le message est requis des qu'un champ est rempli ;
+  // titre et pied vides retombent sur le defaut anglais (si le base est le defaut) ou sur le base.
+  const en = content.translations?.en;
+  const enMessage = en?.message?.trim();
+  const enTitle = en?.title?.trim();
+  const enFooter = en?.footerText?.trim();
+  let translations: BroadcastTranslations | null = null;
+  if (enMessage || enTitle || enFooter) {
+    if (!enMessage) throw new BroadcastValidationError('Le message anglais est requis.', 'translations');
+    if (enMessage.length > 4000) throw new BroadcastValidationError('Le message anglais dépasse 4000 caractères.', 'translations');
+    if ((enTitle?.length ?? 0) > 256) throw new BroadcastValidationError('Le titre anglais dépasse 256 caractères.', 'translations');
+    if ((enFooter?.length ?? 0) > 2048) throw new BroadcastValidationError('Le pied de page anglais dépasse 2048 caractères.', 'translations');
+    translations = {
+      en: {
+        title: resolveEmojiShortcodesToUnicode(enTitle || (title === resolveEmojiShortcodesToUnicode(DEFAULT_BROADCAST_TITLE) ? DEFAULT_BROADCAST_TITLE_EN : title)),
+        message: resolveEmojiShortcodes(enMessage),
+        footerText: resolveEmojiShortcodesToUnicode(enFooter || (footerText === DEFAULT_BROADCAST_FOOTER ? DEFAULT_BROADCAST_FOOTER_EN : footerText)),
+      },
+    };
   }
 
   return {
@@ -150,6 +220,8 @@ export function normalizeBroadcastContent(content: BroadcastContent): {
     channelPref: content.channelPref ?? 'AUTO',
     pollOptions,
     pollClosesAt,
+    feedbackLabel,
+    translations,
     warnings,
   };
 }
@@ -164,6 +236,14 @@ function buildPollComponents(broadcastId: string, options: string[]) {
       label,
       custom_id: `${POLL_BUTTON_PREFIX}${broadcastId}:${index}`,
     })),
+  }];
+}
+
+/** Bouton unique qui ouvre le formulaire d'avis. */
+function buildFeedbackComponents(broadcastId: string, label: string) {
+  return [{
+    type: 1,
+    components: [{ type: 2, style: 1, label, custom_id: `${FEEDBACK_BUTTON_PREFIX}${broadcastId}` }],
   }];
 }
 
@@ -182,6 +262,7 @@ export async function loadGuildChannelMap(): Promise<Record<string, GuildChannel
   const rows = await prisma.guild.findMany({
     select: {
       id: true,
+      language: true,
       broadcastChannelId: true,
       newsChannelId: true,
       publicChannelId: true,
@@ -191,6 +272,7 @@ export async function loadGuildChannelMap(): Promise<Record<string, GuildChannel
   const map: Record<string, GuildChannelConfig> = Object.create(null);
   for (const row of rows) {
     map[row.id] = {
+      language: row.language,
       broadcastChannelId: row.broadcastChannelId,
       newsChannelId: row.newsChannelId,
       publicChannelId: row.publicChannelId,
@@ -241,7 +323,8 @@ interface ShardBroadcastContext {
   channelMap: Record<string, GuildChannelConfig>;
   allowedIds: string[];
   channelPref: BroadcastChannelPref;
-  components: ReturnType<typeof buildPollComponents> | undefined;
+  translations: BroadcastTranslations | null;
+  components: ReturnType<typeof buildPollComponents> | ReturnType<typeof buildFeedbackComponents> | undefined;
 }
 
 /**
@@ -263,13 +346,19 @@ export async function deliverBroadcast(
     channelPref: BroadcastChannelPref;
     allowedIds: string[];
     channelMap: Record<string, GuildChannelConfig>;
+    /** Variante par langue, choisie serveur par serveur d'apres sa configuration. */
+    translations?: BroadcastTranslations | null;
     /** Present = l'annonce porte un sondage ; `broadcastId` sert d'ancre aux boutons. */
     poll?: { broadcastId: string; options: string[] };
+    /** Present = demande d'avis : un bouton ouvre un formulaire. */
+    feedback?: { broadcastId: string; label: string };
   },
 ): Promise<DeliveryResult[]> {
-  const components = params.poll && params.poll.options.length > 0
-    ? buildPollComponents(params.poll.broadcastId, params.poll.options)
-    : undefined;
+  const components = params.feedback
+    ? buildFeedbackComponents(params.feedback.broadcastId, params.feedback.label)
+    : params.poll && params.poll.options.length > 0
+      ? buildPollComponents(params.poll.broadcastId, params.poll.options)
+      : undefined;
   const context: ShardBroadcastContext = {
     components,
     embed: {
@@ -283,6 +372,7 @@ export async function deliverBroadcast(
     channelMap: params.channelMap,
     allowedIds: params.allowedIds,
     channelPref: params.channelPref,
+    translations: params.translations ?? null,
   };
 
   if (client.shard) {
@@ -333,11 +423,17 @@ export async function deliverBroadcast(
           }
 
           try {
+            // Meme cascade que pickBroadcastLocale/pickBroadcastText (non capturables ici).
+            const lang = config?.language === 'fr' || config?.language === 'en'
+              ? config.language
+              : String(guild.preferredLocale ?? '').toLowerCase().startsWith('fr') ? 'fr' : 'en';
+            const en = ctx.translations?.en;
+            const useEn = lang === 'en' && Boolean(en?.message);
             const embed = new ShardEmbed()
-              .setTitle(ctx.embed.title)
-              .setDescription(ctx.embed.message)
+              .setTitle(useEn ? (en!.title || ctx.embed.title) : ctx.embed.title)
+              .setDescription(useEn ? en!.message! : ctx.embed.message)
               .setColor(parseInt(ctx.embed.color.replace('#', ''), 16))
-              .setFooter({ text: ctx.embed.footerText })
+              .setFooter({ text: useEn ? (en!.footerText || ctx.embed.footerText) : ctx.embed.footerText })
               .setTimestamp();
             if (ctx.embed.thumbnailUrl) embed.setThumbnail(ctx.embed.thumbnailUrl);
             if (ctx.embed.imageUrl) embed.setImage(ctx.embed.imageUrl);
@@ -403,11 +499,16 @@ export async function deliverBroadcast(
     }
 
     try {
+      const text = pickBroadcastText(
+        { title: params.title, message: params.message, footerText: params.footerText },
+        params.translations,
+        pickBroadcastLocale(params.channelMap[id]?.language, guild.preferredLocale),
+      );
       const embed = new EmbedBuilder()
-        .setTitle(params.title)
-        .setDescription(params.message)
+        .setTitle(text.title)
+        .setDescription(text.message)
         .setColor(params.color as ColorResolvable)
-        .setFooter({ text: params.footerText })
+        .setFooter({ text: text.footerText })
         .setTimestamp();
       if (params.thumbnailUrl) embed.setThumbnail(params.thumbnailUrl);
       if (params.imageUrl) embed.setImage(params.imageUrl);
@@ -513,6 +614,68 @@ export async function handleBroadcastPollVote(interaction: ButtonInteraction): P
   );
 }
 
+/** Annonce ouverte aux avis, ou `null` (inconnue, sans demande d'avis, ou close). */
+async function findOpenFeedbackBroadcast(broadcastId: string | undefined) {
+  if (!broadcastId) return { broadcast: null, closed: false };
+  const broadcast = await prisma.broadcastLog.findUnique({
+    where: { id: broadcastId },
+    select: { feedbackLabel: true, pollClosesAt: true, title: true },
+  });
+  if (!broadcast?.feedbackLabel) return { broadcast: null, closed: false };
+  const closed = Boolean(broadcast.pollClosesAt && broadcast.pollClosesAt.getTime() <= Date.now());
+  return { broadcast: closed ? null : broadcast, closed };
+}
+
+/** Bouton `bcfb:<broadcastId>` : ouvre le formulaire d'avis. */
+export async function handleBroadcastFeedbackButton(interaction: ButtonInteraction): Promise<void> {
+  const broadcastId = interaction.customId.split(':')[1];
+  const { broadcast, closed } = await findOpenFeedbackBroadcast(broadcastId);
+  if (!broadcast) {
+    await interaction.reply({
+      content: closed ? 'Cette demande d’avis est close.' : 'Cette demande d’avis n’existe plus.',
+      flags: [MessageFlags.Ephemeral],
+    });
+    return;
+  }
+
+  const modal = new ModalBuilder()
+    .setCustomId(`${FEEDBACK_MODAL_PREFIX}${broadcastId}`)
+    .setTitle(broadcast.title.slice(0, 45))
+    .addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(
+      new TextInputBuilder()
+        .setCustomId('content')
+        .setLabel('Ton retour')
+        .setStyle(TextInputStyle.Paragraph)
+        .setMinLength(5)
+        .setMaxLength(1500)
+        .setRequired(true),
+    ));
+  await interaction.showModal(modal);
+}
+
+/** Formulaire `bcfbm:<broadcastId>` : un avis par envoi, plusieurs par personne autorises. */
+export async function handleBroadcastFeedbackSubmit(interaction: ModalSubmitInteraction): Promise<void> {
+  const broadcastId = interaction.customId.split(':')[1];
+  const { broadcast, closed } = await findOpenFeedbackBroadcast(broadcastId);
+  if (!broadcastId || !broadcast) {
+    await interaction.reply({
+      content: closed ? 'Cette demande d’avis est close.' : 'Cette demande d’avis n’existe plus.',
+      flags: [MessageFlags.Ephemeral],
+    });
+    return;
+  }
+
+  const content = interaction.fields.getTextInputValue('content').trim().slice(0, 1500);
+  if (!content) {
+    await interaction.reply({ content: 'Ton retour est vide.', flags: [MessageFlags.Ephemeral] });
+    return;
+  }
+  await prisma.broadcastFeedback.create({
+    data: { broadcastId, userId: interaction.user.id, guildId: interaction.guildId ?? 'dm', content },
+  });
+  await interaction.reply({ content: 'Merci, ton retour a bien été transmis à l’équipe Kotbo.', flags: [MessageFlags.Ephemeral] });
+}
+
 /** Persiste le detail d'envoi et met le broadcast dans son etat final. */
 export async function finalizeBroadcast(
   broadcastId: string,
@@ -599,7 +762,9 @@ export function startBroadcastScheduler(
             channelPref: broadcast.channelPref as BroadcastChannelPref,
             allowedIds: [...allowed],
             channelMap,
+            translations: broadcast.translations as BroadcastTranslations | null,
             poll: { broadcastId: broadcast.id, options: broadcast.pollOptions },
+            feedback: broadcast.feedbackLabel ? { broadcastId: broadcast.id, label: broadcast.feedbackLabel } : undefined,
           });
 
           await finalizeBroadcast(broadcast.id, deliveries, allowed.size);

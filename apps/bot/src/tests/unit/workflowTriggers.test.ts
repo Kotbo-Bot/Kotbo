@@ -12,6 +12,8 @@ import {
   parseEmojiFilter,
   parseMessageFilter,
   readTriggerChannelFilter,
+  RECIPE_TEMPLATES,
+  SUGGESTION_STATUS_LABELS,
   TRIGGER_GROUP_LABELS,
   TRIGGER_LIBRARY,
   type Recipe,
@@ -660,6 +662,18 @@ describe('déclencheurs de formulaire et de suggestion', () => {
     expect(keys('OnSuggestionCreated')).not.toContain('suggestion.isApproved');
   });
 
+  test('la suggestion traitée expose aussi le statut précédent, « en cours », le titre et la catégorie', () => {
+    expect(paths('OnSuggestionResolved')).toEqual(expect.arrayContaining(['previousStatusLabel', 'title', 'category']));
+    expect(keys('OnSuggestionResolved')).toContain('suggestion.isInProgress');
+    expect(SUGGESTION_STATUS_LABELS.IN_PROGRESS).toBeDefined();
+  });
+
+  test('le seuil de votes atteint expose la suggestion, ses votes et son message', () => {
+    expect(paths('OnSuggestionThresholdReached')).toEqual(expect.arrayContaining([
+      'member', 'content', 'title', 'category', 'upvotes', 'downvotes', 'threshold', 'message',
+    ]));
+  });
+
   test('« la suggestion est approuvée » survit à la réouverture et filtre à l\'exécution', async () => {
     const recipe: Recipe = {
       trigger: { type: 'OnSuggestionResolved' },
@@ -708,5 +722,125 @@ describe('déclencheurs de formulaire et de suggestion', () => {
 
     const rejected = await run({ statusLabel: 'Refusée', isRejected: true });
     expect(rejected.calls).toEqual([]);
+  });
+});
+
+describe('déclencheurs de réputation', () => {
+  test('remercier et être remercié partent du même vote, rattachés au module Réputation', () => {
+    for (const type of ['OnReputationGiven', 'OnReputationReceived']) {
+      const def = getNodeDef(type);
+      expect(def?.category).toBe('trigger');
+      expect(def?.event).toBe('reputation:given');
+      expect(def?.module).toBe('reputation');
+      expect(def?.config?.some((field) => field.key === 'channelIds')).toBe(true);
+    }
+  });
+
+  test('« membre » désigne celui qui remercie, puis celui qui est remercié', () => {
+    const paths = (type: string) => contextTokens(type).map((token) => token.path);
+    expect(paths('OnReputationGiven')).toEqual(expect.arrayContaining(['member.displayName', 'receiver.displayName', 'reason', 'reputation', 'channel.name']));
+    expect(paths('OnReputationReceived')).toEqual(expect.arrayContaining(['member.displayName', 'giver.displayName', 'reason', 'reputation', 'channel.name']));
+    expect(paths('OnReputationGiven')).not.toContain('giver.displayName');
+    expect(paths('OnReputationReceived')).not.toContain('receiver.displayName');
+  });
+
+  test('une recette « être remercié » se compile et se relit à l\'identique', () => {
+    const recipe: Recipe = {
+      trigger: { type: 'OnReputationReceived' },
+      steps: [{
+        id: 'log', kind: 'action', action: 'SendLogMessage',
+        values: { text: { from: 'text', template: '{giver.displayName} remercie {member.displayName} ({reputation} points) : {reason}' } },
+      }],
+    };
+    const graph = compileRecipe(recipe);
+    expect(hasBlockingIssue(validateGraph(graph))).toBe(false);
+    expect(decompileGraph(graph)).toEqual(recipe);
+  });
+
+  test('la condition sur la réputation n\'est proposée qu\'aux deux déclencheurs de remerciement', () => {
+    const keys = (type: string) => availableConditions(type).map((condition) => condition.key);
+    expect(keys('OnReputationGiven')).toContain('reputation.points');
+    expect(keys('OnReputationReceived')).toContain('reputation.points');
+    // La dette de clan expose aussi un total : la condition ne doit pas s'y glisser.
+    expect(keys('OnClanDebtOpened')).not.toContain('reputation.points');
+    expect(keys('OnLevelUp')).not.toContain('reputation.points');
+  });
+
+  test('les modèles de réputation se compilent et se relisent à l\'identique', () => {
+    for (const id of ['reputation-thanks-dm', 'reputation-milestone']) {
+      const template = RECIPE_TEMPLATES.find((entry) => entry.id === id);
+      expect(template).toBeDefined();
+      const recipe = template!.build();
+      expect(recipe.trigger.type).toBe('OnReputationReceived');
+      // L'id d'un test de condition est tiré au hasard, et un salon laissé vide à choisir n'est pas relu.
+      const normalize = (value: Recipe | null) => JSON.parse(JSON.stringify(value), (key, node) => {
+        if (node && typeof node === 'object' && 'condition' in node) return { ...node, id: 'ID' };
+        return key === 'channel' && node?.channelId === '' ? undefined : node;
+      });
+      expect(normalize(decompileGraph(compileRecipe(recipe)))).toEqual(normalize(recipe));
+    }
+  });
+
+  test('le message privé au membre remercié est prêt à l\'emploi, sans réglage', () => {
+    const recipe = RECIPE_TEMPLATES.find((entry) => entry.id === 'reputation-thanks-dm')!.build();
+    expect(hasBlockingIssue(validateGraph(compileRecipe(recipe)))).toBe(false);
+  });
+});
+
+describe('déclencheurs de saison', () => {
+  test('ouverture et clôture sont rattachées au module Saisons', () => {
+    expect(getNodeDef('OnSeasonStarted')).toMatchObject({ category: 'trigger', event: 'season:started', module: 'seasons' });
+    expect(getNodeDef('OnSeasonEnded')).toMatchObject({ category: 'trigger', event: 'season:ended', module: 'seasons' });
+  });
+
+  test('la clôture expose le premier comme membre, avec la saison et ses chiffres', () => {
+    const paths = (type: string) => contextTokens(type).map((token) => token.path);
+    expect(paths('OnSeasonStarted')).toEqual(expect.arrayContaining(['season', 'number']));
+    expect(paths('OnSeasonStarted')).not.toContain('member.displayName');
+    expect(paths('OnSeasonEnded')).toEqual(expect.arrayContaining(['member.displayName', 'season', 'number', 'participants', 'winnerXp']));
+  });
+
+  test('une recette « fin de saison » se compile et se relit à l\'identique', () => {
+    const recipe: Recipe = {
+      trigger: { type: 'OnSeasonEnded' },
+      steps: [{
+        id: 'log', kind: 'action', action: 'SendLogMessage',
+        values: { text: { from: 'text', template: '{season} terminée : {member.displayName} gagne avec {winnerXp} XP ({participants} participants)' } },
+      }],
+    };
+    const graph = compileRecipe(recipe);
+    expect(hasBlockingIssue(validateGraph(graph))).toBe(false);
+    expect(decompileGraph(graph)).toEqual(recipe);
+  });
+});
+
+describe('déclencheurs de Starlight', () => {
+  test('mise à la une et retrait, rattachés au module Starlight, filtrables par salon', () => {
+    for (const [type, event] of [['OnStarboardFeatured', 'starboard:featured'], ['OnStarboardRemoved', 'starboard:removed']]) {
+      const def = getNodeDef(type);
+      expect(def?.category).toBe('trigger');
+      expect(def?.event).toBe(event);
+      expect(def?.module).toBe('starboard');
+      expect(def?.config?.some((field) => field.key === 'channelIds')).toBe(true);
+    }
+  });
+
+  test('« membre » est l’auteur ; score, compte et motif exposés', () => {
+    const paths = (type: string) => contextTokens(type).map((token) => token.path);
+    expect(paths('OnStarboardFeatured')).toEqual(expect.arrayContaining(['member.displayName', 'channel.name', 'score', 'featuredCount', 'messageUrl', 'starMessageUrl']));
+    expect(paths('OnStarboardRemoved')).toEqual(expect.arrayContaining(['member.displayName', 'channel.name', 'score', 'reason']));
+  });
+
+  test('une recette « message à la une » se compile et se relit à l\'identique', () => {
+    const recipe: Recipe = {
+      trigger: { type: 'OnStarboardFeatured' },
+      steps: [{
+        id: 'log', kind: 'action', action: 'SendLogMessage',
+        values: { text: { from: 'text', template: '{member.displayName} passe à la une ({score} points, {featuredCount} au total) : {messageUrl}' } },
+      }],
+    };
+    const graph = compileRecipe(recipe);
+    expect(hasBlockingIssue(validateGraph(graph))).toBe(false);
+    expect(decompileGraph(graph)).toEqual(recipe);
   });
 });

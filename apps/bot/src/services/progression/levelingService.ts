@@ -36,6 +36,7 @@ import {
 } from './rankCardDecor.js';
 import { creditRpFromXp } from './ranked/rankedService.js';
 import { visiblePresenceStatus } from '../core/presencePrivacyService.js';
+import { isModuleEnabled } from '../core/moduleGate.js';
 import { kotboEventBus } from '@kotbo/core';
 import prisma, { prismaRead } from '../../utils/db.js';
 import { upsertRetryingRace } from '../../utils/upsertRetry.js';
@@ -748,6 +749,10 @@ async function consumeDailyXpAllowance(guildId: string, userId: string, amount: 
  * `rankedSource` branche le RP compétitif sur ce même gain. Il n'est renseigné
  * que par les sources d'activité, pour la même raison : un ajustement de staff
  * ne doit pas faire grimper un membre dans le classement.
+ *
+ * Le module est vérifié ici et non chez l'appelant : drops, quêtes, boutique,
+ * événements, réponses automatiques et récompenses du site versent tous de
+ * l'XP, et aucun ne savait que le leveling pouvait être éteint.
  */
 export async function addXp(
   guildId: string,
@@ -758,6 +763,7 @@ export async function addXp(
   options: { applyDailyCap?: boolean; rankedSource?: 'text' | 'voice' } = {},
 ) {
   if (amount <= 0) return;
+  if (!(await isModuleEnabled(guildId, 'leveling'))) return;
 
   const config = await getOrCreateLevelConfig(guildId).catch(() => null);
   const curve = config ? levelCurveFromConfig(config) : DEFAULT_LEVEL_CURVE;
@@ -948,6 +954,7 @@ export function totalLevelUpCoins(level: number): number {
  */
 async function getLevelUpCoinReward(guildId: string, newLevel: number): Promise<{ amount: number; currencyEmoji: string; currencyName: string } | null> {
   try {
+    if (!(await isModuleEnabled(guildId, 'economy'))) return null;
     const { getOrCreateEconomyConfig } = await import('../features/economyService.js');
     const econConfig = await getOrCreateEconomyConfig(guildId).catch(() => null);
     if (!econConfig || !econConfig.enabled) return null;

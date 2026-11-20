@@ -6,6 +6,7 @@
   montré à part quand la période n'a encore rien.
 -->
 <script lang="ts">
+  import UserDisplay from '../UserDisplay.svelte';
   import { untrack } from 'svelte';
   import { Callout, SectionCard } from '../ui';
   import ActivityChartCard, { type ChartMetric } from './ActivityChartCard.svelte';
@@ -14,7 +15,6 @@
   import BarList from './BarList.svelte';
   import AnalyticsSkeleton from './AnalyticsSkeleton.svelte';
   import { fetchCommandAnalytics, type CommandAnalytics } from '../../api';
-  import { memberAvatarSrc } from '../../discordMedia';
   import { m } from '../../i18n';
   import { analyticsLoader } from './analyticsLoader.svelte';
   import { analyticsAnnotations } from './annotations.svelte';
@@ -152,8 +152,7 @@
               <li>
                 <button type="button" disabled={!onOpenMember} class="user" onclick={() => onOpenMember?.(u.userId, u.name ?? '')}>
                   <span class="user__rank">{i + 1}</span>
-                  <img class="user__avatar" src={memberAvatarSrc(u.avatarUrl, u.name, u.userId)} alt="" width="24" height="24" loading="lazy" />
-                  <span class="user__name">{u.name ?? m.an_member_fallback()}</span>
+                  <UserDisplay userId={u.userId} name={u.name} avatarUrl={u.avatarUrl} size="sm" class="min-w-0 flex-1" />
                   <span class="user__meta">{m.anx_cmd_user_commands({ count: fmtNumber(u.commands) })}</span>
                   <span class="user__value">{fmtNumber(u.uses)}</span>
                 </button>
@@ -277,22 +276,7 @@
     color: var(--color-on-surface-variant);
   }
 
-  .user__avatar {
-    width: 1.5rem;
-    height: 1.5rem;
-    border-radius: 999px;
-    object-fit: cover;
-  }
 
-  .user__name {
-    flex: 1;
-    min-width: 0;
-    font-size: 0.875rem;
-    color: var(--color-on-surface);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
 
   .user__meta {
     flex-shrink: 0;

@@ -3,6 +3,8 @@
   import Button from './ui/Button.svelte';
   import { m } from '../i18n';
   import { portal } from '../actions/portal';
+  import { dialogFocus } from '../actions/dialogFocus';
+  import { scrollLock } from '../scrollLock';
 
   interface Props {
     open?: boolean;
@@ -21,10 +23,10 @@
 
   let {
     open = $bindable(false),
-    title = m.d7_confirm_required(),
+    title,
     description = '',
-    confirmLabel = m.d7_confirm(),
-    cancelLabel = m.d7_cancel(),
+    confirmLabel,
+    cancelLabel,
     variant = 'default',
     requireInput = '',
     impacts = [],
@@ -37,8 +39,8 @@
   let executing = $state(false);
 
   const VARIANTS = {
-    danger: { icon: 'AlertTriangle', tone: 'bg-error/10 text-error', button: 'danger' },
-    warning: { icon: 'AlertTriangle', tone: 'bg-warning/10 text-warning', button: 'primary' },
+    danger: { icon: 'AlertTriangle', tone: 'bg-error/10 text-on-error-container', button: 'danger' },
+    warning: { icon: 'AlertTriangle', tone: 'bg-warning/10 text-on-warning-container', button: 'primary' },
     default: { icon: 'Info', tone: 'bg-primary/10 text-primary', button: 'primary' },
   } as const;
 
@@ -63,88 +65,101 @@
     }
   }
 
-  function handleKeydown(e: KeyboardEvent) {
-    if (!open) return;
-    if (e.key === 'Escape') handleCancel();
-    if (e.key === 'Enter' && canConfirm && !executing) handleConfirm();
+  function handleSubmit(e: SubmitEvent) {
+    e.preventDefault();
+    handleConfirm();
   }
-</script>
 
-<svelte:window onkeydown={handleKeydown} />
+  // Focus de depart : le champ a recopier, sinon le choix le moins risque
+  // (Annuler quand l'action est destructrice). Entree active ce bouton : plus
+  // de validation par un second Entree sur le declencheur reste sous la fenetre.
+  const focusTarget = $derived(requireInput ? 'input' : variant === 'danger' ? 'cancel' : 'confirm');
+
+  const titleId = $props.id();
+  const descriptionId = `${titleId}-description`;
+</script>
 
 {#if open}
   <div
     use:portal
+    use:scrollLock
     class="confirm-modal fixed inset-0 flex items-center justify-center p-4"
-    onclick={handleCancel}
-    onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleCancel(); }}
-    role="dialog"
-    tabindex="-1"
-    aria-modal="true"
-    aria-labelledby="confirm-modal-title"
-    aria-describedby={description ? 'confirm-modal-description' : undefined}
+    role="presentation"
   >
-    <div class="absolute inset-0 bg-black/40 animate-in fade-in duration-150"></div>
+    <!-- Au clavier, on annule avec Echap ou le bouton Annuler. -->
+    <div class="absolute inset-0 bg-black/40 animate-in fade-in duration-150" onclick={handleCancel} aria-hidden="true"></div>
 
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <!--
+      Le role dialog va sur le panneau, pas sur le formulaire : un <form> ne
+      peut pas porter de role interactif. Le formulaire, dedans, ne garde que
+      la soumission (Entree valide le bouton de confirmation).
+    -->
     <div
-      class="confirm-modal__panel relative z-10 w-full max-w-md bg-surface-container-lowest border border-outline-variant rounded-xl shadow-lg p-5 space-y-5 animate-in fade-in slide-up duration-150"
-      onclick={(e) => e.stopPropagation()}
-      onkeydown={(e) => e.stopPropagation()}
+      use:dialogFocus={{ onEscape: handleCancel }}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
+      aria-describedby={description ? descriptionId : undefined}
+      tabindex="-1"
+      class="confirm-modal__panel relative z-10 w-full max-w-md bg-surface-container-lowest border border-outline-variant rounded-xl shadow-lg p-5 animate-in fade-in slide-up duration-150 focus:outline-none"
     >
-      <div class="flex items-start gap-3">
-        <span class="w-9 h-9 rounded-full flex items-center justify-center shrink-0 {config.tone}" aria-hidden="true">
-          <Papicon icon={config.icon} size={17} />
-        </span>
-        <div class="min-w-0 pt-1.5">
-          <h3 id="confirm-modal-title" class="text-base font-semibold text-on-surface leading-snug">{title}</h3>
-          {#if description}
-            <p id="confirm-modal-description" class="text-sm text-on-surface-variant mt-1.5 leading-relaxed">{description}</p>
-          {/if}
-        </div>
-      </div>
-
-      {#if impacts.length > 0}
-        <div class="rounded-lg border border-outline-variant bg-surface-container-low px-3.5 py-3">
-          <p class="text-sm font-medium text-on-surface">{m.confirm_impacts_title()}</p>
-          <ul class="mt-1.5 space-y-1">
-            {#each impacts as impact}
-              <li class="flex items-start gap-2 text-sm text-on-surface-variant">
-                <Papicon icon="ArrowRight" size={13} class="mt-1 shrink-0" />
-                <span>{impact}</span>
-              </li>
-            {/each}
-          </ul>
-        </div>
-      {/if}
-
-      {#if requireInput}
-        <label class="field gap-1.5">
-          <span class="text-sm text-on-surface-variant">
-            {m.d7_type_to_confirm_pre()} <span class="font-mono font-medium text-on-surface">{requireInput}</span> {m.d7_type_to_confirm_post()}
+      <form onsubmit={handleSubmit} class="space-y-5">
+        <div class="flex items-start gap-3">
+          <span class="w-9 h-9 rounded-full flex items-center justify-center shrink-0 {config.tone}" aria-hidden="true">
+            <Papicon icon={config.icon} size={17} />
           </span>
-          <input
-            type="text"
-            bind:value={inputValue}
-            placeholder={requireInput}
-            autocomplete="off"
-            spellcheck="false"
-            class="input font-mono"
-          />
-        </label>
-      {/if}
+          <div class="min-w-0 pt-1.5">
+            <h3 id={titleId} class="text-base font-semibold text-on-surface leading-snug">{title ?? m.d7_confirm_required()}</h3>
+            {#if description}
+              <p id={descriptionId} class="text-sm text-on-surface-variant mt-1.5 leading-relaxed">{description}</p>
+            {/if}
+          </div>
+        </div>
 
-      <div class="confirm-modal__actions flex items-center justify-end gap-2">
-        <Button variant="ghost" onclick={handleCancel}>{cancelLabel}</Button>
-        <Button
-          variant={config.button}
-          onclick={handleConfirm}
-          disabled={!canConfirm}
-          loading={executing || loading}
-        >
-          {confirmLabel}
-        </Button>
-      </div>
+        {#if impacts.length > 0}
+          <div class="rounded-lg border border-outline-variant bg-surface-container-low px-3.5 py-3">
+            <p class="text-sm font-medium text-on-surface">{m.confirm_impacts_title()}</p>
+            <ul class="mt-1.5 space-y-1">
+              {#each impacts as impact}
+                <li class="flex items-start gap-2 text-sm text-on-surface-variant">
+                  <Papicon icon="ArrowRight" size={13} class="mt-1 shrink-0" />
+                  <span>{impact}</span>
+                </li>
+              {/each}
+            </ul>
+          </div>
+        {/if}
+
+        {#if requireInput}
+          <label class="field gap-1.5">
+            <span class="text-sm text-on-surface-variant">
+              {m.d7_type_to_confirm_pre()} <span class="font-mono font-medium text-on-surface">{requireInput}</span> {m.d7_type_to_confirm_post()}
+            </span>
+            <input
+              type="text"
+              bind:value={inputValue}
+              placeholder={requireInput}
+              autocomplete="off"
+              spellcheck="false"
+              class="input font-mono"
+              data-autofocus={focusTarget === 'input' || undefined}
+            />
+          </label>
+        {/if}
+
+        <div class="confirm-modal__actions flex items-center justify-end gap-2">
+          <Button variant="ghost" onclick={handleCancel} data-autofocus={focusTarget === 'cancel' || undefined}>{cancelLabel ?? m.d7_cancel()}</Button>
+          <Button
+            type="submit"
+            variant={config.button}
+            data-autofocus={focusTarget === 'confirm' || undefined}
+            disabled={!canConfirm}
+            loading={executing || loading}
+          >
+            {confirmLabel ?? m.d7_confirm()}
+          </Button>
+        </div>
+      </form>
     </div>
   </div>
 {/if}

@@ -21,6 +21,7 @@ import { UserFacingError } from '../../utils/userFacingError.js';
 import { pickAbsenceSuperiors } from './absenceSuperiors.js';
 import { syncDoingListItemFromTask } from './doingListTaskSync.js';
 
+import { fetchGuildChannel } from '../../utils/panelMessage.js';
 type AbsenceMutableStatus = 'PENDING' | 'ACKNOWLEDGED' | 'APPROVED' | 'REJECTED' | 'CANCELED' | 'ENDED';
 
 export const getAbsences = async (guildId: string) => {
@@ -176,7 +177,7 @@ const sendAbsenceDiscordRelay = async (params: {
     const guild = client.guilds.cache.get(params.guildId) ?? await client.guilds.fetch(params.guildId).catch(() => null);
     if (guild) {
       await Promise.all(Array.from(targetChannelIds).map(async (channelId) => {
-        const channel = await client.channels.fetch(channelId).catch(() => null);
+        const channel = await fetchGuildChannel(client, params.guildId, channelId);
         if (!channel || !('send' in channel)) return;
 
         await channel.send({
@@ -557,12 +558,12 @@ export const createMeeting = async (
       throw new MeetingValidationError("Impossible d'accéder au serveur Discord pour créer la réunion.");
     }
 
-    const announcementChannel = await client.channels.fetch(announcementChannelId).catch(() => null);
+    const announcementChannel = await fetchGuildChannel(client, guildId, announcementChannelId);
     if (!announcementChannel || (announcementChannel.type !== ChannelType.GuildText && announcementChannel.type !== ChannelType.GuildAnnouncement)) {
       throw new MeetingValidationError("Le salon d'annonce configuré est introuvable ou n'est pas un salon texte/annonces.");
     }
 
-    const voiceChannel = await client.channels.fetch(voiceChannelId).catch(() => null);
+    const voiceChannel = await fetchGuildChannel(client, guildId, voiceChannelId);
     if (!voiceChannel || (voiceChannel.type !== ChannelType.GuildVoice && voiceChannel.type !== ChannelType.GuildStageVoice)) {
       throw new MeetingValidationError('Le salon vocal/conférence configuré est introuvable ou invalide.');
     }
@@ -660,9 +661,9 @@ export const createMeeting = async (
   }
 };
 
-export const updateMeetingStatus = async (id: string, status: 'SCHEDULED' | 'COMPLETED' | 'CANCELED') => {
+export const updateMeetingStatus = async (guildId: string, id: string, status: 'SCHEDULED' | 'COMPLETED' | 'CANCELED') => {
   const updated = await prisma.staffMeeting.update({
-    where: { id },
+    where: { id, guildId },
     data: { status }
   });
   broadcastDashboardStateChange(updated.guildId, 'meetings_updated');
@@ -689,8 +690,9 @@ export const updateMeeting = async (
     timezone?: string | null;
   }
 ) => {
+  // `guildId` dans le filtre : l'identifiant d'une réunion fuit dans les boutons de présence.
   const meeting = await prisma.staffMeeting.update({
-    where: { id },
+    where: { id, guildId },
     data,
   });
 
@@ -742,8 +744,8 @@ export const deleteMeeting = async (
   id: string, 
   options: { deleteEvent?: boolean; deleteMessage?: boolean; deleteNotifications?: boolean } = { deleteEvent: true, deleteMessage: false, deleteNotifications: false }
 ) => {
-  const meeting = await prisma.staffMeeting.findUnique({
-    where: { id },
+  const meeting = await prisma.staffMeeting.findFirst({
+    where: { id, guildId },
     select: { discordEventId: true, discordMessageId: true, title: true }
   });
 
@@ -772,7 +774,7 @@ export const deleteMeeting = async (
         select: { meetingAnnouncementChannelId: true }
       });
       if (guildConfig?.meetingAnnouncementChannelId) {
-        const channel = await client.channels.fetch(guildConfig.meetingAnnouncementChannelId).catch(() => null);
+        const channel = await fetchGuildChannel(client, guildId, guildConfig.meetingAnnouncementChannelId);
         if (channel?.isTextBased()) {
           const msg = await channel.messages.fetch(meeting.discordMessageId).catch(() => null);
           if (msg) {
@@ -802,7 +804,7 @@ export const deleteMeeting = async (
   }
 
   const deleted = await prisma.staffMeeting.delete({
-    where: { id }
+    where: { id, guildId }
   });
   broadcastDashboardStateChange(guildId, 'meetings_updated');
   return deleted;
@@ -964,7 +966,7 @@ export const updateMeetingAnnouncement = async (client: Client, meetingId: strin
 
   if (!guildConfig?.meetingAnnouncementChannelId) return;
 
-  const channel = await client.channels.fetch(guildConfig.meetingAnnouncementChannelId).catch(() => null);
+  const channel = await fetchGuildChannel(client, meeting.guildId, guildConfig.meetingAnnouncementChannelId);
   if (!channel || !channel.isTextBased()) return;
 
   const message = await channel.messages.fetch(meeting.discordMessageId).catch(() => null);
@@ -1170,7 +1172,7 @@ export const upsertProcedure = async (
 ) => {
   if (id) {
     return prisma.staffProcedure.update({
-      where: { id },
+      where: { id, guildId },
       data: { title, content, sortOrder }
     });
   } else {
@@ -1193,9 +1195,9 @@ export const upsertProcedure = async (
   }
 };
 
-export const deleteProcedure = async (id: string) => {
+export const deleteProcedure = async (guildId: string, id: string) => {
   return prisma.staffProcedure.delete({
-    where: { id }
+    where: { id, guildId }
   });
 };
 
@@ -1802,8 +1804,8 @@ export const updateCall = async (
     invitees?: string[];
   }
 ) => {
-  const existingCall = await prisma.staffCall.findUnique({
-    where: { id },
+  const existingCall = await prisma.staffCall.findFirst({
+    where: { id, guildId },
     include: { invitees: true }
   });
   if (!existingCall) throw new Error("Appel introuvable.");
@@ -1832,7 +1834,7 @@ export const updateCall = async (
   }
 
   const updatedCall = await prisma.staffCall.update({
-    where: { id },
+    where: { id, guildId },
     data: updatePayload,
     include: {
       creator: true,
@@ -1854,7 +1856,7 @@ export const updateCall = async (
 };
 
 export const deleteCall = async (client: Client, guildId: string, id: string) => {
-  const call = await prisma.staffCall.findUnique({ where: { id } });
+  const call = await prisma.staffCall.findFirst({ where: { id, guildId } });
   if (!call) return;
 
   if (call.discordChannelId && call.isTempChannel && call.channelMode === 'CREATE_NEW') {
@@ -1867,7 +1869,7 @@ export const deleteCall = async (client: Client, guildId: string, id: string) =>
     }
   }
 
-  return prisma.staffCall.delete({ where: { id } });
+  return prisma.staffCall.delete({ where: { id, guildId } });
 };
 
 // ==========================================

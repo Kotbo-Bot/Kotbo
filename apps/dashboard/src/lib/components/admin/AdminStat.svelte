@@ -36,9 +36,9 @@
 
   const tones: Record<string, { chip: string; accent: string }> = {
     primary: { chip: 'bg-primary/12 text-primary', accent: 'var(--primary-color)' },
-    success: { chip: 'bg-success/12 text-success', accent: '#10b981' },
-    warning: { chip: 'bg-warning/12 text-warning', accent: '#f59e0b' },
-    danger: { chip: 'bg-error/12 text-error', accent: '#ef4444' },
+    success: { chip: 'bg-success/12 text-on-success-container', accent: '#10b981' },
+    warning: { chip: 'bg-warning/12 text-on-warning-container', accent: '#f59e0b' },
+    danger: { chip: 'bg-error/12 text-on-error-container', accent: '#ef4444' },
     info: { chip: 'bg-sky-500/12 text-sky-500', accent: '#0ea5e9' },
     neutral: { chip: 'bg-on-surface/8 text-on-surface-variant', accent: '#71717a' },
   };
@@ -51,19 +51,19 @@
 <svelte:element
   this={href ? 'a' : 'div'}
   href={href || undefined}
-  class="group relative rounded-2xl border border-outline-variant/25 bg-surface-container-lowest/70 p-4 flex flex-col gap-3 transition-colors
-    {href ? 'hover:border-primary/40 hover:bg-surface-container-low/70 focus-visible:outline-2 focus-visible:outline-primary' : ''}"
+  class="admin-surface admin-press group relative p-5 flex flex-col gap-3
+    {href ? 'hover:bg-surface-container-low focus-visible:outline-2 focus-visible:outline-primary' : ''}"
 >
   <div class="flex items-start justify-between gap-3">
     <div class="min-w-0">
-      <p class="text-xs font-semibold text-on-surface-variant truncate">{label}</p>
+      <p class="text-body-sm font-semibold text-on-surface-variant truncate">{label}</p>
       {#if loading}
         <div class="mt-2 h-8 w-24 rounded-lg bg-on-surface/8 animate-pulse"></div>
       {:else}
-        <p class="text-[26px] leading-none font-semibold text-on-surface mt-2 tabular-nums truncate">{value}</p>
+        <p class="font-headline text-[32px] leading-none font-bold tracking-[-0.02em] text-on-surface mt-2.5 tabular-nums truncate">{value}</p>
       {/if}
     </div>
-    <div class="w-9 h-9 shrink-0 rounded-xl flex items-center justify-center {toneConfig.chip}">
+    <div class="w-9 h-9 shrink-0 rounded-[11px] flex items-center justify-center {toneConfig.chip}">
       <Papicon {icon} size={17} />
     </div>
   </div>
@@ -76,8 +76,8 @@
             {deltaNeutral
               ? 'bg-on-surface/8 text-on-surface-variant'
               : deltaPositive
-                ? 'bg-success/12 text-success'
-                : 'bg-error/12 text-error'}"
+                ? 'bg-success/12 text-on-success-container'
+                : 'bg-error/12 text-on-error-container'}"
         >
           {#if !deltaNeutral}
             <Papicon icon={deltaPositive ? 'ArrowUp' : 'ArrowDown'} size={10} />

@@ -2,6 +2,13 @@
 // REPUTATION - SYSTÈME DE RECONNAISSANCE COMMUNAUTAIRE
 // ============================================================================
 
+/// `VOTE` : un remerciement entre membres. `ADJUSTMENT` : points donnés ou
+/// retirés à la main par le staff depuis le dashboard, sans jour ni gains.
+enum ReputationVoteKind {
+  VOTE
+  ADJUSTMENT
+}
+
 model ReputationVote {
   id String @id @default(cuid())
 
@@ -9,18 +16,93 @@ model ReputationVote {
   giverId  String // Celui qui donne le +rep
   receiverId String // Celui qui reçoit
 
-  value   Int    @default(1) // +1 ou -1
+  kind    ReputationVoteKind @default(VOTE)
+  /// +1 pour un vote ; le nombre de points, signé, pour un ajustement.
+  value   Int    @default(1)
   reason  String?
+
+  /// Gains réellement versés au receveur pour ce vote, repris s'il est retiré.
+  xpGranted    Int @default(0)
+  coinsGranted Int @default(0)
+
+  /// Message remercié, quand le vote vient d'un message (menu contextuel ou
+  /// réaction). Le lien se reconstruit avec l'id du serveur.
+  channelId String?
+  messageId String?
 
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
 
   /// Jour du vote (YYYY-MM-DD) dans le fuseau du serveur : porte la contrainte « un vote par personne et par jour ».
-  day       String
+  /// `null` pour un ajustement, que la contrainte ne concerne pas.
+  day       String?
   createdAt DateTime @default(now())
 
   @@unique([guildId, giverId, receiverId, day])
   @@index([guildId, receiverId])
   @@index([guildId, giverId, day])
   @@index([receiverId])
+  /// Historique du dashboard : du plus récent au plus ancien.
+  @@index([guildId, createdAt])
   @@map("reputation_votes")
+}
+
+/// Réglages du module, une ligne par serveur, créée à la première sauvegarde.
+///
+/// Pas de champ `enabled` : l'activation passe par la page Modules
+/// (`isModuleEnabled(guildId, 'reputation')`), aucun service ne lit cette
+/// table sans passer par cette garde.
+model ReputationConfig {
+  guildId String @id
+
+  /// Votes qu'un membre peut donner par jour du serveur.
+  dailyLimit Int @default(3)
+
+  /// Remercier en réagissant avec `reactionEmoji` sous un message. Unicode brut
+  /// ou id d'emoji custom, comme pour Starlight.
+  reactionEnabled Boolean @default(false)
+  reactionEmoji   String?
+
+  /// Gains du membre remercié, par remerciement reçu. `0` = aucun gain ; ils
+  /// ne sont versés que si le module concerné (Niveaux, Économie) est actif.
+  xpPerRep    Int @default(0)
+  coinsPerRep Int @default(0)
+
+  /// Garde-fous du donneur : âge du compte et ancienneté sur le serveur, en
+  /// jours. `0` = aucune exigence.
+  minAccountAgeDays Int @default(0)
+  minMemberDays     Int @default(0)
+  /// Jours avant de pouvoir remercier à nouveau le même membre. `1` = le
+  /// lendemain, comme sans réglage.
+  sameMemberCooldownDays Int @default(1)
+  /// Rôles qui ne peuvent ni remercier ni être remerciés, salons où l'on ne
+  /// remercie pas.
+  excludedRoleIds    String[] @default([])
+  excludedChannelIds String[] @default([])
+
+  /// Salon où annoncer un palier atteint. Vide = pas d'annonce, le rôle est
+  /// donné en silence.
+  announceChannelId String?
+
+  guild Guild            @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  tiers ReputationTier[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("reputation_configs")
+}
+
+/// Palier : à `threshold` points de réputation reçus, le membre reçoit `roleId`.
+/// Les paliers se cumulent : atteindre le troisième ne retire pas les deux premiers.
+model ReputationTier {
+  id        String @id @default(cuid())
+  guildId   String
+  threshold Int
+  roleId    String
+
+  config ReputationConfig @relation(fields: [guildId], references: [guildId], onDelete: Cascade)
+
+  @@unique([guildId, threshold])
+  @@unique([guildId, roleId])
+  @@map("reputation_tiers")
 }

@@ -4,6 +4,7 @@ import prisma, { prismaRead } from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { cache } from '../../utils/cache.js';
 import { addXp } from '../progression/levelingService.js';
+import { isModuleEnabled } from '../core/moduleGate.js';
 
 function getDailyKey(): string {
   return new Date().toISOString().slice(0, 10);
@@ -149,6 +150,9 @@ async function rewardQuest(
   channelId?: string,
 ): Promise<void> {
   const { guildId } = quest;
+  // Les pièces appartiennent à l'économie : éteinte, la quête se solde quand
+  // même, sans créditer un solde que plus rien n'affiche ni ne dépense.
+  const rewardCoins = quest.rewardCoins > 0 && (await isModuleEnabled(guildId, 'economy')) ? quest.rewardCoins : 0;
 
   const paid = await prisma.$transaction(async (tx) => {
     const claimed = await tx.questProgress.updateMany({
@@ -159,11 +163,11 @@ async function rewardQuest(
 
     // Upsert et non updateMany : un membre qui n'a jamais touché à l'économie n'a pas
     // encore de profil, et la quête passait payée sans qu'il reçoive une pièce.
-    if (quest.rewardCoins > 0) {
+    if (rewardCoins > 0) {
       await tx.rpgProfile.upsert({
         where: { guildId_userId: { guildId, userId } },
-        update: { balance: { increment: quest.rewardCoins } },
-        create: { guildId, userId, balance: quest.rewardCoins },
+        update: { balance: { increment: rewardCoins } },
+        create: { guildId, userId, balance: rewardCoins },
       });
     }
     return true;

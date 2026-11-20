@@ -5,38 +5,32 @@
  * dans `services/core/homeTasksService.ts` ; la route ne fait que resoudre le
  * lecteur.
  */
-import { IncomingMessage, ServerResponse } from 'node:http';
-import { Client } from 'discord.js';
+import { Hono } from 'hono';
+import type { Client } from 'discord.js';
 import { logger } from '../../../utils/logger.js';
-import { json, type AuthClaims, type DashboardAccess } from '../../shared.js';
-import { jsonFailure } from '../../shared/failure.js';
 import { buildHomeTasks } from '../../../services/core/homeTasksService.js';
 import { getCachedFeatureAccess } from './featureGate.js';
+import { fail, guildRoute, send } from '../../hono/dashboard/kit.js';
 
-export async function handleHomeTasksRoutes(
-  req: IncomingMessage,
-  res: ServerResponse,
-  parts: string[],
-  client: Client,
-  user: AuthClaims,
-  guildId: string,
-  access: DashboardAccess,
-): Promise<boolean> {
-  if (parts[4] !== 'home-tasks') return false;
-  if (parts.length !== 5 || req.method !== 'GET') return false;
+export function createHomeTasksRouter(client: Client) {
+  const router = new Hono();
 
-  try {
-    const featureAccess = await getCachedFeatureAccess(client, guildId, access, user.userId);
-    const data = await buildHomeTasks(client, guildId, {
-      userId: user.userId,
-      canManageSettings: access.canManageSettings,
-      canView: (featureKey) => featureAccess[featureKey]?.canView !== false,
-    });
-    json(res, 200, data);
-  } catch (err) {
-    logger.error('HomeTasksAPI', 'Error building home tasks:', err);
-    jsonFailure(res, err, 'Erreur lors du calcul des sujets à traiter', 'HomeTasksAPI');
-  }
+  router.get('/api/dashboard/guilds/:guildId/home-tasks', ...guildRoute(client, { invalidateCache: false }), async (c) => {
+    const guildId = c.req.param('guildId');
+    const access = c.var.effectiveAccess;
+    const userId = c.var.dashboardUser.userId;
+    try {
+      const featureAccess = await getCachedFeatureAccess(client, guildId, access, userId);
+      return send(c, await buildHomeTasks(client, guildId, {
+        userId,
+        canManageSettings: access.canManageSettings,
+        canView: (featureKey) => featureAccess[featureKey]?.canView !== false,
+      }));
+    } catch (err) {
+      logger.error('HomeTasksAPI', 'Error building home tasks:', err);
+      return fail(c, err, 'Erreur lors du calcul des sujets à traiter', 'HomeTasksAPI');
+    }
+  });
 
-  return true;
+  return router;
 }

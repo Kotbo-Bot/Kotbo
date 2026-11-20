@@ -64,30 +64,30 @@
   type Jailed = { userId: string; source: string; reason: string | null; releaseAt: string | null; createdAt: string };
 
   const JAIL_SOURCES: Record<string, string> = {
-    MANUAL: m.arx_jail_src_manual(),
-    SERVER_TAG: m.arx_jail_src_server_tag(),
-    ACCOUNT_AGE: m.arx_jail_src_account_age(),
-    DISCORD_QUARANTINE: m.arx_jail_src_discord(),
+    get MANUAL() { return m.arx_jail_src_manual(); },
+    get SERVER_TAG() { return m.arx_jail_src_server_tag(); },
+    get ACCOUNT_AGE() { return m.arx_jail_src_account_age(); },
+    get DISCORD_QUARANTINE() { return m.arx_jail_src_discord(); },
     HONEYPOT: 'Honeypot',
-    VISION: m.sec_tab_antiraid_vision(),
+    get VISION() { return m.sec_tab_antiraid_vision(); },
   };
 
   const SANCTION_OPTIONS = [
-    { value: 'DELETE', label: m.arx_sanction_delete_only() },
-    { value: 'WARN', label: m.arx_sanction_warn() },
+    { value: 'DELETE', get label() { return m.arx_sanction_delete_only(); } },
+    { value: 'WARN', get label() { return m.arx_sanction_warn(); } },
     { value: 'TIMEOUT', label: 'Timeout' },
-    { value: 'JAIL', label: m.arx_jail_title() },
-    { value: 'KICK', label: m.arx_sanction_kick() },
+    { value: 'JAIL', get label() { return m.arx_jail_title(); } },
+    { value: 'KICK', get label() { return m.arx_sanction_kick(); } },
     { value: 'SOFTBAN', label: 'Softban' },
-    { value: 'BAN', label: m.arx_sanction_ban() },
+    { value: 'BAN', get label() { return m.arx_sanction_ban(); } },
   ];
   const DURATION_OPTIONS: { value: number | null; label: string }[] = [
     { value: 5, label: '5 minutes' },
-    { value: 60, label: m.arx_duration_1h() },
-    { value: 1440, label: m.arx_duration_1d() },
-    { value: 10080, label: m.arx_duration_7d() },
-    { value: 43200, label: m.arx_duration_30d() },
-    { value: null, label: m.arx_duration_permanent() },
+    { value: 60, get label() { return m.arx_duration_1h(); } },
+    { value: 1440, get label() { return m.arx_duration_1d(); } },
+    { value: 10080, get label() { return m.arx_duration_7d(); } },
+    { value: 43200, get label() { return m.arx_duration_30d(); } },
+    { value: null, get label() { return m.arx_duration_permanent(); } },
   ];
 
   let config = $state<Config>({});
@@ -123,7 +123,7 @@
   // La barre « Modifications non enregistrées » est celle de MainLayout.
   useUnsavedChanges({
     id: 'security-anti-raid',
-    label: m.nav_security_antiraid(),
+    get label() { return m.nav_security_antiraid(); },
     getConfig: () => config,
     getSaved: () => original,
     onSave: save,
@@ -374,7 +374,7 @@
     <span class="text-xs font-medium text-on-surface-variant">{label}</span>
     <select
       bind:value={config[field]}
-      class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
+      class="mt-1 w-full rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface"
     >
       <option value={null}>{m.common_none()}</option>
       {#each list as item (item.id)}
@@ -390,7 +390,7 @@
     <span class="text-xs font-medium text-on-surface-variant">{label}</span>
     <select
       bind:value={config[field]}
-      class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
+      class="mt-1 w-full rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface"
     >
       <option value={null}>{m.common_none()}</option>
       {#each roles as role (role.id)}
@@ -407,7 +407,7 @@
     <input
       type="number" {min} {max}
       bind:value={config[field]}
-      class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
+      class="mt-1 w-full rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface"
     />
     {#if help}<p class="text-2xs text-on-surface-variant mt-1">{help}</p>{/if}
   </label>
@@ -545,7 +545,7 @@
             <span class="text-xs font-medium text-on-surface-variant">{m.arx_trigger_action()}</span>
             <select
               bind:value={config.antiRaidAction}
-              class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
+              class="mt-1 w-full rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface"
             >
               <option value="LOCK">{m.arx_action_lock()}</option>
               <option value="CAPTCHA">{m.arx_action_captcha()}</option>
@@ -577,7 +577,7 @@
               <span class="text-xs font-medium text-on-surface-variant">{m.arx_unit()}</span>
               <select
                 bind:value={config.accountAgeMinUnit}
-                class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
+                class="mt-1 w-full rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface"
               >
                 <option value="DAYS">{m.arx_unit_days()}</option>
                 <option value="MONTHS">{m.arx_unit_months()}</option>
@@ -587,7 +587,7 @@
               <span class="text-xs font-medium text-on-surface-variant">{m.arx_action()}</span>
               <select
                 bind:value={config.accountAgeAction}
-                class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
+                class="mt-1 w-full rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface"
               >
                 <option value="ALERT">{m.arx_age_action_alert()}</option>
                 <option value="KICK">{m.arx_age_action_kick()}</option>
@@ -623,7 +623,7 @@
               <textarea
                 rows="2"
                 bind:value={config.accountAgeMessage}
-                class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface resize-y"
+                class="mt-1 w-full rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface resize-y"
               ></textarea>
               <p class="text-2xs text-on-surface-variant mt-1">{m.arx_dm_message_help()}</p>
             </label>
@@ -636,7 +636,7 @@
               value={(config.accountAgeWhitelist ?? []).join('\n')}
               oninput={(e) => (config.accountAgeWhitelist = e.currentTarget.value.split('\n').map((s) => s.trim()).filter(Boolean))}
               placeholder="123456789012345678"
-              class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface font-mono resize-y"
+              class="mt-1 w-full rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface font-mono resize-y"
             ></textarea>
             <p class="text-2xs text-on-surface-variant mt-1">{m.arx_age_whitelist_help()}</p>
           </label>
@@ -657,7 +657,7 @@
               <span class="text-xs font-medium text-on-surface-variant">{m.arx_persist_mode()}</span>
               <select
                 bind:value={config.rolePersistMode}
-                class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
+                class="mt-1 w-full rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface"
               >
                 <option value="ALL">{m.arx_persist_mode_all()}</option>
                 <option value="LIST">{m.arx_persist_mode_list()}</option>
@@ -702,7 +702,7 @@
             <textarea
               rows="2"
               bind:value={config.joinLockMessage}
-              class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface resize-y"
+              class="mt-1 w-full rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface resize-y"
             ></textarea>
           </label>
         </div>
@@ -721,7 +721,7 @@
             <span class="text-xs font-medium text-on-surface-variant">{m.arx_captcha_trigger()}</span>
             <select
               bind:value={config.captchaTrigger}
-              class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
+              class="mt-1 w-full rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface"
             >
               <option value="ALWAYS">{m.arx_captcha_always()}</option>
               <option value="AUTO">{m.arx_captcha_auto()}</option>
@@ -776,7 +776,7 @@
               <span class="text-xs font-medium text-on-surface-variant">{m.arx_action()}</span>
               <select
                 bind:value={config.scamFilterAction}
-                class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
+                class="mt-1 w-full rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface"
               >
                 <option value="DELETE">{m.common_delete()}</option>
                 <option value="DELETE_AND_WARN">{m.arx_scam_delete_warn()}</option>
@@ -796,7 +796,7 @@
                 value={(config.scamFilterCustomDomains ?? []).join('\n')}
                 oninput={(e) => (config.scamFilterCustomDomains = e.currentTarget.value.split('\n').map((s) => s.trim()).filter(Boolean))}
                 placeholder="exemple-scam.com"
-                class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface font-mono resize-y"
+                class="mt-1 w-full rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface font-mono resize-y"
               ></textarea>
             </label>
             <label class="block">
@@ -806,7 +806,7 @@
                 value={(config.scamFilterWhitelist ?? []).join('\n')}
                 oninput={(e) => (config.scamFilterWhitelist = e.currentTarget.value.split('\n').map((s) => s.trim()).filter(Boolean))}
                 placeholder="mon-site.fr"
-                class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface font-mono resize-y"
+                class="mt-1 w-full rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface font-mono resize-y"
               ></textarea>
             </label>
           </div>
@@ -952,7 +952,7 @@
                 <div class="flex flex-col gap-1.5 shrink-0">
                   <button
                     type="button"
-                    class="px-2.5 py-1 rounded-lg text-xs font-medium bg-success/15 text-success border border-success/30 hover:bg-success/25 disabled:opacity-50 transition-colors"
+                    class="px-2.5 py-1 rounded-lg text-xs font-medium bg-success/15 text-on-success-container border border-success/30 hover:bg-success/25 disabled:opacity-50 transition-colors"
                     disabled={busyAction !== null}
                     onclick={() => decideInvite(request, true)}
                   >
@@ -960,7 +960,7 @@
                   </button>
                   <button
                     type="button"
-                    class="px-2.5 py-1 rounded-lg text-xs font-medium bg-error/15 text-error border border-error/30 hover:bg-error/25 disabled:opacity-50 transition-colors"
+                    class="px-2.5 py-1 rounded-lg text-xs font-medium bg-error/15 text-on-error-container border border-error/30 hover:bg-error/25 disabled:opacity-50 transition-colors"
                     disabled={busyAction !== null}
                     onclick={() => decideInvite(request, false)}
                   >
@@ -985,7 +985,7 @@
               type="text"
               bind:value={lineageUserId}
               placeholder="123456789012345678"
-              class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface font-mono"
+              class="mt-1 w-full rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface font-mono"
             />
           </label>
           <button
@@ -1061,7 +1061,7 @@
                   </span>
                   <button
                     type="button"
-                    class="px-3 py-1.5 rounded-lg text-xs font-medium bg-error/15 text-error border border-error/30 hover:bg-error/25 disabled:opacity-50 transition-colors"
+                    class="px-3 py-1.5 rounded-lg text-xs font-medium bg-error/15 text-on-error-container border border-error/30 hover:bg-error/25 disabled:opacity-50 transition-colors"
                     disabled={busyAction !== null || quarantinePreview === 0}
                     onclick={() => runQuarantine(false)}
                   >
@@ -1093,7 +1093,7 @@
               <span class="text-xs font-medium text-on-surface-variant">{m.arx_vision_sanction()}</span>
               <select
                 bind:value={config.visionSanction}
-                class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
+                class="mt-1 w-full rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface"
               >
                 {#each SANCTION_OPTIONS as option (option.value)}
                   <option value={option.value}>{option.label}</option>
@@ -1105,7 +1105,7 @@
                 <span class="text-xs font-medium text-on-surface-variant">{m.arx_vision_duration()}</span>
                 <select
                   bind:value={config.visionDurationMin}
-                  class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
+                  class="mt-1 w-full rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface"
                 >
                   {#each DURATION_OPTIONS as option (option.label)}
                     {#if option.value !== null || config.visionSanction !== 'TIMEOUT'}
@@ -1121,6 +1121,7 @@
             <Callout variant="warning">{m.arx_vision_no_jail()}</Callout>
           {/if}
           {@render switchRow('visionNotifyMember', m.arx_vision_notify(), m.arx_vision_notify_help())}
+          {@render switchRow('visionUncertainDelete', m.arx_vision_uncertain_delete(), m.arx_vision_uncertain_delete_help())}
         </div>
       </SectionCard>
 

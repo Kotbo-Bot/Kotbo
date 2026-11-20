@@ -95,6 +95,15 @@ describe('URL des webhooks', () => {
     expect(isPrivateAddress('2606:4700:4700::1111')).toBe(false);
   });
 
+  test('classe les IPv4 encapsulées sous leur forme hexadécimale', () => {
+    expect(isPrivateAddress('::ffff:7f00:1')).toBe(true); // 127.0.0.1
+    expect(isPrivateAddress('::ffff:a00:1')).toBe(true); // 10.0.0.1
+    expect(isPrivateAddress('::a00:1')).toBe(true); // ::/96
+    expect(isPrivateAddress('64:ff9b::a00:1')).toBe(true); // NAT64
+    expect(isPrivateAddress('2002:a00:1::')).toBe(true); // 6to4
+    expect(isPrivateAddress('::ffff:101:101')).toBe(false); // 1.1.1.1
+  });
+
   test('refuse un domaine qui se résout vers un réseau interne', async () => {
     const resolve = (async () => [{ address: '10.1.2.3', family: 4 }]) as never;
     await expect(assertWebhookUrlReachable('https://piege.example.com/x', resolve)).rejects.toThrow(WebhookUrlError);

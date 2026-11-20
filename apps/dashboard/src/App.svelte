@@ -3,6 +3,7 @@
   import { Route as RouteLegacy, router } from "tinro";
   const Route = RouteLegacy as any;
   import MainLayout from "./lib/components/MainLayout.svelte";
+  import AdminShellHost from "./lib/components/admin/AdminShellHost.svelte";
   import { authStore } from "./lib/stores/auth.svelte";
   import { rememberLoginReturn } from "./lib/loginReturn";
   import { dashboardStore } from "./lib/stores/dashboard.svelte";
@@ -12,6 +13,7 @@
   import { feedbackModal } from "./lib/stores/feedbackModal.svelte";
   import { inviteDetailsModal } from "./lib/stores/inviteDetailsModal.svelte";
   import { channelDetailsModal } from "./lib/stores/channelDetailsModal.svelte";
+  import { serverDetailsModal } from "./lib/stores/serverDetailsModal.svelte";
   import { memberCaseModal } from "./lib/stores/memberCaseModal.svelte";
   import ToastContainer from "./lib/components/ToastContainer.svelte";
   import BackendDownBanner from "./lib/components/BackendDownBanner.svelte";
@@ -99,10 +101,7 @@
       $router.path.startsWith("/sanction-evidence/") ||
       $router.path.startsWith("/form/") ||
       $router.path.startsWith("/appeal/") ||
-      $router.path.startsWith("/verify/") ||
-      // Portail partenaire : le jeton de l'URL tient lieu d'authentification,
-      // et demander un compte a un partenaire qui n'en a pas tuerait l'usage.
-      $router.path.startsWith("/partner-portal/"),
+      $router.path.startsWith("/verify/"),
   );
 
   // `/profile/<id>` cible un autre membre, `/profile/<onglet>` mon propre profil :
@@ -674,11 +673,6 @@
         props={(meta) => ({ serverId: meta.params.serverId, eventId: meta.params.eventId })}
       />
       <LazyRoute
-        path="/partner-portal/:token"
-        load={() => import("./pages/PartnerPortal.svelte")}
-        props={(meta) => ({ token: meta.params.token })}
-      />
-      <LazyRoute
         path="/profile/:userId"
         load={() => import("./pages/PublicProfile.svelte")}
         props={(meta) => ({ userId: meta.params.userId })}
@@ -786,6 +780,122 @@
           <MainLayout>
             <ModuleDisabledNotice moduleKey={disabledModuleForRoute} />
           </MainLayout>
+        {:else if $router.path === "/admin" || $router.path.startsWith("/admin/")}
+          {#if authStore.isBotAdmin}
+            <!-- Coquille admin persistante : la barre laterale, le bandeau d'en-tete
+                 et la sonde de sante restent montes pendant toute la navigation. -->
+            <AdminShellHost>
+            <LazyRoute
+              path="/admin"
+              load={() => import("./pages/admin/Overview.svelte")}
+            />
+            <LazyRoute
+              path="/admin/servers"
+              load={() => import("./pages/admin/Servers.svelte")}
+            />
+            <LazyRoute
+              path="/admin/servers/:guildId"
+              load={() => import("./pages/admin/ServerSheet.svelte")}
+              props={(meta) => ({ guildId: meta.params.guildId })}
+            />
+            <LazyRoute
+              path="/admin/activity"
+              load={() => import("./pages/admin/Activity.svelte")}
+            />
+            <LazyRoute
+              path="/admin/ai"
+              load={() => import("./pages/admin/AiSupervision.svelte")}
+            />
+            <LazyRoute
+              path="/admin/performance"
+              load={() => import("./pages/admin/Performance.svelte")}
+            />
+            <LazyRoute
+              path="/admin/shards"
+              load={() => import("./pages/admin/Shards.svelte")}
+            />
+            <LazyRoute
+              path="/admin/security"
+              load={() => import("./pages/admin/Security.svelte")}
+            />
+            <LazyRoute
+              path="/admin/linked-accounts"
+              load={() => import("./pages/admin/LinkedAccounts.svelte")}
+            />
+            <LazyRoute
+              path="/admin/content"
+              load={() => import("./pages/admin/Content.svelte")}
+            />
+            <LazyRoute
+              path="/admin/config"
+              load={() => import("./pages/admin/Config.svelte")}
+            />
+            <LazyRoute
+              path="/admin/activation"
+              load={() => import("./pages/admin/Activation.svelte")}
+            />
+            <!-- Ancienne page des modules : devenue l'onglet Modules d'Analytics. -->
+            <Route path="/admin/modules">
+              <div use:redirectTo={"/admin/analytics/modules"}></div>
+            </Route>
+            <LazyRoute
+              path="/admin/billing"
+              load={() => import("./pages/admin/Billing.svelte")}
+            />
+            <LazyRoute
+              path="/admin/analytics"
+              load={() => import("./pages/admin/Analytics.svelte")}
+            />
+            <LazyRoute
+              path="/admin/analytics/:tab"
+              load={() => import("./pages/admin/Analytics.svelte")}
+              props={(meta) => ({ tab: meta.params.tab })}
+            />
+            <LazyRoute
+              path="/admin/whitelabel"
+              load={() => import("./pages/admin/WhiteLabel.svelte")}
+            />
+            <LazyRoute
+              path="/admin/instances"
+              load={() => import("./pages/admin/Instances.svelte")}
+            />
+            <LazyRoute
+              path="/admin/broadcast"
+              load={() => import("./pages/admin/Broadcast.svelte")}
+            />
+            <LazyRoute
+              path="/admin/achievements"
+              load={() => import("./pages/admin/Achievements.svelte")}
+            />
+            <LazyRoute
+              path="/admin/feature-pages"
+              load={() => import("./pages/admin/FeaturePages.svelte")}
+            />
+            <LazyRoute
+              path="/admin/gdpr"
+              load={() => import("./pages/admin/Gdpr.svelte")}
+            />
+            <LazyRoute
+              path="/admin/audit"
+              load={() => import("./pages/admin/Audit.svelte")}
+            />
+            <LazyRoute
+              path="/admin/sites"
+              load={() => import("./pages/admin/Sites.svelte")}
+            />
+            <Route fallback>
+              <NotFound />
+            </Route>
+            </AdminShellHost>
+          {:else if !authStore.initialized}
+            <div class="min-h-screen bg-surface flex items-center justify-center">
+              <div class="w-8 h-8 rounded-full border-2 border-primary border-t-transparent animate-spin"></div>
+            </div>
+          {:else}
+            <MainLayout>
+              <NoAccessNotice reason="feature" />
+            </MainLayout>
+          {/if}
         {:else}
           <MainLayout>
             <LazyRoute
@@ -801,80 +911,6 @@
               path="/activity"
               load={() => import("./pages/ActivityLog.svelte")}
             />
-            {#if authStore.isBotAdmin}
-              <LazyRoute
-                path="/admin"
-                load={() => import("./pages/admin/Overview.svelte")}
-              />
-              <LazyRoute
-                path="/admin/servers"
-                load={() => import("./pages/admin/Servers.svelte")}
-              />
-              <LazyRoute
-                path="/admin/shards"
-                load={() => import("./pages/admin/Shards.svelte")}
-              />
-              <LazyRoute
-                path="/admin/security"
-                load={() => import("./pages/admin/Security.svelte")}
-              />
-              <LazyRoute
-                path="/admin/content"
-                load={() => import("./pages/admin/Content.svelte")}
-              />
-              <LazyRoute
-                path="/admin/config"
-                load={() => import("./pages/admin/Config.svelte")}
-              />
-              <LazyRoute
-                path="/admin/activation"
-                load={() => import("./pages/admin/Activation.svelte")}
-              />
-              <!-- Ancienne page des modules : devenue l'onglet Modules d'Analytics. -->
-              <Route path="/admin/modules">
-                <div use:redirectTo={"/admin/analytics?tab=modules"}></div>
-              </Route>
-              <LazyRoute
-                path="/admin/billing"
-                load={() => import("./pages/admin/Billing.svelte")}
-              />
-              <LazyRoute
-                path="/admin/analytics"
-                load={() => import("./pages/admin/Analytics.svelte")}
-              />
-              <LazyRoute
-                path="/admin/whitelabel"
-                load={() => import("./pages/admin/WhiteLabel.svelte")}
-              />
-              <LazyRoute
-                path="/admin/instances"
-                load={() => import("./pages/admin/Instances.svelte")}
-              />
-              <LazyRoute
-                path="/admin/broadcast"
-                load={() => import("./pages/admin/Broadcast.svelte")}
-              />
-              <LazyRoute
-                path="/admin/achievements"
-                load={() => import("./pages/admin/Achievements.svelte")}
-              />
-              <LazyRoute
-                path="/admin/feature-pages"
-                load={() => import("./pages/admin/FeaturePages.svelte")}
-              />
-              <LazyRoute
-                path="/admin/gdpr"
-                load={() => import("./pages/admin/Gdpr.svelte")}
-              />
-              <LazyRoute
-                path="/admin/audit"
-                load={() => import("./pages/admin/Audit.svelte")}
-              />
-              <LazyRoute
-                path="/admin/sites"
-                load={() => import("./pages/admin/Sites.svelte")}
-              />
-            {/if}
             <LazyRoute
               path="/logs/*"
               load={() => import("./pages/Logs.svelte")}
@@ -1297,6 +1333,13 @@
   {#await import("./lib/components/channels/ChannelDetailsModal.svelte") then module}
     {@const ChannelDetailsModal = module.default}
     <ChannelDetailsModal />
+  {/await}
+{/if}
+
+{#if serverDetailsModal.open}
+  {#await import("./lib/components/servers/ServerDetailsModal.svelte") then module}
+    {@const ServerDetailsModal = module.default}
+    <ServerDetailsModal />
   {/await}
 {/if}
 

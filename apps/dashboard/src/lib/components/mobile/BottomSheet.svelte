@@ -2,6 +2,7 @@
   import type { Snippet } from 'svelte';
   import { portal } from '../../actions/portal';
   import { scrollLock } from '../../scrollLock';
+  import { dialogFocus } from '../../actions/dialogFocus';
   import { prefersReducedMotion } from '../../stores/media.svelte';
   import { m } from '../../i18n';
   import Papicon from '../Papicon.svelte';
@@ -35,7 +36,6 @@
   /** A fast flick dismisses even when the drag was short. */
   const DISMISS_VELOCITY = 0.6;
 
-  let panel = $state<HTMLElement | null>(null);
   let body = $state<HTMLElement | null>(null);
   let dragOffset = $state(0);
   let dragging = $state(false);
@@ -43,51 +43,10 @@
   let pointerId: number | null = null;
   let startY = 0;
   let startTime = 0;
-  let previouslyFocused: HTMLElement | null = null;
 
   $effect(() => {
-    if (!open) return;
-
-    previouslyFocused = document.activeElement as HTMLElement | null;
-    dragOffset = 0;
-
-    // Focus the panel itself rather than the first control: on a phone, focusing
-    // an input here would raise the keyboard over the sheet before the user asks.
-    const frame = requestAnimationFrame(() => panel?.focus({ preventScroll: true }));
-
-    return () => {
-      cancelAnimationFrame(frame);
-      previouslyFocused?.focus?.({ preventScroll: true });
-      previouslyFocused = null;
-    };
+    if (open) dragOffset = 0;
   });
-
-  function onKeyDown(event: KeyboardEvent) {
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      onclose();
-      return;
-    }
-
-    if (event.key !== 'Tab' || !panel) return;
-
-    const focusables = panel.querySelectorAll<HTMLElement>(
-      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-    );
-    if (focusables.length === 0) return;
-
-    const first = focusables[0];
-    const last = focusables[focusables.length - 1];
-    const active = document.activeElement;
-
-    if (event.shiftKey && (active === first || active === panel)) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && active === last) {
-      event.preventDefault();
-      first.focus();
-    }
-  }
 
   function onPointerDown(event: PointerEvent) {
     if (event.pointerType === 'mouse') return;
@@ -139,7 +98,6 @@
     use:scrollLock
     class="sheet"
     class:sheet--static={$prefersReducedMotion}
-    onkeydown={onKeyDown}
     role="presentation"
   >
     <button
@@ -151,7 +109,7 @@
     ></button>
 
     <div
-      bind:this={panel}
+      use:dialogFocus={{ onEscape: onclose }}
       class="sheet__panel"
       class:sheet__panel--dragging={dragging}
       style:transform={dragOffset > 0 ? `translate3d(0, ${dragOffset}px, 0)` : undefined}

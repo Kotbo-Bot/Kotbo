@@ -10,12 +10,13 @@
   import { prefetchRoute } from '../lazyRoutes';
   import { portal } from '../actions/portal';
   import { lockBodyScroll, unlockBodyScroll } from '../scrollLock';
-  import type { PageConfig } from '../config/pages';
+  import { pagePlan, type PageConfig } from '../config/pages';
   import { resolveGuildIconSrc } from '../discordMedia';
   import { m } from '../i18n';
   import { serverSwitcherStore } from '../stores/serverSwitcher.svelte';
   import { brandingStore } from '../stores/branding.svelte';
   import { dashboardStore } from '../stores/dashboard.svelte';
+  import { userPrefs } from '../stores/userPreferences.svelte';
 
   let isDesktop = $state(
     typeof window !== 'undefined'
@@ -227,21 +228,61 @@
     return left >= 0 ? left : null;
   });
   const unread = $derived(notificationsStore.unreadCount);
+
+  function onEdgeMouseDown(e: MouseEvent): void {
+    if (!isDesktop || e.button !== 0) return;
+    e.preventDefault();
+    sidebarStore.setResizing(true);
+    if (typeof document !== 'undefined') {
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    }
+
+    const onMouseMove = (ev: MouseEvent) => {
+      if (collapsed && ev.clientX > 120) {
+        sidebarStore.set(false);
+      }
+      sidebarStore.setWidth(ev.clientX);
+    };
+
+    const onMouseUp = () => {
+      sidebarStore.setResizing(false);
+      if (typeof document !== 'undefined') {
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      }
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  }
+
+  function onEdgeDblClick(e: MouseEvent): void {
+    if (!isDesktop) return;
+    e.preventDefault();
+    if (collapsed) {
+      sidebarStore.set(false);
+    }
+    sidebarStore.resetWidth();
+  }
 </script>
 
 {#snippet unreadBadge(href: string)}
   {#if href === '/notifications' && unread > 0}
     <span
       class="min-w-4 h-4 px-1 rounded-full bg-primary text-on-primary text-2xs font-semibold leading-none flex items-center justify-center"
-      aria-label="{unread} notifications non lues"
     >
-      {unread > 99 ? '99+' : unread}
+      <span aria-hidden="true">{unread > 99 ? '99+' : unread}</span>
+      <span class="sr-only">{unread === 1 ? m.home_notifications_one() : m.home_notifications_count({ n: unread })}</span>
     </span>
   {/if}
 {/snippet}
 
 {#snippet pageLink(item: PageConfig, withIcon: boolean)}
   {@const active = isActiveNavItem(item.href)}
+  {@const plan = !userPrefs.prefs.showPlanCrowns && dashboardStore.state.plan !== 'FREE' ? null : pagePlan(item)}
   <div data-href={item.href} class="nav-row group relative flex items-center rounded-lg transition-colors duration-150 {active ? 'is-active' : ''}">
     {#if !withIcon}
       <span class="nav-row__node" aria-hidden="true">
@@ -259,12 +300,19 @@
         <Papicon icon={item.icon} size={16} class="shrink-0 nav-row__icon" />
       {/if}
       <span class="flex-1 min-w-0 truncate text-body-sm">{item.name}</span>
+      {#if plan}
+        {@const planLabel = plan === 'plus' ? m.nav_plan_plus() : m.nav_plan_freemium()}
+        <span title={planLabel} class="shrink-0 flex {plan === 'plus' ? 'text-warning' : 'text-on-surface-variant'}">
+          <Papicon icon="crown" size={12} class={plan === 'plus' ? 'fill-current' : ''} />
+          <span class="sr-only">{planLabel}</span>
+        </span>
+      {/if}
       {@render unreadBadge(item.href)}
     </a>
     <button
       type="button"
       onclick={(e) => toggleFavorite(item.href, e)}
-      aria-label={favorites.includes(item.href) ? m.nav_unfavorite() : m.nav_favorite()}
+      aria-label={m.nav_favorite({ name: item.name })}
       aria-pressed={favorites.includes(item.href)}
       class="nav-row__pin mr-1 flex items-center justify-center w-6 h-6 rounded-md shrink-0 transition-opacity duration-150
         {favorites.includes(item.href) ? 'opacity-100 text-warning' : 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100 text-on-surface-variant hover:text-warning'}"
@@ -308,37 +356,50 @@
   aria-hidden={!isDesktop && !mobileOpen}
   ontouchstart={onTouchStart}
   ontouchend={onTouchEnd}
+  style={isDesktop ? `width: ${isCollapsed ? '4.5rem' : `${sidebarStore.width}px`};` : ''}
   class="
     fixed left-0 top-0 h-dvh flex flex-col z-50
     bg-surface-container-lowest
     border-r border-outline-variant
-    will-change-transform transition-[transform,width] duration-200 ease-in-out
+    will-change-transform {sidebarStore.isResizing ? 'transition-none' : 'transition-[transform,width] duration-200 ease-in-out'}
     app-sidebar w-72
     {!isDesktop && mobileOpen ? 'translate-x-0 shadow-lg' : ''}
     {!isDesktop && !mobileOpen ? '-translate-x-full' : ''}
     lg:translate-x-0 lg:shadow-none
-    {isCollapsed ? 'lg:w-[4.5rem]' : 'lg:w-60'}
   "
 >
 
-  <button
-    type="button"
-    onclick={() => sidebarStore.toggle()}
-    class="
-      absolute -right-3 top-14 z-10
-      w-6 h-6 rounded-full border border-outline-variant
-      bg-surface-container-lowest shadow-sm
-      hidden lg:flex items-center justify-center
-      transition-colors duration-150
-      hover:bg-surface-container hover:text-primary
-      text-on-surface-variant
-    "
-    aria-label={isCollapsed ? m.sbx_expand() : m.sbx_collapse()}
-  >
-    <div class="transition-transform duration-200 {isCollapsed ? 'rotate-180' : ''}">
-      <Papicon icon="chevrons-left" size={12} />
+  {#if isDesktop}
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+    <div
+      role="separator"
+      aria-orientation="vertical"
+      aria-label={isCollapsed ? m.sbx_expand() : m.sbx_collapse()}
+      tabindex="-1"
+      class="sidebar-edge-handle"
+      class:is-resizing={sidebarStore.isResizing}
+      onmousedown={onEdgeMouseDown}
+      ondblclick={onEdgeDblClick}
+    >
+      <div class="edge-bar" aria-hidden="true"></div>
+
+      <button
+        type="button"
+        class="edge-collapse-btn"
+        onmousedown={(e) => e.stopPropagation()}
+        onclick={(e) => {
+          e.stopPropagation();
+          sidebarStore.toggle();
+        }}
+        aria-label={isCollapsed ? m.sbx_expand() : m.sbx_collapse()}
+      >
+        <Papicon
+          icon={isCollapsed ? 'chevron-right' : 'chevron-left'}
+          size={12}
+        />
+      </button>
     </div>
-  </button>
+  {/if}
 
   <div class="flex items-center gap-2.5 px-4 h-14 shrink-0 {isCollapsed ? 'lg:justify-center lg:px-0' : ''}">
     <!-- Le logo ramene a l'accueil du dashboard : c'est la convention que
@@ -398,7 +459,8 @@
       onclick={openSearch}
       onmouseenter={(e) => showTooltip(e, m.nav_search_pages())}
       onmouseleave={hideTooltip}
-      aria-label={m.nav_search_pages()}
+      aria-label={isCollapsed ? m.nav_search_pages() : undefined}
+      aria-keyshortcuts="Control+K"
       class="nav-search w-full flex items-center gap-2 h-9 rounded-lg border border-outline-variant bg-surface-container-low text-on-surface-variant hover:text-on-surface hover:border-outline transition-colors
         {isCollapsed ? 'lg:justify-center lg:px-0 px-3' : 'px-3'}"
     >
@@ -412,7 +474,7 @@
 
   <nav
     class="flex-1 overflow-y-auto overscroll-contain scrollbar-hide pb-3 {isCollapsed ? 'lg:px-2' : 'px-3'}"
-    aria-label="Navigation principale"
+    aria-label={m.a11y_main_nav()}
   >
     {#if isCollapsed}
       <div class="flex flex-col gap-1">
@@ -662,5 +724,82 @@
 
   .nav-thread .nav-row.is-active:hover {
     background: var(--surface-container);
+  }
+
+  .sidebar-edge-handle {
+    position: absolute;
+    top: 0;
+    right: -6px;
+    bottom: 0;
+    width: 12px;
+    z-index: 50;
+    cursor: col-resize;
+    user-select: none;
+  }
+
+  .edge-bar {
+    position: absolute;
+    left: 5px;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: var(--outline);
+    opacity: 0;
+    transition: opacity 150ms ease, background-color 150ms ease;
+    pointer-events: none;
+  }
+
+  .sidebar-edge-handle:hover .edge-bar {
+    opacity: 1;
+  }
+
+  .sidebar-edge-handle.is-resizing .edge-bar {
+    opacity: 1;
+    width: 2px;
+    background: var(--primary-color);
+  }
+
+  .edge-collapse-btn {
+    position: absolute;
+    left: 6px;
+    top: 3.5rem;
+    transform: translate(-50%, 0);
+    width: 24px;
+    height: 24px;
+    border-radius: 9999px;
+    border: 1px solid var(--outline-variant);
+    background: var(--surface-container-lowest);
+    color: var(--on-surface-variant);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+    cursor: pointer;
+    transition: opacity 150ms ease,
+                background-color 150ms ease,
+                color 150ms ease,
+                border-color 150ms ease;
+  }
+
+  .sidebar-edge-handle:hover .edge-collapse-btn,
+  .sidebar-edge-handle:focus-within .edge-collapse-btn,
+  .sidebar-edge-handle.is-resizing .edge-collapse-btn {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .edge-collapse-btn:hover {
+    background: var(--surface-container);
+    color: var(--on-surface);
+    border-color: var(--outline);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .edge-bar,
+    .edge-collapse-btn {
+      transition: none;
+    }
   }
 </style>

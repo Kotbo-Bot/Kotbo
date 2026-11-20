@@ -111,7 +111,7 @@
         value={policy.userLimit}
         oninput={onUserLimitInput}
         onblur={resyncUserLimit}
-        class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/30 transition-all"
+        class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/30 transition-all"
       />
       <p class="text-2xs text-on-surface-variant/40">{m.cm_tv_user_limit_hint()}</p>
     </div>

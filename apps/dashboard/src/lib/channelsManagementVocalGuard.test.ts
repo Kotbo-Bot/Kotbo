@@ -9,7 +9,7 @@ import { join } from 'node:path';
  * l'audit du dashboard ; la logique pure, elle, est testée dans
  * `tempVoiceUi.test.ts`.
  */
-const read = (...parts: string[]) => readFileSync(join(import.meta.dir, '..', ...parts), 'utf-8');
+const read = (...parts: string[]) => readFileSync(join(import.meta.dir, '..', ...parts), 'utf-8').replace(/\r\n/g, '\n');
 const page = read('pages', 'ChannelsManagement.svelte');
 const COUPE = page.lastIndexOf('</script>');
 const script = page.slice(0, COUPE);
@@ -130,5 +130,22 @@ describe('D — mode démonstration', () => {
   test('« demo_mode » est traduit en anglais', () => {
     expect(dict('en').demo_mode).toBe('Demo mode');
     expect(dict('fr').demo_mode).toBe('Mode Démonstration');
+  });
+});
+
+describe('réglages par personne et visibilité', () => {
+  test('la case et les 3 radios de visibilité sont liées à la politique par défaut, sans texte en dur', () => {
+    expect(balisage).toContain('bind:checked={config.tempVoiceDefaults.reglagesPerso}');
+    expect(balisage).toContain('bind:group={config.tempVoiceDefaults.visibilite}');
+    expect(balisage).toContain('id="tv-visibilite-{mode.key}"');
+    expect(balisage).toContain('<legend');
+    expect(script).toMatch(/visibilite: 'tous',\s*reglagesPerso: true,/);
+    for (const k of ['tous', 'acces', 'prive']) expect(script).toContain(`key: '${k}', label: () => m.cm_tv_visibilite_${k}()`);
+    for (const lang of ['fr', 'en'] as const) {
+      const d = dict(lang);
+      for (const k of ['perso_title', 'reglages_perso_label', 'reglages_perso_hint', 'visibilite_label', 'visibilite_note', ...['tous', 'acces', 'prive'].flatMap(v => [`visibilite_${v}`, `visibilite_${v}_hint`])]) {
+        expect(d[`cm_tv_${k}`]).toBeTruthy();
+      }
+    }
   });
 });

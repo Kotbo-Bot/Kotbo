@@ -8,24 +8,6 @@ import { logger } from '../../../../utils/logger.js';
 import { type CommandAccessLevel, type DashboardPresetKey, parseDiscordMarkdown, type SeverityLevel } from '../../../shared.js';
 import { SanctionType } from '@prisma/client';
 import { type Embed, type Guild } from 'discord.js';
-import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { Client } from 'discord.js';
-import type { AuthClaims, DashboardAccess } from '../../../shared.js';
-
-/** Tout ce qu un sous-routeur recoit du repartiteur. */
-export type ModuleRouteContext = {
-  req: IncomingMessage;
-  res: ServerResponse;
-  parts: string[];
-  url: URL;
-  client: Client;
-  user: AuthClaims;
-  guildId: string;
-  access: DashboardAccess;
-  method: string | undefined;
-  auditUser: string;
-  moduleKey: string | undefined;
-};
 
 export const PRESET_LABELS: Record<DashboardPresetKey, string> = {
   general: 'Communauté générale',
@@ -36,7 +18,7 @@ export const PRESET_LABELS: Record<DashboardPresetKey, string> = {
 export const PRESET_COMMAND_OVERRIDES: Record<DashboardPresetKey, Partial<Record<string, CommandAccessLevel>>> = {
   general: {},
   gaming: {},
-  dev: { dailyAlgo: 'tout_le_monde' },
+  dev: {},
 };
 
 export const _DEFAULT_SEVERITY_BY_MODULE = [
@@ -47,194 +29,6 @@ export const _DEFAULT_SEVERITY_BY_MODULE = [
 ];
 
 export const _DEFAULT_MESSAGE_TEMPLATE = 'Bonjour {user}, ...';
-
-export function resolveDailyAlgoFinalScore(submission: {
-  scoreFinal: number | null;
-  scoreCorrectness: number | null;
-  scoreComments: number | null;
-  scoreCompactness: number | null;
-  scoreOptimization: number | null;
-  scoreReadability: number | null;
-}): number | null {
-  if (submission.scoreFinal !== null) {
-    return submission.scoreFinal;
-  }
-
-  const components = [
-    submission.scoreCorrectness,
-    submission.scoreComments,
-    submission.scoreCompactness,
-    submission.scoreOptimization,
-    submission.scoreReadability,
-  ];
-
-  if (components.some((value) => value === null)) {
-    return null;
-  }
-
-  const sum = (components as number[]).reduce((acc, value) => acc + value, 0);
-  return Math.round((sum / 5) * 10) / 10;
-}
-
-export function getDailyAlgoDateKeyWithOffset(offsetDays: number, baseDate = new Date()): string {
-  const anchor = new Date(Date.UTC(baseDate.getUTCFullYear(), baseDate.getUTCMonth(), baseDate.getUTCDate()));
-  anchor.setUTCDate(anchor.getUTCDate() + offsetDays);
-
-  const year = anchor.getUTCFullYear();
-  const month = String(anchor.getUTCMonth() + 1).padStart(2, '0');
-  const day = String(anchor.getUTCDate()).padStart(2, '0');
-
-  return `${year}-${month}-${day}`;
-}
-
-export async function getDailyAlgoScheduleRuns(guildId: string, daysBack: number, daysForward: number) {
-  const safeDaysBack = Math.max(0, Math.trunc(daysBack));
-  const safeDaysForward = Math.max(0, Math.trunc(daysForward));
-  const startDateKey = getDailyAlgoDateKeyWithOffset(-safeDaysBack);
-  const endDateKey = getDailyAlgoDateKeyWithOffset(safeDaysForward);
-
-  const runs = await prisma.dailyAlgoRun.findMany({
-    where: {
-      guildId,
-      dateKey: {
-        gte: startDateKey,
-        lte: endDateKey,
-      },
-    },
-    include: {
-      problem: true,
-      _count: {
-        select: {
-          submissions: true,
-        },
-      },
-    },
-    orderBy: {
-      dateKey: 'asc',
-    },
-  });
-
-  return runs.map((run) => ({
-    id: run.id,
-    guildId: run.guildId,
-    dateKey: run.dateKey,
-    problemId: run.problemId,
-    challengeChannelId: run.challengeChannelId,
-    validationChannelId: run.validationChannelId,
-    challengeMessageId: run.challengeMessageId,
-    leaderboardMessageId: run.leaderboardMessageId,
-    summarySentAt: run.summarySentAt?.toISOString() ?? null,
-    createdAt: run.createdAt.toISOString(),
-    updatedAt: run.updatedAt.toISOString(),
-    submissionsCount: run._count.submissions,
-    problem: {
-      id: run.problem.id,
-      title: run.problem.title,
-      description: run.problem.description,
-      solution: run.problem.solution,
-      difficulty: run.problem.difficulty,
-      language: run.problem.language,
-      functionName: run.problem.functionName,
-      functionArgs: run.problem.functionArgs,
-      unitTests: run.problem.unitTests,
-      allowedLanguages: run.problem.allowedLanguages,
-      usedAt: run.problem.usedAt?.toISOString() ?? null,
-      createdAt: run.problem.createdAt.toISOString(),
-      updatedAt: run.problem.updatedAt.toISOString(),
-    },
-  }));
-}
-
-export async function ensureDailyAlgoScheduleRuns(guildId: string, daysForward: number) {
-  const safeDaysForward = Math.max(1, Math.trunc(daysForward));
-  const guild = await prisma.guild.findUnique({
-    where: { id: guildId },
-    select: {
-      id: true,
-      dailyAlgoChannelId: true,
-      dailyAlgoValidationChannelId: true,
-    },
-  });
-
-  if (!guild) {
-    throw new Error('Guilde introuvable.');
-  }
-
-  if (!guild.dailyAlgoChannelId) {
-    return {
-      createdDateKeys: [],
-      createdCount: 0,
-    };
-  }
-
-  const createdDateKeys: string[] = [];
-
-  for (let offsetDays = 0; offsetDays <= safeDaysForward; offsetDays += 1) {
-    const dateKey = getDailyAlgoDateKeyWithOffset(offsetDays);
-    const existingRun = await prisma.dailyAlgoRun.findUnique({
-      where: {
-        guildId_dateKey: {
-          guildId,
-          dateKey,
-        },
-      },
-    });
-
-    if (existingRun) {
-      continue;
-    }
-
-    const existingRunForDate = await prisma.dailyAlgoRun.findFirst({
-      where: { dateKey },
-      select: { problemId: true }
-    });
-
-    let problemId = existingRunForDate?.problemId;
-
-    if (!problemId) {
-      const problemCandidate = await prisma.dailyAlgoProblem.findFirst({
-        where: {
-          language: 'fr',
-          usedAt: null,
-        },
-        orderBy: [
-          { createdAt: 'asc' },
-          { id: 'asc' },
-        ],
-        select: {
-          id: true,
-        },
-      });
-
-      if (!problemCandidate) {
-        break;
-      }
-      problemId = problemCandidate.id;
-
-      await prisma.dailyAlgoProblem.update({
-        where: { id: problemId },
-        data: { usedAt: new Date() }
-      });
-    }
-
-    await prisma.dailyAlgoRun.create({
-      data: {
-        guildId,
-        dateKey,
-        problemId: problemId,
-        challengeChannelId: guild.dailyAlgoChannelId!,
-        validationChannelId: guild.dailyAlgoValidationChannelId ?? null,
-      },
-    });
-
-    createdDateKeys.push(dateKey);
-  }
-
-  return {
-    createdDateKeys,
-    createdCount: createdDateKeys.length,
-  };
-}
 
 export type DashboardSanctionType = 'WARN' | 'KICK' | 'TIMEOUT' | 'TEMP_BAN' | 'BAN' | 'SOFTBAN';
 
@@ -296,7 +90,6 @@ export function normalizeBrokenRulesPayload(value: string): string {
 export const buildModuleUpdatesForPreset = (presetKey: DashboardPresetKey) => {
   if (presetKey === 'dev') {
     return {
-      dailyAlgoEnabled: true,
       codePoliceEnabled: false,
       autoNicknameModerationEnabled: false,
       sanctionSyncEnabled: false,
@@ -305,7 +98,6 @@ export const buildModuleUpdatesForPreset = (presetKey: DashboardPresetKey) => {
   }
   if (presetKey === 'gaming') {
     return {
-      dailyAlgoEnabled: false,
       codePoliceEnabled: true,
       autoNicknameModerationEnabled: true,
       sanctionSyncEnabled: true,
@@ -313,7 +105,6 @@ export const buildModuleUpdatesForPreset = (presetKey: DashboardPresetKey) => {
     };
   }
   return {
-    dailyAlgoEnabled: false,
     codePoliceEnabled: false,
     autoNicknameModerationEnabled: true,
     sanctionSyncEnabled: false,

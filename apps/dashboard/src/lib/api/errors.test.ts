@@ -26,8 +26,8 @@ describe('codes d\'erreur de la route vocale', () => {
     expect(manquants).toEqual([]);
   });
 
-  test('chaque entrée de la table correspond à un code que la route émet encore', () => {
-    expect(TRANSLATED_API_CODES.filter((code) => !emitted.includes(code))).toEqual([]);
+  test('chaque entrée `tv_` de la table correspond à un code que la route émet encore', () => {
+    expect(TRANSLATED_API_CODES.filter((code) => code.startsWith('tv_') && !emitted.includes(code))).toEqual([]);
   });
 
   test('chaque code a sa clé api_err_<code> en français ET en anglais', () => {
@@ -72,6 +72,26 @@ describe('codes d\'erreur de la route vocale', () => {
 
   test('sans code ni message, le texte de la catégorie reste le repli', () => {
     expect(new DashboardApiError({ kind: 'not_found', status: 404 }).message).toBe(m.api_err_not_found());
+  });
+});
+
+/** Codes de la route des saisons (`sea_*`) : même table, mêmes garanties. */
+describe('codes d\'erreur de la route des saisons', () => {
+  const seasonsRoute = readFileSync(join(import.meta.dir, '..', '..', '..', '..', 'bot', 'src', 'api', 'routes', 'dashboard', 'seasons.ts'), 'utf-8');
+  const emittedSeason = [...new Set([...seasonsRoute.matchAll(/'(sea_[a-z_]+)'/g)].map((x) => x[1]))];
+
+  test('la route émet bien des codes', () => {
+    expect(emittedSeason.length).toBeGreaterThanOrEqual(15);
+  });
+
+  test('chaque code émis est traduit, chaque entrée `sea_` est encore émise', () => {
+    expect(emittedSeason.filter((code) => !TRANSLATED_API_CODES.includes(code))).toEqual([]);
+    expect(TRANSLATED_API_CODES.filter((code) => code.startsWith('sea_') && !emittedSeason.includes(code))).toEqual([]);
+  });
+
+  test('un code de saison remplace le texte français du serveur', () => {
+    const error = new DashboardApiError({ kind: 'conflict', status: 409, code: 'sea_another_active', serverMessage: 'Une saison est déjà en cours' });
+    expect(error.message).toBe(m.api_err_sea_another_active());
   });
 });
 

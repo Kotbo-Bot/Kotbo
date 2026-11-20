@@ -21,6 +21,8 @@ import {
   makeSessionCookie,
   sessionIdFromCookieHeader,
 } from '../../auth/sessionStore.js';
+import { customDomainForHost, isCustomDomainOrigin } from '../../../services/system/customDomain.js';
+import { openSecret } from '../../../utils/secretBox.js';
 
 export const authRouter = new OpenAPIHono();
 
@@ -67,15 +69,55 @@ function isAllowedMutationOrigin(origin: string | undefined): boolean {
   if (!origin) return process.env.NODE_ENV !== 'production';
   try {
     const normalized = new URL(origin).origin;
-    if (normalized === getDashboardOrigin()) return true;
+    if (normalized === getDashboardOrigin() || isCustomDomainOrigin(normalized)) return true;
     return process.env.NODE_ENV !== 'production' && ['localhost', '127.0.0.1'].includes(new URL(origin).hostname);
   } catch {
     return false;
   }
 }
 
+type OAuthTarget = {
+  clientId: string;
+  clientSecret: string;
+  redirectUri: string;
+  dashboardUrl: string;
+  /** Serveur sur lequel ouvrir le dashboard après connexion (domaine perso). */
+  guildId: string | null;
+};
+
+/**
+ * Application Discord à utiliser. Sur le domaine perso d'un serveur, c'est la
+ * sienne : l'URL de retour de son domaine n'est déclarée que là.
+ */
+function resolveOAuthTarget(c: Context): OAuthTarget | null {
+  const custom = customDomainForHost(c.req.header('host'));
+  if (custom) {
+    let secret: string | null = null;
+    try { secret = openSecret(custom.sealedClientSecret); } catch { secret = null; }
+    if (!secret) return null;
+    return {
+      clientId: custom.clientId,
+      clientSecret: secret,
+      redirectUri: `https://${custom.host}/api/auth/discord/callback`,
+      dashboardUrl: `https://${custom.host}`,
+      guildId: custom.guildId,
+    };
+  }
+  return {
+    clientId: getDiscordClientId(),
+    clientSecret: getDiscordClientSecret(),
+    redirectUri: getDiscordRedirectUri(),
+    dashboardUrl: getDashboardUrl().replace(/\/$/, ''),
+    guildId: null,
+  };
+}
+
 function startDiscordOAuth(c: Context, widget: boolean) {
-  const missingOAuth = getMissingOAuthConfig({ includeSecret: true });
+  const target = resolveOAuthTarget(c);
+  if (!target) {
+    return c.json({ error: 'Connexion indisponible : le client secret de ce domaine est illisible, ressaisis-le dans Identité.' }, 500);
+  }
+  const missingOAuth = target.guildId ? [] : getMissingOAuthConfig({ includeSecret: true });
   if (missingOAuth.length > 0) {
     return c.json({ error: 'Configuration OAuth invalide côté serveur.', missing: missingOAuth }, 500);
   }
@@ -92,8 +134,8 @@ function startDiscordOAuth(c: Context, widget: boolean) {
   ]);
 
   const params = new URLSearchParams({
-    client_id: getDiscordClientId(),
-    redirect_uri: getDiscordRedirectUri(),
+    client_id: target.clientId,
+    redirect_uri: target.redirectUri,
     response_type: 'code',
     scope: widget ? 'identify guilds openid sdk.social_layer' : 'identify guilds',
     state,
@@ -107,7 +149,8 @@ authRouter.get('/api/auth/discord/login', (c) => startDiscordOAuth(c, false));
 authRouter.get('/api/auth/discord/widget-login', (c) => startDiscordOAuth(c, true));
 
 authRouter.get('/api/auth/discord/callback', async (c) => {
-  const dashboardUrl = getDashboardUrl().replace(/\/$/, '');
+  const target = resolveOAuthTarget(c);
+  const dashboardUrl = target?.dashboardUrl ?? getDashboardUrl().replace(/\/$/, '');
   const code = c.req.query('code');
   const state = c.req.query('state');
 
@@ -132,7 +175,7 @@ authRouter.get('/api/auth/discord/callback', async (c) => {
   const cookies = parseCookies(c.req.header('cookie') ?? '');
   const returnTo = safeReturnTo(cookies.kotbo_oauth_return_to);
 
-  if (!code || !state || !cookies.kotbo_oauth_state || state !== cookies.kotbo_oauth_state || !cookies.kotbo_oauth_verifier) {
+  if (!target || !code || !state || !cookies.kotbo_oauth_state || state !== cookies.kotbo_oauth_state || !cookies.kotbo_oauth_verifier) {
     appendCookies(c.res.headers, clearOAuthCookies());
     return c.redirect(`${dashboardUrl}/login?error=invalid_state`, 302);
   }
@@ -142,11 +185,11 @@ authRouter.get('/api/auth/discord/callback', async (c) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
-        client_id: getDiscordClientId(),
-        client_secret: getDiscordClientSecret(),
+        client_id: target.clientId,
+        client_secret: target.clientSecret,
         grant_type: 'authorization_code',
         code,
-        redirect_uri: getDiscordRedirectUri(),
+        redirect_uri: target.redirectUri,
         code_verifier: cookies.kotbo_oauth_verifier,
       }),
     });
@@ -180,7 +223,9 @@ authRouter.get('/api/auth/discord/callback', async (c) => {
     });
 
     appendCookies(c.res.headers, [...clearOAuthCookies(), makeSessionCookie(session.id)]);
-    return c.redirect(`${dashboardUrl}${returnTo === '/' ? '/' : returnTo}`, 302);
+    // Sur un domaine perso, on arrive sur son serveur (?guild= est lu par lib/guildFromUrl.ts).
+    const landing = target.guildId && returnTo === '/' ? `/?guild=${target.guildId}` : returnTo;
+    return c.redirect(`${dashboardUrl}${landing}`, 302);
   } catch (error) {
     logger.error('Auth', 'OAuth authorization-code callback error:', error);
     appendCookies(c.res.headers, clearOAuthCookies());
@@ -240,3 +285,9 @@ authRouter.post('/api/auth/logout', async (c) => {
   appendCookies(c.res.headers, clearSessionCookies());
   return c.json({ success: true });
 });
+
+// Compatibilité pour les clients utilisant encore l'ancien flux OAuth implicite.
+authRouter.post('/api/auth/discord/token-exchange', (c) =>
+  c.json({ error: 'Le flux OAuth implicite a été désactivé. Reconnectez-vous avec Discord.' }, 410),
+);
+

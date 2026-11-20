@@ -85,6 +85,7 @@ import {
   getPlayerInventory,
 } from '../../../services/features/rpg/rpgPlayerAdminService.js';
 
+import { consumeApproval } from '../staffApproval.js';
 const fail = (e: unknown) => toolError(e);
 
 /**
@@ -1276,16 +1277,16 @@ export function registerRpgTools(ctx: McpToolContext) {
         description: "Dissout une guilde RPG : ses membres gardent leur profil, son trésor et son village sont perdus. Requiert une validation staff (request_staff_approval). Requiert WRITE_MEMBERS.",
         inputSchema: {
           id: z.string().describe('ID de la guilde'),
-          approved_by_staff: z.boolean().default(false).describe('Indique si un bouton Discord a déjà approuvé cette demande'),
+          approval_id: z.string().optional().describe("Identifiant d'une demande request_staff_approval (action_name dissolve_rpg_guild:<id>) approuvée par un humain du staff. Usage unique."),
           key_name: z.string().optional(),
         },
         _meta: toolMeta,
       },
-      guard('WRITE_MEMBERS', async ({ id, approved_by_staff, key_name }) => {
+      guard('WRITE_MEMBERS', async ({ id, approval_id, key_name }) => {
         // Même garde que la remise à zéro de l'économie : le trésor d'une guilde est le
         // fruit du travail de tous ses membres, il ne part pas sur une simple demande.
-        if (!approved_by_staff) {
-          return err('Action critique rejetée. Utilisez request_staff_approval pour soumettre la dissolution à la validation humaine du staff.');
+        if (!(await consumeApproval(guildId, approval_id, `dissolve_rpg_guild:${id}`))) {
+          return err(`Action critique rejetée : aucune approbation staff valide. Utilisez request_staff_approval (action_name dissolve_rpg_guild:${id}), attendez le clic d'un administrateur, puis passez approval_id.`);
         }
         try {
           const { name, members, treasury } = await adminDissolveRpgGuild(guildId, id);

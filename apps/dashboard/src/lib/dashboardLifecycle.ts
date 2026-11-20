@@ -247,7 +247,9 @@ class DashboardLifecycleManager {
       };
 
       this.socket.onerror = (error) => {
-        console.error('[DashboardWS] Erreur:', error);
+        if (!this.intentionallyClosed) {
+          console.error('[DashboardWS] Erreur:', error);
+        }
         this.socket?.close();
       };
     } catch (err) {
@@ -297,9 +299,12 @@ class DashboardLifecycleManager {
     this.unsubscribeState = null;
     setRealtimeStatus('offline');
     if (this.socket) {
+      this.socket.onerror = null;
+      this.socket.onclose = null;
       this.socket.close();
       this.socket = null;
     }
+    this.isConnecting = false;
     this.initialized = false;
   }
 }

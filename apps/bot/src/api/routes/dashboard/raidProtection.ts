@@ -1,8 +1,8 @@
-import { IncomingMessage, ServerResponse } from 'node:http';
-import { Client } from 'discord.js';
+import { Hono } from 'hono';
+import type { Client } from 'discord.js';
 import prisma from '../../../utils/db.js';
 import { logger } from '../../../utils/logger.js';
-import { json, readJsonBody, safePushAudit, getGuildName, type AuthClaims, type DashboardAccess } from '../../shared.js';
+import { safePushAudit, getGuildName } from '../../shared.js';
 import {
   getRaidProtectionConfig,
   upsertRaidProtectionConfig,
@@ -24,8 +24,7 @@ import {
 } from '../../../services/moderation/spam/index.js';
 import { getLineageReport, quarantineLineage } from '../../../services/moderation/inviteLineageService.js';
 
-import { jsonFailure } from '../../shared/failure.js';
-import { handleVisionRoutes } from './visionRoutes.js';
+import { fail, guildRoute, readBody, send } from '../../hono/dashboard/kit.js';
 import { MAX_OTHER_SERVERS, resolveInvite } from '../../../services/moderation/otherServersFilter.js';
 import { FILE_GROUPS, MAX_FILE_RULES, invalidateFileRules, normalizeExtensions } from '../../../services/moderation/fileExtensionFilter.js';
 import { normalizeAutoSanction } from '../../../services/moderation/autoSanction.js';
@@ -64,7 +63,7 @@ const PATCHABLE_FIELDS = [
   'scamFilterEnabled', 'scamFilterAction', 'scamFilterTimeoutMin', 'scamFilterCustomDomains',
   'scamFilterWhitelist', 'scamFilterAlertChannelId', 'scamImageFilterEnabled',
   'scamQrFilterEnabled', 'scamQrTrustedMessages', 'scamOcrEnabled',
-  'visionEnabled', 'visionSanction', 'visionDurationMin', 'visionReviewChannelId', 'visionNotifyMember',
+  'visionEnabled', 'visionSanction', 'visionDurationMin', 'visionReviewChannelId', 'visionNotifyMember', 'visionUncertainDelete',
   'jailRoleId', 'jailChannelId', 'jailStripRoles', 'discordQuarantineSyncEnabled',
   'otherInvitesMode', 'otherFriendInvites', 'otherForwardsMode', 'otherTagsMode', 'otherServers', 'otherSanction', 'otherDurationMin',
   'fileFilterMode', 'fileGroups', 'fileExtensions', 'fileRejectCorrupted', 'fileSanction', 'fileDurationMin',
@@ -72,69 +71,52 @@ const PATCHABLE_FIELDS = [
   'inviteSpamThreshold', 'inviteSpamWindowSec', 'inviteAlertChannelId', 'inviteBypassRoleIds',
 ] as const;
 
-export async function handleRaidProtectionRoutes(
-  req: IncomingMessage,
-  res: ServerResponse,
-  parts: string[],
-  _url: URL,
-  client: Client,
-  user: AuthClaims,
-  guildId: string,
-  _access: DashboardAccess
-): Promise<boolean> {
-  if (parts[4] !== 'raid-protection') return false;
-  const method = req.method;
-  const sub = parts[5];
-  const auditUser = `${user.username ?? 'Utilisateur'} (${user.userId})`;
+export function createRaidProtectionRouter(client: Client) {
+  const router = new Hono();
+  const base = '/api/dashboard/guilds/:guildId';
+  const gate = guildRoute(client);
 
-  if (await handleVisionRoutes(req, res, parts, _url, client, user, guildId)) return true;
 
-  // ── Automod : liste des autres serveurs ─────────────────────────────────
-  // POST /raid-protection/other-servers {invite}
-  if (sub === 'other-servers' && method === 'POST') {
+  router.post(`${base}/raid-protection/other-servers`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
     try {
-      const body = (await readJsonBody(req)) ?? {};
+      const body = (await readBody(c)) ?? {};
       const code = String(body.invite ?? '').trim().replace(/^.*\//, '');
       const invite = code ? await resolveInvite(client, code) : { kind: 'INVALID' as const };
       if (invite.kind !== 'GUILD') {
-        json(res, 400, { error: 'Invitation invalide ou expirée : colle une invitation vers le serveur à ajouter.' });
-        return true;
+        return send(c, { error: 'Invitation invalide ou expirée : colle une invitation vers le serveur à ajouter.' }, 400);
       }
       const config = (await getRaidProtectionConfig(guildId)) ?? (await upsertRaidProtectionConfig(guildId, {}));
       const others = config.otherServers.filter((entry) => !entry.startsWith(`${invite.guildId}|`));
       if (others.length >= MAX_OTHER_SERVERS) {
-        json(res, 409, { error: `${MAX_OTHER_SERVERS} serveurs au plus dans la liste.` });
-        return true;
+        return send(c, { error: `${MAX_OTHER_SERVERS} serveurs au plus dans la liste.` }, 409);
       }
       const updated = await upsertRaidProtectionConfig(guildId, { otherServers: [...others, `${invite.guildId}|${invite.guildName.replace(/\|/g, ' ')}`] });
-      json(res, 200, { config: updated });
+      return send(c, { config: updated });
     } catch (err) {
       logger.error('RaidProtectionAPI', 'Erreur ajout serveur:', err);
-      jsonFailure(res, err, 'Erreur lors de l\'ajout du serveur', 'RaidProtectionAPI');
+      return fail(c, err, 'Erreur lors de l\'ajout du serveur', 'RaidProtectionAPI');
     }
-    return true;
-  }
+  });
 
-  // ── Automod : règles de fichiers par salon / catégorie ───────────────────
-  // GET /raid-protection/file-rules · POST {targetId, mode, groups, extensions} · DELETE /:id
-  if (sub === 'file-rules') {
+  router.on(['GET', 'POST', 'DELETE'], [`${base}/raid-protection/file-rules`, `${base}/raid-protection/file-rules/:ruleId`], ...gate, async (c) => {
+    const guildId = c.req.param('guildId')!;
+    const method = c.req.method;
+    const ruleId = c.req.param('ruleId');
     try {
       if (method === 'GET') {
-        json(res, 200, { rules: await prisma.fileFilterRule.findMany({ where: { guildId }, orderBy: { createdAt: 'asc' } }), groups: FILE_GROUPS, maxRules: MAX_FILE_RULES });
-        return true;
+        return send(c, { rules: await prisma.fileFilterRule.findMany({ where: { guildId }, orderBy: { createdAt: 'asc' } }), groups: FILE_GROUPS, maxRules: MAX_FILE_RULES });
       }
       if (method === 'POST') {
-        const body = (await readJsonBody(req)) ?? {};
+        const body = (await readBody(c)) ?? {};
         const targetId = String(body.targetId ?? '');
         const target = client.guilds.cache.get(guildId)?.channels.cache.get(targetId);
         if (!target) {
-          json(res, 400, { error: 'Salon ou catégorie introuvable.' });
-          return true;
+          return send(c, { error: 'Salon ou catégorie introuvable.' }, 400);
         }
         const exists = await prisma.fileFilterRule.findUnique({ where: { guildId_targetId: { guildId, targetId } }, select: { id: true } });
         if (!exists && (await prisma.fileFilterRule.count({ where: { guildId } })) >= MAX_FILE_RULES) {
-          json(res, 409, { error: `${MAX_FILE_RULES} règles au plus.` });
-          return true;
+          return send(c, { error: `${MAX_FILE_RULES} règles au plus.` }, 409);
         }
         const data = {
           targetType: target.type === 4 ? 'CATEGORY' : 'CHANNEL',
@@ -148,66 +130,57 @@ export async function handleRaidProtectionRoutes(
           update: data,
         });
         await invalidateFileRules(guildId);
-        json(res, 200, { rule });
-        return true;
+        return send(c, { rule });
       }
-      if (method === 'DELETE' && parts[6]) {
-        await prisma.fileFilterRule.deleteMany({ where: { id: parts[6], guildId } });
+      if (method === 'DELETE' && ruleId) {
+        await prisma.fileFilterRule.deleteMany({ where: { id: ruleId, guildId } });
         await invalidateFileRules(guildId);
-        json(res, 200, { success: true });
-        return true;
+        return send(c, { success: true });
       }
     } catch (err) {
       logger.error('RaidProtectionAPI', 'Erreur règles de fichiers:', err);
-      jsonFailure(res, err, 'Erreur sur les règles de fichiers', 'RaidProtectionAPI');
-      return true;
+      return fail(c, err, 'Erreur sur les règles de fichiers', 'RaidProtectionAPI');
     }
-  }
+  });
 
-  // ── Shield ─────────────────────────────────────────────────────────────
-  // POST /raid-protection/shield {level} · /shield/panel {channelId | create} · /shield/status
-  if (sub === 'shield' && method === 'POST') {
+  router.on(['POST'], [`${base}/raid-protection/shield`, `${base}/raid-protection/shield/:shieldAction{panel|status}`], ...gate, async (c) => {
+    const shieldAction = c.req.param('shieldAction');
+    const guildId = c.req.param('guildId')!;
+    const user = c.var.dashboardUser;
+    const auditUser = `${user.username ?? 'Utilisateur'} (${user.userId})`;
     try {
       const guild = client.guilds.cache.get(guildId);
       if (!guild) {
-        json(res, 404, { error: 'Serveur introuvable' });
-        return true;
+        return send(c, { error: 'Serveur introuvable' }, 404);
       }
-      const body = (await readJsonBody(req)) ?? {};
-      if (!parts[6]) {
+      const body = (await readBody(c)) ?? {};
+      if (!shieldAction) {
         const level = Number(body.level);
         if (!isShieldLevel(level)) {
-          json(res, 400, { error: 'Niveau Shield invalide (1 à 5)' });
-          return true;
+          return send(c, { error: 'Niveau Shield invalide (1 à 5)' }, 400);
         }
         const result = await setShieldLevel(guild, level, user.userId);
         await safePushAudit(guildId, { user: auditUser, action: `Shield ${result.previous} → ${result.level}`, context: getGuildName(client, guildId), module: 'RaidProtection', eventType: 'Manuel', details: result.warnings.join(' | '), channelId: null }, 'RaidProtectionAPI');
-        json(res, 200, { ...result, config: await getRaidProtectionConfig(guildId) });
-        return true;
+        return send(c, { ...result, config: await getRaidProtectionConfig(guildId) });
       }
-      if (parts[6] === 'panel') {
+      if (shieldAction === 'panel') {
         const channelId = body.create === true ? await createShieldPanelChannel(guild) : String(body.channelId ?? '');
         const result = await postShieldPanel(guild, channelId);
         if (!result.ok) {
-          json(res, 400, { error: result.reason });
-          return true;
+          return send(c, { error: result.reason }, 400);
         }
-        json(res, 200, { channelId, config: await getRaidProtectionConfig(guildId) });
-        return true;
+        return send(c, { channelId, config: await getRaidProtectionConfig(guildId) });
       }
-      if (parts[6] === 'status') {
+      if (shieldAction === 'status') {
         const channelId = await createShieldStatusChannel(guild);
-        json(res, 200, { channelId, config: await getRaidProtectionConfig(guildId) });
-        return true;
+        return send(c, { channelId, config: await getRaidProtectionConfig(guildId) });
       }
     } catch (err) {
       logger.error('RaidProtectionAPI', 'Erreur Shield:', err);
-      jsonFailure(res, err, 'Erreur Shield', 'RaidProtectionAPI');
-      return true;
+      return fail(c, err, 'Erreur Shield', 'RaidProtectionAPI');
     }
-  }
+  });
 
-  // GET /raid-protection - config + compteurs
   //
   // La config est creee si elle manque, comme le fait /automod. Un serveur que
   // le bot vient de rejoindre n'a pas encore de ligne, et renvoyer `null`
@@ -216,7 +189,8 @@ export async function handleRaidProtectionRoutes(
   // creation est sans effet, tous les interrupteurs du modele etant a false par
   // defaut - seul joinLockKick vaut true, et il ne joue que si joinLockEnabled
   // est actif.
-  if (!sub && method === 'GET') {
+  router.get(`${base}/raid-protection`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
     try {
       const [config, reportStats, pendingInvites, scamImageCount] = await Promise.all([
         getRaidProtectionConfig(guildId).then((c) => c ?? upsertRaidProtectionConfig(guildId, {})),
@@ -224,21 +198,21 @@ export async function handleRaidProtectionRoutes(
         prisma.inviteApprovalRequest.count({ where: { guildId, status: 'PENDING' } }),
         prisma.scamImageHash.count({ where: { OR: [{ guildId }, { guildId: null }] } }),
       ]);
-      json(res, 200, { config, reportStats, pendingInvites, scamImageCount });
+      return send(c, { config, reportStats, pendingInvites, scamImageCount });
     } catch (err) {
       logger.error('RaidProtectionAPI', 'Erreur GET config:', err);
-      jsonFailure(res, err, 'Erreur lors de la récupération de la configuration', 'RaidProtectionAPI');
+      return fail(c, err, 'Erreur lors de la récupération de la configuration', 'RaidProtectionAPI');
     }
-    return true;
-  }
+  });
 
-  // PATCH /raid-protection - mise à jour de la config
-  if (!sub && method === 'PATCH') {
+  router.patch(`${base}/raid-protection`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const auditUser = `${user.username ?? 'Utilisateur'} (${user.userId})`;
     try {
-      const body = await readJsonBody<Record<string, unknown>>(req);
+      const body = await readBody<Record<string, unknown>>(c);
       if (!body) {
-        json(res, 400, { error: 'Corps de requête manquant' });
-        return true;
+        return send(c, { error: 'Corps de requête manquant' }, 400);
       }
       const data: Record<string, unknown> = {};
       for (const field of PATCHABLE_FIELDS) {
@@ -310,22 +284,22 @@ export async function handleRaidProtectionRoutes(
         details: '',
         channelId: null,
       }, 'RaidProtectionAPI');
-      json(res, 200, { config });
+      return send(c, { config });
     } catch (err) {
       logger.error('RaidProtectionAPI', 'Erreur PATCH config:', err);
-      jsonFailure(res, err, 'Erreur lors de la mise à jour de la configuration', 'RaidProtectionAPI');
+      return fail(c, err, 'Erreur lors de la mise à jour de la configuration', 'RaidProtectionAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /raid-protection/raidmode { active }
-  if (sub === 'raidmode' && method === 'POST') {
+  router.post(`${base}/raid-protection/raidmode`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const auditUser = `${user.username ?? 'Utilisateur'} (${user.userId})`;
     try {
-      const body = await readJsonBody<{ active?: boolean }>(req);
+      const body = await readBody<{ active?: boolean }>(c);
       const guild = client.guilds.cache.get(guildId);
       if (!guild) {
-        json(res, 404, { error: 'Serveur introuvable' });
-        return true;
+        return send(c, { error: 'Serveur introuvable' }, 404);
       }
       const config = (await getRaidProtectionConfig(guildId)) ?? (await upsertRaidProtectionConfig(guildId, {}));
       if (body?.active) {
@@ -351,22 +325,23 @@ export async function handleRaidProtectionRoutes(
         channelId: null,
       }, 'RaidProtectionAPI');
       }
-      json(res, 200, { config: await getRaidProtectionConfig(guildId) });
+      return send(c, { config: await getRaidProtectionConfig(guildId) });
     } catch (err) {
       logger.error('RaidProtectionAPI', 'Erreur raidmode:', err);
-      jsonFailure(res, err, 'Erreur lors du changement de mode raid', 'RaidProtectionAPI');
+      return fail(c, err, 'Erreur lors du changement de mode raid', 'RaidProtectionAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /raid-protection/joinlock | dmlock { active, hours? }
-  if ((sub === 'joinlock' || sub === 'dmlock') && method === 'POST') {
+  router.post(`${base}/raid-protection/:sub{joinlock|dmlock}`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const auditUser = `${user.username ?? 'Utilisateur'} (${user.userId})`;
+    const sub = c.req.param('sub');
     try {
-      const body = await readJsonBody<{ active?: boolean; hours?: number }>(req);
+      const body = await readBody<{ active?: boolean; hours?: number }>(c);
       const guild = client.guilds.cache.get(guildId);
       if (!guild) {
-        json(res, 404, { error: 'Serveur introuvable' });
-        return true;
+        return send(c, { error: 'Serveur introuvable' }, 404);
       }
       const until = body?.hours ? new Date(Date.now() + body.hours * 60 * 60 * 1000) : null;
       if (sub === 'joinlock') {
@@ -385,22 +360,22 @@ export async function handleRaidProtectionRoutes(
         details: '',
         channelId: null,
       }, 'RaidProtectionAPI');
-      json(res, 200, { config: await getRaidProtectionConfig(guildId) });
+      return send(c, { config: await getRaidProtectionConfig(guildId) });
     } catch (err) {
       logger.error('RaidProtectionAPI', `Erreur ${sub}:`, err);
-      jsonFailure(res, err, 'Erreur lors du changement de verrou', 'RaidProtectionAPI');
+      return fail(c, err, 'Erreur lors du changement de verrou', 'RaidProtectionAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /raid-protection/invite-emergency { active }
-  if (sub === 'invite-emergency' && method === 'POST') {
+  router.post(`${base}/raid-protection/invite-emergency`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const auditUser = `${user.username ?? 'Utilisateur'} (${user.userId})`;
     try {
-      const body = await readJsonBody<{ active?: boolean }>(req);
+      const body = await readBody<{ active?: boolean }>(c);
       const guild = client.guilds.cache.get(guildId);
       if (!guild) {
-        json(res, 404, { error: 'Serveur introuvable' });
-        return true;
+        return send(c, { error: 'Serveur introuvable' }, 404);
       }
       let deleted = 0;
       if (body?.active) deleted = await enableInviteEmergency(guild);
@@ -414,108 +389,103 @@ export async function handleRaidProtectionRoutes(
         details: '',
         channelId: null,
       }, 'RaidProtectionAPI');
-      json(res, 200, { config: await getRaidProtectionConfig(guildId), deleted });
+      return send(c, { config: await getRaidProtectionConfig(guildId), deleted });
     } catch (err) {
       logger.error('RaidProtectionAPI', 'Erreur invite-emergency:', err);
-      jsonFailure(res, err, 'Erreur lors du changement du mode urgence', 'RaidProtectionAPI');
+      return fail(c, err, 'Erreur lors du changement du mode urgence', 'RaidProtectionAPI');
     }
-    return true;
-  }
+  });
 
-  // GET /raid-protection/reports?status=PENDING
-  if (sub === 'reports' && !parts[6] && method === 'GET') {
+  router.get(`${base}/raid-protection/reports`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
     try {
-      const status = _url.searchParams.get('status') ?? undefined;
+      const status = c.req.query('status') ?? undefined;
       const reports = await prisma.memberReport.findMany({
         where: { guildId, ...(status ? { status } : {}) },
         orderBy: { createdAt: 'desc' },
         take: 100,
       });
-      json(res, 200, { reports });
+      return send(c, { reports });
     } catch (err) {
       logger.error('RaidProtectionAPI', 'Erreur GET reports:', err);
-      jsonFailure(res, err, 'Erreur lors de la récupération des signalements', 'RaidProtectionAPI');
+      return fail(c, err, 'Erreur lors de la récupération des signalements', 'RaidProtectionAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /raid-protection/reports/:id/decision { resolved }
-  if (sub === 'reports' && parts[6] && parts[7] === 'decision' && method === 'POST') {
+  router.post(`${base}/raid-protection/reports/:id/decision`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const id = c.req.param('id');
     try {
-      const body = await readJsonBody<{ resolved?: boolean }>(req);
-      const report = await handleReportDecision(parts[6], user.userId, Boolean(body?.resolved));
+      const body = await readBody<{ resolved?: boolean }>(c);
+      const report = await handleReportDecision(guildId, id, user.userId, Boolean(body?.resolved));
       if (!report) {
-        json(res, 404, { error: 'Signalement introuvable ou déjà traité' });
-        return true;
+        return send(c, { error: 'Signalement introuvable ou déjà traité' }, 404);
       }
-      json(res, 200, { report });
+      return send(c, { report });
     } catch (err) {
       logger.error('RaidProtectionAPI', 'Erreur decision report:', err);
-      jsonFailure(res, err, 'Erreur lors du traitement du signalement', 'RaidProtectionAPI');
+      return fail(c, err, 'Erreur lors du traitement du signalement', 'RaidProtectionAPI');
     }
-    return true;
-  }
+  });
 
-  // GET /raid-protection/invite-requests
-  if (sub === 'invite-requests' && !parts[6] && method === 'GET') {
+  router.get(`${base}/raid-protection/invite-requests`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
     try {
       const requests = await prisma.inviteApprovalRequest.findMany({
         where: { guildId },
         orderBy: { createdAt: 'desc' },
         take: 100,
       });
-      json(res, 200, { requests });
+      return send(c, { requests });
     } catch (err) {
       logger.error('RaidProtectionAPI', 'Erreur GET invite-requests:', err);
-      jsonFailure(res, err, 'Erreur lors de la récupération des demandes', 'RaidProtectionAPI');
+      return fail(c, err, 'Erreur lors de la récupération des demandes', 'RaidProtectionAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /raid-protection/invite-requests/:id/decision { approved }
-  if (sub === 'invite-requests' && parts[6] && parts[7] === 'decision' && method === 'POST') {
+  router.post(`${base}/raid-protection/invite-requests/:id/decision`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const id = c.req.param('id');
     try {
-      const body = await readJsonBody<{ approved?: boolean }>(req);
+      const body = await readBody<{ approved?: boolean }>(c);
       const request = body?.approved
-        ? await approveInviteRequest(client, parts[6], user.userId)
-        : await rejectInviteRequest(client, parts[6], user.userId);
+        ? await approveInviteRequest(client, guildId, id, user.userId)
+        : await rejectInviteRequest(client, guildId, id, user.userId);
       if (!request) {
-        json(res, 404, { error: 'Demande introuvable ou déjà traitée' });
-        return true;
+        return send(c, { error: 'Demande introuvable ou déjà traitée' }, 404);
       }
-      json(res, 200, { request });
+      return send(c, { request });
     } catch (err) {
       logger.error('RaidProtectionAPI', 'Erreur decision invite:', err);
-      jsonFailure(res, err, 'Erreur lors du traitement de la demande', 'RaidProtectionAPI');
+      return fail(c, err, 'Erreur lors du traitement de la demande', 'RaidProtectionAPI');
     }
-    return true;
-  }
+  });
 
-  // ── Moteur anti-spam comportemental ────────────────────────────────────────
-
-  // GET /raid-protection/spam - config + statistiques de calibration
-  if (sub === 'spam' && !parts[6] && method === 'GET') {
+  router.get(`${base}/raid-protection/spam`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
     try {
-      const days = Math.min(90, Math.max(1, Number(_url.searchParams.get('days')) || 14));
+      const days = Math.min(90, Math.max(1, Number((c.req.query('days') ?? null)) || 14));
       const [config, stats] = await Promise.all([
         getSpamConfig(guildId),
         getCalibrationStats(guildId, days).catch(() => null),
       ]);
-      json(res, 200, { config, stats });
+      return send(c, { config, stats });
     } catch (err) {
       logger.error('RaidProtectionAPI', 'Erreur GET spam:', err);
-      jsonFailure(res, err, 'Erreur lors de la récupération de la configuration anti-spam', 'RaidProtectionAPI');
+      return fail(c, err, 'Erreur lors de la récupération de la configuration anti-spam', 'RaidProtectionAPI');
     }
-    return true;
-  }
+  });
 
-  // PATCH /raid-protection/spam - mise à jour de la config
-  if (sub === 'spam' && !parts[6] && method === 'PATCH') {
+  router.patch(`${base}/raid-protection/spam`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const auditUser = `${user.username ?? 'Utilisateur'} (${user.userId})`;
     try {
-      const body = await readJsonBody<Record<string, unknown>>(req);
+      const body = await readBody<Record<string, unknown>>(c);
       if (!body) {
-        json(res, 400, { error: 'Corps de requête manquant' });
-        return true;
+        return send(c, { error: 'Corps de requête manquant' }, 400);
       }
 
       const data: Record<string, unknown> = {};
@@ -532,8 +502,7 @@ export async function handleRaidProtectionRoutes(
       );
       for (let i = 1; i < resolved.length; i++) {
         if (resolved[i] < resolved[i - 1]) {
-          json(res, 400, { error: 'Les paliers doivent être croissants : journalisation ≤ suppression ≤ exclusion ≤ bannissement.' });
-          return true;
+          return send(c, { error: 'Les paliers doivent être croissants : journalisation ≤ suppression ≤ exclusion ≤ bannissement.' }, 400);
         }
       }
 
@@ -547,19 +516,18 @@ export async function handleRaidProtectionRoutes(
         details: Object.keys(data).join(', '),
         channelId: null,
       }, 'RaidProtectionAPI');
-      json(res, 200, { config });
+      return send(c, { config });
     } catch (err) {
       logger.error('RaidProtectionAPI', 'Erreur PATCH spam:', err);
-      jsonFailure(res, err, 'Erreur lors de la mise à jour de la configuration anti-spam', 'RaidProtectionAPI');
+      return fail(c, err, 'Erreur lors de la mise à jour de la configuration anti-spam', 'RaidProtectionAPI');
     }
-    return true;
-  }
+  });
 
-  // GET /raid-protection/spam/samples?pending=1 - file de décision
-  if (sub === 'spam' && parts[6] === 'samples' && method === 'GET') {
+  router.get(`${base}/raid-protection/spam/samples`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
     try {
-      const pendingOnly = _url.searchParams.get('pending') === '1';
-      const minScore = Number(_url.searchParams.get('minScore')) || 0;
+      const pendingOnly = (c.req.query('pending') ?? null) === '1';
+      const minScore = Number((c.req.query('minScore') ?? null)) || 0;
       const samples = await prisma.spamDetectionSample.findMany({
         where: {
           guildId,
@@ -569,28 +537,28 @@ export async function handleRaidProtectionRoutes(
         orderBy: { createdAt: 'desc' },
         take: 100,
       });
-      json(res, 200, { samples });
+      return send(c, { samples });
     } catch (err) {
       logger.error('RaidProtectionAPI', 'Erreur GET spam/samples:', err);
-      jsonFailure(res, err, 'Erreur lors de la récupération des détections', 'RaidProtectionAPI');
+      return fail(c, err, 'Erreur lors de la récupération des détections', 'RaidProtectionAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /raid-protection/spam/samples/:id/decision { truePositive }
-  if (sub === 'spam' && parts[6] === 'samples' && parts[7] && parts[8] === 'decision' && method === 'POST') {
+  router.post(`${base}/raid-protection/spam/samples/:id/decision`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const auditUser = `${user.username ?? 'Utilisateur'} (${user.userId})`;
+    const id = c.req.param('id');
     try {
-      const body = await readJsonBody<{ truePositive?: boolean }>(req);
+      const body = await readBody<{ truePositive?: boolean }>(c);
       if (typeof body?.truePositive !== 'boolean') {
-        json(res, 400, { error: 'Champ truePositive manquant' });
-        return true;
+        return send(c, { error: 'Champ truePositive manquant' }, 400);
       }
 
       const label = body.truePositive ? 'TRUE_POSITIVE' : 'FALSE_POSITIVE';
-      const ok = await recordSpamDecision(guildId, parts[7], label, user.userId);
+      const ok = await recordSpamDecision(guildId, id, label, user.userId);
       if (!ok) {
-        json(res, 404, { error: 'Détection introuvable' });
-        return true;
+        return send(c, { error: 'Détection introuvable' }, 404);
       }
 
       await safePushAudit(guildId, {
@@ -599,59 +567,58 @@ export async function handleRaidProtectionRoutes(
         context: getGuildName(client, guildId),
         module: 'AntiSpam',
         eventType: 'Manuel',
-        details: parts[7],
+        details: id,
         channelId: null,
       }, 'RaidProtectionAPI');
-      json(res, 200, { success: true });
+      return send(c, { success: true });
     } catch (err) {
       logger.error('RaidProtectionAPI', 'Erreur POST spam/decision:', err);
-      jsonFailure(res, err, 'Erreur lors de l\'enregistrement de la décision', 'RaidProtectionAPI');
+      return fail(c, err, 'Erreur lors de l\'enregistrement de la décision', 'RaidProtectionAPI');
     }
-    return true;
-  }
+  });
 
-  // ── Lignage des invitations ────────────────────────────────────────────────
-
-  // GET /raid-protection/lineage/:userId - d'où vient ce membre, et qui a-t-il amené
-  if (sub === 'lineage' && parts[6] && !parts[7] && method === 'GET') {
+  router.get(`${base}/raid-protection/lineage/:userId`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const userId = c.req.param('userId');
     try {
-      const report = await getLineageReport(guildId, parts[6]);
-      json(res, 200, { report });
+      const report = await getLineageReport(guildId, userId);
+      return send(c, { report });
     } catch (err) {
       logger.error('RaidProtectionAPI', 'Erreur GET lineage:', err);
-      jsonFailure(res, err, 'Erreur lors du calcul du lignage', 'RaidProtectionAPI');
+      return fail(c, err, 'Erreur lors du calcul du lignage', 'RaidProtectionAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /raid-protection/lineage/:userId/quarantine { dryRun, maxDepth, sinceDays, quarantineRoleId }
-  if (sub === 'lineage' && parts[6] && parts[7] === 'quarantine' && method === 'POST') {
+  router.post(`${base}/raid-protection/lineage/:userId/quarantine`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const auditUser = `${user.username ?? 'Utilisateur'} (${user.userId})`;
+    const userId = c.req.param('userId');
     try {
-      const body = await readJsonBody<{
+      const body = await readBody<{
         dryRun?: boolean;
         maxDepth?: number;
         sinceDays?: number;
         quarantineRoleId?: string | null;
-      }>(req);
+      }>(c);
 
       const guild = client.guilds.cache.get(guildId) ?? (await client.guilds.fetch(guildId).catch(() => null));
       if (!guild) {
-        json(res, 404, { error: 'Serveur introuvable' });
-        return true;
+        return send(c, { error: 'Serveur introuvable' }, 404);
       }
 
-      const result = await quarantineLineage(guild, parts[6], {
+      const result = await quarantineLineage(guild, userId, {
         dryRun: body?.dryRun !== false,
         maxDepth: body?.maxDepth,
         since: body?.sinceDays ? new Date(Date.now() - body.sinceDays * 86_400_000) : undefined,
         quarantineRoleId: body?.quarantineRoleId ?? null,
-        reason: `Quarantaine de lignage depuis ${parts[6]}, demandée par ${auditUser}`,
+        reason: `Quarantaine de lignage depuis ${userId}, demandée par ${auditUser}`,
       });
 
       if (!result.dryRun) {
         await safePushAudit(guildId, {
           user: auditUser,
-          action: `Quarantaine de lignage appliquée depuis ${parts[6]}`,
+          action: `Quarantaine de lignage appliquée depuis ${userId}`,
           context: getGuildName(client, guildId),
           module: 'InviteLineage',
           eventType: 'Manuel',
@@ -660,51 +627,47 @@ export async function handleRaidProtectionRoutes(
         }, 'RaidProtectionAPI');
       }
 
-      json(res, 200, { result });
+      return send(c, { result });
     } catch (err) {
       logger.error('RaidProtectionAPI', 'Erreur POST lineage/quarantine:', err);
-      jsonFailure(res, err, 'Erreur lors de la mise en quarantaine', 'RaidProtectionAPI');
+      return fail(c, err, 'Erreur lors de la mise en quarantaine', 'RaidProtectionAPI');
     }
-    return true;
-  }
+  });
 
-  // GET /raid-protection/audit[?deep=0] - rapport d'audit de sécurité complet
-  if (sub === 'audit' && !parts[6] && method === 'GET') {
+  router.get(`${base}/raid-protection/audit`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
     try {
       const guild = client.guilds.cache.get(guildId) ?? (await client.guilds.fetch(guildId).catch(() => null));
       if (!guild) {
-        json(res, 404, { error: 'Serveur introuvable' });
-        return true;
+        return send(c, { error: 'Serveur introuvable' }, 404);
       }
-      const deep = _url.searchParams.get('deep') !== '0';
+      const deep = (c.req.query('deep') ?? null) !== '0';
       const report = await runSecurityAudit(guild, { deep });
-      json(res, 200, { report });
+      return send(c, { report });
     } catch (err) {
       logger.error('RaidProtectionAPI', 'Erreur GET audit:', err);
-      jsonFailure(res, err, 'Erreur lors de l\'audit de sécurité', 'RaidProtectionAPI');
+      return fail(c, err, 'Erreur lors de l\'audit de sécurité', 'RaidProtectionAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /raid-protection/audit/fix { findingId } - correctif en un clic
-  if (sub === 'audit' && parts[6] === 'fix' && method === 'POST') {
+  router.post(`${base}/raid-protection/audit/fix`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const auditUser = `${user.username ?? 'Utilisateur'} (${user.userId})`;
     try {
-      const body = await readJsonBody<{ findingId?: string }>(req);
+      const body = await readBody<{ findingId?: string }>(c);
       const findingId = body?.findingId;
       if (!findingId) {
-        json(res, 400, { error: 'findingId manquant' });
-        return true;
+        return send(c, { error: 'findingId manquant' }, 400);
       }
       const guild = client.guilds.cache.get(guildId) ?? (await client.guilds.fetch(guildId).catch(() => null));
       if (!guild) {
-        json(res, 404, { error: 'Serveur introuvable' });
-        return true;
+        return send(c, { error: 'Serveur introuvable' }, 404);
       }
 
       const outcome = await applyAuditFix(guild, findingId, `Correctif d'audit appliqué par ${auditUser}`);
       if (!outcome.ok) {
-        json(res, 400, { error: outcome.message });
-        return true;
+        return send(c, { error: outcome.message }, 400);
       }
 
       await safePushAudit(guildId, {
@@ -719,24 +682,24 @@ export async function handleRaidProtectionRoutes(
 
       // Le rapport est recalculé pour que l'UI reflète immédiatement l'effet.
       const report = await runSecurityAudit(guild, { deep: false });
-      json(res, 200, { success: true, message: outcome.message, report });
+      return send(c, { success: true, message: outcome.message, report });
     } catch (err) {
       logger.error('RaidProtectionAPI', 'Erreur POST audit/fix:', err);
-      jsonFailure(res, err, 'Erreur lors de l\'application du correctif', 'RaidProtectionAPI');
+      return fail(c, err, 'Erreur lors de l\'application du correctif', 'RaidProtectionAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /raid-protection/audit/fix-all - applique tout ce qui est sans risque
   //
   // Les correctifs `risky` sont exclus cote service : ils modifient des
   // permissions existantes et gardent leur confirmation individuelle.
-  if (sub === 'audit' && parts[6] === 'fix-all' && method === 'POST') {
+  router.post(`${base}/raid-protection/audit/fix-all`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const auditUser = `${user.username ?? 'Utilisateur'} (${user.userId})`;
     try {
       const guild = client.guilds.cache.get(guildId) ?? (await client.guilds.fetch(guildId).catch(() => null));
       if (!guild) {
-        json(res, 404, { error: 'Serveur introuvable' });
-        return true;
+        return send(c, { error: 'Serveur introuvable' }, 404);
       }
 
       const { applied, failed } = await applySafeAuditFixes(
@@ -758,13 +721,13 @@ export async function handleRaidProtectionRoutes(
 
       // Rapport recalcule pour que le score et la liste refletent le lot.
       const report = await runSecurityAudit(guild, { deep: false });
-      json(res, 200, { success: true, applied, failed, report });
+      return send(c, { success: true, applied, failed, report });
     } catch (err) {
       logger.error('RaidProtectionAPI', 'Erreur POST audit/fix-all:', err);
-      jsonFailure(res, err, "Erreur lors de l'application des correctifs", 'RaidProtectionAPI');
+      return fail(c, err, "Erreur lors de l'application des correctifs", 'RaidProtectionAPI');
     }
-    return true;
-  }
+  });
 
-  return false;
+  return router;
 }
+

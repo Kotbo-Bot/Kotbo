@@ -60,13 +60,55 @@ export async function deleteLevelingReward(rewardId: string, guildId = authStore
   return dashboardMutation(`/leveling/rewards/${rewardId}`, { method: 'DELETE', guildId, errorContext: 'API Error (Delete Leveling Reward):' });
 }
 
-export async function importLevelingData(
-  data: unknown[],
-  options: { dryRun?: boolean } = {},
+/**
+ * Lecture par IA de captures ou de texte d'un classement tiers (offre Plus).
+ * Ne fait que rendre des lignes au format de l'import : rien n'est écrit.
+ */
+export async function extractLevelingLeaderboard(
+  input: { text?: string; images?: Array<{ mediaType: string; data: string }> },
   guildId = authStore.selectedGuildId,
 ) {
-  const path = options.dryRun ? '/leveling/import?dry_run=1' : '/leveling/import';
-  return dashboardRequest(path, { method: 'POST', successMessage: m.api_ok_import_leveling_data(), payload: data, guildId, silent: options.dryRun, errorContext: 'API Error (Import Leveling):' });
+  return dashboardRequest('/leveling/import/extract', {
+    method: 'POST',
+    payload: input,
+    guildId,
+    silent: true,
+    // Un appel au modèle sur plusieurs captures dépasse le délai par défaut.
+    timeoutMs: 120_000,
+    errorContext: 'API Error (Extract Leveling):',
+  });
+}
+
+export async function importLevelingData(
+  data: unknown[],
+  options: {
+    dryRun?: boolean;
+    source?: 'mee6' | 'draftbot' | 'lurkr' | 'tatsu';
+    /** Clef d'API de la source quand elle en exige une (Tatsu). */
+    apiKey?: string;
+    onProgress?: (fetched: number) => void;
+  } = {},
+  guildId = authStore.selectedGuildId,
+) {
+  const params = new URLSearchParams();
+  if (options.dryRun) params.set('dry_run', '1');
+  if (options.source) params.set('source', options.source);
+  const path = params.size ? `/leveling/import?${params}` : '/leveling/import';
+  // Une source est lue chez l'autre bot en tâche de fond : le serveur répond
+  // `pending` tant que la lecture dure, on rappelle jusqu'au rapport.
+  for (;;) {
+    const res = await dashboardRequest(path, {
+      method: 'POST',
+      successMessage: m.api_ok_import_leveling_data(),
+      payload: options.source ? { apiKey: options.apiKey } : data,
+      guildId,
+      silent: options.dryRun || !!options.source,
+      errorContext: 'API Error (Import Leveling):',
+    });
+    if (!res?.pending) return res;
+    options.onProgress?.(res.fetched ?? 0);
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+  }
 }
 
 
@@ -479,25 +521,6 @@ export async function fetchAdminLockRequestDetail(requestId: string, guildId = a
 
 export async function decideAdminLockRequest(requestId: string, payload: { decision: 'APPROVED' | 'REJECTED'; reason?: string }, guildId = authStore.selectedGuildId) {
   return dashboardRequest(`/admin-lock/${requestId}/decide`, { method: 'POST', successMessage: m.api_ok_decide_admin_lock_request(), payload, guildId, errorContext: 'API Error (Decide Admin Lock Request):' });
-}
-
-export async function fetchSuggestions(guildId = authStore.selectedGuildId) {
-  return dashboardRequest('/suggestions', { method: 'GET', guildId, errorContext: 'API Error (Fetch Suggestions):' });
-}
-
-export async function fetchSuggestionsConfig(guildId = authStore.selectedGuildId) {
-  return dashboardRequest('/suggestions/config', { method: 'GET', guildId, errorContext: 'API Error (Fetch Suggestions Config):' });
-}
-
-export async function updateSuggestionsConfig(
-  config: { enabled?: boolean; channelId?: string | null },
-  guildId = authStore.selectedGuildId
-) {
-  return dashboardRequest('/suggestions/config', { method: 'PATCH', successMessage: m.api_ok_update_suggestions_config(), payload: config, guildId, errorContext: 'API Error (Update Suggestions Config):' });
-}
-
-export async function resolveSuggestion(suggestionId: string, payload: { status: 'APPROVED' | 'REJECTED' | 'IMPLEMENTED'; responseText: string }, guildId = authStore.selectedGuildId) {
-  return dashboardRequest(`/suggestions/${suggestionId}/resolve`, { method: 'POST', successMessage: m.api_ok_resolve_suggestion(), payload, guildId, errorContext: 'API Error (Resolve Suggestion):' });
 }
 
 export async function sendOrUpdateEmbed(payload: { channelId: string; messageId?: string | null; embed: Record<string, unknown> }, guildId = authStore.selectedGuildId) {

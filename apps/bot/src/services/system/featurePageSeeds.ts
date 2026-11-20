@@ -163,11 +163,6 @@ const MODULE_SEO: Record<string, { slug: { fr: string; en: string }; nameFr?: st
     nameEn: 'Fun channels',
     descriptionEn: 'Counting, one-word story, mystery number and channel mini-games.',
   },
-  daily_algo: {
-    slug: { fr: 'daily-algo', en: 'daily-algo' },
-    nameEn: 'Daily Algo',
-    descriptionEn: 'Daily algorithm challenge, submissions and a weekly leaderboard.',
-  },
   tickets: {
     slug: { fr: 'tickets-discord', en: 'discord-tickets' },
     nameEn: 'Support tickets',
@@ -286,15 +281,15 @@ const MODULE_SEO: Record<string, { slug: { fr: string; en: string }; nameFr?: st
     nameEn: 'Bump reminder',
     descriptionEn: 'Automatically detects bumps (Disboard, Discadia, DS.me, Disforge...) and reminds you as soon as the server can bump again.',
   },
+  rich_links: {
+    slug: { fr: 'apercus-de-liens', en: 'link-previews' },
+    nameEn: 'Link previews',
+    descriptionEn: 'Replies to GitHub, X, Bluesky, TikTok, Instagram, YouTube, Steam, npm and other links with a card: description, figures, image and a button to open it.',
+  },
   channel_links: {
     slug: { fr: 'liens-de-salons', en: 'channel-links' },
     nameEn: 'Channel links',
     descriptionEn: 'Message synchronization between channels on several servers.',
-  },
-  partnerships: {
-    slug: { fr: 'partenariats', en: 'partnerships' },
-    nameEn: 'Partnerships',
-    descriptionEn: 'Partners, agreements, granted perks, cross-promotion and measured results.',
   },
   staff_server: {
     slug: { fr: 'serveur-staff', en: 'staff-server' },

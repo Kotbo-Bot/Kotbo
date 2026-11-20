@@ -1,4 +1,4 @@
-import { describe, expect, test, mock, beforeEach } from 'bun:test';
+import { describe, expect, test, mock, beforeEach, afterEach } from 'bun:test';
 import path from 'node:path';
 import nodeCrypto from 'node:crypto';
 import { createServer, IncomingMessage, ServerResponse } from 'node:http';
@@ -35,9 +35,6 @@ const mockDb = {
     count: mock(() => Promise.resolve(0)),
     findMany: mock(() => Promise.resolve([])),
   },
-  dailyAlgoSubmission: {
-    count: mock(() => Promise.resolve(0)),
-  },
   globalBlacklist: {
     findMany: mock(() => Promise.resolve([])),
     upsert: mock(() => Promise.resolve({})),
@@ -55,14 +52,24 @@ const mockDb = {
     upsert: mock(() => Promise.resolve({})),
   },
   botErrorLog: {
-    findMany: mock(() => Promise.resolve([])),
-    deleteMany: mock(() => Promise.resolve({})),
+    findMany: mock(() => Promise.resolve<unknown[]>([])),
+    findUnique: mock(() => Promise.resolve<unknown>(null)),
+    groupBy: mock(() => Promise.resolve<unknown[]>([])),
+    deleteMany: mock(() => Promise.resolve({ count: 0 })),
   },
   activationCode: {
     findMany: mock(() => Promise.resolve([])),
     create: mock(() => Promise.resolve({})),
     findUnique: mock(() => Promise.resolve(null)),
     update: mock(() => Promise.resolve({})),
+    delete: mock(() => Promise.resolve({})),
+  },
+  adminAuditLog: {
+    create: mock(() => Promise.resolve({})),
+  },
+  whiteLabelInstance: {
+    findUnique: mock(() => Promise.resolve<unknown>(null)),
+    update: mock(() => Promise.resolve<unknown>({})),
   },
   dashboardAuditLog: {
     create: mock(() => Promise.resolve({})),
@@ -95,6 +102,7 @@ const mockActivation = {
   isGuildActivated: mock((_guildId: string) => true),
   activateGuild: mock(() => Promise.resolve({})),
   deactivateGuild: mock(() => Promise.resolve({})),
+  generateActivationCode: mock(() => 'CODE-SECRET-1234'),
 };
 const activationPath = path.resolve(import.meta.dir, '../../utils/activation.ts');
 const activationJsPath = path.resolve(import.meta.dir, '../../utils/activation.js');
@@ -119,11 +127,19 @@ const TEST_SESSION = {
   expiresAt: Date.now() + 3_600_000,
 };
 
+// Admin global distinct de l'utilisateur de test : l'acces admin est mis en
+// cache par utilisateur, et un cas plus haut y laisse un refus pour ce dernier.
+const ADMIN_SESSION_ID = 'admin-session-id';
+const ADMIN_SESSION = { ...TEST_SESSION, userId: 'audit-admin-1', username: 'AuditAdmin' };
+
 const sessionStorePath = path.resolve(import.meta.dir, '../../api/auth/sessionStore.ts');
 const sessionStoreJsPath = path.resolve(import.meta.dir, '../../api/auth/sessionStore.js');
 const mockSessionStore = () => completeModuleMock(sessionStorePath, {
-  getDashboardSession: mock(async (sessionId: string | null) =>
-    sessionId === TEST_SESSION_ID ? TEST_SESSION : null),
+  getDashboardSession: mock(async (sessionId: string | null) => {
+    if (sessionId === TEST_SESSION_ID) return TEST_SESSION;
+    if (sessionId === ADMIN_SESSION_ID) return ADMIN_SESSION;
+    return null;
+  }),
   sessionIdFromRequest: (req: { headers: Record<string, unknown> }) => {
     const raw = req.headers?.cookie;
     const cookie = Array.isArray(raw) ? raw[0] : raw;
@@ -190,13 +206,14 @@ mock.module(path.resolve(import.meta.dir, '../../services/system/planService.js'
 
 // Import router modules and helpers after mocks are set up
 import { JWT_SECRET, splitPath, resolveDashboardAccess } from '../../api/shared.js';
-import { handlePublicRoutes } from '../../api/routes/public.js';
-import { handleAuthRoutes } from '../../api/routes/auth.js';
-import { handleReportErrorRoute } from '../../api/routes/error.js';
-import { handleUserRoutes } from '../../api/routes/user.js';
-import { handleAdminRoutes } from '../../api/routes/admin.js';
-import { handleDashboardRoutes } from '../../api/routes/dashboard.js';
-import { getMcpConnectionLogs, handleMCPRoutes, makeMcpDirectToken } from '../../api/mcp/mcpServer.js';
+import { createPublicMiscRouter } from '../../api/hono/routes/public/publicMisc.js';
+import { createPublicCommunityRouter } from '../../api/hono/routes/public/publicCommunity.js';
+import { authRouter } from '../../api/hono/routes/auth.js';
+import { createReportErrorRouter } from '../../api/routes/error.js';
+import { createUserRouter } from '../../api/routes/user.js';
+import { createAdminRouter } from '../../api/routes/admin.js';
+import { createDashboardRouter } from '../../api/hono/dashboard/index.js';
+import { getMcpConnectionLogs, handleMCPRoutes, makeMcpDirectToken, createMcpServerRouter } from '../../api/mcp/mcpServer.js';
 
 // Helper mock req/res functions
 function createMockRequest(options: {
@@ -462,7 +479,6 @@ describe('Modular Routers Unit Tests', () => {
     mockDb.globalAdmin.findUnique.mockClear();
     mockDb.sanction.count.mockClear();
     mockDb.sanction.findMany.mockClear();
-    mockDb.dailyAlgoSubmission.count.mockClear();
     mockDb.globalBlacklist.findMany.mockClear();
     mockDb.globalBlacklist.upsert.mockClear();
     mockDb.globalBlacklist.delete.mockClear();
@@ -511,87 +527,29 @@ describe('Modular Routers Unit Tests', () => {
   });
 
   describe('1. Public Routes', () => {
-    test('GET /health returns service status', async () => {
-      const req = createMockRequest({ method: 'GET', url: '/health' });
-      const res = createMockResponse();
-      const parts = splitPath(req.url!);
-      const url = new URL(req.url!, 'http://localhost');
-
-      const handled = await handlePublicRoutes(req, res, parts, url, mockClient);
-      expect(handled).toBeTrue();
-      expect(res.statusCode).toBe(200);
-      const data = JSON.parse(res.body);
-      expect(data.ok).toBeTrue();
-      expect(data.service).toBe('kotbo-dashboard-api');
-    });
-
-    test('GET /api/config returns client info', async () => {
-      const req = createMockRequest({ method: 'GET', url: '/api/config' });
-      const res = createMockResponse();
-      const parts = splitPath(req.url!);
-      const url = new URL(req.url!, 'http://localhost');
-
-      // Set client ID to bypass empty checks
-      process.env.DISCORD_CLIENT_ID = 'test-client-id';
-      process.env.DISCORD_REDIRECT_URI = 'http://localhost';
-
-      const handled = await handlePublicRoutes(req, res, parts, url, mockClient);
-      expect(handled).toBeTrue();
-      expect(res.statusCode).toBe(200);
-      const data = JSON.parse(res.body);
-      expect(data.discordClientId).toBe('test-client-id');
-    });
+    const fwd = { 'x-forwarded-proto': 'https', 'x-forwarded-host': 'api-kotbo.example' };
+    const publicApp = () => createPublicMiscRouter(mockClient);
 
     test('GET root OAuth discovery refuses templated MCP endpoints', async () => {
-      const req = createMockRequest({
-        method: 'GET',
-        url: '/.well-known/oauth-authorization-server',
-        headers: { 'x-forwarded-proto': 'https', 'x-forwarded-host': 'api-kotbo.example' },
-      });
-      const res = createMockResponse();
-      const parts = splitPath(req.url!);
-      const url = new URL(req.url!, 'http://localhost');
-
-      const handled = await handlePublicRoutes(req, res, parts, url, mockClient);
-      expect(handled).toBeTrue();
-      expect(res.statusCode).toBe(400);
-      const data = JSON.parse(res.body);
+      const res = await publicApp().request('/.well-known/oauth-authorization-server', { headers: fwd });
+      expect(res.status).toBe(400);
+      const data = await res.json() as { error: string; endpoint_format: string };
       expect(data.error).toBe('guild_scoped_mcp_endpoint_required');
       expect(data.endpoint_format).toBe('https://api-kotbo.example/api/mcp/:guildId');
     });
 
     test('GET standard MCP protected resource metadata returns guild-scoped issuer', async () => {
-      const req = createMockRequest({
-        method: 'GET',
-        url: '/.well-known/oauth-protected-resource/api/mcp/112233445566778899',
-        headers: { 'x-forwarded-proto': 'https', 'x-forwarded-host': 'api-kotbo.example' },
-      });
-      const res = createMockResponse();
-      const parts = splitPath(req.url!);
-      const url = new URL(req.url!, 'http://localhost');
-
-      const handled = await handlePublicRoutes(req, res, parts, url, mockClient);
-      expect(handled).toBeTrue();
-      expect(res.statusCode).toBe(200);
-      const data = JSON.parse(res.body);
+      const res = await publicApp().request('/.well-known/oauth-protected-resource/api/mcp/112233445566778899', { headers: fwd });
+      expect(res.status).toBe(200);
+      const data = await res.json() as { resource: string; authorization_servers: string[] };
       expect(data.resource).toBe('https://api-kotbo.example/api/mcp/112233445566778899');
       expect(data.authorization_servers).toEqual(['https://api-kotbo.example/api/mcp/112233445566778899']);
     });
 
     test('GET standard MCP authorization server metadata returns concrete endpoints', async () => {
-      const req = createMockRequest({
-        method: 'GET',
-        url: '/.well-known/oauth-authorization-server/api/mcp/112233445566778899',
-        headers: { 'x-forwarded-proto': 'https', 'x-forwarded-host': 'api-kotbo.example' },
-      });
-      const res = createMockResponse();
-      const parts = splitPath(req.url!);
-      const url = new URL(req.url!, 'http://localhost');
-
-      const handled = await handlePublicRoutes(req, res, parts, url, mockClient);
-      expect(handled).toBeTrue();
-      expect(res.statusCode).toBe(200);
-      const data = JSON.parse(res.body);
+      const res = await publicApp().request('/.well-known/oauth-authorization-server/api/mcp/112233445566778899', { headers: fwd });
+      expect(res.status).toBe(200);
+      const data = await res.json() as Record<string, any>;
       expect(data.issuer).toBe('https://api-kotbo.example/api/mcp/112233445566778899');
       expect(data.authorization_endpoint).toBe('https://api-kotbo.example/api/mcp/112233445566778899/oauth/authorize');
       expect(data.token_endpoint).toBe('https://api-kotbo.example/api/mcp/112233445566778899/oauth/token');
@@ -601,57 +559,44 @@ describe('Modular Routers Unit Tests', () => {
       expect(data.client_id_metadata_document_supported).toBe(true);
     });
 
-    test('GET root protected resource metadata supports resource query parameter', async () => {
-      const req = createMockRequest({
-        method: 'GET',
-        url: '/.well-known/oauth-protected-resource?resource=https%3A%2F%2Fapi-kotbo.example%2Fapi%2Fmcp%2F112233445566778899',
-      });
-      const res = createMockResponse();
-      const parts = splitPath(new URL(req.url!, 'http://localhost').pathname);
-      const url = new URL(req.url!, 'http://localhost');
+    test('GET well-known with an invalid guild id answers 400', async () => {
+      const res = await publicApp().request('/.well-known/oauth-protected-resource/api/mcp/abc', { headers: fwd });
+      expect(res.status).toBe(400);
+    });
 
-      const handled = await handlePublicRoutes(req, res, parts, url, mockClient);
-      expect(handled).toBeTrue();
-      expect(res.statusCode).toBe(200);
-      const data = JSON.parse(res.body);
+    test('GET root protected resource metadata supports resource query parameter', async () => {
+      const res = await publicApp().request('/.well-known/oauth-protected-resource?resource=https%3A%2F%2Fapi-kotbo.example%2Fapi%2Fmcp%2F112233445566778899');
+      expect(res.status).toBe(200);
+      const data = await res.json() as { resource: string };
       expect(data.resource).toBe('https://api-kotbo.example/api/mcp/112233445566778899');
     });
 
     test('GET root authorization server metadata supports resource query parameter', async () => {
-      const req = createMockRequest({
-        method: 'GET',
-        url: '/.well-known/oauth-authorization-server?resource=https%3A%2F%2Fapi-kotbo.example%2Fapi%2Fmcp%2F112233445566778899',
-      });
-      const res = createMockResponse();
-      const parts = splitPath(new URL(req.url!, 'http://localhost').pathname);
-      const url = new URL(req.url!, 'http://localhost');
-
-      const handled = await handlePublicRoutes(req, res, parts, url, mockClient);
-      expect(handled).toBeTrue();
-      expect(res.statusCode).toBe(200);
-      const data = JSON.parse(res.body);
+      const res = await publicApp().request('/.well-known/oauth-authorization-server?resource=https%3A%2F%2Fapi-kotbo.example%2Fapi%2Fmcp%2F112233445566778899');
+      expect(res.status).toBe(200);
+      const data = await res.json() as { issuer: string };
       expect(data.issuer).toBe('https://api-kotbo.example/api/mcp/112233445566778899');
     });
 
     test('GET root authorization server metadata supports signed direct MCP resource URLs', async () => {
       const directToken = makeMcpDirectToken('112233445566778899', 'direct-key-id');
       const directResource = `https://api-kotbo.example/api/mcp-direct/112233445566778899/${directToken}`;
-      const req = createMockRequest({
-        method: 'GET',
-        url: `/.well-known/oauth-authorization-server?resource=${encodeURIComponent(directResource)}`,
-      });
-      const res = createMockResponse();
-      const parts = splitPath(new URL(req.url!, 'http://localhost').pathname);
-      const url = new URL(req.url!, 'http://localhost');
-
-      const handled = await handlePublicRoutes(req, res, parts, url, mockClient);
-      expect(handled).toBeTrue();
-      expect(res.statusCode).toBe(200);
-      const data = JSON.parse(res.body);
+      const res = await publicApp().request(`/.well-known/oauth-authorization-server?resource=${encodeURIComponent(directResource)}`);
+      expect(res.status).toBe(200);
+      const data = await res.json() as Record<string, string>;
       expect(data.issuer).toBe(directResource);
       expect(data.registration_endpoint).toBe(`${directResource}/oauth/register`);
       expect(data.authorization_endpoint).toBe(`${directResource}/oauth/authorize`);
       expect(data.token_endpoint).toBe(`${directResource}/oauth/token`);
+    });
+
+    test('public pages refuse a malformed guild id before touching the database', async () => {
+      const misc = createPublicMiscRouter(mockClient);
+      const community = createPublicCommunityRouter(mockClient);
+      expect((await misc.request('/api/public/guilds/abc/news')).status).toBe(400);
+      expect((await misc.request('/api/public/rss/abc')).status).toBe(400);
+      expect((await community.request('/api/public/guilds/abc/giveaways')).status).toBe(400);
+      expect((await community.request('/api/public/guilds/abc/quizzes/q1', { method: 'GET' })).status).toBe(400);
     });
   });
 
@@ -1143,65 +1088,69 @@ describe('Modular Routers Unit Tests', () => {
       const logs = getMcpConnectionLogs('112233445566778899', 30);
       expect(JSON.stringify(logs)).not.toContain(directToken);
     });
+
+    test('createMcpServerRouter routes requests correctly through Hono', async () => {
+      const router = createMcpServerRouter(mockClient);
+      const res = await router.request('/api/mcp/112233445566778899/.well-known/oauth-protected-resource', {
+        headers: {
+          'x-forwarded-proto': 'https',
+          'x-forwarded-host': 'api-kotbo.example',
+        },
+      });
+      expect(res.status).toBe(200);
+      const data = await res.json() as { resource: string; authorization_servers: string[] };
+      expect(data.resource).toBe('https://api-kotbo.example/api/mcp/112233445566778899');
+      expect(data.authorization_servers).toEqual(['https://api-kotbo.example/api/mcp/112233445566778899']);
+    });
+
+    test('le transport web répond à une méthode JSON-RPC hors du mode compat', async () => {
+      const token = makeMcpDirectToken('112233445566778899', 'direct-key-id');
+      mockMcpKeyService.getActiveMcpKeyById.mockImplementation(() => Promise.resolve({
+        id: 'direct-key-id',
+        guildId: '112233445566778899',
+        permissions: ['READ_STATS'],
+        isActive: true,
+      } as unknown));
+      const res = await createMcpServerRouter(mockClient).request(`/api/mcp-direct/112233445566778899/${token}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 7, method: 'resources/list' }),
+      });
+      expect(res.status).toBe(200);
+      const data = await res.json() as { jsonrpc: string; id: number };
+      expect(data.jsonrpc).toBe('2.0');
+      expect(data.id).toBe(7);
+    });
   });
 
   describe('2. Auth Routes', () => {
-    test('active Discord login is handled by the Hono router', async () => {
-      const req = createMockRequest({ method: 'GET', url: '/api/auth/discord/login' });
-      const res = createMockResponse();
-      const parts = splitPath(req.url!);
-      const url = new URL(req.url!, 'http://localhost');
-
-      const handled = await handleAuthRoutes(req, res, parts, url, mockClient);
-      expect(handled).toBeFalse();
-    });
-
     test('legacy implicit token exchange is retired', async () => {
-      const req = createMockRequest({ method: 'POST', url: '/api/auth/discord/token-exchange' });
-      const res = createMockResponse();
-      const parts = splitPath(req.url!);
-      const url = new URL(req.url!, 'http://localhost');
-
-      const handled = await handleAuthRoutes(req, res, parts, url, mockClient);
-      expect(handled).toBeTrue();
-      expect(res.statusCode).toBe(410);
+      const res = await authRouter.request('/api/auth/discord/token-exchange', { method: 'POST' });
+      expect(res.status).toBe(410);
     });
-
   });
 
   describe('3. Error Routes', () => {
     test('POST /api/report-error returns 400 for invalid payload', async () => {
-      const req = createMockRequest({
+      const router = createReportErrorRouter(mockClient);
+      const res = await router.request('/api/report-error', {
         method: 'POST',
-        url: '/api/report-error',
-        headers: { 'content-type': 'application/json' },
+        headers: authenticatedHeaders({ 'content-type': 'application/json' }),
         body: '{}',
       });
-      const res = createMockResponse();
-      const parts = splitPath(req.url!);
-      const url = new URL(req.url!, 'http://localhost');
-
-      const handled = await handleReportErrorRoute(req, res, parts, url, mockClient);
-      expect(handled).toBeTrue();
-      expect(res.statusCode).toBe(400);
+      expect(res.status).toBe(400);
     });
   });
 
   describe('4. User Routes', () => {
     test('GET /api/user/me returns user info when authenticated', async () => {
-      const req = createMockRequest({
+      const router = createUserRouter(mockClient);
+      const res = await router.request('/api/user/me', {
         method: 'GET',
-        url: '/api/user/me',
         headers: authenticatedHeaders(),
       });
-      const res = createMockResponse();
-      const parts = splitPath(req.url!);
-      const url = new URL(req.url!, 'http://localhost');
-
-      const handled = await handleUserRoutes(req, res, parts, url, mockClient);
-      expect(handled).toBeTrue();
-      expect(res.statusCode).toBe(200);
-      const data = JSON.parse(res.body);
+      expect(res.status).toBe(200);
+      const data = await res.json() as { id?: string; username?: string };
       expect(data.id).toBe('123456789012345678');
       expect(data.username).toBe('TestUser');
     });
@@ -1209,74 +1158,46 @@ describe('Modular Routers Unit Tests', () => {
 
   describe('5. Admin Routes', () => {
     test('GET /api/admin/stats is blocked without admin access', async () => {
-      const req = createMockRequest({
-        method: 'GET',
-        url: '/api/admin/stats',
+      mockDb.globalAdmin.findUnique.mockResolvedValue(null);
+      const router = createAdminRouter(mockClient);
+      const res = await router.request('/api/admin/stats', {
         headers: authenticatedHeaders(),
       });
-      const res = createMockResponse();
-      const parts = splitPath(req.url!);
-      const url = new URL(req.url!, 'http://localhost');
-
-      // Mock resolvesAdminAccess to false
-      mockDb.globalAdmin.findUnique.mockResolvedValue(null);
-
-      const handled = await handleAdminRoutes(req, res, parts, url, mockClient);
-      expect(handled).toBeTrue();
-      expect(res.statusCode).toBe(403);
+      expect(res.status).toBe(403);
     });
   });
 
   describe('6. Dashboard Router dispatcher', () => {
     test('Bypasses auth for recruitment webhook', async () => {
-      const req = createMockRequest({
+      // Route servie par Hono : sans session ni clé, c'est le webhook qui refuse.
+      const res = await createDashboardRouter(mockClient).request('/api/dashboard/guilds/1122334455667788/recruitment/candidatures', {
         method: 'POST',
-        url: '/api/dashboard/guilds/1122334455667788/recruitment/candidatures',
+        headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ data: { name: 'Applicant' } }),
       });
-      const res = createMockResponse();
-      const parts = splitPath(req.url!);
-      const url = new URL(req.url!, 'http://localhost');
-
-      const handled = await handleDashboardRoutes(req, res, parts, url, mockClient);
-      expect(handled).toBeTrue();
-      expect(res.statusCode).toBe(401);
-      const data = JSON.parse(res.body);
+      expect(res.status).toBe(401);
+      const data = await res.json() as { error?: string; reason?: string };
       expect(data.error).toBe('Non authentifié');
+      expect(data.reason).toBe('missing_credentials');
     });
 
     test('Requires user authentication for general guild settings', async () => {
-      const req = createMockRequest({
-        method: 'GET',
-        url: '/api/dashboard/guilds/1122334455667788/state',
-      });
-      const res = createMockResponse();
-      const parts = splitPath(req.url!);
-      const url = new URL(req.url!, 'http://localhost');
-
-      const handled = await handleDashboardRoutes(req, res, parts, url, mockClient);
-      expect(handled).toBeTrue();
-      expect(res.statusCode).toBe(401);
+      const res = await createDashboardRouter(mockClient).request('/api/dashboard/guilds/1122334455667788/state');
+      expect(res.status).toBe(401);
     });
 
     test('GET /api/dashboard/guilds/:guildId/notifications/features returns 200', async () => {
       // Mock db feature configs and guild info
-      mockDb.guild.findUnique.mockResolvedValue({ id: '1122334455667788', dailyAlgoEnabled: true });
+      mockDb.guild.findUnique.mockResolvedValue({ id: '1122334455667788' });
       mockDb.dashboardFeatureConfig.findMany.mockResolvedValue([]);
       
-      const req = createMockRequest({
-        method: 'GET',
-        url: '/api/dashboard/guilds/1122334455667788/notifications/features',
-        headers: authenticatedHeaders(),
-      });
-      const res = createMockResponse();
-      const parts = splitPath(req.url!);
-      const url = new URL(req.url!, 'http://localhost');
-
-      const handled = await handleDashboardRoutes(req, res, parts, url, mockClient);
-      expect(handled).toBeTrue();
-      expect(res.statusCode).toBe(200);
-      const data = JSON.parse(res.body);
+      // Route servie par Hono depuis la migration.
+      const res = await createDashboardRouter(mockClient).request(
+        '/api/dashboard/guilds/1122334455667788/notifications/features',
+        { headers: authenticatedHeaders() },
+      );
+      expect(res.status).toBe(200);
+      const data = await res.json() as { features?: unknown };
       expect(data.features).toBeDefined();
     });
 
@@ -1298,22 +1219,17 @@ describe('Modular Routers Unit Tests', () => {
         },
       };
 
-      const req = createMockRequest({
-        method: 'POST',
-        url: '/api/dashboard/guilds/1122334455667788/embed-builder',
-        headers: authenticatedHeaders({ 'content-type': 'application/json' }),
-        body: JSON.stringify(payload),
-      });
+      const res = await createDashboardRouter(mockClient).request(
+        '/api/dashboard/guilds/1122334455667788/embed-builder',
+        {
+          method: 'POST',
+          headers: authenticatedHeaders({ 'content-type': 'application/json' }),
+          body: JSON.stringify(payload),
+        },
+      );
+      expect(res.status).toBe(200);
 
-      const res = createMockResponse();
-      const parts = splitPath(req.url!);
-      const url = new URL(req.url!, 'http://localhost');
-
-      const handled = await handleDashboardRoutes(req, res, parts, url, mockClient);
-      expect(handled).toBeTrue();
-      expect(res.statusCode).toBe(200);
-
-      const data = JSON.parse(res.body);
+      const data = await res.json() as { ok?: boolean; messageId?: string };
       expect(data.ok).toBeTrue();
       expect(data.messageId).toBe('sent-msg-id');
     });
@@ -1358,5 +1274,161 @@ describe('Accès dashboard des admins globaux', () => {
 
     expect(access.level).toBe('admin');
     expect(access.viaGlobalAdmin).toBeUndefined();
+  });
+});
+
+const ADMIN_ID = ADMIN_SESSION.userId;
+
+/** Requête sur une route `/api/admin`, au nom de l'admin global de test. */
+async function adminRequest(method: string, url: string, body?: unknown) {
+  const res = await createAdminRouter(mockClient).request(url, {
+    method,
+    headers: {
+      cookie: `kotbo_session=${ADMIN_SESSION_ID}`,
+      ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  return { statusCode: res.status, body: await res.text() };
+}
+
+/** Entrées d'audit écrites pendant le cas, dans l'ordre. */
+function audits(): Array<Record<string, unknown>> {
+  return mockDb.adminAuditLog.create.mock.calls.map((call) => (call as unknown as [{ data: Record<string, unknown> }])[0].data);
+}
+
+/** Le bloc qui l'appelle s'exécute en admin global, journal d'audit vidé. */
+function asGlobalAdmin() {
+  beforeEach(() => {
+    mockDb.globalAdmin.findUnique.mockResolvedValue({ userId: ADMIN_ID } as never);
+    mockDb.adminAuditLog.create.mockClear();
+  });
+
+  afterEach(() => {
+    mockDb.globalAdmin.findUnique.mockResolvedValue(null);
+  });
+}
+
+describe('Journal d\'audit des actions admin sensibles', () => {
+  asGlobalAdmin();
+
+  test('la création d\'un code d\'activation est tracée, sans le code lui-même', async () => {
+    mockDb.activationCode.create.mockResolvedValueOnce({ id: 'code-1', code: 'CODE-SECRET-1234', accessType: 'PERMANENT' } as never);
+    const res = await adminRequest('POST', '/api/admin/activation-codes', {});
+    expect(res.statusCode).toBe(201);
+    expect(audits()).toHaveLength(1);
+    expect(audits()[0]).toMatchObject({ action: 'activation_code.create', actorId: ADMIN_ID, targetId: 'code-1' });
+    expect(JSON.stringify(audits()[0])).not.toContain('CODE-SECRET-1234');
+  });
+
+  test('la révocation d\'un code d\'activation est tracée', async () => {
+    mockDb.activationCode.findUnique.mockResolvedValueOnce({ id: 'code-2', code: 'CODE-SECRET-1234', usedByGuildId: null } as never);
+    const res = await adminRequest('DELETE', '/api/admin/activation-codes/code-2');
+    expect(res.statusCode).toBe(200);
+    expect(audits()[0]).toMatchObject({ action: 'activation_code.revoke', actorId: ADMIN_ID, targetId: 'code-2' });
+  });
+
+  test('la bascule de la maintenance globale est tracée', async () => {
+    const res = await adminRequest('POST', '/api/admin/config', { maintenance: true });
+    // La route pose l'état sur le process : on le rend, d'autres suites le lisent.
+    globalThis.KOTBO_MAINTENANCE_MODE = false;
+    expect(res.statusCode).toBe(200);
+    expect(audits()[0]).toMatchObject({ action: 'maintenance.enable', actorId: ADMIN_ID });
+  });
+
+  test('la purge du journal d\'erreurs est tracée', async () => {
+    const res = await adminRequest('DELETE', '/api/admin/errors');
+    expect(res.statusCode).toBe(200);
+    expect(audits()[0]).toMatchObject({ action: 'errors.purge', actorId: ADMIN_ID });
+  });
+
+  test('la modification d\'une marque blanche nomme les champs, jamais les secrets', async () => {
+    mockDb.whiteLabelInstance.findUnique.mockResolvedValueOnce({ id: 'wl-1', slug: 'acme' });
+    mockDb.whiteLabelInstance.update.mockResolvedValueOnce({ id: 'wl-1', slug: 'acme', name: 'Acme' });
+    const res = await adminRequest('PATCH', '/api/admin/whitelabel/wl-1', { name: 'Acme', discordToken: 'JETON-TRES-SECRET' });
+    expect(res.statusCode).toBe(200);
+    expect(audits()[0]).toMatchObject({
+      action: 'whitelabel.update',
+      targetId: 'wl-1',
+      metadata: { fields: ['name', 'discordToken'] },
+    });
+    expect(JSON.stringify(audits()[0])).not.toContain('JETON-TRES-SECRET');
+  });
+});
+
+describe('Journal des erreurs du bot', () => {
+  asGlobalAdmin();
+
+  const GROUPE = { message: 'boom', source: 'uncaughtException' };
+
+  beforeEach(() => {
+    mockDb.botErrorLog.findMany.mockClear();
+    mockDb.botErrorLog.deleteMany.mockClear();
+  });
+
+  test('les erreurs identiques sont regroupées, la plus récente en tête', async () => {
+    mockDb.botErrorLog.groupBy.mockResolvedValueOnce([{
+      ...GROUPE,
+      _count: { _all: 3 },
+      _min: { createdAt: new Date('2026-11-01T10:00:00Z') },
+      _max: { createdAt: new Date('2026-11-02T10:00:00Z'), id: 'erreur-3' },
+    }]);
+    const res = await adminRequest('GET', '/api/admin/errors?view=groups');
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body).groups).toEqual([{
+      id: 'erreur-3',
+      ...GROUPE,
+      count: 3,
+      firstAt: '2026-11-01T10:00:00.000Z',
+      lastAt: '2026-11-02T10:00:00.000Z',
+    }]);
+  });
+
+  test('les occurrences d\'un groupe se lisent page par page', async () => {
+    mockDb.botErrorLog.findUnique.mockResolvedValueOnce(GROUPE);
+    mockDb.botErrorLog.findMany.mockResolvedValueOnce([
+      { id: 'erreur-3', ...GROUPE, stack: 'pile 3', createdAt: new Date('2026-11-02T10:00:00Z') },
+      { id: 'erreur-2', ...GROUPE, stack: 'pile 2', createdAt: new Date('2026-11-01T10:00:00Z') },
+    ]);
+    const res = await adminRequest('GET', '/api/admin/errors?group=erreur-3&limit=1');
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.errors.map((e: { id: string }) => e.id)).toEqual(['erreur-3']);
+    expect(body.errors[0].stack).toBe('pile 3');
+    expect(body.nextCursor).toBe('erreur-3');
+    const query = (mockDb.botErrorLog.findMany.mock.calls[0] as unknown as [Record<string, unknown>])[0];
+    expect(query).toMatchObject({ where: GROUPE, take: 2 });
+  });
+
+  test('la page suivante repart du curseur', async () => {
+    mockDb.botErrorLog.findUnique.mockResolvedValueOnce(GROUPE);
+    await adminRequest('GET', '/api/admin/errors?group=erreur-3&cursor=erreur-3&limit=1');
+    const query = (mockDb.botErrorLog.findMany.mock.calls[0] as unknown as [Record<string, unknown>])[0];
+    expect(query).toMatchObject({ cursor: { id: 'erreur-3' }, skip: 1 });
+  });
+
+  test('un groupe disparu entre-temps répond 404', async () => {
+    const res = await adminRequest('GET', '/api/admin/errors?group=purgee');
+    expect(res.statusCode).toBe(404);
+  });
+
+  test('purger un groupe ne retire que ses erreurs, et c\'est tracé', async () => {
+    mockDb.botErrorLog.findUnique.mockResolvedValueOnce(GROUPE);
+    mockDb.botErrorLog.deleteMany.mockResolvedValueOnce({ count: 3 });
+    const res = await adminRequest('DELETE', '/api/admin/errors?group=erreur-3');
+    expect(res.statusCode).toBe(200);
+    expect(mockDb.botErrorLog.deleteMany).toHaveBeenCalledWith({ where: GROUPE });
+    expect(audits()[0]).toMatchObject({ action: 'errors.purge', metadata: { count: 3, group: GROUPE } });
+  });
+
+  test('un groupe vide est refusé : il ne vaut jamais « tout le journal »', async () => {
+    const res = await adminRequest('DELETE', '/api/admin/errors?group=');
+    expect(res.statusCode).toBe(404);
+    expect(mockDb.botErrorLog.deleteMany).not.toHaveBeenCalled();
+  });
+
+  test('sans groupe, la purge vide tout le journal', async () => {
+    await adminRequest('DELETE', '/api/admin/errors');
+    expect(mockDb.botErrorLog.deleteMany).toHaveBeenCalledWith({ where: {} });
   });
 });

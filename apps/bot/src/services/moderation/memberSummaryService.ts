@@ -95,7 +95,7 @@ export async function getMemberSummary(guildId: string, userId: string): Promise
     safe('réputation', { received: 0, given: 0 }, async () => {
       const [received, given] = await Promise.all([
         prisma.reputationVote.aggregate({ where: { guildId, receiverId: userId }, _sum: { value: true } }),
-        prisma.reputationVote.count({ where: { guildId, giverId: userId } }),
+        prisma.reputationVote.count({ where: { guildId, giverId: userId, kind: 'VOTE' } }),
       ]);
       return { received: received._sum.value ?? 0, given };
     }),

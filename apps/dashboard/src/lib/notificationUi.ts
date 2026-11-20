@@ -9,7 +9,6 @@ export const CATEGORY_META: Record<NotificationCategory, { label: () => string; 
   moderation: { label: () => m.ntf_cat_moderation(), icon: 'shield' },
   security: { label: () => m.ntf_cat_security(), icon: 'lock' },
   tickets: { label: () => m.ntf_cat_tickets(), icon: 'ticket' },
-  partnerships: { label: () => m.ntf_cat_partnerships(), icon: 'handshake' },
   community: { label: () => m.ntf_cat_community(), icon: 'sparkles' },
   system: { label: () => m.ntf_cat_system(), icon: 'cpu' },
 };

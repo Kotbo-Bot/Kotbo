@@ -65,6 +65,7 @@
     rp: () => m.ste_tpl_rp(),
     esport: () => m.ste_tpl_esport(),
     etude: () => m.ste_tpl_etude(),
+    dev: () => m.ste_tpl_dev(),
     autre: () => m.ste_gal_cat_other(),
   };
 

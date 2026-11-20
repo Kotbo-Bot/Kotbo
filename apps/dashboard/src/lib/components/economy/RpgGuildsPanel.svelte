@@ -127,11 +127,11 @@
       <h3 class="text-lg font-semibold">{m.eco_guilds_title()}</h3>
       <p class="text-xs text-on-surface-variant mt-1 leading-relaxed max-w-2xl">{m.eco_guilds_desc()}</p>
     </div>
-    <input
+    <input aria-label={m.eco_guilds_search_ph()}
       type="search"
       placeholder={m.eco_guilds_search_ph()}
       bind:value={search}
-      class="bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none w-full md:w-64"
+      class="bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary w-full md:w-64"
     />
   </div>
 
@@ -181,7 +181,7 @@
                   type="button"
                   onclick={() => dissolve(rpgGuild)}
                   disabled={disabled}
-                  class="px-3 py-1.5 bg-error/10 hover:bg-error/20 text-error text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                  class="px-3 py-1.5 bg-error/10 hover:bg-error/20 text-on-error-container text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Papicon icon="trash" size={12} /> {m.eco_guilds_dissolve_btn()}
                 </button>
@@ -252,12 +252,12 @@
       <div class="grid grid-cols-3 gap-3">
         <div class="col-span-2 space-y-1">
           <label for="guildName" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_guilds_field_name()}</label>
-          <input id="guildName" type="text" maxlength="32" bind:value={editing.name} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none" />
+          <input id="guildName" type="text" maxlength="32" bind:value={editing.name} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
         </div>
         <div class="space-y-1">
           <label for="guildEmoji" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_guilds_field_emoji()}</label>
           <div class="flex gap-2">
-            <input id="guildEmoji" type="text" bind:value={editing.emoji} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none" />
+            <input id="guildEmoji" type="text" bind:value={editing.emoji} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
             <EmojiPicker bind:value={editing.emoji} />
           </div>
         </div>
@@ -265,17 +265,17 @@
 
       <div class="space-y-1">
         <label for="guildDesc" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_guilds_field_description()}</label>
-        <textarea id="guildDesc" maxlength="300" bind:value={editing.description} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none h-16 resize-none"></textarea>
+        <textarea id="guildDesc" maxlength="300" bind:value={editing.description} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary h-16 resize-none"></textarea>
       </div>
 
       <div class="grid grid-cols-2 gap-3">
         <div class="space-y-1">
           <label for="guildTreasury" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_guilds_field_treasury({ currency: currencyName })}</label>
-          <input id="guildTreasury" type="number" min="0" bind:value={editing.treasury} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none" />
+          <input id="guildTreasury" type="number" min="0" bind:value={editing.treasury} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
         </div>
         <div class="space-y-1">
           <label for="guildOwner" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_guilds_field_owner()}</label>
-          <select id="guildOwner" bind:value={editing.ownerId} class="w-full bg-surface-container-high/45 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none text-on-surface">
+          <select id="guildOwner" bind:value={editing.ownerId} class="w-full bg-surface-container-high/45 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary text-on-surface">
             {#each editing.members as member (member.userId)}
               <option value={member.userId}>{member.displayName}</option>
             {/each}

@@ -50,7 +50,7 @@
     PLUS: 'Plus',
     PRO: 'Pro',
     ULTIMATE: 'Ultimate',
-    CUSTOM: m.mpx_plan_custom(),
+    get CUSTOM() { return m.mpx_plan_custom(); },
   };
   const requiredPlanLabel = $derived(
     module?.requiredPlan ? PLAN_LABELS[module.requiredPlan] ?? module.requiredPlan : m.mpx_plan_paid(),
@@ -188,7 +188,7 @@
     </div>
   {/if}
 
-  <main class="module-page__body flex-1 {bare ? '' : 'space-y-8'} {isModuleEnabled || isFixed || featureKey === 'sanctions' || featureKey === 'channel_links' || featureKey === 'staff_server' ? '' : 'opacity-40 pointer-events-none grayscale-[0.5] transition-all duration-500'}">
+  <div class="module-page__body flex-1 {bare ? '' : 'space-y-8'} {isModuleEnabled || isFixed || featureKey === 'sanctions' || featureKey === 'channel_links' || featureKey === 'staff_server' ? '' : 'opacity-40 pointer-events-none grayscale-[0.5] transition-all duration-500'}">
     {@render children()}
-  </main>
+  </div>
 </div>

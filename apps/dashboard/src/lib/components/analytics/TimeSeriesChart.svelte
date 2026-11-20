@@ -64,7 +64,41 @@
   }
 
   const data = $derived.by(() => {
-    if (mode === 'lines') {
+    if (stacks.length > 0) {
+      if (mode === 'bar') {
+        return {
+          labels,
+          datasets: stacks.map((s) => ({
+            type: 'bar',
+            label: s.label,
+            data: s.values,
+            backgroundColor: s.color,
+            hoverBackgroundColor: s.color,
+            borderRadius: 4,
+            borderSkipped: 'bottom',
+            maxBarThickness: 28,
+          })),
+        };
+      }
+      if (mode === 'stacked') {
+        return {
+          labels,
+          datasets: stacks.map((s) => ({
+            type: 'line',
+            label: s.label,
+            data: s.values,
+            borderColor: 'var(--color-surface-container-low)',
+            borderWidth: 1.5,
+            backgroundColor: alpha(s.color, 0.75),
+            fill: true,
+            pointRadius: 0,
+            pointHoverRadius: 3,
+            pointBackgroundColor: s.color,
+            tension: 0.25,
+            stack: 'total',
+          })),
+        };
+      }
       return {
         labels,
         datasets: stacks.map((s) => ({
@@ -78,25 +112,6 @@
           pointRadius: 0,
           pointHoverRadius: 4,
           tension: 0.25,
-        })),
-      };
-    }
-    if (mode === 'stacked') {
-      return {
-        labels,
-        datasets: stacks.map((s) => ({
-          type: 'line',
-          label: s.label,
-          data: s.values,
-          borderColor: 'var(--color-surface-container-low)',
-          borderWidth: 1.5,
-          backgroundColor: alpha(s.color, 0.75),
-          fill: true,
-          pointRadius: 0,
-          pointHoverRadius: 3,
-          pointBackgroundColor: s.color,
-          tension: 0.25,
-          stack: 'total',
         })),
       };
     }

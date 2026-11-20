@@ -37,11 +37,18 @@ export default defineConfig({
       },
     }),
     tailwindcss(),
-    paraglideVitePlugin({
-      project: './project.inlang',
-      outdir: './src/lib/paraglide',
-      strategy: ['localStorage', 'preferredLanguage', 'baseLocale'],
-    }),
+    // Le Dockerfile compile paraglide dans une couche cachee, puis pose cette
+    // variable. Garder la strategie ci-dessous alignee avec DockerfileDash.
+    ...(process.env.KOTBO_SKIP_PARAGLIDE
+      ? []
+      : [
+          paraglideVitePlugin({
+            project: './project.inlang',
+            outdir: './src/lib/paraglide',
+            strategy: ['localStorage', 'preferredLanguage', 'baseLocale'],
+            outputStructure: 'locale-modules',
+          }),
+        ]),
     demoHead(),
   ],
   server: {

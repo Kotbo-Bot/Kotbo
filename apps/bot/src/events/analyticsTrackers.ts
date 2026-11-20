@@ -38,6 +38,8 @@ async function handleMessageForWordStats(message: Message): Promise<void> {
   trackMessageWords(guildId, message.content);
 }
 
+const knownLocales = new Map<string, string>();
+
 export function registerAnalyticsTrackers(client: Client): void {
   startWordStatsFlusher();
   registerContentStatsTracker(client);
@@ -70,6 +72,24 @@ export function registerAnalyticsTrackers(client: Client): void {
     } catch (err) {
       logger.error('AnalyticsTrackers', 'Erreur tracking onboarding:', err);
     }
+  });
+
+  // Langue du client Discord : seule source accessible à un bot, elle arrive
+  // avec chaque interaction. Le cache évite une écriture par clic.
+  client.on(Events.InteractionCreate, (interaction) => {
+    const guildId = interaction.guildId;
+    const locale = interaction.locale;
+    if (!guildId || !locale) return;
+    const key = `${guildId}:${interaction.user.id}`;
+    if (knownLocales.get(key) === locale) return;
+    if (knownLocales.size > 50_000) knownLocales.clear();
+    knownLocales.set(key, locale);
+    void prisma.memberProfile
+      .updateMany({
+        where: { guildId, userId: interaction.user.id, OR: [{ locale: null }, { locale: { not: locale } }] },
+        data: { locale },
+      })
+      .catch((err) => logger.error('AnalyticsTrackers', 'Erreur tracking langue:', err));
   });
 
   logger.success('AnalyticsTrackers', 'Trackers analytics avancés enregistrés');

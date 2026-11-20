@@ -366,7 +366,7 @@
             </div>
 
             {#if broken}
-              <p class="text-2xs text-warning bg-warning/10 rounded-lg px-3 py-2 flex items-center gap-1.5">
+              <p class="text-2xs text-on-warning-container bg-warning/10 rounded-lg px-3 py-2 flex items-center gap-1.5">
                 <Papicon icon="AlertTriangle" size={12} /> {m.eco_dungeon_broken()}
               </p>
             {/if}
@@ -451,7 +451,7 @@
                   type="button"
                   onclick={() => remove(dungeon)}
                   disabled={disabled}
-                  class="px-3 py-1.5 bg-error/10 hover:bg-error/20 text-error text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                  class="px-3 py-1.5 bg-error/10 hover:bg-error/20 text-on-error-container text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Papicon icon="trash" size={12} /> {m.eco_dungeon_delete_btn()}
                 </button>
@@ -472,33 +472,33 @@
       <div class="grid grid-cols-3 gap-3">
         <div class="col-span-2 space-y-1">
           <label for="dungeonName" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_dungeon_field_name()}</label>
-          <input id="dungeonName" type="text" maxlength="50" bind:value={editing.name} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none" />
+          <input id="dungeonName" type="text" maxlength="50" bind:value={editing.name} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
         </div>
         <div class="space-y-1">
           <label for="dungeonEmoji" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_item_emoji()}</label>
           <div class="flex gap-2">
-            <input id="dungeonEmoji" type="text" bind:value={editing.emoji} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none" />
+            <input id="dungeonEmoji" type="text" bind:value={editing.emoji} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
             <EmojiPicker bind:value={editing.emoji} />
           </div>
         </div>
         <div class="col-span-3 space-y-1">
           <label for="dungeonDescription" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_dungeon_field_description()}</label>
-          <textarea id="dungeonDescription" rows="2" maxlength="300" bind:value={editing.description} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-xs focus:outline-none resize-none"></textarea>
+          <textarea id="dungeonDescription" rows="2" maxlength="300" bind:value={editing.description} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary resize-none"></textarea>
         </div>
       </div>
 
       <div class="grid grid-cols-3 gap-3">
         <div class="space-y-1">
           <label for="dungeonLevel" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_dungeon_field_level()}</label>
-          <input id="dungeonLevel" type="number" min="1" bind:value={editing.levelRequired} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2.5 text-xs focus:outline-none" />
+          <input id="dungeonLevel" type="number" min="1" bind:value={editing.levelRequired} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
         </div>
         <div class="space-y-1">
           <label for="dungeonEnergy" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_dungeon_field_energy()}</label>
-          <input id="dungeonEnergy" type="number" min="0" bind:value={editing.energyCost} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2.5 text-xs focus:outline-none" />
+          <input id="dungeonEnergy" type="number" min="0" bind:value={editing.energyCost} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
         </div>
         <div class="space-y-1">
           <label for="dungeonCooldown" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_dungeon_field_cooldown()}</label>
-          <input id="dungeonCooldown" type="number" min="0" max="720" bind:value={editing.cooldownHours} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2.5 text-xs focus:outline-none" />
+          <input id="dungeonCooldown" type="number" min="0" max="720" bind:value={editing.cooldownHours} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
         </div>
       </div>
       <p class="text-2xs text-on-surface-variant leading-relaxed -mt-3">{m.eco_dungeon_field_cooldown_hint()}</p>
@@ -572,11 +572,11 @@
         <div class="grid grid-cols-2 gap-3">
           <div class="space-y-1">
             <label for="dungeonCoins" class="text-xs font-semibold text-on-surface-variant ml-2">{currencyName || m.eco_fish_field_value()}</label>
-            <input id="dungeonCoins" type="number" min="0" bind:value={editing.completionCoins} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2.5 text-xs focus:outline-none" />
+            <input id="dungeonCoins" type="number" min="0" bind:value={editing.completionCoins} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
           </div>
           <div class="space-y-1">
             <label for="dungeonXp" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_dungeon_rpg_xp()}</label>
-            <input id="dungeonXp" type="number" min="0" bind:value={editing.completionXp} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2.5 text-xs focus:outline-none" />
+            <input id="dungeonXp" type="number" min="0" bind:value={editing.completionXp} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
           </div>
           <div class="col-span-2 space-y-1">
             <span class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_fish_reward_item()}</span>
@@ -632,11 +632,11 @@
         <div class="grid grid-cols-2 gap-3">
           <div class="space-y-1">
             <label for="firstClearCoins" class="text-xs font-semibold text-on-surface-variant ml-2">{currencyName || m.eco_fish_field_value()}</label>
-            <input id="firstClearCoins" type="number" min="0" bind:value={editing.firstClearCoins} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2.5 text-xs focus:outline-none" />
+            <input id="firstClearCoins" type="number" min="0" bind:value={editing.firstClearCoins} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
           </div>
           <div class="space-y-1">
             <label for="firstClearXp" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_dungeon_rpg_xp()}</label>
-            <input id="firstClearXp" type="number" min="0" bind:value={editing.firstClearXp} class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2.5 text-xs focus:outline-none" />
+            <input id="firstClearXp" type="number" min="0" bind:value={editing.firstClearXp} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
           </div>
           <div class="col-span-2 space-y-1">
             <span class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_fish_reward_item()}</span>

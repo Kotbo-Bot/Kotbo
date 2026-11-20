@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { dialogFocus } from '../lib/actions/dialogFocus';
   import { router } from 'tinro';
   import { authStore } from '../lib/stores/auth.svelte';
   import { dashboardStore } from '../lib/stores/dashboard.svelte';
@@ -11,6 +12,7 @@
   import HomeTodo from '../lib/components/home/HomeTodo.svelte';
   import HomeActivityCard from '../lib/components/home/HomeActivityCard.svelte';
   import TopList from '../lib/components/analytics/TopList.svelte';
+  import Sparkline from '../lib/components/analytics/Sparkline.svelte';
   import { SERIES } from '../lib/components/analytics/analyticsFormat';
   import { channelDetailsModal } from '../lib/stores/channelDetailsModal.svelte';
   import ServerLocaleSettings from '../lib/components/ServerLocaleSettings.svelte';
@@ -32,46 +34,58 @@
   }
 
   /**
-   * Ce que voit un nouveau venu, sous « A traiter » : l'etat du serveur, rien
-   * de plus. L'ancienne grille par defaut empilait douze blocs, dont deux
-   * reglages du serveur (langue, fuseau), un doublon de la cloche et un etat
-   * systeme toujours « Optimal ». Ils restent dans la bibliotheque, et les
-   * dispositions deja enregistrees ne bougent pas.
+   * Ce que voit un nouveau venu, sous « A traiter », du plus global au plus
+   * actionnable : les chiffres du moment, la sante (Pulse) a cote de la courbe,
+   * puis une rangee de ce qui demande une decision (sanctions, securite,
+   * taches), et enfin le journal et le climat. Trois colonnes, donc quatre
+   * rangees pleines : 3 + 3 + 3 + 3. L'ancienne grille empilait douze blocs,
+   * dont deux reglages du serveur, un doublon de la cloche et un etat systeme
+   * toujours « Optimal » ; la liste du staff laisse sa place a « Mes taches »
+   * et reste dans la bibliotheque. Les dispositions deja enregistrees ne bougent
+   * pas : les nouveaux blocs y arrivent masques.
    */
   const DEFAULT_LAYOUT: LayoutItem[] = [
     { id: 'liveStats', colSpan: 3, rowSpan: 1, visible: true },
+    { id: 'pulse', colSpan: 1, rowSpan: 1, visible: true },
     { id: 'analytics', colSpan: 2, rowSpan: 1, visible: true },
     { id: 'moderation', colSpan: 1, rowSpan: 1, visible: true },
-    { id: 'staff', colSpan: 1, rowSpan: 1, visible: true },
+    { id: 'shield', colSpan: 1, rowSpan: 1, visible: true },
+    { id: 'myTasks', colSpan: 1, rowSpan: 1, visible: true },
     { id: 'audit', colSpan: 2, rowSpan: 1, visible: true },
+    { id: 'climate', colSpan: 1, rowSpan: 1, visible: true },
   ];
 
   const MODULE_CATALOG = [
-    { id: 'liveStats', title: m.home_mod_livestats_title(), desc: m.home_mod_livestats_desc(), icon: 'users' },
-    { id: 'analytics', title: m.home_mod_analytics_title(), desc: m.home_mod_analytics_desc(), icon: 'trending-up' },
-    { id: 'system', title: m.home_mod_system_title(), desc: m.home_mod_system_desc(), icon: 'cpu' },
-    { id: 'channels', title: m.home_mod_channels_title(), desc: m.home_mod_channels_desc(), icon: 'hash' },
-    { id: 'moderation', title: m.home_mod_moderation_title(), desc: m.home_mod_moderation_desc(), icon: 'shield' },
-    { id: 'members', title: m.home_mod_members_title(), desc: m.home_mod_members_desc(), icon: 'award' },
-    { id: 'notifications', title: m.home_mod_notifications_title(), desc: m.home_mod_notifications_desc(), icon: 'inbox' },
-    { id: 'staff', title: m.home_mod_staff_title(), desc: m.home_mod_staff_desc(), icon: 'users' },
-    { id: 'audit', title: m.home_mod_audit_title(), desc: m.home_mod_audit_desc(), icon: 'activity' },
-    { id: 'botLanguage', title: m.home_mod_botlanguage_title(), desc: m.home_mod_botlanguage_desc(), icon: 'globe' },
-    { id: 'timezone', title: m.home_mod_timezone_title(), desc: m.home_mod_timezone_desc(), icon: 'clock' },
-    { id: 'actions', title: m.home_mod_actions_title(), desc: m.home_mod_actions_desc(), icon: 'plus-circle' },
-    { id: 'notes', title: m.home_mod_notes_title(), desc: m.home_mod_notes_desc(), icon: 'edit' },
-    { id: 'serverInfo', title: m.home_mod_serverinfo_title(), desc: m.home_mod_serverinfo_desc(), icon: 'server' },
-    { id: 'botHosting', title: m.home_mod_bothosting_title(), desc: m.home_mod_bothosting_desc(), icon: 'cpu' },
-    { id: 'news', title: m.home_mod_news_title(), desc: m.home_mod_news_desc(), icon: 'book' },
-    { id: 'quickGuide', title: m.home_mod_quickguide_title(), desc: m.home_mod_quickguide_desc(), icon: 'info' },
-    { id: 'clockWeather', title: m.home_mod_clockweather_title(), desc: m.home_mod_clockweather_desc(), icon: 'clock' },
-    { id: 'economy', title: m.home_mod_economy_title(), desc: m.home_mod_economy_desc(), icon: 'dollar-sign' },
-    { id: 'leveling', title: m.home_mod_leveling_title(), desc: m.home_mod_leveling_desc(), icon: 'bar-chart-2' },
-    { id: 'tickets', title: m.home_mod_tickets_title(), desc: m.home_mod_tickets_desc(), icon: 'message-square' },
-    { id: 'invites', title: m.home_mod_invites_title(), desc: m.home_mod_invites_desc(), icon: 'user-plus' },
-    { id: 'events', title: m.home_mod_events_title(), desc: m.home_mod_events_desc(), icon: 'calendar' },
-    { id: 'polls', title: m.home_mod_polls_title(), desc: m.home_mod_polls_desc(), icon: 'bar-chart' },
-    { id: 'staffServer', title: m.home_mod_staffserver_title(), desc: m.home_mod_staffserver_desc(), icon: 'shield' },
+    { id: 'liveStats', get title() { return m.home_mod_livestats_title(); }, get desc() { return m.home_mod_livestats_desc(); }, icon: 'users' },
+    { id: 'analytics', get title() { return m.home_mod_analytics_title(); }, get desc() { return m.home_mod_analytics_desc(); }, icon: 'trending-up' },
+    { id: 'system', get title() { return m.home_mod_system_title(); }, get desc() { return m.home_mod_system_desc(); }, icon: 'cpu' },
+    { id: 'channels', get title() { return m.home_mod_channels_title(); }, get desc() { return m.home_mod_channels_desc(); }, icon: 'hash' },
+    { id: 'moderation', get title() { return m.home_mod_moderation_title(); }, get desc() { return m.home_mod_moderation_desc(); }, icon: 'shield' },
+    { id: 'members', get title() { return m.home_mod_members_title(); }, get desc() { return m.home_mod_members_desc(); }, icon: 'award' },
+    { id: 'notifications', get title() { return m.home_mod_notifications_title(); }, get desc() { return m.home_mod_notifications_desc(); }, icon: 'inbox' },
+    { id: 'staff', get title() { return m.home_mod_staff_title(); }, get desc() { return m.home_mod_staff_desc(); }, icon: 'users' },
+    { id: 'audit', get title() { return m.home_mod_audit_title(); }, get desc() { return m.home_mod_audit_desc(); }, icon: 'activity' },
+    { id: 'botLanguage', get title() { return m.home_mod_botlanguage_title(); }, get desc() { return m.home_mod_botlanguage_desc(); }, icon: 'globe' },
+    { id: 'timezone', get title() { return m.home_mod_timezone_title(); }, get desc() { return m.home_mod_timezone_desc(); }, icon: 'clock' },
+    { id: 'actions', get title() { return m.home_mod_actions_title(); }, get desc() { return m.home_mod_actions_desc(); }, icon: 'plus-circle' },
+    { id: 'notes', get title() { return m.home_mod_notes_title(); }, get desc() { return m.home_mod_notes_desc(); }, icon: 'edit' },
+    { id: 'serverInfo', get title() { return m.home_mod_serverinfo_title(); }, get desc() { return m.home_mod_serverinfo_desc(); }, icon: 'server' },
+    { id: 'botHosting', get title() { return m.home_mod_bothosting_title(); }, get desc() { return m.home_mod_bothosting_desc(); }, icon: 'cpu' },
+    { id: 'news', get title() { return m.home_mod_news_title(); }, get desc() { return m.home_mod_news_desc(); }, icon: 'book' },
+    { id: 'quickGuide', get title() { return m.home_mod_quickguide_title(); }, get desc() { return m.home_mod_quickguide_desc(); }, icon: 'info' },
+    { id: 'clockWeather', get title() { return m.home_mod_clockweather_title(); }, get desc() { return m.home_mod_clockweather_desc(); }, icon: 'clock' },
+    { id: 'economy', get title() { return m.home_mod_economy_title(); }, get desc() { return m.home_mod_economy_desc(); }, icon: 'dollar-sign' },
+    { id: 'leveling', get title() { return m.home_mod_leveling_title(); }, get desc() { return m.home_mod_leveling_desc(); }, icon: 'bar-chart-2' },
+    { id: 'tickets', get title() { return m.home_mod_tickets_title(); }, get desc() { return m.home_mod_tickets_desc(); }, icon: 'message-square' },
+    { id: 'invites', get title() { return m.home_mod_invites_title(); }, get desc() { return m.home_mod_invites_desc(); }, icon: 'user-plus' },
+    { id: 'events', get title() { return m.home_mod_events_title(); }, get desc() { return m.home_mod_events_desc(); }, icon: 'calendar' },
+    { id: 'polls', get title() { return m.home_mod_polls_title(); }, get desc() { return m.home_mod_polls_desc(); }, icon: 'bar-chart' },
+    { id: 'staffServer', get title() { return m.home_mod_staffserver_title(); }, get desc() { return m.home_mod_staffserver_desc(); }, icon: 'shield' },
+    { id: 'pulse', get title() { return m.home_mod_pulse_title(); }, get desc() { return m.home_mod_pulse_desc(); }, icon: 'activity' },
+    { id: 'shield', get title() { return m.home_mod_shield_title(); }, get desc() { return m.home_mod_shield_desc(); }, icon: 'shield' },
+    { id: 'myTasks', get title() { return m.home_mod_mytasks_title(); }, get desc() { return m.home_mod_mytasks_desc(); }, icon: 'check-circle' },
+    { id: 'boosts', get title() { return m.home_mod_boosts_title(); }, get desc() { return m.home_mod_boosts_desc(); }, icon: 'star' },
+    { id: 'climate', get title() { return m.home_mod_climate_title(); }, get desc() { return m.home_mod_climate_desc(); }, icon: 'bar-chart-2' },
   ];
 
   /**
@@ -567,9 +581,9 @@
 
   // Widget "Serveur Staff" - état du lien de la paire
   const SYNC_MODE_LABELS: Record<string, string> = {
-    MAIN_TO_STAFF: m.home_sync_main_to_staff(),
-    STAFF_TO_MAIN: m.home_sync_staff_to_main(),
-    BIDIRECTIONAL: m.home_sync_bidirectional(),
+    get MAIN_TO_STAFF() { return m.home_sync_main_to_staff(); },
+    get STAFF_TO_MAIN() { return m.home_sync_staff_to_main(); },
+    get BIDIRECTIONAL() { return m.home_sync_bidirectional(); },
   };
   let staffServerLinks = $state<any[]>([]);
   let staffLinksGuildId: string | null = null;
@@ -718,6 +732,11 @@
     serverInfo: 'serverInfo',
     quickGuide: 'quickGuide',
     botHosting: 'hosting',
+    pulse: 'pulse',
+    shield: 'shield',
+    myTasks: 'myTasks',
+    boosts: 'boosts',
+    climate: 'climate',
   };
 
   let homeWidgets = $state<HomeWidgetsData | null>(null);
@@ -768,6 +787,22 @@
   function formatMemory(megabytes: number): string {
     if (megabytes >= 1024) return `${(megabytes / 1024).toFixed(1)} GB`;
     return `${megabytes} MB`;
+  }
+
+  function emotionLabel(emotion: string | null): string {
+    switch (emotion) {
+      case 'joy': return m.home_climate_emotion_joy();
+      case 'sad': return m.home_climate_emotion_sad();
+      case 'anger': return m.home_climate_emotion_anger();
+      case 'fear': return m.home_climate_emotion_fear();
+      default: return '-';
+    }
+  }
+
+  function pulseTone(score: number): string {
+    if (score >= 70) return 'text-success';
+    if (score >= 40) return 'text-warning';
+    return 'text-error';
   }
 
   function formatEventDate(iso: string): string {
@@ -1271,7 +1306,7 @@
                     </div>
                     <button
                       onclick={() => handleMarkAsRead(notif.id)}
-                      class="w-5 h-5 rounded bg-success/10 text-success hover:bg-success/20 transition-colors flex items-center justify-center shrink-0 cursor-pointer"
+                      class="w-5 h-5 rounded bg-success/10 text-on-success-container hover:bg-success/20 transition-colors flex items-center justify-center shrink-0 cursor-pointer"
                     >
                       <Papicon icon="check" size={10} />
                     </button>
@@ -1383,11 +1418,11 @@
             <div class="flex items-center gap-2.5 mb-2 shrink-0">
               <h3 class="text-sm font-medium text-on-surface">{m.home_team_notes()}</h3>
             </div>
-            <textarea
+            <textarea aria-label={m.home_team_notes()}
               value={staffNotes}
               oninput={saveStaffNotes}
               placeholder={m.home_notes_placeholder()}
-              class="w-full grow p-2.5 text-xs bg-surface-container border border-outline-variant rounded-lg outline-none resize-none focus:border-primary/50 text-on-surface min-h-[100px]"
+              class="w-full grow p-2.5 text-xs bg-surface-container border border-field-border rounded-lg outline-none resize-none focus:border-primary/50 text-on-surface min-h-[100px]"
             ></textarea>
           </div>
         {:else if item.id === 'serverInfo'}
@@ -1433,7 +1468,7 @@
                 <h3 class="text-sm font-medium text-on-surface">{m.home_mod_bothosting_title()}</h3>
               </div>
               {#if hosting}
-                <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-2xs bg-success/20 text-success font-medium">
+                <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-2xs bg-success/20 text-on-success-container font-medium">
                   <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> {m.home_online_label()}
                 </span>
               {/if}
@@ -1733,6 +1768,155 @@
               {/if}
             </div>
           </div>
+        {:else if item.id === 'pulse'}
+          {@const pulse = homeWidgets?.pulse}
+          <div class="flex flex-col h-full justify-between">
+            <div class="flex items-center justify-between mb-3 shrink-0">
+              <h3 class="text-sm font-medium text-on-surface">{m.home_mod_pulse_title()}</h3>
+              <button onclick={() => router.goto('/pulse')} class="text-2xs text-primary hover:underline cursor-pointer">{m.home_pulse_open()}</button>
+            </div>
+            <div class="grow flex flex-col justify-center gap-2">
+              {#if pulse && !pulse.hasData}
+                <p class="text-2xs text-on-surface-variant text-center">{m.home_pulse_no_data()}</p>
+              {:else}
+                <div class="flex items-end justify-between gap-3">
+                  <div>
+                    <p class="text-3xl font-semibold leading-none {pulse?.score == null ? 'text-on-surface' : pulseTone(pulse.score)}">{pulse?.score ?? '-'}<span class="text-sm text-on-surface-variant font-normal">/100</span></p>
+                    {#if pulse && pulse.trendDelta !== 0}
+                      <p class="text-2xs mt-1 {pulse.trendDelta > 0 ? 'text-success' : 'text-error'}">{pulse.trendDelta > 0 ? '+' : ''}{pulse.trendDelta}</p>
+                    {/if}
+                  </div>
+                  {#if pulse && pulse.history.length > 1}
+                    <Sparkline values={pulse.history} width={120} height={36} />
+                  {/if}
+                </div>
+                <p class="text-2xs {pulse && pulse.alertCount > 0 ? 'text-warning' : 'text-on-surface-variant'}">
+                  {pulse && pulse.alertCount > 0 ? m.home_pulse_alerts({ n: pulse.alertCount }) : m.home_pulse_no_alert()}
+                </p>
+              {/if}
+            </div>
+          </div>
+        {:else if item.id === 'shield'}
+          {@const shield = homeWidgets?.shield}
+          {@const shieldPending = shield ? shield.openWaves + shield.pendingVision : 0}
+          <div class="flex flex-col h-full justify-between">
+            <div class="flex items-center justify-between mb-3 shrink-0">
+              <h3 class="text-sm font-medium text-on-surface">{m.home_mod_shield_title()}</h3>
+              <button onclick={() => router.goto('/security/raid-protection')} class="text-2xs text-primary hover:underline cursor-pointer">{m.home_details()}</button>
+            </div>
+            <div class="grow flex flex-col justify-center gap-2">
+              <div class="grid grid-cols-2 gap-2">
+                <div class="px-3 py-2 rounded-lg bg-warning/5 border border-warning/10">
+                  <p class="text-lg font-semibold text-on-surface">{shield ? formatNumber(shield.jailed) : '-'}</p>
+                  <p class="text-2xs text-on-surface-variant">{m.home_shield_jailed()}</p>
+                </div>
+                <div class="px-3 py-2 rounded-lg bg-error/5 border border-error/10">
+                  <p class="text-lg font-semibold text-on-surface">{shield ? formatNumber(shield.jailedRecently) : '-'}</p>
+                  <p class="text-2xs text-on-surface-variant">{m.home_shield_jailed_7d()}</p>
+                </div>
+              </div>
+              {#if shield && shield.openWaves > 0}
+                <p class="text-2xs text-warning">{m.home_shield_waves()} : {shield.openWaves}</p>
+              {/if}
+              {#if shield && shield.pendingVision > 0}
+                <p class="text-2xs text-warning">{m.home_shield_vision()} : {shield.pendingVision}</p>
+              {/if}
+              {#if shield && shieldPending === 0}
+                <p class="text-2xs text-on-surface-variant text-center">{shield.configured ? m.home_shield_calm() : m.home_shield_not_configured()}</p>
+              {/if}
+            </div>
+          </div>
+        {:else if item.id === 'myTasks'}
+          {@const tasks = homeWidgets?.myTasks}
+          <div class="flex flex-col h-full justify-between">
+            <div class="flex items-center justify-between mb-3 shrink-0">
+              <h3 class="text-sm font-medium text-on-surface">{m.home_mod_mytasks_title()}</h3>
+              <button onclick={() => router.goto('/doing-lists')} class="text-2xs text-primary hover:underline cursor-pointer">{m.home_see_everything()}</button>
+            </div>
+            <div class="grow flex flex-col gap-2 {tasks && tasks.isStaff && tasks.next.length > 0 ? '' : 'justify-center'}">
+              {#if tasks && !tasks.isStaff}
+                <p class="text-2xs text-on-surface-variant text-center">{m.home_tasks_not_staff()}</p>
+              {:else if tasks && tasks.open === 0}
+                <p class="text-2xs text-on-surface-variant text-center">{m.home_tasks_none()}</p>
+              {:else}
+                <div class="grid grid-cols-2 gap-2">
+                  <div class="px-3 py-2 rounded-lg bg-blue-500/5 border border-blue-500/10">
+                    <p class="text-lg font-semibold text-on-surface">{tasks ? formatNumber(tasks.open) : '-'}</p>
+                    <p class="text-2xs text-on-surface-variant">{m.home_tasks_open()}</p>
+                  </div>
+                  <div class="px-3 py-2 rounded-lg {tasks && tasks.overdue > 0 ? 'bg-error/5 border-error/10' : 'bg-success/5 border-success/10'} border">
+                    <p class="text-lg font-semibold text-on-surface">{tasks ? formatNumber(tasks.overdue) : '-'}</p>
+                    <p class="text-2xs text-on-surface-variant">{m.home_tasks_overdue()}</p>
+                  </div>
+                </div>
+                {#each (tasks?.next ?? []).slice(0, displayRowSpan(item) >= 2 ? 3 : 2) as task (task.id)}
+                  <div class="px-2.5 py-1.5 rounded-lg bg-surface-container/60">
+                    <p class="text-xs font-medium text-on-surface truncate">{task.title}</p>
+                    {#if task.dueAt}
+                      <p class="text-2xs {new Date(task.dueAt) < new Date() ? 'text-error' : 'text-on-surface-variant'}">{m.home_tasks_due({ date: formatEventDate(task.dueAt) })}</p>
+                    {/if}
+                  </div>
+                {/each}
+              {/if}
+            </div>
+          </div>
+        {:else if item.id === 'boosts'}
+          {@const boosts = homeWidgets?.boosts}
+          <div class="flex flex-col h-full justify-between">
+            <div class="flex items-center justify-between mb-3 shrink-0">
+              <h3 class="text-sm font-medium text-on-surface">{m.home_mod_boosts_title()}</h3>
+              <button onclick={() => router.goto('/analytics')} class="text-2xs text-primary hover:underline cursor-pointer">{m.home_details()}</button>
+            </div>
+            <div class="grow flex flex-col justify-center gap-2">
+              {#if boosts && !boosts.hasData}
+                <p class="text-2xs text-on-surface-variant text-center">{m.home_boosts_no_data()}</p>
+              {:else}
+                <div class="flex items-center justify-between gap-2">
+                  <p class="text-lg font-semibold text-purple-400 flex items-center gap-1.5">
+                    <Papicon icon="star" size={14} />{boosts?.tier == null ? '-' : m.home_boosts_level({ n: boosts.tier })}
+                  </p>
+                  {#if boosts?.delta != null && boosts.delta !== 0}
+                    <span class="text-2xs {boosts.delta > 0 ? 'text-success' : 'text-error'}">{boosts.delta > 0 ? '+' : ''}{boosts.delta} · {m.home_boosts_delta()}</span>
+                  {/if}
+                </div>
+                <p class="text-xs text-on-surface">
+                  {boosts?.boostCount == null ? '-' : m.home_boosts_count({ n: boosts.boostCount })}
+                  {#if boosts?.boosterCount != null}<span class="text-on-surface-variant"> · {m.home_boosts_boosters({ n: boosts.boosterCount })}</span>{/if}
+                </p>
+                {#if boosts}
+                  <p class="text-2xs {boosts.lostRecently > 0 ? 'text-warning' : 'text-on-surface-variant'}">
+                    {boosts.lostRecently > 0 ? m.home_boosts_lost({ n: boosts.lostRecently }) : m.home_boosts_none_lost()}
+                  </p>
+                {/if}
+              {/if}
+            </div>
+          </div>
+        {:else if item.id === 'climate'}
+          {@const climate = homeWidgets?.climate}
+          <div class="flex flex-col h-full justify-between">
+            <div class="flex items-center justify-between mb-3 shrink-0">
+              <h3 class="text-sm font-medium text-on-surface">{m.home_mod_climate_title()}</h3>
+              <button onclick={() => router.goto('/analytics')} class="text-2xs text-primary hover:underline cursor-pointer">{m.home_details()}</button>
+            </div>
+            <div class="grow flex flex-col justify-center gap-2">
+              {#if climate && !climate.enabled && climate.analyzed === 0}
+                <p class="text-2xs text-on-surface-variant text-center">{m.home_climate_disabled()}</p>
+              {:else}
+                <div class="flex items-end justify-between gap-3">
+                  <div>
+                    <p class="text-lg font-semibold text-on-surface">{climate?.toxicPercent == null ? '-' : `${climate.toxicPercent}%`}</p>
+                    <p class="text-2xs text-on-surface-variant">{m.home_climate_toxic()}</p>
+                  </div>
+                  {#if climate && climate.history.length > 1}
+                    <Sparkline values={climate.history} width={100} height={32} color="var(--series-2)" />
+                  {/if}
+                </div>
+                {#if climate}
+                  <p class="text-2xs text-on-surface-variant">{m.home_climate_emotion()} : <span class="text-on-surface">{emotionLabel(climate.dominantEmotion)}</span> · {m.home_climate_analyzed({ n: climate.analyzed })}</p>
+                {/if}
+              {/if}
+            </div>
+          </div>
         {:else if item.id === 'staffServer'}
           <div class="flex flex-col h-full justify-between">
             <div class="flex items-center justify-between mb-3 shrink-0">
@@ -1808,9 +1992,9 @@
   <!-- Add Module Modal -->
   {#if showAddModuleModal}
     <div class="modal-backdrop" onclick={() => showAddModuleModal = false} role="button" tabindex="-1" onkeydown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) showAddModuleModal = false; }}>
-      <div class="modal-panel modal-panel-lg" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="dialog" aria-modal="true" tabindex="-1">
+      <div class="modal-panel modal-panel-lg" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} use:dialogFocus={{ onEscape: () => (showAddModuleModal = false) }} role="dialog" aria-modal="true" aria-labelledby="home-module-library-title" tabindex="-1">
         <div class="flex items-center justify-between border-b border-outline-variant pb-3 mb-4">
-          <h2 class="text-base font-semibold text-on-surface flex items-center gap-2">
+          <h2 id="home-module-library-title" class="text-base font-semibold text-on-surface flex items-center gap-2">
             <Papicon icon="plus-circle" size={18} class="text-primary" /> {m.home_module_library()}
           </h2>
           <button
@@ -1841,7 +2025,7 @@
               
               <div class="flex justify-end pt-1">
                 {#if isVisible}
-                  <span class="inline-flex items-center gap-1 text-2xs text-success font-medium bg-success/10 px-2 py-1 rounded">
+                  <span class="inline-flex items-center gap-1 text-2xs text-on-success-container font-medium bg-success/10 px-2 py-1 rounded">
                     <Papicon icon="check" size={10} /> {m.home_already_visible()}
                   </span>
                 {:else}
@@ -1863,8 +2047,8 @@
   <!-- Reset Confirmation Modal -->
   {#if showResetConfirm}
     <div class="modal-backdrop" onclick={() => showResetConfirm = false} role="button" tabindex="-1" onkeydown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) showResetConfirm = false; }}>
-      <div class="modal-panel max-w-sm" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="dialog" aria-modal="true" tabindex="-1">
-        <h3 class="font-semibold text-base text-on-surface mb-2">{m.home_reset_layout_q()}</h3>
+      <div class="modal-panel max-w-sm" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} use:dialogFocus={{ onEscape: () => (showResetConfirm = false) }} role="dialog" aria-modal="true" aria-labelledby="home-reset-title" tabindex="-1">
+        <h3 id="home-reset-title" class="font-semibold text-base text-on-surface mb-2">{m.home_reset_layout_q()}</h3>
         <p class="text-sm text-on-surface-variant leading-normal mb-5">
           {m.home_reset_layout_warn()}
         </p>
@@ -1879,9 +2063,9 @@
   <!-- Presets Modal -->
   {#if showPresetsModal}
     <div class="modal-backdrop" onclick={() => showPresetsModal = false} role="button" tabindex="-1" onkeydown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) showPresetsModal = false; }}>
-      <div class="modal-panel modal-panel-lg" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="dialog" aria-modal="true" tabindex="-1">
+      <div class="modal-panel modal-panel-lg" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} use:dialogFocus={{ onEscape: () => (showPresetsModal = false) }} role="dialog" aria-modal="true" aria-labelledby="home-presets-title" tabindex="-1">
         <div class="flex items-center justify-between border-b border-outline-variant pb-3 mb-4">
-          <h2 class="text-base font-semibold text-on-surface flex items-center gap-2">
+          <h2 id="home-presets-title" class="text-base font-semibold text-on-surface flex items-center gap-2">
             <Papicon icon="layers" size={18} class="text-primary" /> {m.home_layout_presets()}
           </h2>
           <button
@@ -1898,17 +2082,17 @@
             <Papicon icon="save" size={14} class="text-primary" /> {m.home_save_current_layout()}
           </h3>
           <div class="flex gap-2">
-            <input
+            <input aria-label={m.home_preset_name_ph()}
               type="text"
               bind:value={presetName}
               placeholder={m.home_preset_name_ph()}
-              class="grow px-3 py-2 text-xs bg-surface-container border border-outline-variant rounded-lg outline-none focus:border-primary/50 text-on-surface"
+              class="grow px-3 py-2 text-xs bg-surface-container border border-field-border rounded-lg outline-none focus:border-primary/50 text-on-surface"
             />
-            <input
+            <input aria-label={m.home_preset_desc_ph()}
               type="text"
               bind:value={presetDescription}
               placeholder={m.home_preset_desc_ph()}
-              class="grow px-3 py-2 text-xs bg-surface-container border border-outline-variant rounded-lg outline-none focus:border-primary/50 text-on-surface"
+              class="grow px-3 py-2 text-xs bg-surface-container border border-field-border rounded-lg outline-none focus:border-primary/50 text-on-surface"
             />
             <button
               onclick={saveAsPreset}
@@ -1925,10 +2109,10 @@
             <Papicon icon="upload" size={14} class="text-secondary" /> {m.home_import_preset_json()}
           </h3>
           <div class="flex gap-2">
-            <textarea
+            <textarea aria-label={m.home_import_preset_json()}
               bind:value={presetImportJson}
               placeholder={m.home_paste_json_ph() + ' {"name": "...", "layout": [...]}'}
-              class="grow px-3 py-2 text-xs bg-surface-container border border-outline-variant rounded-lg outline-none focus:border-primary/50 text-on-surface min-h-[60px] resize-none"
+              class="grow px-3 py-2 text-xs bg-surface-container border border-field-border rounded-lg outline-none focus:border-primary/50 text-on-surface min-h-[60px] resize-none"
             ></textarea>
             <button
               onclick={importPresetFromJson}

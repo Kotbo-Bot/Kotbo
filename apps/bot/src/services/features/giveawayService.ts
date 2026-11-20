@@ -1257,9 +1257,13 @@ async function distributeGiveawayPrizes(giveaway: {
 }, winners: string[]) {
   if (winners.length === 0) return;
 
-  const rpgXp = (giveaway.rpgXp as number) || 0;
-  const rpgCoins = (giveaway.rpgCoins as number) || 0;
-  const rpgItemId = (giveaway.rpgItemId as string | null) || null;
+  // Pièces, XP RPG et objet appartiennent tous à l'économie. Éteinte, les
+  // gagnants sont annoncés avec le lot écrit, sans rien créditer ; l'événement
+  // `giveaway:winner` part quand même, en fin de tour.
+  const economyEnabled = await isModuleEnabled(giveaway.guildId, 'economy');
+  const rpgXp = economyEnabled ? (giveaway.rpgXp as number) || 0 : 0;
+  const rpgCoins = economyEnabled ? (giveaway.rpgCoins as number) || 0 : 0;
+  const rpgItemId = economyEnabled ? (giveaway.rpgItemId as string | null) || null : null;
 
   const { checkLevelUp } = await import('./economyService.js');
 

@@ -128,6 +128,14 @@ describe('phishingFeedService & fusion Kotbo Vision', () => {
       }
     });
 
+    it('ignore les sosies dans un texte lu par OCR, qui lit « m » comme « rn »', () => {
+      // steamcommunity.com mal lu : un sosie pour un message, du bruit pour l'OCR.
+      expect(detectScam('va sur stearncommunity.com pour échanger', makeConfig(), true).matched).toBe(false);
+      expect(detectScam('https://discord.corn/channels', makeConfig(), true).matched).toBe(false);
+      // Un domaine listé reste bloqué, même lu dans une image.
+      expect(detectScam('https://free-nitro-drop.ru/welcome', makeConfig(), true).matched).toBe(true);
+    });
+
     it('respecte toujours la whitelist du serveur sur les flux GitHub et lookalikes', () => {
       const cfg = makeConfig({ scamFilterWhitelist: ['free-nitro-drop.ru', 'stearncommunity.com'] });
       expect(detectScam('https://free-nitro-drop.ru/test', cfg).matched).toBe(false);

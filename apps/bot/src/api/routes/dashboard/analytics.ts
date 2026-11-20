@@ -1,21 +1,19 @@
-import { IncomingMessage, ServerResponse } from 'node:http';
+import { Hono, type Context } from 'hono';
+import { createMiddleware } from 'hono/factory';
 import { Client, Routes } from 'discord.js';
 import prisma, { prismaRead } from '../../../utils/db.js';
 import { logger } from '../../../utils/logger.js';
 import { cache } from '../../../utils/cache.js';
 import { memberDisplaysGuildTag } from '../../../services/moderation/tagRoleService.js';
+import { guildTagBadgeUrl } from '../../../services/core/serverTagService.js';
 import {
-  json,
-  readJsonBody,
   getGuildMembers,
-  type AuthClaims,
-  type DashboardAccess,
+  splitPath,
 } from '../../shared.js';
 import {
   getHourlyHeatmapData,
   getWeekOverWeekComparison,
   getGrowthAndRetention,
-  getDailyAlgoAnalytics,
   getGlobalInteractions,
   getCommandUsageAnalytics,
   getStaffPerformanceAnalytics,
@@ -26,7 +24,6 @@ import { resolveOnlineMembersCount } from '../../../services/core/presenceDetect
 import { canViewFeatureSection } from './featureGate.js';
 import { applyFreeAnalyticsLimits } from './analyticsFreeTier.js';
 import { getGuildPlan } from '../../../services/system/planService.js';
-import { isModulePaused } from '@kotbo/contracts';
 
 export type LiveGuildCounts = {
   totalMembers: number;
@@ -86,40 +83,41 @@ export async function resolveLiveGuildCounts(
   return { totalMembers, onlineNow, idleNow, dndNow, voiceNow, botsCount };
 }
 
-import { jsonFailure } from '../../shared/failure.js';
-export async function handleAnalyticsRoutes(
-  req: IncomingMessage,
-  res: ServerResponse,
-  parts: string[],
-  url: URL,
-  client: Client,
-  user: AuthClaims,
-  guildId: string,
-  _access: DashboardAccess
-): Promise<boolean> {
-  const method = req.method;
-
-  if (parts[4] !== 'analytics') {
-    return false;
+import { fail, guildRoute, readBody, send } from '../../hono/dashboard/kit.js';
+declare module 'hono' {
+  interface ContextVariableMap {
+    /** Paramètres de la requête, bornés par l'offre gratuite. */
+    analyticsQuery: URLSearchParams;
   }
+}
 
-  if ((await getGuildPlan(guildId)) === 'FREE' && !applyFreeAnalyticsLimits(parts, method, url.searchParams)) {
-    json(res, 402, { error: 'plan_required', message: "Cette analyse fait partie de l'offre Plus." });
-    return true;
-  }
+export function createAnalyticsRouter(client: Client) {
+  const router = new Hono();
+  const base = '/api/dashboard/guilds/:guildId';
+  // Offre gratuite : analyses payantes refusées, période et filtres bornés.
+  const analyticsPlan = createMiddleware(async (c, next) => {
+    const query = new URL(c.req.url).searchParams;
+    if ((await getGuildPlan(c.req.param('guildId')!)) === 'FREE' && !applyFreeAnalyticsLimits(splitPath(c.req.path), c.req.method, query)) {
+      return send(c, { error: 'plan_required', message: "Cette analyse fait partie de l'offre Plus." }, 402);
+    }
+    c.set('analyticsQuery', query);
+    await next();
+  });
+  const gate = [...guildRoute(client), analyticsPlan] as const;
 
   // POST /api/dashboard/guilds/:guildId/analytics/rescan-members
-  if (parts.length === 6 && parts[5] === 'rescan-members' && method === 'POST') {
+  router.post(`${base}/analytics/rescan-members`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId')!;
     try {
-      const body = await readJsonBody<{ force?: boolean }>(req);
+      const body = await readBody<{ force?: boolean }>(c);
       const force = !!body?.force;
 
       const { startMemberScraping } = await import('../../../services/analytics/memberScraperService.js');
       const result = await startMemberScraping(client, guildId, force);
       if (result.status === 'ALREADY_RUNNING') {
-        json(res, 409, { error: 'Une synchronisation est déjà en cours sur ce serveur.' });
+        return send(c, { error: 'Une synchronisation est déjà en cours sur ce serveur.' }, 409);
       } else {
-        json(res, 200, {
+        return send(c, {
           ok: true,
           message: result.status === 'ALREADY_COMPLETED'
             ? 'Les membres sont déjà synchronisés.'
@@ -128,59 +126,65 @@ export async function handleAnalyticsRoutes(
       }
     } catch (err) {
       logger.error('AnalyticsAPI', 'POST rescan-members error:', err);
-      jsonFailure(res, err, 'Erreur lors du lancement du scraping membres', 'AnalyticsAPI');
+      return fail(c, err, 'Erreur lors du lancement du scraping membres', 'AnalyticsAPI');
     }
-    return true;
-  }
+  });
 
   // …/analytics/annotations : notes datées posées sur les courbes. Tout lecteur
   // d'Analytics en pose ; l'auteur retire la sienne, un administrateur
   // n'importe laquelle. Le répartiteur laisse passer ces écritures sans
   // `canManageSettings` (cf. isAnalyticsAnnotationAction) : le droit de lecture
   // de la section est donc revérifié ici.
-  if (parts[5] === 'annotations' && (parts.length === 6 || (parts.length === 7 && method === 'DELETE'))) {
+  const handleAnnotations = async (c: Context) => {
+    const guildId = c.req.param('guildId')!;
+    const user = c.var.dashboardUser;
+    const access = c.var.effectiveAccess;
+    const method = c.req.method;
+    const q = c.var.analyticsQuery;
+    const id = c.req.param('id');
     const insights = await import('../../../services/analytics/activityInsightsService.js');
     try {
       if (method === 'GET') {
         const { parseRange } = await import('../../../services/analytics/contentAnalyticsService.js');
-        const range = parseRange(url.searchParams);
-        json(res, 200, await insights.listAnnotations(client, guildId, range.start, range.end));
-        return true;
+        const range = parseRange(q);
+        return send(c, await insights.listAnnotations(client, guildId, range.start, range.end));
       }
-      if (!_access.canViewDashboard || !(await canViewFeatureSection(client, guildId, _access, user.userId, 'analytics'))) {
-        json(res, 403, { error: 'Accès à Analytics requis.' });
-        return true;
+      if (!access.canViewDashboard || !(await canViewFeatureSection(client, guildId, access, user.userId, 'analytics'))) {
+        return send(c, { error: 'Accès à Analytics requis.' }, 403);
       }
-      if (method === 'POST' && parts.length === 6) {
-        const input = insights.validateAnnotation((await readJsonBody<Record<string, unknown>>(req)) ?? {});
+      if (method === 'POST' && !id) {
+        const input = insights.validateAnnotation((await readBody<Record<string, unknown>>(c)) ?? {});
         if (typeof input === 'string') {
-          json(res, 400, { error: input === 'invalid_date' ? 'Date invalide' : `Texte requis (${insights.ANNOTATION_LABEL_MAX} caractères au plus)` });
-          return true;
+          return send(c, { error: input === 'invalid_date' ? 'Date invalide' : `Texte requis (${insights.ANNOTATION_LABEL_MAX} caractères au plus)` }, 400);
         }
         const created = await insights.createAnnotation(guildId, user.userId, input);
-        if (created === 'too_many') json(res, 409, { error: 'Trop de notes sur ce serveur : supprime les plus anciennes.' });
-        else json(res, 201, { id: created.id });
-        return true;
+        if (created === 'too_many') return send(c, { error: 'Trop de notes sur ce serveur : supprime les plus anciennes.' }, 409);
+        else return send(c, { id: created.id }, 201);
       }
-      if (method === 'DELETE' && parts.length === 7) {
-        const outcome = await insights.deleteAnnotation(guildId, parts[6]!, user.userId, _access.canManageSettings);
-        if (outcome === 'not_found') json(res, 404, { error: 'Note introuvable' });
-        else if (outcome === 'forbidden') json(res, 403, { error: 'Seul l\'auteur ou un administrateur peut retirer cette note.' });
-        else json(res, 200, { ok: true });
-        return true;
+      if (method === 'DELETE' && !!id) {
+        const outcome = await insights.deleteAnnotation(guildId, id!, user.userId, access.canManageSettings);
+        if (outcome === 'not_found') return send(c, { error: 'Note introuvable' }, 404);
+        else if (outcome === 'forbidden') return send(c, { error: 'Seul l\'auteur ou un administrateur peut retirer cette note.' }, 403);
+        else return send(c, { ok: true });
       }
     } catch (err) {
       logger.error('AnalyticsAPI', 'Erreur annotations:', err);
-      jsonFailure(res, err, 'Erreur sur les annotations', 'AnalyticsAPI');
-      return true;
+      return fail(c, err, 'Erreur sur les annotations', 'AnalyticsAPI');
     }
-  }
+  };
+  router.all(`${base}/analytics/annotations`, ...gate, handleAnnotations);
+  router.delete(`${base}/analytics/annotations/:id`, ...gate, handleAnnotations);
 
   // …/analytics/views[/:id] : vues enregistrées (onglet, période, filtres).
   // Chacun voit les siennes et celles partagées ; l'auteur retire la sienne,
   // un administrateur n'importe laquelle. Écriture ouverte aux lecteurs
   // d'Analytics (cf. isAnalyticsAnnotationAction), droit revérifié ici.
-  if (parts[5] === 'views' && (parts.length === 6 || (parts.length === 7 && method === 'DELETE'))) {
+  const handleViews = async (c: Context) => {
+    const guildId = c.req.param('guildId')!;
+    const user = c.var.dashboardUser;
+    const access = c.var.effectiveAccess;
+    const method = c.req.method;
+    const id = c.req.param('id');
     try {
       if (method === 'GET') {
         const views = await prismaRead.analyticsSavedView.findMany({
@@ -188,379 +192,440 @@ export async function handleAnalyticsRoutes(
           orderBy: { createdAt: 'asc' },
           take: 100,
         });
-        json(res, 200, views.map((v) => ({ ...v, mine: v.userId === user.userId })));
-        return true;
+        return send(c, views.map((v) => ({ ...v, mine: v.userId === user.userId })));
       }
-      if (!_access.canViewDashboard || !(await canViewFeatureSection(client, guildId, _access, user.userId, 'analytics'))) {
-        json(res, 403, { error: 'Accès à Analytics requis.' });
-        return true;
+      if (!access.canViewDashboard || !(await canViewFeatureSection(client, guildId, access, user.userId, 'analytics'))) {
+        return send(c, { error: 'Accès à Analytics requis.' }, 403);
       }
-      if (method === 'POST' && parts.length === 6) {
-        const body = (await readJsonBody<Record<string, unknown>>(req)) ?? {};
+      if (method === 'POST' && !id) {
+        const body = (await readBody<Record<string, unknown>>(c)) ?? {};
         const name = typeof body.name === 'string' ? body.name.trim().slice(0, 60) : '';
         const payload = body.payload && typeof body.payload === 'object' ? body.payload : null;
         if (!name || !payload || JSON.stringify(payload).length > 4000) {
-          json(res, 400, { error: 'Vue invalide' });
-          return true;
+          return send(c, { error: 'Vue invalide' }, 400);
         }
         const count = await prisma.analyticsSavedView.count({ where: { guildId, userId: user.userId } });
         if (count >= 30) {
-          json(res, 409, { error: '30 vues au plus par personne.' });
-          return true;
+          return send(c, { error: '30 vues au plus par personne.' }, 409);
         }
         const view = await prisma.analyticsSavedView.create({
           data: { guildId, userId: user.userId, name, payload: payload as object, shared: body.shared === true },
         });
-        json(res, 201, { ...view, mine: true });
-        return true;
+        return send(c, { ...view, mine: true }, 201);
       }
-      if (method === 'DELETE' && parts.length === 7) {
-        const view = await prisma.analyticsSavedView.findFirst({ where: { id: parts[6]!, guildId } });
-        if (!view) json(res, 404, { error: 'Vue introuvable' });
-        else if (view.userId !== user.userId && !_access.canManageSettings) json(res, 403, { error: "Seul l'auteur ou un administrateur peut retirer cette vue." });
+      if (method === 'DELETE' && !!id) {
+        const view = await prisma.analyticsSavedView.findFirst({ where: { id: id!, guildId } });
+        if (!view) return send(c, { error: 'Vue introuvable' }, 404);
+        else if (view.userId !== user.userId && !access.canManageSettings) return send(c, { error: "Seul l'auteur ou un administrateur peut retirer cette vue." }, 403);
         else {
           await prisma.analyticsSavedView.delete({ where: { id: view.id } });
-          json(res, 200, { ok: true });
+          return send(c, { ok: true });
         }
-        return true;
+        return send(c, { error: 'Route introuvable' }, 404);
       }
     } catch (err) {
       logger.error('AnalyticsAPI', 'Erreur vues enregistrées:', err);
-      jsonFailure(res, err, 'Erreur sur les vues enregistrées', 'AnalyticsAPI');
-      return true;
+      return fail(c, err, 'Erreur sur les vues enregistrées', 'AnalyticsAPI');
     }
-  }
+  };
+  router.all(`${base}/analytics/views`, ...gate, handleViews);
+  router.delete(`${base}/analytics/views/:id`, ...gate, handleViews);
 
   // …/analytics/alerts[/:id] et …/analytics/reports[/:id[/test]] : alertes sur
   // seuil et rapports planifiés. Lecture pour qui voit Analytics ; écriture
   // gardée par le répartiteur (droit de configuration).
-  if ((parts[5] === 'alerts' || parts[5] === 'reports') && parts.length >= 6 && parts.length <= 8) {
-    const isAlerts = parts[5] === 'alerts';
-    const id = parts[6];
+  const handleAlerts = async (c: Context) => {
+    const guildId = c.req.param('guildId')!;
+    const user = c.var.dashboardUser;
+    const method = c.req.method;
+    const isAlerts = c.req.param('kind') === 'alerts';
+    const id = c.req.param('id');
     try {
       if (isAlerts) {
         const alerts = await import('../../../services/analytics/analyticsAlertsService.js');
-        if (method === 'GET' && parts.length === 6) {
+        if (method === 'GET' && !id) {
           const [rules, events] = await Promise.all([
             prismaRead.analyticsAlertRule.findMany({ where: { guildId }, orderBy: { createdAt: 'asc' } }),
             prismaRead.analyticsAlertEvent.findMany({ where: { guildId }, orderBy: { triggeredAt: 'desc' }, take: 50 }),
           ]);
-          json(res, 200, { rules, events });
-          return true;
+          return send(c, { rules, events });
         }
-        if ((method === 'POST' && parts.length === 6) || (method === 'PUT' && parts.length === 7)) {
-          const input = alerts.validateAlertRule((await readJsonBody<Record<string, unknown>>(req)) ?? {});
+        if ((method === 'POST' && !id) || (method === 'PUT' && (!!id && !c.req.param('tail')))) {
+          const input = alerts.validateAlertRule((await readBody<Record<string, unknown>>(c)) ?? {});
           if (typeof input === 'string') {
-            json(res, 400, { error: 'Règle invalide', field: input });
-            return true;
+            return send(c, { error: 'Règle invalide', field: input }, 400);
           }
           if (method === 'POST') {
             const count = await prisma.analyticsAlertRule.count({ where: { guildId } });
             if (count >= alerts.ALERT_RULES_PER_GUILD_MAX) {
-              json(res, 409, { error: `${alerts.ALERT_RULES_PER_GUILD_MAX} alertes au plus par serveur.` });
-              return true;
+              return send(c, { error: `${alerts.ALERT_RULES_PER_GUILD_MAX} alertes au plus par serveur.` }, 409);
             }
             const rule = await prisma.analyticsAlertRule.create({ data: { ...input, guildId, createdById: user.userId } });
-            json(res, 201, rule);
+            return send(c, rule, 201);
           } else {
             // Une règle modifiée repart de zéro : sa prochaine période sera évaluée.
             const updated = await prisma.analyticsAlertRule.updateMany({ where: { id: id!, guildId }, data: { ...input, lastPeriodKey: null } });
-            json(res, updated.count > 0 ? 200 : 404, updated.count > 0 ? { ok: true } : { error: 'Alerte introuvable' });
+            return send(c, updated.count > 0 ? { ok: true } : { error: 'Alerte introuvable' }, updated.count > 0 ? 200 : 404);
           }
-          return true;
+          return send(c, { error: 'Route introuvable' }, 404);
         }
-        if (method === 'DELETE' && parts.length === 7) {
+        if (method === 'DELETE' && (!!id && !c.req.param('tail'))) {
           const deleted = await prisma.analyticsAlertRule.deleteMany({ where: { id: id!, guildId } });
-          json(res, deleted.count > 0 ? 200 : 404, deleted.count > 0 ? { ok: true } : { error: 'Alerte introuvable' });
-          return true;
+          return send(c, deleted.count > 0 ? { ok: true } : { error: 'Alerte introuvable' }, deleted.count > 0 ? 200 : 404);
         }
       } else {
         const reports = await import('../../../services/analytics/analyticsReportService.js');
-        if (method === 'GET' && parts.length === 6) {
-          json(res, 200, { schedules: await prismaRead.analyticsReportSchedule.findMany({ where: { guildId }, orderBy: { createdAt: 'asc' } }) });
-          return true;
+        if (method === 'GET' && !id) {
+          return send(c, { schedules: await prismaRead.analyticsReportSchedule.findMany({ where: { guildId }, orderBy: { createdAt: 'asc' } }) });
         }
-        if (method === 'POST' && parts.length === 8 && parts[7] === 'test') {
+        if (method === 'POST' && c.req.param('tail') === 'test') {
           const sent = await reports.sendReportNow(client, id!, guildId);
-          json(res, sent ? 200 : 422, sent ? { ok: true } : { error: 'Rapport non envoyé : vérifie le salon et les destinataires.' });
-          return true;
+          return send(c, sent ? { ok: true } : { error: 'Rapport non envoyé : vérifie le salon et les destinataires.' }, sent ? 200 : 422);
         }
-        if ((method === 'POST' && parts.length === 6) || (method === 'PUT' && parts.length === 7)) {
-          const input = reports.validateReportSchedule((await readJsonBody<Record<string, unknown>>(req)) ?? {});
+        if ((method === 'POST' && !id) || (method === 'PUT' && (!!id && !c.req.param('tail')))) {
+          const input = reports.validateReportSchedule((await readBody<Record<string, unknown>>(c)) ?? {});
           if (typeof input === 'string') {
-            json(res, 400, { error: 'Rapport invalide', field: input });
-            return true;
+            return send(c, { error: 'Rapport invalide', field: input }, 400);
           }
           const { resolveGuildTimezone } = await import('../../../utils/timezone.js');
           const nextRunAt = reports.computeNextRun(input, await resolveGuildTimezone(guildId), new Date());
           if (method === 'POST') {
             const count = await prisma.analyticsReportSchedule.count({ where: { guildId } });
             if (count >= reports.REPORT_SCHEDULES_PER_GUILD_MAX) {
-              json(res, 409, { error: `${reports.REPORT_SCHEDULES_PER_GUILD_MAX} rapports au plus par serveur.` });
-              return true;
+              return send(c, { error: `${reports.REPORT_SCHEDULES_PER_GUILD_MAX} rapports au plus par serveur.` }, 409);
             }
-            json(res, 201, await prisma.analyticsReportSchedule.create({ data: { ...input, nextRunAt, guildId, createdById: user.userId } }));
+            return send(c, await prisma.analyticsReportSchedule.create({ data: { ...input, nextRunAt, guildId, createdById: user.userId } }), 201);
           } else {
             const updated = await prisma.analyticsReportSchedule.updateMany({ where: { id: id!, guildId }, data: { ...input, nextRunAt } });
-            json(res, updated.count > 0 ? 200 : 404, updated.count > 0 ? { ok: true } : { error: 'Rapport introuvable' });
+            return send(c, updated.count > 0 ? { ok: true } : { error: 'Rapport introuvable' }, updated.count > 0 ? 200 : 404);
           }
-          return true;
+          return send(c, { error: 'Route introuvable' }, 404);
         }
-        if (method === 'DELETE' && parts.length === 7) {
+        if (method === 'DELETE' && (!!id && !c.req.param('tail'))) {
           const deleted = await prisma.analyticsReportSchedule.deleteMany({ where: { id: id!, guildId } });
-          json(res, deleted.count > 0 ? 200 : 404, deleted.count > 0 ? { ok: true } : { error: 'Rapport introuvable' });
-          return true;
+          return send(c, deleted.count > 0 ? { ok: true } : { error: 'Rapport introuvable' }, deleted.count > 0 ? 200 : 404);
         }
       }
     } catch (err) {
       logger.error('AnalyticsAPI', `Erreur ${isAlerts ? 'alertes' : 'rapports'}:`, err);
-      jsonFailure(res, err, 'Erreur lors de l\'enregistrement', 'AnalyticsAPI');
-      return true;
+      return fail(c, err, 'Erreur lors de l\'enregistrement', 'AnalyticsAPI');
     }
-  }
-
-  if (method !== 'GET') {
-    return false;
-  }
+  };
+  router.all(`${base}/analytics/:kind{alerts|reports}`, ...gate, handleAlerts);
+  router.all(`${base}/analytics/:kind{alerts|reports}/:id`, ...gate, handleAlerts);
+  router.all(`${base}/analytics/:kind{alerts|reports}/:id/:tail`, ...gate, handleAlerts);
 
   // GET …/analytics/activity/{hourly|rankings|breakdown} : pas horaire,
   // classements filtrés et ventilation des vues Messages et Vocal.
-  if (parts.length === 7 && parts[5] === 'activity' && ['hourly', 'rankings', 'breakdown'].includes(parts[6]!)) {
+  router.get(`${base}/analytics/activity/:view{hourly|rankings|breakdown}`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId')!;
+    const q = c.var.analyticsQuery;
     const service = await import('../../../services/analytics/contentAnalyticsService.js');
     const insights = await import('../../../services/analytics/activityInsightsService.js');
-    const view = parts[6]!;
+    const view = c.req.param('view');
     try {
-      const range = service.parseRange(url.searchParams);
-      const scope = await service.resolveScope(client, guildId, url.searchParams);
+      const range = service.parseRange(q);
+      const scope = await service.resolveScope(client, guildId, q);
       const scopeKey = service.scopeCacheKey(scope, range);
-      const metric = url.searchParams.get('metric') === 'voice' ? 'voice' : 'messages';
+      const metric = q.get('metric') === 'voice' ? 'voice' : 'messages';
       if (view === 'hourly') {
-        const timezone = await resolveViewTimezone(url.searchParams.get('tz'), guildId);
-        json(res, 200, await cache.wrap(`guild:${guildId}:analytics:activity-hourly:${scopeKey}:${timezone}`, 120, () =>
+        const timezone = await resolveViewTimezone(q.get('tz'), guildId);
+        return send(c, await cache.wrap(`guild:${guildId}:analytics:activity-hourly:${scopeKey}:${timezone}`, 120, () =>
           insights.getActivityHourly(guildId, range, scope, timezone)));
       } else if (view === 'rankings') {
-        const dimension = url.searchParams.get('dimension') === 'channels' ? 'channels' : 'members';
-        const limit = Number.parseInt(url.searchParams.get('limit') ?? '10', 10) || 10;
-        const includeBots = url.searchParams.get('includeBots') === '1';
-        json(res, 200, await cache.wrap(`guild:${guildId}:analytics:rankings:${scopeKey}:${metric}:${dimension}:${limit}:${includeBots ? 'b' : ''}`, 120, () =>
+        const dimension = q.get('dimension') === 'channels' ? 'channels' : 'members';
+        const limit = Number.parseInt(q.get('limit') ?? '10', 10) || 10;
+        const includeBots = q.get('includeBots') === '1';
+        return send(c, await cache.wrap(`guild:${guildId}:analytics:rankings:${scopeKey}:${metric}:${dimension}:${limit}:${includeBots ? 'b' : ''}`, 120, () =>
           insights.getActivityRankings(client, guildId, range, scope, metric, dimension, limit, includeBots)));
       } else {
-        const dimension = url.searchParams.get('dimension') === 'category' ? 'category' : 'channel';
-        json(res, 200, await cache.wrap(`guild:${guildId}:analytics:breakdown:${scopeKey}:${metric}:${dimension}`, 120, () =>
+        const dimension = q.get('dimension') === 'category' ? 'category' : 'channel';
+        return send(c, await cache.wrap(`guild:${guildId}:analytics:breakdown:${scopeKey}:${metric}:${dimension}`, 120, () =>
           insights.getActivityBreakdown(client, guildId, range, scope, metric, dimension)));
       }
     } catch (err) {
       logger.error('AnalyticsAPI', `Erreur analytics (activity/${view}):`, err);
-      jsonFailure(res, err, 'Erreur lors du calcul des statistiques', 'AnalyticsAPI');
+      return fail(c, err, 'Erreur lors du calcul des statistiques', 'AnalyticsAPI');
     }
-    return true;
-  }
+  });
 
   // GET …/analytics/audience/{engagement|cohorts|funnel|lifecycle} : membres et
   // rétention (DAU/WAU/MAU, cohortes d'activité, entonnoir, cycle de vie).
-  if (parts.length === 7 && parts[5] === 'audience' && ['engagement', 'cohorts', 'funnel', 'lifecycle'].includes(parts[6]!)) {
+  router.get(`${base}/analytics/audience/:view{engagement|cohorts|funnel|lifecycle}`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId')!;
+    const q = c.var.analyticsQuery;
     const service = await import('../../../services/analytics/contentAnalyticsService.js');
     const audience = await import('../../../services/analytics/audienceInsightsService.js');
-    const view = parts[6]!;
+    const view = c.req.param('view');
     try {
-      const range = service.parseRange(url.searchParams);
-      const scope = await service.resolveScope(client, guildId, url.searchParams);
+      const range = service.parseRange(q);
+      const scope = await service.resolveScope(client, guildId, q);
       const scopeKey = service.scopeCacheKey(scope, range);
       const key = `guild:${guildId}:analytics:audience:${view}:${scopeKey}`;
       if (view === 'engagement') {
-        json(res, 200, await cache.wrap(key, 600, () => audience.getEngagement(guildId, range, scope)));
+        return send(c, await cache.wrap(key, 600, () => audience.getEngagement(guildId, range, scope)));
       } else if (view === 'cohorts') {
-        json(res, 200, await cache.wrap(`guild:${guildId}:analytics:audience:cohorts:${scope.roleFilter ?? ''}:${scope.excludeStaff ? 's' : ''}`, 1800, () =>
+        return send(c, await cache.wrap(`guild:${guildId}:analytics:audience:cohorts:${scope.roleFilter ?? ''}:${scope.excludeStaff ? 's' : ''}`, 1800, () =>
           audience.getActivityCohorts(guildId, scope)));
       } else if (view === 'funnel') {
-        json(res, 200, await cache.wrap(key, 600, () => audience.getOnboardingFunnel(client, guildId, range, scope)));
+        return send(c, await cache.wrap(key, 600, () => audience.getOnboardingFunnel(client, guildId, range, scope)));
       } else {
-        json(res, 200, await cache.wrap(key, 600, () => audience.getLifecycle(client, guildId, range, scope)));
+        return send(c, await cache.wrap(key, 600, () => audience.getLifecycle(client, guildId, range, scope)));
       }
     } catch (err) {
       logger.error('AnalyticsAPI', `Erreur analytics (audience/${view}):`, err);
-      jsonFailure(res, err, 'Erreur lors du calcul des statistiques', 'AnalyticsAPI');
+      return fail(c, err, 'Erreur lors du calcul des statistiques', 'AnalyticsAPI');
     }
-    return true;
-  }
+  });
 
   // GET …/analytics/conversation/{responses|concentration|channel-health|network} :
   // temps de réponse, concentration de l'activité, santé des salons, réseau.
-  if (parts.length === 7 && parts[5] === 'conversation' && ['responses', 'concentration', 'channel-health', 'network'].includes(parts[6]!)) {
+  router.get(`${base}/analytics/conversation/:view{responses|concentration|channel-health|network}`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId')!;
+    const q = c.var.analyticsQuery;
     const service = await import('../../../services/analytics/contentAnalyticsService.js');
     const conversation = await import('../../../services/analytics/conversationInsightsService.js');
-    const view = parts[6]!;
+    const view = c.req.param('view');
     try {
-      const range = service.parseRange(url.searchParams);
-      const scope = await service.resolveScope(client, guildId, url.searchParams);
+      const range = service.parseRange(q);
+      const scope = await service.resolveScope(client, guildId, q);
       const scopeKey = service.scopeCacheKey(scope, range);
       const key = `guild:${guildId}:analytics:conversation:${view}:${scopeKey}`;
       if (view === 'responses') {
-        json(res, 200, await cache.wrap(key, 300, () => conversation.getResponseTimes(client, guildId, range, scope)));
+        return send(c, await cache.wrap(key, 300, () => conversation.getResponseTimes(client, guildId, range, scope)));
       } else if (view === 'concentration') {
-        const metric = url.searchParams.get('metric') === 'voice' ? 'voice' : 'messages';
-        json(res, 200, await cache.wrap(`${key}:${metric}`, 600, () => conversation.getConcentration(guildId, range, scope, metric)));
+        const metric = q.get('metric') === 'voice' ? 'voice' : 'messages';
+        return send(c, await cache.wrap(`${key}:${metric}`, 600, () => conversation.getConcentration(guildId, range, scope, metric)));
       } else if (view === 'channel-health') {
-        json(res, 200, await cache.wrap(`guild:${guildId}:analytics:conversation:channel-health:${range.start}:${range.end}`, 600, () =>
+        return send(c, await cache.wrap(`guild:${guildId}:analytics:conversation:channel-health:${range.start}:${range.end}`, 600, () =>
           conversation.getChannelHealthReport(client, guildId, range)));
       } else {
-        json(res, 200, await cache.wrap(key, 600, () => conversation.getConversationNetwork(client, guildId, range, scope)));
+        return send(c, await cache.wrap(key, 600, () => conversation.getConversationNetwork(client, guildId, range, scope)));
       }
     } catch (err) {
       logger.error('AnalyticsAPI', `Erreur analytics (conversation/${view}):`, err);
-      jsonFailure(res, err, 'Erreur lors du calcul des statistiques', 'AnalyticsAPI');
+      return fail(c, err, 'Erreur lors du calcul des statistiques', 'AnalyticsAPI');
     }
-    return true;
-  }
+  });
 
   // GET …/analytics/commands/stats : usage des commandes par jour. Période seule.
-  if (parts.length === 7 && parts[5] === 'commands' && parts[6] === 'stats') {
+  router.get(`${base}/analytics/commands/stats`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId')!;
+    const q = c.var.analyticsQuery;
     try {
       const { parseRange } = await import('../../../services/analytics/contentAnalyticsService.js');
       const { getCommandAnalytics } = await import('../../../services/analytics/commandStatsService.js');
-      const range = parseRange(url.searchParams);
-      json(res, 200, await cache.wrap(`guild:${guildId}:analytics:commands:${range.start}:${range.end}`, 300, () =>
+      const range = parseRange(q);
+      return send(c, await cache.wrap(`guild:${guildId}:analytics:commands:${range.start}:${range.end}`, 300, () =>
         getCommandAnalytics(client, guildId, range)));
     } catch (err) {
       logger.error('AnalyticsAPI', 'Erreur analytics (commands/stats):', err);
-      jsonFailure(res, err, 'Erreur lors du calcul des statistiques', 'AnalyticsAPI');
+      return fail(c, err, 'Erreur lors du calcul des statistiques', 'AnalyticsAPI');
     }
-    return true;
-  }
+  });
 
   // GET …/analytics/reaction-roles/stats : rôles pris et retirés depuis les menus. Période seule.
-  if (parts.length === 7 && parts[5] === 'reaction-roles' && parts[6] === 'stats') {
+  router.get(`${base}/analytics/reaction-roles/stats`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId')!;
+    const q = c.var.analyticsQuery;
     try {
       const { parseRange } = await import('../../../services/analytics/contentAnalyticsService.js');
       const { getReactionRoleAnalytics } = await import('../../../services/analytics/reactionRoleStatsService.js');
-      const range = parseRange(url.searchParams);
-      json(res, 200, await cache.wrap(`guild:${guildId}:analytics:reaction-roles:${range.start}:${range.end}`, 300, () =>
+      const range = parseRange(q);
+      return send(c, await cache.wrap(`guild:${guildId}:analytics:reaction-roles:${range.start}:${range.end}`, 300, () =>
         getReactionRoleAnalytics(client, guildId, range)));
     } catch (err) {
       logger.error('AnalyticsAPI', 'Erreur analytics (reaction-roles/stats):', err);
-      jsonFailure(res, err, 'Erreur lors du calcul des statistiques', 'AnalyticsAPI');
+      return fail(c, err, 'Erreur lors du calcul des statistiques', 'AnalyticsAPI');
     }
-    return true;
-  }
+  });
 
   // GET …/analytics/climate : toxicité et émotions (Kotbo × AegisAI). Période seule.
-  if (parts.length === 6 && parts[5] === 'climate') {
+  router.get(`${base}/analytics/climate`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId')!;
+    const q = c.var.analyticsQuery;
     try {
       const { parseRange } = await import('../../../services/analytics/contentAnalyticsService.js');
       const { getClimateAnalytics } = await import('../../../services/moderation/aegis/aegisInsights.js');
-      const range = parseRange(url.searchParams);
-      json(res, 200, await cache.wrap(`guild:${guildId}:analytics:climate:${range.start}:${range.end}`, 300, () =>
+      const range = parseRange(q);
+      return send(c, await cache.wrap(`guild:${guildId}:analytics:climate:${range.start}:${range.end}`, 300, () =>
         getClimateAnalytics(client, guildId, range)));
     } catch (err) {
       logger.error('AnalyticsAPI', 'Erreur analytics (climate):', err);
-      jsonFailure(res, err, 'Erreur lors du calcul des statistiques', 'AnalyticsAPI');
+      return fail(c, err, 'Erreur lors du calcul des statistiques', 'AnalyticsAPI');
     }
-    return true;
-  }
+  });
+
+  // GET …/analytics/server-tags : repartition des tags de serveur et serveurs associes
+  router.get(`${base}/analytics/server-tags`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId')!;
+    const q = c.var.analyticsQuery;
+    try {
+      const { getServerTagAnalytics } = await import('../../../services/analytics/serverTagAnalyticsService.js');
+      const includeBots = q.get('includeBots') === '1';
+      return send(c, await cache.wrap(`guild:${guildId}:analytics:server-tags:${includeBots ? 'b' : ''}`, 120, () =>
+          getServerTagAnalytics(client, guildId, { includeBots }),
+        ),);
+    } catch (err) {
+      logger.error('AnalyticsAPI', 'Erreur analytics (server-tags):', err);
+      return fail(c, err, 'Erreur lors du calcul des tags de serveur', 'AnalyticsAPI');
+    }
+  });
+
+  // GET …/analytics/boosts?days= : boosts du serveur, boosters et journal
+  router.get(`${base}/analytics/boosts`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId')!;
+    const q = c.var.analyticsQuery;
+    try {
+      const { getBoostAnalytics } = await import('../../../services/analytics/boostService.js');
+      const days = Math.min(365, Math.max(1, Number.parseInt(q.get('days') ?? '', 10) || 30));
+      return send(c, await cache.wrap(`guild:${guildId}:analytics:boosts:${days}`, 120, () => getBoostAnalytics(client, guildId, days)),);
+    } catch (err) {
+      logger.error('AnalyticsAPI', 'Erreur analytics (boosts):', err);
+      return fail(c, err, 'Erreur lors du calcul des boosts', 'AnalyticsAPI');
+    }
+  });
+
+  // GET …/analytics/servers/:targetGuildId/insights : ses porteurs chez nous,
+  // le recoupement en nombre et la moderation (onglets Membres et Moderation de la fiche)
+  router.get(`${base}/analytics/servers/:targetGuildId/insights`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId')!;
+    const targetGuildId = c.req.param('targetGuildId');
+    if (!/^\d{17,20}$/.test(targetGuildId)) {
+      return send(c, { error: 'Identifiant de serveur invalide.' }, 400);
+    }
+    try {
+      const { getServerMemberInsights } = await import('../../../services/analytics/serverMemberInsightsService.js');
+      return send(c, await cache.wrap(`guild:${guildId}:analytics:server-insights:${targetGuildId}`, 120, () =>
+        getServerMemberInsights(client, guildId, targetGuildId)));
+    } catch (err) {
+      logger.error('AnalyticsAPI', `Erreur analytics (servers/${targetGuildId}/insights):`, err);
+      return fail(c, err, 'Erreur lors du chargement de la fiche serveur', 'AnalyticsAPI');
+    }
+  });
+
+  // GET …/analytics/servers/:targetGuildId : fiche detaillee d'un serveur
+  router.get(`${base}/analytics/servers/:targetGuildId`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId')!;
+    const targetGuildId = c.req.param('targetGuildId');
+    if (!/^\d{17,20}$/.test(targetGuildId)) {
+      return send(c, { error: 'Identifiant de serveur invalide.' }, 400);
+    }
+    try {
+      const { getServerDetails } = await import('../../../services/analytics/serverTagAnalyticsService.js');
+      return send(c, await cache.wrap(`guild:${guildId}:analytics:server-detail:${targetGuildId}`, 120, () =>
+          getServerDetails(client, guildId, targetGuildId),
+        ),);
+    } catch (err) {
+      logger.error('AnalyticsAPI', `Erreur analytics (servers/${targetGuildId}):`, err);
+      return fail(c, err, 'Erreur lors du chargement de la fiche serveur', 'AnalyticsAPI');
+    }
+  });
 
   // GET …/analytics/members/overview : effectif, arrivées par source, inviteurs
   // et qualité des nouveaux. Période seule.
-  if (parts.length === 7 && parts[5] === 'members' && parts[6] === 'overview') {
+  router.get(`${base}/analytics/members/overview`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId')!;
+    const q = c.var.analyticsQuery;
     try {
       const { parseRange } = await import('../../../services/analytics/contentAnalyticsService.js');
       const { getMemberOverview } = await import('../../../services/analytics/memberOverviewService.js');
-      const range = parseRange(url.searchParams);
-      const includeBots = url.searchParams.get('includeBots') === '1';
-      json(res, 200, await cache.wrap(`guild:${guildId}:analytics:members-overview:${range.start}:${range.end}:${includeBots ? 'b' : ''}`, 300, () =>
+      const range = parseRange(q);
+      const includeBots = q.get('includeBots') === '1';
+      return send(c, await cache.wrap(`guild:${guildId}:analytics:members-overview:${range.start}:${range.end}:${includeBots ? 'b' : ''}`, 300, () =>
         getMemberOverview(client, guildId, range, includeBots)));
     } catch (err) {
       logger.error('AnalyticsAPI', 'Erreur analytics (members/overview):', err);
-      jsonFailure(res, err, 'Erreur lors du calcul des statistiques', 'AnalyticsAPI');
+      return fail(c, err, 'Erreur lors du calcul des statistiques', 'AnalyticsAPI');
     }
-    return true;
-  }
+  });
 
   // GET …/analytics/insights/{growth|moderation|staff|words} : analyses poussées
   // de Croissance, Modération, Staff et Contenu. Période seule.
-  if (parts.length === 7 && parts[5] === 'insights' && ['growth', 'moderation', 'staff', 'words'].includes(parts[6]!)) {
+  router.get(`${base}/analytics/insights/:view{growth|moderation|staff|words}`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId')!;
+    const q = c.var.analyticsQuery;
     const service = await import('../../../services/analytics/contentAnalyticsService.js');
     const insights = await import('../../../services/analytics/sectionInsightsService.js');
-    const view = parts[6]!;
+    const view = c.req.param('view');
     try {
-      const range = service.parseRange(url.searchParams);
+      const range = service.parseRange(q);
       const key = `guild:${guildId}:analytics:insights:${view}:${range.start}:${range.end}`;
       if (view === 'growth') {
-        json(res, 200, await cache.wrap(key, 600, () => insights.getGrowthInsights(client, guildId, range)));
+        return send(c, await cache.wrap(key, 600, () => insights.getGrowthInsights(client, guildId, range)));
       } else if (view === 'moderation') {
-        json(res, 200, await cache.wrap(key, 300, () => insights.getModerationTrends(client, guildId, range)));
+        return send(c, await cache.wrap(key, 300, () => insights.getModerationTrends(client, guildId, range)));
       } else if (view === 'staff') {
-        const timezone = await resolveViewTimezone(url.searchParams.get('tz'), guildId);
-        json(res, 200, await cache.wrap(`${key}:${timezone}`, 300, () => insights.getStaffInsights(client, guildId, range, timezone)));
+        const timezone = await resolveViewTimezone(q.get('tz'), guildId);
+        return send(c, await cache.wrap(`${key}:${timezone}`, 300, () => insights.getStaffInsights(client, guildId, range, timezone)));
       } else {
-        json(res, 200, await cache.wrap(key, 900, () => insights.getRisingWords(guildId, range)));
+        return send(c, await cache.wrap(key, 900, () => insights.getRisingWords(guildId, range)));
       }
     } catch (err) {
       logger.error('AnalyticsAPI', `Erreur analytics (insights/${view}):`, err);
-      jsonFailure(res, err, 'Erreur lors du calcul des statistiques', 'AnalyticsAPI');
+      return fail(c, err, 'Erreur lors du calcul des statistiques', 'AnalyticsAPI');
     }
-    return true;
-  }
+  });
 
   // GET …/analytics/{content|activity|channel-tree|filters} et …/analytics/categories/:id
   // Nouvelle page Analytics : période (`period` ou `startDate`/`endDate`) et
   // filtres (`channel`, `role`, `excludeStaff`, `userId`).
-  if ((parts.length === 6 && ['content', 'activity', 'channel-tree', 'filters'].includes(parts[5]!))
-    || (parts.length === 7 && parts[5] === 'categories')) {
+  const handleContent = async (c: Context) => {
+    const guildId = c.req.param('guildId')!;
+    const q = c.var.analyticsQuery;
     const service = await import('../../../services/analytics/contentAnalyticsService.js');
-    const section = parts[5]!;
+    const section = c.req.param('section');
     try {
       if (section === 'filters') {
-        json(res, 200, await cache.wrap(`guild:${guildId}:analytics:filters`, 60, () => service.getFilterOptions(client, guildId)));
-        return true;
+        return send(c, await cache.wrap(`guild:${guildId}:analytics:filters`, 60, () => service.getFilterOptions(client, guildId)));
       }
-      const range = service.parseRange(url.searchParams);
+      const range = service.parseRange(q);
       if (section === 'categories') {
-        const categoryId = parts[6]!;
+        const categoryId = c.req.param('categoryId')!;
         if (!/^\d{17,20}$/.test(categoryId)) {
-          json(res, 400, { error: 'Identifiant de catégorie invalide' });
-          return true;
+          return send(c, { error: 'Identifiant de catégorie invalide' }, 400);
         }
         const data = await cache.wrap(`guild:${guildId}:analytics:category:${categoryId}:${range.start}:${range.end}`, 300, () =>
           service.getCategoryDetail(client, guildId, categoryId, range));
-        if (!data) json(res, 404, { error: 'Catégorie introuvable' });
-        else json(res, 200, data);
-        return true;
+        if (!data) return send(c, { error: 'Catégorie introuvable' }, 404);
+        else return send(c, data);
       }
       if (section === 'channel-tree') {
-        json(res, 200, await cache.wrap(`guild:${guildId}:analytics:channel-tree:${range.start}:${range.end}`, 300, () =>
+        return send(c, await cache.wrap(`guild:${guildId}:analytics:channel-tree:${range.start}:${range.end}`, 300, () =>
           service.getChannelTree(client, guildId, range)));
-        return true;
       }
-      const scope = await service.resolveScope(client, guildId, url.searchParams);
+      const scope = await service.resolveScope(client, guildId, q);
       const scopeKey = service.scopeCacheKey(scope, range);
       if (section === 'content') {
-        json(res, 200, await cache.wrap(`guild:${guildId}:analytics:content:${scopeKey}`, 300, () =>
+        return send(c, await cache.wrap(`guild:${guildId}:analytics:content:${scopeKey}`, 300, () =>
           service.getContentAnalytics(client, guildId, range, scope)));
       } else {
-        const includeBots = url.searchParams.get('includeBots') === '1';
+        const includeBots = q.get('includeBots') === '1';
         const insights = await import('../../../services/analytics/activityInsightsService.js');
-        json(res, 200, await cache.wrap(`guild:${guildId}:analytics:activity:${scopeKey}:${includeBots ? 'b' : ''}`, 120, () =>
+        return send(c, await cache.wrap(`guild:${guildId}:analytics:activity:${scopeKey}:${includeBots ? 'b' : ''}`, 120, () =>
           insights.getActivityInsights(client, guildId, range, scope, includeBots)));
       }
     } catch (err) {
       logger.error('AnalyticsAPI', `Erreur analytics (${section}):`, err);
-      jsonFailure(res, err, 'Erreur lors du calcul des statistiques', 'AnalyticsAPI');
+      return fail(c, err, 'Erreur lors du calcul des statistiques', 'AnalyticsAPI');
     }
-    return true;
-  }
+  };
+  router.get(`${base}/analytics/:section{content|activity|channel-tree|filters}`, ...gate, handleContent);
+  router.get(`${base}/analytics/:section{categories}/:categoryId`, ...gate, handleContent);
 
   // GET /api/dashboard/guilds/:guildId/analytics/advanced?section=<retention|activity|churn|channels|social|words|moderation>
-  if (parts.length === 6 && parts[5] === 'advanced') {
-    const section = url.searchParams.get('section') ?? '';
+  router.get(`${base}/analytics/advanced`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId')!;
+    const q = c.var.analyticsQuery;
+    const section = q.get('section') ?? '';
     const { ADVANCED_SECTIONS, getAdvancedAnalytics } = await import('../../../services/analytics/advancedAnalyticsService.js');
     if (!(ADVANCED_SECTIONS as string[]).includes(section)) {
-      json(res, 400, { error: `Section invalide. Attendu: ${ADVANCED_SECTIONS.join(', ')}` });
-      return true;
+      return send(c, { error: `Section invalide. Attendu: ${ADVANCED_SECTIONS.join(', ')}` }, 400);
     }
     try {
       // Préfixe `guild:<id>:` obligatoire : c'est ce que cache.invalidateGuild()
       // purge quand la config change (ex. activation des stats de mots).
-      const timezone = await resolveViewTimezone(url.searchParams.get('tz'), guildId);
+      const timezone = await resolveViewTimezone(q.get('tz'), guildId);
       const cacheKey = `guild:${guildId}:analytics:advanced:${section}:${timezone}`;
       // wrap() et non get() puis set() : a l'expiration, les onglets du staff
       // ouverts en meme temps relancaient chacun le calcul complet.
@@ -571,50 +636,49 @@ export async function handleAnalyticsRoutes(
       const data = await cache.wrap(cacheKey, ttlSeconds, () =>
         getAdvancedAnalytics(guildId, section as never, timezone),
       );
-      json(res, 200, data);
+      return send(c, data);
     } catch (err) {
       logger.error('AnalyticsAPI', `Erreur analytics avancées (${section}):`, err);
-      jsonFailure(res, err, 'Erreur lors du calcul des statistiques avancées', 'AnalyticsAPI');
+      return fail(c, err, 'Erreur lors du calcul des statistiques avancées', 'AnalyticsAPI');
     }
-    return true;
-  }
+  });
 
   // GET /api/dashboard/guilds/:guildId/analytics/channels/:channelId - Vue détaillée d'un salon
-  if (parts.length === 7 && parts[5] === 'channels') {
-    const channelId = parts[6];
+  router.get(`${base}/analytics/channels/:channelId`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId')!;
+    const q = c.var.analyticsQuery;
+    const channelId = c.req.param('channelId');
     if (!/^\d{17,20}$/.test(channelId)) {
-      json(res, 400, { error: 'Identifiant de salon invalide' });
-      return true;
+      return send(c, { error: 'Identifiant de salon invalide' }, 400);
     }
     try {
-      const days = Math.min(90, Math.max(7, parseInt(url.searchParams.get('days') || '30', 10) || 30));
-      const timezone = await resolveViewTimezone(url.searchParams.get('tz'), guildId);
+      const days = Math.min(90, Math.max(7, parseInt(q.get('days') || '30', 10) || 30));
+      const timezone = await resolveViewTimezone(q.get('tz'), guildId);
       const cacheKey = `guild:${guildId}:analytics:channel:${channelId}:${days}:${timezone}`;
       const cached = await cache.get<Record<string, unknown>>(cacheKey);
       if (cached) {
-        json(res, 200, cached);
-        return true;
+        return send(c, cached);
       }
       const { getChannelDetail } = await import('../../../services/analytics/channelDetailService.js');
       const data = await getChannelDetail(client, guildId, channelId, days, timezone);
       await cache.set(cacheKey, data, 120); // 2 min - agrégats + lectures Discord
-      json(res, 200, data);
+      return send(c, data);
     } catch (err) {
       logger.error('AnalyticsAPI', `Erreur détail salon ${channelId}:`, err);
-      jsonFailure(res, err, 'Erreur lors de la récupération des détails du salon', 'AnalyticsAPI');
+      return fail(c, err, 'Erreur lors de la récupération des détails du salon', 'AnalyticsAPI');
     }
-    return true;
-  }
+  });
 
   // GET /api/dashboard/guilds/:guildId/analytics/members/:userId - Member detailed analytics
-  if (parts.length === 6 && parts[5] === 'members') {
-    const userId = url.searchParams.get('userId');
+  router.get(`${base}/analytics/members`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId')!;
+    const q = c.var.analyticsQuery;
+    const userId = q.get('userId');
     if (!userId) {
-      json(res, 400, { error: 'userId requis' });
-      return true;
+      return send(c, { error: 'userId requis' }, 400);
     }
     try {
-      const periodDays = Math.min(90, Math.max(7, parseInt(url.searchParams.get('period') || '30', 10) || 30));
+      const periodDays = Math.min(90, Math.max(7, parseInt(q.get('period') || '30', 10) || 30));
       const now = new Date();
       const startDate = new Date(now);
       startDate.setDate(startDate.getDate() - periodDays);
@@ -629,7 +693,7 @@ export async function handleAnalyticsRoutes(
       const totalVoice = dailyStats.reduce((s, d) => s + d.voiceMinutes, 0);
       const activeDays = dailyStats.length;
 
-      json(res, 200, {
+      return send(c, {
         userId,
         period: periodDays,
         totalMessages,
@@ -643,17 +707,18 @@ export async function handleAnalyticsRoutes(
       });
     } catch (err) {
       logger.error('AnalyticsAPI', 'Error computing member analytics:', err);
-      jsonFailure(res, err, 'Erreur analytics membre', 'AnalyticsAPI');
+      return fail(c, err, 'Erreur analytics membre', 'AnalyticsAPI');
     }
-    return true;
-  }
+  });
 
   // GET /api/dashboard/guilds/:guildId/analytics/correlation - Messages vs Voice correlation
-  if (parts.length === 6 && parts[5] === 'correlation') {
+  router.get(`${base}/analytics/correlation`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId')!;
+    const q = c.var.analyticsQuery;
     try {
       // Bornée comme les autres périodes : non numérique, elle donnait une date invalide ;
       // démesurée, elle lançait une lecture de toute l'histoire du serveur.
-      const periodDays = Math.min(365, Math.max(1, parseInt(url.searchParams.get('period') || '30', 10) || 30));
+      const periodDays = Math.min(365, Math.max(1, parseInt(q.get('period') || '30', 10) || 30));
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - periodDays);
       const startDateKey = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}-${String(startDate.getDate()).padStart(2, '0')}`;
@@ -672,27 +737,27 @@ export async function handleAnalyticsRoutes(
           voice: m._sum.voiceMinutes ?? 0,
         }));
 
-      json(res, 200, { data: scatterData });
+      return send(c, { data: scatterData });
     } catch (err) {
       logger.error('AnalyticsAPI', 'Error computing correlation:', err);
-      jsonFailure(res, err, 'Erreur analytics correlation', 'AnalyticsAPI');
+      return fail(c, err, 'Erreur analytics correlation', 'AnalyticsAPI');
     }
-    return true;
-  }
+  });
 
   // GET /api/dashboard/guilds/:guildId/analytics/invites - Active invitation codes
-  if (parts.length === 6 && parts[5] === 'invites') {
+  router.get(`${base}/analytics/invites`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId')!;
+    const q = c.var.analyticsQuery;
     try {
       const discordGuild = client.guilds.cache.get(guildId);
       if (!discordGuild) {
-        json(res, 404, { error: 'Serveur Discord introuvable' });
-        return true;
+        return send(c, { error: 'Serveur Discord introuvable' }, 404);
       }
 
       const activeInvites = await discordGuild.invites.fetch().catch(() => new Map());
       const invitesArray = [...activeInvites.values()];
 
-      const periodDays = Math.min(365, Math.max(1, parseInt(url.searchParams.get('days') || url.searchParams.get('period') || '30', 10) || 30));
+      const periodDays = Math.min(365, Math.max(1, parseInt(q.get('days') || q.get('period') || '30', 10) || 30));
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - periodDays + 1);
 
@@ -785,25 +850,25 @@ export async function handleAnalyticsRoutes(
       }
 
       formattedInvites.sort((a, b) => (b.uses || 0) - (a.uses || 0));
-      json(res, 200, formattedInvites);
+      return send(c, formattedInvites);
     } catch (err) {
       logger.error('AnalyticsAPI', 'Error computing invites analytics:', err);
-      jsonFailure(res, err, 'Erreur analytics invites', 'AnalyticsAPI');
+      return fail(c, err, 'Erreur analytics invites', 'AnalyticsAPI');
     }
-    return true;
-  }
+  });
 
   // GET /api/dashboard/guilds/:guildId/analytics/heatmap - Hourly activity heatmap
-  if (parts.length === 6 && parts[5] === 'heatmap') {
+  router.get(`${base}/analytics/heatmap`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId')!;
+    const q = c.var.analyticsQuery;
     try {
-      const days = Math.min(365, Math.max(1, parseInt(url.searchParams.get('days') || '30', 10) || 30));
-      const startDate = url.searchParams.get('startDate');
-      const endDate = url.searchParams.get('endDate');
-      const timezone = await resolveViewTimezone(url.searchParams.get('tz'), guildId);
+      const days = Math.min(365, Math.max(1, parseInt(q.get('days') || '30', 10) || 30));
+      const startDate = q.get('startDate');
+      const endDate = q.get('endDate');
+      const timezone = await resolveViewTimezone(q.get('tz'), guildId);
       const heatmapData = await getHourlyHeatmapData(guildId, { days, startDate, endDate, timezone });
-      if (url.searchParams.get('compare') !== '1') {
-        json(res, 200, heatmapData);
-        return true;
+      if (q.get('compare') !== '1') {
+        return send(c, heatmapData);
       }
       // Avec `compare=1`, la grille de la période d'avant (même durée) suit,
       // pour montrer comment les créneaux se sont déplacés.
@@ -814,95 +879,76 @@ export async function handleAnalyticsRoutes(
       const prevEnd = new Date(Date.parse(`${startKey}T00:00:00Z`) - dayMs).toISOString().slice(0, 10);
       const prevStart = new Date(Date.parse(`${prevEnd}T00:00:00Z`) - span * dayMs).toISOString().slice(0, 10);
       const previous = await getHourlyHeatmapData(guildId, { startDate: prevStart, endDate: prevEnd, timezone });
-      json(res, 200, { current: heatmapData, previous, timezone, range: { start: startKey, end: endKey, prevStart, prevEnd } });
+      return send(c, { current: heatmapData, previous, timezone, range: { start: startKey, end: endKey, prevStart, prevEnd } });
     } catch (err) {
       logger.error('AnalyticsAPI', 'Error computing heatmap:', err);
-      jsonFailure(res, err, 'Erreur heatmap analytics', 'AnalyticsAPI');
+      return fail(c, err, 'Erreur heatmap analytics', 'AnalyticsAPI');
     }
-    return true;
-  }
+  });
 
   // GET /api/dashboard/guilds/:guildId/analytics/weekly-comparison - Week over week comparison
-  if (parts.length === 6 && parts[5] === 'weekly-comparison') {
+  router.get(`${base}/analytics/weekly-comparison`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId')!;
+    const q = c.var.analyticsQuery;
     try {
-      const offset = Math.min(12, Math.max(1, parseInt(url.searchParams.get('offset') || '1', 10)));
-      const rawMode = url.searchParams.get('mode') || 'week';
+      const offset = Math.min(12, Math.max(1, parseInt(q.get('offset') || '1', 10)));
+      const rawMode = q.get('mode') || 'week';
       const mode = (rawMode === 'month' ? 'month' : 'week') as 'week' | 'month';
       const comparisonData = await getWeekOverWeekComparison(guildId, { offset, mode });
-      json(res, 200, comparisonData);
+      return send(c, comparisonData);
     } catch (err) {
       logger.error('AnalyticsAPI', 'Error computing weekly comparison:', err);
-      jsonFailure(res, err, 'Erreur comparaison semaine/semaine', 'AnalyticsAPI');
+      return fail(c, err, 'Erreur comparaison semaine/semaine', 'AnalyticsAPI');
     }
-    return true;
-  }
+  });
 
   // GET /api/dashboard/guilds/:guildId/analytics/growth-retention - Growth and retention metrics
-  if (parts.length === 6 && parts[5] === 'growth-retention') {
+  router.get(`${base}/analytics/growth-retention`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId')!;
+    const q = c.var.analyticsQuery;
     try {
-      const days = Math.min(365, Math.max(7, parseInt(url.searchParams.get('days') || '90', 10)));
-      const startDate = url.searchParams.get('startDate');
-      const endDate = url.searchParams.get('endDate');
+      const days = Math.min(365, Math.max(7, parseInt(q.get('days') || '90', 10)));
+      const startDate = q.get('startDate');
+      const endDate = q.get('endDate');
       const growthData = await getGrowthAndRetention(guildId, { days, startDate, endDate });
-      json(res, 200, growthData);
+      return send(c, growthData);
     } catch (err) {
       logger.error('AnalyticsAPI', 'Error computing growth/retention:', err);
-      jsonFailure(res, err, 'Erreur growth/retention analytics', 'AnalyticsAPI');
+      return fail(c, err, 'Erreur growth/retention analytics', 'AnalyticsAPI');
     }
-    return true;
-  }
-
-  // GET /api/dashboard/guilds/:guildId/analytics/daily-algo - Daily Algo analytics
-  if (parts.length === 6 && parts[5] === 'daily-algo') {
-    // Le segment est celui d'Analytics : la garde de module ne le rattache
-    // pas au Daily Algo. Seule la pause ferme la route, comme elle retire
-    // l'onglet du dashboard : un module simplement éteint garde son historique.
-    if (isModulePaused('daily_algo')) {
-      json(res, 404, { error: 'Le Daily Algo est en pause.' });
-      return true;
-    }
-    try {
-      const days = Math.min(365, Math.max(1, parseInt(url.searchParams.get('days') || '30', 10) || 30));
-      const startDate = url.searchParams.get('startDate');
-      const endDate = url.searchParams.get('endDate');
-      const algoData = await getDailyAlgoAnalytics(guildId, { days, startDate, endDate });
-      json(res, 200, algoData);
-    } catch (err) {
-      logger.error('AnalyticsAPI', 'Error computing daily algo analytics:', err);
-      jsonFailure(res, err, 'Erreur daily algo analytics', 'AnalyticsAPI');
-    }
-    return true;
-  }
+  });
 
   // GET /api/dashboard/guilds/:guildId/analytics/interactions
-  if (parts.length === 6 && parts[5] === 'interactions') {
+  router.get(`${base}/analytics/interactions`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId')!;
+    const q = c.var.analyticsQuery;
     try {
-      const days = parseInt(url.searchParams.get('period') || '30', 10);
-      const startDate = url.searchParams.get('startDate') || undefined;
-      const endDate = url.searchParams.get('endDate') || undefined;
+      const days = parseInt(q.get('period') || '30', 10);
+      const startDate = q.get('startDate') || undefined;
+      const endDate = q.get('endDate') || undefined;
 
       const cacheKey = `guild:${guildId}:analytics:interactions:${days}:${startDate || ''}:${endDate || ''}`;
       const cached = await cache.get<Record<string, unknown>>(cacheKey);
       if (cached) {
-        json(res, 200, cached);
-        return true;
+        return send(c, cached);
       }
 
       const data = await getGlobalInteractions(client, guildId, { days, startDate, endDate });
       await cache.set(cacheKey, data, 60); // 1 min - parsing complet des logs d'audit
-      json(res, 200, data);
+      return send(c, data);
     } catch (err) {
       logger.error('AnalyticsAPI', 'Error getting global interactions:', err);
-      jsonFailure(res, err, 'Erreur récupération interactions', 'AnalyticsAPI');
+      return fail(c, err, 'Erreur récupération interactions', 'AnalyticsAPI');
     }
-    return true;
-  }
+  });
 
   // GET /api/dashboard/guilds/:guildId/analytics - Full analytics data
-  if (parts.length === 5) {
+  router.get(`${base}/analytics`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId')!;
+    const q = c.var.analyticsQuery;
     try {
-      const queryStartDate = url.searchParams.get('startDate');
-      const queryEndDate = url.searchParams.get('endDate');
+      const queryStartDate = q.get('startDate');
+      const queryEndDate = q.get('endDate');
       const now = new Date();
       let startDate: Date;
       let endDate: Date;
@@ -914,7 +960,7 @@ export async function handleAnalyticsRoutes(
         const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
         periodDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
       } else {
-        periodDays = Math.min(365, Math.max(1, parseInt(url.searchParams.get('period') || '30', 10)));
+        periodDays = Math.min(365, Math.max(1, parseInt(q.get('period') || '30', 10)));
         endDate = new Date();
         startDate = new Date(endDate);
         startDate.setDate(startDate.getDate() - periodDays);
@@ -924,20 +970,19 @@ export async function handleAnalyticsRoutes(
       // libelles doivent sortir a l'heure murale du lecteur. Il entre dans la
       // cle de cache, sans quoi deux lecteurs de fuseaux differents se
       // renvoyaient mutuellement des courbes decalees.
-      const viewTimezone = await resolveViewTimezone(url.searchParams.get('tz'), guildId);
+      const viewTimezone = await resolveViewTimezone(q.get('tz'), guildId);
 
       // Check cache (30s TTL - live data stays fresh enough, avoids hammering DB on refreshes)
-      const cacheKey = `analytics:${guildId}:${periodDays}:${queryStartDate || ''}:${queryEndDate || ''}:${url.searchParams.get('granularity') || ''}:${viewTimezone}`;
+      const cacheKey = `analytics:${guildId}:${periodDays}:${queryStartDate || ''}:${queryEndDate || ''}:${q.get('granularity') || ''}:${viewTimezone}`;
       const cached = await cache.get<Record<string, unknown>>(cacheKey);
       if (cached) {
-        json(res, 200, cached);
-        return true;
+        return send(c, cached);
       }
 
       const startDateKey = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}-${String(startDate.getDate()).padStart(2, '0')}`;
       const endDateKey = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, '0')}-${String(endDate.getDate()).padStart(2, '0')}`;
 
-      const granularity = url.searchParams.get('granularity');
+      const granularity = q.get('granularity');
       const use30Min = periodDays === 1 || granularity === '30';
       const useWeeklyAggregation = periodDays > 90 && !use30Min;
 
@@ -983,7 +1028,6 @@ export async function handleAnalyticsRoutes(
         totalStaff,
         meetings,
         candidatures,
-        algoRuns,
         DBInvites,
         memberProfiles,
         inactiveMembers,
@@ -1118,11 +1162,6 @@ export async function handleAnalyticsRoutes(
           by: ['status'],
           where: { guildId },
           _count: true,
-        }),
-        // Algo runs
-        prismaRead.dailyAlgoRun.findMany({
-          where: { guildId, createdAt: { gte: startDate, lte: endDate } },
-          include: { _count: { select: { submissions: true } } },
         }),
         // Top inviters
         prismaRead.memberInvite.groupBy({
@@ -1292,11 +1331,13 @@ export async function handleAnalyticsRoutes(
         // nom du serveur dans leur pseudo, et ratait ceux qui portent le vrai
         // tag sans le mentionner.
         (async () => {
-          if (!discordGuild) return { clanTag: null as string | null, clanTaggedMembersCount: 0, taggedMembersList: [] as any[] };
+          if (!discordGuild) return { clanTag: null as string | null, clanTagBadgeUrl: null as string | null, clanTaggedMembersCount: 0, taggedMembersList: [] as any[] };
           let clanTag: string | null = null;
+          let clanTagBadgeUrl: string | null = null;
           try {
             const rawGuild = await client.rest.get(Routes.guild(guildId)) as any;
             if (rawGuild.clan?.tag) clanTag = rawGuild.clan.tag;
+            clanTagBadgeUrl = guildTagBadgeUrl(guildId, rawGuild.clan?.badge);
           } catch (err) {
             logger.debug('AnalyticsAPI', 'Error fetching raw guild clan info (non-critical): ' + String(err));
           }
@@ -1323,7 +1364,7 @@ export async function handleAnalyticsRoutes(
           } catch (fetchErr) {
             logger.error('AnalyticsAPI', 'Error fetching guild members for tag analytics:', fetchErr);
           }
-          return { clanTag, clanTaggedMembersCount, taggedMembersList };
+          return { clanTag, clanTagBadgeUrl, clanTaggedMembersCount, taggedMembersList };
         })(),
       ]);
 
@@ -1476,10 +1517,6 @@ export async function handleAnalyticsRoutes(
 
       const recruitmentPipeline = candidatures.map(c => ({ status: c.status, count: c._count }));
 
-      const algoAvgParticipation = algoRuns.length > 0
-        ? Math.round(algoRuns.reduce((sum, r) => sum + r._count.submissions, 0) / algoRuns.length * 10) / 10
-        : 0;
-
       // Le regroupement et le tri viennent de Postgres ; il reste à attacher
       // le nom et la couleur, que seul le cache Discord connaît.
       const roleDistribution = memberProfiles
@@ -1584,7 +1621,7 @@ export async function handleAnalyticsRoutes(
       const olderMessages = olderStats.reduce((s: number, d: any) => s + d.messagesCount, 0);
       const messagesTrend = olderMessages > 0 ? Math.round((recentMessages - olderMessages) / olderMessages * 100) : 0;
 
-      const { clanTag, clanTaggedMembersCount, taggedMembersList } = clanData;
+      const { clanTag, clanTagBadgeUrl, clanTaggedMembersCount, taggedMembersList } = clanData;
 
       const analyticsPayload = {
         period: periodDays,
@@ -1593,6 +1630,7 @@ export async function handleAnalyticsRoutes(
         // doute sur l'horloge qui le mesure.
         timezone: viewTimezone,
         clanTag,
+        clanTagBadgeUrl,
         clanTaggedMembersCount,
         live: {
           totalMembers,
@@ -1621,7 +1659,6 @@ export async function handleAnalyticsRoutes(
           totalStaff,
           inactiveMembers,
           avgTenureDays,
-          algoAvgParticipation,
           avgMeetingAttendance,
           messagesTrend,
         },
@@ -1727,13 +1764,13 @@ export async function handleAnalyticsRoutes(
       };
 
       await cache.set(cacheKey, analyticsPayload, 30);
-      json(res, 200, analyticsPayload);
+      return send(c, analyticsPayload);
     } catch (err) {
       logger.error('AnalyticsAPI', 'Error computing analytics:', err);
-      jsonFailure(res, err, 'Erreur lors du calcul des analytics', 'AnalyticsAPI');
+      return fail(c, err, 'Erreur lors du calcul des analytics', 'AnalyticsAPI');
     }
-    return true;
-  }
+  });
 
-  return false;
+  return router;
 }
+

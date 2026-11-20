@@ -1,61 +1,42 @@
-import { IncomingMessage, ServerResponse } from 'node:http';
-import { Client } from 'discord.js';
+import { Hono } from 'hono';
+import type { Client } from 'discord.js';
 import { logger } from '../../../utils/logger.js';
-import { json, type AuthClaims, type DashboardAccess } from '../../shared.js';
 import { getSatisfactionDashboardData, getStaffSatisfactionReviews } from '../../../services/features/ticketSatisfactionService.js';
+import { fail, guildRoute, send } from '../../hono/dashboard/kit.js';
 
-import { jsonFailure } from '../../shared/failure.js';
-export async function handleSatisfactionRoutes(
-  req: IncomingMessage,
-  res: ServerResponse,
-  parts: string[],
-  url: URL,
-  client: Client,
-  user: AuthClaims,
-  guildId: string,
-  _access: DashboardAccess,
-): Promise<boolean> {
-  const method = req.method;
-  if (parts[4] !== 'satisfaction') return false;
+export function createSatisfactionRouter(client: Client) {
+  const router = new Hono();
+  const base = '/api/dashboard/guilds/:guildId/satisfaction';
 
-  // GET /api/dashboard/guilds/:guildId/satisfaction
-  if (parts.length === 5 && method === 'GET') {
+  router.get(base, ...guildRoute(client), async (c) => {
     try {
-      const data = await getSatisfactionDashboardData(guildId, client);
-      json(res, 200, data);
+      return send(c, await getSatisfactionDashboardData(c.req.param('guildId'), client));
     } catch (err) {
       logger.error('SatisfactionAPI', 'Error fetching satisfaction data:', err);
-      jsonFailure(res, err, 'Erreur lors de la récupération des données', 'SatisfactionAPI');
+      return fail(c, err, 'Erreur lors de la récupération des données', 'SatisfactionAPI');
     }
-    return true;
-  }
+  });
 
-  // GET /api/dashboard/guilds/:guildId/satisfaction/staff/:staffId/reviews
-  if (parts.length === 8 && parts[5] === 'staff' && parts[7] === 'reviews' && method === 'GET') {
-    const staffId = parts[6];
-    if (!/^\d{5,25}$/.test(staffId)) {
-      json(res, 400, { error: 'Identifiant staff invalide' });
-      return true;
-    }
-
+  router.get(`${base}/staff/:staffId/reviews`, ...guildRoute(client), async (c) => {
+    const staffId = c.req.param('staffId');
+    if (!/^\d{5,25}$/.test(staffId)) return send(c, { error: 'Identifiant staff invalide' }, 400);
     try {
       const data = await getStaffSatisfactionReviews(
-        guildId,
+        c.req.param('guildId'),
         staffId,
         {
-          limit: Number(url.searchParams.get('limit') ?? 20),
-          offset: Number(url.searchParams.get('offset') ?? 0),
-          commentsOnly: url.searchParams.get('commentsOnly') === 'true',
+          limit: Number(c.req.query('limit') ?? 20),
+          offset: Number(c.req.query('offset') ?? 0),
+          commentsOnly: c.req.query('commentsOnly') === 'true',
         },
         client,
       );
-      json(res, 200, data);
+      return send(c, data);
     } catch (err) {
       logger.error('SatisfactionAPI', 'Error fetching staff reviews:', err);
-      jsonFailure(res, err, 'Erreur lors de la récupération des avis', 'SatisfactionAPI');
+      return fail(c, err, 'Erreur lors de la récupération des avis', 'SatisfactionAPI');
     }
-    return true;
-  }
+  });
 
-  return false;
+  return router;
 }

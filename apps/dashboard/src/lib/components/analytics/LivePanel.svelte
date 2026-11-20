@@ -129,26 +129,40 @@
   }
 
   .live__dot {
+    position: relative;
     width: 0.5rem;
     height: 0.5rem;
     border-radius: 999px;
     background: var(--color-success);
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-success) 50%, transparent);
+  }
+
+  /* Halo animé en transform/opacity (compositeur) : animer box-shadow repeignait à chaque image. */
+  .live__dot::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: var(--color-success);
+    will-change: transform, opacity;
     animation: live-pulse 2s ease-out infinite;
   }
 
   .live__dot--off {
     background: var(--series-neutral);
+  }
+
+  .live__dot--off::after {
     animation: none;
+    display: none;
   }
 
   @keyframes live-pulse {
-    0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-success) 50%, transparent); }
-    100% { box-shadow: 0 0 0 0.5rem transparent; }
+    0% { transform: scale(1); opacity: 0.5; }
+    100% { transform: scale(3); opacity: 0; }
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .live__dot {
+    .live__dot::after {
       animation: none;
     }
   }

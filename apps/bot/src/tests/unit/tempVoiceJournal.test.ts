@@ -99,6 +99,8 @@ const CAS: Cas[] = [
   { action: 'demande_non', genre: 'bouton', suffixe: `${CIBLE}:${CHANNEL}`, libelle: "Refuser une demande d'accès" },
   { action: 'demande_ban', genre: 'bouton', suffixe: `${CIBLE}:${CHANNEL}`, libelle: "Bannir l'auteur d'une demande d'accès" },
   { action: 'mode_select', genre: 'menu', values: ['ownerOnly'], libelle: 'Changer qui peut écrire dans le chat' },
+  { action: 'visibility_select', genre: 'menu', values: ['prive'], libelle: 'Choisir la visibilité du salon' },
+  { action: 'saved_select', genre: 'menu', values: ['apply'], libelle: 'Choisir mes réglages enregistrés' },
   { action: 'reglages_mod', genre: 'menu', values: ['renommer', 'limite'], libelle: 'Modifier les réglages des modérateurs' },
   { action: 'membre_ici', genre: 'menu', values: [CIBLE], libelle: "Ouvrir la fiche d'un membre présent" },
   { action: 'membre_select', genre: 'menuMembres', values: [CIBLE], libelle: "Ouvrir la fiche d'un membre" },

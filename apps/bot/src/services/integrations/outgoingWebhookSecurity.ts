@@ -39,15 +39,37 @@ function isPrivateIPv4(ip: string): boolean {
     || a >= 224; // multidiffusion et réservé
 }
 
+/** Les huit groupes de 16 bits d'une adresse IPv6 valide (`::` et IPv4 finale dépliés). */
+function ipv6Groups(ip: string): number[] | null {
+  let text = ip.toLowerCase();
+  const dotted = text.match(/(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+  if (dotted) {
+    const [, a, b, c, d] = dotted.map(Number);
+    text = text.slice(0, dotted.index) + ((a << 8) | b).toString(16) + ':' + ((c << 8) | d).toString(16);
+  }
+  const [head, tail] = text.split('::');
+  const left = head ? head.split(':') : [];
+  const right = tail ? tail.split(':') : [];
+  const missing = 8 - left.length - right.length;
+  if (text.includes('::') ? missing < 0 : missing !== 0) return null;
+  const groups = [...left, ...Array(text.includes('::') ? missing : 0).fill('0'), ...right].map((g) => parseInt(g, 16));
+  return groups.length === 8 && groups.every((g) => Number.isInteger(g)) ? groups : null;
+}
+
+const ipv4Of = (hi: number, lo: number) => `${hi >> 8}.${hi & 255}.${lo >> 8}.${lo & 255}`;
+
 function isPrivateIPv6(ip: string): boolean {
-  const lower = ip.toLowerCase();
-  if (lower === '::' || lower === '::1') return true;
-  // IPv4 encapsulée (::ffff:10.0.0.1) : on juge l'adresse IPv4.
-  const mapped = lower.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-  if (mapped) return isPrivateIPv4(mapped[1]);
-  return lower.startsWith('fc') || lower.startsWith('fd') // adresses locales uniques
-    || lower.startsWith('fe8') || lower.startsWith('fe9') || lower.startsWith('fea') || lower.startsWith('feb') // lien local
-    || lower.startsWith('ff'); // multidiffusion
+  const g = ipv6Groups(ip);
+  if (!g) return true;
+  if (g.every((x) => x === 0) || (g.slice(0, 7).every((x) => x === 0) && g[7] === 1)) return true; // :: et ::1
+  // IPv4 encapsulée, sous toutes ses écritures : on juge l'adresse IPv4 qu'elle contient.
+  if (g.slice(0, 5).every((x) => x === 0) && (g[5] === 0xffff || g[5] === 0)) return isPrivateIPv4(ipv4Of(g[6], g[7])); // ::ffff:0:0/96 et ::/96
+  if (g[0] === 0x64 && g[1] === 0xff9b && g.slice(2, 6).every((x) => x === 0)) return isPrivateIPv4(ipv4Of(g[6], g[7])); // NAT64
+  if (g[0] === 0x2002) return isPrivateIPv4(ipv4Of(g[1], g[2])); // 6to4
+  const first = g[0];
+  return (first & 0xfe00) === 0xfc00 // adresses locales uniques
+    || (first & 0xffc0) === 0xfe80 // lien local
+    || (first & 0xff00) === 0xff00; // multidiffusion
 }
 
 export function isPrivateAddress(ip: string): boolean {

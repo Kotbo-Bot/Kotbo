@@ -8,6 +8,7 @@
  * jour de la decouverte est un curseur pose au hasard.
  */
 import { m } from '../i18n';
+import { bot } from '../stores/botLocale.svelte';
 
 // ── Écran « économie » ───────────────────────────────────────────────────────
 
@@ -63,11 +64,11 @@ export const ECONOMY_RHYTHMS: {
  * blanche, et l'une d'elles reprend le nom du serveur des qu'on le connait.
  */
 export const CURRENCY_SUGGESTIONS: { name: string; emoji: string }[] = [
-  { name: 'Pièces', emoji: '🪙' },
-  { name: 'Gemmes', emoji: '💎' },
-  { name: 'Jetons', emoji: '🎟️' },
-  { name: 'Étoiles', emoji: '⭐' },
-  { name: 'Cœurs', emoji: '❤️' },
+  { get name() { return m.bot_currency_coins({}, bot()); }, emoji: '🪙' },
+  { get name() { return m.bot_currency_gems({}, bot()); }, emoji: '💎' },
+  { get name() { return m.bot_currency_tokens({}, bot()); }, emoji: '🎟️' },
+  { get name() { return m.bot_currency_stars({}, bot()); }, emoji: '⭐' },
+  { get name() { return m.bot_currency_hearts({}, bot()); }, emoji: '❤️' },
 ];
 
 export type ShopPreset = {
@@ -95,8 +96,8 @@ export const SHOP_PRESETS: ShopPreset[] = [
   {
     key: 'potion',
     emoji: '🧪',
-    name: 'Potion de soin',
-    description: "Rend des points de vie pendant une aventure.",
+    get name() { return m.bot_shop_potion({}, bot()); },
+    get description() { return m.bot_shop_potion_desc({}, bot()); },
     type: 'POTION',
     price: 120,
     rarity: 'COMMON',
@@ -106,8 +107,8 @@ export const SHOP_PRESETS: ShopPreset[] = [
   {
     key: 'energy',
     emoji: '⚡',
-    name: "Fiole d'énergie",
-    description: "Rend de l'énergie pour repartir à l'aventure plus tôt.",
+    get name() { return m.bot_shop_energy({}, bot()); },
+    get description() { return m.bot_shop_energy_desc({}, bot()); },
     type: 'POTION',
     price: 200,
     rarity: 'UNCOMMON',
@@ -117,8 +118,8 @@ export const SHOP_PRESETS: ShopPreset[] = [
   {
     key: 'xp-boost',
     emoji: '📘',
-    name: "Manuel d'expérience",
-    description: "Verse un lot d'XP directement sur votre niveau.",
+    get name() { return m.bot_shop_xp({}, bot()); },
+    get description() { return m.bot_shop_xp_desc({}, bot()); },
     type: 'MATERIAL',
     price: 350,
     rarity: 'RARE',
@@ -128,8 +129,8 @@ export const SHOP_PRESETS: ShopPreset[] = [
   {
     key: 'trophy',
     emoji: '🏆',
-    name: 'Trophée de collection',
-    description: "Ne sert à rien, et c'est tout l'intérêt : il se possède.",
+    get name() { return m.bot_shop_trophy({}, bot()); },
+    get description() { return m.bot_shop_trophy_desc({}, bot()); },
     type: 'ACCESSORY',
     price: 1000,
     rarity: 'RARE',
@@ -211,8 +212,8 @@ export const QUEST_PRESETS: QuestPreset[] = [
   {
     key: 'daily-messages',
     emoji: '💬',
-    name: 'Prendre la parole',
-    description: 'Envoyer 15 messages dans la journée.',
+    get name() { return m.bot_quest_messages({}, bot()); },
+    get description() { return m.bot_quest_messages_desc({}, bot()); },
     type: 'SEND_MESSAGES',
     frequency: 'DAILY',
     target: 15,
@@ -223,8 +224,8 @@ export const QUEST_PRESETS: QuestPreset[] = [
   {
     key: 'daily-voice',
     emoji: '🎧',
-    name: 'Passer en vocal',
-    description: 'Rester 20 minutes en vocal avec les autres.',
+    get name() { return m.bot_quest_voice({}, bot()); },
+    get description() { return m.bot_quest_voice_desc({}, bot()); },
     type: 'VOICE_MINUTES',
     frequency: 'DAILY',
     target: 20,
@@ -235,8 +236,8 @@ export const QUEST_PRESETS: QuestPreset[] = [
   {
     key: 'daily-react',
     emoji: '👍',
-    name: 'Réagir aux autres',
-    description: 'Réagir à 10 messages.',
+    get name() { return m.bot_quest_react({}, bot()); },
+    get description() { return m.bot_quest_react_desc({}, bot()); },
     type: 'REACT_MESSAGES',
     frequency: 'DAILY',
     target: 10,
@@ -247,8 +248,8 @@ export const QUEST_PRESETS: QuestPreset[] = [
   {
     key: 'daily-reply',
     emoji: '↩️',
-    name: 'Répondre à quelqu’un',
-    description: 'Répondre à 5 messages de membres.',
+    get name() { return m.bot_quest_reply({}, bot()); },
+    get description() { return m.bot_quest_reply_desc({}, bot()); },
     type: 'REPLY_MESSAGES',
     frequency: 'DAILY',
     target: 5,
@@ -259,8 +260,8 @@ export const QUEST_PRESETS: QuestPreset[] = [
   {
     key: 'weekly-threads',
     emoji: '🧵',
-    name: 'Lancer une discussion',
-    description: 'Ouvrir 3 fils dans la semaine.',
+    get name() { return m.bot_quest_threads({}, bot()); },
+    get description() { return m.bot_quest_threads_desc({}, bot()); },
     type: 'CREATE_THREADS',
     frequency: 'WEEKLY',
     target: 3,

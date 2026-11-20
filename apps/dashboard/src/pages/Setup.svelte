@@ -164,6 +164,7 @@
       const data = await fetchSetupJourney();
       steps = data?.steps ?? [];
       progress = data?.progress ?? { done: 0, total: 0 };
+      void navigationStore.refreshSetupStatus();
     } catch (err) {
       toast.error(errorMessage(err) || m.setup_err_load());
       steps = [];
@@ -268,7 +269,7 @@
               <p class="text-sm font-semibold text-on-surface leading-tight">{setupStepTitle(action)}</p>
               <p class="mt-1 text-xs text-on-surface-variant leading-relaxed">{setupStepWhy(action)}</p>
               {#if action.detail}
-                <p class="mt-2 text-2xs px-1.5 py-0.5 rounded bg-error/10 text-error inline-block">
+                <p class="mt-2 text-2xs px-1.5 py-0.5 rounded bg-error/10 text-on-error-container inline-block">
                   {m.setup_missing({ detail: action.detail })}
                 </p>
               {/if}
@@ -320,7 +321,7 @@
           <SectionCard title={group.title()} description={group.description()} icon={group.icon}>
             {#snippet actions()}
               <span class="text-2xs px-2 py-0.5 rounded-full font-semibold
-                {groupDone === groupSteps.length ? 'bg-success/10 text-success' : 'bg-surface-container text-on-surface-variant'}">
+                {groupDone === groupSteps.length ? 'bg-success/10 text-on-success-container' : 'bg-surface-container text-on-surface-variant'}">
                 {groupDone}/{groupSteps.length}
               </span>
             {/snippet}
@@ -337,7 +338,7 @@
                       : 'border-primary/25 bg-primary/[0.04] hover:border-primary/45'}"
                   >
                     <div class="w-6 h-6 shrink-0 rounded-full flex items-center justify-center mt-0.5
-                      {step.done ? 'bg-success/15 text-success' : 'bg-primary/15 text-primary'}">
+                      {step.done ? 'bg-success/15 text-on-success-container' : 'bg-primary/15 text-primary'}">
                       <Papicon icon={step.done ? 'check' : 'arrow-right'} size={13} />
                     </div>
 
@@ -347,7 +348,7 @@
                           {setupStepTitle(step)}
                         </span>
                         {#if !step.done && step.detail}
-                          <span class="text-2xs px-1.5 py-0.5 rounded bg-error/10 text-error">
+                          <span class="text-2xs px-1.5 py-0.5 rounded bg-error/10 text-on-error-container">
                             {m.setup_missing({ detail: step.detail })}
                           </span>
                         {:else if step.done && step.detail}

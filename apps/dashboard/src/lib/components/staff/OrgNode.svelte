@@ -112,7 +112,7 @@
               <span class="h-2 w-2 shrink-0 rounded-full" style="background: {section.color || 'var(--outline-variant)'}" aria-hidden="true"></span>
               <h4 class="min-w-0 truncate font-medium text-on-surface">{section.title}</h4>
               {#if section.lead}
-                <span class="shrink-0 rounded-sm bg-warning/10 px-1 text-2xs font-medium text-warning">{m.staff_orgchart_chef_badge()}</span>
+                <span class="shrink-0 rounded-sm bg-warning/10 px-1 text-2xs font-medium text-on-warning-container">{m.staff_orgchart_chef_badge()}</span>
               {/if}
               <span class="ml-auto shrink-0 tabular-nums text-on-surface-variant">{section.members.length}</span>
               {#if sectionItems.length}

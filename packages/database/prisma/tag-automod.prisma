@@ -1,0 +1,169 @@
+// ── Automod des tags ─────────────────────────────────────────────────────────
+// Règles posées sur le tag de serveur affiché par un membre (serveur précis ou
+// texte du tag), détections automatiques (vague d'arrivées, compte récent,
+// adoption en masse, imitation du tag du serveur) et journal des décisions.
+//
+// Actions : WARN | TIMEOUT | KICK | SOFTBAN | BAN | JAIL (sanctions Kotbo, via
+// autoSanction) et TICKET | ROLE | ALERT | DM (sans sanction).
+
+model TagAutomodConfig {
+  guildId String @id
+
+  enabled     Boolean  @default(false)
+  /// Mode test : chaque décision est notée au journal, rien n'est appliqué.
+  testMode    Boolean  @default(false)
+  onJoin      Boolean  @default(true)
+  onTagChange Boolean  @default(true)
+  exemptRoleIds String[] @default([])
+  exemptUserIds String[] @default([])
+  /// Salon des alertes staff (repli : salon de logs du serveur).
+  alertChannelId String?
+
+  /// Liste blanche : seuls les tags couverts par une règle « autoriser » passent.
+  allowlistOnly        Boolean @default(false)
+  allowlistAction      String  @default("ALERT")
+  allowlistDurationMin Int?
+
+  /// Serveurs signalés par plusieurs serveurs Kotbo.
+  sharedListEnabled     Boolean @default(false)
+  sharedListAction      String  @default("ALERT")
+  sharedListDurationMin Int?
+
+  /// Vague d'arrivées portant le même tag. ADAPTIVE | FIXED ; SOFT | NORMAL | STRICT.
+  waveEnabled     Boolean @default(false)
+  waveMode        String  @default("ADAPTIVE")
+  wavePreset      String  @default("NORMAL")
+  waveThreshold   Int     @default(5)
+  waveWindowSec   Int     @default(120)
+  waveAction      String  @default("JAIL")
+  waveDurationMin Int?
+  /// Durée du blocage temporaire du tag après une vague (0 = pas de blocage).
+  waveBlockHours  Int     @default(24)
+  waveReportFleet Boolean @default(true)
+
+  /// Compte récent qui porte un tag. ANY | UNKNOWN (tag non autorisé explicitement).
+  newAccountEnabled     Boolean @default(false)
+  newAccountDays        Int     @default(7)
+  newAccountScope       String  @default("UNKNOWN")
+  newAccountAction      String  @default("ALERT")
+  newAccountDurationMin Int?
+
+  /// Membres déjà présents qui prennent le même tag en peu de temps.
+  massAdoptEnabled   Boolean @default(false)
+  massAdoptThreshold Int     @default(5)
+  massAdoptWindowMin Int     @default(60)
+  massAdoptAction    String  @default("ALERT")
+
+  /// Tag qui imite celui du serveur (homoglyphes, lettres doublées).
+  impersonationEnabled     Boolean @default(false)
+  impersonationAction      String  @default("ALERT")
+  impersonationDurationMin Int?
+
+  updatedAt DateTime @updatedAt
+
+  @@map("tag_automod_configs")
+}
+
+model TagAutomodRule {
+  id      String  @id @default(cuid())
+  guildId String
+  name    String
+  enabled Boolean @default(true)
+  /// BLOCK | ALLOW
+  effect     String @default("BLOCK")
+  /// SERVER | TEXT
+  targetType String
+  targetGuildId String?
+  /// Nom et icône du serveur au moment de la règle (affichage seulement).
+  targetName    String?
+  targetIcon    String?
+  pattern       String?
+  /// EXACT | CONTAINS | REGEX
+  matchMode     String  @default("EXACT")
+
+  action      String  @default("ALERT")
+  durationMin Int?
+  roleId      String?
+  /// Texte du ticket ou du MP (variables : {user}, {tag}, {server}, {delay}).
+  message     String?
+
+  /// Escalade : si le tag est encore affiché après ce délai, `escalateAction`.
+  escalateAfterMin    Int?
+  escalateAction      String?
+  escalateDurationMin Int?
+
+  /// Blocage temporaire (posé après une vague) : la règle s'éteint à cette date.
+  expiresAt DateTime?
+  /// MANUAL | TEMPLATE | WAVE
+  source    String   @default("MANUAL")
+  createdBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([guildId])
+  @@index([targetGuildId])
+  @@map("tag_automod_rules")
+}
+
+model TagAutomodEvent {
+  id         String  @id @default(cuid())
+  guildId    String
+  userId     String
+  userTag    String?
+  tagGuildId String?
+  tag        String?
+  /// JOIN | TAG_CHANGE | RESCAN | WAVE | NEW_ACCOUNT | MASS_ADOPT | IMPERSONATION | SHARED_LIST | ALLOWLIST | ESCALATION
+  trigger    String
+  ruleId     String?
+  waveId     String?
+  action     String
+  /// APPLIED | DRY_RUN | PENDING | RESOLVED | FAILED | SKIPPED
+  status     String
+  detail     String?
+  /// Escalade programmée (statut PENDING).
+  dueAt               DateTime?
+  escalateAction      String?
+  escalateDurationMin Int?
+  createdAt  DateTime @default(now())
+
+  @@index([guildId, createdAt])
+  @@index([guildId, tagGuildId])
+  @@index([status, dueAt])
+  @@map("tag_automod_events")
+}
+
+model TagWave {
+  id         String   @id @default(cuid())
+  guildId    String
+  tagGuildId String?
+  tag        String?
+  userIds    String[] @default([])
+  /// ARRIVALS | MASS_ADOPT
+  kind       String   @default("ARRIVALS")
+  /// OPEN | SANCTIONED | IGNORED | BLOCKED
+  status     String   @default("OPEN")
+  alertChannelId String?
+  alertMessageId String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([guildId, createdAt])
+  @@index([tagGuildId])
+  @@map("tag_waves")
+}
+
+/// Signalement d'un serveur à la flotte (une ligne par serveur signalant).
+model TagRiskReport {
+  id              String   @id @default(cuid())
+  tagGuildId      String
+  reporterGuildId String
+  /// WAVE
+  kind            String
+  count           Int      @default(1)
+  createdAt       DateTime @default(now())
+  lastAt          DateTime @default(now())
+
+  @@unique([tagGuildId, reporterGuildId, kind])
+  @@index([tagGuildId])
+  @@map("tag_risk_reports")
+}

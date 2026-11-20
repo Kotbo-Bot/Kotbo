@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { dialogFocus } from '../actions/dialogFocus';
+  import { portal } from '../actions/portal';
   import { fade, scale } from 'svelte/transition';
   import { router } from 'tinro';
   import Papicon from './Papicon.svelte';
@@ -16,6 +18,28 @@
 
   type GuildGroup = { main: any; staffChild: any | null };
 
+  // shortcut: favoris stockés par navigateur (localStorage), pas synchronisés entre appareils.
+  const FAV_KEY = 'kotbo:favoriteGuilds';
+  function readFavs(): string[] {
+    try {
+      const raw = JSON.parse(localStorage.getItem(FAV_KEY) ?? '[]');
+      return Array.isArray(raw) ? raw.filter((id) => typeof id === 'string') : [];
+    } catch {
+      return [];
+    }
+  }
+  let favorites = $state<string[]>(readFavs());
+
+  function toggleFavorite(guildId: string, e: Event) {
+    e.stopPropagation();
+    favorites = favorites.includes(guildId)
+      ? favorites.filter((id) => id !== guildId)
+      : [...favorites, guildId];
+    try {
+      localStorage.setItem(FAV_KEY, JSON.stringify(favorites));
+    } catch {}
+  }
+
   // Un serveur staff est imbriqué sous son serveur principal plutôt que listé à plat.
   const guildGroups = $derived.by((): GuildGroup[] => {
     const staffChildByMainId = new Map(
@@ -25,9 +49,12 @@
     );
 
     // Un serveur staff n'a sa propre ligne top-level que si son principal n'est pas accessible.
-    return authStore.guilds
+    const groups = authStore.guilds
       .filter((g) => !g.isStaffServer || !authStore.guilds.some((m) => m.id === g.pairedGuildId))
       .map((main) => ({ main, staffChild: staffChildByMainId.get(main.id) ?? null }));
+    // Les favoris passent en premier (tri stable : l'ordre d'origine est conservé dans chaque moitié).
+    const isFav = (g: GuildGroup) => favorites.includes(g.main.id);
+    return [...groups.filter(isFav), ...groups.filter((g) => !isFav(g))];
   });
 
   const filteredGroups = $derived.by(() => {
@@ -117,7 +144,9 @@
 
 {#if open}
   <div
-    class="server-switcher-modal fixed inset-0 z-100 flex items-start justify-center pt-[15vh] px-4"
+    class="server-switcher-modal layer-command fixed inset-0 flex items-start justify-center pt-[15vh] px-4"
+    use:portal
+    use:dialogFocus={{}}
     role="dialog"
     aria-modal="true"
     aria-label={m.d7_server_switcher()}
@@ -139,14 +168,14 @@
     >
       <div class="flex items-center gap-2.5 px-3 py-2.5 border-b border-outline-variant">
         <Papicon icon="Search" size={15} class="text-on-surface-variant/40 shrink-0" />
-        <input
+        <input aria-label={m.d7_search_server()}
           bind:this={inputEl}
           bind:value={query}
           oninput={() => selectedIndex = 0}
           onkeydown={handleKeydown}
           type="text"
           placeholder={m.d7_search_server()}
-          class="flex-1 bg-transparent text-sm text-on-surface placeholder-on-surface-variant/40 focus:outline-none"
+          class="flex-1 bg-transparent text-sm text-on-surface placeholder-on-surface-variant/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         />
         <kbd class="hidden sm:flex px-1.5 py-0.5 rounded bg-surface-container border border-outline-variant text-2xs font-medium text-on-surface-variant/40 leading-none">
           ESC
@@ -194,12 +223,12 @@
               {#if iconUrl}
                 <img
                   src={iconUrl}
-                  alt={guild.name}
+                  alt=""
                   referrerpolicy="no-referrer"
                   class="w-6 h-6 rounded object-cover"
                 />
               {:else}
-                <div class="w-6 h-6 rounded bg-primary/10 flex items-center justify-center text-[10px] font-medium text-primary">
+                <div class="w-6 h-6 rounded bg-primary/10 flex items-center justify-center text-[10px] font-medium text-on-primary-container">
                   {guild.name.charAt(0)}
                 </div>
               {/if}
@@ -223,6 +252,20 @@
                 <kbd class="text-2xs text-primary/50 leading-none">↵</kbd>
               {/if}
             </button>
+
+            {#if !row.nested}
+              {@const isFav = favorites.includes(guild.id)}
+              <button
+                type="button"
+                onclick={(e) => toggleFavorite(guild.id, e)}
+                aria-label={m.nav_favorite({ name: guild.name })}
+                aria-pressed={isFav}
+                class="w-6 h-6 shrink-0 flex items-center justify-center rounded-md transition-opacity duration-150
+                  {isFav ? 'opacity-100 text-warning' : 'opacity-40 hover:opacity-100 focus-visible:opacity-100 text-on-surface-variant hover:text-warning'}"
+              >
+                <Papicon icon="star" size={12} class={isFav ? 'fill-current' : ''} />
+              </button>
+            {/if}
           </div>
         {:else}
           <div class="flex flex-col items-center py-8 gap-1.5 text-center">

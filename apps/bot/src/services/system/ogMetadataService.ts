@@ -151,7 +151,6 @@ const DASHBOARD_SECTIONS: { prefix: string; fr: string; en: string }[] = [
   { prefix: '/activity', fr: "Journal d'activité", en: 'Activity log' },
   { prefix: '/events', fr: 'Événements', en: 'Events' },
   { prefix: '/forms', fr: 'Formulaires', en: 'Forms' },
-  { prefix: '/dailyalgo', fr: 'Daily Algo', en: 'Daily Algo' },
   { prefix: '/security/quick-setup', fr: 'Sécurité - Démarrage rapide', en: 'Security - Quick setup' },
   { prefix: '/security/anti-raid', fr: 'Sécurité - Anti-raid', en: 'Security - Anti-raid' },
   { prefix: '/security/filters', fr: 'Sécurité - Filtres', en: 'Security - Filters' },
@@ -217,7 +216,7 @@ const DASHBOARD_GROUPS: {
     fr: 'Analyse', en: 'Insights', accent: '#34d399',
     descFr: 'Statistiques, tendances et historique de ton serveur.',
     descEn: 'Stats, trends and history for your server.',
-    prefixes: ['/analytics', '/pulse', '/dailyalgo', '/activity', '/logs', '/message-search', '/transcripts-list', '/channel-health', '/alerts', '/notifications', '/members', '/invitations'],
+    prefixes: ['/analytics', '/pulse', '/activity', '/logs', '/message-search', '/transcripts-list', '/channel-health', '/alerts', '/notifications', '/members', '/invitations'],
   },
   {
     fr: 'Sécurité', en: 'Security', accent: '#f87171',

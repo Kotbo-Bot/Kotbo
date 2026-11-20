@@ -1,20 +1,10 @@
-import type { IncomingMessage, ServerResponse } from 'node:http';
+import { Hono } from 'hono';
+import { createMiddleware } from 'hono/factory';
 import type { Client } from 'discord.js';
-import type { AuthClaims, DashboardAccess } from '../../../shared.js';
 import prisma from '../../../../utils/db.js';
 import { logger } from '../../../../utils/logger.js';
-import { jsonFailure } from '../../../shared/failure.js';
-import {
-  json,
-  readJsonBody,
-  getGuildName,
-  resolveDashboardAccess,
-  pushAudit,
-  
-  
-  
-  
-} from '../../../shared.js';
+import { fail, guildRoute, readBody, send } from '../../../hono/dashboard/kit.js';
+import { getGuildName, pushAudit } from '../../../shared.js';
 import {
   
   
@@ -48,69 +38,60 @@ import {
   
 } from '../../../../services/staff/staffManagementService.js';
 
-export async function handleMentorReportRoutes(
-  req: IncomingMessage,
-  res: ServerResponse,
-  parts: string[],
-  url: URL,
-  client: Client,
-  user: AuthClaims,
-  guildId: string,
-  _access: DashboardAccess
-): Promise<boolean> {
-  const method = req.method;
-
-    // 7. Mentor-reports routes
-    if (parts[4] === 'mentor-reports') {
-      const accessLevel = await resolveDashboardAccess(client, guildId, user.userId);
-      if (accessLevel.level !== 'admin' && !accessLevel.canManageTutoring) {
-        json(res, 403, { error: 'Accès tuteur ou admin requis' });
-        return true;
-      }
-
-      // POST /api/dashboard/guilds/:guildId/mentor-reports
-      if (method === 'POST') {
-        try {
-          const body = await readJsonBody<{
-            testingPeriodId: string;
-            type: 'POSITIVE' | 'NEGATIVE' | 'NEUTRAL';
-            content: string;
-          }>(req);
-
-          if (!body?.testingPeriodId || !body?.type || !body?.content) {
-            json(res, 400, { error: 'testingPeriodId, type et content sont obligatoires' });
-            return true;
-          }
-          if (!(await prisma.testingPeriod.findFirst({ where: { id: body.testingPeriodId, guildId }, select: { id: true } }))) {
-            json(res, 404, { error: 'Période de test introuvable' });
-            return true;
-          }
-
-          const report = await addMentorReport(
-            body.testingPeriodId,
-            user.userId,
-            body.type,
-            body.content
-          );
-
-          await pushAudit(guildId, {
-            user: user.username ?? `User${user.userId}`,
-            action: 'Rapport tuteur',
-            context: getGuildName(client, guildId),
-            module: 'Staff Management',
-            eventType: 'Manuel',
-            details: `Rapport ${body.type}: ${body.testingPeriodId}`,
-            channelId: null
-          });
-
-          json(res, 201, { report });
-        } catch (err) {
-          logger.error('StaffAPI', 'Error adding mentor report:', err);
-          jsonFailure(res, err, "Erreur lors de l'ajout du rapport tuteur", 'StaffAPI');
-        }
-        return true;
-      }
+export function createMentorReportsRouter(client: Client) {
+  const router = new Hono();
+  const base = '/api/dashboard/guilds/:guildId';
+  const tutorOrAdmin = createMiddleware(async (c, next) => {
+    const access = c.var.access;
+    if (access.level !== 'admin' && !access.canManageTutoring) {
+      return send(c, { error: 'Accès tuteur ou admin requis' }, 403);
     }
+    await next();
+  });
+  const gate = [...guildRoute(client), tutorOrAdmin] as const;
 
-  return false;
+
+  router.post(`${base}/mentor-reports`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    try {
+      const body = await readBody<{
+        testingPeriodId: string;
+        type: 'POSITIVE' | 'NEGATIVE' | 'NEUTRAL';
+        content: string;
+      }>(c);
+
+      if (!body?.testingPeriodId || !body?.type || !body?.content) {
+        return send(c, { error: 'testingPeriodId, type et content sont obligatoires' }, 400);
+      }
+      if (!(await prisma.testingPeriod.findFirst({ where: { id: body.testingPeriodId, guildId }, select: { id: true } }))) {
+        return send(c, { error: 'Période de test introuvable' }, 404);
+      }
+
+      const report = await addMentorReport(
+        body.testingPeriodId,
+        user.userId,
+        body.type,
+        body.content
+      );
+
+      await pushAudit(guildId, {
+        user: user.username ?? `User${user.userId}`,
+        action: 'Rapport tuteur',
+        context: getGuildName(client, guildId),
+        module: 'Staff Management',
+        eventType: 'Manuel',
+        details: `Rapport ${body.type}: ${body.testingPeriodId}`,
+        channelId: null
+      });
+
+      return send(c, { report }, 201);
+    } catch (err) {
+      logger.error('StaffAPI', 'Error adding mentor report:', err);
+      return fail(c, err, "Erreur lors de l'ajout du rapport tuteur", 'StaffAPI');
+    }
+  });
+
+  return router;
 }
+

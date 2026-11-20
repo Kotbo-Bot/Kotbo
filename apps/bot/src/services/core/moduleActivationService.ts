@@ -36,7 +36,6 @@ import { UserFacingError } from '../../utils/userFacingError.js';
 
 const KOTBO_MODULE_BY_KEY: Record<string, KotboModule> = {
   'codepolice': 'codePolice',
-  'daily_algo': 'dailyAlgo',
   'translation': 'translation',
   'sanctions': 'sanction',
   'nickname_moderation': 'nicknameModeration',

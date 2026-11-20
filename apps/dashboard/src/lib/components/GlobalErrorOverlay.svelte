@@ -39,7 +39,7 @@
 
 <div class="fixed inset-0 z-[10000] flex items-center justify-center bg-background p-6 md:p-12 overflow-y-auto">
   <div class="relative w-full max-w-lg bg-surface-container-lowest border border-outline-variant rounded-xl p-8 md:p-10 shadow-sm flex flex-col items-center text-center gap-5">
-    <div class="w-12 h-12 rounded-lg bg-error/10 text-error flex items-center justify-center">
+    <div class="w-12 h-12 rounded-lg bg-error/10 text-on-error-container flex items-center justify-center">
       <Papicon icon="warning" size={28} />
     </div>
 
@@ -82,7 +82,7 @@
         {#if isSent}
           <button
             disabled
-            class="w-full sm:w-auto px-5 py-2.5 bg-success/10 text-success font-medium text-sm rounded-lg cursor-default flex items-center justify-center gap-2"
+            class="w-full sm:w-auto px-5 py-2.5 bg-success/10 text-on-success-container font-medium text-sm rounded-lg cursor-default flex items-center justify-center gap-2"
           >
             <Papicon icon="check-circle" size={18} />
             {m.d6_error_reported()}

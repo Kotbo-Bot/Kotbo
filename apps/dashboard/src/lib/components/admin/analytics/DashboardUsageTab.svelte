@@ -8,10 +8,16 @@
 -->
 <script lang="ts">
   import AdminCard from '../AdminCard.svelte';
-  import AdminStat from '../AdminStat.svelte';
+  import AdminTable from '../AdminTable.svelte';
+  import AdminToolbar from '../AdminToolbar.svelte';
+  import AdminBadge from '../AdminBadge.svelte';
+  import type { AdminTableColumn } from '../types';
+  import MetricTabs, { type MetricTab } from '../../analytics/MetricTabs.svelte';
   import BarList, { type BarListItem } from '../../analytics/BarList.svelte';
-  import TrendChart from '../../analytics/TrendChart.svelte';
-  import { fmtNumber, fmtPct } from '../../analytics/analyticsFormat';
+  import TimeSeriesChart from '../../analytics/TimeSeriesChart.svelte';
+  import KpiTile from '../../analytics/KpiTile.svelte';
+  import { SERIES, fmtNumber, fmtPct, shortDate } from '../../analytics/analyticsFormat';
+  import { Button, Callout, FilterPills } from '../../ui';
   import { fetchAdminDashboardUsage, type DashboardUsageResult } from '../../../api';
   import { allPages } from '../../../config/pages';
   import { PAGE_TABS } from '../../../config/pageTabs';
@@ -108,7 +114,6 @@
   }
 
   function avgTime(row: { activeMs: number; timeSamples: number; views: number }): number {
-    // Le temps d'une visite peut partir en plusieurs lots : on le rapporte aux vues.
     return row.views > 0 ? row.activeMs / row.views : 0;
   }
 
@@ -117,32 +122,119 @@
     return ((current - previous) / previous) * 100;
   }
 
-  // ── Tendance ─────────────────────────────────────────────────────────────
+  // ── Tendance & MetricTabs ────────────────────────────────────────────────
   type TrendMetric = 'views' | 'visitorDays' | 'sessions' | 'saves';
-  const TREND_METRICS: Array<{ id: TrendMetric; label: string }> = [
-    { id: 'views', label: 'Pages vues' },
-    { id: 'visitorDays', label: 'Visiteurs' },
-    { id: 'sessions', label: 'Sessions' },
-    { id: 'saves', label: 'Enregistrements' },
-  ];
   let trendMetric = $state<TrendMetric>('views');
+  let chartMode = $state<'line' | 'bar'>('line');
+
+  const daily = $derived(data?.daily ?? []);
+  const labels = $derived(daily.map((d) => shortDate(d.dateKey)));
+
+  const metricTabs = $derived.by<MetricTab[]>(() => {
+    const t = data?.totals;
+    if (!t) return [];
+    const p = data?.previousTotals;
+    return [
+      {
+        id: 'views',
+        label: 'Pages vues',
+        value: fmtNumber(t.views),
+        delta: delta(t.views, p?.views),
+        spark: daily.map((d) => d.views),
+        color: SERIES[0],
+        hint: `${fmtNumber(t.guilds)} serveurs actifs · ${fmtDuration(avgTime(t))} / vue`,
+      },
+      {
+        id: 'visitorDays',
+        label: 'Visiteurs-jours',
+        value: fmtNumber(t.visitorDays),
+        delta: delta(t.visitorDays, p?.visitorDays),
+        spark: daily.map((d) => d.visitorDays),
+        color: SERIES[1],
+        hint: 'Visiteurs uniques cumulés jour par jour',
+      },
+      {
+        id: 'sessions',
+        label: 'Sessions',
+        value: fmtNumber(t.sessions),
+        delta: delta(t.sessions, p?.sessions),
+        spark: daily.map((d) => d.sessions),
+        color: SERIES[2],
+        hint: t.sessions > 0 ? `${(t.views / t.sessions).toFixed(1)} pages par session` : undefined,
+      },
+      {
+        id: 'saves',
+        label: 'Enregistrements',
+        value: fmtNumber(t.saves),
+        delta: delta(t.saves, p?.saves),
+        spark: daily.map((d) => d.saves),
+        color: SERIES[3],
+        hint: t.views > 0 ? `${fmtPct((t.saves / t.views) * 100)} des vues` : undefined,
+      },
+    ];
+  });
+
+  const activeMetricLabel = $derived(metricTabs.find((mt) => mt.id === trendMetric)?.label ?? 'Pages vues');
+  const activeMetricColor = $derived(metricTabs.find((mt) => mt.id === trendMetric)?.color ?? SERIES[0]);
 
   // ── Tableau des pages ────────────────────────────────────────────────────
-  type SortKey = 'views' | 'visitorDays' | 'guilds' | 'avgTime' | 'saves' | 'saveRate' | 'errors' | 'exits';
-  let sortKey = $state<SortKey>('views');
+  let pageSearch = $state('');
+  let sortKey = $state('views');
+  let sortDir = $state<'asc' | 'desc'>('desc');
   let showAllPages = $state(false);
 
-  function sortValue(row: DashboardUsagePageRow, key: SortKey): number {
+  const pageColumns: AdminTableColumn[] = [
+    { key: 'page', label: 'Page' },
+    { key: 'views', label: 'Vues', sortKey: 'views', align: 'right' },
+    { key: 'visitorDays', label: 'Visiteurs', sortKey: 'visitorDays', align: 'right', hideBelow: 'sm' },
+    { key: 'guilds', label: 'Serveurs', sortKey: 'guilds', align: 'right', hideBelow: 'md' },
+    { key: 'avgTime', label: 'Temps / vue', sortKey: 'avgTime', align: 'right', hideBelow: 'md' },
+    { key: 'saves', label: 'Enreg.', sortKey: 'saves', align: 'right', hideBelow: 'lg' },
+    { key: 'saveRate', label: 'Taux d’enreg.', sortKey: 'saveRate', align: 'right', hideBelow: 'lg' },
+    { key: 'errors', label: 'Erreurs', sortKey: 'errors', align: 'right' },
+    { key: 'exits', label: 'Sorties', sortKey: 'exits', align: 'right', hideBelow: 'xl' },
+  ];
+
+  function sortValue(row: DashboardUsagePageRow, key: string): number {
     switch (key) {
       case 'avgTime': return avgTime(row);
       case 'saveRate': return row.views > 0 ? row.saves / row.views : 0;
       case 'errors': return row.apiErrors + row.saveErrors;
-      default: return row[key];
+      case 'views':
+      case 'visitorDays':
+      case 'guilds':
+      case 'saves':
+      case 'exits':
+        return row[key];
+      default: return row.views;
     }
   }
 
-  const sortedPages = $derived([...(data?.pages ?? [])].sort((a, b) => sortValue(b, sortKey) - sortValue(a, sortKey)));
-  const visiblePages = $derived(showAllPages ? sortedPages : sortedPages.slice(0, 15));
+  const filteredPages = $derived.by(() => {
+    const q = pageSearch.trim().toLowerCase();
+    const list = (data?.pages ?? []).filter((p) => {
+      if (!q) return true;
+      return (
+        pageLabel(p.page).toLowerCase().includes(q)
+        || p.page.toLowerCase().includes(q)
+        || featureLabel(p.feature).toLowerCase().includes(q)
+      );
+    });
+    const factor = sortDir === 'desc' ? -1 : 1;
+    return list.sort((a, b) => (sortValue(a, sortKey) - sortValue(b, sortKey)) * factor);
+  });
+
+  const visiblePages = $derived(showAllPages ? filteredPages : filteredPages.slice(0, 15));
+
+  const healthColumns: AdminTableColumn[] = [
+    { key: 'page', label: 'Page' },
+    { key: 'samples', label: 'Lectures', align: 'right', hideBelow: 'sm' },
+    { key: 'latency', label: 'Latence moy.', align: 'right' },
+    { key: 'slow', label: '> 3 s', align: 'right' },
+    { key: 'apiErrors', label: 'Erreurs API', align: 'right' },
+    { key: 'jsErrors', label: 'Erreurs JS', align: 'right', hideBelow: 'sm' },
+    { key: 'routeLoad', label: 'Chargement moy.', align: 'right', hideBelow: 'md' },
+  ];
 
   const featureItems = $derived<BarListItem[]>((data?.features ?? []).slice(0, 15).map((f) => ({
     id: f.feature,
@@ -190,71 +282,70 @@
 </script>
 
 <div class="space-y-6">
-  <form class="flex flex-wrap items-center gap-2" onsubmit={applyGuildFilter}>
-    <label for="usage-guild" class="text-body-sm text-on-surface-variant">Serveur</label>
+  <form class="flex flex-wrap items-center gap-2.5" onsubmit={applyGuildFilter}>
+    <label for="usage-guild" class="text-body-sm font-semibold text-on-surface-variant">Serveur</label>
     <input
       id="usage-guild"
       type="text"
       inputmode="numeric"
       placeholder="Tous les serveurs (ou un ID)"
       bind:value={guildFilter}
-      class="w-64 max-w-full px-3 py-1.5 rounded-xl bg-surface-container-high border border-outline-variant/30 text-on-surface text-sm focus:outline-none focus:border-primary"
+      class="input w-64 max-w-full px-3 py-1.5 text-sm"
     />
-    <button type="submit" class="px-3 py-1.5 rounded-xl bg-surface-container-high border border-outline-variant/30 text-sm font-semibold text-on-surface hover:bg-surface-container-highest transition">
-      Filtrer
-    </button>
+    <Button type="submit" size="sm" variant="secondary">Filtrer</Button>
     {#if appliedGuild}
-      <button type="button" class="px-3 py-1.5 rounded-xl text-sm text-on-surface-variant hover:text-on-surface" onclick={() => { guildFilter = ''; appliedGuild = ''; }}>
-        Retirer le filtre
-      </button>
+      <Button
+        size="sm"
+        variant="ghost"
+        icon="X"
+        onclick={() => { guildFilter = ''; appliedGuild = ''; }}
+      >
+        Retirer ({appliedGuild})
+      </Button>
     {/if}
-    <span class="text-body-sm text-on-surface-variant ml-auto">Admins globaux exclus · agrégats par jour, sans identifiant</span>
+    <span class="text-body-sm text-on-surface-variant ml-auto">
+      Admins globaux exclus · agrégats par jour, sans identifiant
+    </span>
   </form>
 
   {#if error}
-    <p class="p-3 rounded-xl bg-error/10 border border-error/25 text-error text-sm font-semibold">{error}</p>
+    <Callout variant="danger">{error}</Callout>
   {/if}
 
   {#if loading && !data}
-    <div class="grid grid-cols-2 lg:grid-cols-6 gap-4">
-      {#each Array.from({ length: 6 }) as _, i (i)}
-        <AdminStat label="…" value="" loading />
-      {/each}
-    </div>
+    <div class="h-32 admin-surface animate-pulse"></div>
+    <div class="h-72 admin-surface animate-pulse"></div>
   {:else if data}
     {@const t = data.totals}
-    {@const p = data.previousTotals}
-    <div class="grid grid-cols-2 lg:grid-cols-6 gap-4">
-      <AdminStat label="Pages vues" value={fmtNumber(t.views)} icon="Eye" delta={delta(t.views, p?.views)} />
-      <AdminStat label="Visiteurs" value={fmtNumber(t.visitorDays)} icon="Users" tone="info" hint="Visiteurs uniques, cumulés jour par jour" delta={delta(t.visitorDays, p?.visitorDays)} />
-      <AdminStat label="Sessions" value={fmtNumber(t.sessions)} icon="activity" tone="neutral" hint={t.sessions > 0 ? `${(t.views / t.sessions).toFixed(1)} pages par session` : ''} delta={delta(t.sessions, p?.sessions)} />
-      <AdminStat label="Serveurs actifs" value={fmtNumber(t.guilds)} icon="Server" tone="neutral" delta={delta(t.guilds, p?.guilds)} />
-      <AdminStat label="Temps actif / vue" value={fmtDuration(avgTime(t))} icon="Clock" tone="neutral" hint={`${fmtDuration(t.activeMs)} au total`} />
-      <AdminStat label="Enregistrements" value={fmtNumber(t.saves)} icon="CheckCircle" tone="success" hint={t.views > 0 ? `${fmtPct((t.saves / t.views) * 100)} des vues` : ''} delta={delta(t.saves, p?.saves)} />
-    </div>
+    <MetricTabs
+      metrics={metricTabs}
+      active={trendMetric}
+      onchange={(id) => {
+        if (id === 'views' || id === 'visitorDays' || id === 'sessions' || id === 'saves') trendMetric = id;
+      }}
+      label="Indicateurs de fréquentation du dashboard"
+    />
 
-    <AdminCard title="Évolution" description="Une mesure à la fois, jour par jour">
+    <AdminCard
+      title={activeMetricLabel}
+      description={`${fmtNumber(t.guilds)} serveurs actifs · temps actif moyen ${fmtDuration(avgTime(t))} (${fmtDuration(t.activeMs)} au total)`}
+    >
       {#snippet actions()}
-        <div class="flex items-center rounded-xl bg-surface-container-high p-1 border border-outline-variant/30 text-xs font-semibold">
-          {#each TREND_METRICS as metric (metric.id)}
-            <button
-              type="button"
-              class="px-2.5 py-1 rounded-lg transition {trendMetric === metric.id ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:text-on-surface'}"
-              aria-pressed={trendMetric === metric.id}
-              onclick={() => { trendMetric = metric.id; }}
-            >
-              {metric.label}
-            </button>
-          {/each}
-        </div>
+        <FilterPills
+          label="Style du graphique"
+          value={chartMode}
+          onchange={(v) => (chartMode = v)}
+          options={[
+            { value: 'line', label: 'Courbe' },
+            { value: 'bar', label: 'Barres' },
+          ]}
+        />
       {/snippet}
-      <TrendChart
-        dates={data.daily.map((d) => d.dateKey)}
-        values={data.daily.map((d) => d[trendMetric])}
-        label={TREND_METRICS.find((mt) => mt.id === trendMetric)?.label ?? ''}
-        previousLabel=""
+      <TimeSeriesChart
+        {labels}
+        mode={chartMode}
+        main={{ label: activeMetricLabel, values: daily.map((d) => d[trendMetric]), color: activeMetricColor }}
         format={(v) => fmtNumber(v)}
-        height={220}
       />
     </AdminCard>
 
@@ -272,64 +363,56 @@
       </div>
     </div>
 
-    <AdminCard title="Pages" description="Clique sur un en-tête pour trier. « Taux d’enregistrement » : enregistrements rapportés aux vues." padded={false}>
-      <div class="overflow-x-auto">
-        <table class="w-full text-left text-sm">
-          <thead>
-            <tr class="border-b border-outline-variant/20 text-xs font-semibold text-on-surface-variant">
-              <th class="py-2.5 px-4">Page</th>
-              {#each [
-                { key: 'views', label: 'Vues' },
-                { key: 'visitorDays', label: 'Visiteurs' },
-                { key: 'guilds', label: 'Serveurs' },
-                { key: 'avgTime', label: 'Temps / vue' },
-                { key: 'saves', label: 'Enreg.' },
-                { key: 'saveRate', label: 'Taux d’enreg.' },
-                { key: 'errors', label: 'Erreurs' },
-                { key: 'exits', label: 'Sorties' },
-              ] as col (col.key)}
-                <th class="py-2.5 px-3 text-right" aria-sort={sortKey === col.key ? 'descending' : 'none'}>
-                  <button
-                    type="button"
-                    class="inline-flex items-center gap-1 hover:text-on-surface {sortKey === col.key ? 'text-on-surface' : ''}"
-                    onclick={() => { sortKey = col.key as SortKey; }}
-                  >
-                    {col.label}{sortKey === col.key ? ' ↓' : ''}
-                  </button>
-                </th>
-              {/each}
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-outline-variant/15">
-            {#each visiblePages as row (row.page)}
-              <tr class="hover:bg-surface-container-highest/30 transition">
-                <td class="py-2.5 px-4">
-                  <span class="font-semibold text-on-surface block">{pageLabel(row.page)}</span>
-                  <span class="text-2xs font-mono text-on-surface-variant">{row.page} · {featureLabel(row.feature)}</span>
-                </td>
-                <td class="py-2.5 px-3 text-right font-mono text-on-surface">{fmtNumber(row.views)}</td>
-                <td class="py-2.5 px-3 text-right font-mono text-on-surface-variant">{fmtNumber(row.visitorDays)}</td>
-                <td class="py-2.5 px-3 text-right font-mono text-on-surface-variant">{fmtNumber(row.guilds)}</td>
-                <td class="py-2.5 px-3 text-right font-mono text-on-surface-variant">{fmtDuration(avgTime(row))}</td>
-                <td class="py-2.5 px-3 text-right font-mono text-on-surface-variant">{fmtNumber(row.saves)}</td>
-                <td class="py-2.5 px-3 text-right font-mono text-on-surface-variant">{row.views > 0 ? fmtPct((row.saves / row.views) * 100) : '–'}</td>
-                <td class="py-2.5 px-3 text-right font-mono {row.apiErrors + row.saveErrors > 0 ? 'text-error' : 'text-on-surface-variant'}">{fmtNumber(row.apiErrors + row.saveErrors)}</td>
-                <td class="py-2.5 px-3 text-right font-mono text-on-surface-variant">{fmtNumber(row.exits)}</td>
-              </tr>
-            {:else}
-              <tr><td colspan="9" class="py-8 text-center text-sm text-on-surface-variant">Aucune page consultée sur la période.</td></tr>
-            {/each}
-          </tbody>
-        </table>
-      </div>
-      {#if sortedPages.length > 15}
-        <div class="px-4 py-3 border-t border-outline-variant/15">
-          <button type="button" class="text-sm font-semibold text-primary" onclick={() => { showAllPages = !showAllPages; }}>
-            {showAllPages ? 'Afficher les 15 premières' : `Afficher les ${sortedPages.length} pages`}
-          </button>
-        </div>
-      {/if}
-    </AdminCard>
+    <div class="space-y-3">
+      <AdminToolbar
+        bind:search={pageSearch}
+        placeholder="Filtrer par nom de page, route ou module…"
+        resultCount={filteredPages.length}
+        resultLabel="page"
+      />
+      <AdminTable
+        columns={pageColumns}
+        rows={visiblePages}
+        bind:sortKey
+        bind:sortDir
+        emptyTitle="Aucune page consultée sur la période"
+        emptyHint="Élargis la période ou retire le filtre serveur."
+      >
+        {#snippet row(item, _index)}
+          {@const rowItem = item as DashboardUsagePageRow}
+          {@const errCount = rowItem.apiErrors + rowItem.saveErrors}
+          <tr class="border-b border-outline-variant/60 hover:bg-on-surface/3 transition-colors">
+            <td class="px-4 py-3">
+              <span class="font-semibold text-on-surface block">{pageLabel(rowItem.page)}</span>
+              <span class="text-2xs font-mono text-on-surface-variant">{rowItem.page} · {featureLabel(rowItem.feature)}</span>
+            </td>
+            <td class="px-4 py-3 text-right font-mono text-sm font-semibold tabular-nums">{fmtNumber(rowItem.views)}</td>
+            <td class="px-4 py-3 text-right font-mono text-sm text-on-surface-variant tabular-nums hidden sm:table-cell">{fmtNumber(rowItem.visitorDays)}</td>
+            <td class="px-4 py-3 text-right font-mono text-sm text-on-surface-variant tabular-nums hidden md:table-cell">{fmtNumber(rowItem.guilds)}</td>
+            <td class="px-4 py-3 text-right font-mono text-sm text-on-surface-variant tabular-nums hidden md:table-cell">{fmtDuration(avgTime(rowItem))}</td>
+            <td class="px-4 py-3 text-right font-mono text-sm text-on-surface-variant tabular-nums hidden lg:table-cell">{fmtNumber(rowItem.saves)}</td>
+            <td class="px-4 py-3 text-right font-mono text-sm text-on-surface-variant tabular-nums hidden lg:table-cell">
+              {rowItem.views > 0 ? fmtPct((rowItem.saves / rowItem.views) * 100) : '–'}
+            </td>
+            <td class="px-4 py-3 text-right">
+              {#if errCount > 0}
+                <AdminBadge size="sm" tone="danger" label={fmtNumber(errCount)} />
+              {:else}
+                <span class="font-mono text-sm text-on-surface-variant tabular-nums">0</span>
+              {/if}
+            </td>
+            <td class="px-4 py-3 text-right font-mono text-sm text-on-surface-variant tabular-nums hidden xl:table-cell">{fmtNumber(rowItem.exits)}</td>
+          </tr>
+        {/snippet}
+        {#snippet footer()}
+          {#if filteredPages.length > 15}
+            <Button size="sm" variant="ghost" onclick={() => { showAllPages = !showAllPages; }}>
+              {showAllPages ? 'Afficher les 15 premières' : `Afficher les ${filteredPages.length} pages`}
+            </Button>
+          {/if}
+        {/snippet}
+      </AdminTable>
+    </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <AdminCard title="Par où on arrive" description="Source de chaque page vue">
@@ -360,21 +443,12 @@
         <BarList items={blockedItems} empty="Aucun refus sur la période." />
       </AdminCard>
       <AdminCard title="Vitesse perçue" description="Moyennes au premier chargement de chaque session">
-        <dl class="grid grid-cols-3 gap-3">
-          <div class="p-3 rounded-xl bg-surface-container-high">
-            <dt class="text-body-sm text-on-surface-variant">Premier octet</dt>
-            <dd class="text-lg font-bold text-on-surface">{vital('ttfb')}</dd>
-          </div>
-          <div class="p-3 rounded-xl bg-surface-container-high">
-            <dt class="text-body-sm text-on-surface-variant">Premier affichage</dt>
-            <dd class="text-lg font-bold text-on-surface">{vital('fcp')}</dd>
-          </div>
-          <div class="p-3 rounded-xl bg-surface-container-high">
-            <dt class="text-body-sm text-on-surface-variant">Plus grand élément</dt>
-            <dd class="text-lg font-bold text-on-surface">{vital('lcp')}</dd>
-          </div>
-        </dl>
-        <div class="grid grid-cols-2 gap-4 mt-4">
+        <div class="grid grid-cols-3 gap-3">
+          <KpiTile label="Premier octet" value={vital('ttfb')} />
+          <KpiTile label="Premier affichage" value={vital('fcp')} />
+          <KpiTile label="Plus grand élément" value={vital('lcp')} />
+        </div>
+        <div class="grid grid-cols-2 gap-4 mt-5">
           <div>
             <p class="text-body-sm font-semibold text-on-surface mb-2">Erreurs API (lecture)</p>
             <BarList items={apiErrorItems} empty="Aucune." />
@@ -387,37 +461,46 @@
       </AdminCard>
     </div>
 
-    <AdminCard title="Santé par page" description="Latence des lectures, part au-delà de 3 s, erreurs et chargement du code de la page" padded={false}>
-      <div class="overflow-x-auto">
-        <table class="w-full text-left text-sm">
-          <thead>
-            <tr class="border-b border-outline-variant/20 text-xs font-semibold text-on-surface-variant">
-              <th class="py-2.5 px-4">Page</th>
-              <th class="py-2.5 px-3 text-right">Lectures</th>
-              <th class="py-2.5 px-3 text-right">Latence moy.</th>
-              <th class="py-2.5 px-3 text-right">&gt; 3 s</th>
-              <th class="py-2.5 px-3 text-right">Erreurs API</th>
-              <th class="py-2.5 px-3 text-right">Erreurs JS</th>
-              <th class="py-2.5 px-3 text-right">Chargement moy.</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-outline-variant/15">
-            {#each data.health as h (h.page)}
-              <tr>
-                <td class="py-2.5 px-4 font-semibold text-on-surface">{pageLabel(h.page)}</td>
-                <td class="py-2.5 px-3 text-right font-mono text-on-surface-variant">{fmtNumber(h.latencySamples)}</td>
-                <td class="py-2.5 px-3 text-right font-mono text-on-surface">{h.latencySamples > 0 ? `${fmtNumber(Math.round(h.latencyMs / h.latencySamples))} ms` : '–'}</td>
-                <td class="py-2.5 px-3 text-right font-mono {h.slowShare >= 10 ? 'text-warning' : 'text-on-surface-variant'}">{fmtPct(h.slowShare)}</td>
-                <td class="py-2.5 px-3 text-right font-mono {h.apiErrors > 0 ? 'text-error' : 'text-on-surface-variant'}">{fmtNumber(h.apiErrors)}</td>
-                <td class="py-2.5 px-3 text-right font-mono {h.jsErrors > 0 ? 'text-error' : 'text-on-surface-variant'}">{fmtNumber(h.jsErrors)}</td>
-                <td class="py-2.5 px-3 text-right font-mono text-on-surface-variant">{h.routeLoads > 0 ? `${fmtNumber(Math.round(h.routeLoadMs / h.routeLoads))} ms` : '–'}</td>
-              </tr>
+    <AdminTable
+      columns={healthColumns}
+      rows={data.health ?? []}
+      emptyTitle="Aucune mesure de santé sur la période"
+      emptyHint="La latence et les erreurs de chargement par page apparaîtront ici."
+    >
+      {#snippet row(item, _index)}
+        {@const h = item as DashboardUsageResult['health'][number]}
+        <tr class="border-b border-outline-variant/60 hover:bg-on-surface/3 transition-colors">
+          <td class="px-4 py-3 font-semibold text-on-surface">{pageLabel(h.page)}</td>
+          <td class="px-4 py-3 text-right font-mono text-sm text-on-surface-variant tabular-nums hidden sm:table-cell">{fmtNumber(h.latencySamples)}</td>
+          <td class="px-4 py-3 text-right font-mono text-sm tabular-nums">
+            {h.latencySamples > 0 ? `${fmtNumber(Math.round(h.latencyMs / h.latencySamples))} ms` : '–'}
+          </td>
+          <td class="px-4 py-3 text-right">
+            {#if h.slowShare >= 10}
+              <AdminBadge size="sm" tone="warning" label={fmtPct(h.slowShare)} />
             {:else}
-              <tr><td colspan="7" class="py-8 text-center text-sm text-on-surface-variant">Aucune mesure sur la période.</td></tr>
-            {/each}
-          </tbody>
-        </table>
-      </div>
-    </AdminCard>
+              <span class="font-mono text-sm text-on-surface-variant tabular-nums">{fmtPct(h.slowShare)}</span>
+            {/if}
+          </td>
+          <td class="px-4 py-3 text-right">
+            {#if h.apiErrors > 0}
+              <AdminBadge size="sm" tone="danger" label={fmtNumber(h.apiErrors)} />
+            {:else}
+              <span class="font-mono text-sm text-on-surface-variant tabular-nums">0</span>
+            {/if}
+          </td>
+          <td class="px-4 py-3 text-right hidden sm:table-cell">
+            {#if h.jsErrors > 0}
+              <AdminBadge size="sm" tone="danger" label={fmtNumber(h.jsErrors)} />
+            {:else}
+              <span class="font-mono text-sm text-on-surface-variant tabular-nums">0</span>
+            {/if}
+          </td>
+          <td class="px-4 py-3 text-right font-mono text-sm text-on-surface-variant tabular-nums hidden md:table-cell">
+            {h.routeLoads > 0 ? `${fmtNumber(Math.round(h.routeLoadMs / h.routeLoads))} ms` : '–'}
+          </td>
+        </tr>
+      {/snippet}
+    </AdminTable>
   {/if}
 </div>

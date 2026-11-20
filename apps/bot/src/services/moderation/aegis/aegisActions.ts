@@ -167,6 +167,10 @@ export async function handleToxic(ctx: ToxicContext): Promise<AegisDetection> {
 
   let decision = ctx.decision;
   let note: string | undefined = ctx.note;
+  if (decision === 'auto' && config.reviewOnly) {
+    decision = 'review';
+    note = "Sur l'offre gratuite, AegisAI signale sans agir : à toi de trancher.";
+  }
   let message: Message | null = null;
   if (decision === 'auto' && job.source !== 'NICKNAME') {
     message = await fetchMessage(guild, job.channelId, job.messageId);

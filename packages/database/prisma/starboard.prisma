@@ -51,6 +51,26 @@ model StarboardConfig {
   /// réactions retirées). Sinon le highlight reste publié une fois atteint.
   removeBelowThreshold Boolean @default(true)
 
+  // ── Garde-fous ─────────────────────────────────────────────────────────────
+  /// Âge maximum d'un message pour entrer à la une, en jours. 0 = aucune limite.
+  /// Un message déjà à la une continue de suivre ses votes.
+  maxMessageAgeDays Int @default(0)
+  /// Seuils propres à certains salons : { "<id du salon>": score }. Un fil prend
+  /// celui de son salon parent.
+  channelThresholds Json @default("{}")
+  /// Membres dont les messages ne passent jamais à la une.
+  blockedUserIds String[] @default([])
+
+  // ── Récompenses ────────────────────────────────────────────────────────────
+  /// Gains de l'auteur au premier passage à la une d'un message. 0 = rien.
+  rewardXp    Int @default(0)
+  rewardCoins Int @default(0)
+  /// Paliers : [{ "threshold": n, "roleId": "..." }], rôle donné à n messages
+  /// passés à la une (hors messages retirés par le staff).
+  tiers        Json    @default("[]")
+  /// Prévenir l'auteur en message privé au premier passage à la une.
+  notifyAuthor Boolean @default(false)
+
   guild   Guild            @relation(fields: [guildId], references: [id], onDelete: Cascade)
   entries StarboardEntry[]
 
@@ -85,7 +105,26 @@ model StarboardEntry {
   /// Score maximal atteint : garde une trace même après retrait du highlight.
   peakScore Int @default(0)
 
+  // ── Aperçu pour la galerie du dashboard ────────────────────────────────────
+  /// Début du texte du message, repris à chaque recalcul (le message peut être
+  /// modifié). Null pour un message sans texte.
+  excerpt  String?
+  /// Première image du message. Les liens d'images de Discord expirent : la
+  /// galerie masque celle qui ne charge plus.
+  imageUrl String?
+
   postedAt DateTime?
+
+  /// Retiré de la une par le staff : le message n'y revient plus, quels que
+  /// soient ses votes, tant que la décision n'est pas annulée.
+  blockedAt   DateTime?
+  blockedById String?
+
+  /// Premier passage à la une payé à l'auteur (gains, message privé). Remis à
+  /// null quand le staff retire le message : les gains sont alors repris.
+  rewardedAt   DateTime?
+  xpGranted    Int       @default(0)
+  coinsGranted Int       @default(0)
 
   config StarboardConfig @relation(fields: [guildId], references: [guildId], onDelete: Cascade)
 
@@ -94,7 +133,10 @@ model StarboardEntry {
 
   @@unique([guildId, messageId])
   @@index([guildId, score])
+  @@index([guildId, createdAt])
+  @@index([guildId, peakScore])
   @@index([starMessageId])
   @@index([authorId])
+  @@index([guildId, authorId])
   @@map("starboard_entries")
 }

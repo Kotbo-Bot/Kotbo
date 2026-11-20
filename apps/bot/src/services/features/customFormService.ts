@@ -6,6 +6,7 @@ import { logger } from '../../utils/logger.js';
 import { handleFormTrigger } from './autoResponseService.js';
 import { labelFormAnswers } from './customFormAnswers.js';
 import { syncRecruitmentFormAvailability } from '../staff/recruitmentPanelService.js';
+import { assertFreeQuota } from '../system/freeQuota.js';
 
 
 // ============================================================================
@@ -31,6 +32,15 @@ export type CustomFormStructure = {
 // CRUD FORMULAIRES
 // ============================================================================
 
+/** Recrutements du serveur : formulaires marqués recrutement + anciens formulaires dédiés. */
+export async function countRecruitmentForms(guildId: string): Promise<number> {
+  const [custom, legacy] = await Promise.all([
+    prisma.customForm.count({ where: { guildId, isRecruitment: true } }),
+    prisma.recruitmentForm.count({ where: { guildId } }),
+  ]);
+  return custom + legacy;
+}
+
 export async function createCustomForm(
   guildId: string,
   data: {
@@ -44,6 +54,17 @@ export async function createCustomForm(
     hierarchyId?: string | null;
   }
 ) {
+  if (data.isRecruitment) {
+    await assertFreeQuota(guildId, 'recruitmentForms', () => countRecruitmentForms(guildId));
+  } else {
+    await assertFreeQuota(guildId, 'customForms', async () => {
+      // Le formulaire d'appel par défaut est posé par Kotbo : il ne compte pas.
+      const appeal = await prisma.banAppealConfig.findUnique({ where: { guildId }, select: { formId: true } });
+      return prisma.customForm.count({
+        where: { guildId, isRecruitment: false, ...(appeal?.formId ? { id: { not: appeal.formId } } : {}) },
+      });
+    });
+  }
   return prisma.customForm.create({
     data: {
       guildId,
@@ -162,7 +183,7 @@ export async function submitCustomForm(
   // nécessiter plusieurs appels DB/réseau. La réponse HTTP ne doit pas attendre
   // ces traitements une fois la soumission durablement enregistrée.
   queueMicrotask(() => {
-    void processCustomFormSubmissionSideEffects(formId, guildId, userId, username, data, client);
+    void processCustomFormSubmissionSideEffects(formId, guildId, userId, username, data, client, identityVerified);
     void publishFormSubmitted(formId, guildId, submission.id, identityVerified ? userId : null, username ?? userTag ?? '', data);
   });
 
@@ -176,6 +197,7 @@ async function processCustomFormSubmissionSideEffects(
   username: string | undefined,
   data: Record<string, string>,
   client?: Client,
+  identityVerified = false,
 ): Promise<void> {
   // Si le formulaire autonome est lié au recrutement, on crée également une candidature
   try {
@@ -224,7 +246,9 @@ async function processCustomFormSubmissionSideEffects(
     logger.error('CustomFormService', 'Error processing recruitment link for custom form:', err);
   }
 
-  if (client) {
+  // Les déclencheurs ajoutent ou retirent des rôles et écrivent en MP : jamais sur un `userId` que
+  // le client a simplement déclaré, sinon n'importe qui agit sur n'importe quel membre.
+  if (client && identityVerified) {
     await handleFormTrigger(guildId, userId, formId, data, client).catch((err) => {
       logger.error('CustomFormService', `Error executing trigger for form ${formId}:`, err);
     });

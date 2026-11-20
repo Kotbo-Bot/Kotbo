@@ -24,8 +24,12 @@ import {
   type Interaction,
 } from 'discord.js';
 import { logger } from './utils/logger.js';
+import { explainLoginError } from './utils/discordLoginError.js';
+import { ensureDashboardSchemaPatches } from './utils/schemaPatches.js';
 import { parseInstanceIdFromArgs, setCurrentInstance, getCurrentInstance, isWhiteLabelInstance } from './utils/instanceContext.js';
 import { loadAllInstances, getInstanceById, getDefaultInstance } from './utils/instanceResolver.js';
+import { customBotOnlyGuild, servesGuild, startGuildOwnershipSync } from './utils/guildOwnership.js';
+import { presenceFrom } from './services/system/customBotProfile.js';
 import { queueAuditLog } from './utils/auditLogger.js';
 import { replyOrFollowUp } from './utils/interactionResponses.js';
 import { interactionFailureMessage } from './utils/failureKind.js';
@@ -49,6 +53,7 @@ import { registerCodePoliceListener } from './events/codePolice.js';
 import { registerAdvancedLogsListener } from './events/advancedLogs.js';
 import { registerCloseSourceWarningListener } from './events/closeSourceWarning.js';
 import { registerNicknameModerationListener } from './events/nicknameModeration.js';
+import { registerTagAutomodListener } from './events/tagAutomod.js';
 import { registerTempVoiceListener } from './events/tempVoice.js';
 import { registerThreadPanelListener } from './events/threadPanel.js';
 import { registerHoneypotListener } from './events/honeypot.js';
@@ -58,10 +63,14 @@ import { registerAnalyticsTrackers } from './events/analyticsTrackers.js';
 import { registerStatsChannelListener } from './events/stats.js';
 import { registerFunEventsListener } from './events/funEvents.js';
 import { registerGiveawayEventsListener } from './events/giveawayEvents.js';
-import { registerDailyAlgoHandlers } from './handlers/dailyAlgoHandler.js';
 import { registerMeetingEvents } from './events/meetingEvents.js';
-import { syncOngoingDailyAlgoButtons } from './services/progression/dailyAlgoService.js';
 import { checkTranslationProviderHealth } from './services/integrations/translationService.js';
+import {
+  cleanupExpiredExternalGuilds,
+  handleUserTagUpdate,
+  recordBotGuildSnapshot,
+  warmGuildNameCache,
+} from './services/core/serverTagService.js';
 import { startDashboardApi } from './api/dashboardApi.js';
 import { broadcastDashboardEventAcrossShards } from './api/shared/sharding.js';
 import { initBotSentry, captureException } from './observability/sentry.js';
@@ -73,15 +82,18 @@ import { registerLevelingListener } from './events/levelingEvents.js';
 import { registerSecurityVerificationListener } from './events/securityVerificationEvents.js';
 import { registerAutoResponseListener } from './events/autoResponseEvents.js';
 import { registerBumpReminderListener } from './events/bumpReminderEvents.js';
+import { registerRichLinkListener } from './events/richLinkEvents.js';
 import { registerSiteListeners } from './events/siteEvents.js';
 import { registerChannelLinkListener } from './events/channelLinkEvents.js';
 import { registerStarboardListener } from './events/starboardEvents.js';
+import { registerReputationListener } from './events/reputationEvents.js';
 import { registerReactionRoleListener } from './events/reactionRoleEvents.js';
 import { registerConvocationListener } from './events/convocationEvents.js';
 import { registerStaffServerListener } from './events/staffServerEvents.js';
 import { registerAbsenceMentionListener } from './events/absenceMentionEvents.js';
 import { registerRaidProtectionListener } from './events/raidProtection.js';
 import { registerServerTagRoleListener } from './events/serverTagRole.js';
+import { registerBoostTracker } from './events/boostTracker.js';
 import { registerClanListener } from './events/clanEvents.js';
 import { registerEventBusBridge } from './events/eventBusBridge.js';
 import { registerAnalyticsBusSubscribers } from './modules/analytics.module.js';
@@ -190,6 +202,9 @@ const OWNER_ID = process.env.DISCORD_CLIENT_OWNER_ID;
 // elle-même ses propres restrictions dans ce cas.
 const GATE_EXEMPT_COMMANDS = new Set(['activate', 'link']);
 
+// Avant la connexion : aucun événement ne doit passer avant de savoir qui sert quoi.
+await startGuildOwnershipSync();
+
 const originalEmit = client.emit;
 client.emit = function (eventName: string | symbol, ...args: unknown[]) {
   if (PASSTHROUGH_EVENTS.has(eventName)) {
@@ -235,6 +250,9 @@ client.emit = function (eventName: string | symbol, ...args: unknown[]) {
       if (userId === OWNER_ID) isOwnerInteraction = true;
     }
   }
+
+  // Un serveur rattaché à une autre instance (bot perso, marque blanche) est servi par elle seule.
+  if (guildId && !servesGuild(guildId, getCurrentInstance())) return false;
 
   // Intercept and block unactivated guilds silently
   if (guildId && !isExemptCommand && !isOwnerInteraction) {
@@ -409,8 +427,28 @@ async function enforceProgressionBlacklist(interaction: Interaction): Promise<bo
 
 client.once(Events.ClientReady, async (c) => {
   logger.success('Bot', `Connecté en tant que ${c.user.tag}`);
-  const activityPrefix = isWhiteLabelInstance() ? `${getCurrentInstance().brandName} | ` : '';
-  c.user.setActivity(`${activityPrefix}/help | v${botPackageJson.version}`, { type: ActivityType.Playing });
+  const currentInstance = getCurrentInstance();
+  // Un bot perso ne reste que sur son serveur : il quitte tout autre où on l'aurait ajouté.
+  const onlyGuild = customBotOnlyGuild(currentInstance);
+  if (onlyGuild) {
+    for (const foreign of c.guilds.cache.filter((g) => g.id !== onlyGuild).values()) {
+      logger.warn('CustomBot', `Serveur étranger quitté au démarrage : ${foreign.name} (${foreign.id})`);
+      await foreign.leave().catch((err) => logger.warn('CustomBot', `Départ de ${foreign.id} impossible :`, err));
+    }
+  }
+  // Le bot perso d'un serveur (instance `cb-<serveur>`) prend le statut choisi sur sa page Identité.
+  const customBotConfig = currentInstance.slug.startsWith('cb-')
+    ? await prisma.customBotConfig.findUnique({ where: { guildId: currentInstance.slug.slice(3) } }).catch(() => null)
+    : null;
+  if (customBotConfig) {
+    c.user.setPresence(presenceFrom(customBotConfig));
+  } else {
+    const activityPrefix = isWhiteLabelInstance() ? `${currentInstance.brandName} | ` : '';
+    c.user.setActivity(`${activityPrefix}/help | v${botPackageJson.version}`, { type: ActivityType.Playing });
+  }
+
+  // S'assure que les colonnes/tables ajoutees recemment existent en base
+  await ensureDashboardSchemaPatches();
 
   // Load application emojis before anything else
   await loadApplicationEmojis(client);
@@ -481,6 +519,23 @@ client.once(Events.ClientReady, async (c) => {
   // into independent processes (Phase 2).
   registerEventBusBridge(client);
 
+  // Persiste les fiches des serveurs connus et ecoute les changements de tag
+  for (const g of c.guilds.cache.values()) {
+    void recordBotGuildSnapshot(g, true);
+  }
+  void warmGuildNameCache();
+  setInterval(() => {
+    void cleanupExpiredExternalGuilds();
+  }, 24 * 60 * 60 * 1000).unref();
+
+  client.on(Events.GuildUpdate, (_oldGuild, newGuild) => {
+    void recordBotGuildSnapshot(newGuild, true);
+  });
+
+  client.on(Events.UserUpdate, (oldUser, newUser) => {
+    void handleUserTagUpdate(client, oldUser, newUser);
+  });
+
   // ── Bus-based modules (decoupled, error-isolated) ─────────
   // Les abonnés au bus filtrent eux-mêmes via `subscribeForModule`. Ceux qui
   // sont restés sur `client.on()` reçoivent la vue filtrée du client.
@@ -498,22 +553,27 @@ client.once(Events.ClientReady, async (c) => {
   registerStickyMessageBusSubscribers(client);
   registerWelcomeGoodbyeBusSubscribers(client);
   registerModerationBusSubscribers(scopeClientToModule(client, 'sanctions'));
-  registerTicketsBusSubscribers(client);
+  // Vue filtrée : le module garde quelques `client.on()` (fils supprimés ou
+  // archivés, messages des fils) qui ne passent pas par le bus.
+  registerTicketsBusSubscribers(scopeClientToModule(client, 'tickets'));
 
   // ── Direct listeners (not yet migrated to the bus) ────────
   //
   // Chaque écouteur rattaché à un module reçoit une vue du client filtrée par
   // `scopeClientToModule` : ses abonnements ne se déclenchent que sur les
   // serveurs où le module est allumé. Les écouteurs sans module (avertissement
-  // code source, rôle de tag serveur, partenariats) gardent le client brut.
+  // code source, rôle de tag serveur) gardent le client brut.
   client.setMaxListeners(30);
   registerCodePoliceListener(scopeClientToModule(client, 'codepolice'));
   registerAdvancedLogsListener(scopeClientToModule(client, 'logs'));
   registerCloseSourceWarningListener(client);
   registerNicknameModerationListener(scopeClientToModule(client, 'nickname_moderation'));
+  // Pas de module : l'automod des tags a son propre interrupteur.
+  registerTagAutomodListener(client);
   registerTempVoiceListener(scopeClientToModule(client, 'auto_thread'));
   registerThreadPanelListener(scopeClientToModule(client, 'auto_thread'));
   registerStarboardListener(scopeClientToModule(client, 'starboard'));
+  registerReputationListener(scopeClientToModule(client, 'reputation'));
   registerReactionRoleListener(scopeClientToModule(client, 'reaction_roles'));
   registerConvocationListener(scopeClientToModule(client, 'sanctions'));
   registerHoneypotListener(scopeClientToModule(client, 'automod'));
@@ -525,18 +585,19 @@ client.once(Events.ClientReady, async (c) => {
   // par salon et peut inverser deux messages. Le module est testé dans la file.
   registerFunEventsListener(client);
   registerGiveawayEventsListener(scopeClientToModule(client, 'giveaways'));
-  registerDailyAlgoHandlers(scopeClientToModule(client, 'daily_algo'));
   registerMeetingEvents(scopeClientToModule(client, 'meetings'));
   registerLevelingListener(scopeClientToModule(client, 'leveling')); // XP vocale uniquement (boucle de polling)
   registerSecurityVerificationListener(scopeClientToModule(client, 'security_verification'));
   registerAutoResponseListener(scopeClientToModule(client, 'auto_responses'));
   registerBumpReminderListener(scopeClientToModule(client, 'bump_reminder'));
+  registerRichLinkListener(scopeClientToModule(client, 'rich_links'));
   registerSiteListeners(scopeClientToModule(client, 'site'));
   registerChannelLinkListener(scopeClientToModule(client, 'channel_links'));
   registerStaffServerListener(scopeClientToModule(client, 'staff_server'));
   registerAbsenceMentionListener(scopeClientToModule(client, 'absences'));
   registerRaidProtectionListener(scopeClientToModule(client, 'raid_protection'));
   registerServerTagRoleListener(client);
+  registerBoostTracker(client);
   registerClanListener(scopeClientToModule(client, 'clans'));
 
   // Un arrêt en plein tour de captcha vocal laisse des autorisations
@@ -576,15 +637,7 @@ client.once(Events.ClientReady, async (c) => {
   // Les jobs conservés dans Redis peuvent être repris dès la création du
   // worker. Tous leurs handlers doivent donc être enregistrés auparavant.
   await startBackgroundQueueWorker();
-  
-  // Non attendu : chaque run des 30 derniers jours coûte plusieurs appels
-  // Discord séquentiels, et les étapes suivantes n'en dépendent pas.
-  logger.info('System', 'Début de la synchronisation des boutons DailyAlgo...');
-  void syncOngoingDailyAlgoButtons(client)
-    .then(() => logger.info('System', 'Synchronisation DailyAlgo terminée.'))
-    .catch((error) =>
-      logger.error('DailyAlgo', 'Impossible de synchroniser les boutons des runs en cours:', error),
-    );
+
   logger.info('System', 'Initialisation des backups automatiques...');
   await initializeAutoBackupForAllGuilds(c.guilds.cache.values()).catch((error) =>
     logger.error('AutoBackup', "Impossible d'initialiser les backups automatiques:", error)
@@ -655,7 +708,15 @@ client.once(Events.ClientReady, async (c) => {
 });
 
 client.on(Events.GuildCreate, async (guild) => {
+  // Bot perso ajouté ailleurs que sur son serveur (lien d'invitation public, appli Discord « Public Bot ») : il repart aussitôt, sans rien enregistrer.
+  const onlyGuild = customBotOnlyGuild(getCurrentInstance());
+  if (onlyGuild && guild.id !== onlyGuild) {
+    logger.warn('CustomBot', `Ajout refusé sur ${guild.name} (${guild.id}) : ce bot est réservé au serveur ${onlyGuild}`);
+    await guild.leave().catch((err) => logger.warn('CustomBot', `Départ de ${guild.id} impossible :`, err));
+    return;
+  }
   logger.info('System', `Le bot a rejoint le serveur : ${guild.name} (${guild.id})`);
+  void recordBotGuildSnapshot(guild, true);
 
   // Entree du tunnel cote serveur. `void` volontaire : l'arrivee ne doit pas
   // attendre une ecriture de statistiques, et le service n'echoue jamais.
@@ -729,6 +790,7 @@ client.on(Events.GuildCreate, async (guild) => {
 
 client.on(Events.GuildDelete, (guild) => {
   logger.info('System', `Le bot a quitté le serveur : ${guild.name} (${guild.id})`);
+  void recordBotGuildSnapshot(guild, false);
   stopAutoBackup(guild.id);
   void announceBotGuildChange(guild.id, 'left');
 
@@ -1000,7 +1062,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       } else {
         logger.warn('Event', "Interaction déjà acquittée au moment de la gestion d'erreur; aucun message supplémentaire envoyé.");
       }
-    } catch (e){
+    } catch (e) {
       captureException(e, 'interaction-create-error-handler');
 
       if (e instanceof DiscordAPIError && e.code === 40060) {
@@ -1051,7 +1113,7 @@ async function flushIndexBuffers() {
   // Flush Command Usage
   const usageEntries = [...commandUsageBuffer.entries()];
   commandUsageBuffer.clear();
-  
+
   if (usageEntries.length > 0) {
     try {
       const ops = usageEntries.map(([key, count]) => {
@@ -1109,12 +1171,14 @@ function flushAndStop(exitCode = 0): Promise<void> {
       // Kotbo × AegisAI : compteurs de la dernière minute, et le worker de la
       // file rend ses jobs en cours à Redis plutôt que de les laisser bloqués.
       // Rôles-boutons : les clics de la dernière minute comptent dans Analytics.
-      const [{ flushAegisStats }, { stopAegisQueue }, { flushReactionRoleStats }] = await Promise.all([
+      // Ponts : le trafic de la dernière minute.
+      const [{ flushAegisStats }, { stopAegisQueue }, { flushReactionRoleStats }, { flushChannelLinkStats }] = await Promise.all([
         import('./services/moderation/aegis/aegisStats.js'),
         import('./services/moderation/aegis/aegisQueue.js'),
         import('./services/analytics/reactionRoleStatsService.js'),
+        import('./services/features/channelLinkStatsService.js'),
       ]);
-      await Promise.allSettled([flushAegisStats(), stopAegisQueue(), flushReactionRoleStats()]);
+      await Promise.allSettled([flushAegisStats(), stopAegisQueue(), flushReactionRoleStats(), flushChannelLinkStats()]);
     } finally {
       process.exit(exitCode);
     }
@@ -1184,6 +1248,19 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 client.login(token).catch((error) => {
-  logger.error('Bot', 'Échec critique lors de la connexion Discord (client.login) :', error);
-  process.exit(1);
+  const reason = explainLoginError(error);
+  if (!reason) {
+    logger.error('Bot', 'Échec critique lors de la connexion Discord (client.login) :', error);
+    process.exit(1);
+  }
+  // Cause connue (intents, token) : pas de trace d'erreur, on la remonte au lanceur
+  // qui l'affiche sur la page Identité, puis on sort proprement.
+  logger.warn('Bot', `Connexion Discord refusée : ${reason}`);
+  const exit = () => process.exit(1);
+  if (process.send && instanceId !== '__default__') {
+    process.send({ type: 'custom-instance-error', instanceId, reason }, exit);
+    setTimeout(exit, 1_000).unref();
+  } else {
+    exit();
+  }
 });

@@ -44,7 +44,6 @@ export async function initializeAutoBackup(guild: Guild): Promise<void> {
   );
 
   backupTasks.set(guildId, task);
-  console.log(`✅ Backup automatique initialisé pour le serveur ${guild.name} à ${AUTO_BACKUP_TIME}`);
 }
 
 /**
@@ -130,6 +129,7 @@ export async function initializeAutoBackupForAllGuilds(guilds: Iterable<Guild>):
       console.error(`Erreur lors de l'initialisation du backup automatique pour ${guild.name}:`, error);
     }
   }
+  console.log(`✅ Backup automatique planifié à ${AUTO_BACKUP_TIME} pour ${backupTasks.size} serveur(s)`);
 }
 
 /**

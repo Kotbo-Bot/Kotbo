@@ -1,4 +1,5 @@
 <script lang="ts">
+  import UserDisplay from '../UserDisplay.svelte';
   import { portal } from '../../actions/portal';
   import { memberAvatarSrc } from '../../discordMedia';
   import Papicon from '../Papicon.svelte';
@@ -132,17 +133,17 @@
             <div class="absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant/40">
               <Papicon icon="MagnifyingGlass" size={20} />
             </div>
-            <input 
+            <input aria-label={m.d7_dam_search_placeholder()} 
               type="text" 
               bind:value={searchQuery}
               placeholder={m.d7_dam_search_placeholder()}
-              class="w-full bg-surface-container-high/40 text-on-surface text-sm font-bold rounded-lg pl-12 pr-4 py-3 border border-outline-variant/5 focus:border-primary/50 focus:outline-none transition-colors placeholder:text-on-surface-variant/40"
+              class="w-full bg-surface-container-high/40 text-on-surface text-sm font-bold rounded-lg pl-12 pr-4 py-3 border border-field-border focus:border-primary/50 focus:outline-none transition-colors placeholder:text-on-surface-variant/40"
             />
           </div>
           <div class="flex gap-2">
-            <select 
+            <select aria-label={m.a11y_sort_by()} 
               bind:value={sortKey}
-              class="bg-surface-container-high/40 text-on-surface text-sm font-bold rounded-lg px-4 py-3 border border-outline-variant/5 focus:border-primary/50 focus:outline-none transition-colors appearance-none cursor-pointer"
+              class="bg-surface-container-high/40 text-on-surface text-sm font-bold rounded-lg px-4 py-3 border border-field-border focus:border-primary/50 focus:outline-none transition-colors appearance-none cursor-pointer"
             >
               <option value="volume">{m.d7_dam_sort_volume()}</option>
               <option value="name">{m.d7_dam_sort_alpha()}</option>
@@ -170,11 +171,7 @@
               >
                 <div class="flex items-center gap-4">
                   <div class="w-8 text-center text-xs font-semibold text-on-surface-variant/40">{globalIndex}</div>
-                  <div class="relative">
-                    <img src={getAvatar(item.avatarUrl, item.name || item.username, item.userId)} alt="" class="w-10 h-10 rounded-xl object-cover" />
-                    <div class="absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-surface {type === 'messages' ? 'bg-primary' : 'bg-emerald-500'}"></div>
-                  </div>
-                  <p class="text-base font-semibold text-on-surface">@{item.name || item.username}</p>
+                  <UserDisplay userId={item.userId} name={item.name || item.username} username={item.username} avatarUrl={item.avatarUrl} size="lg" handle />
                 </div>
                 <div class="flex items-center gap-6">
                   <div class="text-right">
@@ -216,8 +213,7 @@
               >
                 <div class="flex items-center gap-4">
                   <div class="w-8 text-center text-xs font-semibold text-on-surface-variant/40">{globalIndex}</div>
-                  <img src={getAvatar(item.avatarUrl, item.name || item.username, item.userId)} alt="" class="w-10 h-10 rounded-xl object-cover" />
-                  <p class="text-base font-semibold text-on-surface">@{item.moderatorTag}</p>
+                  <UserDisplay userId={item.userId} name={item.moderatorTag} avatarUrl={item.avatarUrl} size="lg" handle />
                 </div>
                 <div class="text-right">
                   <p class="text-xs font-semibold text-primary">{m.d7_dam_actions()}</p>
@@ -234,8 +230,7 @@
               >
                 <div class="flex items-center gap-4">
                   <div class="w-8 text-center text-xs font-semibold text-on-surface-variant/40">{globalIndex}</div>
-                  <img src={getAvatar(item.avatarUrl, item.name || item.username, item.userId)} alt="" class="w-10 h-10 rounded-xl object-cover" />
-                  <p class="text-base font-semibold text-on-surface">@{item.targetTag}</p>
+                  <UserDisplay userId={item.targetUserId} name={item.targetTag} avatarUrl={item.avatarUrl} size="lg" />
                 </div>
                 <div class="text-right">
                   <p class="text-xs font-semibold text-error">{m.d7_dam_sanctions()}</p>
@@ -253,14 +248,7 @@
                 <div class="flex items-center justify-center w-8 h-8 rounded-full font-semibold text-xs {globalIndex <= 3 ? 'bg-warning/10 text-warning' : 'bg-on-surface/5 text-on-surface-variant/30 shrink-0'}">
                   {globalIndex}
                 </div>
-                <div class="relative shrink-0">
-                  <img src={getAvatar(item.avatarUrl, item.name || item.username, item.userId)} alt="" class="w-10 h-10 rounded-xl object-cover" />
-                  <div class="absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-surface bg-emerald-500"></div>
-                </div>
-                <div class="flex-1 min-w-0">
-                  <span class="text-base font-semibold text-on-surface block truncate">{item.name}</span>
-                  <span class="text-xs font-semibold text-on-surface-variant/40">{item.grade || m.d7_staff()}</span>
-                </div>
+                <UserDisplay userId={item.userId} name={item.name} avatarUrl={item.avatarUrl} subtitle={item.grade || m.d7_staff()} size="lg" class="flex-1" />
                 <div class="hidden md:flex items-center gap-6 mr-4 shrink-0">
                   <div class="text-right">
                     <p class="text-xs font-semibold text-on-surface-variant/30">{m.d7_dam_messages()}</p>
@@ -291,7 +279,7 @@
                   </button>
                   <div>
                     <div class="flex items-center gap-2">
-                      <p class="text-sm font-semibold text-on-surface">@{item.targetTag}</p>
+                      <UserDisplay userId={item.targetUserId} name={item.targetTag} avatar={false} size="sm" />
                       {#if getSanctionColor}
                         <span class="px-2 py-0.5 rounded-lg text-xs font-semibold" style="background: {getSanctionColor(item.type)}20; color: {getSanctionColor(item.type)}">{item.type}</span>
                       {/if}
@@ -304,8 +292,7 @@
                   <div class="text-right">
                     <p class="text-xs font-semibold text-on-surface-variant/40">{m.d7_dam_moderator()}</p>
                     <div class="flex items-center gap-2 mt-0.5">
-                      <img src={getAvatar(item.moderatorAvatarUrl, item.moderatorTag, item.moderatorUserId)} alt="" class="w-5 h-5 rounded-md object-cover" />
-                      <p class="text-xs font-bold text-on-surface">@{item.moderatorTag}</p>
+                      <UserDisplay userId={item.moderatorUserId} name={item.moderatorTag} avatarUrl={item.moderatorAvatarUrl} size="xs" />
                     </div>
                   </div>
                   <Papicon icon="CaretRight" size={16} class="text-on-surface-variant/20 group-hover:translate-x-1 transition-transform" />

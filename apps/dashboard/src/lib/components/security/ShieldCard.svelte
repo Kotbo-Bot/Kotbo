@@ -26,11 +26,11 @@
   } = $props();
 
   const LEVELS = [
-    { level: 5, emoji: '🔵', name: m.shd_level5_name(), summary: m.shd_level5_summary(), tone: 'border-primary/40 bg-primary/5' },
-    { level: 4, emoji: '🟢', name: m.shd_level4_name(), summary: m.shd_level4_summary(), tone: 'border-success/40 bg-success/5' },
-    { level: 3, emoji: '🟡', name: m.shd_level3_name(), summary: m.shd_level3_summary(), tone: 'border-warning/40 bg-warning/5' },
-    { level: 2, emoji: '🔴', name: m.shd_level2_name(), summary: m.shd_level2_summary(), tone: 'border-error/40 bg-error/5' },
-    { level: 1, emoji: '⚪', name: m.shd_level1_name(), summary: m.shd_level1_summary(), tone: 'border-outline bg-surface-container-high' },
+    { level: 5, emoji: '🔵', get name() { return m.shd_level5_name(); }, get summary() { return m.shd_level5_summary(); }, tone: 'border-primary/40 bg-primary/5' },
+    { level: 4, emoji: '🟢', get name() { return m.shd_level4_name(); }, get summary() { return m.shd_level4_summary(); }, tone: 'border-success/40 bg-success/5' },
+    { level: 3, emoji: '🟡', get name() { return m.shd_level3_name(); }, get summary() { return m.shd_level3_summary(); }, tone: 'border-warning/40 bg-warning/5' },
+    { level: 2, emoji: '🔴', get name() { return m.shd_level2_name(); }, get summary() { return m.shd_level2_summary(); }, tone: 'border-error/40 bg-error/5' },
+    { level: 1, emoji: '⚪', get name() { return m.shd_level1_name(); }, get summary() { return m.shd_level1_summary(); }, tone: 'border-outline bg-surface-container-high' },
   ];
 
   let busy = $state(false);
@@ -143,9 +143,9 @@
           {config.shieldPanelChannelId ? m.shd_panel_published({ channel: channels.find((c) => c.id === config.shieldPanelChannelId)?.name ?? config.shieldPanelChannelId }) : m.shd_panel_desc()}
         </p>
         <div class="flex flex-wrap gap-2">
-          <select
+          <select aria-label={m.shd_panel()}
             bind:value={panelChannel}
-            class="flex-1 min-w-0 rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-1.5 text-body-sm text-on-surface"
+            class="flex-1 min-w-0 rounded-lg bg-surface-container border border-field-border px-3 py-1.5 text-body-sm text-on-surface"
           >
             <option value="">{m.shd_pick_channel()}</option>
             {#each channels as channel (channel.id)}<option value={channel.id}>#{channel.name}</option>{/each}

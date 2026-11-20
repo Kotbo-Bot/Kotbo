@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { explainDisabled } from '../../lib/actions/explainDisabled';
   import { m } from '../../lib/i18n';
   import { onMount } from 'svelte';
   import { toast } from '../../lib/stores/toast.svelte';
@@ -12,8 +11,12 @@
     deleteGlobalBannedWord,
   } from '../../lib/api';
   import Papicon from '../../lib/components/Papicon.svelte';
-  import Skeleton from '../../lib/components/Skeleton.svelte';
   import AdminShell from '../../lib/components/admin/AdminShell.svelte';
+  import AdminCard from '../../lib/components/admin/AdminCard.svelte';
+  import AdminTable from '../../lib/components/admin/AdminTable.svelte';
+  import AdminToolbar from '../../lib/components/admin/AdminToolbar.svelte';
+  import type { AdminTableColumn } from '../../lib/components/admin/types';
+  import { Button, Callout, ToggleSwitch } from '../../lib/components/ui';
 
   import { errorMessage } from '@kotbo/shared';
   type BannedWordEntry = {
@@ -56,14 +59,31 @@
   let globalWordSavingId = $state('');
   const globalWordSaveTimers = new Map<string, ReturnType<typeof setTimeout>>();
   let globalCleanupLoading = $state(false);
-  const GLOBAL_BANNED_WORDS_PAGE_SIZE = 12;
+  const GLOBAL_BANNED_WORDS_PAGE_SIZE = 25;
+
+  let search = $state('');
+  let categoryFilter = $state('ALL');
+
+  const filteredGlobalBannedWords = $derived.by(() => {
+    const needle = search.trim().toLowerCase();
+    return globalBannedWords.filter(
+      (entry) => (categoryFilter === 'ALL' || entry.category === categoryFilter) && entry.word.toLowerCase().includes(needle),
+    );
+  });
+
+  const wordColumns: AdminTableColumn[] = [
+    { key: 'word', label: 'Mot' },
+    { key: 'category', label: 'Catégorie', width: 'w-48' },
+    { key: 'enabled', label: 'Actif', align: 'center', width: 'w-24' },
+    { key: 'actions', label: '', align: 'right', width: 'w-16' },
+  ];
 
   const globalBannedWordsTotalPages = $derived(
-    Math.max(1, Math.ceil(globalBannedWords.length / GLOBAL_BANNED_WORDS_PAGE_SIZE))
+    Math.max(1, Math.ceil(filteredGlobalBannedWords.length / GLOBAL_BANNED_WORDS_PAGE_SIZE))
   );
 
   const paginatedGlobalBannedWords = $derived(
-    globalBannedWords.slice(
+    filteredGlobalBannedWords.slice(
       (globalBannedWordsPage - 1) * GLOBAL_BANNED_WORDS_PAGE_SIZE,
       globalBannedWordsPage * GLOBAL_BANNED_WORDS_PAGE_SIZE
     )
@@ -338,261 +358,201 @@
 </script>
 
 <AdminShell title="Mots globaux" description="Liste de mots interdits appliquée à tous les serveurs.">
-  <div class="space-y-6 pb-12 animate-in fade-in slide-in-from-bottom-3 duration-600">
-  <div class="flex items-center justify-end">
-    <div class="px-3 py-1.5 rounded-lg bg-on-surface/6 border border-outline-variant/25 text-xs font-semibold text-on-surface-variant">
-      {globalBannedWords.length} mot{globalBannedWords.length > 1 ? 's' : ''}
-    </div>
-  </div>
+  {#snippet actions()}
+    <Button icon="RefreshCw" loading={globalBannedWordsLoading} onclick={loadGlobalBannedWords}>Rafraîchir</Button>
+    <Button icon="Sparkles" loading={globalCleanupLoading} onclick={handleCleanupGlobalWords}>Retirer les doublons</Button>
+  {/snippet}
 
-  <div class="grid grid-cols-1 gap-6">
-    <div class="space-y-4">
-      <div class="flex items-center gap-3">
-        <div class="w-8 h-8 rounded-xl bg-cyan-500/10 border border-cyan-500/15 flex items-center justify-center text-cyan-400">
-          <Papicon icon="filter" size={16} />
-        </div>
-        <p class="font-semibold text-on-surface text-sm">Importer des mots</p>
-      </div>
+  {#if globalBannedWordsError}
+    <Callout variant="danger">
+      {globalBannedWordsError}
+      {#snippet actions()}
+        <Button size="sm" icon="RefreshCw" onclick={loadGlobalBannedWords}>Réessayer</Button>
+      {/snippet}
+    </Callout>
+  {/if}
 
-      <div class="bg-surface-container-low/50 border border-outline-variant/10 rounded-lg p-6 space-y-4">
-        <div class="space-y-2">
-          <p class="text-sm text-on-surface-variant leading-relaxed">
-            Colle un CSV, un JSON ou une liste de mots. Tu choisis les catégories à la main, puis le système ne fait que nettoyer les doublons.
-          </p>
-          <p class="text-xs text-on-surface-variant">
-            Format accepté: <span class="font-mono">mot</span>, <span class="font-mono">mot,catégorie</span>, <span class="font-mono">mot,catégorie,true/false</span> ou JSON avec <span class="font-mono">word</span>, <span class="font-mono">category</span>, <span class="font-mono">enabled</span>.
-          </p>
-        </div>
+  <!-- La liste d'abord : on vient ici pour retrouver ou corriger un mot bien
+       plus souvent que pour en importer un lot. -->
+  <AdminToolbar
+    bind:search
+    bind:activeFilter={categoryFilter}
+    placeholder="Rechercher un mot…"
+    filters={[
+      { value: 'ALL', label: 'Toutes', count: globalBannedWords.length },
+      ...BANNED_WORD_CATEGORY_KEYS.map((key) => ({
+        value: key,
+        label: BANNED_WORD_CATEGORIES[key],
+        count: globalBannedWords.filter((word) => word.category === key).length,
+      })).filter((option) => option.count > 0),
+    ]}
+    resultCount={filteredGlobalBannedWords.length}
+    resultLabel="mot"
+  />
 
-        <input
-          type="file"
-          accept=".csv,.json,.txt,.tsv"
-          onchange={handleImportFileChange}
-          class="block w-full text-sm text-on-surface-variant file:mr-4 file:rounded-xl file:border-0 file:bg-primary file:px-4 file:py-2.5 file:text-sm file:font-bold file:text-white hover:file:bg-primary/90"
-        />
-
-        <textarea
-          bind:value={globalImportText}
-          rows="10"
-          placeholder="word,category\nmenace,threat\ninsulte,insult"
-          class="w-full rounded-lg border border-outline-variant/20 bg-surface/60 px-4 py-3 text-sm text-on-surface placeholder:text-on-surface-variant/30 focus:outline-none focus:border-primary/50"
-        ></textarea>
-
-        <div class="flex flex-wrap gap-3">
-          <button onclick={handleAnalyzeGlobalImport} class="px-5 py-3 rounded-lg bg-primary text-white font-bold text-sm hover:bg-primary/90 transition-colors">Analyser</button>
-          <button onclick={resetGlobalImport} class="px-5 py-3 rounded-lg border border-outline-variant/20 text-sm font-bold text-on-surface-variant hover:bg-on-surface/5 transition-colors">Réinitialiser</button>
-          <button onclick={handleSaveGlobalImport} disabled={globalImportLoading} use:explainDisabled={(globalImportDrafts.length === 0) ? m.common_reason_select_one() : ''} class="px-5 py-3 rounded-lg bg-emerald-500 text-white font-bold text-sm hover:bg-success/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
-            {globalImportLoading ? 'Enregistrement...' : 'Enregistrer les mots'}
-          </button>
-        </div>
-
-        {#if globalImportFileName}
-          <p class="text-xs text-on-surface-variant">Fichier chargé : {globalImportFileName}</p>
-        {/if}
-
-        {#if globalImportError}
-          <div class="rounded-lg border border-warning/20 bg-warning/10 px-4 py-3 text-sm text-warning">
-            {globalImportError}
+  <AdminTable
+    columns={wordColumns}
+    rows={paginatedGlobalBannedWords}
+    loading={globalBannedWordsLoading && !globalBannedWordsLoaded}
+    emptyIcon="filter"
+    emptyTitle={globalBannedWords.length === 0 ? 'Aucun mot global configuré' : 'Aucun mot ne correspond'}
+    emptyHint={globalBannedWords.length === 0 ? 'Importe une première liste ci-dessous.' : 'Élargis la recherche ou change de catégorie.'}
+  >
+    {#snippet row(item, _index)}
+      {@const entry = item as BannedWordEntry}
+      <tr class="border-b border-outline-variant/12">
+        <td class="px-4 py-2">
+          <input
+            type="text"
+            value={entry.word}
+            aria-label="Mot"
+            oninput={(event) => updateGlobalWordField(entry.id, { word: (event.currentTarget as HTMLInputElement).value })}
+            class="input font-mono {entry.enabled ? '' : 'opacity-60'}"
+            maxlength="100"
+          />
+        </td>
+        <td class="px-4 py-2">
+          <select
+            value={entry.category}
+            aria-label="Catégorie"
+            onchange={(event) => updateGlobalWordField(entry.id, { category: (event.currentTarget as HTMLSelectElement).value })}
+            class="input"
+          >
+            {#each Object.entries(BANNED_WORD_CATEGORIES) as [key, label] (key)}
+              <option value={key}>{label}</option>
+            {/each}
+          </select>
+        </td>
+        <td class="px-4 py-2">
+          <div class="flex items-center justify-center gap-2">
+            <ToggleSwitch
+              size="sm"
+              checked={entry.enabled}
+              ariaLabel="Activer « {entry.word} »"
+              onToggle={(checked) => updateGlobalWordField(entry.id, { enabled: checked })}
+            />
+            {#if globalWordSavingId === entry.id}
+              <span class="w-3 h-3 rounded-full border-2 border-on-surface-variant/30 border-t-on-surface-variant animate-spin" aria-hidden="true"></span>
+            {/if}
           </div>
+        </td>
+        <td class="px-4 py-2 text-right">
+          <Button size="sm" variant="danger" icon="Trash" title="Supprimer" aria-label="Supprimer « {entry.word} »" onclick={() => handleDeleteGlobalWord(entry)} />
+        </td>
+      </tr>
+    {/snippet}
+
+    {#snippet footer()}
+      <div class="flex items-center justify-between gap-3">
+        <p class="text-xs text-on-surface-variant tabular-nums">Page {globalBannedWordsPage} sur {globalBannedWordsTotalPages}</p>
+        <div class="flex items-center gap-2">
+          <Button size="sm" icon="ChevronLeft" disabled={globalBannedWordsPage === 1} onclick={() => goToGlobalBannedWordsPage(globalBannedWordsPage - 1)}>
+            Précédent
+          </Button>
+          <Button
+            size="sm"
+            iconRight="ChevronRight"
+            disabled={globalBannedWordsPage === globalBannedWordsTotalPages}
+            onclick={() => goToGlobalBannedWordsPage(globalBannedWordsPage + 1)}
+          >
+            Suivant
+          </Button>
+        </div>
+      </div>
+    {/snippet}
+  </AdminTable>
+
+  <AdminCard
+    title="Importer des mots"
+    description="Colle un CSV, un JSON ou une liste de mots. Tu choisis les catégories à la main avant d’enregistrer ; les doublons sont écartés."
+    icon="Upload"
+    tone="primary"
+  >
+    <div class="space-y-4">
+      <p class="text-xs text-on-surface-variant">
+        Format accepté : <span class="font-mono">mot</span>, <span class="font-mono">mot,catégorie</span>,
+        <span class="font-mono">mot,catégorie,true/false</span> ou JSON avec <span class="font-mono">word</span>,
+        <span class="font-mono">category</span>, <span class="font-mono">enabled</span>.
+      </p>
+
+      <textarea
+        bind:value={globalImportText}
+        rows="6"
+        aria-label="Mots à importer"
+        placeholder={'word,category\nmenace,threat\ninsulte,insult'}
+        class="input font-mono"
+      ></textarea>
+
+      <div class="flex flex-wrap items-center gap-2">
+        <Button variant="primary" icon="Search" onclick={handleAnalyzeGlobalImport}>Analyser</Button>
+        <!-- Le champ fichier natif reste le contrôle réel ; le bouton n'en est que l'habillage. -->
+        <label class="btn btn-tonal cursor-pointer focus-within:outline-2 focus-within:outline-primary">
+          <Papicon icon="Upload" size={14} />
+          Charger un fichier
+          <input type="file" accept=".csv,.json,.txt,.tsv" onchange={handleImportFileChange} class="sr-only" />
+        </label>
+        {#if globalImportText || globalImportDrafts.length > 0}
+          <Button variant="ghost" onclick={resetGlobalImport}>Réinitialiser</Button>
+        {/if}
+        {#if globalImportFileName}
+          <span class="text-xs text-on-surface-variant">Fichier chargé : {globalImportFileName}</span>
         {/if}
       </div>
+
+      {#if globalImportError}
+        <Callout variant="warning">{globalImportError}</Callout>
+      {/if}
 
       {#if globalImportDrafts.length > 0}
-        <div class="bg-surface-container-low/50 border border-outline-variant/10 rounded-lg p-5 space-y-4">
-          <div class="flex items-center justify-between gap-4">
-            <h3 class="text-lg font-semibold text-on-surface">Prévisualisation ({globalImportDrafts.length})</h3>
-            <p class="text-xs text-on-surface-variant">Modifie les catégories avant validation.</p>
+        <div class="space-y-3 pt-4 border-t border-outline-variant/20">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 class="text-sm font-semibold text-on-surface">Prévisualisation ({globalImportDrafts.length})</h3>
+              <p class="text-xs text-on-surface-variant">Modifie les catégories avant validation.</p>
+            </div>
+            <Button variant="primary" icon="Check" loading={globalImportLoading} onclick={handleSaveGlobalImport}>
+              Enregistrer les mots
+            </Button>
           </div>
 
-          <div class="overflow-x-auto rounded-lg border border-outline-variant/10">
-            <table class="w-full text-sm">
-              <thead class="bg-surface/40 text-left text-xs text-on-surface-variant">
-                <tr>
-                  <th class="px-4 py-3">Mot</th>
-                  <th class="px-4 py-3">Catégorie</th>
-                  <th class="px-4 py-3 text-center">Actif</th>
-                  <th class="px-4 py-3"></th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-outline-variant/10">
-                {#each globalImportDrafts as draft (draft.id)}
-                  <tr class="bg-surface/10">
-                    <td class="px-4 py-3">
-                      <input
-                        type="text"
-                        value={draft.word}
-                        oninput={(event) => updateDraft(draft.id, { word: (event.currentTarget as HTMLInputElement).value })}
-                        class="w-full rounded-xl border border-outline-variant/20 bg-surface/70 px-3 py-2 text-sm text-on-surface focus:outline-none focus:border-primary/50"
-                      />
-                    </td>
-                    <td class="px-4 py-3">
-                      <select
-                        value={draft.category}
-                        onchange={(event) => updateDraft(draft.id, { category: (event.currentTarget as HTMLSelectElement).value })}
-                        class="w-full rounded-xl border border-outline-variant/20 bg-surface/70 px-3 py-2 text-sm text-on-surface focus:outline-none focus:border-primary/50"
-                      >
-                        {#each Object.entries(BANNED_WORD_CATEGORIES) as [key, label]}
-                          <option value={key}>{label}</option>
-                        {/each}
-                      </select>
-                    </td>
-                    <td class="px-4 py-3 text-center">
-                      <input
-                        type="checkbox"
-                        checked={draft.enabled}
-                        onchange={(event) => updateDraft(draft.id, { enabled: (event.currentTarget as HTMLInputElement).checked })}
-                        class="h-4 w-4 rounded border-outline-variant/40 text-primary focus:ring-primary/30"
-                      />
-                    </td>
-                    <td class="px-4 py-3 text-right">
-                      <button onclick={() => removeDraft(draft.id)} class="rounded-xl p-2 text-on-surface-variant/40 hover:bg-error/10 hover:text-error transition-colors" title="Retirer">
-                        <Papicon icon="Trash" size={16} />
-                      </button>
-                    </td>
-                  </tr>
-                {/each}
-              </tbody>
-            </table>
-          </div>
+          <AdminTable columns={wordColumns} rows={globalImportDrafts}>
+            {#snippet row(item, _index)}
+              {@const draft = item as ImportDraft}
+              <tr class="border-b border-outline-variant/12">
+                <td class="px-4 py-2">
+                  <input
+                    type="text"
+                    value={draft.word}
+                    aria-label="Mot"
+                    oninput={(event) => updateDraft(draft.id, { word: (event.currentTarget as HTMLInputElement).value })}
+                    class="input font-mono"
+                  />
+                </td>
+                <td class="px-4 py-2">
+                  <select
+                    value={draft.category}
+                    aria-label="Catégorie"
+                    onchange={(event) => updateDraft(draft.id, { category: (event.currentTarget as HTMLSelectElement).value })}
+                    class="input"
+                  >
+                    {#each Object.entries(BANNED_WORD_CATEGORIES) as [key, label] (key)}
+                      <option value={key}>{label}</option>
+                    {/each}
+                  </select>
+                </td>
+                <td class="px-4 py-2">
+                  <div class="flex justify-center">
+                    <ToggleSwitch size="sm" checked={draft.enabled} ariaLabel="Activer « {draft.word} »" onToggle={(checked) => updateDraft(draft.id, { enabled: checked })} />
+                  </div>
+                </td>
+                <td class="px-4 py-2 text-right">
+                  <Button size="sm" variant="ghost" icon="X" title="Retirer" aria-label="Retirer « {draft.word} »" onclick={() => removeDraft(draft.id)} />
+                </td>
+              </tr>
+            {/snippet}
+          </AdminTable>
         </div>
       {/if}
     </div>
-
-    <div class="space-y-4">
-      <div class="flex items-center gap-3">
-        <div class="w-8 h-8 rounded-xl bg-indigo-500/10 border border-indigo-500/15 flex items-center justify-center text-indigo-400">
-          <Papicon icon="ShieldAlert" size={16} />
-        </div>
-        <p class="font-semibold text-on-surface text-sm">Mots actifs ({globalBannedWords.length})</p>
-      </div>
-
-      <div class="bg-surface-container-low/50 border border-outline-variant/10 rounded-lg p-5 space-y-4">
-        <p class="text-sm text-on-surface-variant">
-          Ces mots sont appliqués à tous les serveurs et peuvent être désactivés ou supprimés depuis cette interface d'administration.
-        </p>
-
-        <div class="flex flex-wrap gap-3">
-          <button
-            type="button"
-            onclick={handleCleanupGlobalWords}
-            disabled={globalCleanupLoading}
-            class="inline-flex items-center gap-2 rounded-lg bg-cyan-500 px-4 py-3 text-sm font-bold text-white hover:bg-cyan-500/90 transition-colors disabled:opacity-40"
-          >
-            <Papicon icon="Sparkles" size={16} />
-            {globalCleanupLoading ? 'Nettoyage...' : 'Dédupliquer seulement'}
-          </button>
-          <button
-            type="button"
-              onclick={loadGlobalBannedWords}
-            class="inline-flex items-center gap-2 rounded-lg border border-outline-variant/20 px-4 py-3 text-sm font-bold text-on-surface-variant hover:bg-on-surface/5 transition-colors"
-          >
-            <Papicon icon="RefreshCw" size={16} />
-            Rafraîchir
-          </button>
-        </div>
-
-          {#if globalBannedWordsLoading && !globalBannedWordsLoaded}
-            <div class="space-y-3 rounded-lg border border-outline-variant/10 p-4">
-              {#each [1, 2, 3, 4, 5, 6] as _}
-                <Skeleton height="64px" class="rounded-xl" />
-              {/each}
-            </div>
-          {:else if globalBannedWordsError}
-            <div class="rounded-lg border border-error/20 bg-error/10 p-4 text-sm text-error flex items-center justify-between gap-4">
-              <span>{globalBannedWordsError}</span>
-              <button onclick={loadGlobalBannedWords} class="rounded-xl bg-error px-4 py-2 text-xs font-bold text-on-error transition-colors hover:bg-error/90">
-                Réessayer
-              </button>
-            </div>
-          {:else}
-            <div class="overflow-x-auto rounded-xl border border-outline-variant/10">
-              <table class="w-full text-sm">
-                <thead class="bg-on-surface/3 text-left text-body-sm text-on-surface-variant/30 border-b border-outline-variant/10">
-                  <tr>
-                    <th class="px-4 py-3">Mot</th>
-                    <th class="px-4 py-3">Catégorie</th>
-                    <th class="px-4 py-3 text-center">Actif</th>
-                    <th class="px-4 py-3"></th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-outline-variant/10">
-                  {#each paginatedGlobalBannedWords as entry (entry.id)}
-                    <tr class="{entry.enabled ? 'bg-surface/10' : 'bg-surface/5 opacity-60'}">
-                      <td class="px-4 py-3">
-                        <input
-                          type="text"
-                          value={entry.word}
-                          oninput={(event) => updateGlobalWordField(entry.id, { word: (event.currentTarget as HTMLInputElement).value })}
-                          class="w-full rounded-xl border border-outline-variant/20 bg-surface/70 px-3 py-2 text-sm font-mono font-semibold text-on-surface focus:outline-none focus:border-primary/50"
-                          maxlength="100"
-                        />
-                      </td>
-                      <td class="px-4 py-3">
-                        <select
-                          value={entry.category}
-                          onchange={(event) => updateGlobalWordField(entry.id, { category: (event.currentTarget as HTMLSelectElement).value })}
-                          class="w-full rounded-xl border border-outline-variant/20 bg-surface/70 px-3 py-2 text-sm text-on-surface focus:outline-none focus:border-primary/50"
-                        >
-                          {#each Object.entries(BANNED_WORD_CATEGORIES) as [key, label]}
-                            <option value={key}>{label}</option>
-                          {/each}
-                        </select>
-                      </td>
-                      <td class="px-4 py-3 text-center">
-                        <label class="inline-flex items-center gap-2 cursor-pointer text-xs font-bold {entry.enabled ? 'text-success' : 'text-on-surface-variant/40'}">
-                          <input
-                            type="checkbox"
-                            checked={entry.enabled}
-                            onchange={(event) => updateGlobalWordField(entry.id, { enabled: (event.currentTarget as HTMLInputElement).checked })}
-                            class="h-4 w-4 rounded border-outline-variant/40 text-primary focus:ring-primary/30"
-                          />
-                          <span class="h-2.5 w-2.5 rounded-full {entry.enabled ? 'bg-emerald-500' : 'bg-on-surface-variant/30'}"></span>
-                          {entry.enabled ? 'Actif' : 'Inactif'}
-                        </label>
-                      </td>
-                      <td class="px-4 py-3 text-right whitespace-nowrap">
-                        <div class="flex items-center justify-end gap-2">
-                          <button onclick={() => handleDeleteGlobalWord(entry)} class="rounded-xl p-2 text-on-surface-variant/40 hover:bg-error/10 hover:text-error transition-colors" title="Supprimer">
-                            <Papicon icon="Trash" size={16} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  {/each}
-                </tbody>
-              </table>
-            </div>
-
-            {#if globalBannedWords.length === 0}
-              <p class="py-4 text-center text-sm text-on-surface-variant">Aucun mot global configuré.</p>
-            {:else}
-              <div class="flex flex-col gap-3 rounded-lg border border-outline-variant/10 bg-surface/20 px-4 py-3 md:flex-row md:items-center md:justify-between">
-                <p class="text-xs text-on-surface-variant">
-                  Page {globalBannedWordsPage} sur {globalBannedWordsTotalPages} · {globalBannedWords.length} mot(s) global(aux)
-                </p>
-                {#if globalBannedWordsTotalPages > 1}
-                  <div class="flex items-center gap-2">
-                    <button
-                      onclick={() => goToGlobalBannedWordsPage(globalBannedWordsPage - 1)}
-                      disabled={globalBannedWordsPage === 1}
-                      class="rounded-xl border border-outline-variant/20 px-3 py-2 text-xs font-bold text-on-surface-variant transition-colors hover:bg-on-surface/5 disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      Précédent
-                    </button>
-                    <button
-                      onclick={() => goToGlobalBannedWordsPage(globalBannedWordsPage + 1)}
-                      disabled={globalBannedWordsPage === globalBannedWordsTotalPages}
-                      class="rounded-xl border border-outline-variant/20 px-3 py-2 text-xs font-bold text-on-surface-variant transition-colors hover:bg-on-surface/5 disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      Suivant
-                    </button>
-                  </div>
-                {/if}
-              </div>
-            {/if}
-          {/if}
-      </div>
-    </div>
-  </div>
-</div>
+  </AdminCard>
 </AdminShell>

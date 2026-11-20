@@ -4,6 +4,7 @@ import { createRedisForWorker } from '../redis.js';
 import { logger } from '../../utils/logger.js';
 import { trackActiveTask } from '../../observability/eventLoopLag.js';
 import { captureException } from '../../observability/sentry.js';
+import { getCurrentInstance } from '../../utils/instanceContext.js';
 
 export type BackgroundJobName =
   | 'rss'
@@ -12,9 +13,6 @@ export type BackgroundJobName =
   | 'github'
   | 'huggingface'
   | 'digest'
-  | 'daily-algo'
-  | 'daily-algo-summary'
-  | 'daily-algo-week'
   | 'weekly-recap'
   | 'sanctions'
   | 'staff-warnings-expiration'
@@ -55,6 +53,7 @@ export type BackgroundJobName =
   | 'acquisition-events-prune'
   | 'dashboard-telemetry-prune'
   | 'server-tag-roles-resync'
+  | 'server-tag-holders-snapshot'
   | 'site-analytics-prune'
   | 'site-scheduled-publish'
   | 'notification-dm-flush'
@@ -68,6 +67,7 @@ export type BackgroundJobName =
   | 'aegis-prune'
   | 'workflow-executions-prune'
   | 'ban-hygiene-scan'
+  | 'boost-snapshots'
   | 'warn-auto-archive'
   | 'staff-reminders'
   | 'bump-reminder-tick'
@@ -99,7 +99,13 @@ type BackgroundJobPayload = {
   beforeMessageId?: string;
 };
 
-const QUEUE_NAME = 'kotbo-background-jobs';
+// Un bot perso a sa propre file : son worker ne voit que son serveur, il ne doit
+// pas prendre les jobs (sanctions, giveaways…) du bot principal.
+// Lu au démarrage de la file, une fois l'instance courante connue.
+function queueName(): string {
+  const instance = getCurrentInstance();
+  return instance.isDefault ? 'kotbo-background-jobs' : `kotbo-background-jobs-${instance.slug}`;
+}
 const DEFAULT_LOCK_DURATION_MS = 120_000;
 const DEFAULT_MAX_STALLED_COUNT = 3;
 
@@ -158,7 +164,8 @@ export async function startBackgroundQueueWorker(): Promise<boolean> {
     await queueConnection.connect();
     await workerConnection.connect();
 
-    queue = new Queue<BackgroundJobPayload, void, BackgroundJobName>(QUEUE_NAME, {
+    const name = queueName();
+    queue = new Queue<BackgroundJobPayload, void, BackgroundJobName>(name, {
       connection: queueConnection,
       defaultJobOptions: {
         removeOnComplete: 50,
@@ -167,7 +174,7 @@ export async function startBackgroundQueueWorker(): Promise<boolean> {
     });
 
     worker = new Worker<BackgroundJobPayload, void, BackgroundJobName>(
-      QUEUE_NAME,
+      name,
       getProcessor(),
       {
         connection: workerConnection,

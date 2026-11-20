@@ -1,42 +1,40 @@
 /** Routes dashboard du module `command-access`. */
+import { Hono } from 'hono';
+import type { Client } from 'discord.js';
 import { normalizeCommandRestrictions } from '../../../../utils/commandAccess.js';
 import prisma from '../../../../utils/db.js';
 import { logger } from '../../../../utils/logger.js';
-import { getGuildName, json, pushAudit, readJsonBody, resolveFeatureAccessMap } from '../../../shared.js';
-import { type ModuleRouteContext } from './_shared.js';
+import { getGuildName, pushAudit, resolveFeatureAccessMap } from '../../../shared.js';
+import { auditUserOf, fail, guildRoute, readBody, send } from '../../../hono/dashboard/kit.js';
 
-import { jsonFailure } from '../../../shared/failure.js';
-export async function handleCommandAccessRoutes(ctx: ModuleRouteContext): Promise<boolean> {
-  const { req, res, parts, client, user, guildId, access, method, auditUser, moduleKey } = ctx;
+export function createCommandAccessRouter(client: Client) {
+  const router = new Hono();
 
-  // PUT /api/dashboard/guilds/:guildId/command-access
-  if (moduleKey === 'command-access' && parts.length === 5 && method === 'PUT') {
+  router.put('/api/dashboard/guilds/:guildId/command-access', ...guildRoute(client), async (c) => {
+    const guildId = c.req.param('guildId');
+    const userId = c.var.dashboardUser.userId;
+    const access = c.var.effectiveAccess;
     try {
       const discordGuild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
-      const member = discordGuild ? await discordGuild.members.fetch(user.userId).catch(() => null) : null;
+      const member = discordGuild ? await discordGuild.members.fetch(userId).catch(() => null) : null;
       const roleIds = member?.roles.cache.map((role) => role.id) ?? [];
-      const featureAccess = await resolveFeatureAccessMap(client, guildId, access, user.userId, roleIds);
+      const featureAccess = await resolveFeatureAccessMap(client, guildId, access, userId, roleIds);
 
       if (!featureAccess.commands?.canConfigure && !access.canManageSettings) {
-        json(res, 403, { error: 'Accès refusé. Permissions insuffisantes.' });
-        return true;
+        return send(c, { error: 'Accès refusé. Permissions insuffisantes.' }, 403);
       }
 
-      const body = await readJsonBody<{ commandRestrictions?: unknown }>(req);
-      if (!body) {
-        json(res, 400, { error: 'Payload de restrictions invalide' });
-        return true;
-      }
+      const body = await readBody<{ commandRestrictions?: unknown }>(c);
+      if (!body) return send(c, { error: 'Payload de restrictions invalide' }, 400);
 
       const commandRestrictions = normalizeCommandRestrictions(body.commandRestrictions);
-
       await prisma.dashboardSettings.update({
         where: { guildId },
         data: { commandRestrictions }
       });
 
       await pushAudit(guildId, {
-        user: auditUser,
+        user: auditUserOf(c),
         action: 'Sauvegarde restrictions commandes',
         context: getGuildName(client, guildId),
         module: 'Dashboard',
@@ -45,13 +43,12 @@ export async function handleCommandAccessRoutes(ctx: ModuleRouteContext): Promis
         channelId: null
       });
 
-      json(res, 200, { ok: true });
+      return send(c, { ok: true });
     } catch (err) {
       logger.error('CommandAccessAPI', 'Error updating command restrictions:', err);
-      jsonFailure(res, err, 'Erreur lors de la mise à jour des restrictions', 'CommandAccessAPI');
+      return fail(c, err, 'Erreur lors de la mise à jour des restrictions', 'CommandAccessAPI');
     }
-    return true;
-  }
+  });
 
-  return false;
+  return router;
 }

@@ -4,7 +4,8 @@ import {
 } from 'discord.js';
 import { errorContainer, kotboContainer } from '../../utils/embeds.js';
 import { E, rankEmoji, buildProgressBar } from '../../utils/emojis.js';
-import { getAllSeasons, getSeasonLeaderboard } from '../../services/progression/seasonService.js';
+import { getAllSeasons, getMemberSeasonHistory, getSeasonLeaderboard, getSeasonMemberStanding } from '../../services/progression/seasonService.js';
+import { seasonProgress, summarizeSeasonHistory } from '@kotbo/shared';
 import type { SlashCommandDefinition } from '../../commands.js';
 import { ContainerChild, separator, v2Message } from '@arcscord/components';
 import { getEffectiveLocale, getCommandMetadata } from '../../utils/i18n.js';
@@ -42,7 +43,12 @@ const data = new SlashCommandBuilder()
     sub.setName('leaderboard')
       .setDescription(m.c4_seasons_leaderboard_desc({}, { locale: 'en' }))
       .setDescriptionLocalizations({ fr: m.c4_seasons_leaderboard_desc({}, { locale: 'fr' }) })
-      .addStringOption((opt) => opt.setName('saison').setDescription(m.c4_seasons_opt_saison({}, { locale: 'en' })).setDescriptionLocalizations({ fr: m.c4_seasons_opt_saison({}, { locale: 'fr' }) }).setRequired(true)));
+      .addStringOption((opt) => opt.setName('saison').setDescription(m.c4_seasons_opt_saison({}, { locale: 'en' })).setDescriptionLocalizations({ fr: m.c4_seasons_opt_saison({}, { locale: 'fr' }) }).setRequired(true)))
+  .addSubcommand((sub) =>
+    sub.setName('history')
+      .setDescription(m.c4_seasons_history_desc({}, { locale: 'en' }))
+      .setDescriptionLocalizations({ fr: m.c4_seasons_history_desc({}, { locale: 'fr' }) })
+      .addUserOption((opt) => opt.setName('membre').setDescription(m.c4_seasons_opt_membre({}, { locale: 'en' })).setDescriptionLocalizations({ fr: m.c4_seasons_opt_membre({}, { locale: 'fr' }) })));
 
 async function execute(interaction: ChatInputCommandInteraction) {
   const subcommand = interaction.options.getSubcommand();
@@ -107,21 +113,18 @@ async function execute(interaction: ChatInputCommandInteraction) {
       return;
     }
 
-    const now = Date.now();
-    const start = new Date(active.startDate).getTime();
-    const end = new Date(active.endDate).getTime();
-    const totalDuration = end - start;
-    const elapsed = now - start;
-    const progressPct = totalDuration > 0 ? Math.min((elapsed / totalDuration) * 100, 100) : 0;
-    const daysLeft = Math.max(0, Math.ceil((end - now) / 86400000));
+    const { percent: progressPct, daysLeft } = seasonProgress(new Date(active.startDate), new Date(active.endDate));
 
-    const lb = await getSeasonLeaderboard(guildId, active.id, 10);
+    const lb = await getSeasonLeaderboard(guildId, active.id, 10, interaction.guild);
+    // Hors du top affiché, le membre voit quand même où il en est.
+    const inTop = lb.some((entry) => entry.userId === interaction.user.id);
+    const mine = inTop ? null : await getSeasonMemberStanding(guildId, active.id, interaction.user.id, interaction.guild);
 
     const fields: ContainerChild[] = [
       separator({ divider: true, spacing: 'small' }),
       [
         `${E.arrow} **${m.c4_seasons_field_period({}, { locale })}** · ${formatDate(active.startDate)} → ${formatDate(active.endDate)}`,
-        `${E.arrow} **${m.c4_seasons_field_progress({}, { locale })}** · ${buildProgressBar(progressPct, 8)} \`${Math.round(progressPct)}%\``,
+        `${E.arrow} **${m.c4_seasons_field_progress({}, { locale })}** · ${buildProgressBar(progressPct, 8)} \`${progressPct}%\``,
         `${E.arrow} **${m.c4_seasons_field_time_left({}, { locale })}** · ${m.c4_seasons_days_left({ days: daysLeft }, { locale })}`,
       ].join('\n')
     ]
@@ -130,7 +133,7 @@ async function execute(interaction: ChatInputCommandInteraction) {
     if (lb.length > 0) {
       const lbLines = lb.map((entry) => {
         const medal = rankEmoji(entry.rank);
-        return `${medal} <@${entry.userId}> - Lvl **${entry.level}** · **${entry.xp.toLocaleString('fr-FR')}** ${E.xp}`;
+        return `${medal} <@${entry.userId}> - Lvl **${entry.level}** · **+${entry.xp.toLocaleString('fr-FR')}** ${E.xp}`;
       });
 
       fields.push(
@@ -138,6 +141,15 @@ async function execute(interaction: ChatInputCommandInteraction) {
         `**${E.level} ${m.c4_seasons_field_ranking({}, { locale })}**`,
         lbLines.join('\n')
       )
+    }
+
+    if (!inTop) {
+      fields.push(
+        separator({ divider: true, spacing: 'small' }),
+        mine
+          ? `${E.arrow} ${m.c4_seasons_your_rank({ rank: mine.rank, xp: mine.xp.toLocaleString(locale) }, { locale })}`
+          : `${E.info} ${m.c4_seasons_not_ranked({}, { locale })}`,
+      );
     }
 
     await interaction.editReply(v2Message(
@@ -155,7 +167,7 @@ async function execute(interaction: ChatInputCommandInteraction) {
     const seasonId = interaction.options.getString('saison', true);
     await interaction.deferReply();
 
-    const lb = await getSeasonLeaderboard(guildId, seasonId, 20);
+    const lb = await getSeasonLeaderboard(guildId, seasonId, 20, interaction.guild);
 
     if (lb.length === 0) {
       await interaction.editReply(v2Message(
@@ -166,7 +178,7 @@ async function execute(interaction: ChatInputCommandInteraction) {
 
     const lines = lb.map((entry) => {
       const medal = rankEmoji(entry.rank);
-      return `${medal} <@${entry.userId}> - Lvl **${entry.level}** · **${entry.xp.toLocaleString('fr-FR')}** ${E.xp}`;
+      return `${medal} <@${entry.userId}> - Lvl **${entry.level}** · **+${entry.xp.toLocaleString('fr-FR')}** ${E.xp}`;
     });
 
     await interaction.editReply(v2Message(
@@ -179,6 +191,37 @@ async function execute(interaction: ChatInputCommandInteraction) {
           lines.join('\n')
         ],
         footerTitle: m.c4_seasons_footer_participants({ count: lb.length }, { locale })
+      })
+    ));
+  }
+
+  if (subcommand === 'history') {
+    const user = interaction.options.getUser('membre') ?? interaction.user;
+    await interaction.deferReply();
+
+    const history = await getMemberSeasonHistory(guildId, user.id);
+    const summary = summarizeSeasonHistory(history);
+    const fields: ContainerChild[] = [separator({ divider: true, spacing: 'small' })];
+    if (history.length === 0) {
+      fields.push(`${E.info} ${m.c4_seasons_history_none({}, { locale })}`);
+    } else {
+      fields.push(
+        [
+          `${E.arrow} ${m.c4_seasons_history_summary({ seasons: summary.seasons, wins: summary.wins, podiums: summary.podiums }, { locale })}`,
+          `${E.arrow} ${m.c4_seasons_history_best({ rank: summary.bestRank ?? '-' }, { locale })}`,
+        ].join('\n'),
+        separator({ divider: true, spacing: 'small' }),
+        history.map((entry) => `${rankEmoji(entry.rank)} ${m.c4_seasons_history_line({ number: entry.number, name: entry.name, rank: entry.rank, xp: entry.xp.toLocaleString(locale) }, { locale })}`).join('\n'),
+      );
+    }
+
+    await interaction.editReply(v2Message(
+      { allowedMentions: { parse: [] } },
+      kotboContainer({
+        color: history.length > 0 ? 'primary' : 'dark',
+        title: `${E.trophy} ${m.c4_seasons_history_title({ user: user.displayName }, { locale })}`,
+        fields,
+        footerTitle: m.c4_seasons_title({}, { locale }),
       })
     ));
   }

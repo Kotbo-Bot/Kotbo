@@ -454,7 +454,7 @@
       <LoadingHint context="config" />
     </div>
   {:else if loadError}
-    <div class="rounded-xl bg-error/10 border border-error/20 p-6 text-error text-sm font-semibold flex items-center gap-2">
+    <div class="rounded-xl bg-error/10 border border-error/20 p-6 text-on-error-container text-sm font-semibold flex items-center gap-2">
       <Papicon icon="alert-triangle" size={18} />
       <span>{loadError}</span>
     </div>
@@ -592,19 +592,19 @@
         <!-- Formulaire d'ajout -->
         <div class="flex gap-3 items-start flex-wrap">
           <div class="flex-1 min-w-[200px] relative">
-            <input
+            <input aria-label={m.nm_word_placeholder()}
               id="banned-word-input"
               type="text"
               bind:value={newWord}
               onkeydown={handleKeydown}
               maxlength={100}
               placeholder={m.nm_word_placeholder()}
-              class="w-full bg-surface-container/60 border border-outline-variant/30 rounded-lg px-5 py-3.5 text-sm text-on-surface placeholder:text-on-surface-variant/30 focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/20 transition-all"
+              class="w-full bg-surface-container/60 border border-field-border rounded-lg px-5 py-3.5 text-sm text-on-surface placeholder:text-on-surface-variant/30 focus:outline-none focus:border-primary/60 focus:ring-1 focus:ring-primary/20 transition-all"
             />
           </div>
-          <select
+          <select aria-label={m.nm_col_category()}
             bind:value={newCategory}
-            class="bg-surface-container/60 border border-outline-variant/30 rounded-lg px-4 py-3.5 text-sm text-on-surface focus:outline-none focus:border-primary/60 transition-all"
+            class="bg-surface-container/60 border border-field-border rounded-lg px-4 py-3.5 text-sm text-on-surface focus:outline-none focus:border-primary/60 transition-all"
           >
             {#each Object.entries(CATEGORIES) as [key, meta]}
               <option value={key}>{meta.label}</option>
@@ -747,12 +747,12 @@
           </div>
 
           <div class="flex gap-2">
-            <input
+            <input aria-label={m.nm_nick_placeholder()}
               type="text"
               bind:value={newWhitelistItem}
               onkeydown={handleWhitelistKeydown}
               placeholder={m.nm_nick_placeholder()}
-              class="flex-1 min-w-0 bg-surface-container/60 border border-outline-variant/30 rounded-lg px-4 py-3 text-sm text-on-surface placeholder:text-on-surface-variant/30 focus:outline-none focus:border-primary/60 transition-all"
+              class="flex-1 min-w-0 bg-surface-container/60 border border-field-border rounded-lg px-4 py-3 text-sm text-on-surface placeholder:text-on-surface-variant/30 focus:outline-none focus:border-primary/60 transition-all"
             />
             <button
               onclick={addWhitelistItem}

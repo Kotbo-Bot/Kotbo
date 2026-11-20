@@ -1,14 +1,54 @@
 /** Outils MCP - read community (permission READ_COMMUNITY). */
 import { getModuleActivationStats, getModulePerformanceStats, getModuleStatsSummary, getModuleUsageStats, KOTBO_MODULES } from '../../../services/analytics/moduleStatsService.js';
 import { getSeasonLeaderboard, getSeasonsDashboardData } from '../../../services/progression/seasonService.js';
+import { getMemberReputationSummary } from '../../../services/community/reputationService.js';
+import { getStarboardAuthorLeaderboard, getStarboardOverview } from '../../../services/features/starboardDashboard.js';
+import { getMemberIdentities } from '../../../services/moderation/memberIdentityService.js';
+import { STARBOARD_PERIODS, STARBOARD_STATS_DAYS } from '@kotbo/shared';
 import prisma from '../../../utils/db.js';
 import { z } from 'zod';
 import { type McpToolContext, err, ok, resolveMember, toolError } from '../toolkit.js';
 
 export function registerReadCommunityTools(ctx: McpToolContext) {
-  const { server, guildId, shouldRegister, guard, toolMeta } = ctx;
+  const { server, guildId, client, shouldRegister, guard, toolMeta } = ctx;
 
   if (shouldRegister('READ_COMMUNITY')) {
+    // Lecture pure, rangée avec le classement : elle demandait WRITE_MEMBERS.
+    server.registerTool(
+      'get_member_level',
+      {
+        description: "Récupère le niveau et l'XP d'un membre dans le système de leveling.",
+        inputSchema: {
+          member: z.string().describe('Nom, surnom, @mention ou ID Discord du membre'),
+        },
+        _meta: toolMeta,
+      },
+      guard('READ_COMMUNITY', async ({ member }) => {
+        const resolved = await resolveMember(guildId, member);
+        if (!resolved.ok) return resolved.response;
+
+        const level = await prisma.memberLevel.findUnique({
+          where: { guildId_userId: { guildId, userId: resolved.userId } },
+        });
+
+        if (!level) return err('Aucune donnée de niveau pour ce membre.');
+
+        const rewards = await prisma.levelRoleReward.findMany({
+          where: { guildId, level: { lte: level.level } },
+          orderBy: { level: 'asc' },
+        });
+
+        return ok({
+          userId: resolved.userId,
+          name: resolved.label,
+          level: level.level,
+          xp: level.xp,
+          lastXpGain: level.lastXpGain?.toISOString() ?? null,
+          unlockedRewards: rewards.map((r) => ({ level: r.level, roleId: r.roleId })),
+        });
+      })
+    );
+
     server.registerTool(
       'get_leaderboard',
       {
@@ -66,7 +106,7 @@ export function registerReadCommunityTools(ctx: McpToolContext) {
       {
         description: 'Liste les suggestions de la communauté avec filtre optionnel par statut.',
         inputSchema: {
-          status: z.enum(['PENDING', 'APPROVED', 'REJECTED', 'IMPLEMENTED']).optional(),
+          status: z.enum(['PENDING', 'APPROVED', 'IN_PROGRESS', 'REJECTED', 'IMPLEMENTED']).optional(),
           limit: z.number().int().min(1).max(50).default(20),
         },
         _meta: toolMeta,
@@ -215,6 +255,90 @@ export function registerReadCommunityTools(ctx: McpToolContext) {
             reputationPoints: v._sum.value ?? 0,
           }))
         );
+      })
+    );
+
+    server.registerTool(
+      'get_member_reputation',
+      {
+        description:
+          "Réputation d'un membre : points, rang, remerciements reçus et donnés, et ses cinq derniers mouvements (remerciements et ajustements du staff).",
+        inputSchema: {
+          member: z.string().describe('Nom, surnom, @mention ou ID Discord du membre'),
+        },
+        _meta: toolMeta,
+      },
+      guard('READ_COMMUNITY', async ({ member }) => {
+        const resolved = await resolveMember(guildId, member);
+        if (!resolved.ok) return resolved.response;
+
+        try {
+          const summary = await getMemberReputationSummary(guildId, resolved.userId);
+          const giverIds = [...new Set(summary.recent.map((entry) => entry.giverId))];
+          const profiles = await prisma.memberProfile.findMany({
+            where: { guildId, userId: { in: giverIds } },
+            select: { userId: true, username: true, displayName: true },
+          });
+          const nameOf = new Map(profiles.map((p) => [p.userId, p.displayName ?? p.username ?? p.userId]));
+
+          return ok({
+            userId: resolved.userId,
+            name: resolved.label,
+            reputationPoints: summary.totalRep,
+            // Sans point, le rang « ex aequo avec tout le monde » n'apprend rien.
+            rank: summary.totalRep > 0 ? summary.rank : null,
+            receivedVotes: summary.receivedVotes,
+            receivedLast7Days: summary.receivedLast7Days,
+            givenVotes: summary.givenVotes,
+            recent: summary.recent.map((entry) => ({
+              kind: entry.kind === 'ADJUSTMENT' ? 'staff_adjustment' : 'thanks',
+              points: entry.value,
+              from: nameOf.get(entry.giverId) ?? entry.giverId,
+              reason: entry.reason,
+              at: entry.createdAt.toISOString(),
+            })),
+          });
+        } catch (e) {
+          return toolError(e);
+        }
+      })
+    );
+
+    server.registerTool(
+      'get_starboard',
+      {
+        description:
+          `Messages à la une (Starlight) : chiffres des ${STARBOARD_STATS_DAYS} derniers jours, meilleurs messages de cette fenêtre et auteurs les plus souvent à la une sur la période choisie. Les messages retirés par le staff ne comptent pas. L'identifiant d'un message sert à remove_starboard_message.`,
+        inputSchema: {
+          period: z.enum(STARBOARD_PERIODS).optional().describe('Période du classement des auteurs : week, month (défaut) ou all'),
+        },
+        _meta: toolMeta,
+      },
+      guard('READ_COMMUNITY', async ({ period }) => {
+        try {
+          const [overview, authors] = await Promise.all([
+            getStarboardOverview(guildId),
+            getStarboardAuthorLeaderboard(guildId, period ?? 'month'),
+          ]);
+          const userIds = [...new Set([...overview.topEntries.map((entry) => entry.authorId), ...authors.map((row) => row.authorId)])];
+          const identities = await getMemberIdentities(client, guildId, userIds);
+          const nameOf = (userId: string) => identities.get(userId)?.displayName ?? userId;
+          return ok({
+            stats: overview.stats,
+            topMessages: overview.topEntries.map((entry) => ({
+              id: entry.id,
+              author: nameOf(entry.authorId),
+              score: entry.score,
+              bestScore: entry.peakScore,
+              excerpt: entry.excerpt,
+              onBoard: entry.starMessageId !== null,
+              url: `https://discord.com/channels/${guildId}/${entry.channelId}/${entry.messageId}`,
+            })),
+            topAuthors: authors.map((row, index) => ({ rank: index + 1, author: nameOf(row.authorId), userId: row.authorId, featured: row.count, bestScore: row.bestScore })),
+          });
+        } catch (e) {
+          return toolError(e);
+        }
       })
     );
 
@@ -378,7 +502,7 @@ export function registerReadCommunityTools(ctx: McpToolContext) {
       },
       guard('READ_COMMUNITY', async () => {
         try {
-          const data = await getSeasonsDashboardData(guildId);
+          const data = await getSeasonsDashboardData(guildId, client.guilds.cache.get(guildId) ?? null);
           return ok(data);
         } catch (e) {
           return toolError(e);
@@ -389,7 +513,7 @@ export function registerReadCommunityTools(ctx: McpToolContext) {
     server.registerTool(
       'get_season_leaderboard',
       {
-        description: 'Récupère le classement d\'une saison de leveling spécifique. Requiert READ_COMMUNITY.',
+        description: 'Récupère le classement d\'une saison de leveling : XP gagnée pendant la saison (calculée à la volée si elle est en cours, figée sinon), messages et minutes de voix. Requiert READ_COMMUNITY.',
         inputSchema: {
           season_id: z.string().describe('ID de la saison'),
           limit: z.number().int().min(1).max(100).default(20),
@@ -398,7 +522,7 @@ export function registerReadCommunityTools(ctx: McpToolContext) {
       },
       guard('READ_COMMUNITY', async ({ season_id, limit }) => {
         try {
-          const leaderboard = await getSeasonLeaderboard(guildId, season_id, limit);
+          const leaderboard = await getSeasonLeaderboard(guildId, season_id, limit, client.guilds.cache.get(guildId) ?? null);
           return ok({ seasonId: season_id, leaderboard });
         } catch (e) {
           return toolError(e);

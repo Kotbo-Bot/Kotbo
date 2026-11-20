@@ -7,6 +7,8 @@ export interface EmbedComponent {
 }
 
 export interface SendEmbedParams {
+  /** Serveur de la requête : le salon doit lui appartenir. */
+  guildId: string;
   channelId: string;
   title: string;
   description: string;

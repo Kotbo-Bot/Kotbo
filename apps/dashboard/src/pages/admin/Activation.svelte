@@ -6,6 +6,12 @@
   import { fetchActivationCodes, createActivationCode, deleteActivationCode } from '../../lib/api';
   import Papicon from '../../lib/components/Papicon.svelte';
   import AdminShell from '../../lib/components/admin/AdminShell.svelte';
+  import AdminCard from '../../lib/components/admin/AdminCard.svelte';
+  import AdminTable from '../../lib/components/admin/AdminTable.svelte';
+  import AdminToolbar from '../../lib/components/admin/AdminToolbar.svelte';
+  import AdminBadge from '../../lib/components/admin/AdminBadge.svelte';
+  import type { AdminTableColumn } from '../../lib/components/admin/types';
+  import { Button, Callout, Field, FilterPills } from '../../lib/components/ui';
 
   import { errorMessage } from '@kotbo/shared';
   interface ActivationCode {
@@ -84,11 +90,7 @@
   }
 
   async function loadActivationCodes() {
-    try {
-      activationCodes = await fetchActivationCodes();
-    } catch (err) {
-      console.error('Erreur chargement codes activation:', err);
-    }
+    activationCodes = await fetchActivationCodes();
   }
 
   onMount(async () => {
@@ -145,233 +147,193 @@
     }
   }
 
+  // ── Liste : recherche et filtre d'état ────────────────────────────────────
+  let search = $state('');
+  let statusFilter = $state('ALL');
+
+  function codeStatus(item: ActivationCode): 'FREE' | 'USED' | 'OFF' {
+    if (item.usedByGuildId) return item.guildActivated === false || item.accessExpiredAt ? 'OFF' : 'USED';
+    return item.isActive ? 'FREE' : 'OFF';
+  }
+
+  const counts = $derived({
+    FREE: activationCodes.filter((c) => codeStatus(c) === 'FREE').length,
+    USED: activationCodes.filter((c) => codeStatus(c) === 'USED').length,
+    OFF: activationCodes.filter((c) => codeStatus(c) === 'OFF').length,
+  });
+
+  const filtered = $derived.by(() => {
+    const needle = search.trim().toLowerCase();
+    return activationCodes.filter((item) => {
+      if (statusFilter !== 'ALL' && codeStatus(item) !== statusFilter) return false;
+      if (!needle) return true;
+      return [item.code, item.label, item.guildName, item.usedByGuildId].some((v) => v?.toLowerCase().includes(needle));
+    });
+  });
+
+  async function copyCode(code: string) {
+    try {
+      await navigator.clipboard.writeText(code);
+      toast.success(m.pf_copied());
+    } catch {
+      // Presse-papiers refusé (contexte non sécurisé) : le code reste sélectionnable à la main.
+    }
+  }
+
+  const columns: AdminTableColumn[] = [
+    { key: 'code', label: 'Code' },
+    { key: 'access', label: 'Accès' },
+    { key: 'guild', label: 'Serveur' },
+    { key: 'actions', label: '', align: 'right', width: 'w-20' },
+  ];
 </script>
 
 <AdminShell title="Codes d’activation" description="Génération et suivi des codes donnant accès aux fonctions complètes.">
-  <div class="space-y-6 pb-12 animate-in fade-in slide-in-from-bottom-3 duration-600">
-  {#if loading}
-    <div class="space-y-8">
-      <div class="premium-card rounded-[2.25rem] p-8">
-        <div class="animate-pulse flex flex-wrap items-end gap-5">
-          <div class="h-12 w-72 bg-surface/40 rounded-xl"></div>
-          <div class="h-12 flex-1 min-w-[220px] bg-surface/40 rounded-xl"></div>
-          <div class="h-12 w-44 bg-surface/40 rounded-xl"></div>
-        </div>
+  {#if error}
+    <Callout variant="danger" title="Erreur de chargement">{error}</Callout>
+  {/if}
+
+  <AdminCard title="Générer un code" icon="Key" tone="primary">
+    <div class="flex flex-wrap items-end gap-4">
+      <div class="space-y-1.5">
+        <span class="field-label">Type d'accès</span>
+        <FilterPills
+          label="Type d'accès"
+          options={[
+            { value: 'PERMANENT', label: 'Permanent' },
+            { value: 'TRIAL', label: 'Essai' },
+            { value: 'SUBSCRIPTION', label: 'Abonnement' },
+          ]}
+          value={grantType}
+          onchange={(value) => (grantType = value as typeof grantType)}
+        />
       </div>
-      <div class="premium-card rounded-[2.25rem] overflow-hidden">
-        <div class="animate-pulse space-y-4 p-8">
-          <div class="h-12 bg-surface/40 rounded-xl"></div>
-          <div class="h-12 bg-surface/40 rounded-xl"></div>
-          <div class="h-12 bg-surface/40 rounded-xl"></div>
-        </div>
-      </div>
-    </div>
-  {:else if error}
-    <div class="bg-error/10 border border-error/20 p-8 rounded-[2.25rem] text-center">
-      <Papicon icon="AlertTriangle" size={48} class="text-error mx-auto mb-4" />
-      <h2 class="text-xl font-bold text-on-error-container">Erreur de chargement</h2>
-      <p class="text-on-error-container/70 mt-2">{error}</p>
-    </div>
-  {:else}
-    <div class="space-y-8 animate-in fade-in">
-      <!-- Générateur : barre d'action pleine largeur, les champs ont enfin la
-           place de tenir sur une ligne au lieu de s'empiler dans une colonne. -->
-      <div class="premium-card rounded-[2.25rem] p-8 space-y-5">
-        <div class="flex flex-wrap items-end gap-5">
-          <!-- Type d'accès accordé par le code -->
-          <div class="space-y-2">
-            <span class="block text-xs font-semibold text-on-surface-variant">
-              Type d'accès
-            </span>
-            <div role="group" aria-label="Type d'accès" class="inline-flex rounded-xl border border-outline-variant/30 bg-surface-container-high p-1 gap-1">
-              {#each [{ v: 'PERMANENT', l: 'Permanent' }, { v: 'TRIAL', l: 'Essai' }, { v: 'SUBSCRIPTION', l: 'Abonnement' }] as option}
-                <button
-                  type="button"
-                  aria-pressed={grantType === option.v}
-                  onclick={() => (grantType = option.v as typeof grantType)}
-                  class="px-4 py-2 rounded-lg text-xs font-semibold transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 {grantType === option.v
-                    ? 'bg-primary text-on-primary'
-                    : 'text-on-surface-variant hover:text-on-surface'}"
-                >
-                  {option.l}
-                </button>
+
+      {#if grantType !== 'PERMANENT'}
+        <Field label="Durée">
+          {#snippet children(id)}
+            <div class="flex items-center gap-2">
+              <input {id} type="number" min="1" bind:value={grantAmount} class="input w-20" />
+              <select aria-label="Unité de durée" bind:value={grantUnit} class="input w-28">
+                <option value="minute">minutes</option>
+                <option value="hour">heures</option>
+                <option value="day">jours</option>
+              </select>
+              {#each presets as preset (preset)}
+                <Button size="sm" variant={grantAmount === preset ? 'primary' : 'secondary'} onclick={() => (grantAmount = preset)}>
+                  {preset}
+                </Button>
               {/each}
             </div>
-          </div>
+          {/snippet}
+        </Field>
+      {/if}
 
-          {#if grantType !== 'PERMANENT'}
-            <div class="space-y-2 animate-in fade-in">
-              <label for="grant-amount" class="block text-xs font-semibold text-on-surface-variant">
-                Durée
-              </label>
-              <div class="flex items-center gap-2">
-                <input
-                  id="grant-amount"
-                  type="number"
-                  min="1"
-                  bind:value={grantAmount}
-                  class="w-20 px-4 py-2.5 rounded-xl bg-surface-container-high border border-outline-variant/30 text-on-surface text-sm focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/30"
-                />
-                <select
-                  aria-label="Unité de durée"
-                  bind:value={grantUnit}
-                  class="px-3 py-2.5 rounded-xl bg-surface-container-high border border-outline-variant/30 text-on-surface text-sm focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/30"
-                >
-                  <option value="minute">minutes</option>
-                  <option value="hour">heures</option>
-                  <option value="day">jours</option>
-                </select>
-                {#each presets as preset}
-                  <button
-                    type="button"
-                    onclick={() => (grantAmount = preset)}
-                    class="px-3 py-2.5 rounded-xl text-xs font-semibold border transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 {grantAmount === preset
-                      ? 'bg-primary/10 border-primary/40 text-primary'
-                      : 'bg-surface-container-high border-outline-variant/30 text-on-surface-variant hover:border-outline-variant/60'}"
-                  >
-                    {preset}
-                  </button>
-                {/each}
-              </div>
-            </div>
-          {/if}
+      <Field label="Note interne (optionnel)" class="flex-1 min-w-[220px]">
+        {#snippet children(id)}
+          <input {id} type="text" placeholder="Nom du client, contexte…" bind:value={grantLabel} class="input" />
+        {/snippet}
+      </Field>
 
-          <div class="space-y-2 flex-1 min-w-[220px]">
-            <label for="grant-label" class="block text-xs font-semibold text-on-surface-variant">
-              Note interne <span class="normal-case tracking-normal text-on-surface-variant/40">(optionnel)</span>
-            </label>
-            <input
-              id="grant-label"
-              type="text"
-              placeholder="Nom du client, contexte…"
-              bind:value={grantLabel}
-              class="w-full px-4 py-2.5 rounded-xl bg-surface-container-high border border-outline-variant/30 text-on-surface text-sm focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/30"
-            />
-          </div>
-
-          <button
-            onclick={handleGenerateCode}
-            disabled={generating}
-            class="shrink-0 px-6 py-2.5 rounded-xl bg-primary text-on-primary font-medium text-body-sm transition-all active:scale-95 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 flex items-center gap-2.5"
-          >
-            <Papicon icon="Unlock" size={16} />
-            {generating ? 'Génération…' : 'Générer un code'}
-          </button>
-        </div>
-
-        <!-- Une seule ligne d'aide, qui décrit ce que le code choisi va réellement faire. -->
-        <p class="text-xs text-on-surface-variant leading-relaxed border-t border-outline-variant/20 pt-4">
-          {#if grantType === 'PERMANENT'}
-            Accès sans expiration. Un code ne vaut que pour un seul serveur à la fois.
-          {:else}
-            Accès de {formatDuration(grantMinutes)}. Le serveur reçoit un embed à l'activation, un rappel à
-            mi-parcours puis à J-3 et J-1 quand la période est assez longue, et se désactive automatiquement à
-            l'échéance. Un code ne vaut que pour un seul serveur à la fois.
-          {/if}
-        </p>
-      </div>
-
-      <!-- Codes List Table -->
-      <div class="space-y-6">
-        <h2 class="text-xl font-semibold font-headline flex items-center gap-3 px-2">
-          <Papicon icon="activity" size={24} class="text-purple-400" />
-          Codes générés ({activationCodes.length})
-        </h2>
-
-        <div class="premium-card rounded-[2.25rem] overflow-hidden">
-          <div class="overflow-x-auto">
-            <table class="w-full text-left border-collapse border-spacing-0">
-              <thead class="bg-on-surface/5 text-on-surface-variant/40 text-xs font-medium">
-                <tr>
-                  <th class="px-6 py-5">Code d'activation</th>
-                  <th class="px-6 py-5">Accès</th>
-                  <th class="px-6 py-5">Serveur</th>
-                  <th class="px-6 py-5 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-outline-variant/10">
-                {#each activationCodes as item}
-                  <tr class="hover:bg-on-surface/5 transition-colors group">
-                    <td class="px-6 py-5">
-                      <span class="font-mono text-sm font-semibold text-on-surface bg-surface-container-high px-3 py-1.5 rounded-lg border border-outline-variant/20 tracking-wider">
-                        {item.code}
-                      </span>
-                      {#if item.label}
-                        <p class="text-2xs text-on-surface-variant mt-1.5">{item.label}</p>
-                      {/if}
-                    </td>
-                    <td class="px-6 py-5">
-                      {#if item.accessType === 'PERMANENT'}
-                        <span class="text-xs text-on-surface-variant font-medium">{accessLabel(item)}</span>
-                      {:else}
-                        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-primary/10 text-primary border border-primary/20">
-                          <Papicon icon="Clock" size={12} />
-                          {accessLabel(item)}
-                        </span>
-                        {#if item.accessExpiredAt}
-                          <p class="text-2xs text-error/70 mt-1.5 font-medium">
-                            Expiré le {formatDate(item.accessExpiredAt)}
-                          </p>
-                        {:else if item.accessExpiresAt}
-                          <p class="text-2xs text-on-surface-variant mt-1.5">
-                            {formatDuration(minutesLeft(item.accessExpiresAt))} restantes · {formatDate(item.accessExpiresAt)}
-                          </p>
-                        {/if}
-                      {/if}
-                    </td>
-                    <!-- Le serveur porte à lui seul le statut du code : un code
-                         rattaché à un serveur est utilisé, un code libre est
-                         disponible. Deux colonnes disaient la même chose. -->
-                    <td class="px-6 py-5 text-sm">
-                      {#if item.usedByGuildId}
-                        <div class="flex items-center gap-2">
-                          <p class="font-semibold text-on-surface">{item.guildName || 'Serveur inconnu'}</p>
-                          {#if item.guildActivated === false}
-                            <!-- Un essai révoqué à la main garde son code sans poser
-                                 d'échéance : sans ce marqueur, la colonne Accès
-                                 afficherait un décompte pour un serveur déjà coupé. -->
-                            <span class="shrink-0 px-2 py-0.5 rounded-full text-xs font-semibold bg-error/10 text-error border border-error/20">
-                              Coupé
-                            </span>
-                          {/if}
-                        </div>
-                        <p class="text-2xs text-on-surface-variant/40 font-mono tracking-tighter mt-0.5">{item.usedByGuildId}</p>
-                      {:else if item.isActive}
-                        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-success/10 text-success border border-success/20">
-                          <span class="w-1.5 h-1.5 rounded-full bg-success animate-pulse"></span>
-                          Disponible
-                        </span>
-                      {:else}
-                        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-on-surface/5 text-on-surface-variant border border-outline-variant/30">
-                          <span class="w-1.5 h-1.5 rounded-full bg-on-surface-variant/40"></span>
-                          Désactivé
-                        </span>
-                      {/if}
-                    </td>
-                    <td class="px-6 py-5 text-right">
-                      <button
-                        class="w-10 h-10 inline-flex items-center justify-center hover:bg-error/10 rounded-xl text-on-surface-variant hover:text-error transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-error/50"
-                        onclick={() => handleDeleteCode(item.id, item.code, item.guildName)}
-                        title={item.usedByGuildId ? "Révoquer et désactiver le serveur" : "Supprimer ce code"}
-                      >
-                        <Papicon icon="Trash" size={18} />
-                      </button>
-                    </td>
-                  </tr>
-                {/each}
-                {#if activationCodes.length === 0}
-                  <tr>
-                    <td colspan="4" class="px-6 py-12 text-center text-sm text-on-surface-variant">
-                      Aucun code pour le moment. Générez-en un ci-dessus pour activer un serveur.
-                    </td>
-                  </tr>
-                {/if}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
+      <Button variant="primary" icon="Unlock" loading={generating} onclick={handleGenerateCode}>Générer un code</Button>
     </div>
-  {/if}
-  </div>
+
+    <!-- Une seule ligne d'aide, qui décrit ce que le code choisi va réellement faire. -->
+    <p class="text-xs text-on-surface-variant leading-relaxed border-t border-outline-variant/20 pt-4 mt-4">
+      {#if grantType === 'PERMANENT'}
+        Accès sans expiration. Un code ne vaut que pour un seul serveur à la fois.
+      {:else}
+        Accès de {formatDuration(grantMinutes)}. Le serveur reçoit un embed à l'activation, un rappel à
+        mi-parcours puis à J-3 et J-1 quand la période est assez longue, et se désactive automatiquement à
+        l'échéance. Un code ne vaut que pour un seul serveur à la fois.
+      {/if}
+    </p>
+  </AdminCard>
+
+  <AdminToolbar
+    bind:search
+    bind:activeFilter={statusFilter}
+    placeholder="Rechercher un code, une note ou un serveur…"
+    filters={[
+      { value: 'ALL', label: 'Tous', count: activationCodes.length },
+      { value: 'FREE', label: 'Disponibles', count: counts.FREE },
+      { value: 'USED', label: 'Utilisés', count: counts.USED },
+      { value: 'OFF', label: 'Coupés ou expirés', count: counts.OFF },
+    ]}
+    resultCount={filtered.length}
+    resultLabel="code"
+  />
+
+  <AdminTable
+    {columns}
+    rows={filtered}
+    {loading}
+    emptyIcon="Key"
+    emptyTitle={activationCodes.length === 0 ? 'Aucun code pour le moment' : 'Aucun code ne correspond'}
+    emptyHint={activationCodes.length === 0 ? 'Génères-en un ci-dessus pour activer un serveur.' : 'Élargis la recherche ou change de filtre.'}
+  >
+    {#snippet row(entry, _index)}
+      {@const item = entry as ActivationCode}
+      <tr class="border-b border-outline-variant/12 hover:bg-on-surface/3 transition-colors">
+        <td class="px-4 py-3">
+          <button
+            type="button"
+            onclick={() => copyCode(item.code)}
+            title="Copier le code"
+            class="inline-flex items-center gap-2 font-mono text-body-sm font-semibold text-on-surface bg-on-surface/6 hover:bg-on-surface/10 px-2.5 py-1 rounded-lg transition-colors focus-visible:outline-2 focus-visible:outline-primary"
+          >
+            {item.code}
+            <Papicon icon="Copy" size={12} class="text-on-surface-variant" />
+          </button>
+          {#if item.label}
+            <p class="text-2xs text-on-surface-variant mt-1">{item.label}</p>
+          {/if}
+        </td>
+        <td class="px-4 py-3">
+          <AdminBadge
+            label={accessLabel(item)}
+            tone={item.accessType === 'PERMANENT' ? 'neutral' : 'primary'}
+            icon={item.accessType === 'PERMANENT' ? '' : 'Clock'}
+          />
+          {#if item.accessExpiredAt}
+            <p class="text-2xs text-error mt-1">Expiré le {formatDate(item.accessExpiredAt)}</p>
+          {:else if item.accessExpiresAt}
+            <p class="text-2xs text-on-surface-variant mt-1">
+              {formatDuration(minutesLeft(item.accessExpiresAt))} restantes · {formatDate(item.accessExpiresAt)}
+            </p>
+          {/if}
+        </td>
+        <!-- Le serveur porte à lui seul le statut du code : un code rattaché à
+             un serveur est utilisé, un code libre est disponible. -->
+        <td class="px-4 py-3">
+          {#if item.usedByGuildId}
+            <div class="flex items-center gap-2">
+              <p class="text-body-sm font-semibold text-on-surface">{item.guildName || 'Serveur inconnu'}</p>
+              {#if item.guildActivated === false}
+                <!-- Un essai révoqué à la main garde son code sans poser d'échéance :
+                     sans ce marqueur, la colonne Accès afficherait un décompte pour
+                     un serveur déjà coupé. -->
+                <AdminBadge size="sm" label="Coupé" tone="danger" />
+              {/if}
+            </div>
+            <p class="text-2xs text-on-surface-variant font-mono mt-0.5">{item.usedByGuildId}</p>
+          {:else if item.isActive}
+            <AdminBadge label="Disponible" tone="success" dot />
+          {:else}
+            <AdminBadge label="Désactivé" tone="neutral" dot />
+          {/if}
+        </td>
+        <td class="px-4 py-3 text-right">
+          <Button
+            size="sm"
+            variant="danger"
+            icon="Trash"
+            aria-label={item.usedByGuildId ? 'Révoquer et désactiver le serveur' : 'Supprimer ce code'}
+            title={item.usedByGuildId ? 'Révoquer et désactiver le serveur' : 'Supprimer ce code'}
+            onclick={() => handleDeleteCode(item.id, item.code, item.guildName)}
+          />
+        </td>
+      </tr>
+    {/snippet}
+  </AdminTable>
 </AdminShell>

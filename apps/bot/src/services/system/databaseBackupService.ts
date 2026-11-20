@@ -1,5 +1,4 @@
 import cron from 'node-cron';
-import { execFile } from 'child_process';
 import { createWriteStream } from 'fs';
 import { mkdir, readdir, stat, unlink } from 'fs/promises';
 import path from 'path';
@@ -68,37 +67,22 @@ export async function performDatabaseBackup(): Promise<string> {
 
   const pgDump = findPgDump();
 
-  await new Promise<void>((resolve, reject) => {
-    const child = execFile(
-      pgDump,
-      [connectionString, '--format=plain', '--no-owner', '--no-acl'],
-      { maxBuffer: 1024 * 1024 * 1024 },
-    );
-
-    if (!child.stdout) {
-      reject(new Error('pg_dump: pas de flux stdout'));
-      return;
-    }
-
-    const gzip = createGzip();
-    const out = createWriteStream(outputFile);
-
-    let stderrOutput = '';
-    child.stderr?.on('data', (chunk) => {
-      stderrOutput += chunk.toString();
-    });
-
-    pipeline(child.stdout, gzip, out)
-      .then(() => resolve())
-      .catch(reject);
-
-    child.on('error', reject);
-    child.on('exit', (code) => {
-      if (code !== 0) {
-        reject(new Error(`pg_dump a échoué (code ${code}): ${stderrOutput.slice(0, 2000)}`));
-      }
-    });
+  const child = Bun.spawn([pgDump, connectionString, '--format=plain', '--no-owner', '--no-acl'], {
+    stdout: 'pipe',
+    stderr: 'pipe',
   });
+  const stderrOutput = new Response(child.stderr).text();
+
+  // Le flux peut se terminer avant que pg_dump rende son code : on attend les deux,
+  // sinon un dump interrompu passait pour un backup réussi.
+  const [, code] = await Promise.all([
+    pipeline(child.stdout, createGzip(), createWriteStream(outputFile)),
+    child.exited,
+  ]);
+  if (code !== 0) {
+    await unlink(outputFile).catch(() => {});
+    throw new Error(`pg_dump a échoué (code ${code}): ${(await stderrOutput).slice(0, 2000)}`);
+  }
 
   const size = (await stat(outputFile)).size;
   logger.info(

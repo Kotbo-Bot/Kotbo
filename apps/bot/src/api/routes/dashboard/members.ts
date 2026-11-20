@@ -1,4 +1,5 @@
-import { IncomingMessage, ServerResponse } from 'node:http';
+import { Hono } from 'hono';
+import { createMiddleware } from 'hono/factory';
 import { type GuildMember, Client } from 'discord.js';
 import prisma from '../../../utils/db.js';
 import { notifyMany } from '../../../services/notifications/notifyService.js';
@@ -7,25 +8,14 @@ import { resolveViewTimezone } from '../../../utils/timezone.js';
 import * as altAccountService from '../../../services/moderation/altAccountService.js';
 import { scanGuildMembersForYoungAccounts, getDetectionEvidence } from '../../../services/moderation/dcDetectionService.js';
 import { recordDecision, undoFalsePositive } from '../../../services/moderation/dc/learning.js';
-import { memberProfileIdentity, resolveMemberAvatarUrl, resolveMissingMemberIdentities } from '../../../services/moderation/memberIdentityService.js';
+import { getMemberIdentities, memberProfileIdentity, resolveMemberAvatarUrl, resolveMissingMemberIdentities } from '../../../services/moderation/memberIdentityService.js';
+
+/** Assez pour une page de liste ; au-delà le dashboard découpe ses demandes. */
+const MAX_IDENTITY_LOOKUP = 100;
 import { findPresenceOptOuts } from '../../../services/core/presencePrivacyService.js';
 import { LinkedAccountType, LinkedAccountStatus } from '@prisma/client';
-import {
-  json,
-  readJsonBody,
-  getGuildName,
-  getGuildMembers,
-  buildMemberCaseData,
-  pushAudit,
-  safePushAudit,
-  broadcastDashboardStateChange,
-  formatDurationFr,
-  getDashboardUrl,
-  type AuthClaims,
-  type DashboardAccess,
-  type MemberCaseQuickAction,
-  type FeatureAccessMap,
-} from '../../shared.js';
+import { withInviterAvatars } from '../../../services/analytics/inviterAvatars.js';
+import { getGuildName, getGuildMembers, buildMemberCaseData, pushAudit, safePushAudit, broadcastDashboardStateChange, formatDurationFr, getDashboardUrl, type MemberCaseQuickAction, type FeatureAccessMap } from '../../shared.js';
 import {
   recordAppliedSanction,
   registerBanSanction,
@@ -36,199 +26,203 @@ import {
 } from '../../../services/moderation/sanctionService.js';
 import { sendBanAppealNotificationDM } from '../../../services/moderation/banAppealService.js';
 
-import { jsonFailure } from '../../shared/failure.js';
-export async function handleMembersRoutes(
-  req: IncomingMessage,
-  res: ServerResponse,
-  parts: string[],
-  url: URL,
-  client: Client,
-  user: AuthClaims,
-  guildId: string,
-  access: DashboardAccess,
-  featureAccess: FeatureAccessMap
-): Promise<boolean> {
-  const method = req.method;
-  const auditUser = user.username ?? `User${user.userId}`;
+import { auditUserOf, fail, guildRoute, readBody, send } from '../../hono/dashboard/kit.js';
+import { getCachedFeatureAccess } from './featureGate.js';
+declare module 'hono' {
+  interface ContextVariableMap {
+    memberFeatureAccess: FeatureAccessMap;
+  }
+}
 
+export function createMembersRouter(client: Client) {
+  const router = new Hono();
+  const base = '/api/dashboard/guilds/:guildId';
   /**
-   * Droit « Membres » du centre de gestion.
-   *
-   * Le dossier membre n est pas atteint que par la page Membres : les gagnants
-   * d un giveaway, une ligne de journal ou une sanction l ouvrent aussi. Sans
-   * ce controle, retirer la section a un role n enlevait que l entree de la
-   * barre laterale, et n importe lequel de ces liens ramenait la meme fiche.
+   * Carte des droits par section. Calculée sur l'accès réel et non élevé :
+   * elle est mise en cache pour toutes les fonctionnalités (voir guildGate).
    */
-  const canViewMembers = access.canManageSettings || featureAccess?.members?.canView !== false;
-  const canModerateMembers = access.canManageSettings
-    || (access.canModerateContent && featureAccess?.members?.canModerate !== false)
-    || featureAccess?.members?.canModerate === true;
+  const loadFeatureAccess = createMiddleware(async (c, next) => {
+    c.set('memberFeatureAccess', await getCachedFeatureAccess(client, c.req.param('guildId')!, c.var.access, c.var.dashboardUser.userId));
+    await next();
+  });
+  const gate = [...guildRoute(client), loadFeatureAccess] as const;
 
-  // 1. Linked Accounts Management
-  if (parts[4] === 'linked-accounts') {
-    const isAdmin = access.level === 'admin';
-    const isStaff = isAdmin || access.level === 'moderator';
+  // 1. Comptes liés : réservé au staff.
+  const staffOnly = createMiddleware(async (c, next) => {
+    const level = c.var.effectiveAccess.level;
+    if (level !== 'admin' && level !== 'moderator') return send(c, { error: 'Accès refusé' }, 403);
+    await next();
+  });
+  const staffGate = [...gate, staffOnly] as const;
 
-    if (!isStaff) {
-      json(res, 403, { error: 'Accès refusé' });
-      return true;
+  // 4. Invitations : lecture avec la section Membres, écriture avec la modération.
+  const invitationsAccess = createMiddleware(async (c, next) => {
+    const access = c.var.effectiveAccess;
+    const featureAccess = c.var.memberFeatureAccess;
+    if (c.req.method === 'GET') {
+      if (!access.canManageSettings && !featureAccess?.members?.canView) return send(c, { error: 'Accès refusé' }, 403);
+    } else {
+      const canModerate = access.canModerateContent || access.canManageSettings || featureAccess?.members?.canModerate;
+      if (!canModerate) return send(c, { error: 'Action non autorisée. Modération requise.' }, 403);
     }
+    await next();
+  });
+  const invitationsGate = [...gate, invitationsAccess] as const;
 
-    // GET /api/dashboard/guilds/:guildId/linked-accounts
-    if (method === 'GET') {
-      try {
-        const page = Number(url.searchParams.get('page') ?? '1') || 1;
-        const limit = Math.min(Number(url.searchParams.get('limit') ?? '50') || 50, 200);
-        const skip = (page - 1) * limit;
 
-        const [linkedAccounts, total] = await Promise.all([
-          prisma.linkedAccount.findMany({
-            where: { guildId },
-            orderBy: { createdAt: 'desc' },
-            skip,
-            take: limit,
-          }),
-          prisma.linkedAccount.count({ where: { guildId } }),
-        ]);
 
-        // Batch-fetch all member profiles in 1 query instead of 2*N
-        const userIds = [...new Set(linkedAccounts.flatMap(a => [a.user1Id, a.user2Id]))];
-        const profiles = userIds.length > 0
-          ? await prisma.memberProfile.findMany({
-              where: { guildId, userId: { in: userIds } },
-              select: { userId: true, username: true, avatarUrl: true },
-            })
-          : [];
-        const profileMap = new Map(profiles.map(p => [p.userId, p]));
+  router.get(`${base}/linked-accounts`, ...staffGate, async (c) => {
+    const guildId = c.req.param('guildId');
+    try {
+      const page = Number(c.req.query('page') ?? '1') || 1;
+      const limit = Math.min(Number(c.req.query('limit') ?? '50') || 50, 200);
+      const skip = (page - 1) * limit;
 
-        const enriched = linkedAccounts.map((acc) => {
-          const p1 = profileMap.get(acc.user1Id);
-          const p2 = profileMap.get(acc.user2Id);
-          return {
-            ...acc,
-            user1: p1 ? { tag: p1.username, avatar: p1.avatarUrl } : { tag: acc.user1Id, avatar: null },
-            user2: p2 ? { tag: p2.username, avatar: p2.avatarUrl } : { tag: acc.user2Id, avatar: null },
-          };
-        });
+      const [linkedAccounts, total] = await Promise.all([
+        prisma.linkedAccount.findMany({
+          where: { guildId },
+          orderBy: { createdAt: 'desc' },
+          skip,
+          take: limit,
+        }),
+        prisma.linkedAccount.count({ where: { guildId } }),
+      ]);
 
-        json(res, 200, { data: enriched, total, page, limit });
-      } catch (err) {
-        logger.error('LinkedAccountsAPI', 'Error fetching linked accounts:', err);
-        jsonFailure(res, err, 'Erreur lors de la récupération des comptes liés', 'LinkedAccountsAPI');
+      // Batch-fetch all member profiles in 1 query instead of 2*N
+      const userIds = [...new Set(linkedAccounts.flatMap(a => [a.user1Id, a.user2Id]))];
+      const profiles = userIds.length > 0
+        ? await prisma.memberProfile.findMany({
+            where: { guildId, userId: { in: userIds } },
+            select: { userId: true, username: true, avatarUrl: true },
+          })
+        : [];
+      const profileMap = new Map(profiles.map(p => [p.userId, p]));
+
+      const enriched = linkedAccounts.map((acc) => {
+        const p1 = profileMap.get(acc.user1Id);
+        const p2 = profileMap.get(acc.user2Id);
+        return {
+          ...acc,
+          user1: p1 ? { tag: p1.username, avatar: p1.avatarUrl } : { tag: acc.user1Id, avatar: null },
+          user2: p2 ? { tag: p2.username, avatar: p2.avatarUrl } : { tag: acc.user2Id, avatar: null },
+        };
+      });
+
+      return send(c, { data: enriched, total, page, limit });
+    } catch (err) {
+      logger.error('LinkedAccountsAPI', 'Error fetching linked accounts:', err);
+      return fail(c, err, 'Erreur lors de la récupération des comptes liés', 'LinkedAccountsAPI');
+    }
+  });
+
+  router.patch(`${base}/linked-accounts/:id`, ...staffGate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const auditUser = auditUserOf(c);
+    try {
+      const id = c.req.param('id');
+      const body = await readBody<{ status: 'VALIDATED' | 'REJECTED' }>(c);
+      
+      if (!body?.status) {
+        return send(c, { error: 'Statut requis' }, 400);
       }
-      return true;
-    }
 
-    // PATCH /api/dashboard/guilds/:guildId/linked-accounts/:id
-    if (parts.length === 6 && method === 'PATCH') {
-      try {
-        const id = parts[5];
-        const body = await readJsonBody<{ status: 'VALIDATED' | 'REJECTED' }>(req);
-        
-        if (!body?.status) {
-          json(res, 400, { error: 'Statut requis' });
-          return true;
-        }
+      // Filtré par serveur : le lien d'un autre serveur se validait ou se supprimait sinon.
+      const link = await prisma.linkedAccount.findFirst({
+        where: { id, guildId }
+      });
 
-        // Filtré par serveur : le lien d'un autre serveur se validait ou se supprimait sinon.
-        const link = await prisma.linkedAccount.findFirst({
-          where: { id, guildId }
-        });
-
-        if (!link) {
-          json(res, 404, { error: 'Lien introuvable' });
-          return true;
-        }
-
-        const updatedLink = await prisma.linkedAccount.update({
-          where: { id },
-          data: { status: body.status }
-        });
-
-        await pushAudit(guildId, {
-          channelId: null,
-          user: auditUser,
-          action: body.status === 'VALIDATED' ? 'Validation Compte Lié' : 'Rejet Compte Lié',
-          context: `Comptes: ${link.user1Id} et ${link.user2Id}`,
-          module: 'Membres',
-          eventType: 'Settings',
-          details: `Statut: ${body.status} | Compte 1: ${link.user1Id} | Compte 2: ${link.user2Id}`,
-        });
-
-        if (body.status === 'VALIDATED') {
-          const discordGuild = client.guilds.cache.get(guildId);
-          await notifyMany([link.user1Id, link.user2Id], {
-            guildId,
-            kind: 'security.alt_linked',
-            title: 'Comptes liés officiellement',
-            message: `Vos comptes **<@${link.user1Id}>** et **<@${link.user2Id}>** ont été reliés sur **${discordGuild?.name || 'le serveur'}**.`,
-            severity: 'SUCCESS',
-            actorId: user.userId,
-          });
-        }
-
-        json(res, 200, updatedLink);
-      } catch (err) {
-        logger.error('LinkedAccountsAPI', 'Error updating linked account:', err);
-        jsonFailure(res, err, 'Erreur lors de la mise à jour du compte lié', 'LinkedAccountsAPI');
+      if (!link) {
+        return send(c, { error: 'Lien introuvable' }, 404);
       }
-      return true;
-    }
 
-    // DELETE /api/dashboard/guilds/:guildId/linked-accounts/:id
-    if (parts.length === 6 && method === 'DELETE') {
-      try {
-        const id = parts[5];
-        // Filtré par serveur : le lien d'un autre serveur se validait ou se supprimait sinon.
-        const link = await prisma.linkedAccount.findFirst({
-          where: { id, guildId }
-        });
+      const updatedLink = await prisma.linkedAccount.update({
+        where: { id },
+        data: { status: body.status }
+      });
 
-        if (!link) {
-          json(res, 404, { error: 'Lien introuvable' });
-          return true;
-        }
+      await pushAudit(guildId, {
+        channelId: null,
+        user: auditUser,
+        action: body.status === 'VALIDATED' ? 'Validation Compte Lié' : 'Rejet Compte Lié',
+        context: `Comptes: ${link.user1Id} et ${link.user2Id}`,
+        module: 'Membres',
+        eventType: 'Settings',
+        details: `Statut: ${body.status} | Compte 1: ${link.user1Id} | Compte 2: ${link.user2Id}`,
+      });
 
-        await prisma.linkedAccount.delete({
-          where: { id }
-        });
-
-        await pushAudit(guildId, {
-          channelId: null,
-          user: auditUser,
-          action: 'Suppression Compte Lié',
-          context: `Comptes: ${link.user1Id} et ${link.user2Id}`,
-          module: 'Membres',
-          eventType: 'Settings',
-          details: `Compte 1: ${link.user1Id} | Compte 2: ${link.user2Id}`,
-        });
-
+      if (body.status === 'VALIDATED') {
         const discordGuild = client.guilds.cache.get(guildId);
         await notifyMany([link.user1Id, link.user2Id], {
           guildId,
-          kind: 'security.alt_unlinked',
-          title: 'Comptes déliés',
-          message: `Vos comptes **<@${link.user1Id}>** et **<@${link.user2Id}>** ont été séparés sur **${discordGuild?.name || 'le serveur'}**.`,
-          severity: 'WARNING',
+          kind: 'security.alt_linked',
+          title: 'Comptes liés officiellement',
+          message: `Vos comptes **<@${link.user1Id}>** et **<@${link.user2Id}>** ont été reliés sur **${discordGuild?.name || 'le serveur'}**.`,
+          severity: 'SUCCESS',
           actorId: user.userId,
         });
-
-        json(res, 200, { success: true });
-      } catch (err) {
-        logger.error('LinkedAccountsAPI', 'Error deleting linked account:', err);
-        jsonFailure(res, err, 'Erreur lors de la suppression du compte lié', 'LinkedAccountsAPI');
       }
-      return true;
-    }
-  }
 
-  // 2. Suspected DC Detections
-  // GET /api/dashboard/guilds/:guildId/detections - List suspected DC detections with evidence
-  if (parts.length === 5 && parts[4] === 'detections' && method === 'GET') {
+      return send(c, updatedLink);
+    } catch (err) {
+      logger.error('LinkedAccountsAPI', 'Error updating linked account:', err);
+      return fail(c, err, 'Erreur lors de la mise à jour du compte lié', 'LinkedAccountsAPI');
+    }
+  });
+
+  router.delete(`${base}/linked-accounts/:id`, ...staffGate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const auditUser = auditUserOf(c);
+    try {
+      const id = c.req.param('id');
+      // Filtré par serveur : le lien d'un autre serveur se validait ou se supprimait sinon.
+      const link = await prisma.linkedAccount.findFirst({
+        where: { id, guildId }
+      });
+
+      if (!link) {
+        return send(c, { error: 'Lien introuvable' }, 404);
+      }
+
+      await prisma.linkedAccount.delete({
+        where: { id }
+      });
+
+      await pushAudit(guildId, {
+        channelId: null,
+        user: auditUser,
+        action: 'Suppression Compte Lié',
+        context: `Comptes: ${link.user1Id} et ${link.user2Id}`,
+        module: 'Membres',
+        eventType: 'Settings',
+        details: `Compte 1: ${link.user1Id} | Compte 2: ${link.user2Id}`,
+      });
+
+      const discordGuild = client.guilds.cache.get(guildId);
+      await notifyMany([link.user1Id, link.user2Id], {
+        guildId,
+        kind: 'security.alt_unlinked',
+        title: 'Comptes déliés',
+        message: `Vos comptes **<@${link.user1Id}>** et **<@${link.user2Id}>** ont été séparés sur **${discordGuild?.name || 'le serveur'}**.`,
+        severity: 'WARNING',
+        actorId: user.userId,
+      });
+
+      return send(c, { success: true });
+    } catch (err) {
+      logger.error('LinkedAccountsAPI', 'Error deleting linked account:', err);
+      return fail(c, err, 'Erreur lors de la suppression du compte lié', 'LinkedAccountsAPI');
+    }
+  });
+
+  router.get(`${base}/detections`, ...gate, async (c) => {
+    const featureAccess = c.var.memberFeatureAccess;
+    const guildId = c.req.param('guildId');
+    const access = c.var.effectiveAccess;
     try {
       if (!access.canManageSettings && !featureAccess.double_accounts?.canView) {
-        json(res, 403, { error: "Accès refusé. Le module Détections n'est pas accessible." });
-        return true;
+        return send(c, { error: "Accès refusé. Le module Détections n'est pas accessible." }, 403);
       }
 
       const discordGuild = client.guilds.cache.get(guildId);
@@ -260,7 +254,6 @@ export async function handleMembersRoutes(
       const suspiciousMembers = suspiciousMembersRaw.filter((member) => {
         if (seenUserIds.has(member.userId)) return false;
         seenUserIds.add(member.userId);
-        return true;
       });
 
       // Confidentialité : un membre ayant coupé le suivi de sa présence
@@ -336,26 +329,27 @@ export async function handleMembersRoutes(
         };
       });
 
-      json(res, 200, { total: detections.length, detections });
+      return send(c, { total: detections.length, detections });
     } catch (err) {
       logger.error('MembersAPI', 'Error fetching suspected detections:', err);
-      jsonFailure(res, err, 'Erreur lors du chargement des détections', 'MembersAPI');
+      return fail(c, err, 'Erreur lors du chargement des détections', 'MembersAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/detections/:userId/link - Link a detected user with their suspected alt
-  if (parts.length === 7 && parts[4] === 'detections' && parts[6] === 'link' && method === 'POST') {
+  router.post(`${base}/detections/:userId/link`, ...gate, async (c) => {
+    const featureAccess = c.var.memberFeatureAccess;
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const access = c.var.effectiveAccess;
+    const userId = c.req.param('userId');
     try {
       if (!access.canManageSettings && !featureAccess.double_accounts?.canModerate) {
-        json(res, 403, { error: 'Accès refusé.' });
-        return true;
+        return send(c, { error: 'Accès refusé.' }, 403);
       }
-      const targetUserId = parts[5];
-      const body = await readJsonBody<{ altUserId: string; reason?: string }>(req);
+      const targetUserId = userId;
+      const body = await readBody<{ altUserId: string; reason?: string }>(c);
       if (!body?.altUserId) {
-        json(res, 400, { error: 'altUserId requis.' });
-        return true;
+        return send(c, { error: 'altUserId requis.' }, 400);
       }
       await altAccountService.linkAccounts({
         guildId, user1Id: targetUserId, user2Id: body.altUserId,
@@ -367,113 +361,130 @@ export async function handleMembersRoutes(
         where: { guildId, userId: { in: [targetUserId, body.altUserId] } },
         data: { isSuspectedDC: false },
       }).catch(() => null);
-      json(res, 200, { success: true });
+      return send(c, { success: true });
     } catch (err) {
       logger.error('MembersAPI', 'Error linking from detection:', err);
-      jsonFailure(res, err, 'Erreur lors de la liaison.', 'MembersAPI');
+      return fail(c, err, 'Erreur lors de la liaison.', 'MembersAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/detections/:userId/dismiss - Dismiss a detection (false positive)
-  if (parts.length === 7 && parts[4] === 'detections' && parts[6] === 'dismiss' && method === 'POST') {
+  router.post(`${base}/detections/:userId/dismiss`, ...gate, async (c) => {
+    const featureAccess = c.var.memberFeatureAccess;
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const access = c.var.effectiveAccess;
+    const userId = c.req.param('userId');
     try {
       if (!access.canManageSettings && !featureAccess.double_accounts?.canModerate) {
-        json(res, 403, { error: 'Accès refusé.' });
-        return true;
+        return send(c, { error: 'Accès refusé.' }, 403);
       }
-      const targetUserId = parts[5];
+      const targetUserId = userId;
       await prisma.memberProfile.updateMany({
         where: { guildId, userId: targetUserId },
         data: { isSuspectedDC: false },
       });
       // Même apprentissage que le bouton « Faux positif » de l'alerte Discord.
       void recordDecision(guildId, [targetUserId], 'FALSE_POSITIVE', user.userId);
-      json(res, 200, { success: true });
+      return send(c, { success: true });
     } catch (err) {
       logger.error('MembersAPI', 'Error dismissing detection:', err);
-      jsonFailure(res, err, 'Erreur.', 'MembersAPI');
+      return fail(c, err, 'Erreur.', 'MembersAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/detections/:userId/restore - Restore a dismissed detection (undo)
-  if (parts.length === 7 && parts[4] === 'detections' && parts[6] === 'restore' && method === 'POST') {
+  router.post(`${base}/detections/:userId/restore`, ...gate, async (c) => {
+    const featureAccess = c.var.memberFeatureAccess;
+    const guildId = c.req.param('guildId');
+    const access = c.var.effectiveAccess;
+    const userId = c.req.param('userId');
     try {
       if (!access.canManageSettings && !featureAccess.double_accounts?.canModerate) {
-        json(res, 403, { error: 'Accès refusé.' });
-        return true;
+        return send(c, { error: 'Accès refusé.' }, 403);
       }
-      const targetUserId = parts[5];
+      const targetUserId = userId;
       await prisma.memberProfile.updateMany({
         where: { guildId, userId: targetUserId },
         data: { isSuspectedDC: true },
       });
       void undoFalsePositive(guildId, targetUserId);
-      json(res, 200, { success: true });
+      return send(c, { success: true });
     } catch (err) {
       logger.error('MembersAPI', 'Error restoring detection:', err);
-      jsonFailure(res, err, 'Erreur.', 'MembersAPI');
+      return fail(c, err, 'Erreur.', 'MembersAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/detections/scan - Trigger a rescan of guild members for young accounts
-  if (parts.length === 6 && parts[4] === 'detections' && parts[5] === 'scan' && method === 'POST') {
+  router.post(`${base}/detections/scan`, ...gate, async (c) => {
+    const featureAccess = c.var.memberFeatureAccess;
+    const guildId = c.req.param('guildId');
+    const access = c.var.effectiveAccess;
     try {
       if (!access.canManageSettings && !featureAccess.double_accounts?.canModerate) {
-        json(res, 403, { error: "Accès refusé. Vous n'avez pas les permissions nécessaires pour lancer un scan." });
-        return true;
+        return send(c, { error: "Accès refusé. Vous n'avez pas les permissions nécessaires pour lancer un scan." }, 403);
       }
 
       const discordGuild = client.guilds.cache.get(guildId);
       if (!discordGuild) {
-        json(res, 404, { error: 'Serveur Discord introuvable ou inaccessible par le bot' });
-        return true;
+        return send(c, { error: 'Serveur Discord introuvable ou inaccessible par le bot' }, 404);
       }
 
       let thresholdMs: number | undefined = undefined;
-      const body = await readJsonBody<{ thresholdDays?: number }>(req).catch(() => null);
+      const body = await readBody<{ thresholdDays?: number }>(c).catch(() => null);
       if (body && body.thresholdDays !== undefined) {
         const days = Number(body.thresholdDays);
         if (Number.isNaN(days) || days < 1 || days > 30 || !Number.isInteger(days)) {
-          json(res, 400, { error: 'Le seuil de jours doit être un entier compris entre 1 et 30.' });
-          return true;
+          return send(c, { error: 'Le seuil de jours doit être un entier compris entre 1 et 30.' }, 400);
         }
         thresholdMs = days * 24 * 60 * 60 * 1000;
       }
 
       const result = await scanGuildMembersForYoungAccounts(discordGuild, thresholdMs);
 
-      json(res, 200, {
+      return send(c, {
         success: true,
         scannedCount: result.scannedCount,
         flaggedCount: result.flaggedCount,
       });
     } catch (err) {
       logger.error('MembersAPI', 'Error scanning suspected detections:', err);
-      jsonFailure(res, err, 'Erreur lors du scan des détections', 'MembersAPI');
+      return fail(c, err, 'Erreur lors du scan des détections', 'MembersAPI');
     }
-    return true;
-  }
+  });
 
-  // 3. Members search, Case files, and Note editing
-  // GET /api/dashboard/guilds/:guildId/members/search - Pagination SQL via MemberRepository
-  if (parts.length === 6 && parts[4] === 'members' && parts[5] === 'search' && method === 'GET') {
+  // Identité affichable (pseudo, @, photo, tag de serveur) d'une liste de
+  // membres, pour que chaque écran du dashboard rende un membre de la même
+  // façon sans que chaque route ait à joindre ces champs. Ouverte à tout accès
+  // au dashboard du serveur : ce sont les infos publiques que Discord montre
+  // déjà à côté de chaque message.
+  router.get(`${base}/members/identities`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const ids = [...new Set((c.req.query('ids') ?? '').split(','))]
+      .filter((id) => /^\d{15,21}$/.test(id))
+      .slice(0, MAX_IDENTITY_LOOKUP);
+    try {
+      const identities = await getMemberIdentities(client, guildId, ids);
+      return send(c, { identities: Object.fromEntries(identities) });
+    } catch (err) {
+      return fail(c, err, 'Erreur lors de la lecture des membres', 'MembersAPI');
+    }
+  });
+
+  router.get(`${base}/members/search`, ...gate, async (c) => {
+    const canViewMembers = c.var.effectiveAccess.canManageSettings || c.var.memberFeatureAccess?.members?.canView !== false;
+    const guildId = c.req.param('guildId');
     if (!canViewMembers) {
-      json(res, 403, { error: 'Accès refusé. La section Membres ne vous est pas ouverte.', code: 'feature_denied', featureKey: 'members' });
-      return true;
+      return send(c, { error: 'Accès refusé. La section Membres ne vous est pas ouverte.', code: 'feature_denied', featureKey: 'members' }, 403);
     }
     try {
-      const searchQuery = (url.searchParams.get('q') ?? '').trim();
+      const searchQuery = (c.req.query('q') ?? '').trim();
       // Bornés et repliés sur leur défaut : une valeur non numérique donnait NaN (erreur 500)
       // et une limite négative demandait à la base de lire à rebours.
-      const limit = Math.min(Math.max(Math.trunc(Number(url.searchParams.get('limit') ?? '24')) || 24, 1), 100);
-      const page = Math.max(Math.trunc(Number(url.searchParams.get('page') ?? '1')) || 1, 1);
-      const sortBy = url.searchParams.get('sortBy') ?? 'lastSeenAt';
-      const sortOrder = url.searchParams.get('sortOrder') ?? 'desc';
-      const serverStatus = url.searchParams.get('serverStatus') ?? 'on_server';
-      const botFilter = url.searchParams.get('botFilter') ?? 'human';
+      const limit = Math.min(Math.max(Math.trunc(Number(c.req.query('limit') ?? '24')) || 24, 1), 100);
+      const page = Math.max(Math.trunc(Number(c.req.query('page') ?? '1')) || 1, 1);
+      const sortBy = c.req.query('sortBy') ?? 'lastSeenAt';
+      const sortOrder = c.req.query('sortOrder') ?? 'desc';
+      const serverStatus = c.req.query('serverStatus') ?? 'on_server';
+      const botFilter = c.req.query('botFilter') ?? 'human';
 
       const validSortFields = ['lastSeenAt', 'messageCount', 'guildJoinedAt'] as const;
       const finalSortBy = (validSortFields as readonly string[]).includes(sortBy)
@@ -527,6 +538,7 @@ export async function handleMembersRoutes(
         guildJoinedAt: string | null;
         guildLeftAt: string | null;
         isOnServer: boolean;
+        presenceStatus?: string | null;
       };
 
       // Certaines lignes de profil sont créées sans identité (détection de
@@ -542,9 +554,15 @@ export async function handleMembersRoutes(
         return new Map<string, { username: string; displayName: string; avatarUrl: string }>();
       });
 
+      // Même statut que la fiche membre : null si le suivi est refusé ou inconnu.
+      const presenceOptOuts = await findPresenceOptOuts(guildId, result.members.map((m) => m.userId));
+      const livePresence = (userId: string) =>
+        presenceOptOuts.has(userId) ? null : discordGuild?.members.cache.get(userId)?.presence?.status ?? null;
+
       let members: MemberListEntry[] = result.members.map((m) => {
         const identity = m.username ? undefined : identities.get(m.userId);
         return {
+          presenceStatus: m.guildLeftAt ? 'left' : livePresence(m.userId),
           id: m.userId,
           username: m.username ?? identity?.username ?? 'Utilisateur inconnu',
           displayName: m.displayName ?? identity?.displayName ?? m.username ?? 'Utilisateur inconnu',
@@ -562,6 +580,7 @@ export async function handleMembersRoutes(
       if (members.length === 0 && searchQuery && discordGuild && serverStatus !== 'left') {
         const discordResults = await discordGuild.members.search({ query: searchQuery, limit }).catch(() => null);
         if (discordResults && discordResults.size > 0) {
+          const fallbackOptOuts = await findPresenceOptOuts(guildId, [...discordResults.keys()]);
           members = discordResults.map((dm) => ({
             id: dm.id,
             username: dm.user.username,
@@ -573,11 +592,12 @@ export async function handleMembersRoutes(
             guildJoinedAt: dm.joinedAt?.toISOString() ?? null,
             guildLeftAt: null,
             isOnServer: true,
+            presenceStatus: fallbackOptOuts.has(dm.id) ? null : dm.presence?.status ?? null,
           }));
         }
       }
 
-      json(res, 200, {
+      return send(c, {
         members,
         totalFound: members.length > result.totalFound ? members.length : result.totalFound,
         totalPages: result.totalPages,
@@ -587,47 +607,50 @@ export async function handleMembersRoutes(
       });
     } catch (err) {
       logger.error('MembersAPI', 'Error searching members:', err);
-      jsonFailure(res, err, 'Erreur lors de la recherche de membres', 'MembersAPI');
+      return fail(c, err, 'Erreur lors de la recherche de membres', 'MembersAPI');
     }
-    return true;
-  }
+  });
 
-  // GET /api/dashboard/guilds/:guildId/members/:userId - Get member detailed case file
-  if (parts.length === 6 && parts[4] === 'members' && method === 'GET') {
+  router.get(`${base}/members/:userId`, ...gate, async (c) => {
+    const canViewMembers = c.var.effectiveAccess.canManageSettings || c.var.memberFeatureAccess?.members?.canView !== false;
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const userId = c.req.param('userId');
     if (!canViewMembers) {
-      json(res, 403, { error: 'Accès refusé. La section Membres ne vous est pas ouverte.', code: 'feature_denied', featureKey: 'members' });
-      return true;
+      return send(c, { error: 'Accès refusé. La section Membres ne vous est pas ouverte.', code: 'feature_denied', featureKey: 'members' }, 403);
     }
     try {
-      const memberCase = await buildMemberCaseData(client, guildId, parts[5], user);
+      const memberCase = await buildMemberCaseData(client, guildId, userId, user);
       if (!memberCase) {
-        json(res, 404, { error: 'Membre introuvable ou identifiant invalide.' });
-        return true;
+        return send(c, { error: 'Membre introuvable ou identifiant invalide.' }, 404);
       }
-      json(res, 200, memberCase);
+      return send(c, memberCase);
     } catch (err) {
-      logger.error('MembersAPI', `Error building member case for ${parts[5]}:`, err);
-      jsonFailure(res, err, 'Erreur lors de la construction du dossier membre', 'MembersAPI');
+      logger.error('MembersAPI', `Error building member case for ${userId}:`, err);
+      return fail(c, err, 'Erreur lors de la construction du dossier membre', 'MembersAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/members/:userId/link - Link alternative account
-  if (parts.length === 7 && parts[4] === 'members' && parts[6] === 'link' && method === 'POST') {
+  router.post(`${base}/members/:userId/link`, ...gate, async (c) => {
+    const canModerateMembers = c.var.effectiveAccess.canManageSettings
+      || (c.var.effectiveAccess.canModerateContent && c.var.memberFeatureAccess?.members?.canModerate !== false)
+      || c.var.memberFeatureAccess?.members?.canModerate === true;
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const access = c.var.effectiveAccess;
+    const userId = c.req.param('userId');
     try {
-      const u1Id = parts[5].startsWith('!') ? parts[5].substring(1) : parts[5];
-      const body = await readJsonBody<{ targetAccountId?: string; reason?: string }>(req);
+      const u1Id = userId.startsWith('!') ? userId.substring(1) : userId;
+      const body = await readBody<{ targetAccountId?: string; reason?: string }>(c);
       const u2Id = body?.targetAccountId;
       const reason = body?.reason;
 
       if (!u2Id) {
-        json(res, 400, { error: "L'ID du compte cible est requis." });
-        return true;
+        return send(c, { error: "L'ID du compte cible est requis." }, 400);
       }
 
       if (u1Id === u2Id) {
-        json(res, 400, { error: 'Impossible de lier un compte à lui-même.' });
-        return true;
+        return send(c, { error: 'Impossible de lier un compte à lui-même.' }, 400);
       }
 
       const isStaffDb = await prisma.staffMember.findUnique({ where: { guildId_userId: { guildId: guildId, userId: user.userId } } });
@@ -635,13 +658,11 @@ export async function handleMembersRoutes(
       const isStaff = isAdmin || !!isStaffDb || access.level === 'moderator';
 
       if (!isStaff || !canModerateMembers) {
-        json(res, 403, { error: 'Accès refusé' });
-        return true;
+        return send(c, { error: 'Accès refusé' }, 403);
       }
 
       if (!isAdmin && !reason) {
-        json(res, 400, { error: 'En tant que membre du staff, tu dois obligatoirement fournir une raison pour lier ces comptes.' });
-        return true;
+        return send(c, { error: 'En tant que membre du staff, tu dois obligatoirement fournir une raison pour lier ces comptes.' }, 400);
       }
 
       await altAccountService.linkAccounts({
@@ -656,60 +677,68 @@ export async function handleMembersRoutes(
       });
 
       // linkAccounts prévient déjà les deux comptes.
-      json(res, 200, { success: true });
+      return send(c, { success: true });
     } catch (err) {
-      logger.error('MembersAPI', `Error linking accounts for ${parts[5]}:`, err);
-      jsonFailure(res, err, 'Erreur lors de la liaison des comptes', 'MembersAPI');
+      logger.error('MembersAPI', `Error linking accounts for ${userId}:`, err);
+      return fail(c, err, 'Erreur lors de la liaison des comptes', 'MembersAPI');
     }
-    return true;
-  }
+  });
 
-  // DELETE /api/dashboard/guilds/:guildId/members/:userId/link/:targetId - Unlink accounts
-  if (parts.length === 8 && parts[4] === 'members' && parts[6] === 'link' && method === 'DELETE') {
+  router.delete(`${base}/members/:userId/link/:targetId`, ...gate, async (c) => {
+    const canModerateMembers = c.var.effectiveAccess.canManageSettings
+      || (c.var.effectiveAccess.canModerateContent && c.var.memberFeatureAccess?.members?.canModerate !== false)
+      || c.var.memberFeatureAccess?.members?.canModerate === true;
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const access = c.var.effectiveAccess;
+    const userId = c.req.param('userId');
+    const targetId = c.req.param('targetId');
     try {
-      const u1Id = parts[5].startsWith('!') ? parts[5].substring(1) : parts[5];
-      const u2Id = parts[7];
+      const u1Id = userId.startsWith('!') ? userId.substring(1) : userId;
+      const u2Id = targetId;
 
       const isStaffDb = await prisma.staffMember.findUnique({ where: { guildId_userId: { guildId: guildId, userId: user.userId } } });
       const isAdmin = access.level === 'admin';
       const isStaff = isAdmin || !!isStaffDb || access.level === 'moderator';
 
       if (!isStaff || !canModerateMembers) {
-        json(res, 403, { error: 'Accès refusé' });
-        return true;
+        return send(c, { error: 'Accès refusé' }, 403);
       }
 
       // unlinkAccounts prévient déjà les deux comptes.
       await altAccountService.unlinkAccounts(guildId, u1Id, u2Id);
 
-      json(res, 200, { success: true });
+      return send(c, { success: true });
     } catch (err) {
-      logger.error('MembersAPI', `Error unlinking accounts for ${parts[5]}:`, err);
-      jsonFailure(res, err, 'Erreur lors de la suppression de la liaison', 'MembersAPI');
+      logger.error('MembersAPI', `Error unlinking accounts for ${userId}:`, err);
+      return fail(c, err, 'Erreur lors de la suppression de la liaison', 'MembersAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/members/:userId/actions - Moderation actions
-  if (parts.length === 7 && parts[4] === 'members' && parts[6] === 'actions' && method === 'POST') {
+  router.post(`${base}/members/:userId/actions`, ...gate, async (c) => {
+    const canModerateMembers = c.var.effectiveAccess.canManageSettings
+      || (c.var.effectiveAccess.canModerateContent && c.var.memberFeatureAccess?.members?.canModerate !== false)
+      || c.var.memberFeatureAccess?.members?.canModerate === true;
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const auditUser = auditUserOf(c);
     if (!canModerateMembers) {
-      json(res, 403, { error: 'Action de modération non autorisée.' });
-      return true;
+      return send(c, { error: 'Action de modération non autorisée.' }, 403);
     }
 
-    const userId = parts[5].startsWith('!') ? parts[5].substring(1) : parts[5];
-    const body = await readJsonBody<{
+    const rawUserId = c.req.param('userId')!;
+    const userId = rawUserId.startsWith('!') ? rawUserId.substring(1) : rawUserId;
+    const body = await readBody<{
       type?: MemberCaseQuickAction;
       reason?: string;
       durationMs?: number | null;
-    }>(req);
+    }>(c);
 
     const action = body?.type;
     const reason = body?.reason?.trim() || 'Action lancée depuis le profil membre.';
     const discordGuild = client.guilds.cache.get(guildId);
     if (!discordGuild) {
-      json(res, 404, { error: 'Serveur Discord introuvable.' });
-      return true;
+      return send(c, { error: 'Serveur Discord introuvable.' }, 404);
     }
 
     try {
@@ -722,45 +751,67 @@ export async function handleMembersRoutes(
       };
 
       if (!action || !['WARN', 'KICK', 'TIMEOUT', 'BAN', 'REQUEST_VERIFICATION'].includes(action)) {
-        json(res, 400, { error: "Type d'action invalide." });
-        return true;
+        return send(c, { error: "Type d'action invalide." }, 400);
+      }
+
+      // Mêmes garde-fous que `/sanction` : ni soi-même, ni le bot, ni un membre placé au moins aussi
+      // haut. Un membre du dashboard absent du serveur (admin global) n'a pas de rôle à comparer.
+      if (userId === user.userId) {
+        return send(c, { error: 'Tu ne peux pas te sanctionner toi-même.' }, 403);
+      }
+      if (userId === client.user?.id) {
+        return send(c, { error: 'Tu ne peux pas sanctionner le bot.' }, 403);
+      }
+      if (targetMember && discordGuild.ownerId !== user.userId) {
+        const actorMember = await discordGuild.members.fetch(user.userId).catch(() => null);
+        if (
+          userId === discordGuild.ownerId ||
+          (actorMember && targetMember.roles.highest.position >= actorMember.roles.highest.position)
+        ) {
+          return send(c, { error: 'Tu ne peux pas sanctionner un membre placé au-dessus de toi ou au même rang.' }, 403);
+        }
       }
 
       if (action === 'REQUEST_VERIFICATION') {
         if (!targetMember) {
-          json(res, 404, { error: 'Le membre doit être présent sur le serveur.' });
-          return true;
+          return send(c, { error: 'Le membre doit être présent sur le serveur.' }, 404);
         }
         if (!targetMember.moderatable) {
-          json(res, 400, { error: 'Le bot ne peut pas appliquer de timeout à ce membre.' });
-          return true;
+          return send(c, { error: 'Le bot ne peut pas appliquer de timeout à ce membre.' }, 400);
         }
 
         const {
           createVerificationSession,
           buildVerificationUrl,
           buildVerificationEmbed,
-          getVerificationHistory,
         } = await import('../../../services/moderation/securityVerificationService.js');
 
-        // Anti-spam : chaque demande timeout le membre 28 jours et lui envoie un
-        // MP. Deux modérateurs qui cliquent coup sur coup le harcèlent sans rien
-        // apprendre de plus (issue #216).
-        const history = await getVerificationHistory(guildId, userId);
-        if (history.hasPending) {
-          json(res, 409, {
-            error: 'Une demande de vérification est déjà en cours pour ce membre.',
-            verifications: { hasPending: true, cooldownUntil: history.cooldownUntil?.toISOString() ?? null },
-          });
-          return true;
+        const { isVerificationRequestSpam, checkVerificationEligibility, VERIFICATION_SPAM_MESSAGE } = await import('../../../services/moderation/verificationSpamGuard.js');
+        if (await isVerificationRequestSpam(client, {
+          guildId,
+          guildName: discordGuild.name,
+          moderatorId: moderator.id,
+          moderatorTag: moderator.tag,
+        })) {
+          return send(c, { error: VERIFICATION_SPAM_MESSAGE }, 429);
         }
-        if (history.cooldownUntil) {
-          const waitMinutes = Math.max(1, Math.ceil((history.cooldownUntil.getTime() - Date.now()) / 60000));
-          json(res, 429, {
-            error: `Une vérification vient d'être demandée pour ce membre. Réessayez dans ${waitMinutes} min.`,
-            verifications: { hasPending: false, cooldownUntil: history.cooldownUntil.toISOString() },
-          });
-          return true;
+
+        // Anti-spam : chaque demande timeout le membre 28 jours et lui envoie un
+        // MP. Une par semaine et par membre, 5 par heure sur tout le bot (issue #216).
+        const eligibility = await checkVerificationEligibility(client, {
+          guildId,
+          guildName: discordGuild.name,
+          userId,
+          moderatorTag: moderator.tag,
+        });
+        if (!eligibility.allowed) {
+          return send(c, {
+            error: eligibility.message,
+            verifications: {
+              hasPending: eligibility.reason === 'PENDING',
+              cooldownUntil: eligibility.cooldownUntil?.toISOString() ?? null,
+            },
+          }, eligibility.reason === 'PENDING' ? 409 : 429);
         }
 
         const token = await createVerificationSession(guildId, userId);
@@ -811,8 +862,7 @@ export async function handleMembersRoutes(
           channelId: null,
         });
 
-        json(res, 200, { ok: true, dmSent });
-        return true;
+        return send(c, { ok: true, dmSent });
       }
 
       if (action === 'WARN') {
@@ -829,18 +879,15 @@ export async function handleMembersRoutes(
         });
 
         broadcastDashboardStateChange(guildId, 'member_warned');
-        json(res, 200, { ok: true, sanctionId: sanction.id });
-        return true;
+        return send(c, { ok: true, sanctionId: sanction.id });
       }
 
       if (action === 'KICK') {
         if (!targetMember) {
-          json(res, 404, { error: 'Le membre doit être présent sur le serveur pour être expulsé.' });
-          return true;
+          return send(c, { error: 'Le membre doit être présent sur le serveur pour être expulsé.' }, 404);
         }
         if (!targetMember.kickable) {
-          json(res, 400, { error: 'Le bot ne peut pas exclure ce membre.' });
-          return true;
+          return send(c, { error: 'Le bot ne peut pas exclure ce membre.' }, 400);
         }
 
         await targetMember.kick(`${reason} | Modération: ${user.username ?? user.userId}`);
@@ -859,24 +906,20 @@ export async function handleMembersRoutes(
         }).catch((err) => logger.error('MembersAPI', `Audit du kick de ${userId} en échec:`, err));
 
         broadcastDashboardStateChange(guildId, 'member_kicked');
-        json(res, 200, sanction ? { ok: true, sanctionId: sanction.id } : { ok: true, sanctionId: null, recordFailed: true });
-        return true;
+        return send(c, sanction ? { ok: true, sanctionId: sanction.id } : { ok: true, sanctionId: null, recordFailed: true });
       }
 
       if (action === 'TIMEOUT') {
         if (!targetMember) {
-          json(res, 404, { error: 'Le membre doit être présent sur le serveur pour un timeout.' });
-          return true;
+          return send(c, { error: 'Le membre doit être présent sur le serveur pour un timeout.' }, 404);
         }
         if (!targetMember.moderatable) {
-          json(res, 400, { error: 'Le bot ne peut pas appliquer de timeout à ce membre.' });
-          return true;
+          return send(c, { error: 'Le bot ne peut pas appliquer de timeout à ce membre.' }, 400);
         }
 
         const durationMs = Number(body?.durationMs ?? 0);
         if (!Number.isFinite(durationMs) || durationMs <= 0) {
-          json(res, 400, { error: 'Une durée valide en millisecondes est requise pour le timeout.' });
-          return true;
+          return send(c, { error: 'Une durée valide en millisecondes est requise pour le timeout.' }, 400);
         }
 
         const sanction = await registerTimeoutSanction({
@@ -899,14 +942,12 @@ export async function handleMembersRoutes(
         });
 
         broadcastDashboardStateChange(guildId, 'member_timeout');
-        json(res, 200, { ok: true, sanctionId: sanction.id });
-        return true;
+        return send(c, { ok: true, sanctionId: sanction.id });
       }
 
       if (action === 'BAN') {
         if (targetMember && !targetMember.bannable) {
-          json(res, 400, { error: 'Le bot ne peut pas bannir ce membre.' });
-          return true;
+          return send(c, { error: 'Le bot ne peut pas bannir ce membre.' }, 400);
         }
 
         // Le DM avec le lien d'appel doit partir avant le ban (sinon le bot
@@ -926,26 +967,27 @@ export async function handleMembersRoutes(
         }).catch((err) => logger.error('MembersAPI', `Audit du ban de ${userId} en échec:`, err));
 
         broadcastDashboardStateChange(guildId, 'member_banned');
-        json(res, 200, sanction ? { ok: true, sanctionId: sanction.id } : { ok: true, sanctionId: null, recordFailed: true });
-        return true;
+        return send(c, sanction ? { ok: true, sanctionId: sanction.id } : { ok: true, sanctionId: null, recordFailed: true });
       }
     } catch (err) {
       logger.error('MembersAPI', `Error executing moderation action for ${userId}:`, err);
-      jsonFailure(res, err, "Erreur lors de l'exécution de l'action de modération", 'MembersAPI');
+      return fail(c, err, "Erreur lors de l'exécution de l'action de modération", 'MembersAPI');
     }
-    return true;
-  }
+  });
 
-  // PATCH /api/dashboard/guilds/:guildId/members/:userId/note - Edit moderator note
-  if (parts.length === 7 && parts[4] === 'members' && parts[6] === 'note' && method === 'PATCH') {
+  router.patch(`${base}/members/:userId/note`, ...gate, async (c) => {
+    const canModerateMembers = c.var.effectiveAccess.canManageSettings
+      || (c.var.effectiveAccess.canModerateContent && c.var.memberFeatureAccess?.members?.canModerate !== false)
+      || c.var.memberFeatureAccess?.members?.canModerate === true;
+    const guildId = c.req.param('guildId');
+    const auditUser = auditUserOf(c);
     if (!canModerateMembers) {
-      json(res, 403, { error: 'Action de modération non autorisée.' });
-      return true;
+      return send(c, { error: 'Action de modération non autorisée.' }, 403);
     }
 
-    const userId = parts[5].startsWith('!') ? parts[5].substring(1) : parts[5];
-    const body = await readJsonBody<{ note: string }>(req);
-
+    const rawUserId = c.req.param('userId')!;
+    const userId = rawUserId.startsWith('!') ? rawUserId.substring(1) : rawUserId;
+    const body = await readBody<{ note: string }>(c);
     try {
       // Une note peut viser un membre encore absent de la base : on lui pose
       // son identité Discord pour ne pas créer un profil anonyme.
@@ -977,261 +1019,548 @@ export async function handleMembersRoutes(
         channelId: null,
       }, 'member note update');
 
-      json(res, 200, { ok: true, note: profile.moderatorNote });
+      return send(c, { ok: true, note: profile.moderatorNote });
     } catch (err) {
       logger.error('MembersAPI', `Error updating note for ${userId}:`, err);
-      jsonFailure(res, err, 'Erreur lors de la mise à jour de la note', 'MembersAPI');
+      return fail(c, err, 'Erreur lors de la mise à jour de la note', 'MembersAPI');
     }
-    return true;
-  }
+  });
 
-  // ==========================================
-  // 4. Invitations Endpoints
-  // ==========================================
-  if (parts[4] === 'invitations') {
-    // Check view access for GET routes
+  router.get(`${base}/invitations`, ...invitationsGate, async (c) => {
+    const method = c.req.method;
+    const guildId = c.req.param('guildId');
     if (method === 'GET') {
-      if (!access.canManageSettings && !featureAccess?.members?.canView) {
-        json(res, 403, { error: 'Accès refusé' });
-        return true;
-      }
-    } else {
-      // Check moderation access for state-changing routes
-      const canModerate = access.canModerateContent || access.canManageSettings || featureAccess?.members?.canModerate;
-      if (!canModerate) {
-        json(res, 403, { error: 'Action non autorisée. Modération requise.' });
-        return true;
-      }
-    }
+      try {
+        const invitations = await prisma.guildInvite.findMany({
+          where: { guildId },
+          orderBy: { createdAt: 'desc' },
+        });
+        const suspendedInviters = await prisma.suspendedInviter.findMany({
+          where: { guildId },
+          orderBy: { createdAt: 'desc' },
+        });
+        const inviteUsage = await prisma.memberInvite.groupBy({
+          by: ['inviteCode'],
+          where: { guildId },
+          _count: {
+            _all: true,
+            leftAt: true,
+          },
+          _max: {
+            joinedAt: true,
+          },
+        });
+        const inviterUsage = await prisma.memberInvite.groupBy({
+          by: ['inviterId', 'inviterTag'],
+          where: { guildId, inviterId: { not: null } },
+          _count: {
+            _all: true,
+            leftAt: true,
+          },
+          _max: {
+            joinedAt: true,
+          },
+        });
+        const enrichedInviterUsage = await withInviterAvatars(client, guildId, inviterUsage);
+        const totalJoined = await prisma.memberInvite.count({
+          where: { guildId },
+        });
+        const totalLeft = await prisma.memberInvite.count({
+          where: { guildId, leftAt: { not: null } },
+        });
 
-    // GET /api/dashboard/guilds/:guildId/invitations
-    if (!parts[5]) {
-      if (method === 'GET') {
-        try {
-          const invitations = await prisma.guildInvite.findMany({
-            where: { guildId },
-            orderBy: { createdAt: 'desc' },
-          });
-          const suspendedInviters = await prisma.suspendedInviter.findMany({
-            where: { guildId },
-            orderBy: { createdAt: 'desc' },
-          });
-          const inviteUsage = await prisma.memberInvite.groupBy({
-            by: ['inviteCode'],
-            where: { guildId },
-            _count: {
-              _all: true,
-              leftAt: true,
-            },
-            _max: {
-              joinedAt: true,
-            },
-          });
-          const inviterUsage = await prisma.memberInvite.groupBy({
-            by: ['inviterId', 'inviterTag'],
-            where: { guildId, inviterId: { not: null } },
-            _count: {
-              _all: true,
-              leftAt: true,
-            },
-            _max: {
-              joinedAt: true,
-            },
-          });
-          const inviterIds = inviterUsage
-            .map((entry) => entry.inviterId)
-            .filter((id): id is string => !!id);
-          const inviterProfiles = inviterIds.length > 0
-            ? await prisma.memberProfile.findMany({
-                where: { guildId, userId: { in: inviterIds } },
-                select: { userId: true, avatarUrl: true },
-              })
-            : [];
-          const inviterAvatarMap = new Map(
-            inviterProfiles.map((profile) => [profile.userId, profile.avatarUrl])
-          );
-          const enrichedInviterUsage = inviterUsage.map((entry) => ({
-            ...entry,
-            avatarUrl: entry.inviterId
-              ? inviterAvatarMap.get(entry.inviterId)
-                ?? client.users.cache.get(entry.inviterId)?.displayAvatarURL({ size: 128 })
-                ?? null
-              : null,
-          }));
-          const totalJoined = await prisma.memberInvite.count({
-            where: { guildId },
-          });
-          const totalLeft = await prisma.memberInvite.count({
-            where: { guildId, leftAt: { not: null } },
-          });
-
-          json(res, 200, {
-            invitations,
-            suspendedInviters,
-            inviteUsage,
-            inviterUsage: enrichedInviterUsage,
-            summary: { totalJoined, totalLeft },
-          });
-        } catch (err) {
-          logger.error('InvitationsAPI', `Error listing invitations for guild ${guildId}:`, err);
-          jsonFailure(res, err, 'Erreur lors de la récupération des invitations', 'InvitationsAPI');
-        }
-        return true;
+        return send(c, {
+          invitations,
+          suspendedInviters,
+          inviteUsage,
+          inviterUsage: enrichedInviterUsage,
+          summary: { totalJoined, totalLeft },
+        });
+      } catch (err) {
+        logger.error('InvitationsAPI', `Error listing invitations for guild ${guildId}:`, err);
+        return fail(c, err, 'Erreur lors de la récupération des invitations', 'InvitationsAPI');
       }
     }
+    return send(c, { error: 'Route introuvable' }, 404);
+  });
 
-    // POST /api/dashboard/guilds/:guildId/invitations/suspended-inviters
-    if (parts[5] === 'suspended-inviters' && !parts[6]) {
-      if (method === 'POST') {
-        try {
-          const body = await readJsonBody<{
-            userId: string;
-            userTag?: string;
-            reason?: string;
-            cascade?: boolean;
-          }>(req);
+  router.post(`${base}/invitations/suspended-inviters`, ...invitationsGate, async (c) => {
+    const method = c.req.method;
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const auditUser = auditUserOf(c);
+    if (method === 'POST') {
+      try {
+        const body = await readBody<{
+          userId: string;
+          userTag?: string;
+          reason?: string;
+          cascade?: boolean;
+        }>(c);
 
-          if (!body?.userId || !isValidSnowflake(body.userId)) {
-            json(res, 400, { error: 'ID utilisateur Discord invalide' });
-            return true;
-          }
-
-          const userId = body.userId;
-          const userTag = body.userTag || null;
-          const reason = body.reason || null;
-          const cascade = !!body.cascade;
-
-          const suspendedInviter = await prisma.suspendedInviter.upsert({
-            where: { guildId_userId: { guildId, userId } },
-            update: { userTag, reason },
-            create: { guildId, userId, userTag, reason },
-          });
-
-          let cascadeResult = null;
-
-          if (cascade) {
-            await prisma.guildInvite.updateMany({
-              where: { guildId, inviterId: userId },
-              data: { isSuspended: true },
-            });
-
-            const discordGuild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
-            let purgedCount = 0;
-            if (discordGuild) {
-              const activeJoins = await prisma.memberInvite.findMany({
-                where: {
-                  guildId,
-                  inviterId: userId,
-                  leftAt: null,
-                },
-              });
-
-              // L'exclusion Discord reste séquentielle (elle passe par une API
-              // limitée en débit), mais marquer le départ n'a pas à l'être :
-              // un UPDATE par membre purgé devient un seul UPDATE groupé.
-              const now = new Date();
-              for (const join of activeJoins) {
-                const member = await discordGuild.members.fetch(join.userId).catch(() => null);
-                if (member) {
-                  await member.kick(`Purge cascade créateur suspendu ${userId} par ${auditUser}`).catch(() => null);
-                  purgedCount++;
-                }
-              }
-              if (activeJoins.length > 0) {
-                await prisma.memberInvite.updateMany({
-                  where: { id: { in: activeJoins.map((join) => join.id) } },
-                  data: { leftAt: now },
-                });
-              }
-              cascadeResult = { purgedCount };
-            }
-          }
-
-          await pushAudit(guildId, {
-            user: auditUser,
-            action: "Suspension créateur d'invitations",
-            context: getGuildName(client, guildId),
-            module: 'Invitations',
-            eventType: 'Manuel',
-            details: `Créateur suspendu : ${userId} (${userTag || 'sans tag'}). Cascade : ${cascade ? 'Oui' : 'Non'}.`,
-            channelId: null,
-          });
-
-          json(res, 201, { ok: true, suspendedInviter, cascade: cascadeResult });
-        } catch (err) {
-          logger.error('InvitationsAPI', 'Error suspending inviter:', err);
-          jsonFailure(res, err, 'Erreur lors de la suspension du créateur', 'InvitationsAPI');
-        }
-        return true;
-      }
-    }
-
-    // DELETE /api/dashboard/guilds/:guildId/invitations/suspended-inviters/:userId
-    if (parts[5] === 'suspended-inviters' && parts[6] && !parts[7]) {
-      if (method === 'DELETE') {
-        const userId = parts[6];
-        if (!isValidSnowflake(userId)) {
-          json(res, 400, { error: 'ID utilisateur Discord invalide' });
-          return true;
+        if (!body?.userId || !isValidSnowflake(body.userId)) {
+          return send(c, { error: 'ID utilisateur Discord invalide' }, 400);
         }
 
-        try {
-          const record = await prisma.suspendedInviter.findUnique({
-            where: { guildId_userId: { guildId, userId } },
-          });
-          if (!record) {
-            json(res, 404, { error: 'Créateur suspendu introuvable' });
-            return true;
-          }
+        const userId = body.userId;
+        const userTag = body.userTag || null;
+        const reason = body.reason || null;
+        const cascade = !!body.cascade;
 
-          await prisma.suspendedInviter.delete({
-            where: { guildId_userId: { guildId, userId } },
-          });
+        const suspendedInviter = await prisma.suspendedInviter.upsert({
+          where: { guildId_userId: { guildId, userId } },
+          update: { userTag, reason },
+          create: { guildId, userId, userTag, reason },
+        });
 
+        let cascadeResult = null;
+
+        if (cascade) {
           await prisma.guildInvite.updateMany({
             where: { guildId, inviterId: userId },
-            data: { isSuspended: false },
+            data: { isSuspended: true },
+          });
+
+          const discordGuild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
+          let purgedCount = 0;
+          if (discordGuild) {
+            const activeJoins = await prisma.memberInvite.findMany({
+              where: {
+                guildId,
+                inviterId: userId,
+                leftAt: null,
+              },
+            });
+
+            // L'exclusion Discord reste séquentielle (elle passe par une API
+            // limitée en débit), mais marquer le départ n'a pas à l'être :
+            // un UPDATE par membre purgé devient un seul UPDATE groupé.
+            const now = new Date();
+            const actorMember = discordGuild.ownerId === user.userId
+              ? null
+              : await discordGuild.members.fetch(user.userId).catch(() => null);
+            for (const join of activeJoins) {
+              const member = await discordGuild.members.fetch(join.userId).catch(() => null);
+              // Même règle que les sanctions : on n'expulse pas un membre placé au moins aussi haut.
+              const outranks = member && actorMember && member.roles.highest.position >= actorMember.roles.highest.position;
+              if (member && !outranks && member.id !== user.userId && member.id !== discordGuild.ownerId) {
+                await member.kick(`Purge cascade créateur suspendu ${userId} par ${auditUser}`).catch(() => null);
+                purgedCount++;
+              }
+            }
+            if (activeJoins.length > 0) {
+              await prisma.memberInvite.updateMany({
+                where: { id: { in: activeJoins.map((join) => join.id) } },
+                data: { leftAt: now },
+              });
+            }
+            cascadeResult = { purgedCount };
+          }
+        }
+
+        await pushAudit(guildId, {
+          user: auditUser,
+          action: "Suspension créateur d'invitations",
+          context: getGuildName(client, guildId),
+          module: 'Invitations',
+          eventType: 'Manuel',
+          details: `Créateur suspendu : ${userId} (${userTag || 'sans tag'}). Cascade : ${cascade ? 'Oui' : 'Non'}.`,
+          channelId: null,
+        });
+
+        return send(c, { ok: true, suspendedInviter, cascade: cascadeResult }, 201);
+      } catch (err) {
+        logger.error('InvitationsAPI', 'Error suspending inviter:', err);
+        return fail(c, err, 'Erreur lors de la suspension du créateur', 'InvitationsAPI');
+      }
+    }
+    return send(c, { error: 'Route introuvable' }, 404);
+  });
+
+  router.delete(`${base}/invitations/suspended-inviters/:userId`, ...invitationsGate, async (c) => {
+    const method = c.req.method;
+    const guildId = c.req.param('guildId');
+    const auditUser = auditUserOf(c);
+    if (method === 'DELETE') {
+      const userId = c.req.param('userId');
+      if (!isValidSnowflake(userId)) {
+        return send(c, { error: 'ID utilisateur Discord invalide' }, 400);
+      }
+
+      try {
+        const record = await prisma.suspendedInviter.findUnique({
+          where: { guildId_userId: { guildId, userId } },
+        });
+        if (!record) {
+          return send(c, { error: 'Créateur suspendu introuvable' }, 404);
+        }
+
+        await prisma.suspendedInviter.delete({
+          where: { guildId_userId: { guildId, userId } },
+        });
+
+        await prisma.guildInvite.updateMany({
+          where: { guildId, inviterId: userId },
+          data: { isSuspended: false },
+        });
+
+        await pushAudit(guildId, {
+          user: auditUser,
+          action: "Réhabilitation créateur d'invitations",
+          context: getGuildName(client, guildId),
+          module: 'Invitations',
+          eventType: 'Manuel',
+          details: `Créateur réhabilité : ${userId}. Ses invitations ont été restaurées.`,
+          channelId: null,
+        });
+
+        return send(c, { ok: true });
+      } catch (err) {
+        logger.error('InvitationsAPI', `Error removing suspended inviter ${userId}:`, err);
+        return fail(c, err, 'Erreur lors de la réhabilitation du créateur', 'InvitationsAPI');
+      }
+    }
+    return send(c, { error: 'Route introuvable' }, 404);
+  });
+
+  router.post(`${base}/invitations/inviters/:userId/purge`, ...invitationsGate, async (c) => {
+    const method = c.req.method;
+    const guildId = c.req.param('guildId');
+    const auditUser = auditUserOf(c);
+    if (method === 'POST') {
+      const userId = c.req.param('userId');
+      if (!isValidSnowflake(userId)) {
+        return send(c, { error: 'ID utilisateur Discord invalide' }, 400);
+      }
+
+      try {
+        const discordGuild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
+        if (!discordGuild) {
+          return send(c, { error: 'Serveur Discord introuvable' }, 404);
+        }
+
+        const activeJoins = await prisma.memberInvite.findMany({
+          where: {
+            guildId,
+            inviterId: userId,
+            leftAt: null,
+          },
+        });
+
+        let purgedCount = 0;
+        const now = new Date();
+
+        // Comme ci-dessus : l'exclusion est limitée en débit côté Discord,
+        // le marquage du départ se fait en une seule requête.
+        for (const join of activeJoins) {
+          const member = await discordGuild.members.fetch(join.userId).catch(() => null);
+          if (member) {
+            await member.kick(`Purge en cascade par créateur ${userId} par ${auditUser}`).catch(() => null);
+            purgedCount++;
+          }
+        }
+        if (activeJoins.length > 0) {
+          await prisma.memberInvite.updateMany({
+            where: { id: { in: activeJoins.map((join) => join.id) } },
+            data: { leftAt: now },
+          });
+        }
+
+        await pushAudit(guildId, {
+          user: auditUser,
+          action: 'Purge en cascade par créateur',
+          context: getGuildName(client, guildId),
+          module: 'Invitations',
+          eventType: 'Manuel',
+          details: `Membres invités par ${userId} purgés : ${purgedCount} membre(s) exclu(s).`,
+          channelId: null,
+        });
+
+        return send(c, { ok: true, purgedCount });
+      } catch (err) {
+        logger.error('InvitationsAPI', `Error purging inviter members for ${userId}:`, err);
+        return fail(c, err, 'Erreur lors de la purge en cascade des membres', 'InvitationsAPI');
+      }
+    }
+    return send(c, { error: 'Route introuvable' }, 404);
+  });
+
+  // PUT /api/dashboard/guilds/:guildId/invitations/:code/source
+  // PUT /api/dashboard/guilds/:guildId/invitations/:code/suspend
+  // DELETE /api/dashboard/guilds/:guildId/invitations/:code
+  // POST /api/dashboard/guilds/:guildId/invitations/:code/purge
+  router.on(['GET', 'PUT', 'POST', 'DELETE'], [`${base}/invitations/:code`, `${base}/invitations/:code/:sub{source|suspend|purge}`], ...invitationsGate, async (c) => {
+    const method = c.req.method;
+    const sub = c.req.param('sub');
+    const guildId = c.req.param('guildId')!;
+    const auditUser = auditUserOf(c);
+    const code = c.req.param('code');
+    if (!isValidInviteCode(code)) {
+      return send(c, { error: "Code d'invitation invalide" }, 400);
+    }
+
+    // GET /api/dashboard/guilds/:guildId/invitations/:code
+    if (method === 'GET' && !sub) {
+      try {
+        const invite = await prisma.guildInvite.findUnique({
+          where: { code },
+        });
+        if (!invite || invite.guildId !== guildId) {
+          return send(c, { error: 'Invitation introuvable' }, 404);
+        }
+
+        // Bornée : la valeur pilote une boucle par jour plus bas.
+        const days = Math.min(365, Math.max(1, Math.floor(Number((c.req.query('days') ?? null)) || 30)));
+
+        const now = new Date();
+        const startDate = new Date();
+        startDate.setDate(now.getDate() - days + 1);
+        startDate.setHours(0, 0, 0, 0);
+
+        const periodJoins = await prisma.memberInvite.findMany({
+          where: {
+            guildId,
+            inviteCode: code,
+            joinedAt: { gte: startDate },
+          },
+        });
+
+        const totalJoined = periodJoins.length;
+        const totalLeft = periodJoins.filter((j) => j.leftAt !== null).length;
+        const totalStayed = totalJoined - totalLeft;
+
+        const countsByDate = new Map<string, number>();
+        for (const join of periodJoins) {
+          const dateKey = join.joinedAt.toISOString().slice(0, 10);
+          countsByDate.set(dateKey, (countsByDate.get(dateKey) || 0) + 1);
+        }
+
+        const labels: string[] = [];
+        const counts: number[] = [];
+        for (let i = 0; i < days; i++) {
+          const d = new Date(startDate);
+          d.setDate(startDate.getDate() + i);
+          const dateKey = d.toISOString().slice(0, 10);
+          labels.push(dateKey);
+          counts.push(countsByDate.get(dateKey) || 0);
+        }
+
+        const joins = await prisma.memberInvite.findMany({
+          where: { guildId, inviteCode: code },
+          orderBy: { joinedAt: 'desc' },
+        });
+
+        // Arrivées et départs jour par jour, sur la période et celle d'avant
+        // (même longueur) : les courbes de la fiche, comparaison en pointillé.
+        const dayIndex = (date: Date, from: Date) => Math.floor((date.getTime() - from.getTime()) / 86_400_000);
+        const previousStart = new Date(startDate.getTime() - days * 86_400_000);
+        const perDay = (dates: Array<Date | null>, from: Date) => {
+          const out = new Array<number>(days).fill(0);
+          for (const date of dates) {
+            if (!date) continue;
+            const i = dayIndex(date, from);
+            if (i >= 0 && i < days) out[i] += 1;
+          }
+          return out;
+        };
+        const series = {
+          departures: perDay(joins.map((j) => j.leftAt), startDate),
+          previousArrivals: perDay(joins.map((j) => j.joinedAt), previousStart),
+          previousDepartures: perDay(joins.map((j) => j.leftAt), previousStart),
+        };
+
+        const userIds = joins.map((j) => j.userId);
+        const profiles = await prisma.memberProfile.findMany({
+          where: { guildId, userId: { in: userIds } },
+        });
+        const profileMap = new Map(profiles.map((p) => [p.userId, p]));
+
+        const enrichedJoins = joins.map((j) => {
+          const p = profileMap.get(j.userId);
+          return {
+            userId: j.userId,
+            userTag: p?.username || p?.userTag || `Utilisateur ${j.userId}`,
+            joinedAt: j.joinedAt,
+            leftAt: j.leftAt,
+            avatarUrl: p?.avatarUrl || null,
+            accountCreatedAt: p?.accountCreatedAt || null,
+            messageCount: p?.messageCount ?? 0,
+            ghostStatus: p?.ghostStatus || null,
+            isBot: p?.isBot ?? false,
+          };
+        });
+
+        // Blocs analytiques calculés sur tout l'historique du code, pas
+        // seulement la période affichée : la rétention à 30 jours n'a pas de
+        // sens si on tronque les arrivées à la fenêtre courante.
+        const { getInviteInsights } = await import('../../../services/analytics/inviteDetailService.js');
+        const timezone = await resolveViewTimezone((c.req.query('tz') ?? null), guildId);
+        const insights = await getInviteInsights(guildId, code, joins, labels, counts, timezone);
+
+        // Renvoie vers la fiche serveur : cette invitation est-elle celle par défaut ?
+        const { resolveDefaultInvite } = await import('../../../services/analytics/serverProfileService.js');
+        const defaultInvite = await resolveDefaultInvite(client, guildId).catch(() => null);
+
+        return send(c, {
+          invite,
+          defaultInvite: defaultInvite ? { ...defaultInvite, isThis: defaultInvite.code === code } : null,
+          trend: {
+            totalJoined,
+            totalLeft,
+            totalStayed,
+            labels,
+            counts,
+            ...series,
+          },
+          joins: enrichedJoins,
+          ...insights,
+        });
+      } catch (err) {
+        logger.error('InvitationsAPI', `Error fetching invite details for ${code}:`, err);
+        return fail(c, err, "Erreur lors de la récupération des détails de l'invitation", 'InvitationsAPI');
+      }
+    }
+
+    // PUT /api/dashboard/guilds/:guildId/invitations/:code/source
+    if (method === 'PUT' && sub === 'source' && true) {
+      try {
+        const body = await readBody<{ sourceLabel?: string | null }>(c);
+        if (!body || (body.sourceLabel !== null && typeof body.sourceLabel !== 'string')) {
+          return send(c, { error: 'Nom de provenance invalide' }, 400);
+        }
+
+        const sourceLabel = body.sourceLabel?.trim() || null;
+        if (sourceLabel && sourceLabel.length > 60) {
+          return send(c, { error: 'Le nom de provenance est limité à 60 caractères' }, 400);
+        }
+
+        const invite = await prisma.guildInvite.findUnique({ where: { code } });
+        if (!invite || invite.guildId !== guildId) {
+          return send(c, { error: 'Invitation introuvable' }, 404);
+        }
+
+        const updatedInvite = await prisma.guildInvite.update({
+          where: { code },
+          data: { sourceLabel },
+        });
+
+        await pushAudit(guildId, {
+          user: auditUser,
+          action: 'Provenance invitation',
+          context: getGuildName(client, guildId),
+          module: 'Invitations',
+          eventType: 'Settings',
+          details: sourceLabel
+            ? `L'invitation ${code} est maintenant attribuée à la provenance « ${sourceLabel} ».`
+            : `La provenance de l'invitation ${code} a été retirée.`,
+          channelId: null,
+        });
+
+        return send(c, { ok: true, invite: updatedInvite });
+      } catch (err) {
+        logger.error('InvitationsAPI', `Error updating invite source for ${code}:`, err);
+        return fail(c, err, "Erreur lors de la modification de la provenance", 'InvitationsAPI');
+      }
+    }
+
+    // PUT /api/dashboard/guilds/:guildId/invitations/:code/suspend
+    if (sub === 'suspend') {
+      if (method === 'PUT') {
+        try {
+          const body = await readBody<{ suspended: boolean }>(c);
+          const suspended = !!body?.suspended;
+
+          const invite = await prisma.guildInvite.findUnique({
+            where: { code },
+          });
+          if (!invite || invite.guildId !== guildId) {
+            return send(c, { error: 'Invitation introuvable' }, 404);
+          }
+
+          const updatedInvite = await prisma.guildInvite.update({
+            where: { code },
+            data: { isSuspended: suspended },
           });
 
           await pushAudit(guildId, {
             user: auditUser,
-            action: "Réhabilitation créateur d'invitations",
+            action: suspended ? 'Suspension invitation' : 'Restauration invitation',
             context: getGuildName(client, guildId),
             module: 'Invitations',
             eventType: 'Manuel',
-            details: `Créateur réhabilité : ${userId}. Ses invitations ont été restaurées.`,
+            details: `L'invitation ${code} a été ${suspended ? 'suspendue' : 'restaurée'}.`,
             channelId: null,
           });
 
-          json(res, 200, { ok: true });
+          return send(c, { ok: true, invite: updatedInvite });
         } catch (err) {
-          logger.error('InvitationsAPI', `Error removing suspended inviter ${userId}:`, err);
-          jsonFailure(res, err, 'Erreur lors de la réhabilitation du créateur', 'InvitationsAPI');
+          logger.error('InvitationsAPI', `Error toggling invite suspension for ${code}:`, err);
+          return fail(c, err, "Erreur lors de la modification de l'invitation", 'InvitationsAPI');
         }
-        return true;
       }
     }
 
-    // POST /api/dashboard/guilds/:guildId/invitations/inviters/:userId/purge
-    if (parts[5] === 'inviters' && parts[6] && parts[7] === 'purge') {
-      if (method === 'POST') {
-        const userId = parts[6];
-        if (!isValidSnowflake(userId)) {
-          json(res, 400, { error: 'ID utilisateur Discord invalide' });
-          return true;
+    // DELETE /api/dashboard/guilds/:guildId/invitations/:code
+    if (method === 'DELETE' && !sub) {
+      try {
+        const invite = await prisma.guildInvite.findUnique({
+          where: { code },
+        });
+        if (!invite || invite.guildId !== guildId) {
+          return send(c, { error: 'Invitation introuvable' }, 404);
         }
 
+        const updatedInvite = await prisma.guildInvite.update({
+          where: { code },
+          data: { isDeleted: true },
+        });
+
+        const discordGuild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
+        if (discordGuild) {
+          const discordInvites = await discordGuild.invites.fetch().catch(() => null);
+          const discordInvite = discordInvites?.get(code);
+          if (discordInvite) {
+            await discordInvite.delete('Supprimée via le dashboard Kotbo').catch(() => null);
+          }
+        }
+
+        await pushAudit(guildId, {
+          user: auditUser,
+          action: 'Suppression invitation',
+          context: getGuildName(client, guildId),
+          module: 'Invitations',
+          eventType: 'Manuel',
+          details: `L'invitation ${code} a été marquée comme supprimée.`,
+          channelId: null,
+        });
+
+        return send(c, { ok: true, invite: updatedInvite });
+      } catch (err) {
+        logger.error('InvitationsAPI', `Error deleting invite ${code}:`, err);
+        return fail(c, err, "Erreur lors de la suppression de l'invitation", 'InvitationsAPI');
+      }
+    }
+
+    // POST /api/dashboard/guilds/:guildId/invitations/:code/purge
+    if (sub === 'purge') {
+      if (method === 'POST') {
         try {
+          const invite = await prisma.guildInvite.findUnique({
+            where: { code },
+          });
+          if (!invite || invite.guildId !== guildId) {
+            return send(c, { error: 'Invitation introuvable' }, 404);
+          }
+
           const discordGuild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
           if (!discordGuild) {
-            json(res, 404, { error: 'Serveur Discord introuvable' });
-            return true;
+            return send(c, { error: 'Serveur Discord introuvable' }, 404);
           }
 
           const activeJoins = await prisma.memberInvite.findMany({
             where: {
               guildId,
-              inviterId: userId,
+              inviteCode: code,
               leftAt: null,
             },
           });
@@ -1244,7 +1573,10 @@ export async function handleMembersRoutes(
           for (const join of activeJoins) {
             const member = await discordGuild.members.fetch(join.userId).catch(() => null);
             if (member) {
-              await member.kick(`Purge en cascade par créateur ${userId} par ${auditUser}`).catch(() => null);
+              const reason = `Purge de l'invitation ${code} par ${auditUser}`;
+              await member.kick(reason).catch((e) => {
+                logger.warn('InvitationsAPI', `Failed to kick member ${join.userId}:`, e);
+              });
               purgedCount++;
             }
           }
@@ -1257,354 +1589,27 @@ export async function handleMembersRoutes(
 
           await pushAudit(guildId, {
             user: auditUser,
-            action: 'Purge en cascade par créateur',
+            action: 'Purge invitation',
             context: getGuildName(client, guildId),
             module: 'Invitations',
             eventType: 'Manuel',
-            details: `Membres invités par ${userId} purgés : ${purgedCount} membre(s) exclu(s).`,
+            details: `Purge de l'invitation ${code} : ${purgedCount} membre(s) exclu(s).`,
             channelId: null,
           });
 
-          json(res, 200, { ok: true, purgedCount });
+          return send(c, { ok: true, purgedCount });
         } catch (err) {
-          logger.error('InvitationsAPI', `Error purging inviter members for ${userId}:`, err);
-          jsonFailure(res, err, 'Erreur lors de la purge en cascade des membres', 'InvitationsAPI');
-        }
-        return true;
-      }
-    }
-
-    // Detail and other actions on single invite codes:
-    // GET /api/dashboard/guilds/:guildId/invitations/:code
-    // PUT /api/dashboard/guilds/:guildId/invitations/:code/source
-    // PUT /api/dashboard/guilds/:guildId/invitations/:code/suspend
-    // DELETE /api/dashboard/guilds/:guildId/invitations/:code
-    // POST /api/dashboard/guilds/:guildId/invitations/:code/purge
-    if (parts[5] && parts[5] !== 'suspended-inviters' && parts[5] !== 'inviters') {
-      const code = parts[5];
-      if (!isValidInviteCode(code)) {
-        json(res, 400, { error: "Code d'invitation invalide" });
-        return true;
-      }
-
-      // GET /api/dashboard/guilds/:guildId/invitations/:code
-      if (method === 'GET' && !parts[6]) {
-        try {
-          const invite = await prisma.guildInvite.findUnique({
-            where: { code },
-          });
-          if (!invite || invite.guildId !== guildId) {
-            json(res, 404, { error: 'Invitation introuvable' });
-            return true;
-          }
-
-          // Bornée : la valeur pilote une boucle par jour plus bas.
-          const days = Math.min(365, Math.max(1, Math.floor(Number(url.searchParams.get('days')) || 30)));
-
-          const now = new Date();
-          const startDate = new Date();
-          startDate.setDate(now.getDate() - days + 1);
-          startDate.setHours(0, 0, 0, 0);
-
-          const periodJoins = await prisma.memberInvite.findMany({
-            where: {
-              guildId,
-              inviteCode: code,
-              joinedAt: { gte: startDate },
-            },
-          });
-
-          const totalJoined = periodJoins.length;
-          const totalLeft = periodJoins.filter((j) => j.leftAt !== null).length;
-          const totalStayed = totalJoined - totalLeft;
-
-          const countsByDate = new Map<string, number>();
-          for (const join of periodJoins) {
-            const dateKey = join.joinedAt.toISOString().slice(0, 10);
-            countsByDate.set(dateKey, (countsByDate.get(dateKey) || 0) + 1);
-          }
-
-          const labels: string[] = [];
-          const counts: number[] = [];
-          for (let i = 0; i < days; i++) {
-            const d = new Date(startDate);
-            d.setDate(startDate.getDate() + i);
-            const dateKey = d.toISOString().slice(0, 10);
-            labels.push(dateKey);
-            counts.push(countsByDate.get(dateKey) || 0);
-          }
-
-          const joins = await prisma.memberInvite.findMany({
-            where: { guildId, inviteCode: code },
-            orderBy: { joinedAt: 'desc' },
-          });
-
-          // Arrivées et départs jour par jour, sur la période et celle d'avant
-          // (même longueur) : les courbes de la fiche, comparaison en pointillé.
-          const dayIndex = (date: Date, from: Date) => Math.floor((date.getTime() - from.getTime()) / 86_400_000);
-          const previousStart = new Date(startDate.getTime() - days * 86_400_000);
-          const perDay = (dates: Array<Date | null>, from: Date) => {
-            const out = new Array<number>(days).fill(0);
-            for (const date of dates) {
-              if (!date) continue;
-              const i = dayIndex(date, from);
-              if (i >= 0 && i < days) out[i] += 1;
-            }
-            return out;
-          };
-          const series = {
-            departures: perDay(joins.map((j) => j.leftAt), startDate),
-            previousArrivals: perDay(joins.map((j) => j.joinedAt), previousStart),
-            previousDepartures: perDay(joins.map((j) => j.leftAt), previousStart),
-          };
-
-          const userIds = joins.map((j) => j.userId);
-          const profiles = await prisma.memberProfile.findMany({
-            where: { guildId, userId: { in: userIds } },
-          });
-          const profileMap = new Map(profiles.map((p) => [p.userId, p]));
-
-          const enrichedJoins = joins.map((j) => {
-            const p = profileMap.get(j.userId);
-            return {
-              userId: j.userId,
-              userTag: p?.username || p?.userTag || `Utilisateur ${j.userId}`,
-              joinedAt: j.joinedAt,
-              leftAt: j.leftAt,
-              avatarUrl: p?.avatarUrl || null,
-              accountCreatedAt: p?.accountCreatedAt || null,
-              messageCount: p?.messageCount ?? 0,
-              ghostStatus: p?.ghostStatus || null,
-              isBot: p?.isBot ?? false,
-            };
-          });
-
-          // Blocs analytiques calculés sur tout l'historique du code, pas
-          // seulement la période affichée : la rétention à 30 jours n'a pas de
-          // sens si on tronque les arrivées à la fenêtre courante.
-          const { getInviteInsights } = await import('../../../services/analytics/inviteDetailService.js');
-          const timezone = await resolveViewTimezone(url.searchParams.get('tz'), guildId);
-          const insights = await getInviteInsights(guildId, code, joins, labels, counts, timezone);
-
-          json(res, 200, {
-            invite,
-            trend: {
-              totalJoined,
-              totalLeft,
-              totalStayed,
-              labels,
-              counts,
-              ...series,
-            },
-            joins: enrichedJoins,
-            ...insights,
-          });
-        } catch (err) {
-          logger.error('InvitationsAPI', `Error fetching invite details for ${code}:`, err);
-          jsonFailure(res, err, "Erreur lors de la récupération des détails de l'invitation", 'InvitationsAPI');
-        }
-        return true;
-      }
-
-      // PUT /api/dashboard/guilds/:guildId/invitations/:code/source
-      if (method === 'PUT' && parts[6] === 'source' && !parts[7]) {
-        try {
-          const body = await readJsonBody<{ sourceLabel?: string | null }>(req);
-          if (!body || (body.sourceLabel !== null && typeof body.sourceLabel !== 'string')) {
-            json(res, 400, { error: 'Nom de provenance invalide' });
-            return true;
-          }
-
-          const sourceLabel = body.sourceLabel?.trim() || null;
-          if (sourceLabel && sourceLabel.length > 60) {
-            json(res, 400, { error: 'Le nom de provenance est limité à 60 caractères' });
-            return true;
-          }
-
-          const invite = await prisma.guildInvite.findUnique({ where: { code } });
-          if (!invite || invite.guildId !== guildId) {
-            json(res, 404, { error: 'Invitation introuvable' });
-            return true;
-          }
-
-          const updatedInvite = await prisma.guildInvite.update({
-            where: { code },
-            data: { sourceLabel },
-          });
-
-          await pushAudit(guildId, {
-            user: auditUser,
-            action: 'Provenance invitation',
-            context: getGuildName(client, guildId),
-            module: 'Invitations',
-            eventType: 'Settings',
-            details: sourceLabel
-              ? `L'invitation ${code} est maintenant attribuée à la provenance « ${sourceLabel} ».`
-              : `La provenance de l'invitation ${code} a été retirée.`,
-            channelId: null,
-          });
-
-          json(res, 200, { ok: true, invite: updatedInvite });
-        } catch (err) {
-          logger.error('InvitationsAPI', `Error updating invite source for ${code}:`, err);
-          jsonFailure(res, err, "Erreur lors de la modification de la provenance", 'InvitationsAPI');
-        }
-        return true;
-      }
-
-      // PUT /api/dashboard/guilds/:guildId/invitations/:code/suspend
-      if (parts[6] === 'suspend') {
-        if (method === 'PUT') {
-          try {
-            const body = await readJsonBody<{ suspended: boolean }>(req);
-            const suspended = !!body?.suspended;
-
-            const invite = await prisma.guildInvite.findUnique({
-              where: { code },
-            });
-            if (!invite || invite.guildId !== guildId) {
-              json(res, 404, { error: 'Invitation introuvable' });
-              return true;
-            }
-
-            const updatedInvite = await prisma.guildInvite.update({
-              where: { code },
-              data: { isSuspended: suspended },
-            });
-
-            await pushAudit(guildId, {
-              user: auditUser,
-              action: suspended ? 'Suspension invitation' : 'Restauration invitation',
-              context: getGuildName(client, guildId),
-              module: 'Invitations',
-              eventType: 'Manuel',
-              details: `L'invitation ${code} a été ${suspended ? 'suspendue' : 'restaurée'}.`,
-              channelId: null,
-            });
-
-            json(res, 200, { ok: true, invite: updatedInvite });
-          } catch (err) {
-            logger.error('InvitationsAPI', `Error toggling invite suspension for ${code}:`, err);
-            jsonFailure(res, err, "Erreur lors de la modification de l'invitation", 'InvitationsAPI');
-          }
-          return true;
-        }
-      }
-
-      // DELETE /api/dashboard/guilds/:guildId/invitations/:code
-      if (method === 'DELETE' && !parts[6]) {
-        try {
-          const invite = await prisma.guildInvite.findUnique({
-            where: { code },
-          });
-          if (!invite || invite.guildId !== guildId) {
-            json(res, 404, { error: 'Invitation introuvable' });
-            return true;
-          }
-
-          const updatedInvite = await prisma.guildInvite.update({
-            where: { code },
-            data: { isDeleted: true },
-          });
-
-          const discordGuild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
-          if (discordGuild) {
-            const discordInvites = await discordGuild.invites.fetch().catch(() => null);
-            const discordInvite = discordInvites?.get(code);
-            if (discordInvite) {
-              await discordInvite.delete('Supprimée via le dashboard Kotbo').catch(() => null);
-            }
-          }
-
-          await pushAudit(guildId, {
-            user: auditUser,
-            action: 'Suppression invitation',
-            context: getGuildName(client, guildId),
-            module: 'Invitations',
-            eventType: 'Manuel',
-            details: `L'invitation ${code} a été marquée comme supprimée.`,
-            channelId: null,
-          });
-
-          json(res, 200, { ok: true, invite: updatedInvite });
-        } catch (err) {
-          logger.error('InvitationsAPI', `Error deleting invite ${code}:`, err);
-          jsonFailure(res, err, "Erreur lors de la suppression de l'invitation", 'InvitationsAPI');
-        }
-        return true;
-      }
-
-      // POST /api/dashboard/guilds/:guildId/invitations/:code/purge
-      if (parts[6] === 'purge') {
-        if (method === 'POST') {
-          try {
-            const invite = await prisma.guildInvite.findUnique({
-              where: { code },
-            });
-            if (!invite || invite.guildId !== guildId) {
-              json(res, 404, { error: 'Invitation introuvable' });
-              return true;
-            }
-
-            const discordGuild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
-            if (!discordGuild) {
-              json(res, 404, { error: 'Serveur Discord introuvable' });
-              return true;
-            }
-
-            const activeJoins = await prisma.memberInvite.findMany({
-              where: {
-                guildId,
-                inviteCode: code,
-                leftAt: null,
-              },
-            });
-
-            let purgedCount = 0;
-            const now = new Date();
-
-            // Comme ci-dessus : l'exclusion est limitée en débit côté Discord,
-            // le marquage du départ se fait en une seule requête.
-            for (const join of activeJoins) {
-              const member = await discordGuild.members.fetch(join.userId).catch(() => null);
-              if (member) {
-                const reason = `Purge de l'invitation ${code} par ${auditUser}`;
-                await member.kick(reason).catch((e) => {
-                  logger.warn('InvitationsAPI', `Failed to kick member ${join.userId}:`, e);
-                });
-                purgedCount++;
-              }
-            }
-            if (activeJoins.length > 0) {
-              await prisma.memberInvite.updateMany({
-                where: { id: { in: activeJoins.map((join) => join.id) } },
-                data: { leftAt: now },
-              });
-            }
-
-            await pushAudit(guildId, {
-              user: auditUser,
-              action: 'Purge invitation',
-              context: getGuildName(client, guildId),
-              module: 'Invitations',
-              eventType: 'Manuel',
-              details: `Purge de l'invitation ${code} : ${purgedCount} membre(s) exclu(s).`,
-              channelId: null,
-            });
-
-            json(res, 200, { ok: true, purgedCount });
-          } catch (err) {
-            logger.error('InvitationsAPI', `Error purging invite ${code}:`, err);
-            jsonFailure(res, err, "Erreur lors de la purge de l'invitation", 'InvitationsAPI');
-          }
-          return true;
+          logger.error('InvitationsAPI', `Error purging invite ${code}:`, err);
+          return fail(c, err, "Erreur lors de la purge de l'invitation", 'InvitationsAPI');
         }
       }
     }
-  }
+    return send(c, { error: 'Route introuvable' }, 404);
+  });
 
-  return false;
+  return router;
 }
+
 
 function isValidSnowflake(id: string): boolean {
   return /^\d{17,20}$/.test(id);

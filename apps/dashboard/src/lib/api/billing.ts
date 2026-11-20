@@ -82,6 +82,20 @@ export async function startCheckout(
   return result?.url ?? null;
 }
 
+/** Déplace l'abonnement du serveur courant vers un autre. Lève une erreur dont le message dit pourquoi. */
+export async function transferSubscription(
+  targetGuildId: string,
+  guildId = authStore.selectedGuildId ?? undefined,
+): Promise<void> {
+  await dashboardRequest('/billing/transfer', {
+    method: 'POST',
+    payload: { targetGuildId },
+    guildId,
+    silent: true,
+    errorContext: 'API Error (Transfer):',
+  });
+}
+
 /** Portail Stripe : factures, moyen de paiement, changement d'offre, résiliation. */
 export async function openBillingPortal(guildId = authStore.selectedGuildId ?? undefined): Promise<string | null> {
   const result = await dashboardRequest('/billing/portal', {

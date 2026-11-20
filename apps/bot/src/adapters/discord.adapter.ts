@@ -17,7 +17,9 @@ export class DiscordAdapter implements DiscordPort {
   constructor(private readonly client: Client) {}
 
   async sendEmbed(params: SendEmbedParams): Promise<{ messageId: string } | null> {
-    const channel = await this.client.channels.fetch(params.channelId).catch(() => null);
+    // Résolu depuis le serveur de la requête : un salon d'un autre serveur n'y est pas trouvé.
+    const guild = this.client.guilds.cache.get(params.guildId);
+    const channel = await guild?.channels.fetch(params.channelId).catch(() => null);
     if (!channel?.isTextBased()) return null;
 
     const embed = new EmbedBuilder()

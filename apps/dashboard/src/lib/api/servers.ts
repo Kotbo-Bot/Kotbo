@@ -53,6 +53,41 @@ export async function fetchManageableServers(options?: { refresh?: boolean }): P
 }
 
 /**
+ * Permission Administrateur (bit 3).
+ * Accorde l'ensemble des pouvoirs au bot, garantissant le bon fonctionnement
+ * de la pose de maquette, de l'isolation des tickets et de l'anti-raid.
+ */
+export const ADMIN_INVITE_PERMISSIONS = '8';
+
+/**
+ * Permissions granulaires au detail (salons, roles, moderation, messages, vocal...).
+ * Correspond au bitfield calcule cote bot (`INVITE_PERMISSIONS`).
+ */
+export const DETAILED_INVITE_PERMISSIONS = '1505284844791';
+
+let cachedDiscordClientId: string | null = null;
+
+/**
+ * Recupere l'identifiant client Discord public de l'application via la configuration.
+ */
+export async function fetchDiscordClientId(): Promise<string> {
+  if (cachedDiscordClientId) return cachedDiscordClientId;
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/config`);
+    if (res.ok) {
+      const data = (await res.json()) as { discordClientId?: string };
+      if (typeof data?.discordClientId === 'string' && data.discordClientId) {
+        cachedDiscordClientId = data.discordClientId;
+        return cachedDiscordClientId;
+      }
+    }
+  } catch {
+    // Silencieux : repli sur chaine vide.
+  }
+  return '';
+}
+
+/**
  * Lien d'invitation du bot.
  *
  * Le bitfield vient du bot (`invitePermissions`), qui l'assemble a partir des

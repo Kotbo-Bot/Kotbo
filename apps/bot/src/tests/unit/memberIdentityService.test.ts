@@ -108,8 +108,29 @@ describe('resolveMissingMemberIdentities', () => {
       username: 'kotbo',
       displayName: 'Surnom kotbo',
       avatarUrl: 'https://cdn.example/user-1.png',
+      serverTag: null,
+      boostingSince: null,
     });
     expect(usersFetch).not.toHaveBeenCalled();
+  });
+
+  test('joint le tag de serveur affiché par le membre', async () => {
+    const member = cachedMember('user-2', 'nerd');
+    (member.user as Record<string, unknown>).primaryGuild = {
+      identityEnabled: true,
+      identityGuildId: 'guild-9',
+      tag: 'NERD',
+      badge: 'abc',
+    };
+    const { client } = createClient([member]);
+
+    const identities = await resolveMissingMemberIdentities(client as never, 'guild-1', ['user-2']);
+
+    expect(identities.get('user-2')?.serverTag).toEqual({
+      guildId: 'guild-9',
+      tag: 'NERD',
+      badgeUrl: 'https://cdn.discordapp.com/clan-badges/guild-9/abc.png',
+    });
   });
 
   test("nomme un membre parti via l'API utilisateur", async () => {

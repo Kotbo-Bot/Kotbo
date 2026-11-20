@@ -59,9 +59,6 @@ function getEmojiForTitle(title: string): string | null {
   if (t.includes('ticket') || t.includes('support')) {
     return E.ticket;
   }
-  if (t.includes('daily algo') || t.includes('daily-algo') || t.includes('algorithme') || t.includes('exercice')) {
-    return E.fire;
-  }
   if (t.includes('rpg') || t.includes('pièce') || t.includes('coins') || t.includes('boutique') || t.includes('shop') || t.includes('argent') || t.includes('banque')) {
     return E.coins;
   }

@@ -24,7 +24,7 @@
         <tr>
           <td class="whitespace-nowrap px-4 py-3 font-semibold text-on-surface">
             {#if row.placement === null}
-              <span class="rounded-md bg-success/10 px-2 py-0.5 text-xs font-medium text-success">{m.tn_still_in()}</span>
+              <span class="rounded-md bg-success/10 px-2 py-0.5 text-xs font-medium text-on-success-container">{m.tn_still_in()}</span>
             {:else}
               {medal(row.placement) ?? ''} {m.tn_place({ n: row.placement })}
             {/if}

@@ -1,4 +1,7 @@
 <script lang="ts">
+  import MemberTag from './MemberTag.svelte';
+  import BoosterBadge from './BoosterBadge.svelte';
+  import HintTip from './economy/HintTip.svelte';
   import { Tabs, Button, Callout, SectionCard, EmptyState, Field } from './ui';
   import { memberAvatarSrc } from '../discordMedia';
   import MemberContentPanel from './analytics/MemberContentPanel.svelte';
@@ -15,6 +18,7 @@
   import Papicon from './Papicon.svelte';
   import { inviteDetailsModal } from '../stores/inviteDetailsModal.svelte';
   import { channelDetailsModal } from '../stores/channelDetailsModal.svelte';
+  import { serverDetailsModal } from '../stores/serverDetailsModal.svelte';
   import { fetchMemberCase, fetchMemberDetailedAnalytics, updateSanctionReport, linkMemberAccount, unlinkMemberAccount, updateMemberNote, runMemberCaseAction, searchMessages, formatMessageSearchTotal, fetchMessageLogChannels } from '../api';
   import { toDateTimeLocal, typeLabel as formatTypeLabel } from '../sanctions/formatters';
   import { buildReportRuleOptions, getRuleIdsFromBrokenRules, getRulesFromBrokenRules, buildBrokenRulesPayload } from '../sanctions/reportRules';
@@ -24,8 +28,19 @@
   import { normalizeEvidenceLinks, sanitizeEvidenceLinks } from '../sanctions/evidenceLinks';
   import InteractionTree from './charts/InteractionTree.svelte';
   import Modal from './Modal.svelte';
-  import { m, dateLocale } from '../i18n';
+  import { m, dateLocale, getLocale } from '../i18n';
+
+  // « en-US » → « anglais (États-Unis) » dans la langue du dashboard.
+  function languageName(locale: string | null | undefined): string {
+    if (!locale) return m.mcm_unknown_f();
+    try {
+      return new Intl.DisplayNames([getLocale()], { type: 'language' }).of(locale) ?? locale;
+    } catch {
+      return locale;
+    }
+  }
   import LogDetails from './logs/LogDetails.svelte';
+  import MemberReputationCard from './members/MemberReputationCard.svelte';
 
   import { errorMessage } from '@kotbo/shared';
   type MemberCaseTab = 'extra' | 'resume' | 'identite' | 'activite' | 'messages' | 'logs' | 'sanctions' | 'invites' | 'connexions' | 'analytics' | 'contenu' | 'candidatures' | 'linked_accounts' | 'notes';
@@ -55,6 +70,7 @@
     initialTab = 'resume' as MemberCaseTab,
     showProfileLink = true,
     extraTab = null,
+    caseGuildId = null,
   } = $props<{
     open?: boolean;
     userName?: string;
@@ -69,6 +85,8 @@
     actionIsError?: boolean;
     onClose?: (e: MouseEvent) => void;
     onSelectUser?: (userId: string) => void;
+    /** Serveur du dossier quand ce n'est pas le serveur sélectionné (serveur du staff). */
+    caseGuildId?: string | null;
     /** Onglet affiché à l'ouverture : la fiche complète ouvre directement les actions. */
     initialTab?: MemberCaseTab;
     /** Lien vers la fiche complète, masqué quand le dossier s'ouvre depuis elle. */
@@ -103,6 +121,55 @@
   let messagesHasMore = $state(false);
   let messagesLoading = $state(false);
   let messagesChannels = $state<any[]>([]);
+
+  // --- FILTRES DE L'HISTORIQUE D'IDENTITÉ ---
+  let historyFilter = $state<string>('all');
+  const historyList = $derived(caseData?.history ?? []);
+  const filteredHistory = $derived.by(() => {
+    if (historyFilter === 'all') return historyList;
+    return historyList.filter((item) => item.field === historyFilter);
+  });
+  const historyCounts = $derived.by(() => {
+    const counts: Record<string, number> = {
+      all: historyList.length,
+      username: 0,
+      displayName: 0,
+      avatar: 0,
+      bio: 0,
+      tag: 0,
+      pronouns: 0,
+    };
+    for (const item of historyList) {
+      if (item.field in counts) {
+        counts[item.field] = (counts[item.field] ?? 0) + 1;
+      }
+    }
+    return counts;
+  });
+
+  function historyFieldIcon(field: string): string {
+    switch (field) {
+      case 'username': return 'user';
+      case 'displayName': return 'badge-check';
+      case 'avatar': return 'image';
+      case 'bio': return 'align-left';
+      case 'tag': return 'tag';
+      case 'pronouns': return 'heart';
+      default: return 'edit';
+    }
+  }
+
+  function historyFieldLabel(field: string): string {
+    switch (field) {
+      case 'username': return m.mcm_history_username();
+      case 'displayName': return m.mcm_history_displayName();
+      case 'avatar': return m.mcm_history_avatar();
+      case 'bio': return m.mcm_history_bio();
+      case 'tag': return m.mcm_history_tag();
+      case 'pronouns': return m.mcm_history_pronouns();
+      default: return field;
+    }
+  }
 
   // --- FILTRES DE L'ONGLET LOGS ---
   // Les logs arrivent deja entiers dans caseData (le serveur en plafonne le
@@ -668,13 +735,13 @@
   // Icône Papicon + classes de couleur (statiques pour Tailwind) par type de sanction.
   function getSanctionTypeStyle(type: string): { icon: string; tile: string; dot: string } {
     switch (type.toUpperCase()) {
-      case 'WARN': return { icon: 'alert-triangle', tile: 'bg-warning/10 text-warning', dot: 'bg-warning' };
+      case 'WARN': return { icon: 'alert-triangle', tile: 'bg-warning/10 text-on-warning-container', dot: 'bg-warning' };
       case 'TIMEOUT': return { icon: 'clock', tile: 'bg-primary/10 text-primary', dot: 'bg-primary' };
-      case 'KICK': return { icon: 'log-out', tile: 'bg-warning/10 text-warning', dot: 'bg-warning' };
-      case 'TEMP_BAN': return { icon: 'ban', tile: 'bg-error/10 text-error', dot: 'bg-error' };
-      case 'BAN': return { icon: 'gavel', tile: 'bg-error/10 text-error', dot: 'bg-error' };
+      case 'KICK': return { icon: 'log-out', tile: 'bg-warning/10 text-on-warning-container', dot: 'bg-warning' };
+      case 'TEMP_BAN': return { icon: 'ban', tile: 'bg-error/10 text-on-error-container', dot: 'bg-error' };
+      case 'BAN': return { icon: 'gavel', tile: 'bg-error/10 text-on-error-container', dot: 'bg-error' };
       case 'SOFTBAN': return { icon: 'eraser', tile: 'bg-surface-container-high text-on-surface-variant', dot: 'bg-on-surface-variant' };
-      case 'JAIL': return { icon: 'lock', tile: 'bg-warning/10 text-warning', dot: 'bg-warning' };
+      case 'JAIL': return { icon: 'lock', tile: 'bg-warning/10 text-on-warning-container', dot: 'bg-warning' };
       default: return { icon: 'shield', tile: 'bg-surface-container-high text-on-surface-variant', dot: 'bg-on-surface-variant' };
     }
   }
@@ -952,6 +1019,7 @@
       >
         <img src={memberAvatarSrc(caseData.invite.inviterAvatarUrl, tag, caseData.invite.inviterId)} alt="" class="{compact ? 'h-5 w-5' : 'h-6 w-6'} rounded-full object-cover" />
         <span class="truncate">@{tag}</span>
+        <MemberTag userId={caseData.invite.inviterId} />
       </button>
     {:else}
       <span class="mc-person mc-person--static">
@@ -995,8 +1063,9 @@
   onClose={onClose}
   size="screen"
   showCloseButton={false}
+  ariaLabel={displayName}
 >
-  <div class="mc" role="presentation" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+  <div class="mc">
     <!-- ── Identite ───────────────────────────────────────── -->
     <header class="mc-header">
       {#if caseData?.profile?.bannerUrl}
@@ -1016,7 +1085,7 @@
         </div>
         <div class="min-w-0 flex-1">
           <div class="flex flex-wrap items-center gap-2">
-            <h2 id="modal-title" class="truncate text-xl font-semibold tracking-tight text-on-surface">{displayName}</h2>
+            <h2 class="truncate text-xl font-semibold tracking-tight text-on-surface">{displayName}</h2>
             {#if caseData?.profile?.staffGrade}
               <span class="badge badge-info"><Papicon icon="star" size={11} />{caseData.profile.staffGrade}</span>
             {/if}
@@ -1030,6 +1099,27 @@
               <span class="badge badge-warning"><Papicon icon="clock" size={11} />{m.mcm_verif_badge_pending()}</span>
             {:else if verifications?.lastVerifiedAt}
               <span class="badge badge-success"><Papicon icon="check-circle" size={11} />{m.mcm_verif_badge_done()}</span>
+            {/if}
+            {#if caseData?.serverTag?.tag}
+              <button
+                type="button"
+                class="badge badge-neutral cursor-pointer hover:border-primary/40 hover:text-primary"
+                title={m.mcm_open_server_details()}
+                onclick={() => {
+                  const st = caseData?.serverTag;
+                  if (st?.guildId) serverDetailsModal.show(st.guildId, st.guildName ?? undefined);
+                }}
+              >
+                {#if caseData.serverTag.badgeUrl}
+                  <img src={caseData.serverTag.badgeUrl} alt="" class="h-3.5 w-3.5 shrink-0 object-contain" />
+                {:else}
+                  <Papicon icon="tag" size={11} />
+                {/if}
+                <span>{caseData.serverTag.tag}</span>
+              </button>
+            {/if}
+            {#if caseData?.boost?.boostingSince}
+              <BoosterBadge since={caseData.boost.boostingSince} size={15} />
             {/if}
           </div>
           <p class="mt-0.5 flex flex-wrap items-center gap-x-2 text-sm text-on-surface-variant">
@@ -1056,6 +1146,7 @@
               title={verifications?.lastRequestedAt ? m.mcm_verif_requested_on({ date: formatVerificationDate(verifications.lastRequestedAt) }) : undefined}
               onclick={handleRequestVerification}
             >{requestVerificationBusy ? m.mcm_sending() : m.mcm_request_verification()}</Button>
+            <HintTip text={m.mcm_verif_info()} />
           {/if}
           {#if showProfileLink && userId}
             <Button size="sm" variant="ghost" icon="maximize-2" href={`/members/${userId}`}>{m.mcm_open_profile()}</Button>
@@ -1230,7 +1321,7 @@
                     { label: m.mcm_username(), value: `@${caseData?.profile?.username ?? m.mcm_unknown()}` },
                     { label: m.mcm_global_name(), value: caseData?.profile?.globalName ?? m.mcm_unknown() },
                     { label: m.mcm_server_display(), value: caseData?.profile?.displayName ?? m.mcm_unknown() },
-                    { label: m.mcm_language(), value: caseData?.profile?.locale ?? m.mcm_unknown_f() },
+                    { label: m.mcm_language(), value: languageName(caseData?.profile?.locale) },
                     { label: m.mcm_pronouns(), value: caseData?.profile?.pronouns ?? m.mcm_not_specified_plural() },
                   ])}
                   {#if caseData?.profile?.bannerUrl || caseData?.profile?.accentColor}
@@ -1259,8 +1350,32 @@
                     { label: m.mcm_global_name_cap(), value: caseData?.profile?.globalName ?? m.mcm_unknown() },
                     { label: m.mcm_server_nickname(), value: caseData?.profile?.displayName ?? m.mcm_unknown() },
                     { label: m.mcm_pronouns(), value: caseData?.profile?.pronouns ?? m.mcm_not_specified_plural() },
-                    { label: m.mcm_language_locale(), value: caseData?.profile?.locale ?? m.mcm_unknown_f() },
+                    { label: m.mcm_language_locale(), value: languageName(caseData?.profile?.locale) },
                   ])}
+                  {#if caseData?.serverTag}
+                    <div class="mt-3 flex items-center justify-between gap-2 border-t border-outline-variant pt-3 text-sm">
+                      <span class="text-on-surface-variant">{m.mcm_server_tag()}</span>
+                      <button
+                        type="button"
+                        class="inline-flex items-center gap-1.5 rounded-full border border-outline-variant bg-surface-container-low px-2.5 py-0.5 text-xs font-medium text-on-surface hover:border-primary/40 hover:text-primary"
+                        title={m.mcm_open_server_details()}
+                        onclick={() => {
+                          const st = caseData?.serverTag;
+                          if (st?.guildId) serverDetailsModal.show(st.guildId, st.guildName ?? undefined);
+                        }}
+                      >
+                        {#if caseData.serverTag.badgeUrl}
+                          <img src={caseData.serverTag.badgeUrl} alt="" class="h-3.5 w-3.5 shrink-0 object-contain" />
+                        {:else}
+                          <Papicon icon="tag" size={11} />
+                        {/if}
+                        <span>{caseData.serverTag.tag}</span>
+                        {#if caseData.serverTag.guildName}
+                          <span class="text-on-surface-variant">({caseData.serverTag.guildName})</span>
+                        {/if}
+                      </button>
+                    </div>
+                  {/if}
                 </SectionCard>
 
                 <SectionCard title={m.mcm_key_dates()}>
@@ -1272,6 +1387,27 @@
                     { label: m.mcm_last_seen(), value: formatDateTime(caseData?.profile?.lastSeenAt) },
                   ])}
                 </SectionCard>
+
+                {#if caseData?.boost}
+                  {@const boost = caseData.boost}
+                  <SectionCard title={m.mcm_boost_title()}>
+                    {@render facts([
+                      { label: m.mcm_boost_since(), value: boost.boostingSince ? formatDateTime(boost.boostingSince) : m.mcm_boost_not() },
+                      { label: m.mcm_boost_total(), value: m.boost_days({ count: String(boost.totalDays) }) },
+                      { label: m.mcm_boost_periods(), value: String(boost.periodCount) },
+                    ])}
+                    {#if boost.periods.length > 0}
+                      <ul class="mt-3 flex flex-col gap-1 border-t border-outline-variant pt-3 text-xs text-on-surface-variant">
+                        {#each boost.periods as period (period.start)}
+                          <li class="flex justify-between gap-2">
+                            <span>{formatDateTime(period.start)} → {period.end ? formatDateTime(period.end) : m.mcm_boost_ongoing()}</span>
+                            <span class="shrink-0 font-medium text-on-surface">{m.boost_days({ count: String(period.days) })}</span>
+                          </li>
+                        {/each}
+                      </ul>
+                    {/if}
+                  </SectionCard>
+                {/if}
 
                 <!-- Verifications : trace partagee entre moderateurs pour ne pas
                      redemander ce qu'un collegue a deja lance. -->
@@ -1321,6 +1457,110 @@
                     {/if}
                   </SectionCard>
                 </div>
+
+                <div class="md:col-span-2">
+                  <SectionCard title={m.mcm_identity_history()} description={m.mcm_identity_history_desc()}>
+                    <!-- Filtres -->
+                    <div class="mb-4 flex flex-wrap items-center gap-1.5 border-b border-outline-variant pb-3">
+                      {#each [
+                        { id: 'all', label: m.mcm_history_all(), icon: 'history', count: historyCounts.all },
+                        { id: 'username', label: m.mcm_history_username(), icon: 'user', count: historyCounts.username },
+                        { id: 'displayName', label: m.mcm_history_displayName(), icon: 'badge-check', count: historyCounts.displayName },
+                        { id: 'avatar', label: m.mcm_history_avatar(), icon: 'image', count: historyCounts.avatar },
+                        { id: 'bio', label: m.mcm_history_bio(), icon: 'align-left', count: historyCounts.bio },
+                        { id: 'tag', label: m.mcm_history_tag(), icon: 'tag', count: historyCounts.tag },
+                        { id: 'pronouns', label: m.mcm_history_pronouns(), icon: 'heart', count: historyCounts.pronouns },
+                      ] as filter (filter.id)}
+                        <button
+                          type="button"
+                          class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors {historyFilter === filter.id ? 'bg-primary text-on-primary' : 'bg-surface-container text-on-surface hover:bg-surface-container-high'}"
+                          onclick={() => (historyFilter = filter.id)}
+                        >
+                          <Papicon icon={filter.icon} size={12} />
+                          <span>{filter.label}</span>
+                          {#if filter.count > 0}
+                            <span class="rounded-full px-1.5 py-0.2 text-2xs {historyFilter === filter.id ? 'bg-white/20 text-white' : 'bg-surface-container-high text-on-surface-variant'}">{filter.count}</span>
+                          {/if}
+                        </button>
+                      {/each}
+                    </div>
+
+                    {#if filteredHistory.length === 0}
+                      <EmptyState
+                        icon="history"
+                        title={m.mcm_history_empty()}
+                        description={m.mcm_history_empty_desc()}
+                      />
+                    {:else}
+                      <ul class="space-y-3">
+                        {#each filteredHistory as item (item.id)}
+                          <li class="flex flex-col gap-2 rounded-xl border border-outline-variant bg-surface-container-low p-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div class="flex items-start gap-3 min-w-0 flex-1">
+                              <span class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-surface-container text-on-surface-variant">
+                                <Papicon icon={historyFieldIcon(item.field)} size={14} />
+                              </span>
+                              <div class="min-w-0 flex-1">
+                                <div class="flex items-center gap-2">
+                                  <span class="text-xs font-semibold text-on-surface-variant">{historyFieldLabel(item.field)}</span>
+                                  <span class="text-2xs text-on-surface-variant">·</span>
+                                  <time class="text-xs text-on-surface-variant" datetime={item.recordedAt}>{formatDateTime(item.recordedAt)}</time>
+                                </div>
+                                <div class="mt-1.5 flex flex-wrap items-center gap-2 text-sm text-on-surface">
+                                  {#if item.field === 'avatar'}
+                                    <div class="flex items-center gap-3">
+                                      {#if item.oldValue}
+                                        <div class="flex flex-col items-center gap-1">
+                                          <img src={item.oldValue} alt="" class="h-10 w-10 rounded-full border border-outline-variant object-cover" />
+                                          <span class="text-2xs text-on-surface-variant">{m.mcm_history_old_value()}</span>
+                                        </div>
+                                      {:else}
+                                        <span class="text-xs italic text-on-surface-variant">{m.mcm_history_old_value()} : —</span>
+                                      {/if}
+                                      <Papicon icon="arrow-right" size={14} class="text-on-surface-variant shrink-0" />
+                                      {#if item.newValue}
+                                        <div class="flex flex-col items-center gap-1">
+                                          <img src={item.newValue} alt="" class="h-10 w-10 rounded-full border border-primary/40 object-cover" />
+                                          <span class="text-2xs text-primary font-medium">{m.mcm_history_new_value()}</span>
+                                        </div>
+                                      {:else}
+                                        <span class="text-xs italic text-on-surface-variant">{m.mcm_history_new_value()} : —</span>
+                                      {/if}
+                                    </div>
+                                  {:else if item.field === 'username'}
+                                    <span class="line-through text-on-surface-variant">@{item.oldValue ?? '—'}</span>
+                                    <Papicon icon="arrow-right" size={12} class="text-on-surface-variant shrink-0" />
+                                    <span class="font-medium text-primary">@{item.newValue ?? '—'}</span>
+                                  {:else if item.field === 'bio'}
+                                    <div class="w-full space-y-1">
+                                      {#if item.oldValue}
+                                        <p class="text-xs text-on-surface-variant line-through italic">« {item.oldValue} »</p>
+                                      {/if}
+                                      {#if item.newValue}
+                                        <p class="text-xs text-on-surface font-medium italic">« {item.newValue} »</p>
+                                      {/if}
+                                    </div>
+                                  {:else if item.field === 'tag'}
+                                    <span class="inline-flex items-center gap-1 rounded bg-surface-container px-2 py-0.5 text-xs text-on-surface-variant line-through">{item.oldValue ?? '—'}</span>
+                                    <Papicon icon="arrow-right" size={12} class="text-on-surface-variant shrink-0" />
+                                    <span class="inline-flex items-center gap-1 rounded bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">{item.newValue ?? '—'}</span>
+                                  {:else if item.field === 'pronouns'}
+                                    <span class="inline-flex rounded-full bg-surface-container px-2.5 py-0.5 text-xs text-on-surface-variant line-through">{item.oldValue ?? '—'}</span>
+                                    <Papicon icon="arrow-right" size={12} class="text-on-surface-variant shrink-0" />
+                                    <span class="inline-flex rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary">{item.newValue ?? '—'}</span>
+                                  {:else}
+                                    <span class="line-through text-on-surface-variant">{item.oldValue ?? '—'}</span>
+                                    <Papicon icon="arrow-right" size={12} class="text-on-surface-variant shrink-0" />
+                                    <span class="font-medium text-primary">{item.newValue ?? '—'}</span>
+                                  {/if}
+                                </div>
+                              </div>
+                            </div>
+                          </li>
+                        {/each}
+                      </ul>
+                    {/if}
+                  </SectionCard>
+                </div>
               </div>
 
             {:else if activeTab === 'activite'}
@@ -1340,6 +1580,10 @@
                   </div>
                 </dl>
               </section>
+              <!-- La carte lit le serveur sélectionné : masquée quand le dossier porte sur un autre. -->
+              {#if userId && (!caseGuildId || caseGuildId === authStore.selectedGuildId)}
+                <MemberReputationCard {userId} userName={displayName || userId} onLeave={() => onClose(new MouseEvent('click'))} />
+              {/if}
               <SectionCard title={m.mcm_by_channel()}>
                 {#if caseData?.messagesByChannel?.length}
                   {@const max = Math.max(...caseData.messagesByChannel.map((c) => c.count), 1)}
@@ -1738,6 +1982,7 @@
                         <div class="min-w-0 flex-1">
                           <div class="flex flex-wrap items-center gap-2">
                             <span class="truncate text-sm font-medium text-on-surface">{suggestion.userTag ?? m.mcm_xlink_unknown_user({ id: suggestion.userId })}</span>
+                            <MemberTag userId={suggestion.userId} />
                             <span class="badge badge-neutral">{suggestion.serverCount > 1 ? m.mcm_xlink_servers_other({ count: suggestion.serverCount }) : m.mcm_xlink_servers_one({ count: suggestion.serverCount })}</span>
                             {#if !suggestion.presentOnGuild}<span class="badge badge-neutral">{m.mcm_xlink_absent()}</span>{/if}
                           </div>
@@ -1799,6 +2044,7 @@
                       <div class="min-w-0 flex-1">
                         <div class="flex items-center gap-2">
                           <span class="truncate text-sm font-medium text-on-surface">{link.userTag}</span>
+                          <MemberTag userId={link.userId} />
                           <span class="badge {link.status === 'VALIDATED' ? 'badge-success' : 'badge-warning'}">{link.status}</span>
                         </div>
                         <p class="text-xs text-on-surface-variant">{link.type} · {link.userId}</p>

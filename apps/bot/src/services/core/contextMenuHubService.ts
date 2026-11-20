@@ -196,7 +196,7 @@ async function runAndRender(params: {
         await interaction.editReply(v2Message(denyContainer(denial)));
         return;
       }
-      result = await action.run({ guild, invoker, targetId: targetRef }, input);
+      result = await action.run({ guild, invoker, targetId: targetRef, channelId: interaction.channelId }, input);
     } else {
       const message = await resolveMessage(guild, targetRef);
       if (!message) {

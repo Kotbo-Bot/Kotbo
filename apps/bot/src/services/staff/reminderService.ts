@@ -3,6 +3,8 @@ import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { COLORS } from '../../utils/embeds.js';
 import { notify } from '../notifications/notifyService.js';
+import { fetchGuildChannel, isGuildChannel } from '../../utils/panelMessage.js';
+import { UserFacingError } from '../../utils/userFacingError.js';
 
 export async function processDueReminders(client: Client) {
   const now = new Date();
@@ -58,7 +60,7 @@ export async function processDueReminders(client: Client) {
 
         // Try to send to channel if specified
         if (reminder.channelId) {
-          const channel = await client.channels.fetch(reminder.channelId).catch(() => null);
+          const channel = await fetchGuildChannel(client, reminder.guildId, reminder.channelId);
           if (channel && channel.isTextBased()) {
             await (channel as TextChannel).send({
               content: `🔔 <@${reminder.userId}>`,
@@ -126,6 +128,22 @@ export async function createReminder(data: {
   callId?: string | null;
   meetingId?: string | null;
 }) {
+  // Salon et éléments liés doivent appartenir à ce serveur : sinon le rappel publierait dans un
+  // autre serveur ou recopierait le titre et la description d'une réunion privée d'ailleurs.
+  if (data.channelId && !(await isGuildChannel(data.guildId, data.channelId))) {
+    throw new UserFacingError('Salon introuvable sur ce serveur.');
+  }
+  const owned = async (id: string | null | undefined, find: (id: string) => Promise<unknown>) =>
+    !id || Boolean(await find(id));
+  const inGuild = { guildId: data.guildId };
+  if (
+    !(await owned(data.taskId, (id) => prisma.staffTask.findFirst({ where: { id, ...inGuild }, select: { id: true } }))) ||
+    !(await owned(data.callId, (id) => prisma.staffCall.findFirst({ where: { id, ...inGuild }, select: { id: true } }))) ||
+    !(await owned(data.meetingId, (id) => prisma.staffMeeting.findFirst({ where: { id, ...inGuild }, select: { id: true } })))
+  ) {
+    throw new UserFacingError('Élément du planning introuvable sur ce serveur.');
+  }
+
   return prisma.staffReminder.create({
     data: {
       guildId: data.guildId,

@@ -99,6 +99,10 @@ export function resetAdminGuildBillingTrial(guildId: string) {
   return adminBillingMutation(`/api/admin/guilds/${guildId}/billing/trial-reset`, 'POST');
 }
 
+export function transferAdminGuildBilling(guildId: string, targetGuildId: string) {
+  return adminBillingMutation(`/api/admin/guilds/${guildId}/billing/transfer`, 'POST', { targetGuildId });
+}
+
 export function resyncAdminGuildBilling(guildId: string) {
   return adminBillingMutation(`/api/admin/guilds/${guildId}/billing/resync`, 'POST');
 }
@@ -128,14 +132,6 @@ export async function reconfigureAdminShards(payload: { mode: 'auto' | 'fixed'; 
     body: JSON.stringify(payload),
   });
   if (!response.ok) throw new Error('Erreur lors de la reconfiguration des shards');
-  return response.json();
-}
-
-export async function fetchGlobalDailyAlgoLeaderboard() {
-  const guildId = getGuildId();
-  if (!guildId) return null;
-  const response = await authorizedFetch(`${BASE_URL}/guilds/${guildId}/daily-algo-submissions/global-leaderboard`);
-  if (!response.ok) return null;
   return response.json();
 }
 
@@ -257,19 +253,55 @@ export async function updateMaintenanceConfig(maintenance: boolean) {
   return response.json();
 }
 
-export async function fetchBotErrors() {
-  const response = await authorizedFetch(`${API_BASE_URL}/api/admin/errors`, { method: 'GET' });
+/** Erreurs identiques (même message, même source), regroupées par le bot. */
+export interface BotErrorGroup {
+  /** Une ligne du groupe : c'est elle qui désigne le groupe dans les requêtes. */
+  id: string;
+  message: string;
+  source: string | null;
+  count: number;
+  firstAt: string;
+  lastAt: string;
+}
+
+export interface BotErrorOccurrence {
+  id: string;
+  message: string;
+  stack: string | null;
+  source: string | null;
+  createdAt: string;
+}
+
+export async function fetchBotErrorGroups(): Promise<{ groups: BotErrorGroup[] }> {
+  const response = await authorizedFetch(`${API_BASE_URL}/api/admin/errors?view=groups`, { method: 'GET' });
   if (!response.ok) throw new Error('Erreur chargement erreurs');
   return response.json();
 }
 
-export async function clearBotErrors() {
-  const response = await authorizedFetch(`${API_BASE_URL}/api/admin/errors`, { method: 'DELETE' });
+export async function fetchBotErrorOccurrences(
+  groupId: string,
+  cursor: string | null = null,
+): Promise<{ errors: BotErrorOccurrence[]; nextCursor: string | null }> {
+  const params = new URLSearchParams({ group: groupId });
+  if (cursor) params.set('cursor', cursor);
+  const response = await authorizedFetch(`${API_BASE_URL}/api/admin/errors?${params.toString()}`, { method: 'GET' });
+  if (!response.ok) throw new Error('Erreur chargement des occurrences');
+  return response.json();
+}
+
+/** Purge un groupe, ou tout le journal sans groupe. */
+export async function clearBotErrors(groupId?: string) {
+  const query = groupId !== undefined ? `?${new URLSearchParams({ group: groupId }).toString()}` : '';
+  const response = await authorizedFetch(`${API_BASE_URL}/api/admin/errors${query}`, { method: 'DELETE' });
   if (!response.ok) throw new Error('Erreur suppression erreurs');
   return response.json();
 }
 
 // ─── Broadcast System ───
+
+export interface BroadcastTranslations {
+  en?: { title?: string; message?: string; footerText?: string };
+}
 
 export interface BroadcastPayload {
   title?: string;
@@ -285,6 +317,10 @@ export interface BroadcastPayload {
   pollOptions?: string[];
   /** ISO 8601. */
   pollClosesAt?: string;
+  /** Libellé du bouton = demande d'avis (bouton → formulaire), exclusif avec le sondage. */
+  feedbackLabel?: string;
+  /** Variante anglaise, envoyée aux serveurs configurés en anglais. */
+  translations?: BroadcastTranslations;
   dryRun?: boolean;
   /** ISO 8601. Present = annonce programmee au lieu d'un envoi immediat. */
   scheduledAt?: string;
@@ -355,6 +391,8 @@ export interface BroadcastLogEntry {
   channelPref: string;
   pollOptions: string[];
   pollClosesAt: string | null;
+  feedbackLabel: string | null;
+  translations: BroadcastTranslations | null;
   successCount: number;
   failCount: number;
   totalTargeted: number;
@@ -396,6 +434,21 @@ export interface BroadcastPollResults {
 export async function fetchBroadcastPoll(broadcastId: string): Promise<BroadcastPollResults> {
   const response = await authorizedFetch(`${API_BASE_URL}/api/admin/broadcast/${broadcastId}/poll`);
   if (!response.ok) throw new Error('Erreur chargement des résultats');
+  return response.json();
+}
+
+export interface BroadcastFeedbackEntry {
+  id: string;
+  userId: string;
+  guildId: string;
+  guildName: string;
+  content: string;
+  createdAt: string;
+}
+
+export async function fetchBroadcastFeedback(broadcastId: string): Promise<{ feedbacks: BroadcastFeedbackEntry[] }> {
+  const response = await authorizedFetch(`${API_BASE_URL}/api/admin/broadcast/${broadcastId}/feedback`);
+  if (!response.ok) throw new Error('Erreur chargement des retours');
   return response.json();
 }
 
@@ -665,6 +718,7 @@ export interface BroadcastTemplate {
   target: string;
   targetGuilds: string[];
   channelPref: string;
+  translations: BroadcastTranslations | null;
   createdBy: string;
   createdAt: string;
   updatedAt: string;
@@ -786,6 +840,51 @@ export async function fetchAdminAudit(query: AdminAuditQuery = {}): Promise<{
 export async function fetchAdminAuditActions(): Promise<{ actions: { action: string; count: number }[] }> {
   const response = await authorizedFetch(`${API_BASE_URL}/api/admin/audit/actions`);
   if (!response.ok) throw new Error('Impossible de charger les actions. Réessaie.');
+  return response.json();
+}
+
+export interface LinkedGroupAccount {
+  userId: string;
+  name: string | null;
+  username: string | null;
+  avatarUrl: string | null;
+  guildCount: number;
+}
+
+export interface LinkedGroupLink {
+  guildId: string;
+  guildName: string;
+  user1Id: string;
+  user2Id: string;
+  type: 'MANUAL' | 'AUTOMATIC';
+  status: 'VALIDATED' | 'PENDING' | 'REJECTED';
+  reason: string | null;
+  createdAt: string;
+}
+
+export interface LinkedGroup {
+  id: string;
+  accounts: LinkedGroupAccount[];
+  links: LinkedGroupLink[];
+  guildCount: number;
+  validatedCount: number;
+  manualCount: number;
+  lastLinkedAt: string;
+}
+
+export async function fetchAdminLinkedGroups(query: {
+  search?: string;
+  status?: 'VALIDATED' | 'PENDING';
+  minAccounts?: number;
+  offset?: number;
+  limit?: number;
+} = {}): Promise<{ groups: LinkedGroup[]; total: number; totalAccounts: number; truncated: boolean }> {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) {
+    if (value !== undefined && value !== null && value !== '') params.set(key, String(value));
+  }
+  const response = await authorizedFetch(`${API_BASE_URL}/api/admin/linked-accounts?${params.toString()}`);
+  if (!response.ok) throw new Error('Impossible de charger les doubles comptes. Réessaie.');
   return response.json();
 }
 

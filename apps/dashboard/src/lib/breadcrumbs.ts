@@ -37,7 +37,6 @@ export function buildCrumbs(path: string): Crumb[] {
       recruitment: m.bc_module_recruitment(),
       tickets: m.bc_module_tickets(),
       meetings: m.bc_module_meetings(),
-      dailyalgo: m.bc_module_dailyalgo(),
     };
     list.push({ name: moduleNames[segments[1]] || segments[1], href: path });
   } else if (segments[0] === 'admin') {

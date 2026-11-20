@@ -28,6 +28,12 @@ model DropConfig {
   /// se fait camper par les mêmes membres à chaque fois.
   intervalMinutes Int @default(360)
 
+  /// Attente d'activité : un drop dû ne part que si son salon a reçu au moins
+  /// ce nombre de messages de membres sur les `activityWindowMinutes` dernières
+  /// minutes, avec au plus un intervalle de retard. `0` = pas de condition.
+  activityMinMessages   Int @default(0)
+  activityWindowMinutes Int @default(15)
+
   /// Mode « premier arrivé » : un seul gagnant.
   firstEnabled   Boolean @default(true)
   firstMinAmount Int     @default(50)
@@ -85,6 +91,9 @@ model Drop {
   messageId String?
 
   amount Int
+  /// Drop jackpot : `amount` est déjà multiplié, le drapeau sert à l'annonce
+  /// et à l'historique.
+  jackpot Boolean @default(false)
   /// Ramassages autorisés. `0` = sans limite (mode fenêtre, borné par le temps).
   maxClaims  Int @default(1)
   /// Compteur incrémenté par une écriture conditionnelle : c'est lui qui
@@ -113,6 +122,11 @@ model Drop {
 }
 
 /// Ramassage d'un drop par un membre. L'unicité garantit un gain par personne.
+///
+/// La place est réservée avant le versement, qui touche d'autres modules et parfois
+/// Discord : il ne peut pas tenir dans la même transaction. Un ramassage sans
+/// `paidAt` est une place prise dont le gain reste à verser, et le cycle des drops
+/// reprend ceux qu'un redémarrage ou une erreur a laissés en route.
 model DropClaim {
   id      String @id @default(cuid())
   dropId  String
@@ -121,11 +135,26 @@ model DropClaim {
   /// Recopié du drop : le journal reste juste si la config change ensuite.
   amount  Int
 
+  /// Gain versé. Vide = place réservée, versement à reprendre.
+  paidAt      DateTime?
+  /// Dernière tentative de versement. La reprise la repousse par une écriture
+  /// conditionnelle avant de verser : deux processus ne reprennent pas le même.
+  attemptedAt DateTime  @default(now())
+  /// Reprises déjà faites par le cycle. Le clic n'en compte pas.
+  attempts    Int       @default(0)
+  /// Versement abandonné après trop de reprises en échec : le ramassage n'est plus
+  /// repris, et la page des drops le signale pour qu'un administrateur s'en occupe.
+  abandonedAt DateTime?
+
   drop Drop @relation(fields: [dropId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
 
   @@unique([dropId, userId])
   @@index([guildId, createdAt])
+  /// Plafond de ramassages par membre sur 24 h.
+  @@index([guildId, userId, createdAt])
+  /// Reprise des versements restés en suspens.
+  @@index([paidAt, abandonedAt, attemptedAt])
   @@map("drop_claims")
 }

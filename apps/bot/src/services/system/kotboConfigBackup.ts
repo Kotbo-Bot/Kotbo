@@ -5,7 +5,7 @@ import prisma from '../../utils/db.js';
 export const KOTBO_SINGLETON_MODELS = [
   'AegisConfig', 'BanAppealConfig', 'AuditLoggerConfig', 'AutoModConfig', 'ChannelHealthConfig',
   'GiveawayConfig', 'DashboardSettings', 'EconomyConfig', 'GhostAnalyzerConfig', 'WelcomeConfig',
-  'WelcomeThreadConfig', 'LevelConfig', 'PartnershipSettings', 'PartnershipDirectoryListing',
+  'WelcomeThreadConfig', 'LevelConfig',
   'CallPermissionConfig', 'RaidProtectionConfig', 'RankedConfig', 'ShopSettings', 'SimulationConfig',
   'CommunitySite', 'SpamDetectionConfig', 'StarboardConfig', 'TempVoiceAccessRequestConfig',
   'TempVoiceModPermissionsConfig', 'RpgTowerConfig', 'RpgClanTowerConfig', 'TutoringConfig',

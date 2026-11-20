@@ -40,15 +40,24 @@ describe('getAegisConfig / getAegisSendConfig', () => {
     expect(await getAegisSendConfig('1')).toMatchObject({ guildId: '1', enabled: true });
   });
 
-  test('offre gratuite : l IA ne note rien, le partage accepte part encore', async () => {
+  test('offre gratuite : revue seule, sans modules derives ni analyse etendue', async () => {
     plan = 'FREE';
-    row = { guildId: '1', enabled: true, trainingConsent: false };
-    expect(await getAegisConfig('1')).toBeNull();
-    expect(await getAegisSendConfig('1')).toBeNull();
+    row = {
+      guildId: '1', enabled: true, trainingConsent: false, analyzeEdits: true,
+      conflictEnabled: true, harassmentEnabled: true, distressEnabled: true,
+      analyzeThreads: true, analyzeVoiceChats: true, analyzeNicknames: true, analyzeTickets: true, ticketPriorityBoost: true,
+    };
+    expect(await getAegisConfig('1')).toMatchObject({
+      enabled: true, reviewOnly: true, analyzeEdits: true,
+      conflictEnabled: false, harassmentEnabled: false, distressEnabled: false,
+      analyzeThreads: false, analyzeVoiceChats: false, analyzeNicknames: false, analyzeTickets: false, ticketPriorityBoost: false,
+    });
 
-    row = { guildId: '1', enabled: true, trainingConsent: true };
-    expect(await getAegisSendConfig('1')).toMatchObject({ enabled: false, trainingConsent: true });
+    row = { guildId: '1', enabled: false, trainingConsent: false };
+    expect(await getAegisConfig('1')).toBeNull();
     plan = 'PRO';
+    row = { guildId: '1', enabled: true, trainingConsent: false };
+    expect((await getAegisConfig('1'))?.reviewOnly).toBeUndefined();
   });
 });
 

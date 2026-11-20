@@ -1,8 +1,8 @@
-import { IncomingMessage, ServerResponse } from 'node:http';
-import { json, readJsonBody, type AuthClaims, type DashboardAccess } from '../../shared.js';
+import { Hono } from 'hono';
+import type { Client } from 'discord.js';
 import prisma from '../../../utils/db.js';
 import { logger } from '../../../utils/logger.js';
-import { jsonFailure } from '../../shared/failure.js';
+import { fail, guildRoute, readBody, send } from '../../hono/dashboard/kit.js';
 import {
   createRecruitmentForm,
   getRecruitmentForms,
@@ -19,47 +19,36 @@ import {
 /**
  * Handles recruitment form management endpoints
  */
-export async function handleRecruitmentFormRoutes(
-  req: IncomingMessage,
-  res: ServerResponse,
-  parts: string[],
-  url: URL,
-  _client: unknown,
-  user: AuthClaims,
-  guildId: string,
-  _access: DashboardAccess
-): Promise<boolean> {
-  const method = req.method;
+export function createRecruitmentFormsRouter(client: Client) {
+  const router = new Hono();
+  const base = '/api/dashboard/guilds/:guildId';
+  const gate = guildRoute(client);
 
-  if (parts[4] !== 'recruitment' || parts[5] !== 'forms') {
-    return false;
-  }
 
-  // GET /api/dashboard/guilds/:guildId/recruitment/forms - List all forms
-  if (parts.length === 6 && method === 'GET') {
+  router.get(`${base}/recruitment/forms`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
     try {
       const forms = await getRecruitmentForms(guildId);
-      json(res, 200, { forms });
+      return send(c, { forms });
     } catch (err) {
       logger.error('RecruitmentFormAPI', 'Error getting forms:', err);
-      jsonFailure(res, err, 'Erreur lors de la récupération des formulaires', 'RecruitmentFormAPI');
+      return fail(c, err, 'Erreur lors de la récupération des formulaires', 'RecruitmentFormAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/recruitment/forms - Create new form
-  if (parts.length === 6 && method === 'POST') {
+  router.post(`${base}/recruitment/forms`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
     try {
-      const body = await readJsonBody<{
+      const body = await readBody<{
         name: string;
         description?: string;
         structure?: FormStructure;
         template?: 'default' | 'simple' | 'custom' | 'google';
-      }>(req);
+      }>(c);
 
       if (!body?.name) {
-        json(res, 400, { error: 'Le nom du formulaire est requis' });
-        return true;
+        return send(c, { error: 'Le nom du formulaire est requis' }, 400);
       }
 
       // Use template or custom structure
@@ -77,8 +66,7 @@ export async function handleRecruitmentFormRoutes(
       }
 
       if (!structure) {
-        json(res, 400, { error: 'La structure du formulaire est requise' });
-        return true;
+        return send(c, { error: 'La structure du formulaire est requise' }, 400);
       }
 
       // Get staff member for createdByUserId (FK constraint on APIKey)
@@ -94,8 +82,7 @@ export async function handleRecruitmentFormRoutes(
       }
 
       if (!staffMember) {
-        json(res, 403, { error: 'Aucun membre staff trouvé pour ce serveur. Ajoutez au moins un membre staff avant de créer un formulaire.' });
-        return true;
+        return send(c, { error: 'Aucun membre staff trouvé pour ce serveur. Ajoutez au moins un membre staff avant de créer un formulaire.' }, 403);
       }
 
       const createdById = staffMember.id;
@@ -108,71 +95,81 @@ export async function handleRecruitmentFormRoutes(
         structure
       );
 
-      json(res, 201, {
+      return send(c, {
         form: result.form,
         apiKey: result.apiKey,
         displayKey: result.displayKey,
-      });
+      }, 201);
     } catch (err) {
       logger.error('RecruitmentFormAPI', 'Error creating form:', err);
-      jsonFailure(res, err, 'Erreur lors de la création du formulaire', 'RecruitmentFormAPI');
+      return fail(c, err, 'Erreur lors de la création du formulaire', 'RecruitmentFormAPI');
     }
-    return true;
-  }
+  });
 
-  // GET /api/dashboard/guilds/:guildId/recruitment/forms/:formId - Get specific form
-  if (parts.length === 7 && method === 'GET') {
-    const formId = parts[6];
+  // Déclarée avant `/:formId`, qui la captait dans l'ancien routeur.
+  router.get(`${base}/recruitment/forms/templates`, ...gate, async (c) => {
+    try {
+      const templates = {
+        default: generateDefaultRecruitmentForm(),
+        simple: generateSimpleRecruitmentForm(),
+      };
+      return send(c, { templates });
+    } catch (err) {
+      logger.error('RecruitmentFormAPI', 'Error getting templates:', err);
+      return fail(c, err, 'Erreur lors de la récupération des templates', 'RecruitmentFormAPI');
+    }
+  });
+
+  router.get(`${base}/recruitment/forms/:formId`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const formId = c.req.param('formId');
     try {
       const form = await getRecruitmentForm(formId, guildId);
       if (!form) {
-        json(res, 404, { error: 'Formulaire introuvable' });
-        return true;
+        return send(c, { error: 'Formulaire introuvable' }, 404);
       }
-      json(res, 200, { form });
+      return send(c, { form });
     } catch (err) {
       logger.error('RecruitmentFormAPI', 'Error getting form:', err);
-      jsonFailure(res, err, 'Erreur lors de la récupération du formulaire', 'RecruitmentFormAPI');
+      return fail(c, err, 'Erreur lors de la récupération du formulaire', 'RecruitmentFormAPI');
     }
-    return true;
-  }
+  });
 
-  // PATCH /api/dashboard/guilds/:guildId/recruitment/forms/:formId - Update form
-  if (parts.length === 7 && method === 'PATCH') {
-    const formId = parts[6];
+  router.patch(`${base}/recruitment/forms/:formId`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const formId = c.req.param('formId');
     try {
-      const body = await readJsonBody<{
+      const body = await readBody<{
         name?: string;
         description?: string;
         structure?: FormStructure;
         isActive?: boolean;
-      }>(req);
+      }>(c);
 
       await updateRecruitmentForm(formId, guildId, body || {});
-      json(res, 200, { ok: true });
+      return send(c, { ok: true });
     } catch (err) {
       logger.error('RecruitmentFormAPI', 'Error updating form:', err);
-      jsonFailure(res, err, 'Erreur lors de la mise à jour du formulaire', 'RecruitmentFormAPI');
+      return fail(c, err, 'Erreur lors de la mise à jour du formulaire', 'RecruitmentFormAPI');
     }
-    return true;
-  }
+  });
 
-  // DELETE /api/dashboard/guilds/:guildId/recruitment/forms/:formId - Delete form
-  if (parts.length === 7 && method === 'DELETE') {
-    const formId = parts[6];
+  router.delete(`${base}/recruitment/forms/:formId`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const formId = c.req.param('formId');
     try {
       await deleteRecruitmentForm(formId, guildId);
-      json(res, 200, { ok: true });
+      return send(c, { ok: true });
     } catch (err) {
       logger.error('RecruitmentFormAPI', 'Error deleting form:', err);
-      jsonFailure(res, err, 'Erreur lors de la suppression du formulaire', 'RecruitmentFormAPI');
+      return fail(c, err, 'Erreur lors de la suppression du formulaire', 'RecruitmentFormAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/recruitment/forms/:formId/regenerate-key - Regenerate API key
-  if (parts.length === 8 && parts[7] === 'regenerate-key' && method === 'POST') {
-    const formId = parts[6];
+  router.post(`${base}/recruitment/forms/:formId/regenerate-key`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const formId = c.req.param('formId');
     try {
       // Resolve staff member ID (FK constraint requires a valid StaffMember.id)
       let staffMember = await prisma.staffMember.findUnique({
@@ -187,72 +184,51 @@ export async function handleRecruitmentFormRoutes(
       }
 
       if (!staffMember) {
-        json(res, 403, { error: 'Aucun membre staff trouvé pour ce serveur.' });
-        return true;
+        return send(c, { error: 'Aucun membre staff trouvé pour ce serveur.' }, 403);
       }
 
       logger.info('RecruitmentFormAPI', `Regenerating key for form ${formId} with staffMember ${staffMember.id}`);
       const result = await regenerateFormAPIKey(formId, guildId, staffMember.id);
-      json(res, 200, { apiKey: result.apiKey, displayKey: result.displayKey });
+      return send(c, { apiKey: result.apiKey, displayKey: result.displayKey });
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
       logger.error('RecruitmentFormAPI', 'Error regenerating API key:', err);
-      // Include real error in response for debugging (remove in prod)
-      jsonFailure(res, err, 'Erreur lors de la régénération de la clé API', 'RecruitmentFormAPI');
+      return fail(c, err, 'Erreur lors de la régénération de la clé API', 'RecruitmentFormAPI');
     }
-    return true;
-  }
+  });
 
-  // GET /api/dashboard/guilds/:guildId/recruitment/forms/:formId/script - Generate Google Apps Script
-  if (parts.length === 8 && parts[7] === 'script' && method === 'GET') {
-    const formId = parts[6];
+  router.get(`${base}/recruitment/forms/:formId/script`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const formId = c.req.param('formId');
     try {
       const form = await getRecruitmentForm(formId, guildId);
       if (!form) {
-        json(res, 404, { error: 'Formulaire introuvable' });
-        return true;
+        return send(c, { error: 'Formulaire introuvable' }, 404);
       }
 
+      const url = new URL(c.req.url);
       const webhookUrl = `${url.protocol}//${url.host}/api/dashboard/guilds/${guildId}/recruitment/candidatures`;
       const apiKey = form.apiKey?.displayKey || 'YOUR_API_KEY';
       const script = generateGoogleAppsScript(webhookUrl, apiKey, form.name, guildId);
 
-      json(res, 200, { script });
+      return send(c, { script });
     } catch (err) {
       logger.error('RecruitmentFormAPI', 'Error generating script:', err);
-      jsonFailure(res, err, 'Erreur lors de la génération du script', 'RecruitmentFormAPI');
+      return fail(c, err, 'Erreur lors de la génération du script', 'RecruitmentFormAPI');
     }
-    return true;
-  }
+  });
 
-  // GET /api/dashboard/guilds/:guildId/recruitment/forms/templates - Get available templates
-  if (parts.length === 7 && parts[6] === 'templates' && method === 'GET') {
+  router.get(`${base}/recruitment/forms/:formId/responses`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const formId = c.req.param('formId');
     try {
-      const templates = {
-        default: generateDefaultRecruitmentForm(),
-        simple: generateSimpleRecruitmentForm(),
-      };
-      json(res, 200, { templates });
-    } catch (err) {
-      logger.error('RecruitmentFormAPI', 'Error getting templates:', err);
-      jsonFailure(res, err, 'Erreur lors de la récupération des templates', 'RecruitmentFormAPI');
-    }
-    return true;
-  }
-
-  // GET /api/dashboard/guilds/:guildId/recruitment/forms/:formId/responses - List form responses
-  if (parts.length === 8 && parts[7] === 'responses' && method === 'GET') {
-    const formId = parts[6];
-    try {
-      const limit = Math.min(Math.max(Number(url.searchParams.get('limit')) || 100, 1), 250);
-      const offset = Math.max(Number(url.searchParams.get('offset')) || 0, 0);
+      const limit = Math.min(Math.max(Number((c.req.query('limit') ?? null)) || 100, 1), 250);
+      const offset = Math.max(Number((c.req.query('offset') ?? null)) || 0, 0);
       const form = await prisma.recruitmentForm.findFirst({
         where: { id: formId, guildId },
         select: { id: true },
       });
       if (!form) {
-        json(res, 404, { error: 'Formulaire introuvable' });
-        return true;
+        return send(c, { error: 'Formulaire introuvable' }, 404);
       }
 
       const [responses, total] = await Promise.all([
@@ -276,13 +252,13 @@ export async function handleRecruitmentFormRoutes(
         prisma.recruitmentCandidature.count({ where: { formId, guildId } }),
       ]);
 
-      json(res, 200, { responses, total, limit, offset });
+      return send(c, { responses, total, limit, offset });
     } catch (err) {
       logger.error('RecruitmentFormAPI', 'Error fetching form responses:', err);
-      jsonFailure(res, err, 'Erreur lors de la récupération des réponses', 'RecruitmentFormAPI');
+      return fail(c, err, 'Erreur lors de la récupération des réponses', 'RecruitmentFormAPI');
     }
-    return true;
-  }
+  });
 
-  return false;
+  return router;
 }
+

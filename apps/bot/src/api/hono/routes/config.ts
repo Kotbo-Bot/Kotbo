@@ -6,6 +6,8 @@ import {
 import { configRateLimiter } from '../../limiters.js';
 import { getCurrentInstance } from '../../../utils/instanceContext.js';
 import { rateLimit } from '../middleware/rateLimit.js';
+import crypto from 'node:crypto';
+import { customDomainForHost, refreshCustomDomains, traefikDynamicConfig } from '../../../services/system/customDomain.js';
 
 export const configRouter = new OpenAPIHono();
 
@@ -63,6 +65,8 @@ const BrandingResponse = z.object({
   faviconUrl:   z.string().nullable(),
   footerText:   z.string().nullable(),
   isWhiteLabel: z.boolean(),
+  /** Domaine perso d'un serveur : le serveur qu'il sert. */
+  guildId:      z.string().nullable(),
 });
 
 const brandingRoute = createRoute({
@@ -80,6 +84,21 @@ const brandingRoute = createRoute({
 
 configRouter.openapi(brandingRoute, (c) => {
   const inst = getCurrentInstance();
+  // Sur le domaine perso d'un serveur, le dashboard prend le nom et l'avatar de son bot.
+  const custom = customDomainForHost(c.req.header('host'));
+  if (custom) {
+    return c.json({
+      instanceId:   inst.id,
+      slug:         inst.slug,
+      name:         custom.botName || inst.brandName,
+      color:        inst.brandColor,
+      logoUrl:      custom.botAvatarUrl,
+      faviconUrl:   custom.botAvatarUrl,
+      footerText:   null,
+      isWhiteLabel: true,
+      guildId:      custom.guildId,
+    }, 200);
+  }
   return c.json({
     instanceId:   inst.id,
     slug:         inst.slug,
@@ -89,5 +108,25 @@ configRouter.openapi(brandingRoute, (c) => {
     faviconUrl:   inst.brandFaviconUrl,
     footerText:   inst.brandFooterText,
     isWhiteLabel: !inst.isDefault,
+    guildId:      null,
   }, 200);
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/internal/custom-domains/traefik
+// Lu par le fournisseur HTTP de Traefik (cf. docs/domaines-perso.md). Hors
+// documentation OpenAPI : ce n'est pas une route publique.
+// ---------------------------------------------------------------------------
+
+function sameSecret(given: string, expected: string): boolean {
+  const a = Buffer.from(given);
+  const b = Buffer.from(expected);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+configRouter.get('/api/internal/custom-domains/traefik', async (c) => {
+  const expected = process.env.CUSTOM_DOMAIN_PROVIDER_TOKEN;
+  if (!expected || !sameSecret(c.req.query('token') ?? '', expected)) return c.json({ error: 'Not found' }, 404);
+  const domains = await refreshCustomDomains();
+  return c.json(traefikDynamicConfig(domains));
 });

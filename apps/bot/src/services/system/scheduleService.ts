@@ -190,6 +190,7 @@ export async function executeSchedule(client: Client, scheduleId: string): Promi
         createdByUserId: client.user!.id,
         createdByUsername: client.user!.username,
         createdByTag: '0000',
+        rotate: true,
       };
       await createBackup(guild, backupOptions);
     } else if (schedule.type === 'DATA_EXPORT') {

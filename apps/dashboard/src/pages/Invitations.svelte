@@ -1,4 +1,5 @@
 <script lang="ts">
+  import MemberTag from '../lib/components/MemberTag.svelte';
   import { explainDisabled } from '../lib/actions/explainDisabled';
   import { onMount } from 'svelte';
   import { memberAvatarSrc } from '../lib/discordMedia';
@@ -28,6 +29,8 @@
   import { toast } from '../lib/stores/toast.svelte';
   import { confirmDialog } from '../lib/stores/confirmDialog.svelte';
   import { m, dateLocale } from '../lib/i18n';
+  import TagJoinsCard from '../lib/components/analytics/TagJoinsCard.svelte';
+  import { fetchMemberOverview, type MemberOverview } from '../lib/api';
 
   import { errorMessage } from '@kotbo/shared';
   type InviteStatus = 'active' | 'suspended' | 'deleted' | 'expired';
@@ -206,11 +209,28 @@
   // fois et se demonte proprement.
   $effect(() => {
     document.addEventListener('click', handleClickOutside);
-    return () => document.removeEventListener('click', handleClickOutside);
+    // Le menu est en position fixed : il se ferme au défilement plutôt que de flotter.
+    const close = () => closeActionMenu();
+    window.addEventListener('scroll', close, true);
+    return () => {
+      document.removeEventListener('click', handleClickOutside);
+      window.removeEventListener('scroll', close, true);
+    };
   });
 
 
+  // undefined = pas encore chargé ; null = aucun relevé du tag. Échec : la carte reste masquée.
+  let tagEstimate = $state<MemberOverview['tag'] | undefined>(undefined);
+  async function loadTagEstimate() {
+    try {
+      tagEstimate = (await fetchMemberOverview({ period: 30 }))?.tag ?? null;
+    } catch {
+      tagEstimate = undefined;
+    }
+  }
+
   async function loadInvitations() {
+    void loadTagEstimate();
     if (!authStore.selectedGuildId) return;
     loading = true;
     error = '';
@@ -268,9 +288,9 @@
 
   function getStatusClass(status: InviteStatus) {
     switch (status) {
-      case 'active': return 'bg-success/10 text-success';
-      case 'suspended': return 'bg-warning/10 text-warning';
-      case 'deleted': return 'bg-error/10 text-error';
+      case 'active': return 'bg-success/10 text-on-success-container';
+      case 'suspended': return 'bg-warning/10 text-on-warning-container';
+      case 'deleted': return 'bg-error/10 text-on-error-container';
       case 'expired': return 'bg-slate-500/10 text-on-surface-variant';
     }
   }
@@ -376,9 +396,23 @@
       actionMenuOpen = null;
     } else {
       const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
-      actionMenuPosition = { x: rect.right - 160, y: rect.bottom + 4 };
-      actionMenuOpen = inviteCode;
+      placeMenu(inviteCode, rect.right - 160, rect.bottom + 4, rect.top - 4);
     }
+  }
+
+  // Menu en position fixed (hors du scroll du tableau), recadré dans la fenêtre.
+  // shortcut: hauteur estimée à 290 px, à mesurer si le menu gagne des entrées.
+  function placeMenu(inviteCode: string, x: number, y: number, flipY = y) {
+    const w = 170, h = 290;
+    if (y + h > window.innerHeight) y = Math.max(8, flipY - h);
+    actionMenuPosition = { x: Math.max(8, Math.min(x, window.innerWidth - w - 8)), y };
+    actionMenuOpen = inviteCode;
+  }
+
+  function openContextMenu(inviteCode: string, event: MouseEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    placeMenu(inviteCode, event.clientX, event.clientY);
   }
 
   function closeActionMenu() {
@@ -494,16 +528,19 @@
 
 <!-- Pseudo qui ouvre la fiche membre, pour qui a accès à « Membres » ; du texte sinon. -->
 {#snippet memberName(userId: string | null | undefined, label: string, cls: string)}
-  {#if userId && memberCaseModal.canOpen}
-    <button
-      type="button"
-      class="{cls} text-left hover:text-primary transition-colors"
-      title={m.sx_open_member({ name: label })}
-      onclick={() => memberCaseModal.show(userId, label)}
-    >{label}</button>
-  {:else}
-    <span class={cls}>{label}</span>
-  {/if}
+  <span class="inline-flex max-w-full min-w-0 items-center gap-1.5">
+    {#if userId && memberCaseModal.canOpen}
+      <button
+        type="button"
+        class="{cls} truncate text-left hover:text-primary transition-colors"
+        title={m.sx_open_member({ name: label })}
+        onclick={() => memberCaseModal.show(userId, label)}
+      >{label}</button>
+    {:else}
+      <span class="{cls} truncate">{label}</span>
+    {/if}
+    <MemberTag {userId} />
+  </span>
 {/snippet}
 
 <ModulePage
@@ -527,7 +564,7 @@
 
   <div class="space-y-6">
     {#if error}
-      <div class="p-4 rounded-lg bg-error/10 text-error text-sm font-bold">{error}</div>
+      <div class="p-4 rounded-lg bg-error/10 text-on-error-container text-sm font-bold">{error}</div>
     {/if}
 
     <!-- Stats compactes -->
@@ -583,20 +620,20 @@
               <div class="h-10 w-16 bg-surface-container-high/40 rounded-xl animate-pulse"></div>
             </div>
           {:else}
-            <FormInput
+            <FormInput ariaLabel={m.iv_search_placeholder()}
               placeholder={m.iv_search_placeholder()}
               bind:value={searchQuery}
-              className="w-full lg:w-80 px-4 py-2.5 rounded-xl bg-surface-container-high/30 border border-outline-variant/20 text-sm"
+              className="w-full lg:w-80 px-4 py-2.5 rounded-xl bg-surface-container-high/30 border border-field-border text-sm"
             />
             <div class="flex gap-2 flex-wrap">
-              <select bind:value={statusFilter} class="px-3 py-2 rounded-xl bg-surface-container-high/40 text-xs font-bold border border-outline-variant/20">
+              <select aria-label={m.iv_filter_status()} bind:value={statusFilter} class="px-3 py-2 rounded-xl bg-surface-container-high/40 text-xs font-bold border border-field-border">
                 <option value="all">{m.iv_all_statuses()}</option>
                 <option value="active">{m.iv_filter_active()}</option>
                 <option value="suspended">{m.iv_filter_suspended()}</option>
                 <option value="expired">{m.iv_filter_expired()}</option>
                 <option value="deleted">{m.iv_filter_deleted()}</option>
               </select>
-              <select bind:value={sortBy} class="px-3 py-2 rounded-xl bg-surface-container-high/40 text-xs font-bold border border-outline-variant/20">
+              <select aria-label={m.a11y_sort_by()} bind:value={sortBy} class="px-3 py-2 rounded-xl bg-surface-container-high/40 text-xs font-bold border border-field-border">
                 <option value="createdAt">{m.iv_col_creation()}</option>
                 <option value="uses">{m.iv_col_uses()}</option>
                 <option value="joins">{m.iv_col_joins()}</option>
@@ -652,7 +689,7 @@
               <tbody class="text-sm">
                 {#each filteredInvites as invite}
                   {@const status = getInviteStatus(invite)}
-                  <tr class="border-b border-outline-variant/5 hover:bg-surface-container-high/20 transition-colors">
+                  <tr class="border-b border-outline-variant/5 hover:bg-surface-container-high/20 transition-colors" oncontextmenu={(e) => openContextMenu(invite.code, e)}>
                     <td class="py-3 pr-4">
                       <code class="text-xs font-semibold text-primary dark:text-blue-300 bg-primary/10 dark:bg-blue-500/15 px-2 py-1 rounded-lg">{invite.code}</code>
                     </td>
@@ -702,7 +739,7 @@
                           {getStatusLabel(status)}
                         </span>
                         {#if invite.inviterSuspended}
-                          <span class="px-2 py-0.5 rounded-full text-2xs font-semibold bg-error/10 text-error">{m.iv_inviter_suspended_badge()}</span>
+                          <span class="px-2 py-0.5 rounded-full text-2xs font-semibold bg-error/10 text-on-error-container">{m.iv_inviter_suspended_badge()}</span>
                         {/if}
                         {#if isDormant(invite)}
                           <span class="px-2 py-0.5 rounded-full text-2xs font-semibold bg-slate-500/10 text-on-surface-variant">{m.iv_dormant()}</span>
@@ -731,7 +768,7 @@
                           <Papicon icon="MoreVertical" size={16} class="text-on-surface-variant" />
                         </button>
                         {#if actionMenuOpen === invite.code}
-                          <div class="absolute right-0 top-full mt-1 z-[9999] min-w-[160px] bg-surface-container rounded-xl shadow-sm border border-outline-variant/20 overflow-hidden">
+                          <div style="left:{actionMenuPosition.x}px;top:{actionMenuPosition.y}px" class="fixed z-[9999] min-w-[160px] bg-surface-container rounded-xl shadow-sm border border-outline-variant/20 overflow-hidden">
                             <button
                               class="w-full px-3 py-2 text-left text-xs font-bold hover:bg-surface-container-high/50 flex items-center gap-2 transition-colors"
                               onclick={() => { inviteDetailsModal.show(invite.code); closeActionMenu(); }}
@@ -797,6 +834,9 @@
       </div>
     {:else if activeTab === 'sources'}
       <div class="space-y-5">
+        {#if tagEstimate !== undefined}
+          <TagJoinsCard tag={tagEstimate} />
+        {/if}
         <section class="source-overview">
           <div class="max-w-2xl">
             <div class="flex items-center gap-2 text-cyan-500 mb-3">
@@ -831,7 +871,7 @@
                 maxlength="60"
                 placeholder={m.iv_source_input_placeholder()}
                 aria-label={m.iv_source_aria()}
-                class="flex-1 md:w-72 px-3 py-2.5 rounded-xl bg-surface border border-outline-variant/30 text-sm outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/15"
+                class="flex-1 md:w-72 px-3 py-2.5 rounded-xl bg-surface border border-field-border text-sm outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/15"
                 onkeydown={(event) => {
                   if (event.key === 'Enter') void saveSource(editingInvite);
                   if (event.key === 'Escape') cancelSourceEdit();
@@ -926,7 +966,7 @@
     {:else if activeTab === 'top'}
       <div class="premium-card p-6 rounded-xl space-y-4">
         <div class="flex items-center gap-3">
-          <div class="p-2 rounded-xl bg-success/10 text-success">
+          <div class="p-2 rounded-xl bg-success/10 text-on-success-container">
             <Papicon icon="Crown" size={18} />
           </div>
           <div>
@@ -953,9 +993,17 @@
             {#each topInviters as inviter, index}
               {@const rank = index + 1}
 
-              <div class="p-4 rounded-lg bg-surface-container-high/20 border border-outline-variant/10 flex items-center justify-between">
-                <div class="flex items-center gap-3">
-                  <div class="relative">
+              {@const clickable = memberCaseModal.canOpen && !!inviter.inviterId}
+              <svelte:element
+                this={clickable ? 'button' : 'div'}
+                type={clickable ? 'button' : undefined}
+                role={clickable ? 'button' : undefined}
+                title={clickable ? m.sx_open_member({ name: inviter.inviterTag }) : undefined}
+                onclick={clickable ? () => memberCaseModal.show(inviter.inviterId, inviter.inviterTag) : undefined}
+                class="w-full text-left p-4 rounded-lg bg-surface-container-high/20 border border-outline-variant/10 flex items-center justify-between {clickable ? 'cursor-pointer hover:bg-surface-container-high/40 hover:border-primary/30 transition-colors focus-visible:outline-2 focus-visible:outline-primary' : ''}"
+              >
+                <div class="flex items-center gap-3 min-w-0">
+                  <div class="relative shrink-0">
                     <img
                       src={memberAvatarSrc(inviter.avatarUrl, inviter.inviterTag, inviter.inviterId)}
                       alt={inviter.inviterTag}
@@ -966,13 +1014,16 @@
                       {rank}
                     </span>
                   </div>
-                  <div>
-                    {@render memberName(inviter.inviterId, inviter.inviterTag, 'block text-sm font-semibold text-on-surface')}
+                  <div class="min-w-0">
+                    <span class="inline-flex max-w-full min-w-0 items-center gap-1.5">
+                      <span class="block truncate text-sm font-semibold text-on-surface">{inviter.inviterTag}</span>
+                      <MemberTag userId={inviter.inviterId} />
+                    </span>
                     <p class="text-2xs text-on-surface-variant">{m.iv_last_join_short()} {formatRelative(inviter.lastJoinedAt)}</p>
                   </div>
                 </div>
                 <span class="text-lg font-semibold text-success">{inviter.joinedCount}</span>
-              </div>
+              </svelte:element>
             {/each}
             {#if topInviters.length === 0}
               <p class="text-xs text-on-surface-variant text-center py-8">{m.iv_no_data()}</p>
@@ -985,7 +1036,7 @@
         <!-- Formulaire de suspension -->
         <div class="premium-card p-6 rounded-xl space-y-4">
           <div class="flex items-center gap-3">
-            <div class="p-2 rounded-xl bg-warning/10 text-warning">
+            <div class="p-2 rounded-xl bg-warning/10 text-on-warning-container">
               <Papicon icon="UserMinus" size={18} />
             </div>
             <div>
@@ -1004,20 +1055,20 @@
             </div>
           {:else}
             <div class="space-y-3">
-              <FormInput
+              <FormInput ariaLabel={m.iv_user_id_placeholder()}
                 placeholder={m.iv_user_id_placeholder()}
                 bind:value={suspendUserId}
-                className="w-full px-4 py-2.5 rounded-xl bg-surface-container-high/30 border border-outline-variant/20 text-sm"
+                className="w-full px-4 py-2.5 rounded-xl bg-surface-container-high/30 border border-field-border text-sm"
               />
-              <FormInput
+              <FormInput ariaLabel={m.iv_user_tag_placeholder()}
                 placeholder={m.iv_user_tag_placeholder()}
                 bind:value={suspendUserTag}
-                className="w-full px-4 py-2.5 rounded-xl bg-surface-container-high/30 border border-outline-variant/20 text-sm"
+                className="w-full px-4 py-2.5 rounded-xl bg-surface-container-high/30 border border-field-border text-sm"
               />
-              <FormInput
+              <FormInput ariaLabel={m.iv_suspend_reason_placeholder()}
                 placeholder={m.iv_suspend_reason_placeholder()}
                 bind:value={suspendReason}
-                className="w-full px-4 py-2.5 rounded-xl bg-surface-container-high/30 border border-outline-variant/20 text-sm"
+                className="w-full px-4 py-2.5 rounded-xl bg-surface-container-high/30 border border-field-border text-sm"
               />
               <label class="flex items-center gap-2 text-sm font-bold text-on-surface-variant cursor-pointer">
                 <input type="checkbox" bind:checked={suspendCascade} class="rounded" />
@@ -1037,7 +1088,7 @@
         <!-- Liste des créateurs suspendus -->
         <div class="premium-card p-6 rounded-xl space-y-4">
           <div class="flex items-center gap-3">
-            <div class="p-2 rounded-xl bg-error/10 text-error">
+            <div class="p-2 rounded-xl bg-error/10 text-on-error-container">
               <Papicon icon="UserX" size={18} />
             </div>
             <div>

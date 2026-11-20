@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { dialogFocus } from '../lib/actions/dialogFocus';
   import { m, dateLocale } from '../lib/i18n';
   import { Tabs } from '../lib/components/ui';
   import { onMount } from 'svelte';
@@ -274,7 +275,7 @@
         <div class="w-10 h-10 border-3 border-primary/20 border-t-primary rounded-full animate-spin"></div>
       </div>
     {:else if error}
-      <div class="rounded-lg bg-error/10 border border-error/20 p-5 text-error text-sm">{error}</div>
+      <div class="rounded-lg bg-error/10 border border-error/20 p-5 text-on-error-container text-sm">{error}</div>
     {:else if responses.length === 0}
       <div class="rounded-lg border-2 border-dashed border-outline-variant/20 p-16 text-center text-on-surface-variant/40">
         <Papicon icon="inbox" size={48} class="mb-3" />
@@ -286,7 +287,7 @@
         <div class="flex flex-wrap gap-3 mb-4">
           <div class="relative flex-1 min-w-48">
             <Papicon icon="search" size={16} class="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/40" />
-            <input bind:value={searchQuery} placeholder={m.cfr_search_ph()}
+            <input aria-label={m.cfr_search_ph()} bind:value={searchQuery} placeholder={m.cfr_search_ph()}
               class="w-full bg-surface-container rounded-xl pl-9 pr-4 py-2.5 text-sm outline-none focus:ring-2 ring-primary/20 transition-all" />
           </div>
         </div>
@@ -405,7 +406,7 @@
 <!-- Detail modal -->
 {#if selectedResponse}
   <div class="fixed inset-0 z-50 flex items-center justify-center p-4"
-    role="dialog" aria-modal="true" tabindex="-1" onkeydown={(e) => { if (e.key === 'Escape') selectedResponse = null; }}>
+    use:dialogFocus={{}} role="dialog" aria-modal="true" aria-labelledby="cfr-detail-title" tabindex="-1" onkeydown={(e) => { if (e.key === 'Escape') selectedResponse = null; }}>
     <!-- Backdrop -->
     <button
       type="button"
@@ -418,7 +419,7 @@
     <div class="relative z-10 bg-surface rounded-xl shadow-sm max-w-lg w-full max-h-[80vh] overflow-y-auto">
       <div class="sticky top-0 bg-surface border-b border-outline-variant/10 px-6 py-4 flex items-start justify-between rounded-t-3xl">
         <div>
-          <h2 class="font-semibold text-on-surface text-lg font-sans">{m.cfr_detail()}</h2>
+          <h2 id="cfr-detail-title" class="font-semibold text-on-surface text-lg font-sans">{m.cfr_detail()}</h2>
           <p class="text-xs font-mono text-on-surface-variant/40 mt-0.5">{selectedResponse.id}</p>
         </div>
         <button onclick={() => selectedResponse = null}

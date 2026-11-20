@@ -126,7 +126,10 @@
 
 <svelte:window />
 
-<header class="app-navbar flex items-center justify-between px-6 bg-surface-container-lowest border-b border-outline-variant h-14 fixed top-0 right-0 z-40 transition-all duration-200 {$isMobile || standalone ? 'w-full' : collapsed ? 'w-[calc(100%-4.5rem)]' : 'w-[calc(100%-15rem)]'}">
+<header
+  class="app-navbar flex items-center justify-between px-6 bg-surface-container-lowest border-b border-outline-variant h-14 fixed top-0 right-0 z-40 {$isMobile || standalone ? 'w-full' : ''} {sidebarStore.isResizing ? 'transition-none' : 'transition-[width] duration-200'}"
+  style={!$isMobile && !standalone ? `width: calc(100% - ${collapsed ? '4.5rem' : `${sidebarStore.width}px`});` : ''}
+>
   <div class="app-navbar__leading flex min-w-0 items-center gap-4 server-selector-container relative">
     {#if $isMobile}
       {#if !standalone}
@@ -188,7 +191,7 @@
             class="w-5 h-5 rounded object-cover"
           >
         {:else}
-          <div class="w-5 h-5 rounded bg-primary/10 flex items-center justify-center text-[10px] font-medium text-primary">
+          <div class="w-5 h-5 rounded bg-primary/10 flex items-center justify-center text-[10px] font-medium text-on-primary-container">
             {selectedGuild?.name?.charAt(0) || '?'}
           </div>
         {/if}
@@ -230,14 +233,14 @@
       <button
         onclick={toggleUserMenu}
         class="app-navbar__profile flex items-center gap-2 hover:bg-surface-container p-1 rounded-lg transition-colors group/avatar"
-        aria-label={m.nbx_open_profile()}
+        aria-label={authStore.user?.username ? m.nbx_open_profile_named({ name: authStore.user.username }) : m.nbx_open_profile()}
         aria-expanded={userMenuOpen}
       >
         <div class="w-8 h-8 shrink-0 rounded-md overflow-hidden ring-1 ring-outline-variant">
           {#if !authStore.user}
             <div class="w-full h-full bg-surface-container-high animate-pulse"></div>
           {:else}
-            <img class="w-full h-full object-cover" src={getUserAvatar()} alt="Avatar"/>
+            <img class="w-full h-full object-cover" src={getUserAvatar()} alt=""/>
           {/if}
         </div>
         <div class="hidden sm:flex flex-col items-start">

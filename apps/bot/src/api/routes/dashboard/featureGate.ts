@@ -34,10 +34,6 @@ export const SEGMENT_FEATURE_KEYS: Record<string, string | string[]> = {
   analytics: 'analytics',
   announcement: 'welcome_goodbye',
   campaigns: 'campaigns',
-  partnerships: 'partnerships',
-  partners: 'partnerships',
-  'partner-applications': 'partnerships',
-  'partnership-directory': 'partnerships',
   'welcome-thread': 'welcome_goodbye',
   'welcome-experiments': 'welcome_goodbye',
   'audit-events': 'activity',
@@ -45,12 +41,14 @@ export const SEGMENT_FEATURE_KEYS: Record<string, string | string[]> = {
   'channels-management': 'auto_thread',
   automod: 'automod',
   aegis: 'automod',
+  'emoji-bans': 'automod',
   // La liste de mots bannis n'appartient pas a AutoMod : la moderation des
   // pseudos la lit par le meme service, sans passer par AutoMod. Une seule
   // clef fermait la page Pseudos a un role qui n'avait que cette section.
   'banned-words': ['automod', 'nickname_moderation'],
   'raid-protection': 'raid_protection',
   'nickname-moderation': 'nickname_moderation',
+  'tag-automod': 'raid_protection',
   detections: 'double_accounts',
   'linked-accounts': 'double_accounts',
   verification: 'double_accounts',
@@ -62,10 +60,6 @@ export const SEGMENT_FEATURE_KEYS: Record<string, string | string[]> = {
   'channel-links': 'channel_links',
   'staff-server': 'staff_server',
   'command-access': 'commands',
-  'daily-algo-problems': 'daily_algo',
-  'daily-algo-runs': 'daily_algo',
-  'daily-algo-weeks': 'daily_algo',
-  'daily-algo-submissions': 'daily_algo',
   leveling: 'leveling',
   // Chacune de ces pages a son module et sa ligne de droits : les rabattre sur
   // « Leveling » laissait l'API ouverte a un role a qui le Centre de gestion

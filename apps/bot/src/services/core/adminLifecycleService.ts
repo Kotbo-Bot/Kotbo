@@ -56,7 +56,7 @@ type Reminder = {
   path: string;
 };
 
-function dashboardUrl(path: string, guildId: string): string | null {
+export function dashboardUrl(path: string, guildId: string): string | null {
   let origin = process.env.DASHBOARD_URL ?? '';
   try {
     origin = getCurrentInstance().dashboardOrigin;

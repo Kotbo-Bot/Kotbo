@@ -12,9 +12,6 @@ export type {
   VoiceMoveEvent,
   MemberJoinEvent,
   MemberJoinInviteEvent,
-  PartnershipStageEvent,
-  PartnershipCommitmentEvent,
-  PartnershipReferralEvent,
   MemberLeaveEvent,
   MemberUpdateEvent,
   SanctionAppliedEvent,
@@ -25,6 +22,7 @@ export type {
   FormSubmittedEvent,
   SuggestionCreatedEvent,
   SuggestionResolvedEvent,
+  SuggestionThresholdReachedEvent,
   TicketCreatedEvent,
   LevelUpEvent,
   ThreadCreateEvent,
@@ -34,6 +32,11 @@ export type {
   RoleDeleteEvent,
   FunGameKey,
   FunGameWonEvent,
+  ReputationGivenEvent,
+  StarboardFeaturedEvent,
+  StarboardRemovedEvent,
+  SeasonStartedEvent,
+  SeasonEndedEvent,
 } from './eventBus.types.js';
 
 export { VerificationService } from './services/verification.service.js';

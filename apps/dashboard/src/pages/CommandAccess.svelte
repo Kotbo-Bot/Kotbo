@@ -284,7 +284,7 @@
       <div class="stat-kpi flex items-center gap-2.5 !py-1.5 !px-3 !border-primary/20">
         <Papicon icon="Lock" size={14} class="text-primary" />
         <div class="flex flex-col">
-          <span class="section-label !text-2xs !text-primary/70">{m.commands_kpi_restrictions()}</span>
+          <span class="section-label !text-2xs !text-primary">{m.commands_kpi_restrictions()}</span>
           <span class="text-sm font-semibold text-primary">{restrictedCount}</span>
         </div>
       </div>
@@ -324,7 +324,7 @@
 
       <div class="relative w-full sm:w-64 shrink-0">
         <Papicon icon="Search" size={15} class="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant" />
-        <input
+        <input aria-label={m.commands_search_ph()}
           type="text"
           bind:value={commandSearch}
           placeholder={m.commands_search_ph()}
@@ -539,7 +539,7 @@
                     <div>
                       <p class="section-label mb-1.5">{m.commands_users_section()}</p>
                       <div class="flex items-center gap-2">
-                        <input
+                        <input aria-label={m.commands_ph_user_id()}
                           type="text"
                           inputmode="numeric"
                           disabled={!canManageSettings}
@@ -729,7 +729,7 @@
     width: 100%;
     padding: 0.5rem 0.75rem 0.5rem 2.25rem;
     border-radius: 0.5rem;
-    border: 1px solid var(--outline-variant);
+    border: 1px solid var(--field-border-color);
     background: var(--surface-container-low);
     font-size: 0.8125rem;
     color: var(--on-surface);
@@ -738,6 +738,8 @@
   }
   .cmd-search-input::placeholder { color: var(--on-surface-variant); opacity: 0.5; }
   .cmd-search-input:focus { border-color: var(--color-primary); }
+  /* Le changement de couleur d'une bordure de 1 px ne suffit pas au clavier (RGAA 10.7). */
+  .cmd-search-input:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 1px; }
 
   .cmd-card {
     display: flex;
@@ -885,7 +887,7 @@
     min-width: 0;
     padding: 0.375rem 0.625rem;
     border-radius: 0.5rem;
-    border: 1px solid var(--outline-variant);
+    border: 1px solid var(--field-border-color);
     background: var(--surface-container-low);
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     font-size: 0.75rem;
@@ -893,6 +895,7 @@
     outline: none;
   }
   .cmd-user-input:focus { border-color: var(--color-primary); }
+  .cmd-user-input:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 1px; }
   .cmd-user-input:disabled { opacity: 0.5; }
 
   .cmd-mini-btn {

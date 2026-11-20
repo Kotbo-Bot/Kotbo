@@ -157,7 +157,6 @@ const CATEGORY_LABEL: Record<NotificationCategory, (o: { locale: BotLocale }) =>
   moderation: (o) => m.ntf_cat_moderation({}, o),
   security: (o) => m.ntf_cat_security({}, o),
   tickets: (o) => m.ntf_cat_tickets({}, o),
-  partnerships: (o) => m.ntf_cat_partnerships({}, o),
   community: (o) => m.ntf_cat_community({}, o),
   system: (o) => m.ntf_cat_system({}, o),
 };

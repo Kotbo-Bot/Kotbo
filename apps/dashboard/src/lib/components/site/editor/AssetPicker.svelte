@@ -91,7 +91,7 @@
   >
     <p class="text-body-sm text-on-surface-variant">{m.ste_assets_drop()}</p>
     <Button size="sm" icon="upload" loading={uploading} onclick={() => input?.click()}>{m.ste_assets_upload()}</Button>
-    <input bind:this={input} class="sr-only" type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/avif" multiple onchange={(e) => {
+    <input aria-label={m.ste_assets_upload()} bind:this={input} class="sr-only" type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/avif" multiple onchange={(e) => {
       const files = (e.currentTarget as HTMLInputElement).files;
       if (files) void upload(files);
       (e.currentTarget as HTMLInputElement).value = '';

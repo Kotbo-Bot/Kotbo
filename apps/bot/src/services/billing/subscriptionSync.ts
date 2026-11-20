@@ -203,6 +203,11 @@ export async function syncSubscription(subscription: Stripe.Subscription): Promi
 
   await invalidatePlan(guildId);
 
+  // Ce chemin écrit `plan` sans passer par `setGuildPlan` : la coupure du bot
+  // perso est donc déclenchée ici aussi. Un échec ne doit pas faire rejouer le webhook.
+  const { retireCustomBotIfIneligible } = await import('../system/customBotRetire.js');
+  await retireCustomBotIfIneligible(guildId).catch((err) => logger.error('CustomBot', `Coupure du bot perso de ${guildId} impossible :`, err));
+
   if (expiresAt && subscription.status === 'active') {
     await recordPayerCoverage(guildId, expiresAt);
   }
@@ -214,6 +219,93 @@ export async function syncSubscription(subscription: Stripe.Subscription): Promi
   );
 
   if (!entitled) await announceSubscriptionLost(guildId, subscription.status);
+}
+
+/** Erreur dont le message peut être montré tel quel à l'administrateur. */
+export class TransferError extends Error {
+  constructor(message: string, readonly status: 400 | 404 | 409 | 502 = 400) {
+    super(message);
+  }
+}
+
+const STRIPE_FIELDS = {
+  stripeCustomerId: null,
+  stripeSubscriptionId: null,
+  stripeSubscriptionStatus: null,
+  stripePriceId: null,
+  stripeCancelAtPeriodEnd: false,
+  stripeCurrentPeriodEnd: null,
+} as const;
+
+/**
+ * Déplace l'abonnement d'un serveur vers un autre, sans rien changer côté
+ * paiement : même client Stripe, même abonnement, même échéance.
+ *
+ * Ordre voulu : la base d'abord (les colonnes Stripe sont `@unique`, le serveur
+ * cible doit être libre), puis les métadonnées Stripe qui servent au webhook à
+ * retrouver le serveur. Si Stripe refuse, la base est remise comme avant.
+ */
+export async function transferSubscription(sourceId: string, targetId: string, userId: string | null): Promise<void> {
+  if (sourceId === targetId) throw new TransferError('Choisis un autre serveur que celui-ci.');
+
+  const [source, target] = await Promise.all([
+    prisma.guild.findUnique({ where: { id: sourceId } }),
+    prisma.guild.findUnique({ where: { id: targetId }, select: { stripeCustomerId: true, stripeSubscriptionId: true } }),
+  ]);
+  if (!source?.stripeSubscriptionId || !source.stripeCustomerId) {
+    throw new TransferError("Ce serveur n'a pas d'abonnement à transférer.", 404);
+  }
+  if (target?.stripeSubscriptionId || target?.stripeCustomerId) {
+    throw new TransferError('Le serveur choisi a déjà un abonnement.', 409);
+  }
+
+  const { getStripe } = await import('./stripeService.js');
+  const stripe = getStripe();
+  if (!stripe) throw new TransferError('Facturation Stripe non configurée.', 502);
+
+  const moved = {
+    stripeCustomerId: source.stripeCustomerId,
+    stripeSubscriptionId: source.stripeSubscriptionId,
+    stripeSubscriptionStatus: source.stripeSubscriptionStatus,
+    stripePriceId: source.stripePriceId,
+    stripeCancelAtPeriodEnd: source.stripeCancelAtPeriodEnd,
+    stripeCurrentPeriodEnd: source.stripeCurrentPeriodEnd,
+  };
+
+  await prisma.$transaction([
+    prisma.guild.update({ where: { id: sourceId }, data: { ...STRIPE_FIELDS, billingOwnerId: null } }),
+    prisma.guild.upsert({
+      where: { id: targetId },
+      update: { ...moved, billingOwnerId: source.billingOwnerId ?? userId },
+      create: { id: targetId, ...moved, billingOwnerId: source.billingOwnerId ?? userId },
+    }),
+  ]);
+
+  try {
+    await stripe.customers.update(moved.stripeCustomerId, { metadata: { guildId: targetId } });
+    await stripe.subscriptions.update(moved.stripeSubscriptionId, { metadata: { guildId: targetId } });
+  } catch (err) {
+    logger.error('Billing', `Métadonnées Stripe non mises à jour pour le transfert ${sourceId} -> ${targetId} :`, err);
+    await prisma.$transaction([
+      prisma.guild.update({ where: { id: targetId }, data: STRIPE_FIELDS }),
+      prisma.guild.update({ where: { id: sourceId }, data: { ...moved, billingOwnerId: source.billingOwnerId } }),
+    ]);
+    // Une mise à jour partielle (client changé, abonnement non) est remise telle quelle.
+    await stripe.customers.update(moved.stripeCustomerId, { metadata: { guildId: sourceId } }).catch(() => {});
+    throw new TransferError("Stripe n'a pas pu enregistrer le transfert, rien n'a changé.", 502);
+  }
+
+  // Le serveur cible reçoit l'accès via le chemin habituel (offre, échéance,
+  // activation) ; la source repasse en gratuit sans message de fin d'accès,
+  // puisqu'elle n'a rien perdu par accident.
+  const subscription = await stripe.subscriptions.retrieve(moved.stripeSubscriptionId);
+  await syncSubscription(subscription);
+
+  const { setGuildPlan } = await import('../system/planService.js');
+  await setGuildPlan(sourceId, 'FREE', `abonnement transféré vers ${targetId}`);
+  await prisma.guild.update({ where: { id: sourceId }, data: { accessExpiredAt: new Date() } });
+
+  logger.info('Billing', `Abonnement ${moved.stripeSubscriptionId} transféré de ${sourceId} vers ${targetId}.`);
 }
 
 /**

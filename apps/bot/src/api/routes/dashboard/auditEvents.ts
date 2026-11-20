@@ -1,8 +1,7 @@
-import { IncomingMessage, ServerResponse } from 'node:http';
-import { Client } from 'discord.js';
+import { Hono } from 'hono';
+import type { Client } from 'discord.js';
 import { logger } from '../../../utils/logger.js';
-import { json, readJsonBody, getGuildName, safePushAudit, type AuthClaims, type DashboardAccess } from '../../shared.js';
-import { jsonFailure } from '../../shared/failure.js';
+import { getGuildName, safePushAudit } from '../../shared.js';
 import {
   AUDIT_EVENT_TYPES,
   getAuditConfig,
@@ -12,86 +11,68 @@ import {
   upsertAuditConfig,
   type AuditEventType,
 } from '../../../services/analytics/auditDiffService.js';
+import { fail, guildRoute, readBody, send } from '../../hono/dashboard/kit.js';
 
-function parseEventType(raw: string | null): AuditEventType | undefined {
+function parseEventType(raw: string | undefined): AuditEventType | undefined {
   if (!raw) return undefined;
   return AUDIT_EVENT_TYPES.includes(raw as AuditEventType) ? (raw as AuditEventType) : undefined;
 }
 
 /** Ignore une date invalide plutôt que de renvoyer une erreur pour un filtre optionnel. */
-function parseDate(raw: string | null): Date | undefined {
+function parseDate(raw: string | undefined): Date | undefined {
   if (!raw) return undefined;
   const date = new Date(raw);
   return Number.isNaN(date.getTime()) ? undefined : date;
 }
 
-function parseSnowflake(raw: string | null): string | undefined {
+function parseSnowflake(raw: string | undefined): string | undefined {
   if (!raw || !/^\d{5,25}$/.test(raw)) return undefined;
   return raw;
 }
 
-export async function handleAuditEventRoutes(
-  req: IncomingMessage,
-  res: ServerResponse,
-  parts: string[],
-  url: URL,
-  client: Client,
-  user: AuthClaims,
-  guildId: string,
-  _access: DashboardAccess,
-): Promise<boolean> {
-  if (parts[4] !== 'audit-events') return false;
+export function createAuditEventsRouter(client: Client) {
+  const router = new Hono();
+  const base = '/api/dashboard/guilds/:guildId/audit-events';
 
-  const method = req.method;
-  const sub = parts[5];
-
-  // GET /audit-events - recherche filtrée et paginée
-  if (!sub && method === 'GET') {
+  // Recherche filtrée et paginée
+  router.get(base, ...guildRoute(client), async (c) => {
+    const q = (key: string) => c.req.query(key);
     try {
-      const result = await searchAuditEvents(guildId, {
-        eventType: parseEventType(url.searchParams.get('eventType')),
-        executorId: parseSnowflake(url.searchParams.get('executorId')),
-        channelId: parseSnowflake(url.searchParams.get('channelId')),
-        targetId: parseSnowflake(url.searchParams.get('targetId')),
-        search: url.searchParams.get('search') ?? undefined,
-        from: parseDate(url.searchParams.get('from')),
-        to: parseDate(url.searchParams.get('to')),
-        page: Number(url.searchParams.get('page')) || 1,
-        pageSize: Number(url.searchParams.get('pageSize')) || 25,
-      });
-      json(res, 200, result);
+      return send(c, await searchAuditEvents(c.req.param('guildId'), {
+        eventType: parseEventType(q('eventType')),
+        executorId: parseSnowflake(q('executorId')),
+        channelId: parseSnowflake(q('channelId')),
+        targetId: parseSnowflake(q('targetId')),
+        search: q('search') ?? undefined,
+        from: parseDate(q('from')),
+        to: parseDate(q('to')),
+        page: Number(q('page')) || 1,
+        pageSize: Number(q('pageSize')) || 25,
+      }));
     } catch (err) {
       logger.error('AuditEventsAPI', 'Erreur GET événements:', err);
-      jsonFailure(res, err, 'Erreur lors de la récupération des événements', 'AuditEventsAPI');
+      return fail(c, err, 'Erreur lors de la récupération des événements', 'AuditEventsAPI');
     }
-    return true;
-  }
+  });
 
-  // GET /audit-events/config
-  if (sub === 'config' && method === 'GET') {
+  router.get(`${base}/config`, ...guildRoute(client), async (c) => {
     try {
-      json(res, 200, { config: await getAuditConfig(guildId) });
+      return send(c, { config: await getAuditConfig(c.req.param('guildId')) });
     } catch (err) {
       logger.error('AuditEventsAPI', 'Erreur GET config:', err);
-      jsonFailure(res, err, 'Erreur lors de la récupération de la configuration', 'AuditEventsAPI');
+      return fail(c, err, 'Erreur lors de la récupération de la configuration', 'AuditEventsAPI');
     }
-    return true;
-  }
+  });
 
-  // PATCH /audit-events/config
-  if (sub === 'config' && method === 'PATCH') {
+  router.patch(`${base}/config`, ...guildRoute(client), async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
     try {
-      const body = await readJsonBody<Record<string, unknown>>(req);
-      if (!body) {
-        json(res, 400, { error: 'Corps de requête manquant' });
-        return true;
-      }
+      const body = await readBody(c);
+      if (!body) return send(c, { error: 'Corps de requête manquant' }, 400);
 
       const patch = sanitizeAuditConfigPatch(body);
-      if (Object.keys(patch).length === 0) {
-        json(res, 400, { error: 'Aucun champ valide à mettre à jour' });
-        return true;
-      }
+      if (Object.keys(patch).length === 0) return send(c, { error: 'Aucun champ valide à mettre à jour' }, 400);
 
       const config = await upsertAuditConfig(guildId, patch);
       await safePushAudit(guildId, {
@@ -104,24 +85,22 @@ export async function handleAuditEventRoutes(
         channelId: null,
       }, 'Mise à jour Audit structurel');
 
-      json(res, 200, { config });
+      return send(c, { config });
     } catch (err) {
       logger.error('AuditEventsAPI', 'Erreur PATCH config:', err);
-      jsonFailure(res, err, 'Erreur lors de la mise à jour de la configuration', 'AuditEventsAPI');
+      return fail(c, err, 'Erreur lors de la mise à jour de la configuration', 'AuditEventsAPI');
     }
-    return true;
-  }
+  });
 
-  // GET /audit-events/executors - alimente le filtre « modérateur »
-  if (sub === 'executors' && method === 'GET') {
+  // Alimente le filtre « modérateur »
+  router.get(`${base}/executors`, ...guildRoute(client), async (c) => {
     try {
-      json(res, 200, { executors: await getAuditExecutors(guildId) });
+      return send(c, { executors: await getAuditExecutors(c.req.param('guildId')) });
     } catch (err) {
       logger.error('AuditEventsAPI', 'Erreur GET auteurs:', err);
-      jsonFailure(res, err, 'Erreur lors de la récupération des auteurs', 'AuditEventsAPI');
+      return fail(c, err, 'Erreur lors de la récupération des auteurs', 'AuditEventsAPI');
     }
-    return true;
-  }
+  });
 
-  return false;
+  return router;
 }

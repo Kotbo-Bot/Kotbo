@@ -36,6 +36,9 @@
   import { m } from '../i18n';
   import { responsiveTables } from '../actions/responsiveTables';
   import { getMobilePageLayout, getPageKey } from '../mobilePageContext';
+  import { buildCrumbs } from '../breadcrumbs';
+  import { brandingStore } from '../stores/branding.svelte';
+  import { focusMainAfterNavigation, pageTitle } from '../pageFocus';
 
   const { children }: { children?: Snippet } = $props();
 
@@ -95,6 +98,24 @@
       mobileNav.close();
       navigationStore.noteVisit(path);
     });
+  });
+
+  $effect(() => {
+    const crumbs = buildCrumbs($router.path);
+    document.title = pageTitle(crumbs.at(-1)?.name ?? m.bc_home(), brandingStore.brandName);
+  });
+
+  // Au premier affichage, le focus reste en haut de page, sur le lien d'evitement.
+  let mainEl = $state<HTMLElement | null>(null);
+  let previousPath: string | null = null;
+  $effect(() => {
+    const path = $router.path;
+    const main = untrack(() => mainEl);
+    if (previousPath !== null && path !== previousPath && main) {
+      // Une image plus tard : la palette ou le menu mobile ont rendu le focus.
+      requestAnimationFrame(() => focusMainAfterNavigation(main));
+    }
+    previousPath = path;
   });
 
   const collapsed = $derived(sidebarStore.collapsed);
@@ -170,7 +191,10 @@
     <Sidebar />
   {/if}
 
-  <div class="app-content min-w-0 flex-1 flex flex-col transition-all duration-200 {$isMobile ? 'ml-0' : (collapsed ? 'ml-18' : 'ml-60')}">
+  <div
+    class="app-content min-w-0 flex-1 flex flex-col {$isMobile ? 'ml-0' : ''} {sidebarStore.isResizing ? 'transition-none' : 'transition-[margin] duration-200 ease-in-out'}"
+    style={!$isMobile ? `margin-left: ${collapsed ? '4.5rem' : `${sidebarStore.width}px`};` : ''}
+  >
     {#if $isPhone}
       <MobileTopBar />
     {:else}
@@ -178,11 +202,13 @@
     {/if}
 
     <main
+      bind:this={mainEl}
       id="main-content"
+      tabindex="-1"
       use:responsiveTables
       data-mobile-layout={mobilePageLayout}
       data-page={pageKey}
-      class="app-main w-full {fullBleed ? 'app-main--bleed' : 'px-8 py-6 pb-20 max-w-[1400px] mx-auto'}"
+      class="app-main w-full focus:outline-none {fullBleed ? 'app-main--bleed' : 'px-8 py-6 pb-20 max-w-[1400px] mx-auto'}"
     >
       <DemoBanner />
       {#if !$isPhone && !fullBleed}
@@ -197,7 +223,7 @@
 
           <div class="absolute inset-0 flex items-center justify-center p-6 z-10">
             <div class="max-w-md w-full bg-surface-container-lowest border border-outline-variant rounded-xl p-8 text-center shadow-sm">
-              <div class="w-12 h-12 rounded-lg bg-warning/10 text-warning flex items-center justify-center mb-4 mx-auto">
+              <div class="w-12 h-12 rounded-lg bg-warning/10 text-on-warning-container flex items-center justify-center mb-4 mx-auto">
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>

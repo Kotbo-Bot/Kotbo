@@ -1,6 +1,7 @@
 import type { Client, GuildMember } from 'discord.js';
 import prisma, { prismaRead } from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
+import { extractPrimaryGuildTag, guildTagBadgeUrl } from '../core/serverTagService.js';
 
 /**
  * Complète l'identité des profils membres créés sans pseudo ni avatar.
@@ -18,7 +19,34 @@ export type MemberIdentity = {
   displayName: string;
   /** `null` quand le membre n'a aucune photo : voir resolveMemberAvatarUrl. */
   avatarUrl: string | null;
+  /** Tag de serveur affiché à côté du pseudo, comme sur Discord. */
+  serverTag: MemberServerTag | null;
+  /** Début du boost en cours (ISO), pour le badge d'ancienneté. */
+  boostingSince: string | null;
 };
+
+export type MemberServerTag = { guildId: string; tag: string; badgeUrl: string | null };
+
+/** Tag lu sur le compte Discord en main, sinon le dernier connu en base. */
+function serverTagOf(
+  user: GuildMember['user'] | null | undefined,
+  stored?: { primaryGuildId: string | null; primaryGuildTag: string | null; primaryGuildBadge: string | null } | null,
+): MemberServerTag | null {
+  const live = extractPrimaryGuildTag(user);
+  if (live) return { guildId: live.guildId, tag: live.tag, badgeUrl: live.badgeUrl };
+  if (!stored?.primaryGuildId || !stored.primaryGuildTag) return null;
+  return {
+    guildId: stored.primaryGuildId,
+    tag: stored.primaryGuildTag,
+    badgeUrl: guildTagBadgeUrl(stored.primaryGuildId, stored.primaryGuildBadge),
+  };
+}
+
+/** Boost lu sur le membre en cache, sinon le dernier connu en base. */
+function boostingSinceOf(member: GuildMember | undefined, stored: Date | null): string | null {
+  if (member) return member.premiumSince?.toISOString() ?? null;
+  return stored?.toISOString() ?? null;
+}
 
 /**
  * Photo de profil réellement choisie par le membre, ou `null`.
@@ -104,9 +132,13 @@ export async function getMemberIdentities(
   const profiles = await prisma.memberProfile
     .findMany({
       where: { guildId, userId: { in: unique } },
-      select: { userId: true, username: true, displayName: true, globalName: true, avatarUrl: true },
+      select: {
+        userId: true, username: true, displayName: true, globalName: true, avatarUrl: true,
+        primaryGuildId: true, primaryGuildTag: true, primaryGuildBadge: true, boostingSince: true,
+      },
     })
     .catch(() => []);
+  const cached = client.guilds.cache.get(guildId)?.members.cache;
 
   for (const profile of profiles) {
     const displayName = profile.displayName ?? profile.globalName ?? profile.username;
@@ -117,6 +149,8 @@ export async function getMemberIdentities(
       username: profile.username ?? displayName,
       displayName,
       avatarUrl: profile.avatarUrl,
+      serverTag: serverTagOf(cached?.get(profile.userId)?.user, profile),
+      boostingSince: boostingSinceOf(cached?.get(profile.userId), profile.boostingSince),
     });
   }
 
@@ -216,6 +250,8 @@ export async function resolveMissingMemberIdentities(
         username: member.user.username,
         displayName: member.displayName ?? member.user.globalName ?? member.user.username,
         avatarUrl: resolveMemberAvatarUrl(member, 256),
+        serverTag: serverTagOf(member.user),
+        boostingSince: member.premiumSince?.toISOString() ?? null,
       });
     }
   }
@@ -232,6 +268,9 @@ export async function resolveMissingMemberIdentities(
         username: user.username,
         displayName: user.globalName ?? user.username,
         avatarUrl: resolveUserAvatarUrl(user, 256),
+        serverTag: serverTagOf(user),
+        // Parti du serveur : il ne le booste plus.
+        boostingSince: null,
       });
     }
   }

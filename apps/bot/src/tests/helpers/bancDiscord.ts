@@ -22,6 +22,7 @@ import {
   Client,
   ClientApplication,
   ClientUser,
+  Collection,
   DiscordAPIError,
   Events,
   GatewayIntentBits,
@@ -212,6 +213,17 @@ export class FauxDiscord {
       voice_states: [...this.etatsVocaux].map(([u, ch]) => this.etatVocalBrut(u, ch)),
       threads: [], presences: [], stage_instances: [], guild_scheduled_events: [], member_count: this.membres.size, large: false,
     } as never);
+    // `members.fetch({ user: [...] })` passe par la passerelle (op 8), absente ici : on rend ce que Discord
+    // renverrait, les membres trouvés seulement (les autres sont `not_found`, sans erreur).
+    const membres = client.guilds.cache.get(IDS.GUILD)!.members;
+    const lireMembres = membres.fetch.bind(membres);
+    (membres as unknown as { fetch: (o: unknown) => Promise<unknown> }).fetch = (o) => {
+      const ids = (o as { user?: unknown } | undefined)?.user;
+      if (!Array.isArray(ids)) return lireMembres(o as never);
+      const trouves = ids.filter((id: string) => this.membres.has(id))
+        .map((id: string) => [id, (membres as unknown as { _add: (d: Brut) => unknown })._add(structuredClone(this.membres.get(id)!))] as const);
+      return Promise.resolve(new Collection(trouves));
+    };
     this.client = client;
     return client;
   }
@@ -735,6 +747,11 @@ export function validerMessage(corps: Brut | null | undefined, cible: Brut | nul
   if (cible && cible.flags & V2 && corps.flags !== undefined && !(Number(corps.flags) & V2)) {
     v.push('édition qui retire IS_COMPONENTS_V2 (refusé par Discord)');
   }
+  // Un message classique édité en V2 garde ce que l'édition ne vide pas : ses embeds ou son texte le font refuser.
+  if (cible && !(cible.flags & V2) && estV2) {
+    const garde = (cle: string) => !(cle in corps) && (cle === 'content' ? Boolean(cible.content) : (cible.embeds ?? []).length > 0);
+    if (garde('content') || garde('embeds')) v.push('édition qui passe un message classique en V2 sans vider son texte ou ses embeds (refusé par Discord)');
+  }
   const composants = (corps.components ?? []) as Brut[];
   const tous = aplatir(composants);
   for (const c of tous) validerComposant(c, v);
@@ -839,6 +856,9 @@ const EN = JSON.parse(readFileSync(path.join(dossierMessages, 'en.json'), 'utf8'
 /** Sans emoji ni ponctuation de tête : « 🔒 Verrouillé » et « Verrouillé » se comparent. */
 const nu = (s: string) => s.replace(/<a?:\w+:\d+>/g, '').replace(/^[^\p{L}\p{N}]+/u, '').trim();
 
+/** Noms des membres du banc : un texte égal à l'un d'eux n'est pas une fuite de langue (membre « cible », cf. `/dc`). */
+const NOMS_DE_FIXTURE = new Set(['cible']);
+
 function empreintes(source: Record<string, unknown>, autre: Record<string, unknown>) {
   const valeursAutre = new Set(Object.values(autre).filter((x): x is string => typeof x === 'string').map(nu));
   const textesAutre = Object.values(autre).filter((x): x is string => typeof x === 'string').join('\n');
@@ -848,7 +868,7 @@ function empreintes(source: Record<string, unknown>, autre: Record<string, unkno
     const traduit = autre[cle];
     if (typeof val !== 'string' || typeof traduit !== 'string' || val === traduit) continue;
     const net = nu(val);
-    if (!/\{/.test(val) && net.length >= 3 && !valeursAutre.has(net)) exactes.set(net, cle);
+    if (!/\{/.test(val) && net.length >= 3 && !valeursAutre.has(net) && !NOMS_DE_FIXTURE.has(net)) exactes.set(net, cle);
     for (const morceau of val.split(/\{[^}]*\}/)) {
       const m = nu(morceau).replace(/[\s.:!?,;*_`]+$/u, '');
       if (m.length >= 14 && /\p{L}{4}/u.test(m) && !textesAutre.includes(m)) fragments.set(m, cle);

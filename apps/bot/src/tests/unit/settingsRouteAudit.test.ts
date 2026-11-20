@@ -1,9 +1,8 @@
 import { describe, expect, test, mock, beforeEach } from 'bun:test';
-import { IncomingMessage, ServerResponse } from 'node:http';
-import { Socket } from 'node:net';
 import path from 'node:path';
 import type { Client } from 'discord.js';
-import { DASHBOARD_ACCESS_ADMIN, type AuthClaims } from '../../api/shared.js';
+import { DASHBOARD_ACCESS_ADMIN } from '../../api/shared.js';
+import { dashboardCall, mockDashboardGate } from '../helpers/honoDashboard.js';
 
 /**
  * Journal des actions du staff sur la route des paramètres globaux.
@@ -32,67 +31,13 @@ for (const dbPath of ['../../utils/db.ts', '../../utils/db.js']) {
 }
 
 // Import après les mocks
-const { handleSettingsRoutes } = await import('../../api/routes/dashboard/modules/settings.js');
-
-function createMockRequest(body: Record<string, unknown>): IncomingMessage {
-  const socket = new Socket();
-  const req = new IncomingMessage(socket);
-  req.method = 'PUT';
-  req.url = `/api/dashboard/guilds/${GUILD}/settings`;
-  req.headers = { 'content-type': 'application/json' };
-  req.push(JSON.stringify(body));
-  req.push(null);
-  return req;
-}
-
-interface MockResponse extends ServerResponse {
-  body: string;
-}
-
-function createMockResponse(): MockResponse {
-  const socket = new Socket();
-  const res = new ServerResponse(new IncomingMessage(socket)) as MockResponse;
-
-  let _statusCode = 200;
-  let _body = '';
-
-  Object.defineProperty(res, 'statusCode', {
-    get: () => _statusCode,
-    set: (code: number) => { _statusCode = code; },
-  });
-
-  res.setHeader = () => res;
-  res.getHeader = () => undefined;
-  res.writeHead = (statusCode: number) => { _statusCode = statusCode; return res; };
-  res.end = (chunk?: unknown) => {
-    if (chunk) _body += String(chunk);
-    res.body = _body;
-    return res;
-  };
-
-  return res;
-}
+mockDashboardGate(DASHBOARD_ACCESS_ADMIN, { userId: '200000000000000000', username: 'Tojii' });
+const { createSettingsRouter } = await import('../../api/routes/dashboard/modules/settings.js');
 
 async function putSettings(body: Record<string, unknown>) {
-  const req = createMockRequest(body);
-  const res = createMockResponse();
-  const url = new URL(`http://localhost${req.url}`);
-
-  await handleSettingsRoutes({
-    req,
-    res,
-    parts: url.pathname.split('/').filter(Boolean),
-    url,
-    client: { guilds: { cache: new Map() } } as unknown as Client,
-    user: { userId: '200000000000000000', username: 'Tojii' } as AuthClaims,
-    guildId: GUILD,
-    access: DASHBOARD_ACCESS_ADMIN,
-    method: 'PUT',
-    auditUser: 'Tojii',
-    moduleKey: 'settings',
-  });
-
-  return res;
+  const client = { guilds: { cache: new Map() } } as unknown as Client;
+  const { status, body: json } = await dashboardCall(createSettingsRouter(client), 'PUT', `/api/dashboard/guilds/${GUILD}/settings`, body);
+  return { statusCode: status, body: JSON.stringify(json) };
 }
 
 beforeEach(() => {

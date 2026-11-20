@@ -114,7 +114,7 @@
     onfocus={() => !disabled && (open = true)}
     onblur={() => setTimeout(() => (open = false), 150)}
     onkeydown={handleKeydown}
-    class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+    class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all font-medium disabled:opacity-50 disabled:cursor-not-allowed"
     autocomplete="off"
     {disabled}
   />

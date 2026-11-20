@@ -4,12 +4,10 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 dotenv.config({ path: path.resolve(process.cwd(), '../../.env') });
 
-import { ShardingManager, Client, GatewayIntentBits, ActivityType, type ActivitiesOptions, type PresenceStatusData } from 'discord.js';
+import { ShardingManager, type PresenceData } from 'discord.js';
 import prisma from './utils/db.js';
 import { logger } from './utils/logger.js';
 import { loadAllInstances, type ResolvedInstance } from './utils/instanceResolver.js';
-import { openSecret } from './utils/secretBox.js';
-import { applyCustomBotProfile } from './services/system/customBotProfile.js';
 import { comparePlans, normalizePlanKey } from '@kotbo/contracts';
 
 /**
@@ -18,156 +16,65 @@ import { comparePlans, normalizePlanKey } from '@kotbo/contracts';
  */
 type ShardIpcMessage = {
   type?: string;
-  guildId?: string;
-  config?: { botToken?: string } & Record<string, unknown>;
+  instanceId?: string;
+  presence?: PresenceData;
 } & Record<string, unknown>;
 
-// Custom Bot instances (lightweight clients managed per-guild)
-const customBotClients = new Map<string, Client>();
-
 const activeManagers: ShardingManager[] = [];
+// Instances lancées ou arrêtées à chaud (bots perso des serveurs), par identifiant.
+const managersByInstance = new Map<string, ShardingManager>();
+// Cause d'un refus de connexion Discord, remontée par le shard juste avant sa sortie.
+const startFailures = new Map<string, string>();
 let shuttingDown = false;
+const workerPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'index.ts');
 
 // `docker stop` laisse 10 s par defaut avant le SIGKILL : on garde une marge
 // pour la deconnexion Prisma et la sortie du processus.
 const SHUTDOWN_TIMEOUT_MS = 8_000;
 
-const STATUS_MAP: Record<string, PresenceStatusData> = {
-  ONLINE: 'online', IDLE: 'idle', DND: 'dnd', INVISIBLE: 'invisible',
-};
-
-const ACTIVITY_MAP: Record<string, ActivityType> = {
-  PLAYING: ActivityType.Playing,
-  STREAMING: ActivityType.Streaming,
-  LISTENING: ActivityType.Listening,
-  WATCHING: ActivityType.Watching,
-  COMPETING: ActivityType.Competing,
-};
-
-async function startCustomBot(guildId: string, config: {
-  botToken: string;
-  botStatus?: string;
-  activityType?: string;
-  activityText?: string;
-  activityUrl?: string;
-  botName?: string;
-  botAvatarUrl?: string;
-  botBannerUrl?: string;
-  botBio?: string;
-  /** Faux à la restauration après redémarrage : Discord limite les changements de profil. */
-  applyProfile?: boolean;
-}) {
-  if (customBotClients.has(guildId)) {
-    const existing = customBotClients.get(guildId)!;
-    existing.destroy();
-    customBotClients.delete(guildId);
-  }
-
-  const client = new Client({
-    intents: [GatewayIntentBits.Guilds],
-  });
-
-  client.once('ready', async (c) => {
-    logger.success('CustomBot', `[${guildId}] Bot "${c.user.tag}" connecté.`);
-
-    const status = STATUS_MAP[config.botStatus || 'ONLINE'] || 'online';
-    const activities: ActivitiesOptions[] = [];
-
-    if (config.activityType && config.activityType !== 'NONE' && config.activityText) {
-      activities.push({
-        name: config.activityText,
-        type: ACTIVITY_MAP[config.activityType] ?? ActivityType.Playing,
-        url: config.activityType === 'STREAMING' ? config.activityUrl : undefined,
-      });
-    }
-
-    c.user.setPresence({ status, activities });
-
-    const profileErrors = config.applyProfile === false ? [] : await applyCustomBotProfile(c, config);
-    if (profileErrors.length > 0) logger.warn('CustomBot', `[${guildId}] Profil partiellement appliqué : ${profileErrors.join(' | ')}`);
-
-    await prisma.customBotConfig.update({
-      where: { guildId },
-      data: { isRunning: true, lastStartedAt: new Date(), lastError: profileErrors.length ? profileErrors.join(' | ').slice(0, 500) : null },
-    }).catch(() => {});
-  });
-
-  client.on('error', async (err) => {
-    logger.error('CustomBot', `[${guildId}] Erreur:`, err);
-    await prisma.customBotConfig.update({
-      where: { guildId },
-      data: { lastError: err.message },
-    }).catch(() => {});
-  });
-
-  try {
-    await client.login(config.botToken);
-    customBotClients.set(guildId, client);
-  } catch (err: unknown) {
-    logger.error('CustomBot', `[${guildId}] Impossible de se connecter:`, err);
-    await prisma.customBotConfig.update({
-      where: { guildId },
-      data: { isRunning: false, lastError: errorMessage(err) || 'Login failed' },
-    }).catch(() => {});
-  }
+/** Bot perso d'un serveur : instance `cb-<serveur>`. */
+function customBotGuildId(slug: string): string | null {
+  return slug.startsWith('cb-') ? slug.slice(3) : null;
 }
 
-async function stopCustomBot(guildId: string) {
-  const client = customBotClients.get(guildId);
-  if (client) {
-    client.destroy();
-    customBotClients.delete(guildId);
-    logger.info('CustomBot', `[${guildId}] Bot arrêté.`);
-  }
-  await prisma.customBotConfig.update({
-    where: { guildId },
-    data: { isRunning: false },
-  }).catch(() => {});
+async function markCustomBot(guildId: string, data: { isRunning: boolean; lastStartedAt?: Date; lastError: string | null }) {
+  await prisma.customBotConfig.updateMany({ where: { guildId }, data }).catch(() => {});
 }
 
-async function bootCustomBots() {
+function stopInstance(instanceId: string) {
+  const manager = managersByInstance.get(instanceId);
+  if (!manager) return;
+  managersByInstance.delete(instanceId);
+  manager.respawn = false;
+  for (const shard of manager.shards.values()) {
+    if (shard.process) shard.kill();
+  }
+  const index = activeManagers.indexOf(manager);
+  if (index >= 0) activeManagers.splice(index, 1);
+  logger.info('CustomBot', `Instance ${instanceId} arrêtée.`);
+}
+
+/** (Re)lance une instance enregistrée en base, sans toucher aux autres. */
+async function startInstanceById(instanceId: string) {
+  stopInstance(instanceId);
+  startFailures.delete(instanceId);
+  const instance = (await loadAllInstances()).find((i) => i.id === instanceId);
+  if (!instance) {
+    logger.warn('CustomBot', `Instance ${instanceId} introuvable ou désactivée.`);
+    return;
+  }
+  const guildId = customBotGuildId(instance.slug);
   try {
-    // Un serveur repassé en FREE pendant l'arrêt ne voit pas son bot relancé :
-    // l'accès se vérifie aussi ici, pas seulement dans le dashboard.
-    const candidates = await prisma.customBotConfig.findMany({
-      where: { enabled: true, isRunning: true, botToken: { not: null } },
-      include: { guild: { select: { plan: true } } },
-    });
-    const configs = candidates.filter((cfg) => comparePlans(normalizePlanKey(cfg.guild.plan), 'PLUS') >= 0);
-
-    if (configs.length === 0) return;
-
-    logger.info('CustomBot', `Restauration de ${configs.length} custom bot(s)...`);
-    for (const cfg of configs) {
-      if (!cfg.botToken) continue;
-
-      let botToken: string | null;
-      try {
-        botToken = openSecret(cfg.botToken);
-      } catch (err) {
-        logger.error('CustomBot', `[${cfg.guildId}] Token non déchiffrable :`, err);
-        botToken = null;
-      }
-      if (!botToken) {
-        await prisma.customBotConfig.update({
-          where: { guildId: cfg.guildId },
-          data: { isRunning: false, lastError: 'Token illisible : ressaisissez-le dans le dashboard.' },
-        }).catch(() => {});
-        continue;
-      }
-
-      await startCustomBot(cfg.guildId, {
-        botToken,
-        botStatus: cfg.botStatus,
-        activityType: cfg.activityType,
-        activityText: cfg.activityText || undefined,
-        activityUrl: cfg.activityUrl || undefined,
-        botName: cfg.botName || undefined,
-        applyProfile: false,
-      });
-    }
+    await spawnInstance(instance);
+    if (guildId) await markCustomBot(guildId, { isRunning: true, lastStartedAt: new Date(), lastError: null });
   } catch (err) {
-    logger.warn('CustomBot', 'Impossible de restaurer les custom bots (table manquante ?):', err);
+    // Cause connue remontée par le shard (intents, token) : message clair, sans trace.
+    const known = startFailures.get(instanceId);
+    startFailures.delete(instanceId);
+    if (known) logger.warn('CustomBot', `Démarrage de l'instance ${instance.slug} impossible : ${known}`);
+    else logger.error('CustomBot', `Démarrage de l'instance ${instance.slug} impossible :`, err);
+    stopInstance(instanceId);
+    if (guildId) await markCustomBot(guildId, { isRunning: false, lastError: (known ?? (errorMessage(err) || 'Démarrage impossible')).slice(0, 500) });
   }
 }
 
@@ -176,8 +83,11 @@ type ShardingConfig = {
   shardCount?: number;
 };
 
-console.log("TOKEN DANS LE SHARD :", process.env.DISCORD_TOKEN ? "OK" : "MANQUANT");
-console.log("DATABASE_URL DANS LE SHARD :", process.env.DATABASE_URL ? "OK" : "MANQUANT");
+// SHARD_COUNT ne concerne que le ShardingManager : discord.js le relit dans
+// process.env à chaque `new Client`, et les custom bots créés ici plantaient
+// (« shardCount must be >= 1 ») quand il valait "" ou "auto".
+const ENV_SHARD_COUNT = process.env.SHARD_COUNT ? Number(process.env.SHARD_COUNT) : undefined;
+delete process.env.SHARD_COUNT;
 
 const SHARDING_CONFIG_KEY = 'SHARDING_CONFIG';
 
@@ -246,14 +156,27 @@ function setupShardListeners(manager: ShardingManager, instanceLabel: string) {
           return;
         }
 
-        // Custom bot management via IPC
-        if (message.type === 'custom-bot-start' && message.guildId && message.config?.botToken) {
-          startCustomBot(message.guildId, message.config as { botToken: string } & Record<string, unknown>);
-          return;
-        }
-        if (message.type === 'custom-bot-stop' && message.guildId) {
-          stopCustomBot(message.guildId);
-          return;
+        // Bots perso des serveurs : instances lancées, arrêtées ou mises à jour à chaud.
+        if (typeof message.instanceId === 'string') {
+          const instanceId = message.instanceId;
+          if (message.type === 'custom-instance-start') {
+            void startInstanceById(instanceId);
+            return;
+          }
+          if (message.type === 'custom-instance-error' && typeof message.reason === 'string') {
+            startFailures.set(instanceId, message.reason);
+            return;
+          }
+          if (message.type === 'custom-instance-stop') {
+            stopInstance(instanceId);
+            return;
+          }
+          if (message.type === 'custom-instance-presence' && message.presence) {
+            void managersByInstance.get(instanceId)
+              ?.broadcastEval((c, presence) => { c.user?.setPresence(presence); }, { context: message.presence })
+              .catch((err) => logger.warn('CustomBot', `Statut de l'instance ${instanceId} non appliqué :`, err));
+            return;
+          }
         }
 
         if (message.type === 'respawn-shard' && Number.isInteger(Number(message.shardId))) {
@@ -276,11 +199,11 @@ function setupShardListeners(manager: ShardingManager, instanceLabel: string) {
   });
 }
 
-async function spawnInstance(instance: ResolvedInstance, workerPath: string): Promise<ShardingManager> {
+async function spawnInstance(instance: ResolvedInstance): Promise<ShardingManager> {
   const shardingConfig = await loadShardingConfig();
   const label = instance.isDefault ? 'default' : instance.slug;
 
-  const envShardCount = process.env.SHARD_COUNT ? Number(process.env.SHARD_COUNT) : undefined;
+  const envShardCount = ENV_SHARD_COUNT;
   let totalShards: number | 'auto' = shardingConfig.mode === 'fixed' && shardingConfig.shardCount
     ? shardingConfig.shardCount
     : 'auto';
@@ -305,6 +228,7 @@ async function spawnInstance(instance: ResolvedInstance, workerPath: string): Pr
 
   setupShardListeners(manager, label);
   activeManagers.push(manager);
+  managersByInstance.set(instance.id, manager);
 
   const timeout = process.env.SHARD_READY_TIMEOUT ? Number(process.env.SHARD_READY_TIMEOUT) : 120_000;
   await manager.spawn({ timeout });
@@ -315,7 +239,6 @@ async function spawnInstance(instance: ResolvedInstance, workerPath: string): Pr
 
 async function main() {
   const instances = await loadAllInstances();
-  const workerPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'index.ts');
 
   const defaultInstance = instances.find(i => i.isDefault);
   if (!defaultInstance || !defaultInstance.discordToken) {
@@ -326,16 +249,27 @@ async function main() {
   const managers: ShardingManager[] = [];
 
   // Spawn default instance first
-  const defaultManager = await spawnInstance(defaultInstance, workerPath);
+  const defaultManager = await spawnInstance(defaultInstance);
   managers.push(defaultManager);
 
-  // Spawn white-label instances in parallel
-  const wlInstances = instances.filter(i => !i.isDefault);
+  // Spawn white-label instances in parallel. Le bot perso d'un serveur repassé
+  // sous l'offre Plus pendant l'arrêt n'est pas relancé.
+  const customGuildIds = instances.map((i) => customBotGuildId(i.slug)).filter((id): id is string => Boolean(id));
+  const eligible = new Set(
+    (await prisma.guild.findMany({ where: { id: { in: customGuildIds } }, select: { id: true, plan: true } }).catch(() => []))
+      .filter((g) => comparePlans(normalizePlanKey(g.plan), 'PLUS') >= 0)
+      .map((g) => g.id),
+  );
+  const wlInstances = instances.filter((i) => {
+    if (i.isDefault) return false;
+    const guildId = customBotGuildId(i.slug);
+    return !guildId || eligible.has(guildId);
+  });
   if (wlInstances.length > 0) {
     logger.info('WhiteLabel', `Démarrage de ${wlInstances.length} instance(s) white-label...`);
 
     const results = await Promise.allSettled(
-      wlInstances.map(inst => spawnInstance(inst, workerPath))
+      wlInstances.map(inst => spawnInstance(inst))
     );
 
     for (let i = 0; i < results.length; i++) {
@@ -344,16 +278,13 @@ async function main() {
         managers.push(result.value);
       } else {
         logger.error('WhiteLabel', `Impossible de démarrer l'instance "${wlInstances[i].name}" (${wlInstances[i].slug}):`, result.reason);
+        const guildId = customBotGuildId(wlInstances[i].slug);
+        if (guildId) await markCustomBot(guildId, { isRunning: false, lastError: (errorMessage(result.reason) || 'Démarrage impossible').slice(0, 500) });
       }
     }
   }
 
   logger.success('Sharding', `${managers.length} instance(s) bot démarrée(s) au total.`);
-
-  if (shuttingDown) return;
-
-  // Restore custom bots that were running before restart
-  await bootCustomBots();
 }
 
 /**
@@ -381,10 +312,6 @@ async function shutdown(signal: NodeJS.Signals) {
       }
       shard.kill();
     }
-  }
-
-  for (const client of customBotClients.values()) {
-    void client.destroy();
   }
 
   await Promise.race([

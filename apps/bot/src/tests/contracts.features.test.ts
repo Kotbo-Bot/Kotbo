@@ -67,8 +67,7 @@ describe('Contrats des features', () => {
     const registrySource = readModuleSource(registryPath);
     const commandFiles = listSourceFiles('commands');
 
-    // Hors registre volontairement : `partenariat` est déréférencée tant que le module est en pause.
-    const unregistered = new Set(['backup', 'partenariat']);
+    const unregistered = new Set(['backup']);
 
     for (const file of commandFiles) {
       const normalized = file.replace(/\\/g, '/');
@@ -83,7 +82,7 @@ describe('Contrats des features', () => {
   });
 
   test('Le worker BullMQ démarre après l’enregistrement de ses handlers', () => {
-    const indexPath = listSourceFiles('.').find((file) => file.replace(/\\/g, '/').endsWith('/index.ts'));
+    const indexPath = listSourceFiles('.').find((file) => file.replace(/\\/g, '/').endsWith('/src/index.ts'));
     expect(indexPath).toBeDefined();
     if (!indexPath) return;
 

@@ -55,14 +55,14 @@
   const running = $derived(data?.experiments.find((experiment) => experiment.status === 'RUNNING') ?? null);
 
   function statusLabel(experiment: WelcomeExperiment): { label: string; tone: string } {
-    if (experiment.status === 'RUNNING') return { label: m.wx_status_running({ date: formatDate(experiment.startedAt) }), tone: 'bg-success/10 text-success' };
+    if (experiment.status === 'RUNNING') return { label: m.wx_status_running({ date: formatDate(experiment.startedAt) }), tone: 'bg-success/10 text-on-success-container' };
     if (experiment.status === 'STOPPED') {
       const winner = experiment.variants.find((variant) => variant.key === experiment.winnerKey);
       return winner
         ? { label: m.wx_status_shipped({ name: winner.name }), tone: 'bg-primary/10 text-primary' }
         : { label: m.wx_status_stopped(), tone: 'bg-surface-container text-on-surface-variant' };
     }
-    return { label: m.wx_status_draft(), tone: 'bg-warning/10 text-warning' };
+    return { label: m.wx_status_draft(), tone: 'bg-warning/10 text-on-warning-container' };
   }
 
   const formatDate = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(dateLocale(), { day: 'numeric', month: 'short' }) : '—');

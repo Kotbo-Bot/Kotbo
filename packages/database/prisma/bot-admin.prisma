@@ -99,7 +99,13 @@ model BroadcastLog {
 
   // Sondage interserveur : vide = annonce simple, sinon un bouton par option.
   pollOptions  String[]  @default([])
-  pollClosesAt DateTime?
+  pollClosesAt DateTime? // clôture du sondage ou de la demande d'avis
+
+  // Demande d'avis : libellé du bouton qui ouvre un formulaire (exclusif avec le sondage).
+  feedbackLabel String?
+
+  // Variantes par langue : { en: { title?, message?, footerText? } }. Le texte de base est en français.
+  translations Json?
 
   successCount Int       @default(0)
   failCount    Int       @default(0)
@@ -116,6 +122,7 @@ model BroadcastLog {
 
   deliveries BroadcastDelivery[]
   pollVotes  BroadcastPollVote[]
+  feedbacks  BroadcastFeedback[]
 
   @@index([status])
   @@index([scheduledAt])
@@ -161,6 +168,7 @@ model BroadcastTemplate {
   target       String   @default("ALL")
   targetGuilds String[] @default([])
   channelPref  String   @default("AUTO")
+  translations Json?
 
   createdBy String
   createdAt DateTime @default(now())
@@ -210,6 +218,22 @@ model BroadcastPollVote {
   @@id([broadcastId, userId])
   @@index([broadcastId, optionIndex])
   @@map("broadcast_poll_votes")
+}
+
+// Retour libre laissé via le formulaire d'une demande d'avis.
+model BroadcastFeedback {
+  id          String @id @default(cuid())
+  broadcastId String
+  userId      String
+  guildId     String
+  content     String
+
+  createdAt DateTime @default(now())
+
+  broadcast BroadcastLog @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+
+  @@index([broadcastId, createdAt])
+  @@map("broadcast_feedbacks")
 }
 
 // Journal des actions sensibles de la console admin globale.

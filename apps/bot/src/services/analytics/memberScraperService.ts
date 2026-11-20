@@ -4,6 +4,7 @@ import { logger } from '../../utils/logger.js';
 import { Client, GuildMember } from 'discord.js';
 import { getDateKey } from './analyticsService.js';
 import { fetchAllMembers } from '../../utils/discord.js';
+import { extractPrimaryGuildTag } from '../core/serverTagService.js';
 import {
   acquireGuildScrapeLock,
   ownsGuildScrapeLock,
@@ -142,6 +143,7 @@ async function runMemberScrapeTask(client: Client, guildId: string, _force = fal
           const dateKey = getDateKey(joinedAt);
           joinsByDate.set(dateKey, (joinsByDate.get(dateKey) || 0) + 1);
         }
+        const serverTag = extractPrimaryGuildTag(member.user);
 
         return prisma.memberProfile.upsert({
           where: {
@@ -160,6 +162,10 @@ async function runMemberScrapeTask(client: Client, guildId: string, _force = fal
             guildLeftAt: null,
             lastSeenAt: new Date(),
             rolesSnapshot: member.roles.cache.map(r => r.id).filter(id => id !== guildId),
+            primaryGuildId: serverTag?.guildId ?? null,
+            primaryGuildTag: serverTag?.tag ?? null,
+            primaryGuildBadge: serverTag?.badge ?? null,
+            primaryGuildUpdatedAt: new Date(),
           },
           create: {
             guildId,
@@ -176,6 +182,10 @@ async function runMemberScrapeTask(client: Client, guildId: string, _force = fal
             guildLeftAt: null,
             lastSeenAt: new Date(),
             rolesSnapshot: member.roles.cache.map(r => r.id).filter(id => id !== guildId),
+            primaryGuildId: serverTag?.guildId ?? null,
+            primaryGuildTag: serverTag?.tag ?? null,
+            primaryGuildBadge: serverTag?.badge ?? null,
+            primaryGuildUpdatedAt: new Date(),
           },
         });
       });
@@ -301,7 +311,7 @@ async function runMemberScrapeTask(client: Client, guildId: string, _force = fal
         await prisma.guildDailyStat.update({
           where: { guildId_dateKey: { guildId, dateKey } },
           data: { totalMembers: runningTotal, totalHumans: runningTotal },
-        }).catch(() => {});
+        }).catch(() => { });
       }
     }
 

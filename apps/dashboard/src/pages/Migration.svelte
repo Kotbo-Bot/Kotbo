@@ -42,23 +42,23 @@
   let settings = $state<string[]>([]);
 
   const SETTING_LABELS: Record<string, string> = {
-    ticketCategory: m.mig_set_ticket_category(),
-    ticketLogChannel: m.mig_set_ticket_logs(),
-    welcomeChannel: m.mig_set_welcome(),
-    logChannel: m.mig_set_logs(),
-    suggestionChannel: m.mig_set_suggestions(),
-    moderatorRole: m.mig_set_mod_role(),
+    get ticketCategory() { return m.mig_set_ticket_category(); },
+    get ticketLogChannel() { return m.mig_set_ticket_logs(); },
+    get welcomeChannel() { return m.mig_set_welcome(); },
+    get logChannel() { return m.mig_set_logs(); },
+    get suggestionChannel() { return m.mig_set_suggestions(); },
+    get moderatorRole() { return m.mig_set_mod_role(); },
   };
 
   const FEATURE_LABELS: Record<string, string> = {
-    tickets: m.mig_feat_tickets(),
-    welcome: m.mig_feat_welcome(),
-    reactionRoles: m.mig_feat_reactionroles(),
-    automod: m.mig_feat_automod(),
-    leveling: m.mig_feat_leveling(),
-    stats: m.mig_feat_stats(),
-    logs: m.mig_feat_logs(),
-    rules: m.mig_feat_rules(),
+    get tickets() { return m.mig_feat_tickets(); },
+    get welcome() { return m.mig_feat_welcome(); },
+    get reactionRoles() { return m.mig_feat_reactionroles(); },
+    get automod() { return m.mig_feat_automod(); },
+    get leveling() { return m.mig_feat_leveling(); },
+    get stats() { return m.mig_feat_stats(); },
+    get logs() { return m.mig_feat_logs(); },
+    get rules() { return m.mig_feat_rules(); },
   };
 
   /** Les seules propositions applicables : celles qui portent une action. */
@@ -273,7 +273,7 @@
               <div class="rounded-xl border border-outline-variant/30 bg-surface-container-low/40 p-4">
                 <div class="flex items-start gap-3">
                   {#if finding.action}
-                    <input
+                    <input aria-label={finding.title}
                       type="checkbox"
                       checked={selected[finding.key] ?? false}
                       onchange={(e) => (selected = { ...selected, [finding.key]: e.currentTarget.checked })}
@@ -328,7 +328,7 @@
         title={m.mig_import_title()}
         description={m.mig_import_desc()}
       >
-        <input
+        <input aria-label={m.mig_import_title()}
           type="file"
           accept="application/json,.json"
           onchange={handleFile}
@@ -349,7 +349,7 @@
                   </p>
                   <p class="text-2xs text-on-surface-variant font-mono truncate">{candidate.path}</p>
                 </div>
-                <FormSelect
+                <FormSelect ariaLabel={m.mig_target_for({ name: candidate.name })}
                   value={assignments[candidate.value] ?? ''}
                   onchange={(e: Event) => {
                     assignments = { ...assignments, [candidate.value]: (e.target as HTMLSelectElement).value };

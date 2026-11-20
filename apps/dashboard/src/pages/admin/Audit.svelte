@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { explainDisabled } from '../../lib/actions/explainDisabled';
   import { m } from '../../lib/i18n';
   /**
    * Journal d'audit de la console admin.
@@ -18,12 +17,18 @@
   } from '../../lib/api';
   import Papicon from '../../lib/components/Papicon.svelte';
   import AdminShell from '../../lib/components/admin/AdminShell.svelte';
-  import AdminCard from '../../lib/components/admin/AdminCard.svelte';
-  import AdminStat from '../../lib/components/admin/AdminStat.svelte';
   import AdminToolbar from '../../lib/components/admin/AdminToolbar.svelte';
   import AdminBadge from '../../lib/components/admin/AdminBadge.svelte';
   import AdminDrawer from '../../lib/components/admin/AdminDrawer.svelte';
+  import MetricTabs from '../../lib/components/analytics/MetricTabs.svelte';
+  import { SERIES, fmtNumber } from '../../lib/components/analytics/analyticsFormat';
+  import { Button, EmptyState, FilterPills } from '../../lib/components/ui';
   import type { AdminTone } from '../../lib/components/admin/types';
+  import {
+    auditActionLabel,
+    auditDomain,
+    auditTargetType,
+  } from '../../lib/components/admin/auditLabels';
 
   let entries = $state<AdminAuditEntry[]>([]);
   let actionTypes = $state<{ action: string; count: number }[]>([]);
@@ -59,8 +64,8 @@
         sinceHours: windowHours || undefined,
         limit: 60,
       });
-      entries = result.entries;
-      nextCursor = result.nextCursor;
+      entries = result?.entries ?? [];
+      nextCursor = result?.nextCursor ?? null;
     } catch (err) {
       toast.error(err instanceof Error ? err.message : m.d7_loading_error());
     } finally {
@@ -80,8 +85,8 @@
         limit: 60,
         cursor: nextCursor,
       });
-      entries = [...entries, ...result.entries];
-      nextCursor = result.nextCursor;
+      entries = [...entries, ...(result?.entries ?? [])];
+      nextCursor = result?.nextCursor ?? null;
     } catch (err) {
       toast.error(err instanceof Error ? err.message : m.d7_loading_error());
     } finally {
@@ -92,7 +97,7 @@
   onMount(async () => {
     await Promise.all([
       load(),
-      fetchAdminAuditActions().then((data) => { actionTypes = data.actions; }).catch(() => {}),
+      fetchAdminAuditActions().then((data) => { actionTypes = data?.actions ?? []; }).catch(() => {}),
     ]);
   });
 
@@ -106,9 +111,21 @@
   });
 
   function applyFilter(action: string) {
-    actionFilter = actionFilter === action ? '' : action;
+    actionFilter = action;
     void load();
   }
+
+  /** Types d'action regroupés par domaine, pour un sélecteur lisible. */
+  const actionGroups = $derived.by(() => {
+    const map = new Map<string, { action: string; count: number }[]>();
+    for (const entry of actionTypes) {
+      const domain = auditDomain(entry.action);
+      const bucket = map.get(domain);
+      if (bucket) bucket.push(entry);
+      else map.set(domain, [entry]);
+    }
+    return [...map.entries()].sort(([a], [b]) => a.localeCompare(b, 'fr'));
+  });
 
   function applyOutcome(outcome: string) {
     outcomeFilter = outcome;
@@ -124,13 +141,19 @@
   const failedCount = $derived(entries.filter((entry) => entry.outcome === 'FAILED').length);
   const actorCount = $derived(new Set(entries.map((entry) => entry.actorId)).size);
 
+  const startOfDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+
   /** Regroupe par jour : un journal brut de 60 lignes se lit mal sans repères. */
   const grouped = $derived.by(() => {
     const map = new Map<string, AdminAuditEntry[]>();
     for (const entry of entries) {
-      const day = new Date(entry.createdAt).toLocaleDateString('fr-FR', {
-        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
-      });
+      const date = new Date(entry.createdAt);
+      const daysAgo = Math.round((startOfDay(new Date()) - startOfDay(date)) / 86_400_000);
+      const day = daysAgo === 0 ? 'Aujourd’hui'
+        : daysAgo === 1 ? 'Hier'
+          : date.toLocaleDateString('fr-FR', {
+            weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+          });
       const bucket = map.get(day);
       if (bucket) bucket.push(entry);
       else map.set(day, [entry]);
@@ -150,6 +173,8 @@
       case 'blacklist': return { tone: 'danger', icon: 'Ban' };
       case 'whitelabel': return { tone: 'info', icon: 'Layers' };
       case 'gdpr': return { tone: 'neutral', icon: 'ShieldCheck' };
+      case 'site': return { tone: 'primary', icon: 'Layers' };
+      case 'banned_word': return { tone: 'warning', icon: 'Ban' };
       default: return { tone: 'neutral', icon: 'ClipboardList' };
     }
   }
@@ -197,108 +222,89 @@
 
 <AdminShell
   title="Journal d’audit"
-  description="Trace horodatée des actions sensibles réalisées depuis la console admin globale."
+  description="Qui a fait quoi, quand et sur quoi : chaque action sensible faite depuis la console admin. Clique sur une ligne pour voir le détail."
 >
   {#snippet actions()}
-    <button
-      type="button"
+    <Button
+      icon="Download"
+      disabled={entries.length === 0}
+      disabledReason={m.common_reason_select_one()}
       onclick={exportCsv}
-      use:explainDisabled={(entries.length === 0) ? m.common_reason_select_one() : ''}
-      class="h-9 px-3.5 rounded-xl bg-on-surface/6 hover:bg-on-surface/10 border border-outline-variant/25 text-body-sm font-semibold text-on-surface-variant hover:text-on-surface transition disabled:opacity-40 inline-flex items-center gap-2"
     >
-      <Papicon icon="Download" size={13} />
       Exporter en CSV
-    </button>
-    <button
-      type="button"
-      onclick={load}
-      class="h-9 px-3.5 rounded-xl bg-on-surface/6 hover:bg-on-surface/10 border border-outline-variant/25 text-body-sm font-semibold text-on-surface-variant hover:text-on-surface transition inline-flex items-center gap-2"
-    >
-      <Papicon icon="RefreshCw" size={13} />
-      Actualiser
-    </button>
+    </Button>
+    <Button icon="RefreshCw" {loading} onclick={load}>Actualiser</Button>
   {/snippet}
 
-  <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
-    <AdminStat label="Entrées affichées" value={entries.length} icon="ClipboardList" tone="primary" {loading} />
-    <AdminStat label="Échecs" value={failedCount} icon="AlertTriangle" tone={failedCount > 0 ? 'danger' : 'neutral'} {loading} />
-    <AdminStat label="Auteurs distincts" value={actorCount} icon="Users" tone="info" {loading} />
-    <AdminStat label="Types d’action" value={actionTypes.length} icon="filter" tone="neutral" {loading} />
-  </div>
+  <MetricTabs
+    interactive={false}
+    active=""
+    onchange={() => {}}
+    label="Indicateurs du journal d’audit"
+    metrics={[
+      { id: 'entries', label: 'Entrées affichées', value: fmtNumber(entries.length), color: SERIES[0] },
+      { id: 'failed', label: 'Échecs', value: fmtNumber(failedCount), color: SERIES[3] },
+      { id: 'actors', label: 'Auteurs distincts', value: fmtNumber(actorCount), color: SERIES[1] },
+      { id: 'types', label: 'Types d’action', value: fmtNumber(actionTypes.length), color: SERIES[2] },
+    ]}
+  />
 
   <div class="flex flex-col gap-3">
     <AdminToolbar bind:search placeholder="Rechercher un résumé, une action, un auteur ou un ID cible…">
       {#snippet actions()}
-        <div class="flex items-center gap-1 p-0.5 rounded-lg bg-on-surface/6">
-          {#each windows as option (option.value)}
-            <button
-              type="button"
-              onclick={() => applyWindow(option.value)}
-              class="h-8 px-2.5 rounded-md text-xs font-semibold transition
-                {windowHours === option.value ? 'bg-surface-container-lowest text-on-surface shadow-sm' : 'text-on-surface-variant hover:text-on-surface'}"
-            >
-              {option.label}
-            </button>
-          {/each}
-        </div>
-        <div class="flex items-center gap-1 p-0.5 rounded-lg bg-on-surface/6">
-          {#each [
+        <FilterPills
+          label="Fenêtre"
+          value={String(windowHours)}
+          onchange={(v) => applyWindow(Number(v))}
+          options={windows.map((w) => ({ value: String(w.value), label: w.label }))}
+        />
+        <FilterPills
+          label="Résultat"
+          value={outcomeFilter}
+          onchange={(v) => applyOutcome(v)}
+          options={[
             { value: 'ALL', label: 'Tous' },
             { value: 'OK', label: 'Réussis' },
             { value: 'FAILED', label: 'Échecs' },
-          ] as option (option.value)}
-            <button
-              type="button"
-              onclick={() => applyOutcome(option.value)}
-              class="h-8 px-2.5 rounded-md text-xs font-semibold transition
-                {outcomeFilter === option.value ? 'bg-surface-container-lowest text-on-surface shadow-sm' : 'text-on-surface-variant hover:text-on-surface'}"
-            >
-              {option.label}
-            </button>
-          {/each}
-        </div>
+          ]}
+        />
       {/snippet}
     </AdminToolbar>
 
     {#if actionTypes.length > 0}
-      <div class="flex flex-wrap gap-1.5">
-        {#each actionTypes as entry (entry.action)}
-          <button
-            type="button"
-            onclick={() => applyFilter(entry.action)}
-            aria-pressed={actionFilter === entry.action}
-            class="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-lg text-xs font-mono font-medium transition
-              {actionFilter === entry.action
-                ? 'bg-primary/12 text-primary border border-primary/30'
-                : 'bg-on-surface/5 text-on-surface-variant border border-transparent hover:bg-on-surface/8 hover:text-on-surface'}"
-          >
-            {entry.action}
-            <span class="tabular-nums text-2xs opacity-70">{entry.count}</span>
-          </button>
-        {/each}
-      </div>
+      <label class="inline-flex items-center gap-2 text-xs text-on-surface-variant self-start">
+        Type d’action
+        <select
+          value={actionFilter}
+          onchange={(event) => applyFilter(event.currentTarget.value)}
+          class="h-8 rounded-lg bg-surface-container border border-field-border px-2.5 text-xs text-on-surface"
+        >
+          <option value="">Toutes les actions</option>
+          {#each actionGroups as [domain, items] (domain)}
+            <optgroup label={domain}>
+              {#each items as item (item.action)}
+                <option value={item.action}>{auditActionLabel(item.action)} ({item.count})</option>
+              {/each}
+            </optgroup>
+          {/each}
+        </select>
+      </label>
     {/if}
   </div>
 
   {#if loading}
     <div class="space-y-2">
       {#each Array(8) as _, index (index)}
-        <div class="h-16 rounded-xl bg-on-surface/6 animate-pulse"></div>
+        <div class="h-16 rounded-2xl bg-on-surface/6 animate-pulse"></div>
       {/each}
     </div>
   {:else if entries.length === 0}
-    <AdminCard>
-      <div class="py-14 flex flex-col items-center gap-2 text-center">
-        <div class="w-11 h-11 rounded-2xl bg-on-surface/6 flex items-center justify-center text-on-surface-variant">
-          <Papicon icon="ClipboardList" size={20} />
-        </div>
-        <p class="text-sm font-semibold text-on-surface">Aucune entrée</p>
-        <p class="text-body-sm text-on-surface-variant max-w-md">
-          Le journal est alimenté à partir de cette mise à jour : les actions antérieures n’y figurent pas.
-          Élargis la fenêtre ou retire les filtres si tu cherches une action précise.
-        </p>
-      </div>
-    </AdminCard>
+    <EmptyState
+      icon="ClipboardList"
+      title="Aucune entrée"
+      description="Le journal est alimenté à partir de cette mise à jour : les actions antérieures n’y figurent pas. Élargis la fenêtre ou retire les filtres."
+      reason="nothing-matches"
+    />
   {:else}
     <div class="space-y-5">
       {#each grouped as [day, dayEntries] (day)}
@@ -321,8 +327,8 @@
                 >
                   <div
                     class="w-8 h-8 shrink-0 rounded-lg flex items-center justify-center
-                      {visual.tone === 'danger' ? 'bg-error/12 text-error'
-                        : visual.tone === 'warning' ? 'bg-warning/12 text-warning'
+                      {visual.tone === 'danger' ? 'bg-error/12 text-on-error-container'
+                        : visual.tone === 'warning' ? 'bg-warning/12 text-on-warning-container'
                           : visual.tone === 'info' ? 'bg-sky-500/12 text-sky-500'
                             : visual.tone === 'primary' ? 'bg-primary/12 text-primary'
                               : 'bg-on-surface/8 text-on-surface-variant'}"
@@ -331,14 +337,13 @@
                   </div>
 
                   <div class="min-w-0 flex-1">
-                    <p class="text-body-sm text-on-surface leading-snug">{entry.summary}</p>
-                    <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1 mt-1">
-                      <span class="text-2xs font-mono text-on-surface-variant">{entry.action}</span>
-                      <span class="text-2xs text-on-surface-variant">·</span>
-                      <span class="text-2xs text-on-surface-variant">{entry.actorName ?? entry.actorId}</span>
+                    <p class="text-body-sm font-medium text-on-surface leading-snug">{auditActionLabel(entry.action)}</p>
+                    <p class="text-xs text-on-surface-variant leading-snug mt-0.5">{entry.summary}</p>
+                    <div class="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1.5 text-2xs text-on-surface-variant">
+                      <span>par <span class="font-medium text-on-surface">{entry.actorName ?? entry.actorId}</span></span>
                       {#if entry.targetId}
-                        <span class="text-2xs text-on-surface-variant">·</span>
-                        <span class="text-2xs font-mono text-on-surface-variant truncate max-w-40">{entry.targetId}</span>
+                        <span aria-hidden="true">·</span>
+                        <span>{auditTargetType(entry.targetType) ?? 'Cible'} <span class="font-mono truncate max-w-40 align-bottom inline-block">{entry.targetId}</span></span>
                       {/if}
                     </div>
                   </div>
@@ -375,7 +380,7 @@
   {/if}
 </AdminShell>
 
-<AdminDrawer bind:open={detailOpen} width="sm" title="Détail de l’action" subtitle={selected?.action ?? ''}>
+<AdminDrawer bind:open={detailOpen} width="sm" title={selected ? auditActionLabel(selected.action) : 'Détail de l’action'} subtitle={selected ? auditDomain(selected.action) : ''}>
   {#if selected}
     {@const entry = selected}
     <div class="space-y-4">
@@ -385,14 +390,14 @@
 
       <dl class="space-y-2.5">
         {#each [
-          { label: 'Action', value: entry.action, mono: true },
+          { label: 'Date', value: formatFull(entry.createdAt), mono: false },
           { label: 'Résultat', value: entry.outcome === 'OK' ? 'Réussie' : 'En échec', mono: false },
           { label: 'Auteur', value: entry.actorName ?? '-', mono: false },
-          { label: 'ID auteur', value: entry.actorId, mono: true },
-          { label: 'Type de cible', value: entry.targetType ?? '-', mono: false },
-          { label: 'ID cible', value: entry.targetId ?? '-', mono: true },
+          { label: 'ID de l’auteur', value: entry.actorId, mono: true },
+          { label: 'Cible', value: auditTargetType(entry.targetType) ?? '-', mono: false },
+          { label: 'ID de la cible', value: entry.targetId ?? '-', mono: true },
           { label: 'Adresse IP', value: entry.ip ?? '-', mono: true },
-          { label: 'Horodatage', value: formatFull(entry.createdAt), mono: false },
+          { label: 'Code technique', value: entry.action, mono: true },
         ] as field (field.label)}
           <div class="flex items-start justify-between gap-3">
             <dt class="text-xs text-on-surface-variant shrink-0">{field.label}</dt>

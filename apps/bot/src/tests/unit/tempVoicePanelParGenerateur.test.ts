@@ -78,6 +78,12 @@ import {
   type TempVoiceGuildConfig,
 } from '../../services/features/tempVoiceService';
 import { logger } from '../../utils/logger.js';
+import { legacyModuleCall, mockDashboardGate, type LegacyModuleContext } from '../helpers/honoDashboard.js';
+// Session et garde serveur simulées : la route est servie par Hono.
+mockDashboardGate(
+  { level: 'admin', canViewDashboard: true, canModerateContent: true, canManageSettings: true, canManageTutoring: true },
+  { userId: 'user-1', username: 'Admin' },
+);
 
 const GUILD = '120000000000000000';
 const GUILD_B = '120000000000000009';
@@ -176,9 +182,9 @@ mock.module('@kotbo/contracts', () => contractsDuWorktree);
 
 const { registerTempVoiceListener, tempChannels } = await import('../../events/tempVoice.js');
 const { DASHBOARD_ACCESS_ADMIN } = await import('../../api/shared.js');
-const { handleChannelsManagementRoutes, normalizeTempVoiceModPermissionsInput } = await import(
-  '../../api/routes/dashboard/modules/channels-management.js'
-);
+const { createChannelsManagementRouter, normalizeTempVoiceModPermissionsInput } = await import('../../api/routes/dashboard/modules/channels-management.js');
+const handleChannelsManagementRoutes = (ctx: LegacyModuleContext & { client: unknown }) =>
+  legacyModuleCall(createChannelsManagementRouter(ctx.client as never), ctx);
 
 /**
  * Les avertissements du module, sans `mock.module` sur `../../utils/logger`.

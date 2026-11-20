@@ -6,6 +6,8 @@
   import { router } from 'tinro';
   import Papicon from '../lib/components/Papicon.svelte';
   import MetricCard from '../lib/components/MetricCard.svelte';
+  import BoosterBadge from '../lib/components/BoosterBadge.svelte';
+  import { boostMonths } from '@kotbo/contracts';
   import { formatRelative, formatTenure } from '../lib/components/staff/format';
   import { m, dateLocale } from '../lib/i18n';
 
@@ -77,7 +79,7 @@
     {:else if error}
       <!-- Error Panel -->
       <div class="flex flex-col items-center justify-center py-24 text-center max-w-xl mx-auto">
-        <div class="w-20 h-20 rounded-xl bg-error/10 text-error border border-error/20 flex items-center justify-center mb-6 shadow-sm">
+        <div class="w-20 h-20 rounded-xl bg-error/10 text-on-error-container border border-error/20 flex items-center justify-center mb-6 shadow-sm">
           <Papicon icon="AlertTriangle" size={36} />
         </div>
         <h3 class="text-lg font-semibold tracking-tight text-on-surface font-headline">{m.ppf_not_found()}</h3>
@@ -133,8 +135,11 @@
                 </h1>
                 <div class="flex flex-wrap items-center justify-center md:justify-start gap-2.5">
                   <p class="text-base text-on-surface-variant font-bold">@{profile.username}</p>
+                  {#if profile.boostingSince}
+                    <BoosterBadge since={profile.boostingSince} size={16} />
+                  {/if}
                   {#if profile.isPrivate}
-                    <span class="inline-flex items-center gap-1.5 rounded-lg bg-warning/10 border border-warning/20 px-2.5 py-1 text-xs font-semibold text-warning">
+                    <span class="inline-flex items-center gap-1.5 rounded-lg bg-warning/10 border border-warning/20 px-2.5 py-1 text-xs font-semibold text-on-warning-container">
                       <Papicon icon="Lock" size={10} /> {m.ppf_private()}
                     </span>
                   {/if}
@@ -158,7 +163,7 @@
       {#if profile.isPrivate}
         <!-- Private Profile View -->
         <div class="bg-surface-container-low/40 rounded-xl border border-outline-variant/10 p-10 text-center shadow-lg">
-          <div class="w-16 h-16 rounded-lg bg-warning/10 border border-warning/20 flex items-center justify-center mx-auto mb-6 text-warning">
+          <div class="w-16 h-16 rounded-lg bg-warning/10 border border-warning/20 flex items-center justify-center mx-auto mb-6 text-on-warning-container">
             <Papicon icon="Lock" size={28} />
           </div>
           <h3 class="text-xl font-semibold text-on-surface font-headline">{m.ppf_private_title()}</h3>
@@ -183,14 +188,14 @@
             value={m.ppf_minutes({ count: Math.round((profile.voiceTimeSeconds || 0) / 60) })} 
             note={m.ppf_voice_note()} 
             icon="Mic" 
-            toneClass="bg-success/10 text-success border-success/20" 
+            toneClass="bg-success/10 text-on-success-container border-success/20" 
           />
           <MetricCard 
             label={m.ppf_events()} 
             value={`${profile.eventParticipations?.length || 0}`} 
             note={m.ppf_events_note()} 
             icon="Zap" 
-            toneClass="bg-warning/10 text-warning border-warning/20" 
+            toneClass="bg-warning/10 text-on-warning-container border-warning/20" 
           />
           <MetricCard 
             label={m.ppf_tenure()} 
@@ -217,6 +222,20 @@
             <div class="rounded-xl bg-surface-container-low/40 border border-outline-variant/10 p-8 shadow-sm relative overflow-hidden group">
               <h4 class="text-sm font-semibold text-primary mb-6">{m.ppf_file()}</h4>
               <div class="space-y-6">
+                {#if profile.boost?.boostingSince}
+                  <div class="flex items-center justify-between border-b border-outline-variant/5 pb-3">
+                    <span class="text-xs font-semibold text-on-surface-variant">{m.ppf_boost_title()}</span>
+                    <span class="text-xs font-bold text-on-surface">
+                      {formatDate(profile.boost.boostingSince)} · {m.ppf_boost_value({ months: String(boostMonths(new Date(profile.boost.boostingSince))) })}
+                    </span>
+                  </div>
+                {/if}
+                {#if profile.boost?.totalDays}
+                  <div class="flex items-center justify-between border-b border-outline-variant/5 pb-3">
+                    <span class="text-xs font-semibold text-on-surface-variant">{m.mcm_boost_total()}</span>
+                    <span class="text-xs font-bold text-on-surface">{m.boost_days({ count: String(profile.boost.totalDays) })}</span>
+                  </div>
+                {/if}
                 <div class="flex items-center justify-between border-b border-outline-variant/5 pb-3">
                   <span class="text-xs font-semibold text-on-surface-variant">{m.ppf_account_created()}</span>
                   <span class="text-xs font-bold text-on-surface">{formatDate(profile.accountCreatedAt)}</span>

@@ -26,6 +26,12 @@ import {
   textesVisibles,
   type AppelRest,
 } from '../helpers/bancDiscord.js';
+import { legacyModuleCall, mockDashboardGate, type LegacyModuleContext } from '../helpers/honoDashboard.js';
+// Session et garde serveur simulées : la route est servie par Hono.
+mockDashboardGate(
+  { level: 'admin', canViewDashboard: true, canModerateContent: true, canManageSettings: true, canManageTutoring: true },
+  { userId: 'user-1', username: 'Admin' },
+);
 
 // ─── Base de données et cache simulés, au temps virtuel du monde courant ───
 
@@ -488,6 +494,12 @@ const CAS: CasAction[] = [
   {
     customId: 'tempvoice:mode_select', genre: 'menuTexte', values: ['ownerOnly'], chemin: [SALON],
     effet: (sc) => (tv.tempChannels.get(sc.salonId)?.modeEcriture === 'ownerOnly' ? null : `mode = ${tv.tempChannels.get(sc.salonId)?.modeEcriture}`),
+  },
+  // « Mes réglages » : sans réglage enregistré, « apply » répond « aucun » (couvert en détail par tempVoiceReglagesParcours).
+  { customId: 'tempvoice:saved_select', genre: 'menuTexte', values: ['apply'], chemin: [PROPRIETE] },
+  {
+    customId: 'tempvoice:visibility_select', genre: 'menuTexte', values: ['prive'], chemin: [SALON],
+    effet: (sc) => (tv.tempChannels.get(sc.salonId)?.visibility === 'prive' ? null : `visibilite = ${tv.tempChannels.get(sc.salonId)?.visibility}`),
   },
   { customId: 'tempvoice:reglages_mod', genre: 'menuTexte', values: ['renommer', 'limite'], chemin: [SALON, REGLAGES] },
   { customId: 'tempvoice:membre_ici', genre: 'menuTexte', values: [IDS.CIBLE], chemin: [MEMBRES] },
@@ -1249,7 +1261,9 @@ describe('B — mention du propriétaire : du PATCH du dashboard au salon créé
       // Ligne en base SANS mention : seul le PATCH réel peut poser le réglage.
       reglerBase({ langue: 'fr', format, mode: 'CLASSIC' });
       base.reglages = { ...base.reglages, ownerMentionPlacement: mention === 'panel' ? 'message' : 'panel' };
-      const { handleChannelsManagementRoutes } = await import('../../api/routes/dashboard/modules/channels-management.js');
+      const { createChannelsManagementRouter } = await import('../../api/routes/dashboard/modules/channels-management.js');
+      const handleChannelsManagementRoutes = (ctx: LegacyModuleContext & { client: unknown }) =>
+        legacyModuleCall(createChannelsManagementRouter(ctx.client as never), ctx);
       const { IncomingMessage, ServerResponse } = await import('node:http');
       const { Socket } = await import('node:net');
       const req = new IncomingMessage(new Socket());
@@ -1278,6 +1292,41 @@ describe('B — mention du propriétaire : du PATCH du dashboard au salon créé
       expect(mentionsDe(publics.find((msg) => msg.id === sc.panneauId)!)).toBe(dansPanneau);
       const postes = sc.monde.appels.filter((a) => a.methode === 'POST' && a.route === `/channels/${sc.salonId}/messages`);
       expect(postes.filter((a) => notifie(a.corps as Brut, IDS.PROPRIO))).toHaveLength(notifs);
+    });
+  }
+});
+
+describe('« Le propriétaire est parti » : le message dit qui a récupéré le salon', () => {
+  const messageRecuperer = (sc: Scene) => [...sc.monde.messages.values()]
+    .find((msg) => msg.channel_id === sc.salonId && !(msg.flags & 64) && trouverComposant(msg, 'tempvoice:reclamer'));
+
+  for (const format of FORMATS) for (const depuis of ['message', 'panneau'] as const) {
+    test(`${format} · clic depuis le ${depuis} : la réécriture est acceptée par Discord et nomme le nouveau propriétaire`, async () => {
+      const sc = await monterScene({ langue: 'fr', format, mode: 'CLASSIC' });
+      Object.assign(base.reglages!, { handoverDmEnabled: false });
+      avancer(1_500);
+      sc.monde.bouger(IDS.PROPRIO, null);
+      await sc.monde.calme(sc.enCours);
+      const avant = messageRecuperer(sc);
+      expect(avant).toBeDefined();
+
+      avancer(1_500);
+      const clic = depuis === 'message'
+        ? clicSur('tempvoice:reclamer', { genre: 'bouton' }, IDS.AUTORISE, avant!, 'CLASSIC')
+        : (await parcourir(sc, CAS_PAR_ACTION('claim'), IDS.AUTORISE)).clic;
+      const r = await cliquer(sc, clic);
+      await sc.monde.calme(sc.enCours);
+      expect(tv.tempChannels.get(sc.salonId)?.creatorId).toBe(IDS.AUTORISE);
+
+      const reecritures = sc.monde.appels.filter((a) => a.methode === 'PATCH' && a.route === `/channels/${sc.salonId}/messages/${avant!.id}`);
+      expect(reecritures.length).toBeGreaterThan(0);
+      expect(reecritures.flatMap((a) => [...a.violations, ...(a.erreur ? [String(a.erreur)] : [])])).toEqual([]);
+      const apres = sc.monde.messages.get(avant!.id)!;
+      expect(textesVisibles(apres).join(' ')).toContain(`<@${IDS.AUTORISE}>`);
+      expect(trouverComposant(apres, 'tempvoice:reclamer')?.disabled).toBe(true);
+      // Le format du message ne change pas : un message V1 reste en embeds.
+      expect(Boolean(apres.flags & (1 << 15))).toBe(format === 'V2');
+      tracer(`récupération ${format} ${depuis}`, r);
     });
   }
 });

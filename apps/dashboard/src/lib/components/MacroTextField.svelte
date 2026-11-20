@@ -93,7 +93,7 @@
       {rows}
       {placeholder}
       {disabled}
-      class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none resize-y"
+      class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none resize-y"
     ></textarea>
   {:else}
     <input
@@ -103,7 +103,7 @@
       type="text"
       {placeholder}
       {disabled}
-      class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+      class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
     />
   {/if}
 

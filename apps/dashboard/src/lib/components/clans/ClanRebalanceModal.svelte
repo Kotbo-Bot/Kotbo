@@ -217,7 +217,7 @@
           {/each}
         </div>
         {#if mode === 'most_active'}
-          <p class="text-2xs font-semibold text-warning bg-warning/10 border border-warning/20 rounded-lg px-3 py-2 flex items-start gap-2">
+          <p class="text-2xs font-semibold text-on-warning-container bg-warning/10 border border-warning/20 rounded-lg px-3 py-2 flex items-start gap-2">
             <Papicon icon="AlertTriangle" size={13} /> <span>{m.clan_rebalance_mode_most_warning()}</span>
           </p>
         {/if}
@@ -254,7 +254,7 @@
             bind:value={targetSizeInput}
             oninput={invalidate}
             placeholder={preview ? String(preview.defaultTargetSize) : m.clan_rebalance_size_auto()}
-            class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+            class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
           />
           <p class="text-2xs text-on-surface-variant ml-1">{m.clan_rebalance_size_hint()}</p>
         </div>
@@ -267,7 +267,7 @@
             bind:value={protectAboveInput}
             oninput={invalidate}
             placeholder={m.clan_rebalance_protect_placeholder()}
-            class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+            class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
           />
           <p class="text-2xs text-on-surface-variant ml-1">{m.clan_rebalance_protect_hint()}</p>
         </div>
@@ -297,7 +297,7 @@
     </section>
 
     {#if error}
-      <p class="text-xs font-semibold text-error bg-error/10 border border-error/20 rounded-lg px-3 py-2">{error}</p>
+      <p class="text-xs font-semibold text-on-error-container bg-error/10 border border-error/20 rounded-lg px-3 py-2">{error}</p>
     {/if}
 
     <!-- 2. Aperçu -->
@@ -426,7 +426,7 @@
               type="text"
               bind:value={confirmInput}
               placeholder={confirmWord}
-              class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none font-semibold"
+              class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none font-semibold"
             />
           </div>
         </section>

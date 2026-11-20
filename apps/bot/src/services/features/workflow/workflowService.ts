@@ -1,5 +1,5 @@
 import { isModulePaused } from '@kotbo/contracts';
-import { MEMBER_DAYS_TRIGGERS, isMemberDaysTrigger, readMemberDays, cronMatches, hasBlockingIssue, pausedModuleIssues, readTriggerChannelFilter, readTriggerRoleFilter, validateGraph, getNodeDef, wallClockMinuteKey, FUN_GAME_LABELS, SANCTION_TYPE_LABELS, SUGGESTION_STATUS_LABELS, type WorkflowGraph } from '@kotbo/shared';
+import { MEMBER_DAYS_TRIGGERS, isMemberDaysTrigger, readMemberDays, cronMatches, hasBlockingIssue, pausedModuleIssues, readTriggerChannelFilter, readTriggerRoleFilter, validateGraph, getNodeDef, wallClockMinuteKey, FUN_GAME_LABELS, SANCTION_TYPE_LABELS, STARBOARD_REMOVAL_LABELS, SUGGESTION_STATUS_LABELS, type WorkflowGraph } from '@kotbo/shared';
 import { currentCascadeDepth, runWithCascadeDepth } from '@kotbo/core';
 import type { Client, Guild } from 'discord.js';
 import type { Prisma } from '@prisma/client';
@@ -448,29 +448,6 @@ export async function buildTriggerOutputs(
       return member && role ? { member, role } : null;
     }
 
-    case 'OnPartnershipStage':
-      return {
-        partnerName: String(payload.partnerName ?? ''),
-        stage: String(payload.toStage ?? ''),
-        previousStage: String(payload.fromStage ?? ''),
-        partnershipType: String(payload.type ?? ''),
-        reason: String(payload.reason ?? ''),
-      };
-
-    case 'OnPartnershipCommitmentFailed':
-      return {
-        partnerName: String(payload.partnerName ?? ''),
-        commitment: String(payload.label ?? payload.kind ?? ''),
-        failureStreak: typeof payload.failureStreak === 'number' ? payload.failureStreak : 0,
-      };
-
-    case 'OnPartnershipReferral': {
-      const member = await memberOf(payload.userId);
-      // Sans le membre, le graphe n'a rien a manipuler : mieux vaut ne pas
-      // declencher que declencher avec un membre vide.
-      return member ? { member, partnerName: String(payload.partnerName ?? '') } : null;
-    }
-
     case 'OnMessageSend': {
       const member = await memberOf(payload.authorId);
       const channel = channelOf(payload.channelId);
@@ -512,6 +489,18 @@ export async function buildTriggerOutputs(
       const channel = channelOf(payload.channelId);
       const durationMs = typeof payload.durationMs === 'number' ? payload.durationMs : 0;
       return member ? { member, channel, minutes: Math.floor(durationMs / 60_000) } : null;
+    }
+
+    case 'OnServerTagChanged': {
+      const member = await memberOf(payload.userId);
+      if (!member) return null;
+      return {
+        member,
+        newTag: String(payload.newTag ?? ''),
+        oldTag: String(payload.oldTag ?? ''),
+        serverId: String(payload.newGuildId ?? payload.oldGuildId ?? ''),
+        isOwnGuild: Boolean(payload.isOwnGuild),
+      };
     }
 
     case 'OnSanctionApplied': {
@@ -584,6 +573,8 @@ export async function buildTriggerOutputs(
       return {
         member,
         content: String(payload.content ?? ''),
+        title: String(payload.title ?? ''),
+        category: String(payload.category ?? ''),
         channel: channelOf(payload.channelId),
         message: typeof payload.messageId === 'string'
           ? toMessageValue({
@@ -596,17 +587,70 @@ export async function buildTriggerOutputs(
       };
     }
 
+    case 'OnSuggestionThresholdReached': {
+      const member = await memberOrDeparted(payload.userId, payload.username);
+      return {
+        member,
+        content: String(payload.content ?? ''),
+        title: String(payload.title ?? ''),
+        category: String(payload.category ?? ''),
+        upvotes: Number(payload.upvotes ?? 0),
+        downvotes: Number(payload.downvotes ?? 0),
+        threshold: Number(payload.threshold ?? 0),
+        message: typeof payload.messageId === 'string'
+          ? toMessageValue({
+            id: payload.messageId,
+            content: String(payload.content ?? ''),
+            channelId: String(payload.channelId ?? ''),
+            authorId: guild.client.user?.id ?? '',
+          })
+          : null,
+      };
+    }
+
+    // L'auteur a pu quitter le serveur entre-temps : il reste nommé, le
+    // workflow part quand même (un retrait se signale même pour un absent).
+    case 'OnStarboardFeatured':
+    case 'OnStarboardRemoved': {
+      const member = await memberOrDeparted(payload.authorId, payload.authorId);
+      const shared = {
+        member,
+        channel: channelOf(payload.channelId),
+        score: Number(payload.score ?? 0),
+      };
+      if (triggerType === 'OnStarboardFeatured') {
+        return {
+          ...shared,
+          featuredCount: Number(payload.featuredCount ?? 0),
+          messageUrl: `https://discord.com/channels/${guild.id}/${String(payload.channelId ?? '')}/${String(payload.messageId ?? '')}`,
+          starMessageUrl: `https://discord.com/channels/${guild.id}/${String(payload.starChannelId ?? '')}/${String(payload.starMessageId ?? '')}`,
+        };
+      }
+      const reason = String(payload.reason ?? '');
+      return {
+        ...shared,
+        reason: Object.hasOwn(STARBOARD_REMOVAL_LABELS, reason) ? STARBOARD_REMOVAL_LABELS[reason] : reason,
+        isStaffRemoval: reason === 'STAFF',
+      };
+    }
+
     case 'OnSuggestionResolved': {
       const status = String(payload.status ?? '');
+      const previous = String(payload.previousStatus ?? 'PENDING');
+      const label = (key: string) => (Object.hasOwn(SUGGESTION_STATUS_LABELS, key) ? SUGGESTION_STATUS_LABELS[key] : key);
       return {
         member: await memberOrDeparted(payload.userId, payload.username),
         staff: await memberOf(payload.respondedById),
         content: String(payload.content ?? ''),
+        title: String(payload.title ?? ''),
+        category: String(payload.category ?? ''),
         response: String(payload.responseText ?? ''),
-        statusLabel: Object.hasOwn(SUGGESTION_STATUS_LABELS, status) ? SUGGESTION_STATUS_LABELS[status] : status,
+        statusLabel: label(status),
+        previousStatusLabel: label(previous),
         upvotes: Number(payload.upvotes ?? 0),
         downvotes: Number(payload.downvotes ?? 0),
         isApproved: status === 'APPROVED',
+        isInProgress: status === 'IN_PROGRESS',
         isRejected: status === 'REJECTED',
         isImplemented: status === 'IMPLEMENTED',
       };
@@ -649,9 +693,43 @@ export async function buildTriggerOutputs(
         winners: Number(payload.winnerCount ?? 0),
       };
 
+    case 'OnSeasonStarted':
+      return { season: String(payload.name ?? ''), number: Number(payload.number ?? 0) };
+
+    // Le premier est le membre du déclencheur : sans lui, les actions n'ont
+    // personne à nommer, rien ne part.
+    case 'OnSeasonEnded': {
+      const member = await memberOf(payload.winnerId);
+      if (!member) return null;
+      return {
+        member,
+        season: String(payload.name ?? ''),
+        number: Number(payload.number ?? 0),
+        participants: Number(payload.participants ?? 0),
+        winnerXp: Number(payload.winnerXp ?? 0),
+      };
+    }
+
     case 'OnLevelUp': {
       const member = await memberOf(payload.userId);
       return member ? { member, level: Number(payload.level ?? 0) } : null;
+    }
+
+    // Même vote, lu de chaque côté : `member` est celui à qui le déclencheur
+    // s'adresse. Un des deux partis du serveur entre-temps : rien ne part,
+    // les actions qui le citeraient n'auraient personne à nommer.
+    case 'OnReputationGiven':
+    case 'OnReputationReceived': {
+      const [giver, receiver] = await Promise.all([memberOf(payload.giverId), memberOf(payload.receiverId)]);
+      if (!giver || !receiver) return null;
+      const shared = {
+        channel: channelOf(payload.channelId),
+        reason: String(payload.reason ?? ''),
+        reputation: Number(payload.total ?? 0),
+      };
+      return triggerType === 'OnReputationGiven'
+        ? { member: giver, receiver, ...shared }
+        : { member: receiver, giver, ...shared };
     }
 
     case 'OnBetResolved': {
@@ -1506,7 +1584,7 @@ const PRUNE_BATCH_SIZE = 2000;
 
 async function deleteExecutionsInBatches(where: Prisma.WorkflowExecutionWhereInput): Promise<number> {
   let deleted = 0;
-  for (;;) {
+  for (; ;) {
     const batch = await prisma.workflowExecution.findMany({ where, select: { id: true }, take: PRUNE_BATCH_SIZE });
     if (batch.length === 0) return deleted;
 

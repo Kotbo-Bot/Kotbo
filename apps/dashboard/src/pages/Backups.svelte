@@ -483,21 +483,21 @@
   <div class="space-y-6">
     <div class="space-y-2">
       <span class="block text-xs font-semibold text-on-surface-variant ml-2">{m.backups_field_name()}</span>
-      <input
+      <input aria-label={m.backups_field_name()}
         type="text"
         bind:value={createOptions.name}
         placeholder={m.backups_field_name_ph()}
-        class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+        class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
       />
     </div>
     
     <div class="space-y-2">
       <span class="block text-xs font-semibold text-on-surface-variant ml-2">{m.backups_field_desc()}</span>
-      <input
+      <input aria-label={m.backups_field_desc()}
         type="text"
         bind:value={createOptions.description}
         placeholder={m.backups_field_desc_ph()}
-        class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+        class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
       />
     </div>
 
@@ -567,7 +567,7 @@
 <Modal bind:open={showDeleteModal} title={m.backups_delete_modal_title()}>
   <div class="space-y-4">
     <p class="text-sm font-medium">{m.backups_delete_confirm({ name: selectedBackup?.name ?? '' })}</p>
-    <p class="text-xs text-error font-bold bg-error/10 border border-error/20 px-4 py-3 rounded-lg flex items-center gap-2">
+    <p class="text-xs text-on-error-container font-bold bg-error/10 border border-error/20 px-4 py-3 rounded-lg flex items-center gap-2">
       <Papicon icon="AlertTriangle" size={16} />
       {m.backups_irreversible()}
     </p>
@@ -584,7 +584,7 @@
   <div class="space-y-6">
     <div class="space-y-2">
       <span class="block text-xs font-semibold text-on-surface-variant ml-2">{m.backups_field_file()}</span>
-      <input
+      <input aria-label={m.backups_field_file()}
         type="file"
         accept=".json" 
         onchange={(e) => importFile = (e.currentTarget as HTMLInputElement).files?.[0] || null} 
@@ -594,11 +594,11 @@
     
     <div class="space-y-2">
       <span class="block text-xs font-semibold text-on-surface-variant ml-2">{m.backups_field_name_optional()}</span>
-      <input
+      <input aria-label={m.backups_field_name_optional()}
         type="text"
         bind:value={createOptions.name}
         placeholder={m.backups_field_name_ph()}
-        class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+        class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
       />
     </div>
 
@@ -614,7 +614,7 @@
 <Modal bind:open={showRestoreModal} title={m.backups_restore_modal_title()}>
   <div class="space-y-4">
     <p class="text-sm font-medium">{m.backups_restore_confirm({ name: selectedBackup?.name ?? '' })}</p>
-    <p class="text-xs text-warning font-bold bg-warning/10 border border-warning/20 px-4 py-3 rounded-lg flex items-center gap-2">
+    <p class="text-xs text-on-warning-container font-bold bg-warning/10 border border-warning/20 px-4 py-3 rounded-lg flex items-center gap-2">
       <Papicon icon="AlertTriangle" size={16} />
       {m.backups_restore_warning()}
     </p>

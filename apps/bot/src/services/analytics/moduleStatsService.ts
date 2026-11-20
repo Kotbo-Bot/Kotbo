@@ -5,7 +5,6 @@ import { isAnalyticsCollectionEnabled } from './analyticsConsent.js';
 
 // Liste de tous les modules Kotbo
 export const KOTBO_MODULES = [
-  'dailyAlgo',
   'sanction',
   'ticket',
   'staffManagement',

@@ -597,7 +597,7 @@ describe('T12/T13 — natif ou image : la table de vérité complète', () => {
       expect({ nom, image: 'files' in (charge ?? {}) }).toEqual({ nom, image: false });
       // Et la carte porte bien les six valeurs, sinon « natif » ne voudrait rien dire.
       const embeds = (charge?.embeds ?? []) as Array<{ data?: { fields?: unknown[]; image?: unknown } }>;
-      expect(embeds[0]?.data?.fields?.length).toBe(6);
+      expect(embeds[0]?.data?.fields?.length).toBe(7);
       expect(embeds[0]?.data?.image).toBeUndefined();
       tempChannels.delete(id);
     }

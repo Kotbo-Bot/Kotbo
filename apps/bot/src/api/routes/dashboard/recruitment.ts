@@ -1,18 +1,10 @@
-import { IncomingMessage, ServerResponse } from 'node:http';
-import { Client } from 'discord.js';
+import { Hono, type Context } from 'hono';
+import type { Client } from 'discord.js';
 import { CandidatureStatus } from '@prisma/client';
 import prisma from '../../../utils/db.js';
 import { logger } from '../../../utils/logger.js';
-import { jsonFailure } from '../../shared/failure.js';
-import {
-  json,
-  readJsonBody,
-  verifyRecruitmentWebhookAuth,
-  isRecruitmentAutoRejectEnabled,
-  recruitmentAutoRejectEnabledByGuild,
-  type AuthClaims,
-  type DashboardAccess,
-} from '../../shared.js';
+import { fail, guildRoute, readBody, send } from '../../hono/dashboard/kit.js';
+import { verifyRecruitmentWebhookAuth, isRecruitmentAutoRejectEnabled, recruitmentAutoRejectEnabledByGuild } from '../../shared.js';
 import {
   getCandidatures,
   createCandidature,
@@ -27,33 +19,27 @@ import {
 import { deleteRecruitmentPanel, saveRecruitmentPanel } from '../../../services/staff/recruitmentPanelService.js';
 
 /**
- * Handles Webhook candidature submissions (does NOT require user authentication)
- * POST /api/dashboard/guilds/:guildId/recruitment/candidatures
+ * Handles authenticated recruitment endpoints
  */
-export async function handleRecruitmentWebhookRoute(
-  req: IncomingMessage,
-  res: ServerResponse,
-  parts: string[],
-  client: Client
-): Promise<boolean> {
-  if (
-    parts.length === 6 &&
-    parts[2] === 'guilds' &&
-    parts[4] === 'recruitment' &&
-    parts[5] === 'candidatures' &&
-    req.method === 'POST'
-  ) {
-    const guildId = parts[3];
-    const webhookAuth = await verifyRecruitmentWebhookAuth(req, guildId);
-    const webhookUser = webhookAuth.auth;
-    if (!webhookUser) {
+export function createRecruitmentRouter(client: Client) {
+  const router = new Hono();
+  const base = '/api/dashboard/guilds/:guildId';
+  const gate = guildRoute(client);
+
+  /**
+   * Candidature envoyée par le formulaire (Google Apps Script) : pas de session,
+   * une clé d'API du formulaire ou un jeton à la place.
+   */
+  router.post(`${base}/recruitment/candidatures`, async (c) => {
+    const guildId = c.req.param('guildId')!;
+    const webhookAuth = await verifyRecruitmentWebhookAuth({ headers: c.req.header() }, guildId);
+    if (!webhookAuth.auth) {
       logger.warn('RecruitmentAPI', `Webhook auth failed for guild ${guildId}: ${webhookAuth.reason}`);
-      json(res, 401, { error: 'Non authentifié', reason: webhookAuth.reason });
-      return true;
+      return send(c, { error: 'Non authentifié', reason: webhookAuth.reason }, 401);
     }
 
     try {
-      const body = await readJsonBody<Record<string, unknown>>(req);
+      const body = await readBody(c);
       const payload = body && typeof body === 'object' && 'data' in body
         ? ((body.data as Record<string, unknown>) ?? body)
         : (body ?? {});
@@ -62,88 +48,75 @@ export async function handleRecruitmentWebhookRoute(
         autoRejectEnabled: isRecruitmentAutoRejectEnabled(guildId),
         client,
       });
-      json(res, 201, result);
+      return send(c, result, 201);
     } catch (err) {
       logger.error('RecruitmentAPI', 'Error creating candidature:', err);
-      jsonFailure(res, err, 'Erreur lors de la création de la candidature', 'RecruitmentAPI');
+      return fail(c, err, 'Erreur lors de la création de la candidature', 'RecruitmentAPI');
     }
-    return true;
-  }
-
-  return false;
-}
-
-/**
- * Handles authenticated recruitment endpoints
- */
-export async function handleRecruitmentRoutes(
-  req: IncomingMessage,
-  res: ServerResponse,
-  parts: string[],
-  url: URL,
-  client: Client,
-  user: AuthClaims,
-  guildId: string,
-  _access: DashboardAccess
-): Promise<boolean> {
-  const method = req.method;
-
-  if (parts[4] !== 'recruitment') {
-    return false;
-  }
-
-  // GET /api/dashboard/guilds/:guildId/recruitment/candidatures - Get recruitment candidatures
-  if (parts.length === 6 && parts[5] === 'candidatures' && method === 'GET') {
-    try {
-      const candidatures = await getCandidatures(guildId);
-      json(res, 200, { candidatures });
-    } catch (err) {
-      logger.error('RecruitmentAPI', 'Error getting candidatures:', err);
-      jsonFailure(res, err, 'Erreur lors de la récupération des candidatures', 'RecruitmentAPI');
-    }
-    return true;
-  }
+  });
 
   // Panneaux « statut des recrutements »
-  // GET|POST /recruitment/panels, PATCH|DELETE /recruitment/panels/:id
-  if (parts[5] === 'panels' && (parts.length === 6 || parts.length === 7)) {
-    const panelId = parts[6];
-    try {
-      if (parts.length === 6 && method === 'GET') {
-        const panels = await prisma.recruitmentPanel.findMany({ where: { guildId }, orderBy: { createdAt: 'asc' } });
-        json(res, 200, { panels });
-        return true;
-      }
-      if (parts.length === 6 && method === 'POST') {
-        const panel = await saveRecruitmentPanel(guildId, (await readJsonBody<Record<string, unknown>>(req)) ?? {});
-        json(res, 201, { panel });
-        return true;
-      }
-      if (panelId && method === 'PATCH') {
-        const panel = await saveRecruitmentPanel(guildId, (await readJsonBody<Record<string, unknown>>(req)) ?? {}, panelId);
-        json(res, 200, { panel });
-        return true;
-      }
-      if (panelId && method === 'DELETE') {
-        const deleted = await deleteRecruitmentPanel(guildId, panelId);
-        json(res, deleted ? 200 : 404, deleted ? { ok: true } : { error: 'Panneau introuvable' });
-        return true;
-      }
-    } catch (err) {
-      logger.error('RecruitmentAPI', 'Error on recruitment panel:', err);
-      jsonFailure(res, err, 'Erreur sur le panneau de recrutement', 'RecruitmentAPI');
-      return true;
-    }
-  }
+  const panelFailure = (c: Context, err: unknown) => {
+    logger.error('RecruitmentAPI', 'Error on recruitment panel:', err);
+    return fail(c, err, 'Erreur sur le panneau de recrutement', 'RecruitmentAPI');
+  };
 
-  // PATCH /api/dashboard/guilds/:guildId/recruitment/config - Update recruitment configuration
-  if (parts.length === 6 && parts[5] === 'config' && method === 'PATCH') {
+  router.get(`${base}/recruitment/panels`, ...gate, async (c) => {
     try {
-      const body = await readJsonBody<{
+      const panels = await prisma.recruitmentPanel.findMany({ where: { guildId: c.req.param('guildId') }, orderBy: { createdAt: 'asc' } });
+      return send(c, { panels });
+    } catch (err) {
+      return panelFailure(c, err);
+    }
+  });
+
+  router.post(`${base}/recruitment/panels`, ...gate, async (c) => {
+    try {
+      const panel = await saveRecruitmentPanel(c.req.param('guildId'), (await readBody(c)) ?? {});
+      return send(c, { panel }, 201);
+    } catch (err) {
+      return panelFailure(c, err);
+    }
+  });
+
+  router.patch(`${base}/recruitment/panels/:panelId`, ...gate, async (c) => {
+    try {
+      const panel = await saveRecruitmentPanel(c.req.param('guildId'), (await readBody(c)) ?? {}, c.req.param('panelId'));
+      return send(c, { panel });
+    } catch (err) {
+      return panelFailure(c, err);
+    }
+  });
+
+  router.delete(`${base}/recruitment/panels/:panelId`, ...gate, async (c) => {
+    try {
+      const deleted = await deleteRecruitmentPanel(c.req.param('guildId'), c.req.param('panelId'));
+      return deleted ? send(c, { ok: true }) : send(c, { error: 'Panneau introuvable' }, 404);
+    } catch (err) {
+      return panelFailure(c, err);
+    }
+  });
+
+
+  router.get(`${base}/recruitment/candidatures`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    try {
+      const candidatures = await getCandidatures(guildId);
+      return send(c, { candidatures });
+    } catch (err) {
+      logger.error('RecruitmentAPI', 'Error getting candidatures:', err);
+      return fail(c, err, 'Erreur lors de la récupération des candidatures', 'RecruitmentAPI');
+    }
+  });
+
+  router.patch(`${base}/recruitment/config`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    try {
+      const body = await readBody<{
         recruitmentCategoryId?: string | null;
         recruitmentLogChannelId?: string | null;
         recruitmentAutoRejectEnabled?: boolean;
-      }>(req);
+      }>(c);
 
       const recruitmentCategoryId = body?.recruitmentCategoryId?.trim() || null;
       const recruitmentLogChannelId = body?.recruitmentLogChannelId?.trim() || null;
@@ -160,7 +133,7 @@ export async function handleRecruitmentRoutes(
         recruitmentAutoRejectEnabledByGuild.set(guildId, body.recruitmentAutoRejectEnabled);
       }
 
-      json(res, 200, {
+      return send(c, {
         ok: true,
         recruitmentCategoryId,
         recruitmentLogChannelId,
@@ -168,14 +141,14 @@ export async function handleRecruitmentRoutes(
       });
     } catch (err) {
       logger.error('RecruitmentAPI', 'Error updating recruitment config:', err);
-      jsonFailure(res, err, 'Erreur lors de la mise à jour de la configuration de recrutement', 'RecruitmentAPI');
+      return fail(c, err, 'Erreur lors de la mise à jour de la configuration de recrutement', 'RecruitmentAPI');
     }
-    return true;
-  }
+  });
 
-  // PATCH /api/dashboard/guilds/:guildId/recruitment/candidatures/:id - Update candidature workflow
-  if (parts.length === 7 && parts[5] === 'candidatures' && method === 'PATCH') {
-    const candidatureId = parts[6];
+  router.patch(`${base}/recruitment/candidatures/:candidatureId`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const candidatureId = c.req.param('candidatureId');
 
     const candidature = await prisma.recruitmentCandidature.findFirst({
       where: { id: candidatureId, guildId },
@@ -183,11 +156,10 @@ export async function handleRecruitmentRoutes(
     });
 
     if (!candidature) {
-      json(res, 404, { error: 'Candidature introuvable pour ce serveur.' });
-      return true;
+      return send(c, { error: 'Candidature introuvable pour ce serveur.' }, 404);
     }
 
-    const body = await readJsonBody<{
+    const body = await readBody<{
       action?: string;
       status?: string;
       notes?: string;
@@ -196,39 +168,33 @@ export async function handleRecruitmentRoutes(
       tutorUserId?: string;
       hierarchyId?: string;
       hierarchyGrade?: string;
-    }>(req);
+    }>(c);
 
     const action = body?.action;
-
     try {
       if (action === 'status_update') {
         const nextStatus = body?.status;
         if (!nextStatus || !Object.values(CandidatureStatus).includes(nextStatus as CandidatureStatus)) {
-          json(res, 400, { error: 'Statut candidature invalide.' });
-          return true;
+          return send(c, { error: 'Statut candidature invalide.' }, 400);
         }
 
         await updateCandidatureStatus(candidatureId, nextStatus as CandidatureStatus, body?.notes);
-        json(res, 200, { ok: true });
-        return true;
+        return send(c, { ok: true });
       }
 
       if (action === 'approve') {
         const discordUserId = body?.discordUserId?.trim();
         if (!discordUserId) {
-          json(res, 400, { error: 'discordUserId est requis pour valider une candidature.' });
-          return true;
+          return send(c, { error: 'discordUserId est requis pour valider une candidature.' }, 400);
         }
 
         await approveCandidature(client, guildId, candidatureId, discordUserId, user.userId);
-        json(res, 200, { ok: true });
-        return true;
+        return send(c, { ok: true });
       }
 
       if (action === 'reject') {
         await rejectCandidature(client, guildId, candidatureId, body?.reason?.trim(), user.userId);
-        json(res, 200, { ok: true });
-        return true;
+        return send(c, { ok: true });
       }
 
       if (action === 'oral_pass') {
@@ -242,39 +208,34 @@ export async function handleRecruitmentRoutes(
           body?.hierarchyId,
           body?.hierarchyGrade
         );
-        json(res, 200, { ok: true });
-        return true;
+        return send(c, { ok: true });
       }
 
       if (action === 'oral_fail') {
         await completeOral(client, guildId, candidatureId, 'FAILED', body?.reason?.trim(), user.userId);
-        json(res, 200, { ok: true });
-        return true;
+        return send(c, { ok: true });
       }
 
       if (action === 'assign_tutor') {
         const tutorUserId = body?.tutorUserId?.trim();
         if (!tutorUserId) {
-          json(res, 400, { error: 'tutorUserId est requis pour assigner un tuteur.' });
-          return true;
+          return send(c, { error: 'tutorUserId est requis pour assigner un tuteur.' }, 400);
         }
 
         await assignTutor(candidatureId, tutorUserId);
-        json(res, 200, { ok: true });
-        return true;
+        return send(c, { ok: true });
       }
 
-      json(res, 400, { error: 'Action de candidature non reconnue.' });
+      return send(c, { error: 'Action de candidature non reconnue.' }, 400);
     } catch (err) {
       logger.error('RecruitmentAPI', 'Error updating candidature:', err);
-      jsonFailure(res, err, 'Erreur lors de la mise à jour de la candidature', 'RecruitmentAPI');
+      return fail(c, err, 'Erreur lors de la mise à jour de la candidature', 'RecruitmentAPI');
     }
-    return true;
-  }
+  });
 
-  // DELETE /api/dashboard/guilds/:guildId/recruitment/candidatures/:id - Delete candidature
-  if (parts.length === 7 && parts[5] === 'candidatures' && method === 'DELETE') {
-    const candidatureId = parts[6];
+  router.delete(`${base}/recruitment/candidatures/:candidatureId`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const candidatureId = c.req.param('candidatureId');
 
     const candidature = await prisma.recruitmentCandidature.findFirst({
       where: { id: candidatureId, guildId },
@@ -282,31 +243,29 @@ export async function handleRecruitmentRoutes(
     });
 
     if (!candidature) {
-      json(res, 404, { error: 'Candidature introuvable pour ce serveur.' });
-      return true;
+      return send(c, { error: 'Candidature introuvable pour ce serveur.' }, 404);
     }
 
     try {
       await deleteRecruitmentCandidature(candidatureId);
-      json(res, 200, { ok: true });
+      return send(c, { ok: true });
     } catch (err) {
       logger.error('RecruitmentAPI', 'Error deleting candidature:', err);
-      jsonFailure(res, err, 'Erreur lors de la suppression de la candidature', 'RecruitmentAPI');
+      return fail(c, err, 'Erreur lors de la suppression de la candidature', 'RecruitmentAPI');
     }
-    return true;
-  }
+  });
 
-  // GET /api/dashboard/guilds/:guildId/recruitment/tutors - Get eligible tutors
-  if (parts.length === 6 && parts[5] === 'tutors' && method === 'GET') {
+  router.get(`${base}/recruitment/tutors`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
     try {
       const tutors = await getEligibleTutors(guildId);
-      json(res, 200, { tutors });
+      return send(c, { tutors });
     } catch (err) {
       logger.error('RecruitmentAPI', 'Error getting eligible tutors:', err);
-      jsonFailure(res, err, 'Erreur lors de la récupération des tuteurs éligibles', 'RecruitmentAPI');
+      return fail(c, err, 'Erreur lors de la récupération des tuteurs éligibles', 'RecruitmentAPI');
     }
-    return true;
-  }
+  });
 
-  return false;
+  return router;
 }
+

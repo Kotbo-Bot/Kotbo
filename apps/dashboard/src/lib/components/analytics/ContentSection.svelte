@@ -16,6 +16,7 @@
   import AnalyticsSkeleton from './AnalyticsSkeleton.svelte';
   import { fetchContentAnalytics, type ContentAnalytics, type ContentEmoji, type ContentSourceServer, type ContentSticker } from '../../api';
   import { channelDetailsModal } from '../../stores/channelDetailsModal.svelte';
+  import { serverDetailsModal } from '../../stores/serverDetailsModal.svelte';
   import { m } from '../../i18n';
   import { errorMessage } from '@kotbo/shared';
   import { analyticsExport, analyticsFilters as filters, pct } from './analyticsFilters.svelte';
@@ -312,7 +313,13 @@
         </div>
         <div class="span-5 flex flex-col gap-4">
           <SectionCard title={m.anx_emoji_servers_title()} description={m.anx_emoji_servers_desc()}>
-            <BarList items={emojiServerItems} empty={m.anx_emoji_servers_empty()} />
+            <BarList
+              items={emojiServerItems}
+              empty={m.anx_emoji_servers_empty()}
+              onselect={(item) => {
+                if (/^\d{17,20}$/.test(item.id)) serverDetailsModal.show(item.id, item.label);
+              }}
+            />
           </SectionCard>
           <SectionCard title={m.anx_emoji_style_title()}>
             <BarList items={emojiStyleItems} max={100} />
@@ -340,7 +347,12 @@
               {#if (data.stickerServers ?? []).length > 0}
                 <div class="flex flex-col gap-2 border-t border-outline-variant pt-4">
                   <span class="text-body-sm font-medium text-on-surface">{m.anx_sticker_servers_title()}</span>
-                  <BarList items={serverItems(data.stickerServers)} />
+                  <BarList
+                    items={serverItems(data.stickerServers)}
+                    onselect={(item) => {
+                      if (/^\d{17,20}$/.test(item.id)) serverDetailsModal.show(item.id, item.label);
+                    }}
+                  />
                 </div>
               {/if}
             </div>

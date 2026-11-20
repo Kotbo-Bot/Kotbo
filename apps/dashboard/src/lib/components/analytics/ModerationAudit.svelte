@@ -1,6 +1,7 @@
 <script lang="ts">
-  import Papicon from '../Papicon.svelte';
+  import UserDisplay from '../UserDisplay.svelte';
   import { memberAvatarSrc } from '../../discordMedia';
+  import Papicon from '../Papicon.svelte';
   import Chart from '../charts/Chart.svelte';
   import DetailedAnalyticsModal from './DetailedAnalyticsModal.svelte';
   import { m } from '../../i18n';
@@ -71,8 +72,6 @@
   // Un repli sur l'avatar Discord generique donnerait la meme vignette a tous
   // les membres sans photo : on passe le nom et l'id pour obtenir une
   // initiale coloree distincte (issue #211).
-  const getAvatar = (url: string | null, name?: string | null, userId?: string | null) =>
-    memberAvatarSrc(url, name, userId);
 
   let showModsModal = $state(false);
   let showSanctionedModal = $state(false);
@@ -107,7 +106,7 @@
     <!-- Distribution Chart -->
     <div class="premium-card p-6 rounded-xl flex flex-col items-center justify-center min-h-[220px]">
       <div class="flex items-center gap-3 mb-6 w-full">
-        <div class="p-2 rounded-xl bg-warning/10 text-warning">
+        <div class="p-2 rounded-xl bg-warning/10 text-on-warning-container">
           <Papicon icon="ChartPieSlice" size={18} />
         </div>
         <h4 class="text-sm font-semibold text-on-surface">{m.d4_distribution()}</h4>
@@ -124,7 +123,7 @@
     <!-- Trend Chart -->
     <div class="premium-card p-6 rounded-xl flex flex-col min-h-[220px] space-y-4">
       <div class="flex items-center gap-3">
-        <div class="p-2 rounded-xl bg-error/10 text-error">
+        <div class="p-2 rounded-xl bg-error/10 text-on-error-container">
           <Papicon icon="ChartLineUp" size={18} />
         </div>
         <h4 class="text-sm font-semibold text-on-surface">{m.d4_trend()}</h4>
@@ -160,11 +159,7 @@
             class="w-full flex items-center justify-between p-3 rounded-lg bg-surface-container-high/20 enabled:hover:bg-surface-container-high/50 transition-all text-left"
           >
             <div class="flex items-center gap-3">
-              <img src={getAvatar(mod.avatarUrl, mod.moderatorTag, mod.userId)} alt="" class="w-8 h-8 rounded-lg object-cover" />
-              <div>
-                <p class="text-sm font-semibold text-on-surface">@{mod.moderatorTag}</p>
-                <p class="text-xs font-semibold text-on-surface-variant/40">{m.d4_moderation_activity()}</p>
-              </div>
+              <UserDisplay userId={mod.userId} name={mod.moderatorTag} avatarUrl={mod.avatarUrl} subtitle={m.d4_moderation_activity()} />
             </div>
             <span class="text-sm font-semibold text-primary">{m.d4_count_actions({ count: mod.count })}</span>
           </button>
@@ -179,7 +174,7 @@
     <div class="premium-card p-8 rounded-xl space-y-6 flex flex-col">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-3">
-          <div class="p-2 rounded-xl bg-error/10 text-error">
+          <div class="p-2 rounded-xl bg-error/10 text-on-error-container">
             <Papicon icon="UserFocus" size={20} />
           </div>
           <h3 class="text-lg font-semibold text-on-surface">{m.d4_sanctioned_members()}</h3>
@@ -199,11 +194,7 @@
             class="w-full flex items-center justify-between p-3 rounded-lg bg-surface-container-high/20 enabled:hover:bg-surface-container-high/50 transition-all text-left"
           >
             <div class="flex items-center gap-3">
-              <img src={getAvatar(member.avatarUrl, member.targetTag, member.targetUserId)} alt="" class="w-8 h-8 rounded-lg object-cover" />
-              <div>
-                <p class="text-sm font-semibold text-on-surface">@{member.targetTag}</p>
-                <p class="text-xs font-semibold text-on-surface-variant/40">{m.d4_recidivism()}</p>
-              </div>
+              <UserDisplay userId={member.targetUserId} name={member.targetTag} avatarUrl={member.avatarUrl} subtitle={m.d4_recidivism()} />
             </div>
             <span class="text-sm font-semibold text-error">{m.d4_count_sanctions({ count: member.count })}</span>
           </button>
@@ -219,7 +210,7 @@
   <div class="premium-card p-8 rounded-xl space-y-8">
     <div class="flex items-center justify-between">
       <div class="flex items-center gap-4">
-        <div class="bg-error/10 p-3 rounded-lg text-error">
+        <div class="bg-error/10 p-3 rounded-lg text-on-error-container">
           <Papicon icon="Gavel" size={24} />
         </div>
         <div>
@@ -246,11 +237,11 @@
         >
           <div class="flex items-center gap-4">
             <div class="w-12 h-12 rounded-lg overflow-hidden bg-on-surface/5 flex items-center justify-center shrink-0">
-              <img src={getAvatar(sanction.targetAvatarUrl, sanction.targetTag, sanction.targetUserId)} alt="" class="w-full h-full object-cover" />
+              <img src={memberAvatarSrc(sanction.targetAvatarUrl, sanction.targetTag, sanction.targetUserId)} alt="" class="w-full h-full object-cover" />
             </div>
             <div>
               <div class="flex items-center gap-2">
-                <p class="text-sm font-semibold text-on-surface">@{sanction.targetTag}</p>
+                <UserDisplay userId={sanction.targetUserId} name={sanction.targetTag} avatar={false} />
                 <span class="px-2 py-0.5 rounded-lg text-xs font-semibold" style="background: {getSanctionColor(sanction.type)}20; color: {getSanctionColor(sanction.type)}">{sanction.type}</span>
               </div>
               <p class="text-xs font-medium text-on-surface-variant mt-0.5 line-clamp-1">{sanction.reason || m.d4_no_reason_specified()}</p>
@@ -260,8 +251,7 @@
             <div class="text-right">
               <p class="text-xs font-semibold text-on-surface-variant/40">{m.d4_moderator()}</p>
               <div class="flex items-center gap-2 mt-0.5">
-                <img src={getAvatar(sanction.moderatorAvatarUrl, sanction.moderatorTag, sanction.moderatorUserId)} alt="" class="w-5 h-5 rounded-md object-cover" />
-                <p class="text-xs font-bold text-on-surface">@{sanction.moderatorTag}</p>
+                <UserDisplay userId={sanction.moderatorUserId} name={sanction.moderatorTag} avatarUrl={sanction.moderatorAvatarUrl} size="xs" />
               </div>
             </div>
             <Papicon icon="CaretRight" size={16} class="text-on-surface-variant/20 group-enabled:group-hover:translate-x-1 transition-transform" />

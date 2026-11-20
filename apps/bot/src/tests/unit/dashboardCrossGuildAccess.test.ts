@@ -10,6 +10,7 @@ import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { readFileSync } from 'node:fs';
+import { completeModuleMock } from '../helpers/moduleMock.js';
 
 /**
  * Source d'une route du dashboard, fins de ligne ramenées à LF : les motifs
@@ -69,9 +70,36 @@ for (const file of ['../../utils/db.ts', '../../utils/db.js']) {
   mock.module(path.resolve(import.meta.dir, file), () => ({ default: mockDb, prisma: mockDb, prismaRead: mockDb, upsertRetryingRace: (upsert: () => Promise<unknown>) => upsert() }));
 }
 
-const { handleEventsRoutes } = await import('../../api/routes/dashboard/events.js');
-const { handleStaffServerRoutes } = await import('../../api/routes/dashboard/staffServer.js');
-const { handleInvitationsRoutes } = await import('../../api/routes/dashboard/modules/invitations.js');
+// Routes servies par Hono : session et garde serveur simulées, on vérifie la route elle-même.
+const allowAll = { level: 'admin', canViewDashboard: true, canManageSettings: true, canModerateContent: true };
+for (const ext of ['ts', 'js']) {
+  mock.module(path.resolve(import.meta.dir, `../../api/routes/dashboard/guildGate.${ext}`), () =>
+    completeModuleMock(path.resolve(import.meta.dir, '../../api/routes/dashboard/guildGate.ts'), {
+      auditGlobalAdminWrite: async () => {},
+      evaluateGuildGate: async () => ({ denied: null, access: allowAll, effectiveAccess: allowAll }),
+    }));
+  mock.module(path.resolve(import.meta.dir, `../../api/auth/sessionStore.${ext}`), () =>
+    completeModuleMock(path.resolve(import.meta.dir, '../../api/auth/sessionStore.ts'), {
+      sessionIdFromCookieHeader: () => 'sid',
+      getDashboardSession: async () => ({ userId: 'staff-1', username: 'staff' }),
+    }));
+  mock.module(path.resolve(import.meta.dir, `../../utils/cache.${ext}`), () =>
+    completeModuleMock(path.resolve(import.meta.dir, '../../utils/cache.ts'), {
+      cache: { invalidateGuild: async () => {} },
+    }));
+}
+
+// La carte des droits par section interroge Discord : ouverte ici, la route seule est testée.
+for (const ext of ['ts', 'js']) {
+  mock.module(path.resolve(import.meta.dir, `../../api/routes/dashboard/featureGate.${ext}`), () =>
+    completeModuleMock(path.resolve(import.meta.dir, '../../api/routes/dashboard/featureGate.ts'), {
+      getCachedFeatureAccess: async () => ({}),
+    }));
+}
+
+const { createEventsRouter } = await import('../../api/routes/dashboard/events.js');
+const { createStaffServerRouter } = await import('../../api/routes/dashboard/staffServer.js');
+const { createMembersRouter } = await import('../../api/routes/dashboard/members.js');
 
 function request(method: string, body: unknown = {}): any {
   const req: any = Readable.from([Buffer.from(JSON.stringify(body))]);
@@ -92,25 +120,19 @@ const user = { userId: 'staff-1', username: 'staff' } as any;
 const access = { level: 'admin', canManageSettings: true, canModerateContent: true } as any;
 const client: any = { guilds: { cache: new Map(), fetch: async () => null }, channels: { cache: new Map() } };
 
-function moduleCtx(method: string, parts: string[], body?: unknown): any {
-  return {
-    req: request(method, body), res: response(), parts, url: new URL('http://localhost/'), client, user,
-    guildId: HERE, access, method, auditUser: 'staff', moduleKey: parts[4],
-  };
-}
 
 beforeEach(() => { writes = []; writeWheres = []; });
 
 describe('accès entre serveurs', () => {
   test('un événement d\'un autre serveur ne se modifie ni ne se supprime', async () => {
-    for (const [method, parts] of [
-      ['PATCH', ['api', 'dashboard', 'guilds', HERE, 'events', 'event-1']],
-      ['DELETE', ['api', 'dashboard', 'guilds', HERE, 'events', 'event-1']],
-      ['GET', ['api', 'dashboard', 'guilds', HERE, 'events', 'event-1']],
-    ] as const) {
-      const res = response();
-      await handleEventsRoutes(request(method, { title: 'x' }), res, [...parts], new URL('http://localhost/'), client, user, HERE, access);
-      expect(res.statusCode).toBe(404);
+    const router = createEventsRouter(client);
+    for (const method of ['PATCH', 'DELETE', 'GET']) {
+      const res = await router.request(`/api/dashboard/guilds/${HERE}/events/event-1`, {
+        method,
+        headers: { cookie: 'kotbo_session=x', 'content-type': 'application/json' },
+        ...(method === 'GET' ? {} : { body: JSON.stringify({ title: 'x' }) }),
+      });
+      expect(res.status).toBe(404);
     }
     expect(writes).toEqual([]);
   });
@@ -121,21 +143,26 @@ describe('accès entre serveurs', () => {
       ['DELETE', ['api', 'dashboard', 'guilds', HERE, 'staff-server', 'link-1', 'mappings', 'map-1']],
       ['POST', ['api', 'dashboard', 'guilds', HERE, 'staff-server', 'link-1', 'sync']],
     ] as const) {
-      const res = response();
-      await handleStaffServerRoutes(request(method, { staffRoleId: 'r1' }), res, [...parts], new URL('http://localhost/'), client, user, HERE);
-      expect(res.statusCode).toBe(404);
+      const res = await createStaffServerRouter(client).request(`/${parts.join('/')}`, {
+        method,
+        headers: { cookie: 'kotbo_session=x', 'content-type': 'application/json' },
+        body: JSON.stringify({ staffRoleId: 'r1' }),
+      });
+      expect(res.status).toBe(404);
     }
     expect(writes).toEqual([]);
   });
 
   test('une invitation d\'un autre serveur ne se suspend ni ne se supprime', async () => {
-    const suspend = moduleCtx('PUT', ['api', 'dashboard', 'guilds', HERE, 'invitations', 'abc123', 'suspend'], { suspended: true });
-    await handleInvitationsRoutes(suspend);
-    expect(suspend.res.statusCode).toBe(404);
+    const router = createMembersRouter(client);
+    const headers = { cookie: 'kotbo_session=x', 'content-type': 'application/json' };
+    const suspend = await router.request(`/api/dashboard/guilds/${HERE}/invitations/abc123/suspend`, {
+      method: 'PUT', headers, body: JSON.stringify({ suspended: true }),
+    });
+    expect(suspend.status).toBe(404);
 
-    const remove = moduleCtx('DELETE', ['api', 'dashboard', 'guilds', HERE, 'invitations', 'abc123']);
-    await handleInvitationsRoutes(remove);
-    expect(remove.res.statusCode).toBe(404);
+    const remove = await router.request(`/api/dashboard/guilds/${HERE}/invitations/abc123`, { method: 'DELETE', headers });
+    expect(remove.status).toBe(404);
     expect(writes).toEqual([]);
   });
 
@@ -154,26 +181,16 @@ describe('accès entre serveurs', () => {
     const read = readRouteSource;
 
     const triggers = read('generalistModules.ts');
-    expect(triggers).toContain('prisma.autoResponse.findFirst({\n          where: { id, guildId },');
-    expect(triggers).toContain('prisma.autoResponse.deleteMany({\n          where: { id, guildId },');
+    expect(triggers).toMatch(/prisma\.autoResponse\.findFirst\(\{\s*where: \{ id, guildId \},/);
+    expect(triggers).toMatch(/prisma\.autoResponse\.deleteMany\(\{\s*where: \{ id, guildId \},/);
 
     expect(read('leadership/apiKeys.ts')).toContain('prisma.aPIKey.findFirst({ where: { id: keyId, guildId } })');
 
+    // Indentation libre : seule compte la clause sur le serveur.
     const members = read('members.ts');
-    expect(members).not.toContain('prisma.linkedAccount.findUnique({\n          where: { id }');
-    expect(members.split('prisma.linkedAccount.findFirst({\n          where: { id, guildId }').length - 1).toBe(2);
+    expect(members).not.toMatch(/prisma\.linkedAccount\.findUnique\(\{\s*where: \{ id \}/);
+    expect(members.match(/prisma\.linkedAccount\.findFirst\(\{\s*where: \{ id, guildId \}/g)?.length).toBe(2);
 
-    expect(read('modules/daily-algo-submissions.ts')).toContain('where: { id: submissionId, run: { guildId } }');
-  });
-
-  test('un sous-élément de partenariat doit appartenir au dossier du serveur', () => {
-    const source = readRouteSource('partnerships.ts');
-    for (const model of ['partnershipAgreement', 'partnershipCommitment', 'partnershipPromotion', 'partnershipGuestAccess', 'partnershipPayment']) {
-      expect(source).toContain(`prisma.${model}.count({ where: scoped })`);
-    }
-    // Un pont ne se confirme que depuis le dossier distant.
-    expect(source).toContain("subAction === 'confirm'\n        ? { remotePartnershipId: partnershipId }");
-    expect(source).toContain('prisma.partnerContact.count({ where: { id: parts[7], partnerId } })');
   });
 
   test('une alerte de santé d\'un autre serveur ne se résout pas', async () => {

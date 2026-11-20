@@ -1,24 +1,25 @@
 /** Routes dashboard du module `template`. */
+import { Hono } from 'hono';
+import type { Client } from 'discord.js';
 import prisma from '../../../../utils/db.js';
 import { logger } from '../../../../utils/logger.js';
-import { getGuildName, getOrCreateRuntime, json, pushAudit, readJsonBody } from '../../../shared.js';
-import { type ModuleRouteContext } from './_shared.js';
+import { getGuildName, getOrCreateRuntime, pushAudit } from '../../../shared.js';
+import { auditUserOf, fail, guildRoute, readBody, send } from '../../../hono/dashboard/kit.js';
 
-import { jsonFailure } from '../../../shared/failure.js';
-export async function handleTemplateRoutes(ctx: ModuleRouteContext): Promise<boolean> {
-  const { req, res, parts, client, guildId, method, auditUser, moduleKey } = ctx;
+export function createTemplateRouter(client: Client) {
+  const router = new Hono();
 
-  // PUT /api/dashboard/guilds/:guildId/template
-  if (moduleKey === 'template' && parts.length === 5 && method === 'PUT') {
+  router.put('/api/dashboard/guilds/:guildId/template', ...guildRoute(client), async (c) => {
+    const guildId = c.req.param('guildId');
     try {
-      const body = await readJsonBody<{ messageTemplate: string }>(req);
+      const body = await readBody<{ messageTemplate: string }>(c);
       const runtime = await getOrCreateRuntime(guildId);
       await prisma.dashboardSettings.update({
         where: { guildId },
         data: { messageTemplate: body?.messageTemplate || runtime.messageTemplate }
       });
       await pushAudit(guildId, {
-        user: auditUser,
+        user: auditUserOf(c),
         action: 'Mise à jour template',
         context: getGuildName(client, guildId),
         module: 'Contenu',
@@ -26,13 +27,12 @@ export async function handleTemplateRoutes(ctx: ModuleRouteContext): Promise<boo
         details: 'Template de message éditorial mis à jour.',
         channelId: null
       });
-      json(res, 200, { ok: true });
+      return send(c, { ok: true });
     } catch (err) {
       logger.error('TemplateAPI', 'Error updating template:', err);
-      jsonFailure(res, err, 'Erreur lors de la mise à jour du template', 'TemplateAPI');
+      return fail(c, err, 'Erreur lors de la mise à jour du template', 'TemplateAPI');
     }
-    return true;
-  }
+  });
 
-  return false;
+  return router;
 }

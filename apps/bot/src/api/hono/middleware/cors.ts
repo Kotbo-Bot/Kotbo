@@ -1,6 +1,7 @@
 import type { MiddlewareHandler } from 'hono';
 import { getDashboardOrigin, CORS_EXTRA_ORIGINS, isKotboPublicOrigin } from '../../shared.js';
 import { getAllInstances } from '../../../utils/instanceResolver.js';
+import { isCustomDomainOrigin } from '../../../services/system/customDomain.js';
 
 /** Vérifie si un origin est en localhost (développement) */
 function isAllowedDevOrigin(candidate: string): boolean {
@@ -20,11 +21,15 @@ function isAllowedDevOrigin(candidate: string): boolean {
  */
 export function dashboardCors(): MiddlewareHandler {
   return async (c, next) => {
+    // Matérialise l'instance de réponse Hono pour que ses en-têtes (CORS,
+    // sécurité) soient fusionnés même si une route aval renvoie directement
+    // un objet Response natif (ex. une route qui construit sa propre Response).
+    c.res;
+
     const isMcpPath =
       c.req.path.startsWith('/api/mcp/') ||
-      c.req.path === '/.well-known/oauth-authorization-server' ||
-      c.req.path.startsWith('/.well-known/oauth-protected-resource/') ||
-      c.req.path.startsWith('/.well-known/oauth-authorization-server/');
+      c.req.path.startsWith('/api/mcp-direct/') ||
+      c.req.path.startsWith('/.well-known/');
 
     // Les apercus de liens (Open Graph) sont lus par les robots de Discord,
     // Slack ou X : ils n'envoient pas d'`Origin` et leurs CDN rechargent les
@@ -53,7 +58,7 @@ export function dashboardCors(): MiddlewareHandler {
         } catch {
           normalizedOrigin = origin.replace(/\/$/, '');
         }
-        if (allowedOrigins.has(normalizedOrigin) || isAllowedDevOrigin(origin) || isKotboPublicOrigin(origin)) {
+        if (allowedOrigins.has(normalizedOrigin) || isAllowedDevOrigin(origin) || isKotboPublicOrigin(origin) || isCustomDomainOrigin(origin)) {
           c.header('Access-Control-Allow-Origin', origin);
           c.header('Access-Control-Allow-Credentials', 'true');
         } else {
@@ -70,7 +75,7 @@ export function dashboardCors(): MiddlewareHandler {
 
     c.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
     c.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, Origin, X-Requested-With, Cache-Control, Pragma, If-None-Match, X-Kotbo-API-Key, X-API-Key');
-    c.header('Access-Control-Expose-Headers', 'ETag');
+    c.header('Access-Control-Expose-Headers', 'ETag, X-Rank-Card-Preview');
     c.header('Access-Control-Max-Age', '86400');
 
     // Sécurité

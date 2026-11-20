@@ -2,7 +2,7 @@
  * Message de panneau tenu a jour par le bot : edite s'il existe encore, poste
  * sinon. Partage par les panneaux de recrutement et la liste du staff.
  */
-import type { MessageCreateOptions, MessageEditOptions } from 'discord.js';
+import type { Client, MessageCreateOptions, MessageEditOptions } from 'discord.js';
 import { getClient } from './client.js';
 import { UserFacingError } from './userFacingError.js';
 
@@ -38,4 +38,15 @@ export async function isGuildChannel(guildId: string, channelId: string): Promis
   if (!/^\d{15,25}$/.test(channelId)) return false;
   const channel = await getClient().channels.fetch(channelId).catch(() => null);
   return !!channel && 'guildId' in channel && channel.guildId === guildId;
+}
+
+/**
+ * Salon d'un serveur précis, ou `null`. Résolu depuis le serveur et non par `client.channels` :
+ * un identifiant de salon venu d'un réglage ne doit jamais atteindre un autre serveur.
+ */
+export async function fetchGuildChannel(client: Client, guildId: string, channelId: string | null | undefined) {
+  if (!channelId) return null;
+  const guild = client.guilds.cache.get(guildId);
+  if (!guild) return null;
+  return guild.channels.fetch(channelId).catch(() => null);
 }

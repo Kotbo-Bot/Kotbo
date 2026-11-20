@@ -13,6 +13,19 @@ export type DropType = 'XP' | 'RPG_XP' | 'CLAN_POINTS' | 'COINS' | 'RPG_ITEM';
 
 export const DROP_TYPES: readonly DropType[] = ['XP', 'RPG_XP', 'CLAN_POINTS', 'COINS', 'RPG_ITEM'] as const;
 
+/**
+ * Module (registre `@kotbo/contracts`) qui tient la ressource versée. Les drops
+ * ne la possèdent pas : un drop de pièces sur un serveur où l'économie est
+ * éteinte créditerait un solde que plus rien n'affiche ni ne dépense.
+ */
+export const DROP_TYPE_MODULE: Readonly<Record<DropType, string>> = {
+  XP: 'leveling',
+  RPG_XP: 'economy',
+  CLAN_POINTS: 'clans',
+  COINS: 'economy',
+  RPG_ITEM: 'economy',
+};
+
 
 /**
  * Façon dont un drop se ramasse :
@@ -170,6 +183,268 @@ export function normalizeDropDeleteAfterMinutes(value: unknown): number {
   return clampDropInt(parsed, DROP_DELETE_AFTER_MINUTES_RANGE, DROP_DELETE_AFTER_DISABLED);
 }
 
+/**
+ * Attente d'activité : un drop dû ne part que si son salon a reçu assez de messages de
+ * membres sur les dernières minutes. Sans elle, un drop tiré à 4 h tombe dans un salon
+ * vide et expire sans personne.
+ *
+ * Zéro message vaut « sans condition » : c'est la valeur qui éteint l'option. Le plafond
+ * suit la lecture faite au moment du tirage - une seule page de messages Discord, soit
+ * cent au plus - en gardant de la marge.
+ */
+export const DROP_ACTIVITY_DISABLED = 0;
+export const DROP_ACTIVITY_MESSAGES_RANGE = { min: 1, max: 50 } as const;
+export const DROP_ACTIVITY_WINDOW_MINUTES_RANGE = { min: 5, max: 120 } as const;
+export const DEFAULT_DROP_ACTIVITY_MESSAGES = 5;
+const DEFAULT_DROP_ACTIVITY_WINDOW_MINUTES = 15;
+
+export interface DropActivitySettings {
+  /** Messages de membres exigés sur la fenêtre. `0` = pas de condition. */
+  minMessages: number;
+  windowMinutes: number;
+}
+
+function normalizeDropActivity(raw: Partial<DropActivitySettings> | null | undefined): DropActivitySettings {
+  const parsed = Number(raw?.minMessages);
+  const minMessages = !Number.isFinite(parsed) || Math.trunc(parsed) <= DROP_ACTIVITY_DISABLED
+    ? DROP_ACTIVITY_DISABLED
+    : clampDropInt(parsed, DROP_ACTIVITY_MESSAGES_RANGE, DEFAULT_DROP_ACTIVITY_MESSAGES);
+  return {
+    minMessages,
+    windowMinutes: clampDropInt(raw?.windowMinutes, DROP_ACTIVITY_WINDOW_MINUTES_RANGE, DEFAULT_DROP_ACTIVITY_WINDOW_MINUTES),
+  };
+}
+
+/**
+ * Le drop dû part-il maintenant ?
+ *
+ * Un salon qui reste calme ne bloque pas le type indéfiniment : passé un intervalle entier
+ * de retard, le drop part quand même. Sur un petit serveur, l'option espacerait sinon les
+ * drops jusqu'à les faire disparaître.
+ */
+export function dropActivityVerdict(input: {
+  dueAt: Date;
+  now: Date;
+  intervalMinutes: number;
+  activity: DropActivitySettings;
+  recentMessages: number;
+}): 'publish' | 'wait' {
+  if (input.activity.minMessages <= DROP_ACTIVITY_DISABLED) return 'publish';
+  if (input.recentMessages >= input.activity.minMessages) return 'publish';
+  const waitedMs = input.now.getTime() - input.dueAt.getTime();
+  return waitedMs >= input.intervalMinutes * 60 * 1000 ? 'publish' : 'wait';
+}
+
+/**
+ * Délai entre deux lectures d'un salon calme pendant l'attente d'activité. Le drop dû
+ * attend parfois un intervalle entier : relire Discord à chaque minute coûterait jusqu'à
+ * des centaines d'appels par drop, pour une fenêtre d'activité d'au moins cinq minutes.
+ */
+export const DROP_ACTIVITY_RECHECK_MINUTES = 5;
+
+/** Faut-il relire l'activité du salon ? `lastCheckAt` vide = jamais lue. */
+export function dropActivityCheckDue(lastCheckAt: Date | null, now: Date): boolean {
+  if (!lastCheckAt) return true;
+  return now.getTime() - lastCheckAt.getTime() >= DROP_ACTIVITY_RECHECK_MINUTES * 60 * 1000;
+}
+
+/**
+ * Bilan d'un type sur la période du conseil : drops terminés, et parmi eux ceux qui ont
+ * expiré sans que personne les ramasse. Les drops encore ouverts n'y entrent pas.
+ */
+export interface DropOutcomes {
+  closed: number;
+  unclaimed: number;
+}
+
+/** Période observée pour le conseil, et taille d'échantillon en dessous de laquelle on se tait. */
+export const DROP_ADVICE_WINDOW_DAYS = 7;
+export const DROP_ADVICE_MIN_SAMPLE = 5;
+/** Part de drops sans gagnant à partir de laquelle le conseil apparaît. */
+const DROP_ADVICE_UNCLAIMED_RATIO = 0.5;
+
+/**
+ * Faut-il conseiller l'attente d'activité pour ce type ?
+ *
+ * Un type dont la plupart des drops expirent sans gagnant tombe dans un salon vide :
+ * c'est exactement ce que l'attente d'activité corrige. Rien n'est dit sur trois drops,
+ * ni quand l'option est déjà allumée.
+ */
+export function shouldAdviseActivityWait(outcomes: DropOutcomes, activity: DropActivitySettings): boolean {
+  if (activity.minMessages !== DROP_ACTIVITY_DISABLED) return false;
+  if (outcomes.closed < DROP_ADVICE_MIN_SAMPLE) return false;
+  return outcomes.unclaimed / outcomes.closed >= DROP_ADVICE_UNCLAIMED_RATIO;
+}
+
+/**
+ * Drops jackpot : de temps en temps, un drop rapporte un multiple du montant tiré.
+ *
+ * Réglage unique pour tout le serveur, à valeurs fixes : une chance et un multiplicateur
+ * libres sur chacun des cinq types feraient beaucoup de champs pour un effet d'ambiance.
+ * Les drops d'objet en sont exclus : multiplier une pièce rare, c'est précisément ce que
+ * leur liste choisie sert à empêcher.
+ */
+export const DROP_JACKPOT_CHANCE_CHOICES = [10, 20, 50] as const;
+export const DROP_JACKPOT_MULTIPLIER_CHOICES = [3, 5, 10] as const;
+const DEFAULT_DROP_JACKPOT_CHANCE = 20;
+const DEFAULT_DROP_JACKPOT_MULTIPLIER = 5;
+
+function pickChoice(value: unknown, choices: readonly number[], fallback: number): number {
+  const parsed = Number(value);
+  return choices.includes(parsed) ? parsed : fallback;
+}
+
+export function rollDropJackpot(
+  type: DropType,
+  settings: Pick<DropGlobalSettings, 'dropJackpotEnabled' | 'dropJackpotChance'>,
+  random: () => number = Math.random,
+): boolean {
+  if (type === 'RPG_ITEM' || !settings.dropJackpotEnabled) return false;
+  return random() < 1 / settings.dropJackpotChance;
+}
+
+/** Rôle à mentionner pour un drop donné, ou `null` quand personne ne doit l'être. */
+export function dropMentionRoleId(
+  settings: Pick<DropGlobalSettings, 'dropMentionRoleId' | 'dropMentionJackpotOnly'>,
+  jackpot: boolean,
+): string | null {
+  if (!settings.dropMentionRoleId) return null;
+  if (settings.dropMentionJackpotOnly && !jackpot) return null;
+  return settings.dropMentionRoleId;
+}
+
+export function dropJackpotAmount(amount: number, multiplier: number): number {
+  return Math.min(DROP_AMOUNT_RANGE.max, amount * multiplier);
+}
+
+/**
+ * Règles de ramassage : configuration avancée, éteinte par défaut. Un serveur qui
+ * n'y touche pas laisse tout le monde ramasser, comme avant leur existence.
+ *
+ * Chaque règle vaut pour tous les types de drop. `0` ou `null` l'éteint.
+ */
+export interface DropClaimRules {
+  /** Ramassages au plus par membre sur 24 h glissantes, tous drops confondus. */
+  dailyLimit: number;
+  /** Ancienneté minimale sur le serveur, en jours : freine les comptes créés pour l'occasion. */
+  minMemberDays: number;
+  /** Rôle sans lequel on ne ramasse pas. */
+  requiredRoleId: string | null;
+}
+
+export const DROP_CLAIM_DAILY_LIMIT_RANGE = { min: 1, max: 100 } as const;
+export const DROP_CLAIM_MIN_MEMBER_DAYS_RANGE = { min: 1, max: 365 } as const;
+
+export const DEFAULT_DROP_CLAIM_RULES: DropClaimRules = {
+  dailyLimit: 0,
+  minMemberDays: 0,
+  requiredRoleId: null,
+};
+
+/** Fenêtre du plafond de ramassages : 24 h glissantes, sans fuseau horaire à choisir. */
+export const DROP_CLAIM_LIMIT_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/** Ce qu'il faut savoir du membre au moment du clic. */
+export interface DropClaimFacts {
+  /** Arrivée sur le serveur ; `null` quand Discord ne la donne pas. */
+  joinedAt: Date | null;
+  roleIds: readonly string[];
+  /** Ramassages du membre sur les dernières 24 h. Lu seulement quand un plafond est réglé. */
+  claimsLast24h: number;
+  now: Date;
+}
+
+export type DropClaimBlocker = 'DAILY_LIMIT' | 'MEMBER_TOO_NEW' | 'MISSING_ROLE';
+
+/**
+ * Une entrée par règle, dans l'ordre où elles sont annoncées au membre. Ajouter
+ * une règle revient à ajouter une entrée ici, un champ dans `DropClaimRules` et
+ * son message : le service et la page n'ont rien d'autre à apprendre.
+ */
+const DROP_CLAIM_RULES: ReadonlyArray<{
+  blocker: DropClaimBlocker;
+  active: (rules: DropClaimRules) => boolean;
+  blocks: (rules: DropClaimRules, facts: DropClaimFacts) => boolean;
+}> = [
+  {
+    blocker: 'DAILY_LIMIT',
+    active: (rules) => rules.dailyLimit > 0,
+    blocks: (rules, facts) => facts.claimsLast24h >= rules.dailyLimit,
+  },
+  {
+    blocker: 'MEMBER_TOO_NEW',
+    active: (rules) => rules.minMemberDays > 0,
+    // Une arrivée inconnue ne bloque pas : refuser sur une donnée absente
+    // pénaliserait un membre de longue date que Discord n'a pas renseigné.
+    blocks: (rules, facts) => facts.joinedAt !== null
+      && facts.now.getTime() - facts.joinedAt.getTime() < rules.minMemberDays * 24 * 60 * 60 * 1000,
+  },
+  {
+    blocker: 'MISSING_ROLE',
+    active: (rules) => rules.requiredRoleId !== null,
+    blocks: (rules, facts) => !facts.roleIds.includes(rules.requiredRoleId as string),
+  },
+];
+
+/** Au moins une règle est réglée : la page le signale, le clic va lire le membre. */
+export function hasDropClaimRules(rules: DropClaimRules): boolean {
+  return DROP_CLAIM_RULES.some((rule) => rule.active(rules));
+}
+
+/** Première règle que le membre ne respecte pas, ou `null` s'il peut ramasser. */
+export function dropClaimBlocker(rules: DropClaimRules, facts: DropClaimFacts): DropClaimBlocker | null {
+  return DROP_CLAIM_RULES.find((rule) => rule.active(rules) && rule.blocks(rules, facts))?.blocker ?? null;
+}
+
+/**
+ * Le rôle requis a disparu du serveur. `guildRoleIds` vide (`null`) = rôles inconnus :
+ * rien n'est signalé sur une donnée absente.
+ */
+export function dropClaimRoleMissing(rules: DropClaimRules, guildRoleIds: readonly string[] | null): boolean {
+  return rules.requiredRoleId !== null && guildRoleIds !== null && !guildRoleIds.includes(rules.requiredRoleId);
+}
+
+/**
+ * Règles réellement appliquées au clic : un rôle requis supprimé du serveur ne peut plus
+ * être porté par personne, et bloquerait tous les ramassages sans que rien ne le dise.
+ * La règle est ignorée, et la page signale le rôle manquant.
+ */
+export function effectiveDropClaimRules(rules: DropClaimRules, guildRoleIds: readonly string[] | null): DropClaimRules {
+  return dropClaimRoleMissing(rules, guildRoleIds) ? { ...rules, requiredRoleId: null } : rules;
+}
+
+/**
+ * Reprises d'un versement en suspens avant abandon. Au-delà, l'erreur ne tient plus à un
+ * incident passager : le ramassage est marqué abandonné au lieu d'être repris sans fin.
+ */
+export const DROP_CLAIM_SETTLE_MAX_ATTEMPTS = 5;
+
+/**
+ * Sort d'un versement en suspens au passage du cycle. Module éteint : le gain promis au
+ * membre attend son retour, sans compter de tentative. Sinon on verse, jusqu'au plafond.
+ */
+export function dropClaimSettleAction(input: { moduleEnabled: boolean; attempts: number }): 'pay' | 'hold' | 'abandon' {
+  if (!input.moduleEnabled) return 'hold';
+  return input.attempts >= DROP_CLAIM_SETTLE_MAX_ATTEMPTS ? 'abandon' : 'pay';
+}
+
+/** Bornée, et sous le minimum la règle est éteinte plutôt que ramenée à 1. */
+function optionalDropInt(value: unknown, range: { min: number; max: number }): number {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(parsed) || parsed < range.min) return 0;
+  return Math.min(range.max, Math.trunc(parsed));
+}
+
+/** Lit la colonne JSON : vide, illisible ou partielle, ce qui manque reste éteint. */
+export function normalizeDropClaimRules(raw: unknown): DropClaimRules {
+  const source = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as Partial<DropClaimRules> : {};
+  return {
+    dailyLimit: optionalDropInt(source.dailyLimit, DROP_CLAIM_DAILY_LIMIT_RANGE),
+    minMemberDays: optionalDropInt(source.minMemberDays, DROP_CLAIM_MIN_MEMBER_DAYS_RANGE),
+    requiredRoleId: typeof source.requiredRoleId === 'string' && source.requiredRoleId ? source.requiredRoleId : null,
+  };
+}
+
 export interface DropModeSettings {
   enabled: boolean;
   minAmount: number;
@@ -187,6 +462,7 @@ export interface DropTypeSettings {
   channelId: string | null;
   /** Écart moyen entre deux drops. Le tirage réel s'en écarte volontairement. */
   intervalMinutes: number;
+  activity: DropActivitySettings;
   first: DropModeSettings;
   race: DropModeSettings & { winnerCount: number };
   window: DropModeSettings & { durationMinutes: number };
@@ -196,17 +472,32 @@ export interface DropGlobalSettings {
   dropsEnabled: boolean;
   dropChannelId: string | null;
   dropMentionRoleId: string | null;
+  /**
+   * Le rôle n'est mentionné que pour les jackpots. Mentionné à chaque drop, il fait couper
+   * les notifications du serveur ; réservé aux jackpots, il redevient attendu.
+   */
+  dropMentionJackpotOnly: boolean;
   dropLifetimeMinutes: number;
   /** Minutes après clôture avant suppression du message. `0` = jamais. */
   dropDeleteAfterMinutes: number;
+  dropJackpotEnabled: boolean;
+  /** Un drop sur N est un jackpot. */
+  dropJackpotChance: number;
+  dropJackpotMultiplier: number;
+  dropClaimRules: DropClaimRules;
 }
 
 export const DEFAULT_DROP_GLOBAL_SETTINGS: DropGlobalSettings = {
   dropsEnabled: false,
   dropChannelId: null,
   dropMentionRoleId: null,
+  dropMentionJackpotOnly: false,
   dropLifetimeMinutes: 60,
   dropDeleteAfterMinutes: DROP_DELETE_AFTER_DISABLED,
+  dropJackpotEnabled: false,
+  dropJackpotChance: DEFAULT_DROP_JACKPOT_CHANCE,
+  dropJackpotMultiplier: DEFAULT_DROP_JACKPOT_MULTIPLIER,
+  dropClaimRules: DEFAULT_DROP_CLAIM_RULES,
 };
 
 /**
@@ -229,6 +520,7 @@ export function defaultDropTypeSettings(type: DropType): DropTypeSettings {
     items: [],
     channelId: null,
     intervalMinutes: 360,
+    activity: { minMessages: DROP_ACTIVITY_DISABLED, windowMinutes: DEFAULT_DROP_ACTIVITY_WINDOW_MINUTES },
     first: { enabled: true, minAmount: base.min, maxAmount: base.max },
     // Un drop partagé rapporte moins par tête qu'une victoire au clic : le
     // barème de départ le reflète, l'administrateur reste libre de l'inverser.
@@ -275,6 +567,7 @@ export function normalizeDropTypeSettings(
     items: normalizeDropItems(source.items ?? fallback.items),
     channelId: source.channelId ?? null,
     intervalMinutes: clampDropInt(source.intervalMinutes, DROP_INTERVAL_MINUTES_RANGE, fallback.intervalMinutes),
+    activity: normalizeDropActivity(source.activity ?? fallback.activity),
     first: normalizeModeAmounts(source.first, fallback.first, range),
     race: {
       ...race,
@@ -287,18 +580,29 @@ export function normalizeDropTypeSettings(
   };
 }
 
-export function normalizeDropGlobalSettings(raw: Partial<DropGlobalSettings> | null | undefined): DropGlobalSettings {
+export function normalizeDropGlobalSettings(
+  raw: (Omit<Partial<DropGlobalSettings>, 'dropClaimRules'> & { dropClaimRules?: unknown }) | null | undefined,
+): DropGlobalSettings {
   const source = raw ?? {};
   return {
     dropsEnabled: source.dropsEnabled ?? DEFAULT_DROP_GLOBAL_SETTINGS.dropsEnabled,
     dropChannelId: source.dropChannelId ?? null,
     dropMentionRoleId: source.dropMentionRoleId ?? null,
+    dropMentionJackpotOnly: source.dropMentionJackpotOnly ?? DEFAULT_DROP_GLOBAL_SETTINGS.dropMentionJackpotOnly,
     dropLifetimeMinutes: clampDropInt(
       source.dropLifetimeMinutes,
       DROP_LIFETIME_MINUTES_RANGE,
       DEFAULT_DROP_GLOBAL_SETTINGS.dropLifetimeMinutes,
     ),
     dropDeleteAfterMinutes: normalizeDropDeleteAfterMinutes(source.dropDeleteAfterMinutes),
+    dropJackpotEnabled: source.dropJackpotEnabled ?? DEFAULT_DROP_GLOBAL_SETTINGS.dropJackpotEnabled,
+    dropJackpotChance: pickChoice(source.dropJackpotChance, DROP_JACKPOT_CHANCE_CHOICES, DEFAULT_DROP_JACKPOT_CHANCE),
+    dropJackpotMultiplier: pickChoice(
+      source.dropJackpotMultiplier,
+      DROP_JACKPOT_MULTIPLIER_CHOICES,
+      DEFAULT_DROP_JACKPOT_MULTIPLIER,
+    ),
+    dropClaimRules: normalizeDropClaimRules(source.dropClaimRules),
   };
 }
 
@@ -373,6 +677,40 @@ export function pickDropMode(settings: DropTypeSettings, random: () => number = 
   return modes[Math.floor(random() * modes.length)] ?? modes[0];
 }
 
+/**
+ * Raison pour laquelle un type de drop allumé ne publiera rien.
+ *
+ * - `MODULE_OFF` : le module qui tient la ressource est éteint (le cycle saute le type) ;
+ * - `NO_CHANNEL` : ni salon propre, ni salon par défaut ;
+ * - `NO_MODE` : tous les modes de ramassage sont éteints ;
+ * - `RPG_OFF` : drop d'objet sans RPG, aucun inventaire où déposer la pièce ;
+ * - `NO_ITEMS` : drop d'objet sans liste d'objets.
+ *
+ * Une seule raison, la plus en amont : c'est celle qu'il faut lever en premier.
+ */
+export type DropTypeBlocker = 'MODULE_OFF' | 'NO_CHANNEL' | 'NO_MODE' | 'RPG_OFF' | 'NO_ITEMS';
+
+export interface DropTypeContext {
+  defaultChannelId: string | null;
+  resourceModuleActive: boolean;
+  rpgEnabled: boolean;
+}
+
+export function dropTypeBlocker(
+  type: DropType,
+  settings: DropTypeSettings,
+  context: DropTypeContext,
+): DropTypeBlocker | null {
+  if (!context.resourceModuleActive) return 'MODULE_OFF';
+  if (!settings.channelId && !context.defaultChannelId) return 'NO_CHANNEL';
+  if (enabledDropModes(settings).length === 0) return 'NO_MODE';
+  if (type === 'RPG_ITEM') {
+    if (!context.rpgEnabled) return 'RPG_OFF';
+    if (settings.items.length === 0) return 'NO_ITEMS';
+  }
+  return null;
+}
+
 export function dropModeSettings(settings: DropTypeSettings, mode: DropMode): DropModeSettings {
   if (mode === 'RACE') return settings.race;
   if (mode === 'WINDOW') return settings.window;
@@ -414,4 +752,55 @@ export function dropExpiresAt(
     ? clampDropInt(settings.window.durationMinutes, DROP_WINDOW_MINUTES_RANGE, 10)
     : clampDropInt(lifetimeMinutes, DROP_LIFETIME_MINUTES_RANGE, 60);
   return new Date(postedAt.getTime() + minutes * MS_PER_MINUTE);
+}
+
+const WEEK_MINUTES = 7 * 24 * 60;
+
+/**
+ * Ce qu'un type distribue en une semaine, pour juger de son poids dans l'économie.
+ *
+ * - `drops` : apparitions par semaine, d'après l'intervalle moyen ;
+ * - `distributed` : total versé par les modes à gagnants comptés (premier arrivé,
+ *   course), en supposant chaque place prise ;
+ * - `window` : le mode ouvert à tous n'a pas de nombre de gagnants, son gain est donné
+ *   par participant.
+ *
+ * Les modes se partagent les apparitions à parts égales, comme au tirage, et chaque
+ * montant vaut le milieu de sa fourchette. Le jackpot relève la moyenne de
+ * (multiplicateur - 1) / N. C'est un ordre de grandeur : des drops expirés ou retenus
+ * par l'attente d'activité versent moins. `null` quand aucun mode n'est allumé.
+ */
+export interface DropWeeklyEstimate {
+  drops: number;
+  distributed: number;
+  window: { drops: number; perParticipant: number } | null;
+}
+
+export function estimateWeeklyDrops(
+  type: DropType,
+  settings: DropTypeSettings,
+  jackpot: Pick<DropGlobalSettings, 'dropJackpotEnabled' | 'dropJackpotChance' | 'dropJackpotMultiplier'>,
+): DropWeeklyEstimate | null {
+  const modes = enabledDropModes(settings);
+  if (modes.length === 0) return null;
+
+  const drops = WEEK_MINUTES / clampDropInt(settings.intervalMinutes, DROP_INTERVAL_MINUTES_RANGE, 360);
+  const perMode = drops / modes.length;
+  const boost = type !== 'RPG_ITEM' && jackpot.dropJackpotEnabled
+    ? 1 + (jackpot.dropJackpotMultiplier - 1) / jackpot.dropJackpotChance
+    : 1;
+  const mean = (mode: DropMode) => {
+    const { minAmount, maxAmount } = dropModeSettings(settings, mode);
+    return ((minAmount + maxAmount) / 2) * boost;
+  };
+
+  let distributed = 0;
+  if (settings.first.enabled) distributed += perMode * mean('FIRST');
+  if (settings.race.enabled) distributed += perMode * mean('RACE') * dropMaxClaims(settings, 'RACE');
+
+  return {
+    drops,
+    distributed,
+    window: settings.window.enabled ? { drops: perMode, perParticipant: mean('WINDOW') } : null,
+  };
 }

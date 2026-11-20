@@ -248,6 +248,17 @@ export type MemberCaseConnection = {
   visible: boolean;
 };
 
+export type MemberCaseServerTag = {
+  guildId: string;
+  tag: string;
+  badge: string | null;
+  badgeUrl: string | null;
+  serverName: string | null;
+  serverIconUrl: string | null;
+  isOwnGuild: boolean;
+  updatedAt: string | null;
+};
+
 /** Une demande de vérification de sécurité passée sur ce membre. */
 export type MemberCaseVerificationEntry = {
   id: string;
@@ -295,4 +306,27 @@ export type MemberCaseResponse = {
   /** Liens de double compte déjà posés sur d'autres serveurs de l'instance. */
   crossServerLinks: CrossServerLinkSummaryPayload;
   verifications: MemberCaseVerifications;
+  /** Boost en cours et historique reconstruit à partir des débuts/arrêts notés par le bot. */
+  boost?: MemberCaseBoost | null;
+  serverTag?: MemberCaseServerTag | null;
+  /** Historique des attributs d'identité : pseudos, descriptions, pseudos d'affichage, photos de profil, tags et pronoms. */
+  history?: MemberHistoryEntry[];
+};
+
+export type MemberCaseBoost = {
+  boostingSince: string | null;
+  totalDays: number;
+  periodCount: number;
+  /** Plus récentes d'abord, 20 au plus. */
+  periods: Array<{ start: string; end: string | null; days: number }>;
+};
+
+export type MemberHistoryField = 'username' | 'displayName' | 'avatar' | 'bio' | 'tag' | 'pronouns';
+
+export type MemberHistoryEntry = {
+  id: string;
+  field: MemberHistoryField;
+  oldValue: string | null;
+  newValue: string | null;
+  recordedAt: string;
 };

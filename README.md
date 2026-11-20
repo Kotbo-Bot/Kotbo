@@ -83,9 +83,8 @@ Kotbo est architecturé sous forme de monorepo moderne géré par **Bun** :
 - **Commandes `/casier` & `/sanction`** : Historique complet des sanctions d'un utilisateur consultable via un embed clair ou un menu contextuel Discord.
 - **Synchronisation Globale** : Propagation optionnelle des sanctions sur les différents serveurs liés pour limiter la récidive.
 
-### 💻 Daily Algo & Code Police
+### 💻 Code Police
 - **Code Police** : Détecte les blocs de code mal formatés (envoyés sans balises markdown) et propose un reformatage automatique propre à l'utilisateur.
-- **Daily Algo** : Publication quotidienne d'un défi d'algorithme. Les utilisateurs soumettent leur code (JavaScript, etc.) via un modal. Le bot évalue les critères (vitesse, propreté, tests unitaires) et met à jour un classement (`/leaderboard`).
 
 ---
 
@@ -100,7 +99,7 @@ Kotbo/
 │   │       ├── commands/   # Définitions des commandes Slash
 │   │       ├── events/     # Listeners d'événements Discord et tâches Cron
 │   │       ├── handlers/   # Gestionnaires d'interactions (boutons, modals)
-│   │       ├── services/   # Logique métier (RSS, YouTube, DailyAlgo, Tickets)
+│   │       ├── services/   # Logique métier (RSS, YouTube, Tickets)
 │   │       └── utils/      # Client Prisma, gestion du cache Redis, logs, embeds
 │   │
 │   └── dashboard/          # Frontend Web (Single Page Application)
@@ -274,8 +273,7 @@ Les images du bot et du dashboard se construisent séparément, via `DockerfileB
 * `/post` : Permet de générer des annonces personnalisées ou d'interagir via des embeds soignés.
 * `/ticket` : Commande d'administration pour gérer et configurer le système de tickets de support.
 * `/serverstats` : Configure des salons vocaux dynamiques affichant des statistiques en temps réel.
-* `/dailyalgo` : Permet de forcer ou configurer les défis algorithmiques.
-* `/leaderboard` : Affiche les classements locaux (activité, daily algo).
+* `/leaderboard` : Affiche les classements locaux (activité).
 * `/epoch [date]` : Outil utilitaire convertissant des dates en formats de timestamps Discord (epoch).
 * `/devutils <subcommand>` : Utilitaires pour développeurs (décodage Base64, validation JWT, hachage MD5/SHA256).
 * `/excuse` : Génère une excuse de développeur aléatoire.

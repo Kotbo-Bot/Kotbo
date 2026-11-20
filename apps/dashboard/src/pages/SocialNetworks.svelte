@@ -372,7 +372,7 @@
                     <ToggleSwitch size="sm" checked={draft[type.key]} ariaLabel={type.label()} onToggle={(v) => (draft[type.key] = v)} />
                   </div>
                   {#if draft[type.key]}
-                    <FormInput id="social-gh-{type.message}" bind:value={draft[type.message]} placeholder={m.social_default_msg_ph()} className="w-full" />
+                    <FormInput ariaLabel={m.social_default_msg_ph()} id="social-gh-{type.message}" bind:value={draft[type.message]} placeholder={m.social_default_msg_ph()} className="w-full" />
                   {/if}
                 </div>
               {/each}

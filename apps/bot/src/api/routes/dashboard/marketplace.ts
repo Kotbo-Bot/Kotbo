@@ -1,34 +1,24 @@
-import { IncomingMessage, ServerResponse } from 'node:http';
-import { Client } from 'discord.js';
+import { Hono } from 'hono';
+import type { Client } from 'discord.js';
 import { logger } from '../../../utils/logger.js';
-import { json, resolveMemberFeatureAccess, type AuthClaims, type DashboardAccess } from '../../shared.js';
+import { resolveMemberFeatureAccess } from '../../shared.js';
 import { getMarketplaceDashboardData } from '../../../services/economy/marketplaceService.js';
 import { getMemberIdentities } from '../../../services/moderation/memberIdentityService.js';
+import { fail, guildRoute, send } from '../../hono/dashboard/kit.js';
 
-import { jsonFailure } from '../../shared/failure.js';
-export async function handleMarketplaceRoutes(
-  req: IncomingMessage,
-  res: ServerResponse,
-  parts: string[],
-  url: URL,
-  client: Client,
-  user: AuthClaims,
-  guildId: string,
-  access: DashboardAccess,
-): Promise<boolean> {
-  const method = req.method;
-  if (parts[4] !== 'marketplace') return false;
+export function createMarketplaceRouter(client: Client) {
+  const router = new Hono();
 
-  // La marketplace est une page de la section Economie du dashboard : elle suit
-  // le meme droit, sinon interdire "economy" laisserait ses donnees accessibles.
-  const featureAccess = await resolveMemberFeatureAccess(client, guildId, access, user.userId);
-  if (!featureAccess.economy?.canView) {
-    json(res, 403, { error: 'Accès refusé. Votre rôle ne donne pas accès à la marketplace.' });
-    return true;
-  }
+  router.get('/api/dashboard/guilds/:guildId/marketplace', ...guildRoute(client), async (c) => {
+    const guildId = c.req.param('guildId');
 
-  // GET /api/dashboard/guilds/:guildId/marketplace
-  if (parts.length === 5 && method === 'GET') {
+    // La marketplace est une page de la section Economie du dashboard : elle suit
+    // le meme droit, sinon interdire "economy" laisserait ses donnees accessibles.
+    const featureAccess = await resolveMemberFeatureAccess(client, guildId, c.var.effectiveAccess, c.var.dashboardUser.userId);
+    if (!featureAccess.economy?.canView) {
+      return send(c, { error: 'Accès refusé. Votre rôle ne donne pas accès à la marketplace.' }, 403);
+    }
+
     try {
       const data = await getMarketplaceDashboardData(guildId);
 
@@ -43,13 +33,12 @@ export async function handleMarketplaceRoutes(
         [...identities].map(([id, identity]) => [id, { displayName: identity.displayName, avatarUrl: identity.avatarUrl }]),
       );
 
-      json(res, 200, { ...data, members });
+      return send(c, { ...data, members });
     } catch (err) {
       logger.error('MarketplaceAPI', 'Error fetching marketplace data:', err);
-      jsonFailure(res, err, 'Erreur lors de la récupération des données', 'MarketplaceAPI');
+      return fail(c, err, 'Erreur lors de la récupération des données', 'MarketplaceAPI');
     }
-    return true;
-  }
+  });
 
-  return false;
+  return router;
 }

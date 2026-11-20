@@ -12,25 +12,39 @@
  * `@kotbo/shared` pour rester testables ; ce service ne fait que les appliquer,
  * publier les messages et créditer les gains.
  */
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, MessageFlags, type ButtonInteraction, type Client } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, GuildMember, MessageFlags, SnowflakeUtil, type ButtonInteraction, type Client } from 'discord.js';
 import type { Prisma } from '@prisma/client';
 import {
+  DROP_ACTIVITY_DISABLED,
+  DROP_CLAIM_LIMIT_WINDOW_MS,
   DROP_DELETE_AFTER_DISABLED,
   DROP_ITEM_WEIGHT_RANGE,
   DROP_TYPES,
+  DROP_TYPE_MODULE,
   defaultDropTypeSettings,
   drawDropAmount,
+  dropActivityCheckDue,
+  dropActivityVerdict,
+  dropClaimBlocker,
+  dropClaimSettleAction,
   dropExpiresAt,
+  dropJackpotAmount,
+  dropMentionRoleId,
   dropMaxClaims,
   dropMessageDeleteAt,
+  effectiveDropClaimRules,
   enabledDropModes,
+  hasDropClaimRules,
   nextAllowedPublicationAt,
+  normalizeDropClaimRules,
   normalizeDropDeleteAfterMinutes,
   normalizeDropItems,
   normalizeDropTypeSettings,
   pickDropMode,
   pickWeightedDropItem,
   planNextDropAt,
+  rollDropJackpot,
+  type DropClaimFacts,
   type DropItemChance,
   type DropMode,
   type DropType,
@@ -48,6 +62,7 @@ import { awardClanPointsToMembers } from '../community/clanService.js';
 import { flushClanPointsFeedGroup } from '../community/clanPointsFeedService.js';
 import { isModuleEnabled } from '../core/moduleGate.js';
 
+import { fetchGuildChannel } from '../../utils/panelMessage.js';
 export const DROP_CLAIM_PREFIX = 'drop_claim:';
 
 /** Groupe du flux des points de clan qui rassemble les gagnants d'un drop. */
@@ -65,8 +80,17 @@ interface DropGuildContext {
   id: string;
   dropChannelId: string | null;
   dropMentionRoleId: string | null;
+  dropMentionJackpotOnly: boolean;
   dropLifetimeMinutes: number;
   dropDeleteAfterMinutes: number;
+  dropJackpotEnabled: boolean;
+  dropJackpotChance: number;
+  dropJackpotMultiplier: number;
+}
+
+/** Salon où tombe un type : le sien, sinon celui par défaut du serveur. */
+function dropChannelIdFor(settings: DropTypeSettings, guild: DropGuildContext): string | null {
+  return settings.channelId ?? guild.dropChannelId;
 }
 
 /** Colonnes plates de la base vers l'objet de réglages de `@kotbo/shared`. */
@@ -76,6 +100,7 @@ export function dropSettingsFromRow(row: NonNullable<DropConfigRow>): DropTypeSe
     items: normalizeDropItems(row.items),
     channelId: row.channelId,
     intervalMinutes: row.intervalMinutes,
+    activity: { minMessages: row.activityMinMessages, windowMinutes: row.activityWindowMinutes },
     first: { enabled: row.firstEnabled, minAmount: row.firstMinAmount, maxAmount: row.firstMaxAmount },
     race: {
       enabled: row.raceEnabled,
@@ -99,6 +124,8 @@ export function dropSettingsToRow(settings: DropTypeSettings) {
     items: settings.items as unknown as Prisma.InputJsonValue,
     channelId: settings.channelId,
     intervalMinutes: settings.intervalMinutes,
+    activityMinMessages: settings.activity.minMessages,
+    activityWindowMinutes: settings.activity.windowMinutes,
     firstEnabled: settings.first.enabled,
     firstMinAmount: settings.first.minAmount,
     firstMaxAmount: settings.first.maxAmount,
@@ -148,6 +175,28 @@ function resourceLabel(type: DropType, locale: BotLocale, itemLabel?: string | n
   return m.drop_resource_xp({}, { locale });
 }
 
+/**
+ * Gabarits de l'annonce dans la langue du serveur, pour l'aperçu du dashboard.
+ *
+ * Les messages sont rendus avec leurs marqueurs (`{amount}`, `{resource}`...) en guise de
+ * valeurs : la page les remplit avec le formulaire en cours, sans route d'aperçu ni copie
+ * des textes de son côté. Mêmes messages que `buildDropEmbed`, donc même annonce.
+ */
+export function dropAnnouncementLabels(locale: BotLocale) {
+  const amount = '{amount}';
+  const resource = '{resource}';
+  return {
+    locale,
+    title: m.drop_announce_title({}, { locale }),
+    jackpotTitle: m.drop_jackpot_title({}, { locale }),
+    claimButton: m.drop_claim_button({}, { locale }),
+    first: m.drop_announce_desc_first({ amount, resource }, { locale }),
+    race: m.drop_announce_desc_race({ amount, resource, winners: '{winners}' }, { locale }),
+    window: m.drop_announce_desc_window({ amount, resource, closes: '{closes}' }, { locale }),
+    resources: Object.fromEntries(DROP_TYPES.map((type) => [type, resourceLabel(type, locale)])) as Record<DropType, string>,
+  };
+}
+
 function buildDropEmbed(drop: DropRow, locale: BotLocale, itemLabel?: string | null): EmbedBuilder {
   const resource = resourceLabel(drop.type as DropType, locale, itemLabel);
   const amount = drop.amount.toLocaleString(locale === 'fr' ? 'fr-FR' : 'en-US');
@@ -165,9 +214,14 @@ function buildDropEmbed(drop: DropRow, locale: BotLocale, itemLabel?: string | n
   }
 
   return new EmbedBuilder()
-    .setTitle(m.drop_announce_title({}, { locale }))
+    .setTitle(dropTitle(drop, locale))
     .setDescription(description)
-    .setColor(COLORS.primary);
+    .setColor(drop.jackpot ? COLORS.warning : COLORS.primary);
+}
+
+/** Un jackpot s'annonce comme tel, du message d'apparition jusqu'au bilan. */
+function dropTitle(drop: DropRow, locale: BotLocale): string {
+  return drop.jackpot ? m.drop_jackpot_title({}, { locale }) : m.drop_announce_title({}, { locale });
 }
 
 function buildClaimRow(dropId: string, locale: BotLocale, disabled: boolean): ActionRowBuilder<ButtonBuilder> {
@@ -216,6 +270,60 @@ async function eligibleDropItems(guildId: string, chances: DropItemChance[]) {
     .map((item) => ({ item, weight: weightOf.get(item.id) ?? DROP_ITEM_WEIGHT_RANGE.min }));
 }
 
+/** Une page de messages Discord : la plus grande lecture faite en un appel. */
+const RECENT_MESSAGES_PAGE = 100;
+
+/**
+ * Messages de membres postés dans un salon depuis `since`.
+ *
+ * Lu sur Discord au moment où le drop est dû plutôt que compté au fil de l'eau : le cycle
+ * tourne dans un seul processus pour tous les shards, un compteur en mémoire n'y verrait
+ * que les serveurs du sien. Les bots (dont les drops eux-mêmes), les webhooks et les
+ * messages système ne comptent pas. Un salon injoignable vaut zéro : le drop attend son
+ * plafond de retard, puis la publication dira elle-même ce qui ne va pas.
+ */
+export async function countRecentMemberMessages(client: Client, channelId: string, since: Date, guildId: string): Promise<number> {
+  const channel = await fetchGuildChannel(client, guildId, channelId);
+  if (!channel?.isTextBased()) return 0;
+
+  // `after` : Discord ne renvoie que la fenêtre, un salon calme répond une page vide.
+  const after = SnowflakeUtil.generate({ timestamp: since.getTime() }).toString();
+  const messages = await channel.messages.fetch({ limit: RECENT_MESSAGES_PAGE, after }).catch(() => null);
+  if (!messages) return 0;
+
+  let count = 0;
+  for (const message of messages.values()) {
+    if (message.author.bot || message.system || message.webhookId) continue;
+    if (message.createdTimestamp >= since.getTime()) count += 1;
+  }
+  return count;
+}
+
+/**
+ * Dernière lecture de l'activité de chaque type en attente, par config. En mémoire : le
+ * cycle tourne dans un seul processus, et un redémarrage ne coûte qu'une lecture de plus.
+ */
+const activityCheckedAt = new Map<string, Date>();
+
+/**
+ * Messages récents du salon d'un type en attente d'activité. Entre deux lectures, le
+ * salon est tenu pour calme : le drop continue d'attendre, et le plafond de retard
+ * de `dropActivityVerdict` le fait partir à l'heure même sans relecture.
+ */
+async function recentMessagesForActivity(
+  client: Client,
+  configId: string,
+  channelId: string | null,
+  settings: DropTypeSettings,
+  now: Date,
+  guildId: string,
+): Promise<number> {
+  if (!channelId || !dropActivityCheckDue(activityCheckedAt.get(configId) ?? null, now)) return 0;
+  activityCheckedAt.set(configId, now);
+  const since = new Date(now.getTime() - settings.activity.windowMinutes * 60 * 1000);
+  return countRecentMemberMessages(client, channelId, since, guildId);
+}
+
 async function publishDrop(
   client: Client,
   guild: DropGuildContext,
@@ -223,13 +331,13 @@ async function publishDrop(
   settings: DropTypeSettings,
   mode: DropMode,
 ): Promise<void> {
-  const channelId = settings.channelId ?? guild.dropChannelId;
+  const channelId = dropChannelIdFor(settings, guild);
   if (!channelId) {
     logger.warn('Drops', `Aucun salon configuré pour le drop ${config.type} sur ${guild.id}.`);
     return;
   }
 
-  const channel = await client.channels.fetch(channelId).catch(() => null);
+  const channel = await fetchGuildChannel(client, guild.id, channelId);
   if (!channel?.isTextBased() || !channel.isSendable()) {
     logger.warn('Drops', `Salon ${channelId} injoignable pour le drop ${config.type} sur ${guild.id}.`);
     return;
@@ -255,6 +363,8 @@ async function publishDrop(
   }
 
   const now = new Date();
+  const drawn = drawDropAmount(settings, mode);
+  const jackpot = rollDropJackpot(config.type as DropType, guild);
   const drop = await prisma.drop.create({
     data: {
       guildId: guild.id,
@@ -263,7 +373,8 @@ async function publishDrop(
       mode,
       channelId,
       itemId,
-      amount: drawDropAmount(settings, mode),
+      amount: jackpot ? dropJackpotAmount(drawn, guild.dropJackpotMultiplier) : drawn,
+      jackpot,
       maxClaims: dropMaxClaims(settings, mode),
       expiresAt: dropExpiresAt(now, settings, mode, guild.dropLifetimeMinutes),
       // Recopié du serveur : le délai suit le drop, régler l'option n'emporte
@@ -273,13 +384,14 @@ async function publishDrop(
   });
 
   const locale = await resolveGuildLocale(guild.id);
-  const mention = guild.dropMentionRoleId ? `<@&${guild.dropMentionRoleId}>` : undefined;
+  const mentionRoleId = dropMentionRoleId(guild, jackpot);
+  const mention = mentionRoleId ? `<@&${mentionRoleId}>` : undefined;
 
   const message = await channel.send({
     content: mention,
     embeds: [buildDropEmbed(drop, locale, itemLabel)],
     components: [buildClaimRow(drop.id, locale, false)],
-    allowedMentions: mention ? { roles: [guild.dropMentionRoleId!] } : { parse: [] },
+    allowedMentions: mentionRoleId ? { roles: [mentionRoleId] } : { parse: [] },
   }).catch((error: unknown) => {
     logger.error('Drops', `Publication impossible du drop ${config.type} sur ${guild.id}:`, error);
     return null;
@@ -293,7 +405,7 @@ async function publishDrop(
   }
 
   await prisma.drop.update({ where: { id: drop.id }, data: { messageId: message.id } }).catch(() => null);
-  logger.info('Drops', `Drop ${config.type}/${mode} de ${drop.amount} publié sur ${guild.id}.`);
+  logger.info('Drops', `Drop ${config.type}/${mode}${jackpot ? ' (jackpot)' : ''} de ${drop.amount} publié sur ${guild.id}.`);
 }
 
 async function tickDropConfig(client: Client, guild: DropGuildContext, config: NonNullable<DropConfigRow>): Promise<void> {
@@ -319,6 +431,23 @@ async function tickDropConfig(client: Client, guild: DropGuildContext, config: N
   }
 
   if (config.nextDropAt > now) return;
+
+  // Attente d'activité : le drop reste dû, sans consommer son créneau, tant que
+  // le salon est calme. Le cycle repasse à la minute suivante. Placée avant le
+  // garde-fou anti-spam, qui décale l'échéance : sinon chaque drop d'un autre
+  // type remettrait à zéro le plafond de retard, mesuré depuis cette échéance.
+  if (settings.activity.minMessages > DROP_ACTIVITY_DISABLED) {
+    const recentMessages = await recentMessagesForActivity(client, config.id, dropChannelIdFor(settings, guild), settings, now, guild.id);
+    const verdict = dropActivityVerdict({
+      dueAt: config.nextDropAt,
+      now,
+      intervalMinutes: settings.intervalMinutes,
+      activity: settings.activity,
+      recentMessages,
+    });
+    if (verdict === 'wait') return;
+    activityCheckedAt.delete(config.id);
+  }
 
   // Garde-fou anti-spam, tous types confondus : quatre ressources qui tombent
   // coup sur coup font un bot qui inonde un salon, ce qui lui vaut d'être
@@ -368,13 +497,18 @@ export async function runDropCycle(client: Client): Promise<void> {
       id: true,
       dropChannelId: true,
       dropMentionRoleId: true,
+      dropMentionJackpotOnly: true,
       dropLifetimeMinutes: true,
       dropDeleteAfterMinutes: true,
+      dropJackpotEnabled: true,
+      dropJackpotChance: true,
+      dropJackpotMultiplier: true,
     },
   });
   if (guilds.length === 0) {
     await closeExpiredDrops(client);
     await purgeDeletedDropMessages(client);
+    await settlePendingDropClaims(client);
     return;
   }
 
@@ -400,6 +534,9 @@ export async function runDropCycle(client: Client): Promise<void> {
       // La colonne dit que les drops sont allumés, la garde dit s'ils le sont
       // vraiment (bascule de module, cascade de dépendances). Lecture en cache.
       if (!(await isModuleEnabled(guild.id, 'drops'))) continue;
+      // Le module qui tient la ressource doit tourner lui aussi : sinon le drop
+      // se publie, se ramasse, et ne verse rien qu'on puisse voir.
+      if (!(await isModuleEnabled(guild.id, DROP_TYPE_MODULE[config.type as DropType]))) continue;
 
       await tickDropConfig(client, guild, config);
     } catch (error) {
@@ -409,13 +546,14 @@ export async function runDropCycle(client: Client): Promise<void> {
 
   await closeExpiredDrops(client);
   await purgeDeletedDropMessages(client);
+  await settlePendingDropClaims(client);
 }
 
 /** Grise le bouton d'un drop terminé et récapitule ce qui a été ramassé. */
 async function closeDropMessage(client: Client, drop: DropRow): Promise<void> {
   if (!drop.messageId) return;
 
-  const channel = await client.channels.fetch(drop.channelId).catch(() => null);
+  const channel = await fetchGuildChannel(client, drop.guildId, drop.channelId);
   if (!channel?.isTextBased()) return;
 
   const message = await channel.messages.fetch(drop.messageId).catch(() => null);
@@ -454,7 +592,7 @@ async function closeDropMessage(client: Client, drop: DropRow): Promise<void> {
     : mentions;
 
   const embed = new EmbedBuilder()
-    .setTitle(m.drop_announce_title({}, { locale }))
+    .setTitle(dropTitle(drop, locale))
     .setColor(claimCount > 0 ? COLORS.success : COLORS.dark)
     .setDescription(
       claimCount === 0
@@ -489,6 +627,7 @@ async function purgeDeletedDropMessages(client: Client): Promise<void> {
     take: 50,
     select: {
       id: true,
+      guildId: true,
       channelId: true,
       messageId: true,
       closedAt: true,
@@ -503,7 +642,7 @@ async function purgeDeletedDropMessages(client: Client): Promise<void> {
     const deleteAt = dropMessageDeleteAt(drop.closedAt, drop.deleteAfterMinutes);
     if (!deleteAt || deleteAt > now) continue;
 
-    const channel = await client.channels.fetch(drop.channelId).catch(() => null);
+    const channel = await fetchGuildChannel(client, drop.guildId, drop.channelId);
     if (channel?.isTextBased()) {
       await channel.messages.delete(drop.messageId).catch(() => null);
     }
@@ -539,37 +678,88 @@ async function closeExpiredDrops(client: Client): Promise<void> {
 }
 
 type ClaimOutcome =
-  | { ok: true; amount: number; full: boolean }
+  | { ok: true; claimId: string; full: boolean }
   | { ok: false; reason: 'already' | 'full' | 'error' };
 
+/** Ramassage à verser : sa ligne, et le membre qui touche le gain. */
+interface PendingClaim {
+  id: string;
+  userId: string;
+}
+
+/** Délai avant de reprendre un versement en suspens, bien au-delà de la durée d'un clic. */
+const CLAIM_SETTLE_RETRY_MS = 5 * 60 * 1000;
+/** Ramassages repris par passage du cycle. */
+const CLAIM_SETTLE_BATCH = 50;
+
 /**
- * Verse la récompense d'un drop.
+ * Marque un ramassage comme versé. Écriture conditionnelle : `false` quand un
+ * autre passage l'a déjà marqué.
+ */
+async function markClaimPaid(db: Prisma.TransactionClient, claimId: string): Promise<boolean> {
+  const marked = await db.dropClaim.updateMany({
+    where: { id: claimId, paidAt: null },
+    data: { paidAt: new Date() },
+  });
+  return marked.count > 0;
+}
+
+/**
+ * Verse dans la même transaction que le marquage : une ressource qui ne vit qu'en
+ * base est versée une fois, jamais deux, même si deux passages se croisent.
+ * Renvoie `false` quand le ramassage était déjà versé.
+ */
+async function payInTransaction(
+  claimId: string,
+  pay: (tx: Prisma.TransactionClient) => Promise<unknown>,
+): Promise<boolean> {
+  return prisma.$transaction(async (tx) => {
+    if (!(await markClaimPaid(tx, claimId))) return false;
+    await pay(tx);
+    return true;
+  });
+}
+
+/**
+ * Verse la récompense d'un drop et marque le ramassage comme versé.
  *
  * Renvoie ce qui a réellement été crédité : les points de clan d'un membre sans
  * clan ne vont nulle part, et le drop doit alors rester ouvert pour quelqu'un
- * d'autre plutôt que de disparaître dans le vide.
+ * d'autre plutôt que de disparaître dans le vide. Une erreur est propagée : le
+ * ramassage reste alors en suspens, et le cycle le reprendra.
+ *
+ * Pièces, XP RPG et objets ne vivent qu'en base : versement et marquage partagent
+ * une transaction. L'XP de niveau et les points de clan passent par leurs modules,
+ * qui annoncent, donnent des rôles et lisent Discord : le marquage suit le
+ * versement, et un arrêt entre les deux le ferait reprendre une seconde fois.
+ * Mieux vaut ce cas, rare et borné à un gain, qu'un clic qui ne rapporte rien.
  */
-async function creditDrop(client: Client, drop: DropRow, userId: string): Promise<number> {
+async function creditDrop(client: Client, drop: DropRow, claim: PendingClaim): Promise<number> {
+  const userId = claim.userId;
   switch (drop.type as DropType) {
     case 'XP': {
       await addXp(drop.guildId, userId, drop.amount, client, drop.channelId);
+      await markClaimPaid(prisma, claim.id);
       return drop.amount;
     }
     case 'RPG_XP': {
       const profile = await getOrCreateRpgProfile(drop.guildId, userId);
-      await prisma.rpgProfile.update({ where: { id: profile.id }, data: { xp: { increment: drop.amount } } });
+      const paid = await payInTransaction(claim.id, (tx) =>
+        tx.rpgProfile.update({ where: { id: profile.id }, data: { xp: { increment: drop.amount } } }));
       // Comme tout gain d'XP RPG : sans ce passage, l'XP s'empile sans jamais
       // faire monter de niveau tant qu'aucune autre action ne le déclenche.
-      await checkLevelUp(drop.guildId, userId);
+      if (paid) await checkLevelUp(drop.guildId, userId);
       return drop.amount;
     }
     case 'COINS': {
       const profile = await getOrCreateRpgProfile(drop.guildId, userId);
-      await prisma.rpgProfile.update({ where: { id: profile.id }, data: { balance: { increment: drop.amount } } });
+      await payInTransaction(claim.id, (tx) =>
+        tx.rpgProfile.update({ where: { id: profile.id }, data: { balance: { increment: drop.amount } } }));
       return drop.amount;
     }
     case 'RPG_ITEM': {
       if (!drop.itemId) return 0;
+      const itemId = drop.itemId;
 
       // Le module a pu être éteint et l'objet supprimé depuis la publication : les mêmes
       // contrôles sont repassés. Rendre 0 laisse le drop ouvert plutôt que de le consommer
@@ -578,15 +768,15 @@ async function creditDrop(client: Client, drop: DropRow, userId: string): Promis
       // La liste du serveur n'est volontairement pas relue : elle décide de ce qui *peut
       // être publié*, et un objet retiré après coup ne doit pas reprendre ce que le salon
       // a déjà promis nommément.
-      const eligible = await eligibleDropItems(drop.guildId, [{ itemId: drop.itemId, weight: DROP_ITEM_WEIGHT_RANGE.min }]);
+      const eligible = await eligibleDropItems(drop.guildId, [{ itemId, weight: DROP_ITEM_WEIGHT_RANGE.min }]);
       if (eligible.length === 0) return 0;
 
       const profile = await getOrCreateRpgProfile(drop.guildId, userId);
-      await prisma.rpgInventoryItem.upsert({
-        where: { rpgProfileId_itemId: { rpgProfileId: profile.id, itemId: drop.itemId } },
-        create: { rpgProfileId: profile.id, itemId: drop.itemId, quantity: drop.amount },
+      await payInTransaction(claim.id, (tx) => tx.rpgInventoryItem.upsert({
+        where: { rpgProfileId_itemId: { rpgProfileId: profile.id, itemId } },
+        create: { rpgProfileId: profile.id, itemId, quantity: drop.amount },
         update: { quantity: { increment: drop.amount } },
-      });
+      }));
       return drop.amount;
     }
     case 'CLAN_POINTS': {
@@ -599,7 +789,9 @@ async function creditDrop(client: Client, drop: DropRow, userId: string): Promis
         // Tous les gagnants du drop partent dans un seul message du flux, publié à sa clôture.
         feedGroup: { key: dropFeedGroupKey(drop.id), flushAt: drop.expiresAt },
       });
-      return granted.get(userId) ?? 0;
+      const credited = granted.get(userId) ?? 0;
+      if (credited > 0) await markClaimPaid(prisma, claim.id);
+      return credited;
     }
     default:
       return 0;
@@ -617,7 +809,7 @@ async function creditDrop(client: Client, drop: DropRow, userId: string): Promis
 async function reserveClaim(drop: DropRow, userId: string): Promise<ClaimOutcome> {
   try {
     return await prisma.$transaction(async (tx) => {
-      await tx.dropClaim.create({
+      const claim = await tx.dropClaim.create({
         data: { dropId: drop.id, guildId: drop.guildId, userId, amount: drop.amount },
       });
 
@@ -635,7 +827,7 @@ async function reserveClaim(drop: DropRow, userId: string): Promise<ClaimOutcome
 
       const updated = await tx.drop.findUnique({ where: { id: drop.id }, select: { claimCount: true } });
       const full = drop.maxClaims > 0 && (updated?.claimCount ?? 0) >= drop.maxClaims;
-      return { ok: true as const, amount: drop.amount, full };
+      return { ok: true as const, claimId: claim.id, full };
     });
   } catch (error) {
     const code = (error as { code?: string })?.code;
@@ -645,14 +837,123 @@ async function reserveClaim(drop: DropRow, userId: string): Promise<ClaimOutcome
   }
 }
 
-/** Annule une réservation dont la récompense n'a finalement pas été versée. */
-async function releaseClaim(drop: DropRow, userId: string): Promise<void> {
-  await prisma.$transaction([
-    prisma.dropClaim.deleteMany({ where: { dropId: drop.id, userId } }),
-    prisma.drop.update({ where: { id: drop.id }, data: { claimCount: { decrement: 1 } } }),
-  ]).catch((error: unknown) => {
-    logger.error('Drops', `Libération de la place de ${userId} sur le drop ${drop.id} impossible:`, error);
+/**
+ * Rend la place d'un ramassage dont la récompense ne sera pas versée. Un
+ * ramassage déjà versé n'est jamais retiré, et la place n'est rendue que si la
+ * ligne a bien été supprimée ici.
+ */
+async function releaseClaim(dropId: string, claimId: string): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    const removed = await tx.dropClaim.deleteMany({ where: { id: claimId, paidAt: null } });
+    if (removed.count > 0) {
+      await tx.drop.update({ where: { id: dropId }, data: { claimCount: { decrement: 1 } } });
+    }
+  }).catch((error: unknown) => {
+    // Le ramassage reste en suspens : la reprise le retentera.
+    logger.error('Drops', `Libération du ramassage ${claimId} sur le drop ${dropId} impossible:`, error);
   });
+}
+
+/**
+ * Reprend les versements qu'un redémarrage ou une erreur a laissés en route.
+ *
+ * Chaque ramassage est d'abord pris à bail par une écriture conditionnelle sur
+ * `attemptedAt` : le cycle peut tourner sur plusieurs processus, et le second
+ * à lire la ligne la trouve déjà repoussée. Un nouvel échec la laisse en
+ * suspens jusqu'au passage suivant, après le même délai, et le plafond de
+ * reprises de `@kotbo/shared` l'abandonne plutôt que de la reprendre sans fin.
+ */
+export async function settlePendingDropClaims(client: Client): Promise<void> {
+  const pending = await prisma.dropClaim.findMany({
+    where: { paidAt: null, abandonedAt: null, attemptedAt: { lte: new Date(Date.now() - CLAIM_SETTLE_RETRY_MS) } },
+    orderBy: { attemptedAt: 'asc' },
+    take: CLAIM_SETTLE_BATCH,
+    include: { drop: true },
+  });
+
+  for (const claim of pending) {
+    const leased = await prisma.dropClaim.updateMany({
+      where: { id: claim.id, paidAt: null, attemptedAt: claim.attemptedAt },
+      data: { attemptedAt: new Date() },
+    });
+    if (leased.count === 0) continue;
+
+    // Le membre a lu « le gain suivra » : un module coupé depuis garde le gain en
+    // attente de son retour au lieu de le retirer.
+    const moduleEnabled = await isModuleEnabled(claim.guildId, DROP_TYPE_MODULE[claim.drop.type as DropType]);
+    const action = dropClaimSettleAction({ moduleEnabled, attempts: claim.attempts });
+    if (action === 'hold') continue;
+    if (action === 'abandon') {
+      await prisma.dropClaim.updateMany({ where: { id: claim.id, paidAt: null }, data: { abandonedAt: new Date() } });
+      logger.error('Drops', `Versement ${claim.id} (drop ${claim.dropId}, membre ${claim.userId}) abandonné après ${claim.attempts} reprises.`);
+      continue;
+    }
+
+    // `updateMany` : une ligne disparue entre-temps ne doit pas interrompre le lot.
+    await prisma.dropClaim.updateMany({ where: { id: claim.id, paidAt: null }, data: { attempts: { increment: 1 } } });
+    const credited = await creditDrop(client, claim.drop, claim).catch((error: unknown) => {
+      logger.error('Drops', `Reprise du versement ${claim.id} (drop ${claim.dropId}) impossible:`, error);
+      return null;
+    });
+    if (credited === null) continue;
+
+    if (credited <= 0) {
+      await releaseClaim(claim.dropId, claim.id);
+    } else {
+      logger.info('Drops', `Versement repris pour ${claim.userId} sur le drop ${claim.dropId}.`);
+    }
+  }
+}
+
+/** Arrivée et rôles du membre qui clique, qu'il soit en cache ou brut de l'API. */
+function memberFacts(member: ButtonInteraction['member']): Pick<DropClaimFacts, 'joinedAt' | 'roleIds'> {
+  if (!member) return { joinedAt: null, roleIds: [] };
+  if (member instanceof GuildMember) {
+    return { joinedAt: member.joinedAt, roleIds: [...member.roles.cache.keys()] };
+  }
+  return { joinedAt: member.joined_at ? new Date(member.joined_at) : null, roleIds: member.roles };
+}
+
+/**
+ * Rôles du serveur, pour écarter un rôle requis supprimé depuis. `null` quand le serveur
+ * n'est pas en cache : sans liste fiable, la règle s'applique telle qu'enregistrée.
+ */
+function guildRoleIds(interaction: ButtonInteraction): string[] | null {
+  const roles = interaction.guild?.roles.cache;
+  return roles && roles.size > 0 ? [...roles.keys()] : null;
+}
+
+/**
+ * Message de refus quand le membre ne respecte pas une règle de ramassage du
+ * serveur, `null` sinon. Sans règle réglée, le clic ne coûte qu'une lecture de
+ * la colonne : les ramassages du jour ne sont comptés que sous un plafond.
+ *
+ * Le comptage précède la réservation sans la verrouiller : deux clics simultanés
+ * sur deux drops peuvent dépasser le plafond d'un ramassage, ce qui reste sans
+ * conséquence pour une règle de confort.
+ */
+async function claimRuleRefusal(interaction: ButtonInteraction, guildId: string, locale: BotLocale): Promise<string | null> {
+  const row = await prisma.guild.findUnique({ where: { id: guildId }, select: { dropClaimRules: true } });
+  const rules = effectiveDropClaimRules(normalizeDropClaimRules(row?.dropClaimRules), guildRoleIds(interaction));
+  if (!hasDropClaimRules(rules)) return null;
+
+  const now = new Date();
+  const claimsLast24h = rules.dailyLimit > 0
+    ? await prisma.dropClaim.count({
+      where: { guildId, userId: interaction.user.id, createdAt: { gte: new Date(now.getTime() - DROP_CLAIM_LIMIT_WINDOW_MS) } },
+    })
+    : 0;
+
+  switch (dropClaimBlocker(rules, { ...memberFacts(interaction.member), claimsLast24h, now })) {
+    case 'DAILY_LIMIT':
+      return m.drop_claim_daily_limit({ limit: rules.dailyLimit }, { locale });
+    case 'MEMBER_TOO_NEW':
+      return m.drop_claim_member_too_new({ days: rules.minMemberDays }, { locale });
+    case 'MISSING_ROLE':
+      return m.drop_claim_missing_role({ role: `<@&${rules.requiredRoleId}>` }, { locale });
+    default:
+      return null;
+  }
 }
 
 /** Bouton « Ramasser » : réserve la place, verse le gain, ferme si le drop est complet. */
@@ -677,6 +978,19 @@ export async function handleDropClaim(interaction: ButtonInteraction, dropId: st
     await refuse(m.drop_claim_closed({}, { locale }));
     return;
   }
+  // Même contrôle que le cycle de publication, repassé au clic : un module coupé
+  // après l'apparition du drop ne verserait rien (`addXp` se tait), et le membre
+  // lirait un gain fictif en consommant une place.
+  if (!(await isModuleEnabled(drop.guildId, DROP_TYPE_MODULE[drop.type as DropType]))) {
+    await refuse(m.drop_claim_module_off({}, { locale }));
+    return;
+  }
+
+  const ruleRefusal = await claimRuleRefusal(interaction, drop.guildId, locale);
+  if (ruleRefusal) {
+    await refuse(ruleRefusal);
+    return;
+  }
 
   const reserved = await reserveClaim(drop, interaction.user.id).catch((error: unknown) => {
     // Une contention sur le drop peut faire expirer la transaction : le drop
@@ -693,13 +1007,20 @@ export async function handleDropClaim(interaction: ButtonInteraction, dropId: st
     return;
   }
 
-  const credited = await creditDrop(interaction.client, drop, interaction.user.id).catch((error: unknown) => {
-    logger.error('Drops', `Versement du drop ${dropId} à ${interaction.user.id} impossible:`, error);
-    return 0;
+  const credited = await creditDrop(
+    interaction.client,
+    drop,
+    { id: reserved.claimId, userId: interaction.user.id },
+  ).catch((error: unknown) => {
+    // La place reste réservée et non versée : la reprise du cycle s'en charge.
+    logger.error('Drops', `Versement du drop ${dropId} à ${interaction.user.id} impossible, repris plus tard:`, error);
+    return null;
   });
 
-  if (credited <= 0) {
-    await releaseClaim(drop, interaction.user.id);
+  if (credited === null) {
+    await refuse(m.drop_claim_pending({}, { locale }));
+  } else if (credited <= 0) {
+    await releaseClaim(drop.id, reserved.claimId);
     await refuse(
       drop.type === 'CLAN_POINTS'
         ? m.drop_claim_no_clan({}, { locale })
@@ -708,21 +1029,22 @@ export async function handleDropClaim(interaction: ButtonInteraction, dropId: st
           : m.drop_claim_failed({}, { locale }),
     );
     return;
+  } else {
+    const claimedItem = drop.itemId
+      ? await prisma.rpgItem.findUnique({ where: { id: drop.itemId }, select: { name: true, emoji: true } })
+      : null;
+    const resource = resourceLabel(
+      drop.type as DropType,
+      locale,
+      claimedItem ? `${claimedItem.emoji} ${claimedItem.name}` : null,
+    );
+    const amount = credited.toLocaleString(locale === 'fr' ? 'fr-FR' : 'en-US');
+    await interaction.editReply({
+      content: m.drop_claim_success({ amount, resource }, { locale }),
+    }).catch(() => null);
   }
 
-  const claimedItem = drop.itemId
-    ? await prisma.rpgItem.findUnique({ where: { id: drop.itemId }, select: { name: true, emoji: true } })
-    : null;
-  const resource = resourceLabel(
-    drop.type as DropType,
-    locale,
-    claimedItem ? `${claimedItem.emoji} ${claimedItem.name}` : null,
-  );
-  const amount = credited.toLocaleString(locale === 'fr' ? 'fr-FR' : 'en-US');
-  await interaction.editReply({
-    content: m.drop_claim_success({ amount, resource }, { locale }),
-  }).catch(() => null);
-
+  // Un versement en suspens occupe sa place : le drop complet se ferme quand même.
   if (reserved.full) {
     const closed = await prisma.drop.updateMany({
       where: { id: drop.id, closedAt: null },

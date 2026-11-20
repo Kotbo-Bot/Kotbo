@@ -37,16 +37,16 @@
   const history = $derived(requests.filter(r => r.status !== 'PENDING'));
 
   const TYPE_LABELS: Record<string, string> = {
-    ROLE_CREATE: m.e7_alr_type_role_create(),
-    ROLE_PERMISSION_EDIT: m.e7_alr_type_role_permission_edit(),
-    MEMBER_ROLE_GRANT: m.e7_alr_type_member_role_grant(),
+    get ROLE_CREATE() { return m.e7_alr_type_role_create(); },
+    get ROLE_PERMISSION_EDIT() { return m.e7_alr_type_role_permission_edit(); },
+    get MEMBER_ROLE_GRANT() { return m.e7_alr_type_member_role_grant(); },
   };
 
   const STATUS_META: Record<string, { label: string; classes: string }> = {
-    PENDING: { label: m.e7_alr_status_pending(), classes: 'bg-warning/10 text-warning border-warning/30' },
-    APPROVED: { label: m.e7_alr_status_approved(), classes: 'bg-success/10 text-success border-success/30' },
-    REJECTED: { label: m.e7_alr_status_rejected(), classes: 'bg-error/10 text-error border-error/30' },
-    EXPIRED: { label: m.e7_alr_status_expired(), classes: 'bg-rose-900/20 text-error border-rose-900/40' },
+    PENDING: { get label() { return m.e7_alr_status_pending(); }, classes: 'bg-warning/10 text-on-warning-container border-warning/30' },
+    APPROVED: { get label() { return m.e7_alr_status_approved(); }, classes: 'bg-success/10 text-on-success-container border-success/30' },
+    REJECTED: { get label() { return m.e7_alr_status_rejected(); }, classes: 'bg-error/10 text-on-error-container border-error/30' },
+    EXPIRED: { get label() { return m.e7_alr_status_expired(); }, classes: 'bg-rose-900/20 text-error border-rose-900/40' },
   };
 
   // ── API ────────────────────────────────────────────────────────────────────
@@ -132,7 +132,7 @@
           <div class="rounded-xl border border-outline-variant/20 bg-surface overflow-hidden">
             <button onclick={() => toggleOpen(request.id)}
               class="w-full p-4 flex items-center gap-4 hover:bg-surface-container/40 transition-colors text-left">
-              <div class="w-10 h-10 rounded-full bg-error/10 text-error flex items-center justify-center shrink-0">
+              <div class="w-10 h-10 rounded-full bg-error/10 text-on-error-container flex items-center justify-center shrink-0">
                 <Papicon icon="lock" size={18} />
               </div>
               <div class="flex-1 min-w-0">
@@ -159,9 +159,9 @@
 
                 {#if request.status === 'PENDING'}
                   <div class="space-y-3 pt-2 border-t border-outline-variant/10">
-                    <textarea bind:value={actionReason} rows="2"
+                    <textarea aria-label={m.e7_alr_reject_placeholder()} bind:value={actionReason} rows="2"
                       placeholder={m.e7_alr_reject_placeholder()}
-                      class="w-full bg-surface rounded-xl px-4 py-3 text-sm outline-none border border-outline-variant/20 focus:border-primary transition-colors resize-y"></textarea>
+                      class="w-full bg-surface rounded-xl px-4 py-3 text-sm outline-none border border-field-border focus:border-primary transition-colors resize-y"></textarea>
                     <div class="flex flex-wrap gap-2">
                       <button onclick={() => decide(request, 'APPROVED')} disabled={actionInProgress}
                         class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors disabled:opacity-50 flex items-center gap-1.5">

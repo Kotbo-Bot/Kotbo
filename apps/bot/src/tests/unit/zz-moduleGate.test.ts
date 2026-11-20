@@ -111,7 +111,7 @@ for (const suffix of ['../../services/analytics/moduleStatsService.ts', '../../s
 
 const { getModuleStates, isModuleEnabled, invalidateModuleStates, filterGuildsWithModule } =
   await import('../../services/core/moduleGate.js');
-const { setDashboardModuleStatus, CoreModuleError, PlanLockedError, PausedModuleError } =
+const { setDashboardModuleStatus, CoreModuleError, PlanLockedError } =
   await import('../../services/core/moduleActivationService.js');
 
 const GUILD = 'guild-1';
@@ -195,10 +195,10 @@ describe('isModuleEnabled', () => {
   });
 
   test('accepte les cles historiques', async () => {
-    featureRows = [{ guildId: GUILD, featureKey: 'daily_algo', enabled: false }];
+    featureRows = [{ guildId: GUILD, featureKey: 'translation', enabled: false }];
 
-    expect(await isModuleEnabled(GUILD, 'dailyalgo')).toBeFalse();
-    expect(await isModuleEnabled(GUILD, 'daily_algo')).toBeFalse();
+    expect(await isModuleEnabled(GUILD, 'traduction')).toBeFalse();
+    expect(await isModuleEnabled(GUILD, 'translation')).toBeFalse();
   });
 
   test('une ligne sous un alias est repliee sur la cle canonique', async () => {
@@ -270,11 +270,11 @@ describe('setDashboardModuleStatus', () => {
   });
 
   test('normalise la cle historique avant d ecrire', async () => {
-    const result = await setDashboardModuleStatus(GUILD, 'dailyalgo', false);
+    const result = await setDashboardModuleStatus(GUILD, 'traduction', false);
 
-    expect(result.moduleKey).toBe('daily_algo');
-    expect(featureRows.some((row) => row.featureKey === 'daily_algo')).toBeTrue();
-    expect(featureRows.some((row) => row.featureKey === 'dailyalgo')).toBeFalse();
+    expect(result.moduleKey).toBe('translation');
+    expect(featureRows.some((row) => row.featureKey === 'translation')).toBeTrue();
+    expect(featureRows.some((row) => row.featureKey === 'traduction')).toBeFalse();
   });
 
   test('desactive les dependants actifs en cascade', async () => {
@@ -367,43 +367,6 @@ describe('setDashboardModuleStatus', () => {
     featureRows = [{ guildId: GUILD, featureKey: 'tutoring', enabled: true }];
 
     const result = await setDashboardModuleStatus(GUILD, 'tutoring', false);
-
-    expect(result.enabled).toBeFalse();
-  });
-});
-
-/**
- * Modules en pause : retires du produit sans que leurs donnees soient
- * supprimees. Ni une ligne en base, ni une colonne historique, ni l offre ne
- * doivent pouvoir les rallumer.
- */
-describe('module en pause', () => {
-  test('est eteint malgre une ligne et une colonne qui l activent', async () => {
-    guildRow = guild({ dailyAlgoEnabled: true });
-    featureRows = [{ guildId: GUILD, featureKey: 'daily_algo', enabled: true }];
-
-    expect(await isModuleEnabled(GUILD, 'daily_algo')).toBeFalse();
-    expect((await getModuleStates(GUILD)).daily_algo).toBeFalse();
-  });
-
-  test('refuse d etre rallume, sans rien ecrire', async () => {
-    const err = await setDashboardModuleStatus(GUILD, 'daily_algo', true).catch((e) => e);
-
-    expect(err).toBeInstanceOf(PausedModuleError);
-    expect(err.moduleKey).toBe('daily_algo');
-    expect(featureRows.find((row) => row.featureKey === 'daily_algo')).toBeUndefined();
-  });
-
-  test('refuse aussi la mise en place guidee', async () => {
-    await expect(
-      setDashboardModuleStatus(GUILD, 'daily_algo', true, undefined, { recordIntentWhenLocked: true }),
-    ).rejects.toThrow(PausedModuleError);
-  });
-
-  test('laisse ecrire l extinction', async () => {
-    featureRows = [{ guildId: GUILD, featureKey: 'daily_algo', enabled: true }];
-
-    const result = await setDashboardModuleStatus(GUILD, 'daily_algo', false);
 
     expect(result.enabled).toBeFalse();
   });

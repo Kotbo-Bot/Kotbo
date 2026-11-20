@@ -4,7 +4,6 @@ import { activateCommand } from './commands/admin/activate.js';
 import { adminCommand } from './commands/admin/admin.js';
 import { casierCommand, casierContextCommand } from './commands/moderation/casier.js';
 import { configCommand } from './commands/admin/config.js';
-import { dailyAlgoCommand } from './commands/fun/dailyAlgo.js';
 import { dcCommand } from './commands/moderation/dc.js';
 import { demissionCommand } from './commands/admin/demission.js';
 import { devutilsCommand } from './commands/admin/devutils.js';
@@ -26,7 +25,6 @@ import { convoquerCommand } from './commands/moderation/convoquer.js';
 import { optOutCommand } from './commands/utility/optout.js';
 import { privacyCommand } from './commands/utility/privacy.js';
 import { pingCommand } from './commands/utility/ping.js';
-import { postCommand } from './commands/utility/post.js';
 import { profilCommand } from './commands/profile/profil.js';
 import { profileCommand } from './commands/profile/profile.js';
 import { rankCommand } from './commands/profile/rank.js';
@@ -37,7 +35,6 @@ import { roleCommand } from './commands/moderation/role.js';
 import { sanctionCommand, sanctionContextCommand } from './commands/moderation/sanction.js';
 import { requestVerificationCommand, requestVerificationContextCommand } from './commands/moderation/request-verification.js';
 import { sayCommand } from './commands/fun/say.js';
-import { mpsayCommand } from './commands/fun/mpsay.js';
 import { dailyCommand } from './commands/economy/daily.js';
 import { coinsCommand } from './commands/economy/coins.js';
 import { diceCommand } from './commands/economy/dice.js';
@@ -73,6 +70,7 @@ import { staffserverCommand } from './commands/admin/staffserver.js';
 import { channelhealthCommand } from './commands/admin/channelhealth.js';
 import { simulationCommand } from './commands/admin/simulation.js';
 import { repCommand } from './commands/community/rep.js';
+import { starlightCommand } from './commands/community/starlight.js';
 import { marketCommand } from './commands/economy/market.js';
 import { boutiqueCommand } from './commands/economy/boutique.js';
 import { towerCommand } from './commands/economy/tower.js';
@@ -95,6 +93,7 @@ import { bypassCommand } from './commands/admin/bypass.js';
 import { auditCommand } from './commands/admin/audit.js';
 import { reportCommand, reportMessageContextCommand } from './commands/moderation/report.js';
 import { wikiCommand } from './commands/community/wiki.js';
+import { regleCommand } from './commands/community/regle.js';
 
 export type SlashCommandDefinition = {
   data: { name: string; description: string; toJSON: () => unknown };
@@ -123,9 +122,7 @@ export const commands: SlashCommandDefinition[] = [
   devutilsCommand,
   statusCommand,
   adminCommand,
-  postCommand,
   helpCommand,
-  dailyAlgoCommand,
   profileCommand,
   profilCommand,
   sanctionCommand,
@@ -147,7 +144,6 @@ export const commands: SlashCommandDefinition[] = [
   transcriptCommand,
   ticketCommand,
   sayCommand,
-  mpsayCommand,
   demissionCommand,
   rankCommand,
   prestigeCommand,
@@ -182,6 +178,7 @@ export const commands: SlashCommandDefinition[] = [
   channelhealthCommand,
   simulationCommand,
   repCommand,
+  starlightCommand,
   marketCommand,
   boutiqueCommand,
   towerCommand,
@@ -205,6 +202,7 @@ export const commands: SlashCommandDefinition[] = [
   optOutCommand,
   privacyCommand,
   wikiCommand,
+  regleCommand,
   confessionCommand,
 ];
 
@@ -299,11 +297,11 @@ export const COMMAND_MODULES = new Map<ApplicationCommandDefinition, string>([
   [staffserverCommand, 'staff_server'],
 
   // Communauté
-  [dailyAlgoCommand, 'daily_algo'],
   [ticketCommand, 'tickets'],
   [giveawayCommand, 'giveaways'],
   [suggestCommand, 'suggestions'],
   [wikiCommand, 'site_wiki'],
+  [regleCommand, 'regulation'],
   [suggestionConfigCommand, 'suggestions'],
   [eventCommand, 'events'],
   [ctfCommand, 'events'],
@@ -315,6 +313,7 @@ export const COMMAND_MODULES = new Map<ApplicationCommandDefinition, string>([
   [clanCommand, 'clans'],
   [questsCommand, 'quests'],
   [repCommand, 'reputation'],
+  [starlightCommand, 'starboard'],
   [marketCommand, 'marketplace'],
   [boutiqueCommand, 'economy'],
   [rpgCommand, 'economy'],
@@ -349,8 +348,6 @@ export const COMMAND_MODULES = new Map<ApplicationCommandDefinition, string>([
   [invitesCommand, 'analytics'],
   [widgetCommand, 'analytics'],
   [pulseCommand, 'analytics'],
-  // `/post` ne publie que le défi du jour : elle suit le Daily Algo, pas les actualités.
-  [postCommand, 'daily_algo'],
   [linkCommand, 'channel_links'],
 ]);
 

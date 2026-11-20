@@ -1,6 +1,7 @@
 import { OpenAPIHono } from '@hono/zod-openapi';
 import { swaggerUI } from '@hono/swagger-ui';
 import { HTTPException } from 'hono/http-exception';
+import { compress } from 'hono/compress';
 import type { Client } from 'discord.js';
 import { dashboardCors } from './middleware/cors.js';
 import { createHealthRouter } from './routes/health.js';
@@ -24,6 +25,19 @@ import { createSiteAdminRouter } from './routes/siteAdmin.js';
 import { createShopAdminRouter } from './routes/shopAdmin.js';
 import { createAdminSitesRouter } from './routes/adminSites.js';
 import { logger } from '../../utils/logger.js';
+import { createDashboardRouter } from './dashboard/index.js';
+import { createAdminRouter } from '../routes/admin.js';
+import { createUserRouter } from '../routes/user.js';
+import { createReportErrorRouter } from '../routes/error.js';
+import { createReportFeedbackRouter } from '../routes/feedback.js';
+import { createRestApiRouter } from '../mcp/restApi.js';
+import { createMcpServerRouter } from '../mcp/mcpServer.js';
+import { createPublicMiscRouter } from './routes/public/publicMisc.js';
+import { createPublicCommunityRouter } from './routes/public/publicCommunity.js';
+import { createPublicRpgClansRouter } from './routes/public/publicRpgClans.js';
+import { createPublicFilesRouter } from './routes/public/publicFiles.js';
+import { createPublicFormsRouter } from './routes/public/publicForms.js';
+import { fail } from './dashboard/kit.js';
 
 /**
  * Crée et configure l'application Hono avec tous les middlewares et routes.
@@ -52,6 +66,12 @@ export function createHonoApp(client: Client): OpenAPIHono {
   // Routes
   // ---------------------------------------------------------------------------
 
+  // L'ancien pont gzipait les réponses > 1 Ko ; les pages publiques lourdes (clans, RPG) en dépendent.
+  app.use('/api/public/*', compress());
+  app.use('/api/admin/*', compress());
+  app.use('/api/mcp/*', compress());
+  app.use('/api/mcp-direct/*', compress());
+
   app.route('/', createHealthRouter(client));
   app.route('/', configRouter);
   app.route('/', eventBusRouter);
@@ -73,6 +93,19 @@ export function createHonoApp(client: Client): OpenAPIHono {
   app.route('/', createSiteAdminRouter(client));
   app.route('/', createShopAdminRouter(client));
   app.route('/', createAdminSitesRouter(client));
+  // Console admin (/api/admin/*) : après les routeurs admin spécialisés, qui passent la main via next().
+  app.route('/', createAdminRouter(client));
+  app.route('/', createUserRouter(client));
+  app.route('/', createReportErrorRouter(client));
+  app.route('/', createReportFeedbackRouter(client));
+  app.route('/', createRestApiRouter(client));
+  app.route('/', createMcpServerRouter(client));
+  app.route('/', createPublicMiscRouter(client));
+  app.route('/', createPublicCommunityRouter(client));
+  app.route('/', createPublicRpgClansRouter(client));
+  app.route('/', createPublicFilesRouter());
+  app.route('/', createPublicFormsRouter(client));
+  app.route('/', createDashboardRouter(client));
 
   // ---------------------------------------------------------------------------
   // OpenAPI / Swagger UI (uniquement en développement)
@@ -102,13 +135,12 @@ export function createHonoApp(client: Client): OpenAPIHono {
     }
 
     logger.error('HonoAPI', 'Erreur non gérée:', err);
-    return c.json({ error: 'Erreur interne du serveur' }, 500);
+    // Même réponse que l'ancien routeur : statut et texte selon la panne.
+    return fail(c, err, 'Erreur interne du serveur', 'HonoAPI');
   });
 
   app.notFound((c) => {
-    // Seule cette réponse renvoie au fallback legacy : un 404 rendu par une route
-    // Hono (site absent, page supprimée) doit atteindre le client tel quel.
-    return c.json({ error: 'Route introuvable' }, 404, { 'X-Kotbo-Unrouted': '1' });
+    return c.json({ error: 'Route introuvable' }, 404);
   });
 
   return app;

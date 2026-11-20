@@ -634,7 +634,7 @@
         <button
           type="button"
           onclick={themeStore.toggle}
-          aria-label="theme"
+          aria-label={m.navbar_change_theme()}
           class="w-8 h-8 rounded-full border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#0c1322] flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-100 transition-colors cursor-pointer"
         >
           {#if themeStore.dark}
@@ -806,7 +806,7 @@
               <span class="absolute inset-y-0 left-4 flex items-center text-slate-400 group-focus-within:text-slate-500 transition-colors">
                 <Papicon icon="Search" size={16} />
               </span>
-              <input
+              <input aria-label={m.clan_public_search_placeholder()}
                 type="text"
                 bind:value={searchQuery}
                 placeholder={m.clan_public_search_placeholder()}

@@ -40,8 +40,10 @@ model CustomBotConfig {
   activityText    String?  // Texte d'activité (ex: "/help")
   activityUrl     String?  // URL pour le type STREAMING
 
-  // Dashboard personnalisé
-  customDashboardUrl String? // URL perso du dashboard
+  // Dashboard sur le domaine du serveur : nom d'hôte seul (ex. "panel.monserveur.fr").
+  // Servi par Traefik une fois les DNS vérifiés, connexion via botClientId/botClientSecret.
+  customDashboardUrl     String?   @unique
+  customDomainVerifiedAt DateTime?
 
   // Runtime state (géré par le système)
   isRunning       Boolean  @default(false)

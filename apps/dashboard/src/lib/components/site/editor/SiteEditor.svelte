@@ -587,10 +587,10 @@
         </select>
         {#if !linkPage}
           <!-- svelte-ignore a11y_autofocus -->
-          <input class="site-bubble-input" type="text" placeholder="https://" bind:value={linkValue} autofocus />
+          <input aria-label={m.ste_link_url()} class="site-bubble-input" type="text" placeholder="https://" bind:value={linkValue} autofocus />
         {/if}
         <button type="submit" class="site-bubble-btn">{m.ste_link_apply()}</button>
-        <button type="button" class="site-bubble-btn" onclick={() => (linkOpen = false)}>×</button>
+        <button type="button" class="site-bubble-btn" aria-label={m.common_close()} onclick={() => (linkOpen = false)}>×</button>
       </form>
     {:else}
       <button type="button" class="site-bubble-btn" class:is-on={active.bold} aria-pressed={active.bold} title={m.ste_fmt_bold()} onclick={() => editor?.chain().focus().toggleBold().run()}><b>B</b></button>
@@ -680,7 +680,7 @@
   .site-bubble-swatch.hl-accent { background: var(--site-accent, var(--color-primary)); } .site-bubble-swatch.hl-yellow { background: #facc15; } .site-bubble-swatch.hl-green { background: #22c55e; }
   .site-bubble-swatch.hl-blue { background: #3b82f6; } .site-bubble-swatch.hl-pink { background: #ec4899; } .site-bubble-swatch.hl-red { background: #ef4444; }
   .site-bubble-link { display: flex; align-items: center; gap: 4px; }
-  .site-bubble-input, .site-bubble-select { height: 30px; border-radius: 7px; border: 1px solid var(--color-outline-variant); background: var(--color-surface-container); color: var(--color-on-surface); padding: 0 8px; font: 13px Inter, system-ui, sans-serif; }
+  .site-bubble-input, .site-bubble-select { height: 30px; border-radius: 7px; border: 1px solid var(--color-field-border); background: var(--color-surface-container); color: var(--color-on-surface); padding: 0 8px; font: 13px Inter, system-ui, sans-serif; }
   .site-bubble-input { width: 220px; }
   .site-canvas-wrap { position: relative; }
   .site-block-handle { position: absolute; z-index: 15; }

@@ -1,18 +1,23 @@
 import { errorCode } from '../utils/errors.js';
-import { IncomingMessage } from 'node:http';
-import { Socket } from 'node:net';
 import { Client } from 'discord.js';
 
 import prisma from '../utils/db.js';
 import { mayBeTicketChannel } from '../services/features/ticketChannelLookup.js';
+import type { Server } from 'bun';
+import {
+  customDomainForHost,
+  customDomainGate,
+  customDomainScope,
+  isCustomDomainOrigin,
+  scopedGuildId,
+  startCustomDomainSync,
+} from '../services/system/customDomain.js';
 import { logger } from '../utils/logger.js';
 import {
-  json,
   getDiscordClientId,
   getDashboardOrigin,
   CORS_EXTRA_ORIGINS,
   isKotboPublicOrigin,
-  splitPath,
   configRateLimiter,
   errorReportRateLimiter,
   feedbackReportRateLimiter,
@@ -25,28 +30,17 @@ import {
   resolveDashboardAccess,
   type DashboardEvent,
   type DashboardSanctionType,
-  BunServerResponse,
 } from './shared.js';
 import { getDashboardSession, sessionIdFromCookieHeader } from './auth/sessionStore.js';
 import { getCurrentInstance } from '../utils/instanceContext.js';
 import { getAllInstances } from '../utils/instanceResolver.js';
 
 // Modular Route Handlers (legacy - maintenu pendant la migration progressive)
-import { handlePublicRoutes } from './routes/public.js';
-import { handleAuthRoutes } from './routes/auth.js';
-import { handleReportErrorRoute } from './routes/error.js';
-import { handleReportFeedbackRoute } from './routes/feedback.js';
-import { handleUserRoutes } from './routes/user.js';
-import { handleAdminRoutes } from './routes/admin.js';
 import { startBroadcastScheduler } from '../services/system/broadcastService.js';
-import { handleDashboardRoutes } from './routes/dashboard.js';
-import { handleVerifyRoutes } from './routes/verify.js';
-import { handleMCPRoutes, mcpRateLimiter } from './mcp/mcpServer.js';
+import { mcpRateLimiter } from './mcp/mcpServer.js';
 
-// Hono - nouveau routeur typé (migration progressive)
+// Hono - nouveau routeur typé
 import { createHonoApp } from './hono/app.js';
-
-import { jsonFailure } from './shared/failure.js';
 import { canViewFeatureSection } from './routes/dashboard/featureGate.js';
 import { closeCollabConnection, handleCollabMessage, openCollabConnection } from '../services/site/siteCollabService.js';
 import { canEditKind, resolveSiteRights } from '../services/site/siteRights.js';
@@ -95,6 +89,8 @@ export async function notifyDashboardSanctionReportRequired(params: {
 interface WebSocketData {
   isAuthenticated: boolean;
   userId?: string;
+  /** Socket ouvert depuis le domaine perso d'un serveur : il ne voit que lui. */
+  scopedGuildId?: string;
   /** Socket d'édition à plusieurs d'une page de site (protocole y-websocket). */
   collab?: { pageId: string; guildId: string };
   /** Serveurs dont ce socket suit le temps réel d'Analytics. */
@@ -117,6 +113,7 @@ export const startDashboardApi = async (client: Client) => {
 
   // Instancie l'app Hono (nouveau routeur typé)
   const honoApp = createHonoApp(client);
+  startCustomDomainSync();
 
   const clientId = getDiscordClientId();
   const missingOAuthAtStartup = (() => {
@@ -138,10 +135,10 @@ export const startDashboardApi = async (client: Client) => {
   }
 
   const broadcastDashboardEventLocal = (event: DashboardEvent) => {
-    server.publish(
-      'authenticated-dashboard',
-      JSON.stringify({ at: new Date().toISOString(), ...event }),
-    );
+    const payload = JSON.stringify({ at: new Date().toISOString(), ...event });
+    server.publish('authenticated-dashboard', payload);
+    // Les sockets des domaines perso n'écoutent que le sujet de leur serveur.
+    if (typeof event.guildId === 'string') server.publish(`guild-events:${event.guildId}`, payload);
   };
 
   const broadcastDashboardStateChangeLocal = (guildId: string, reason: string) => {
@@ -185,246 +182,101 @@ export const startDashboardApi = async (client: Client) => {
   // base. L'etat etant persiste, un redemarrage ne perd aucune annonce.
   startBroadcastScheduler(client, collectShardGuilds);
 
+  const handleRequest = async (request: Request, serverInstance: Server<WebSocketData>): Promise<Response | undefined> => {
+    const url = new URL(request.url);
+
+    function isAllowedWsOrigin(candidate: string | null): boolean {
+      if (!candidate) return false;
+      if (candidate === getDashboardOrigin()) return true;
+      if (getAllInstances().some((i) => i.dashboardOrigin === candidate)) return true;
+      if (isKotboPublicOrigin(candidate) || isCustomDomainOrigin(candidate)) return true;
+      try {
+        const parsed = new URL(candidate);
+        if (CORS_EXTRA_ORIGINS.includes(parsed.origin)) return true;
+        if (['localhost', '127.0.0.1'].includes(parsed.hostname)) return true;
+      } catch {
+        return false;
+      }
+      return false;
+    }
+
+    // Édition à plusieurs d'une page de site : même contrôle d'origine et de
+    // session que le WebSocket du dashboard, plus le droit d'éditer la page.
+    const collabParts = url.pathname.startsWith('/api/site/collab/')
+      ? url.pathname.slice('/api/site/collab/'.length).split('/').filter(Boolean)
+      : null;
+    if (collabParts) {
+      const [collabGuildId = '', collabPageId = ''] = collabParts;
+      if (collabParts.length !== 2 || !SNOWFLAKE_RE.test(collabGuildId) || !/^[a-z0-9]{20,32}$/.test(collabPageId)) {
+        return new Response('Chemin invalide', { status: 400 });
+      }
+      if (!isAllowedWsOrigin(request.headers.get('origin'))) return new Response('Origine WebSocket refusée', { status: 403 });
+      const session = await getDashboardSession(sessionIdFromCookieHeader(request.headers.get('cookie') ?? undefined));
+      if (!session) return new Response('Session WebSocket absente ou expirée', { status: 401 });
+      const page = await prisma.sitePage.findFirst({ where: { id: collabPageId, guildId: collabGuildId }, select: { kind: true } });
+      if (!page) return new Response('Page introuvable', { status: 404 });
+      const rights = await resolveSiteRights(client, collabGuildId, session.userId);
+      if (!canEditKind(rights, page.kind)) return new Response('Accès refusé', { status: 403 });
+      const upgraded = serverInstance.upgrade(request, {
+        data: { isAuthenticated: true, userId: session.userId, collab: { pageId: collabPageId, guildId: collabGuildId } },
+      });
+      if (upgraded) return undefined;
+      return new Response('Upgrade WebSocket impossible', { status: 400 });
+    }
+
+    // Signaux temps réel d'un site communautaire : ouverts aux anonymes (les
+    // signaux ne portent aucune donnée), depuis l'origine d'un dashboard.
+    if (url.pathname.startsWith('/api/site/live/')) {
+      const siteId = url.pathname.slice('/api/site/live/'.length);
+      if (!/^[a-z0-9]{20,32}$/.test(siteId)) return new Response('Chemin invalide', { status: 400 });
+      if (!isAllowedWsOrigin(request.headers.get('origin'))) return new Response('Origine WebSocket refusée', { status: 403 });
+      const site = await prisma.communitySite.findUnique({ where: { id: siteId }, select: { id: true, suspendedAt: true } });
+      if (!site || site.suspendedAt) return new Response('Site introuvable', { status: 404 });
+      const session = await getDashboardSession(sessionIdFromCookieHeader(request.headers.get('cookie') ?? undefined)).catch(() => null);
+      const upgraded = serverInstance.upgrade(request, {
+        data: { isAuthenticated: Boolean(session), userId: session?.userId, siteLive: { siteId, topics: new Set<string>() } },
+      });
+      if (upgraded) return undefined;
+      return new Response('Upgrade WebSocket impossible', { status: 400 });
+    }
+
+    // WebSocket upgrade (inchangé)
+    if (url.pathname === '/api/dashboard/ws') {
+      if (!isAllowedWsOrigin(request.headers.get('origin'))) return new Response('Origine WebSocket refusée', { status: 403 });
+
+      const session = await getDashboardSession(sessionIdFromCookieHeader(request.headers.get('cookie') ?? undefined));
+      if (!session) return new Response('Session WebSocket absente ou expirée', { status: 401 });
+      const success = serverInstance.upgrade(request, {
+        data: { isAuthenticated: true, userId: session.userId, scopedGuildId: scopedGuildId() ?? undefined },
+      });
+      if (success) return undefined;
+    }
+
+    // -----------------------------------------------------------------------
+    // Routeur Hono (toutes les routes API passent désormais par Hono)
+    // -----------------------------------------------------------------------
+    try {
+      return await honoApp.fetch(request);
+    } catch (honoErr) {
+      logger.error('DashboardAPI', 'Erreur Hono non gérée:', honoErr);
+      return new Response(JSON.stringify({ error: 'Erreur interne API' }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+  };
+
   const startServer = (listenPort: number) => Bun.serve<WebSocketData>({
     port: listenPort,
     reusePort: true,
-    // Bun coupe à 10 s par défaut une requête qui n'a encore rien renvoyé : le proxy
-    // répond alors 502 sans CORS pendant que le handler finit (quiz, appels Discord lents).
-    idleTimeout: 60,
-    async fetch(request, serverInstance) {
-      const url = new URL(request.url);
-
-      // Édition à plusieurs d'une page de site : même contrôle d'origine et de
-      // session que le WebSocket du dashboard, plus le droit d'éditer la page.
-      const collabParts = url.pathname.startsWith('/api/site/collab/')
-        ? url.pathname.slice('/api/site/collab/'.length).split('/').filter(Boolean)
-        : null;
-      if (collabParts) {
-        const [collabGuildId = '', collabPageId = ''] = collabParts;
-        if (collabParts.length !== 2 || !SNOWFLAKE_RE.test(collabGuildId) || !/^[a-z0-9]{20,32}$/.test(collabPageId)) {
-          return new Response('Chemin invalide', { status: 400 });
-        }
-        const origin = request.headers.get('origin');
-        let allowedOrigin = origin === getDashboardOrigin() || getAllInstances().some((i) => i.dashboardOrigin === origin);
-        if (!allowedOrigin && process.env.NODE_ENV !== 'production' && origin) {
-          try {
-            allowedOrigin = ['localhost', '127.0.0.1'].includes(new URL(origin).hostname);
-          } catch {
-            allowedOrigin = false;
-          }
-        }
-        if (!allowedOrigin) return new Response('Origine WebSocket refusée', { status: 403 });
-        const session = await getDashboardSession(sessionIdFromCookieHeader(request.headers.get('cookie') ?? undefined));
-        if (!session) return new Response('Session WebSocket absente ou expirée', { status: 401 });
-        const page = await prisma.sitePage.findFirst({ where: { id: collabPageId, guildId: collabGuildId }, select: { kind: true } });
-        if (!page) return new Response('Page introuvable', { status: 404 });
-        const rights = await resolveSiteRights(client, collabGuildId, session.userId);
-        if (!canEditKind(rights, page.kind)) return new Response('Accès refusé', { status: 403 });
-        const upgraded = serverInstance.upgrade(request, {
-          data: { isAuthenticated: true, userId: session.userId, collab: { pageId: collabPageId, guildId: collabGuildId } },
-        });
-        if (upgraded) return undefined;
-        return new Response('Upgrade WebSocket impossible', { status: 400 });
-      }
-
-      // Signaux temps réel d'un site communautaire : ouverts aux anonymes (les
-      // signaux ne portent aucune donnée), depuis l'origine d'un dashboard.
-      if (url.pathname.startsWith('/api/site/live/')) {
-        const siteId = url.pathname.slice('/api/site/live/'.length);
-        if (!/^[a-z0-9]{20,32}$/.test(siteId)) return new Response('Chemin invalide', { status: 400 });
-        const origin = request.headers.get('origin');
-        let allowedOrigin = origin === getDashboardOrigin() || getAllInstances().some((i) => i.dashboardOrigin === origin);
-        if (!allowedOrigin && process.env.NODE_ENV !== 'production' && origin) {
-          try {
-            allowedOrigin = ['localhost', '127.0.0.1'].includes(new URL(origin).hostname);
-          } catch {
-            allowedOrigin = false;
-          }
-        }
-        if (!allowedOrigin) return new Response('Origine WebSocket refusée', { status: 403 });
-        const site = await prisma.communitySite.findUnique({ where: { id: siteId }, select: { id: true, suspendedAt: true } });
-        if (!site || site.suspendedAt) return new Response('Site introuvable', { status: 404 });
-        const session = await getDashboardSession(sessionIdFromCookieHeader(request.headers.get('cookie') ?? undefined)).catch(() => null);
-        const upgraded = serverInstance.upgrade(request, {
-          data: { isAuthenticated: Boolean(session), userId: session?.userId, siteLive: { siteId, topics: new Set<string>() } },
-        });
-        if (upgraded) return undefined;
-        return new Response('Upgrade WebSocket impossible', { status: 400 });
-      }
-
-      // WebSocket upgrade (inchangé)
-      if (url.pathname === '/api/dashboard/ws') {
-        const origin = request.headers.get('origin');
-        let allowedOrigin = origin === getDashboardOrigin();
-        if (!allowedOrigin && process.env.NODE_ENV !== 'production' && origin) {
-          try {
-            allowedOrigin = ['localhost', '127.0.0.1'].includes(new URL(origin).hostname);
-          } catch {
-            allowedOrigin = false;
-          }
-        }
-        if (!allowedOrigin) return new Response('Origine WebSocket refusée', { status: 403 });
-
-        const session = await getDashboardSession(sessionIdFromCookieHeader(request.headers.get('cookie') ?? undefined));
-        if (!session) return new Response('Session WebSocket absente ou expirée', { status: 401 });
-        const success = serverInstance.upgrade(request, {
-          data: { isAuthenticated: true, userId: session.userId },
-        });
-        if (success) return undefined;
-      }
-
-      // -----------------------------------------------------------------------
-      // 1. Routeur Hono (routes migrées vers Zod + OpenAPI)
-      //    Si Hono retourne 404, on tombe dans le fallback legacy.
-      //    On clone le request pour que le body reste lisible par le legacy handler.
-      // -----------------------------------------------------------------------
-      try {
-        const honoResponse = await honoApp.fetch(request.clone());
-        // `X-Kotbo-Unrouted` vient du notFound de Hono : tout autre 404 est une
-        // vraie réponse de route (site absent, page supprimée).
-        if (honoResponse.headers.get('X-Kotbo-Unrouted') !== '1') {
-          return honoResponse;
-        }
-      } catch (honoErr) {
-        logger.error('DashboardAPI', 'Erreur Hono non gérée:', honoErr);
-        return new Response(JSON.stringify({ error: 'Erreur interne API' }), {
-          status: 500,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      }
-
-      // -----------------------------------------------------------------------
-      // 2. Fallback legacy - handlers non encore migrés vers Hono
-      //    Conservé pendant la période de migration progressive.
-      // -----------------------------------------------------------------------
-
-      // Convert request standard to IncomingMessage
-      const socket = new Socket();
-      const req = new IncomingMessage(socket);
-      req.method = request.method;
-      req.url = url.pathname + url.search;
-      req.headers = {};
-      request.headers.forEach((value, key) => {
-        req.headers[key.toLowerCase()] = value;
-      });
-
-      const logMsg = (msg: string) => {
-        if (process.env.NODE_ENV !== 'production') {
-          logger.debug('LegacyAPI', msg);
-        }
-      };
-
-      const sanitizedPath = url.pathname.replace(/mcp_[a-f0-9]+/gi, 'mcp_[REDACTED]')
-        .replace(/kotbo_ac_[A-Za-z0-9_-]+/gi, 'kotbo_ac_[REDACTED]')
-        .replace(/kotbo_rt_[A-Za-z0-9_-]+/gi, 'kotbo_rt_[REDACTED]');
-      logMsg(`[Legacy] Request: ${request.method} ${sanitizedPath}`);
-
-      let bodyText = '';
-      if (request.method !== 'GET' && request.method !== 'HEAD') {
-        try {
-          bodyText = await request.text();
-        } catch (err) {
-          const errMsg = err instanceof Error ? err.stack || err.message : String(err);
-          logMsg(`Body read error: ${errMsg}`);
-        }
-      }
-      req.bodyText = bodyText;
-
-      if (bodyText) {
-        req.push(Buffer.from(bodyText, 'utf8'));
-      }
-      req.push(null);
-
-      return new Promise<Response>((resolve) => {
-        const res = new BunServerResponse(req, resolve);
-
-        void (async () => {
-          // CORS + sécurité (legacy - géré par Hono middleware pour les routes migrées)
-          const isMcpPath = url.pathname.startsWith('/api/mcp/')
-            || url.pathname === '/.well-known/oauth-authorization-server'
-            || url.pathname.startsWith('/.well-known/oauth-protected-resource/')
-            || url.pathname.startsWith('/.well-known/oauth-authorization-server/');
-
-          if (isMcpPath) {
-            res.setHeader('Access-Control-Allow-Origin', '*');
-          } else {
-            const dashboardOrigin = getDashboardOrigin();
-            const wlOrigins = getAllInstances().map(i => i.dashboardOrigin);
-            const allowedOrigins = new Set([
-              dashboardOrigin,
-              ...CORS_EXTRA_ORIGINS,
-              ...wlOrigins,
-              'http://localhost:5173',
-              'http://localhost:3000'
-            ]);
-            const isAllowedDevOrigin = (candidate: string) => {
-              try {
-                const parsed = new URL(candidate);
-                if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
-                return parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
-              } catch { return false; }
-            };
-            const origin = req.headers.origin;
-            const originStr = Array.isArray(origin) ? origin[0] : origin;
-            if (originStr) {
-              let normalizedOrigin: string;
-              try { normalizedOrigin = new URL(originStr).origin; } catch { normalizedOrigin = originStr.replace(/\/$/, ''); }
-              if (allowedOrigins.has(normalizedOrigin) || isAllowedDevOrigin(originStr) || isKotboPublicOrigin(originStr)) {
-                res.setHeader('Access-Control-Allow-Origin', originStr);
-                res.setHeader('Access-Control-Allow-Credentials', 'true');
-              } else {
-                // Origine non autorisée : ne pas refléter l'origin ni les credentials.
-                res.statusCode = 403;
-                res.setHeader('Vary', 'Origin');
-                res.setHeader('Content-Type', 'application/json; charset=utf-8');
-                res.end(JSON.stringify({ error: 'Origine refusée' }));
-                return;
-              }
-            } else {
-              res.setHeader('Access-Control-Allow-Origin', dashboardOrigin);
-            }
-            res.setHeader('Vary', 'Origin');
-          }
-          res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-          res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, Origin, X-Requested-With, Cache-Control, Pragma, If-None-Match, X-Kotbo-API-Key, X-API-Key');
-          res.setHeader('Access-Control-Max-Age', '86400');
-          // Reponses binaires : sans exposition explicite, le dashboard ne peut
-          // pas lire l en-tete qui accompagne l image (aperçu de carte de rang).
-          res.setHeader('Access-Control-Expose-Headers', 'X-Rank-Card-Preview, ETag');
-          res.setHeader('Content-Security-Policy', "default-src 'self';");
-          res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
-          res.setHeader('X-Frame-Options', 'DENY');
-          res.setHeader('X-Content-Type-Options', 'nosniff');
-          res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-          res.setHeader('Permissions-Policy', 'geolocation=(), camera=(), microphone=()');
-
-          try {
-            if (req.method === 'OPTIONS') {
-              res.statusCode = 204;
-              res.end();
-              return;
-            }
-
-            const parts = splitPath(url.pathname);
-
-            // Routes legacy (non encore migrées vers Hono)
-            if (await handlePublicRoutes(req, res, parts, url, client)) return;
-            if (await handleAuthRoutes(req, res, parts, url, client)) return;
-            if (await handleVerifyRoutes(req, res, parts, url, client)) return;
-            if (await handleReportErrorRoute(req, res, parts, url, client)) return;
-            if (await handleReportFeedbackRoute(req, res, parts, url, client)) return;
-            if (await handleUserRoutes(req, res, parts, url, client)) return;
-            if (await handleAdminRoutes(req, res, parts, url, client)) return;
-            if (await handleMCPRoutes(req, res, parts, url, client)) return;
-            if (await handleDashboardRoutes(req, res, parts, url, client)) return;
-
-            json(res, 404, { error: 'Route introuvable' });
-          } catch (error) {
-            logger.error('DashboardAPI', error);
-            jsonFailure(res, error, 'Erreur interne API dashboard', 'DashboardAPI');
-          }
-        })();
-      });
+    fetch(request, serverInstance) {
+      // Domaine perso d'un serveur : liste blanche de routes, un seul serveur
+      // accessible, et la portée suit la requête jusqu'aux contrôles d'accès.
+      const scoped = customDomainForHost(request.headers.get('host'));
+      if (!scoped) return handleRequest(request, serverInstance);
+      const refused = customDomainGate(scoped, new URL(request.url).pathname);
+      if (refused) return refused;
+      return customDomainScope.run(scoped.guildId, () => handleRequest(request, serverInstance));
     },
     websocket: {
       open(ws) {
@@ -436,7 +288,7 @@ export const startDashboardApi = async (client: Client) => {
           void openCollabConnection(ws, ws.data.collab.pageId, ws.data.collab.guildId, ws.data.userId ?? '');
           return;
         }
-        ws.subscribe('authenticated-dashboard');
+        ws.subscribe(ws.data.scopedGuildId ? `guild-events:${ws.data.scopedGuildId}` : 'authenticated-dashboard');
         ws.send(JSON.stringify({ type: 'dashboard_ws_connected', at: new Date().toISOString() }));
       },
       async message(ws, messageData) {
@@ -481,6 +333,7 @@ export const startDashboardApi = async (client: Client) => {
         // la section revérifié ici (le sujet commun ne porte que des signaux).
         const guildId = typeof data.guildId === 'string' && SNOWFLAKE_RE.test(data.guildId) ? data.guildId : null;
         if (!guildId || !ws.data.userId) return;
+        if (ws.data.scopedGuildId && ws.data.scopedGuildId !== guildId) return;
         const live = (ws.data.liveGuilds ??= new Set());
         if (data.type === 'analytics_live_unsubscribe') {
           if (live.delete(guildId)) {
@@ -514,7 +367,7 @@ export const startDashboardApi = async (client: Client) => {
           void closeCollabConnection(ws);
           return;
         }
-        ws.unsubscribe('authenticated-dashboard');
+        ws.unsubscribe(ws.data.scopedGuildId ? `guild-events:${ws.data.scopedGuildId}` : 'authenticated-dashboard');
         for (const guildId of ws.data.liveGuilds ?? []) removeLiveSubscriber(guildId);
         ws.data.liveGuilds?.clear();
       }

@@ -11,7 +11,12 @@ export type HomeWidgetSection =
   | 'polls'
   | 'serverInfo'
   | 'quickGuide'
-  | 'hosting';
+  | 'hosting'
+  | 'pulse'
+  | 'shield'
+  | 'myTasks'
+  | 'boosts'
+  | 'climate';
 
 export interface HomeWidgetsData {
   windowDays: number;
@@ -76,6 +81,42 @@ export interface HomeWidgetsData {
     memoryTotalMb: number;
     latencyMs: number;
     uptimeSeconds: number;
+  };
+  pulse?: {
+    hasData: boolean;
+    score: number | null;
+    trend: string | null;
+    trendDelta: number;
+    alertCount: number;
+    history: number[];
+  };
+  shield?: {
+    configured: boolean;
+    jailed: number;
+    jailedRecently: number;
+    openWaves: number;
+    pendingVision: number;
+  };
+  myTasks?: {
+    isStaff: boolean;
+    open: number;
+    overdue: number;
+    next: Array<{ id: string; title: string; dueAt: string | null; priority: string }>;
+  };
+  boosts?: {
+    hasData: boolean;
+    tier: number | null;
+    boostCount: number | null;
+    boosterCount: number | null;
+    delta: number | null;
+    lostRecently: number;
+  };
+  climate?: {
+    enabled: boolean;
+    analyzed: number;
+    toxicPercent: number | null;
+    dominantEmotion: string | null;
+    history: number[];
   };
 }
 

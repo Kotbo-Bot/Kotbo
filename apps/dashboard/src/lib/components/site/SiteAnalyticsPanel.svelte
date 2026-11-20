@@ -29,9 +29,9 @@
   let metric = $state<'views' | 'visitors'>('views');
 
   const periods: FilterOption[] = [
-    { value: '7', label: m.ste_period_7() },
-    { value: '30', label: m.ste_period_30() },
-    { value: '90', label: m.ste_period_90() },
+    { value: '7', get label() { return m.ste_period_7(); } },
+    { value: '30', get label() { return m.ste_period_30(); } },
+    { value: '90', get label() { return m.ste_period_90(); } },
   ];
 
   async function load() {

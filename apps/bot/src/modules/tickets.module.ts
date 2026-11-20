@@ -148,6 +148,9 @@ export function registerTicketsBusSubscribers(client: Client): void {
   }, MODULE_NAME);
 
   // ── DM Relay - stays on client.on (DMs are not guild events) ──
+  // Le client reçu est la vue filtrée par module : un message de serveur ne
+  // passe que si les tickets y tournent, un MP passe toujours et
+  // `relayDmToThread` vérifie le serveur du ticket visé.
   client.on(Events.MessageCreate, async (message: Message) => {
     if (message.author.bot) return;
 

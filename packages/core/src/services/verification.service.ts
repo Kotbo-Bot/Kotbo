@@ -50,6 +50,7 @@ export class VerificationService {
     }
 
     const result = await this.discord.sendEmbed({
+      guildId: input.guildId,
       channelId: input.channelId,
       title: config.verificationEmbedTitle,
       description: config.verificationEmbedDesc,

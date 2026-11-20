@@ -1,10 +1,3 @@
-export type ValidateRoute = {
-  /** `dismiss` = hors-sujet : aucun point, mais aucune sanction (Daily Algo). */
-  action: 'approve' | 'reject' | 'dismiss' | 'translate' | 'pin' | 'rate';
-  type: 'daily-algo';
-  itemId: string;
-};
-
 export type UserCaseSection = 'resume' | 'sanctions' | 'identite' | 'activite';
 
 export type UserCaseRoute = {
@@ -17,24 +10,6 @@ export type UserCaseRoute = {
   /** ID de la sanction à révoquer. */
   sanctionId?: string;
 };
-
-export function parseSetupStep(customId: string): string | null {
-  if (!customId.startsWith('setup:')) return null;
-  return customId.split(':')[1] ?? null;
-}
-
-export function parseValidateRoute(customId: string): ValidateRoute | null {
-  if (!customId.startsWith('validate:')) return null;
-
-  const parts = customId.split(':');
-  if (parts.length < 4) return null;
-
-  const action = parts[1] as ValidateRoute['action'];
-  const type = parts[2] as ValidateRoute['type'];
-  const itemId = parts[3];
-
-  return { action, type, itemId };
-}
 
 export function parseSessionRoute(customId: string): { type: string; sessionId: string } | null {
   if (!customId.startsWith('session:')) return null;

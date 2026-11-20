@@ -167,7 +167,7 @@ model APIKey {
   displayKey String @unique // Les premiers/derniers 8 chars pour affichage (format: aab...xyz)
 
   name String @default("Mon clé API")
-  permissions String[] @default(["daily_algo:create_exercise"]) // permissions supportées
+  permissions String[] @default([]) // permissions supportées
   isActive Boolean @default(true)
   lastUsedAt DateTime?
 

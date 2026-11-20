@@ -87,7 +87,7 @@ async function getCommands(): Promise<SlashCommandDefinition[]> {
 function getCommandCategory(name: string): CategoryId {
   const adminAndMod = ['admin', 'sanction', 'dc', 'rescan', 'casier', 'absent', 'meeting', 'note', 'transcript', 'clear', 'channel', 'signal', 'demission', 'ticket'];
   const gettingStarted = ['setup', 'config', 'ping', 'info', 'dashboard', 'serverstats', 'stats', 'activate', 'opt-out', 'privacy'];
-  const feedAndNews = ['post', 'daily-algo', 'suggest', 'suggestion-config', 'event'];
+  const feedAndNews = ['suggest', 'suggestion-config', 'event'];
   const profileAndRpg = ['profile', 'profil', 'leaderboard', 'invites', 'rank'];
   if (name.startsWith('rpg-')) return 'profile';
   if (gettingStarted.includes(name)) return 'getting_started';

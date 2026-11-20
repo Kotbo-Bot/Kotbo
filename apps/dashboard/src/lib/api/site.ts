@@ -10,7 +10,7 @@ import { DashboardApiError } from './errors';
 
 export type SitePageKind = 'PAGE' | 'WIKI' | 'BLOG';
 export type SiteVisibility = 'PUBLIC' | 'MEMBERS' | 'ROLES' | 'STAFF';
-export type SiteTemplate = 'general' | 'gaming' | 'rp' | 'esport' | 'etude';
+export type SiteTemplate = 'general' | 'gaming' | 'rp' | 'esport' | 'etude' | 'dev';
 
 export interface CommunitySite {
   id: string;
@@ -290,7 +290,7 @@ export function importStockImage(id: string, guildId?: string) {
 
 // ─── Galerie de modèles ─────────────────────────────────────────────────────
 
-export const SITE_TEMPLATE_CATEGORIES = ['general', 'gaming', 'rp', 'esport', 'etude', 'autre'] as const;
+export const SITE_TEMPLATE_CATEGORIES = ['general', 'gaming', 'rp', 'esport', 'etude', 'dev', 'autre'] as const;
 export type SiteTemplateCategory = (typeof SITE_TEMPLATE_CATEGORIES)[number];
 
 export interface GalleryTemplate {

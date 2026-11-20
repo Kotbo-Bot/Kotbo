@@ -115,6 +115,7 @@ export const FREE_MODULES = [
   'raid_protection',
   'security_verification',
   'nickname_moderation',
+  'double_accounts',
   // Accueil et contenu de base.
   'welcome_goodbye',
   'reaction_roles',
@@ -123,6 +124,7 @@ export const FREE_MODULES = [
   'auto_responses',
   'auto_thread',
   'news',
+  'custom_forms',
   // Communauté.
   'leveling',
   'tickets',
@@ -133,14 +135,27 @@ export const FREE_MODULES = [
   'fun',
   // Intégrations.
   'analytics',
-  'workflows',
   'social_networks',
   'youtube',
   'twitch',
   'bump_reminder',
+  'rich_links',
   // Vitrine de la gestion du staff : le reste de la catégorie est payant.
   'staff_directory',
+  'recruitment',
 ];
+
+/**
+ * Plafonds du plan Gratuit, en nombre d'éléments par serveur. Les offres
+ * payantes n'en ont pas. Appliqués à la création par `assertFreeQuota` (bot).
+ */
+export const FREE_QUOTAS = {
+  customForms: 3,
+  recruitmentForms: 1,
+  backups: 2,
+  scheduledTasks: 2,
+} as const;
+export type FreeQuotaKey = keyof typeof FREE_QUOTAS;
 
 export const PLAN_REGISTRY: PlanDefinition[] = [
   {

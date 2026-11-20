@@ -1,9 +1,8 @@
 import { describe, expect, test, mock, beforeEach } from 'bun:test';
-import { IncomingMessage, ServerResponse } from 'node:http';
-import { Socket } from 'node:net';
 import path from 'node:path';
 import type { Client } from 'discord.js';
-import { DASHBOARD_ACCESS_ADMIN, type AuthClaims } from '../../api/shared.js';
+import { DASHBOARD_ACCESS_ADMIN } from '../../api/shared.js';
+import { dashboardCall, mockDashboardGate } from '../helpers/honoDashboard.js';
 
 let storedRows: Array<{ id: string }> = [];
 const mockFindMany = mock(async (args: { skip: number; take: number }) =>
@@ -28,48 +27,14 @@ for (const dbPath of ['../../utils/db.ts', '../../utils/db.js']) {
 }
 
 // Import après les mocks
-const { handleMessageLogRoutes } = await import('../../api/routes/dashboard/messageLogs.js');
-
-interface MockResponse extends ServerResponse {
-  body: string;
-}
-
-function createMockResponse(): MockResponse {
-  const socket = new Socket();
-  const res = new ServerResponse(new IncomingMessage(socket)) as MockResponse;
-  let _statusCode = 200;
-  let _body = '';
-  Object.defineProperty(res, 'statusCode', {
-    get: () => _statusCode,
-    set: (code: number) => {
-      _statusCode = code;
-    },
-  });
-  res.setHeader = () => res;
-  res.getHeader = () => undefined;
-  res.writeHead = (statusCode: number) => {
-    _statusCode = statusCode;
-    return res;
-  };
-  res.end = (chunk?: unknown) => {
-    if (chunk) _body += String(chunk);
-    res.body = _body;
-    return res;
-  };
-  return res;
-}
+mockDashboardGate(DASHBOARD_ACCESS_ADMIN, { userId: 'user-1', username: 'Admin' });
+const { createMessageLogsRouter } = await import('../../api/routes/dashboard/messageLogs.js');
 
 const mockClient = {} as Client;
-const mockUser: AuthClaims = { userId: 'user-1', username: 'Admin' };
 
 async function search(query: string) {
-  const req = new IncomingMessage(new Socket());
-  req.method = 'GET';
-  const res = createMockResponse();
-  const url = new URL(`http://localhost/api/dashboard/guilds/guild-1/message-logs/search?${query}`);
-  const parts = ['api', 'dashboard', 'guilds', 'guild-1', 'message-logs', 'search'];
-  await handleMessageLogRoutes(req, res, parts, url, mockClient, mockUser, 'guild-1', DASHBOARD_ACCESS_ADMIN);
-  return { status: res.statusCode, body: JSON.parse(res.body) };
+  const { status, body } = await dashboardCall(createMessageLogsRouter(mockClient), 'GET', `/api/dashboard/guilds/guild-1/message-logs/search?${query}`);
+  return { status, body };
 }
 
 function seed(count: number) {

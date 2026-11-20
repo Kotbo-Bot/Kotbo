@@ -165,7 +165,7 @@
   <div class="space-y-6 pb-20">
     <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
       <MetricCard label={m.ev_total_events()} value={events.length} icon="Zap" loading={!loaded} />
-      <MetricCard label={m.ev_ongoing_events()} value={filters[2].count} icon="Play" toneClass="bg-success/10 text-success" loading={!loaded} />
+      <MetricCard label={m.ev_ongoing_events()} value={filters[2].count} icon="Play" toneClass="bg-success/10 text-on-success-container" loading={!loaded} />
       <MetricCard
         label={m.ev_participations_registrations()}
         value={events.reduce((acc, e) => acc + (e._count?.participants || 0) + (e._count?.registrations || 0), 0)}

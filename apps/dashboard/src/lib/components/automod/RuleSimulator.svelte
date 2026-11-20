@@ -458,7 +458,7 @@
                   <div class="mt-1.5 flex flex-wrap items-center gap-2">
                     <span class="text-2xs px-1.5 py-0.5 rounded bg-surface-container text-on-surface-variant">{sample.detail}</span>
                     {#if sample.falsePositiveHint}
-                      <span class="text-2xs px-1.5 py-0.5 rounded bg-warning/10 text-warning">{m.sim_fp_prefix()} {sample.falsePositiveHint}</span>
+                      <span class="text-2xs px-1.5 py-0.5 rounded bg-warning/10 text-on-warning-container">{m.sim_fp_prefix()} {sample.falsePositiveHint}</span>
                     {/if}
                     <a class="text-2xs text-primary hover:underline" href={messageLink(sample)} target="_blank" rel="noopener">{m.sim_open_discord()}</a>
                     {#if kind === 'keywords' && sampleTab !== 'removed' && sample.highlights.length > 0}

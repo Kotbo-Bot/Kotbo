@@ -65,15 +65,15 @@
   }
 </script>
 
-<div class="rounded-2xl border border-outline-variant/25 bg-surface-container-lowest/70 overflow-hidden">
+<div class="admin-surface overflow-hidden">
   <div class="overflow-x-auto">
     <table class="w-full min-w-max text-sm border-collapse">
       <thead>
-        <tr class="border-b border-outline-variant/25 bg-surface-container-low/60">
+        <tr class="border-b border-outline-variant">
           {#each columns as column (column.key)}
             <th
               scope="col"
-              class="sticky top-0 z-10 px-4 py-2.5 text-2xs font-semibold uppercase tracking-wider text-on-surface-variant whitespace-nowrap
+              class="sticky top-0 z-10 px-4 py-2.5 text-xs font-semibold text-on-surface-variant whitespace-nowrap
                 {alignClasses[column.align ?? 'left']} {column.width ?? ''} {column.hideBelow ? hideClasses[column.hideBelow] : ''}"
               aria-sort={column.sortKey && sortKey === column.sortKey
                 ? (sortDir === 'asc' ? 'ascending' : 'descending')

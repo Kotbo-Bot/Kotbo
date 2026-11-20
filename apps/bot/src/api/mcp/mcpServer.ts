@@ -1,17 +1,58 @@
-import { IncomingMessage, ServerResponse } from 'node:http';
 import crypto from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import { Client } from 'discord.js';
+import { Hono, type Context } from 'hono';
 import type { McpKeyPermission } from '@prisma/client';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { JWT_SECRET, json } from '../shared.js';
+import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
+import { JWT_SECRET, splitPath } from '../shared.js';
 import { getActiveMcpKeyById, verifyMcpKey, verifyMcpKeyByClientCredentials } from './mcpKeyService.js';
 import { registerMcpTools } from './mcpTools.js';
 import { getGuildPlan } from '../../services/system/planService.js';
 import { logger } from '../../utils/logger.js';
 import { GENERIC_ERROR_MESSAGE, publicErrorMessage } from '../../utils/publicError.js';
+
+/** Requête MCP : ce que le handler lit de la requête Hono, sans node:http. */
+export interface McpReq {
+  method?: string;
+  url?: string;
+  headers: Record<string, string | string[] | undefined>;
+  bodyText?: string;
+}
+
+/** Réponse en cours de construction ; `McpResponse` la convertit en `Response`. */
+export interface McpRes {
+  statusCode: number;
+  setHeader(name: string, value: string | number | readonly string[]): unknown;
+  end(body?: string): unknown;
+}
+
+class McpResponse implements McpRes {
+  statusCode = 200;
+  private readonly headers = new Headers();
+  private payload: string | undefined;
+
+  setHeader(name: string, value: string | number | readonly string[]) {
+    this.headers.set(name, Array.isArray(value) ? value.join(', ') : String(value));
+    return this;
+  }
+
+  end(body?: string) {
+    this.payload = body;
+  }
+
+  toResponse(): Response {
+    const bodyless = [101, 204, 205, 304].includes(this.statusCode);
+    return new Response(bodyless ? null : this.payload ?? null, { status: this.statusCode, headers: this.headers });
+  }
+}
+
+function json(res: McpRes, status: number, data: unknown) {
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.statusCode = status;
+  res.end(JSON.stringify(data));
+}
 
 // ── In-memory OAuth state (ephemeral, single-instance) ────────────────────
 
@@ -80,7 +121,7 @@ setInterval(() => {
 // ── Rate limiter (shared, cleaned by dashboardApi.ts) ─────────────────────
 export const mcpRateLimiter = new Map<string, number[]>();
 
-function checkRateLimit(keyId: string): boolean {
+export function checkRateLimit(keyId: string): boolean {
   const now = Date.now();
   const ts = (mcpRateLimiter.get(keyId) ?? []).filter((t) => now - t < 60_000);
   if (ts.length >= 100) return false;
@@ -109,7 +150,7 @@ export function getMcpConnectionLogs(guildId: string, limit = 150): McpConnectio
     .reverse();
 }
 
-function inferMcpGuildId(req: IncomingMessage): string {
+function inferMcpGuildId(req: McpReq): string {
   const path = (req.url ?? '').split('?')[0] ?? '';
   const match = path.match(/\/api\/(?:mcp|mcp-direct)\/(\d{15,20})(?:\/|$)/);
   return match?.[1] ?? 'unknown';
@@ -132,14 +173,14 @@ function sanitizeMcpLogValue(value: unknown): unknown {
   return value;
 }
 
-function oauthError(req: IncomingMessage, res: ServerResponse, status: number, error: string, desc?: string) {
+function oauthError(req: McpReq, res: McpRes, status: number, error: string, desc?: string) {
   mcpLog(req, 'oauth_error', { status, error, description: desc ?? null }, 'warn');
   res.setHeader('Content-Type', 'application/json');
   res.statusCode = status;
   res.end(JSON.stringify({ error, ...(desc ? { error_description: desc } : {}) }));
 }
 
-function sendOAuthTokenResponse(res: ServerResponse, body: Record<string, unknown>) {
+function sendOAuthTokenResponse(res: McpRes, body: Record<string, unknown>) {
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('Pragma', 'no-cache');
@@ -147,7 +188,7 @@ function sendOAuthTokenResponse(res: ServerResponse, body: Record<string, unknow
   res.end(JSON.stringify(body));
 }
 
-function mcpLog(req: IncomingMessage, event: string, data: Record<string, unknown> = {}, level: 'info' | 'warn' | 'error' = 'info') {
+function mcpLog(req: McpReq, event: string, data: Record<string, unknown> = {}, level: 'info' | 'warn' | 'error' = 'info') {
   const ua = Array.isArray(req.headers['user-agent']) ? req.headers['user-agent'].join(' ') : req.headers['user-agent'] ?? '';
   const guildId = typeof data.guildId === 'string' ? data.guildId : inferMcpGuildId(req);
   const safeUrl = sanitizeMcpUrl(req.url);
@@ -180,7 +221,7 @@ function authParam(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 
-function authChallenge(req: IncomingMessage, url: URL, guildId: string, error?: string, errorDescription?: string): string {
+function authChallenge(req: McpReq, url: URL, guildId: string, error?: string, errorDescription?: string): string {
   const params = [
     'Bearer realm="kotbo"',
     'scope="mcp"',
@@ -227,27 +268,30 @@ function authPageCsp(redirectSource: string): string {
   return `default-src 'none'; style-src 'unsafe-inline'; form-action 'self' ${redirectSource}; base-uri 'none'; frame-ancestors 'none'`;
 }
 
-function publicBase(req: IncomingMessage, url: URL, guildId: string): string {
+function publicBase(req: McpReq, url: URL, guildId: string): string {
   return `${publicOrigin(req, url)}/api/mcp/${guildId}`;
 }
 
-function directPublicBase(req: IncomingMessage, url: URL, guildId: string, directToken: string): string {
+function directPublicBase(req: McpReq, url: URL, guildId: string, directToken: string): string {
   return `${publicOrigin(req, url)}/api/mcp-direct/${guildId}/${directToken}`;
 }
 
-function publicOrigin(req: IncomingMessage, url: URL): string {
+function publicOrigin(req: Pick<McpReq, 'headers'>, url: URL): string {
   const proto = (req.headers['x-forwarded-proto'] as string | undefined)?.split(',')[0]?.trim()
     ?? url.protocol.replace(':', '');
   const host = (req.headers['x-forwarded-host'] as string | undefined) ?? url.host;
   return `${proto}://${host}`;
 }
 
-function standardProtectedResourceMetadataUrl(req: IncomingMessage, url: URL, guildId: string): string {
+function standardProtectedResourceMetadataUrl(req: McpReq, url: URL, guildId: string): string {
   const proto = (req.headers['x-forwarded-proto'] as string | undefined)?.split(',')[0]?.trim()
     ?? url.protocol.replace(':', '');
   const host = (req.headers['x-forwarded-host'] as string | undefined) ?? url.host;
   return `${proto}://${host}/.well-known/oauth-protected-resource/api/mcp/${guildId}`;
 }
+
+/** Empreintes des codes d'autorisation déjà échangés, avec leur échéance. */
+const consumedAuthCodes = new Map<string, number>();
 
 function oauthCodeKey(): Buffer {
   const secret = process.env.MCP_OAUTH_CODE_SECRET || JWT_SECRET || process.env.JWT_SECRET || 'kotbo-mcp-dev-secret';
@@ -316,7 +360,7 @@ function initializeClientInfo(body: unknown): Record<string, unknown> | null {
   return clientInfo as Record<string, unknown>;
 }
 
-function looksLikeClaude(req: IncomingMessage): boolean {
+function looksLikeClaude(req: McpReq): boolean {
   const ua = Array.isArray(req.headers['user-agent']) ? req.headers['user-agent'].join(' ') : req.headers['user-agent'] ?? '';
   return /claude|anthropic/i.test(ua);
 }
@@ -334,7 +378,7 @@ function zodSchemaToToolInputSchema(schema: unknown): Record<string, unknown> {
   return { type: 'object', properties: {} };
 }
 
-function sendToolsListCompat(server: McpServer, parsedBody: unknown, res: ServerResponse) {
+function sendToolsListCompat(server: McpServer, parsedBody: unknown, res: McpRes) {
   const registeredTools = ((server as unknown as { _registeredTools?: Record<string, Record<string, unknown>> })._registeredTools) ?? {};
   const tools = Object.entries(registeredTools)
     .filter(([, tool]) => tool.enabled !== false)
@@ -364,7 +408,7 @@ function sendToolsListCompat(server: McpServer, parsedBody: unknown, res: Server
   }));
 }
 
-function sendInitializeCompat(parsedBody: unknown, res: ServerResponse) {
+function sendInitializeCompat(parsedBody: unknown, res: McpRes) {
   res.setHeader('Content-Type', 'application/json');
   res.statusCode = 200;
   res.end(JSON.stringify({
@@ -390,7 +434,7 @@ type McpServerInternals = {
   executeToolHandler(tool: unknown, args: unknown, extra: Record<string, unknown>): Promise<unknown>;
 };
 
-async function sendToolCallCompat(server: McpServer, parsedBody: unknown, res: ServerResponse) {
+async function sendToolCallCompat(server: McpServer, parsedBody: unknown, res: McpRes) {
   const params = (parsedBody as { params?: Record<string, unknown> })?.params ?? {};
   const toolName = typeof params.name === 'string' ? params.name : '';
   const toolArgs = (params.arguments as Record<string, unknown>) ?? {};
@@ -425,10 +469,10 @@ async function sendToolCallCompat(server: McpServer, parsedBody: unknown, res: S
 }
 
 async function handleTransportRequestWithCompat(
-  transport: StreamableHTTPServerTransport,
+  transport: WebStandardStreamableHTTPServerTransport,
   server: McpServer,
-  req: IncomingMessage,
-  res: ServerResponse,
+  req: McpReq,
+  res: McpRes,
   parsedBody: unknown
 ) {
   const method = jsonRpcMethod(parsedBody);
@@ -457,7 +501,19 @@ async function handleTransportRequestWithCompat(
     return;
   }
 
-  await transport.handleRequest(req, res, parsedBody);
+  const headers = new Headers();
+  for (const [key, value] of Object.entries(req.headers)) {
+    if (value !== undefined) headers.set(key, Array.isArray(value) ? value.join(', ') : value);
+  }
+  const request = new Request(new URL(req.url ?? '/', 'http://localhost'), {
+    method: req.method ?? 'POST',
+    headers,
+    body: req.method === 'GET' || req.method === 'HEAD' ? undefined : req.bodyText,
+  });
+  const response = await transport.handleRequest(request, { parsedBody });
+  res.statusCode = response.status;
+  response.headers.forEach((value, key) => res.setHeader(key, value));
+  res.end(await response.text());
 }
 
 function verifyPKCE(verifier: string, challenge: string, method: string): boolean {
@@ -486,34 +542,11 @@ function readBasicClientCredentials(authHeader: string | string[] | undefined): 
   }
 }
 
-function setIncomingHeader(req: IncomingMessage, name: string, value: string) {
-  const lowerName = name.toLowerCase();
-  req.headers[lowerName] = value;
-
-  let found = false;
-  for (let i = 0; i < req.rawHeaders.length; i += 2) {
-    if (req.rawHeaders[i]?.toLowerCase() === lowerName) {
-      req.rawHeaders[i + 1] = value;
-      found = true;
-    }
-  }
-
-  if (!found) {
-    req.rawHeaders.push(name, value);
-  }
+function setIncomingHeader(req: McpReq, name: string, value: string) {
+  req.headers[name.toLowerCase()] = value;
 }
 
-function getRawIncomingHeader(req: IncomingMessage, name: string): string | null {
-  const lowerName = name.toLowerCase();
-  for (let i = 0; i < req.rawHeaders.length; i += 2) {
-    if (req.rawHeaders[i]?.toLowerCase() === lowerName) {
-      return req.rawHeaders[i + 1] ?? null;
-    }
-  }
-  return null;
-}
-
-function normalizeMcpTransportAcceptHeader(req: IncomingMessage, method: string): string | null {
+function normalizeMcpTransportAcceptHeader(req: McpReq, method: string): string | null {
   const current = Array.isArray(req.headers.accept) ? req.headers.accept.join(', ') : req.headers.accept;
 
   if (method === 'POST') {
@@ -531,21 +564,20 @@ function normalizeMcpTransportAcceptHeader(req: IncomingMessage, method: string)
   return null;
 }
 
-function normalizeMcpTransportContentTypeHeader(req: IncomingMessage, method: string, parsedBody: unknown): string | null {
+function normalizeMcpTransportContentTypeHeader(req: McpReq, method: string, parsedBody: unknown): string | null {
   if (method !== 'POST') return null;
   if (!jsonRpcMethod(parsedBody)) return null;
 
   const current = Array.isArray(req.headers['content-type'])
     ? req.headers['content-type'].join(', ')
     : req.headers['content-type'];
-  const rawCurrent = getRawIncomingHeader(req, 'Content-Type');
 
   setIncomingHeader(req, 'Content-Type', 'application/json');
-  if (current?.includes('application/json') && rawCurrent?.includes('application/json')) {
+  if (current?.includes('application/json')) {
     return null;
   }
 
-  return JSON.stringify({ header: current ?? null, rawHeader: rawCurrent });
+  return JSON.stringify({ header: current ?? null });
 }
 
 function makeAccessToken(opts: {
@@ -570,7 +602,7 @@ function makeAccessToken(opts: {
   );
 }
 
-export function makeMcpDirectUrl(req: IncomingMessage, url: URL, guildId: string, keyId: string) {
+export function makeMcpDirectUrl(req: Pick<McpReq, 'headers'>, url: URL, guildId: string, keyId: string) {
   const token = makeMcpDirectToken(guildId, keyId);
   return {
     directUrl: `${publicOrigin(req, url)}/api/mcp-direct/${guildId}/${token}`,
@@ -694,25 +726,33 @@ function authPage(opts: {
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Kotbo - Autorisation MCP</title>
 <style>
+/* Jetons du dashboard Kotbo (clair par défaut, sombre selon le navigateur). */
+:root{--bg:#fff;--surface:#fff;--on:#111827;--muted:#374151;--primary:#4f46e5;--on-primary:#fff;--container:#f3f4f6;--field:#7c8390;--error:#dc2626;--line:rgba(17,24,39,.09);--shadow:0 1px 3px rgba(0,0,0,.05),0 10px 28px -14px rgba(0,0,0,.14);color-scheme:light dark}
+@media (prefers-color-scheme:dark){:root{--bg:#09090b;--surface:#09090b;--on:#fafafa;--muted:#b4b4bb;--primary:#818cf8;--on-primary:#1e1b4b;--container:#1c1c1f;--field:#7a7a83;--error:#f87171;--line:rgba(250,250,250,.09);--shadow:0 1px 3px rgba(0,0,0,.34),0 10px 28px -14px rgba(0,0,0,.44)}}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f1117;color:#e5e7eb;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1rem}
-.card{background:#1a1d23;border:1px solid rgba(255,255,255,.08);border-radius:16px;padding:2rem;width:100%;max-width:400px}
-h1{font-size:1.375rem;font-weight:800;color:#fff;margin-bottom:.25rem}
-.sub{font-size:.8125rem;color:#6b7280;margin-bottom:1.5rem}
-.app{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:.875rem 1rem;margin-bottom:1.5rem}
-.app-name{font-size:.875rem;font-weight:600;color:#fff}
-.app-desc{font-size:.75rem;color:#6b7280;margin-top:.25rem}
-label{display:block;font-size:.8125rem;font-weight:500;color:#9ca3af;margin-bottom:.375rem}
-input[type=password]{width:100%;background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:.625rem .875rem;color:#fff;font-size:.875rem;font-family:monospace;outline:none;transition:border-color .15s}
-input[type=password]:focus{border-color:rgba(99,102,241,.5)}
-.err{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);border-radius:8px;padding:.625rem .875rem;font-size:.8125rem;color:#f87171;margin-bottom:1rem}
-button{width:100%;padding:.75rem;background:#6366f1;border:none;border-radius:8px;color:#fff;font-size:.9375rem;font-weight:600;cursor:pointer;margin-top:1rem;transition:background .15s}
-button:hover{background:#5558e3}
-.hint{font-size:.75rem;color:#4b5563;margin-top:1rem;text-align:center;line-height:1.5}
+body{font-family:ui-rounded,'SN Pro','Inter',system-ui,-apple-system,'Segoe UI',sans-serif;background:var(--bg);background-image:radial-gradient(900px 320px at 78% -40px,color-mix(in srgb,var(--primary) 8%,transparent),transparent 70%);color:var(--on);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1rem}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:27px;box-shadow:var(--shadow);padding:2rem;width:100%;max-width:26rem}
+.logo{display:flex;align-items:center;justify-content:center;width:3rem;height:3rem;border-radius:1rem;background:color-mix(in srgb,var(--primary) 12%,transparent);color:var(--primary);margin-bottom:1.25rem}
+h1{font-size:1.5rem;font-weight:700;letter-spacing:-.01em;margin-bottom:.375rem}
+.sub{font-size:.875rem;color:var(--muted);margin-bottom:1.5rem;line-height:1.5}
+.app{background:var(--container);border-radius:1.25rem;padding:.875rem 1rem;margin-bottom:1.5rem}
+.app-name{font-size:.875rem;font-weight:600;overflow-wrap:anywhere}
+.app-desc{font-size:.75rem;color:var(--muted);margin-top:.25rem;line-height:1.5}
+label{display:block;font-size:.8125rem;font-weight:600;margin-bottom:.375rem}
+input[type=password]{width:100%;background:var(--container);border:1px solid var(--field);border-radius:14px;padding:.75rem 1rem;color:var(--on);font-size:.875rem;font-family:ui-monospace,Menlo,Consolas,monospace;outline:none;transition:border-color .15s}
+input[type=password]:focus-visible{border-color:var(--primary);outline:2px solid var(--primary);outline-offset:1px}
+.err{background:color-mix(in srgb,var(--error) 10%,transparent);border:1px solid color-mix(in srgb,var(--error) 25%,transparent);border-radius:1rem;padding:.75rem 1rem;font-size:.8125rem;color:var(--error);margin-bottom:1rem;line-height:1.5}
+button{width:100%;height:3rem;background:var(--primary);border:none;border-radius:999px;color:var(--on-primary);font-size:.875rem;font-weight:600;font-family:inherit;cursor:pointer;margin-top:1.25rem;box-shadow:0 1px 2px rgba(0,0,0,.08);transition:filter .15s,transform .12s}
+button:hover{filter:brightness(1.1)}
+button:active{transform:scale(.97)}
+button:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+.hint{font-size:.75rem;color:var(--muted);margin-top:1.25rem;text-align:center;line-height:1.6}
+@media (prefers-reduced-motion:reduce){button{transition:none}button:active{transform:none}}
 </style>
 </head>
 <body>
 <div class="card">
+  <div class="logo" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6v6c0 4.5 3.4 8.2 8 9 4.6-.8 8-4.5 8-9V6l-8-3Z"/><path d="m9 12 2 2 4-4"/></svg></div>
   <h1>Kotbo</h1>
   <p class="sub">Serveur MCP - autorisation d'accès</p>
   <div class="app">
@@ -739,8 +779,8 @@ button:hover{background:#5558e3}
 // ── Main handler ──────────────────────────────────────────────────────────
 
 export async function handleMCPRoutes(
-  req: IncomingMessage & { bodyText?: string },
-  res: ServerResponse,
+  req: McpReq,
+  res: McpRes,
   parts: string[],
   url: URL,
   client: Client
@@ -1041,7 +1081,10 @@ export async function handleMCPRoutes(
       return true;
     }
 
-    const ac = authCodes.get(code) ?? openAuthCode(code);
+    // Le code est un blob chiffré autoportant : le cache mémoire seul ne l'invalide pas. Une empreinte
+    // des codes déjà échangés (jusqu'à leur expiration) empêche une seconde présentation.
+    const codeHash = crypto.createHash('sha256').update(code).digest('hex');
+    const ac = consumedAuthCodes.has(codeHash) ? null : (authCodes.get(code) ?? openAuthCode(code));
     if (!ac || ac.expiresAt < Date.now()) {
       oauthError(req, res, 400, 'invalid_grant', 'Code invalide ou expiré');
       return true;
@@ -1068,6 +1111,8 @@ export async function handleMCPRoutes(
     }
 
     authCodes.delete(code); // single-use
+    consumedAuthCodes.set(codeHash, ac.expiresAt);
+    for (const [hash, expiresAt] of consumedAuthCodes) if (expiresAt < Date.now()) consumedAuthCodes.delete(hash);
     const tokenAudience = resource ?? ac.resource ?? base;
     const refreshToken = sealRefreshToken({
       clientId: ac.clientId,
@@ -1203,7 +1248,7 @@ export async function handleMCPRoutes(
       securitySchemes: directToken ? [{ type: 'noauth' }] : undefined,
     });
 
-    const transport = new StreamableHTTPServerTransport({
+    const transport = new WebStandardStreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
       enableJsonResponse: true,
     });
@@ -1259,4 +1304,37 @@ export async function handleMCPRoutes(
   }
 
   return false;
+}
+
+export function createMcpServerRouter(client: Client): Hono {
+  const router = new Hono();
+
+  const handleMcp = async (c: Context) => {
+    const url = new URL(c.req.url);
+    const headers: McpReq['headers'] = {};
+    c.req.raw.headers.forEach((value, key) => {
+      headers[key.toLowerCase()] = value;
+    });
+    const method = c.req.method;
+    const bodyText = method === 'GET' || method === 'HEAD' ? '' : await c.req.text().catch(() => '');
+    const req: McpReq = { method, url: url.pathname + url.search, headers, bodyText };
+
+    const res = new McpResponse();
+    try {
+      const handled = await handleMCPRoutes(req, res, splitPath(url.pathname), url, client);
+      if (!handled) json(res, 404, { error: 'Route introuvable' });
+      return res.toResponse();
+    } catch (err) {
+      logger.error('MCP', err);
+      const failed = new McpResponse();
+      json(failed, 500, { error: 'Erreur interne MCP' });
+      return failed.toResponse();
+    }
+  };
+
+  router.all('/api/mcp', handleMcp);
+  router.all('/api/mcp/*', handleMcp);
+  router.all('/api/mcp-direct/*', handleMcp);
+
+  return router;
 }

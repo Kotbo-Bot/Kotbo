@@ -5,6 +5,7 @@
   d'attention, note interne). La fiche complète et le dossier restent à un clic.
 -->
 <script lang="ts">
+  import MemberTag from '../MemberTag.svelte';
   import Papicon from '../Papicon.svelte';
   import Skeleton from '../Skeleton.svelte';
   import { Button } from '../ui';
@@ -88,8 +89,8 @@
   };
 
   const SIGNAL_CLASS = {
-    danger: 'bg-error/10 text-error',
-    warning: 'bg-warning/10 text-warning',
+    danger: 'bg-error/10 text-on-error-container',
+    warning: 'bg-warning/10 text-on-warning-container',
     info: 'bg-surface-container text-on-surface-variant',
   } as const;
 </script>
@@ -114,7 +115,10 @@
 
     <div class="tmp__body">
       <div>
-        <p class="text-base font-bold text-on-surface leading-tight truncate">{name}</p>
+        <div class="flex min-w-0 items-center gap-1.5">
+          <p class="text-base font-bold text-on-surface leading-tight truncate">{name}</p>
+          <MemberTag {userId} />
+        </div>
         <p class="text-body-sm text-on-surface-variant truncate">@{profile?.username ?? userId}{#if profile?.pronouns} · {profile.pronouns}{/if}</p>
       </div>
 

@@ -294,6 +294,13 @@
     return mode === 'WEBHOOK' ? m.channel_links_mode_webhook() : m.channel_links_mode_embed();
   }
 
+  // Courbe des messages envoyés, jour par jour, dans un repère 60×16.
+  function sparkPoints(daily: number[]) {
+    const max = Math.max(1, ...daily);
+    const step = 60 / Math.max(1, daily.length - 1);
+    return daily.map((v, i) => `${(i * step).toFixed(1)},${(15 - (v / max) * 14).toFixed(1)}`).join(' ');
+  }
+
   function groupTitle(group: any) {
     return group.name || m.channel_links_group_default_name({ count: group.members.length });
   }
@@ -386,6 +393,7 @@
                   <div class="flex flex-col gap-1.5 mb-3">
                     {#each group.members as member}
                       {@const warnings = memberWarnings(member)}
+                      {@const traffic = group.stats?.channels[`${member.guildId}:${member.channelId}`]}
                       <div class="flex items-center gap-2 min-w-0">
                         {#if member.guildIcon}
                           <img src={member.guildIcon} alt="" class="w-5 h-5 rounded shrink-0" />
@@ -399,6 +407,12 @@
                         </span>
                         <span class="text-xs font-medium text-on-surface">#{member.channelName}</span>
                         <span class="text-xs text-on-surface-variant/40" title={modeLabel(member.mode)}>{modeArrow(member.mode)}</span>
+                        {#if traffic}
+                          <span
+                            class="text-2xs tabular-nums text-on-surface-variant"
+                            title={m.channel_links_stats_member_tooltip(traffic)}
+                          >↑{traffic.sent} ↓{traffic.received}</span>
+                        {/if}
                         {#if !member.enabled}
                           <span class="text-2xs px-1.5 py-0.5 rounded-full bg-surface-container text-on-surface-variant">
                             {m.channel_links_member_paused()}
@@ -406,7 +420,7 @@
                         {/if}
                         {#if member.isLinkOnly}
                           <span
-                            class="text-2xs px-2 py-0.5 rounded-full bg-success/10 text-success border border-success/20"
+                            class="text-2xs px-2 py-0.5 rounded-full bg-success/10 text-on-success-container border border-success/20"
                             title={m.channel_links_badge_link_only_tooltip()}
                           >
                             {m.channel_links_badge_link_only()}
@@ -414,7 +428,7 @@
                         {/if}
                         {#if warnings.length > 0}
                           <span
-                            class="text-2xs px-2 py-0.5 rounded-full bg-warning/10 text-warning border border-warning/20"
+                            class="text-2xs px-2 py-0.5 rounded-full bg-warning/10 text-on-warning-container border border-warning/20"
                             title={warnings.join(' ')}
                           >
                             {m.channel_links_perm_badge()}
@@ -422,6 +436,20 @@
                         {/if}
                       </div>
                     {/each}
+                  </div>
+
+                  <div class="flex items-center gap-3 mb-3 text-xs text-on-surface-variant">
+                    {#if group.stats}
+                      <svg viewBox="0 0 60 16" class="w-16 h-4 shrink-0 text-primary" aria-hidden="true">
+                        <polyline points={sparkPoints(group.stats.daily)} fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
+                      </svg>
+                      <span>{m.channel_links_stats_summary(group.stats)}</span>
+                      {#if group.stats.failed > 0}
+                        <span class="text-warning">{m.channel_links_stats_failed({ count: group.stats.failed })}</span>
+                      {/if}
+                    {:else}
+                      <span>{m.channel_links_stats_empty()}</span>
+                    {/if}
                   </div>
 
                   <div class="flex flex-wrap gap-1.5">
@@ -469,7 +497,7 @@
             id="new-group-name"
             bind:value={newGroupName}
             placeholder={m.channel_links_group_name_ph()}
-            class="w-full px-3 py-2 rounded-lg bg-surface-container border border-outline-variant/30 text-on-surface text-sm outline-none"
+            class="w-full px-3 py-2 rounded-lg bg-surface-container border border-field-border text-on-surface text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
           />
         </div>
 
@@ -479,7 +507,7 @@
           <select
             id="new-source-channel-id"
             bind:value={newSourceChannelId}
-            class="w-full px-3 py-2 rounded-lg bg-surface-container border border-outline-variant/30 text-on-surface text-sm outline-none"
+            class="w-full px-3 py-2 rounded-lg bg-surface-container border border-field-border text-on-surface text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
             <option value="">{m.channel_links_select_channel_ph()}</option>
             {#each channels as ch}
@@ -530,10 +558,10 @@
 
                   {#if selected}
                     <div class="px-3 pb-3">
-                      <select
+                      <select aria-label={m.channel_links_target_channel({ server: guild.name })}
                         value={selected.channelId}
                         onchange={(e) => setTargetChannel(guild.id, (e.currentTarget as HTMLSelectElement).value)}
-                        class="w-full px-3 py-2 rounded-lg bg-surface-container border border-outline-variant/30 text-on-surface text-sm outline-none"
+                        class="w-full px-3 py-2 rounded-lg bg-surface-container border border-field-border text-on-surface text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
                       >
                         <option value="">{m.channel_links_select_channel_ph()}</option>
                         <option value={CREATE_CHANNEL}>{m.channel_links_create_channel_option()}</option>
@@ -556,7 +584,7 @@
             <select
               id="new-owner-mode"
               bind:value={newOwnerMode}
-              class="w-full px-3 py-2 rounded-lg bg-surface-container border border-outline-variant/30 text-on-surface text-sm outline-none"
+              class="w-full px-3 py-2 rounded-lg bg-surface-container border border-field-border text-on-surface text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
               <option value="BOTH">{m.channel_links_member_mode_both()}</option>
               <option value="SEND_ONLY">{m.channel_links_member_mode_send()}</option>
@@ -568,7 +596,7 @@
             <select
               id="new-relay-mode"
               bind:value={newRelayMode}
-              class="w-full px-3 py-2 rounded-lg bg-surface-container border border-outline-variant/30 text-on-surface text-sm outline-none"
+              class="w-full px-3 py-2 rounded-lg bg-surface-container border border-field-border text-on-surface text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
             >
               <option value="WEBHOOK">{m.channel_links_mode_webhook_mirror()}</option>
               <option value="EMBED">{m.channel_links_mode_embed()}</option>
@@ -651,7 +679,7 @@
               id="config-group-name"
               bind:value={configGroup.name}
               placeholder={m.channel_links_group_name_ph()}
-              class="w-full px-3 py-2 rounded-lg bg-surface-container border border-outline-variant/30 text-on-surface text-sm outline-none"
+              class="w-full px-3 py-2 rounded-lg bg-surface-container border border-field-border text-on-surface text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
             />
           </div>
 
@@ -675,20 +703,20 @@
                     <p class="text-xs text-on-surface-variant">#{member.channelName}</p>
                   </div>
 
-                  <select
+                  <select aria-label={m.channel_links_field_member_mode()}
                     value={member.mode}
                     onchange={(e) => handleMemberChange(member.id, { mode: (e.currentTarget as HTMLSelectElement).value })}
-                    class="px-2 py-1.5 rounded-lg bg-surface-container border border-outline-variant/30 text-on-surface text-xs outline-none"
+                    class="px-2 py-1.5 rounded-lg bg-surface-container border border-field-border text-on-surface text-xs outline-none focus-visible:ring-2 focus-visible:ring-primary"
                   >
                     <option value="BOTH">{m.channel_links_member_mode_both()}</option>
                     <option value="SEND_ONLY">{m.channel_links_member_mode_send()}</option>
                     <option value="RECEIVE_ONLY">{m.channel_links_member_mode_receive()}</option>
                   </select>
 
-                  <select
+                  <select aria-label={m.channel_links_field_relay_mode()}
                     value={member.relayMode}
                     onchange={(e) => handleMemberChange(member.id, { relayMode: (e.currentTarget as HTMLSelectElement).value })}
-                    class="px-2 py-1.5 rounded-lg bg-surface-container border border-outline-variant/30 text-on-surface text-xs outline-none"
+                    class="px-2 py-1.5 rounded-lg bg-surface-container border border-field-border text-on-surface text-xs outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     title={m.channel_links_field_relay_mode()}
                   >
                     <option value="WEBHOOK">{relayModeLabel('WEBHOOK')}</option>
@@ -729,20 +757,20 @@
             <div class="mt-3 flex flex-col gap-2 px-3 py-3 rounded-lg bg-surface-container/30 border border-outline-variant/10">
               <span class="text-sm font-medium text-on-surface">{m.channel_links_add_member_heading()}</span>
               <div class="grid grid-cols-2 gap-2">
-                <select
+                <select aria-label={m.channel_links_add_server()}
                   bind:value={addGuildId}
                   onchange={() => { addChannelId = ''; }}
-                  class="px-3 py-2 rounded-lg bg-surface-container border border-outline-variant/30 text-on-surface text-sm outline-none"
+                  class="px-3 py-2 rounded-lg bg-surface-container border border-field-border text-on-surface text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 >
                   <option value="">{m.channel_links_select_guild_ph()}</option>
                   {#each otherGuilds as guild}
                     <option value={guild.id}>{guild.name}</option>
                   {/each}
                 </select>
-                <select
+                <select aria-label={m.channel_links_add_channel()}
                   bind:value={addChannelId}
                   disabled={!addGuildId}
-                  class="px-3 py-2 rounded-lg bg-surface-container border border-outline-variant/30 text-on-surface text-sm outline-none disabled:opacity-50"
+                  class="px-3 py-2 rounded-lg bg-surface-container border border-field-border text-on-surface text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
                 >
                   <option value="">{m.channel_links_select_channel_ph()}</option>
                   {#each addGuildChannels as ch}
@@ -751,9 +779,9 @@
                 </select>
               </div>
               <div class="flex items-center gap-2">
-                <select
+                <select aria-label={m.channel_links_field_member_mode()}
                   bind:value={addMode}
-                  class="flex-1 px-3 py-2 rounded-lg bg-surface-container border border-outline-variant/30 text-on-surface text-sm outline-none"
+                  class="flex-1 px-3 py-2 rounded-lg bg-surface-container border border-field-border text-on-surface text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 >
                   <option value="BOTH">{m.channel_links_member_mode_both()}</option>
                   <option value="SEND_ONLY">{m.channel_links_member_mode_send()}</option>

@@ -1,8 +1,6 @@
 import { type Client } from 'discord.js';
 import cron from 'node-cron';
 import prisma from '../utils/db.js';
-import { runDailyAlgoForAllGuilds, runDailyAlgoSummariesForAllGuilds } from '../services/progression/dailyAlgoService.js';
-import { runDailyAlgoWeeklyClosuresForAllGuilds } from '../services/progression/dailyAlgoWeekService.js';
 import { scanGuildMembersForYoungAccounts, JOIN_TO_ACCOUNT_CREATION_PROXIMITY_MS } from '../services/moderation/dcDetectionService.js';
 import { processScheduledSanctions, checkMissingReports } from '../services/moderation/sanctionService.js';
 import { processMeetingNotifications } from '../services/staff/staffLeadershipService.js';
@@ -30,6 +28,11 @@ import { refreshPhishingFeeds } from '../services/moderation/phishingFeedService
 import { isModuleEnabled } from '../services/core/moduleGate.js';
 
 const runningJobs = new Set<string>();
+
+async function runTagHoldersSnapshot(client: Client): Promise<void> {
+  const { snapshotTagHolders } = await import('../services/analytics/serverTagAnalyticsService.js');
+  await snapshotTagHolders(client);
+}
 
 /** Rescan des deux auto-rôles du tag (Annonces et Shield) sur chaque serveur qui en a un. */
 async function resyncServerTagRoles(client: Client): Promise<void> {
@@ -188,20 +191,6 @@ export async function registerCrons(client: Client): Promise<void> {
       logger.debug('Cron', 'Vérification des événements planifiés...');
       const { checkScheduledEvents } = await import('../services/features/eventService.js');
       await checkScheduledEvents(client);
-    },
-    'daily-algo': async () => {
-      const now = new Date();
-      const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-      logger.debug('Cron', `Vérification du daily algo à ${currentTime}...`);
-      await runDailyAlgoForAllGuilds(client);
-    },
-    'daily-algo-summary': async () => {
-      logger.debug('Cron', 'Génération du bilan quotidien Daily Algo...');
-      await runDailyAlgoSummariesForAllGuilds(client);
-    },
-    'daily-algo-week': async () => {
-      logger.debug('Cron', 'Clôture de la semaine Daily Algo...');
-      await runDailyAlgoWeeklyClosuresForAllGuilds(client);
     },
     sanctions: async () => {
       logger.debug('Cron', 'Traitement des sanctions planifiées...');
@@ -439,6 +428,7 @@ export async function registerCrons(client: Client): Promise<void> {
       await pruneSiteAnalytics();
     },
     'server-tag-roles-resync': () => resyncServerTagRoles(client),
+    'server-tag-holders-snapshot': () => runTagHoldersSnapshot(client),
     'site-scheduled-publish': async () => {
       const { publishDuePages } = await import('../services/site/siteAdminService.js');
       await publishDuePages(client);
@@ -484,6 +474,10 @@ export async function registerCrons(client: Client): Promise<void> {
     },
     'ban-hygiene-scan': async () => {
       await runBanHygieneScan(client);
+    },
+    'boost-snapshots': async () => {
+      const { runBoostSnapshots } = await import('../services/analytics/boostService.js');
+      await runBoostSnapshots(client);
     },
     'warn-auto-archive': async () => {
       const { runWarnAutoArchive } = await import('../services/moderation/sanctionArchiveService.js');
@@ -555,28 +549,6 @@ export async function registerCrons(client: Client): Promise<void> {
       await reconcileAllMemberPresence(client);
     });
   }, 5 * 60_000).unref?.();
-
-  // 📊 Daily Algo: Toutes les minutes (vérification de l'heure configurée)
-  cron.schedule('* * * * *', async () => {
-    await runCronJob('daily-algo', async () => {
-      await runDailyAlgoForAllGuilds(client);
-    }, 3000);
-  });
-
-  // 📊 Daily Algo: Bilan à 23:59 UTC
-  cron.schedule('59 23 * * *', async () => {
-    await runCronJob('daily-algo-summary', async () => {
-      await runDailyAlgoSummariesForAllGuilds(client);
-    }, 2000);
-  }, { timezone: 'UTC' });
-
-  // 🏁 Daily Algo: Clôture de la semaine, le lundi à 00:05 UTC.
-  // Un peu après minuit pour laisser passer le bilan de 23:59 de la veille.
-  cron.schedule('5 0 * * 1', async () => {
-    await runCronJob('daily-algo-week', async () => {
-      await runDailyAlgoWeeklyClosuresForAllGuilds(client);
-    }, 2000);
-  }, { timezone: 'UTC' });
 
   // 🛡️ Sanctions: Toutes les minutes (expiration des mutes/bans)
   cron.schedule('* * * * *', async () => {
@@ -778,6 +750,11 @@ export async function registerCrons(client: Client): Promise<void> {
     await runCronJob('server-tag-roles-resync', () => resyncServerTagRoles(client), 2000);
   });
 
+  // 🏷️ Porteurs du tag : releve du soir (23:50) pour la courbe d'Analytics.
+  cron.schedule('50 23 * * *', async () => {
+    await runCronJob('server-tag-holders-snapshot', () => runTagHoldersSnapshot(client), 2000);
+  });
+
   // 🧭 Telemetrie du dashboard : purge au-dela de 180 jours (03:55).
   cron.schedule('55 3 * * *', async () => {
     await runCronJob('dashboard-telemetry-prune', async () => {
@@ -922,6 +899,14 @@ export async function registerCrons(client: Client): Promise<void> {
   cron.schedule('15 5 * * *', async () => {
     await runCronJob('ban-hygiene-scan', async () => {
       await runBanHygieneScan(client);
+    }, 3000);
+  });
+
+  // 💎 Boosts : rattrapage des boosters et point du jour, refait chaque heure pour survivre à un arrêt du bot
+  cron.schedule('17 * * * *', async () => {
+    await runCronJob('boost-snapshots', async () => {
+      const { runBoostSnapshots } = await import('../services/analytics/boostService.js');
+      await runBoostSnapshots(client);
     }, 3000);
   });
 
@@ -1157,8 +1142,9 @@ export async function registerCrons(client: Client): Promise<void> {
     }, 5000);
   }, { timezone: 'Europe/Paris' });
 
-  // 🏆 Leveling Seasons: Vérification quotidienne à 0h05
-  cron.schedule('5 0 * * *', async () => {
+  // Leveling Seasons : vérification toutes les heures, pour qu'une saison
+  // s'ouvre et se clôture à l'heure prévue plutôt qu'au lendemain.
+  cron.schedule('5 * * * *', async () => {
     await runCronJob('season-check', async () => {
       const { checkAndProgressSeasons } = await import('../services/progression/seasonService.js');
       await checkAndProgressSeasons(client);

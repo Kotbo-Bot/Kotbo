@@ -176,6 +176,7 @@
                   {roles}
                   {channels}
                   placeholder={field.placeholder}
+                  label={field.label}
                   optional={field.optional}
                   onChange={(value) => setValue(field.key, value)}
                 />
@@ -191,6 +192,7 @@
               kind={option.kind}
               value={(step as ActionStep).values[option.key]}
               {triggerType}
+              label={option.label}
               onChange={(value) => setValue(option.key, value)}
             />
           </div>
@@ -218,12 +220,12 @@
         <div class="flex flex-wrap items-center gap-2 text-sm text-on-surface">
           <Papicon icon="Clock" size={14} class="text-sky-700 dark:text-sky-300 shrink-0" />
           <span class="text-on-surface-variant/90">{m.wf_wait_prefix()}</span>
-          <input
+          <input aria-label={m.wf_wait_seconds()}
             type="number"
             min="1"
             value={(step as WaitStep).seconds}
             oninput={(event) => onChange({ ...(step as WaitStep), seconds: Math.max(1, Number(event.currentTarget.value)) })}
-            class="w-24 px-2.5 py-1 rounded-lg text-xs bg-surface-container-highest border border-outline-variant/25 text-on-surface focus:outline-none focus:border-primary/60"
+            class="w-24 px-2.5 py-1 rounded-lg text-xs bg-surface-container-highest border border-field-border text-on-surface focus:outline-none focus:border-primary/60"
           />
           <span class="text-on-surface-variant/90">{m.wf_wait_suffix()}</span>
         </div>
@@ -237,13 +239,13 @@
             min="1"
             value={cooldownDuration.amount}
             oninput={(event) => setCooldown({ seconds: toSeconds(Number(event.currentTarget.value), cooldownDuration.unit) })}
-            class="w-20 px-2.5 py-1 rounded-lg text-xs bg-surface-container-highest border border-outline-variant/25 text-on-surface focus:outline-none focus:border-primary/60"
+            class="w-20 px-2.5 py-1 rounded-lg text-xs bg-surface-container-highest border border-field-border text-on-surface focus:outline-none focus:border-primary/60"
             aria-label={m.wf_cooldown_amount()}
           />
           <select
             value={cooldownDuration.unit}
             onchange={(event) => setCooldown({ seconds: toSeconds(cooldownDuration.amount, event.currentTarget.value as DurationUnit) })}
-            class="px-2 py-1 rounded-lg text-xs bg-surface-container-highest border border-outline-variant/25 text-on-surface cursor-pointer focus:outline-none"
+            class="px-2 py-1 rounded-lg text-xs bg-surface-container-highest border border-field-border text-on-surface cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             aria-label={m.wf_cooldown_unit()}
           >
             {#each DURATION_UNITS as entry (entry.unit)}
@@ -257,7 +259,7 @@
               const scope = event.currentTarget.value;
               if (isCooldownScope(scope)) setCooldown({ scope });
             }}
-            class="px-2 py-1 rounded-lg text-xs bg-surface-container-highest border border-outline-variant/25 text-on-surface cursor-pointer focus:outline-none"
+            class="px-2 py-1 rounded-lg text-xs bg-surface-container-highest border border-field-border text-on-surface cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             aria-label={m.wf_cooldown_scope()}
           >
             {#each COOLDOWN_SCOPES as scope (scope)}
@@ -273,10 +275,10 @@
             <Papicon icon="GitBranch" size={14} class="text-warning shrink-0" />
             <span class="text-sm font-semibold text-on-surface">{m.wf_if()}</span>
             {#if (step as ConditionStep).tests.length > 1}
-              <select
+              <select aria-label={m.wf_match_mode()}
                 value={(step as ConditionStep).match}
                 onchange={(event) => onChange({ ...(step as ConditionStep), match: event.currentTarget.value as 'all' | 'any' })}
-                class="px-2 py-0.5 rounded-lg text-2xs bg-surface-container-highest border border-outline-variant/25 text-on-surface-variant cursor-pointer focus:outline-none"
+                class="px-2 py-0.5 rounded-lg text-2xs bg-surface-container-highest border border-field-border text-on-surface-variant cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               >
                 <option value="all">{m.wf_match_all()}</option>
                 <option value="any">{m.wf_match_any()}</option>
@@ -292,10 +294,10 @@
                   {#if piece.text}
                     <span class="text-on-surface-variant/90">{piece.text}</span>
                   {:else if piece.field === 'operator' && def.operators}
-                    <select
+                    <select aria-label={m.wf_operator()}
                       value={test.operator ?? def.defaultOperator}
                       onchange={(event) => updateTest(test.id, { operator: event.currentTarget.value })}
-                      class="px-2 py-1 rounded-lg text-xs bg-surface-container-highest border border-outline-variant/25 text-on-surface cursor-pointer focus:outline-none"
+                      class="px-2 py-1 rounded-lg text-xs bg-surface-container-highest border border-field-border text-on-surface cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     >
                       {#each def.operators as operator (operator.value)}
                         <option value={operator.value}>{operator.label}</option>
@@ -308,13 +310,14 @@
                       maxlength={MAX_VARIABLE_NAME_LENGTH}
                       placeholder={m.wf_variable_placeholder()}
                       oninput={(event) => updateTest(test.id, { name: event.currentTarget.value })}
-                      class="w-28 px-2.5 py-1 rounded-lg text-xs bg-surface-container-highest border border-outline-variant/25 text-on-surface focus:outline-none focus:border-primary/60"
+                      class="w-28 px-2.5 py-1 rounded-lg text-xs bg-surface-container-highest border border-field-border text-on-surface focus:outline-none focus:border-primary/60"
                       aria-label={m.wf_variable_name()}
                     />
                   {:else if piece.field === 'value' && def.valueKind}
                     <ValueField
                       kind={def.valueKind}
                       value={test.value}
+                      label={m.wf_test_value()}
                       {triggerType}
                       {roles}
                       {channels}
@@ -327,7 +330,7 @@
                   type="button"
                   onclick={() => updateTest(test.id, { negate: !test.negate })}
                   class="px-2 py-0.5 rounded-lg text-2xs font-medium border transition-colors {test.negate
-                    ? 'bg-error/15 border-error/30 text-error'
+                    ? 'bg-error/15 border-error/30 text-on-error-container'
                     : 'bg-surface-container-highest border-outline-variant/20 text-on-surface-variant hover:text-on-surface'}"
                   title={m.wf_invert_title()}
                 >{m.wf_invert()}</button>

@@ -1,19 +1,16 @@
-import { IncomingMessage, ServerResponse } from 'node:http';
+import { Hono } from 'hono';
 import crypto from 'node:crypto';
 import { Client, PermissionFlagsBits } from 'discord.js';
 import { logger } from '../../utils/logger.js';
 import { isGuildActivated } from '../../utils/activation.js';
 import {
-  json,
-  readJsonBody,
   checkRateLimit,
   rankCardPreviewRateLimiter,
-  verifyAuth,
   resolveAdminAccess,
   resolveDashboardAccess,
   hasDashboardAdminPermission,
   getDiscordClientId,
-  DashboardAccessLevel,
+  type DashboardAccessLevel,
 } from '../shared.js';
 import { getCurrentInstance, isWhiteLabelInstance } from '../../utils/instanceContext.js';
 import prisma from '../../utils/db.js';
@@ -23,8 +20,7 @@ import { readRankCardCustomization, saveRankCardCustomization } from '../../serv
 import { evaluateAchievements } from '../../services/progression/achievementService.js';
 import { getGuildLevelCurve, getLevelFromXp, renderRankCard } from '../../services/progression/levelingService.js';
 import { ensureMemberProfiles } from '../../services/progression/memberProfileSync.js';
-
-import { jsonFailure } from '../shared/failure.js';
+import { dashboardAuth, fail, readBody, send } from '../hono/dashboard/kit.js';
 // Repli de l'aperçu quand aucune progression réelle n'est disponible : la
 // personnalisation est globale, la progression dépend du serveur.
 const PREVIEW_LEVEL = 12;
@@ -287,77 +283,64 @@ export async function syncMutualMemberProfiles(
   }
 }
 
-export async function handleUserRoutes(
-  req: IncomingMessage,
-  res: ServerResponse,
-  parts: string[],
-  url: URL,
-  client: Client
-): Promise<boolean> {
-  const method = req.method;
+export function createUserRouter(client: Client) {
+  const router = new Hono();
 
-  if (parts[0] !== 'api' || parts[1] !== 'user') {
-    return false;
-  }
-
-  const user = await verifyAuth(req);
-  if (!user) {
-    json(res, 401, { error: 'Non authentifié' });
-    return true;
-  }
+  // Toutes les routes /api/user/* requièrent une session active.
+  router.use('/api/user/*', dashboardAuth);
 
   // GET /api/user/me
-  if (parts[2] === 'me' && method === 'GET') {
-    // Premier appel du dashboard apres la connexion : c'est la que le compte
-    // relie recoit sa fiche sur chaque serveur partage, qu'il y ait ecrit ou non.
+  router.get('/api/user/me', async (c) => {
+    const user = c.var.dashboardUser;
+    // Premier appel du dashboard après la connexion : c'est là que le compte
+    // relié reçoit sa fiche sur chaque serveur partagé, qu'il y ait écrit ou non.
     void syncMutualMemberProfiles(client, user.userId, user.discordToken);
     const isBotAdmin = await resolveAdminAccess(client, user.userId);
-    json(res, 200, { id: user.userId, username: user.username, avatar: user.avatar, isBotAdmin });
-    return true;
-  }
+    return send(c, { id: user.userId, username: user.username, avatar: user.avatar, isBotAdmin });
+  });
 
   // GET /api/user/rank-card - la préférence et l'état des succès : le catalogue
   // des fonds, décors et succès vient de `@kotbo/shared`, que le dashboard
   // compile déjà.
-  if (parts[2] === 'rank-card' && parts.length === 3 && method === 'GET') {
+  router.get('/api/user/rank-card', async (c) => {
+    const user = c.var.dashboardUser;
     try {
       // Dans cet ordre : l'évaluation enregistre les succès tout juste atteints,
       // la lecture de la préférence doit les voir pour ne pas les retirer.
       const achievements = await evaluateAchievements(user.userId);
       const customization = await readRankCardCustomization(user.userId);
-      json(res, 200, { customization, achievements });
+      return send(c, { customization, achievements });
     } catch (err) {
       logger.error('API', `Erreur de lecture de la carte de rang pour ${user.userId}:`, err);
-      jsonFailure(res, err, 'Une erreur interne est survenue', 'API');
+      return fail(c, err, 'Une erreur interne est survenue', 'API');
     }
-    return true;
-  }
+  });
 
   // PUT /api/user/rank-card
-  if (parts[2] === 'rank-card' && parts.length === 3 && method === 'PUT') {
+  router.put('/api/user/rank-card', async (c) => {
+    const user = c.var.dashboardUser;
     try {
-      const body = await readJsonBody(req);
+      const body = await readBody(c);
       const achievements = await evaluateAchievements(user.userId);
       const unlocked = new Set(achievements.unlocked.map((entry) => entry.id));
       const customization = await saveRankCardCustomization(user.userId, body, unlocked);
-      json(res, 200, { customization });
+      return send(c, { customization });
     } catch (err) {
       logger.error('API', `Erreur de sauvegarde de la carte de rang pour ${user.userId}:`, err);
-      jsonFailure(res, err, 'Une erreur interne est survenue', 'API');
+      return fail(c, err, 'Une erreur interne est survenue', 'API');
     }
-    return true;
-  }
+  });
 
   // POST /api/user/rank-card/preview - rendu réel, pour éviter de réimplémenter
   // le dessin de la carte côté dashboard.
-  if (parts[2] === 'rank-card' && parts[3] === 'preview' && parts.length === 4 && method === 'POST') {
+  router.post('/api/user/rank-card/preview', async (c) => {
+    const user = c.var.dashboardUser;
     if (!checkRateLimit(rankCardPreviewRateLimiter, user.userId, 120, 60 * 1000)) {
-      json(res, 429, { error: "Trop d'aperçus demandés. Patientez une minute avant de réessayer." });
-      return true;
+      return send(c, { error: "Trop d'aperçus demandés. Patientez une minute avant de réessayer." }, 429);
     }
 
     try {
-      const body = await readJsonBody(req);
+      const body = await readBody<{ guildId?: unknown; locale?: string }>(c);
       const achievements = await evaluateAchievements(user.userId);
       const customization = normalizeRankCardCustomization(body, new Set(achievements.unlocked.map((entry) => entry.id)));
       const progression = await resolvePreviewProgression(user.userId, body?.guildId);
@@ -380,46 +363,44 @@ export async function handleUserRoutes(
         progression?.curve,
       );
 
-      res.writeHead(200, {
+      return c.body(new Uint8Array(buffer), 200, {
         'Content-Type': 'image/png',
         'Cache-Control': 'no-store',
         'X-Rank-Card-Preview': progression ? 'real' : 'sample',
       });
-      res.end(buffer);
     } catch (err) {
       logger.error('API', `Erreur d'aperçu de la carte de rang pour ${user.userId}:`, err);
-      jsonFailure(res, err, 'Une erreur interne est survenue', 'API');
+      return fail(c, err, 'Une erreur interne est survenue', 'API');
     }
-    return true;
-  }
+  });
 
   // GET /api/user/servers
   //
   // La liste des serveurs *que la personne administre*, avec ou sans Kotbo -
-  // `/api/user/guilds` ne rend que ceux ou le bot est deja la, et c'est
-  // precisement l'inverse qu'il faut pour proposer de l'ajouter.
-  if (parts[2] === 'servers' && method === 'GET') {
+  // `/api/user/guilds` ne rend que ceux où le bot est déjà là, et c'est
+  // précisément l'inverse qu'il faut pour proposer de l'ajouter.
+  router.get('/api/user/servers', async (c) => {
+    const user = c.var.dashboardUser;
     try {
       if (!user.discordToken) {
         // Sans jeton OAuth, Discord ne nous dit rien des serveurs de la
         // personne : mieux vaut une liste vide qu'une liste fausse.
-        json(res, 200, { guilds: [], clientId: getDiscordClientId(), invitePermissions: BOT_INVITE_PERMISSIONS, oauthUnavailable: true });
-        return true;
+        return send(c, { guilds: [], clientId: getDiscordClientId(), invitePermissions: BOT_INVITE_PERMISSIONS, oauthUnavailable: true });
       }
 
-      const forceFresh = url.searchParams.get('refresh') === '1' || url.searchParams.get('refresh') === 'true';
+      const refreshParam = c.req.query('refresh');
+      const forceFresh = refreshParam === '1' || refreshParam === 'true';
       const oauthGuilds = await fetchOAuthGuilds(user.discordToken, forceFresh).catch((err) => {
         logger.warn('DashboardAPI', `Discord OAuth guild list unavailable: ${String(err)}`);
         return null;
       });
 
       if (!oauthGuilds) {
-        json(res, 200, { guilds: [], clientId: getDiscordClientId(), invitePermissions: BOT_INVITE_PERMISSIONS, oauthUnavailable: true });
-        return true;
+        return send(c, { guilds: [], clientId: getDiscordClientId(), invitePermissions: BOT_INVITE_PERMISSIONS, oauthUnavailable: true });
       }
 
-      // Sur une instance marque blanche, un serveur qui n'est pas rattache a
-      // l'instance n'a rien a faire dans la liste : l'y montrer proposerait
+      // Sur une instance marque blanche, un serveur qui n'est pas rattaché à
+      // l'instance n'a rien à faire dans la liste : l'y montrer proposerait
       // d'inviter un bot qui refuserait ensuite de servir ce serveur.
       let instanceGuildIds: Set<string> | null = null;
       if (isWhiteLabelInstance()) {
@@ -453,24 +434,24 @@ export async function handleUserRoutes(
             icon: guild.icon ?? null,
             owner: guild.owner ?? false,
             botPresent,
-            // Le bot peut etre sur le serveur sans que celui-ci soit active :
-            // l'ecran doit distinguer « a inviter » de « a activer ».
+            // Le bot peut être sur le serveur sans que celui-ci soit activé :
+            // l'écran doit distinguer « à inviter » de « à activer ».
             activated: botPresent ? isGuildActivated(guild.id) : false,
           };
         })
         .filter((guild): guild is NonNullable<typeof guild> => guild !== null)
         .sort((a, b) => Number(a.botPresent) - Number(b.botPresent) || a.name.localeCompare(b.name, 'fr'));
 
-      json(res, 200, { guilds: payload, clientId: getDiscordClientId(), invitePermissions: BOT_INVITE_PERMISSIONS, oauthUnavailable: false });
+      return send(c, { guilds: payload, clientId: getDiscordClientId(), invitePermissions: BOT_INVITE_PERMISSIONS, oauthUnavailable: false });
     } catch (err) {
       logger.error('API', 'Unexpected error in /api/user/servers:', err);
-      jsonFailure(res, err, 'Une erreur interne est survenue', 'API');
+      return fail(c, err, 'Une erreur interne est survenue', 'API');
     }
-    return true;
-  }
+  });
 
   // GET /api/user/guilds
-  if (parts[2] === 'guilds' && method === 'GET') {
+  router.get('/api/user/guilds', async (c) => {
+    const user = c.var.dashboardUser;
     try {
       // For white-label instances, only show guilds bound to this instance
       let instanceGuildIds: Set<string> | null = null;
@@ -483,7 +464,8 @@ export async function handleUserRoutes(
         instanceGuildIds = new Set(boundGuilds.map(g => g.id));
       }
 
-      const forceFresh = url.searchParams.get('refresh') === '1' || url.searchParams.get('refresh') === 'true';
+      const refreshParam = c.req.query('refresh');
+      const forceFresh = refreshParam === '1' || refreshParam === 'true';
       const [isGlobalAdmin, staffLinks, oauthGuilds] = await Promise.all([
         resolveAdminAccess(client, user.userId),
         prisma.staffServerLink.findMany({
@@ -561,11 +543,11 @@ export async function handleUserRoutes(
         }
       });
 
-      // Droits de facturation, resolus en une requete pour toute la liste : la
-      // page Facturation n est pas une page comme les autres, elle affiche un
-      // montant debite et une adresse. Elle est ouverte aux administrateurs, a
-      // celui qui paie (`billingOwnerId`, meme s il a perdu ses droits Discord)
-      // et au reste du staff seulement si le serveur l a decide.
+      // Droits de facturation, résolus en une requête pour toute la liste : la
+      // page Facturation n'est pas une page comme les autres, elle affiche un
+      // montant débité et une adresse. Elle est ouverte aux administrateurs, à
+      // celui qui paie (`billingOwnerId`, même s'il a perdu ses droits Discord)
+      // et au reste du staff seulement si le serveur l'a décidé.
       const resolvedIds = resolved.filter((entry) => entry !== null).map((entry) => entry!.botGuild.id);
       const billingRows = resolvedIds.length
         ? await prisma.guild.findMany({
@@ -596,13 +578,12 @@ export async function handleUserRoutes(
       }
 
       const payload = accessibleGuildsList.sort((a, b) => (a.name ?? '').localeCompare(b.name ?? '', 'fr'));
-      json(res, 200, { guilds: payload });
+      return send(c, { guilds: payload });
     } catch (err) {
       logger.error('API', 'Unexpected error in /api/user/guilds:', err);
-      jsonFailure(res, err, 'Une erreur interne est survenue', 'API');
+      return fail(c, err, 'Une erreur interne est survenue', 'API');
     }
-    return true;
-  }
+  });
 
-  return false;
+  return router;
 }

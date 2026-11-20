@@ -104,6 +104,39 @@ function candidaturesOf(person: DemoPerson): MemberCaseResponse['candidatures'] 
   return [];
 }
 
+function historyOf(person: DemoPerson): NonNullable<MemberCaseResponse['history']> {
+  const list: NonNullable<MemberCaseResponse['history']> = [];
+  if (person.username === 'arka') {
+    list.push(
+      { id: 'h-arka-1', field: 'username', oldValue: 'arka_old', newValue: 'arka', recordedAt: ago(45 * DAY) },
+      { id: 'h-arka-2', field: 'displayName', oldValue: 'Arka Dev', newValue: 'Arka', recordedAt: ago(30 * DAY) },
+      { id: 'h-arka-3', field: 'avatar', oldValue: 'https://cdn.discordapp.com/embed/avatars/0.png', newValue: 'https://cdn.discordapp.com/embed/avatars/1.png', recordedAt: ago(25 * DAY) },
+      { id: 'h-arka-4', field: 'bio', oldValue: 'Dev passionné', newValue: 'Dev TypeScript & bot Discord', recordedAt: ago(20 * DAY) },
+      { id: 'h-arka-5', field: 'tag', oldValue: 'DEV', newValue: 'KODA', recordedAt: ago(15 * DAY) },
+      { id: 'h-arka-6', field: 'pronouns', oldValue: 'il', newValue: 'il/lui', recordedAt: ago(10 * DAY) },
+    );
+  } else if (person.username === 'lena') {
+    list.push(
+      { id: 'h-lena-1', field: 'displayName', oldValue: 'Helena', newValue: 'Lena', recordedAt: ago(60 * DAY) },
+      { id: 'h-lena-2', field: 'avatar', oldValue: 'https://cdn.discordapp.com/embed/avatars/2.png', newValue: 'https://cdn.discordapp.com/embed/avatars/3.png', recordedAt: ago(35 * DAY) },
+      { id: 'h-lena-3', field: 'pronouns', oldValue: 'she/her', newValue: 'elle', recordedAt: ago(20 * DAY) },
+      { id: 'h-lena-4', field: 'bio', oldValue: null, newValue: 'Animatrice & modératrice', recordedAt: ago(12 * DAY) },
+    );
+  } else if (person.username === 'vantar') {
+    list.push(
+      { id: 'h-van-1', field: 'username', oldValue: 'shadow_vantar', newValue: 'vantar', recordedAt: ago(90 * DAY) },
+      { id: 'h-van-2', field: 'displayName', oldValue: 'Shadow', newValue: 'Vantar', recordedAt: ago(50 * DAY) },
+      { id: 'h-van-3', field: 'tag', oldValue: 'NONE', newValue: 'DEVH', recordedAt: ago(25 * DAY) },
+      { id: 'h-van-4', field: 'avatar', oldValue: 'https://cdn.discordapp.com/embed/avatars/4.png', newValue: 'https://cdn.discordapp.com/embed/avatars/5.png', recordedAt: ago(10 * DAY) },
+    );
+  } else {
+    list.push(
+      { id: `h-${person.id}-1`, field: 'displayName', oldValue: `${person.displayName} [Ancien]`, newValue: person.displayName, recordedAt: ago(40 * DAY) },
+    );
+  }
+  return list;
+}
+
 function reportsFor(sanctions: SanctionItem[]): SanctionReportItem[] {
   return sanctions
     .filter((s) => s.type !== 'WARN' || s.id.endsWith('501'))
@@ -191,6 +224,21 @@ export function registerMembersRoutes(): void {
       leftCount: 0,
       botCount: 1,
     };
+  });
+
+  // GET /api/dashboard/guilds/:id/members/identities?ids=
+  // Un membre sur trois porte le tag du serveur de démo, comme dans les stats.
+  route('GET', '/api/dashboard/guilds/:id/members/identities', ({ params, query }) => {
+    const ids = new Set((query.get('ids') ?? '').split(','));
+    const identities = Object.fromEntries(
+      MEMBERS.flatMap((p, index) => (ids.has(p.id) ? [[p.id, {
+        username: p.username,
+        displayName: p.displayName,
+        avatarUrl: null,
+        serverTag: index % 3 === 0 ? { guildId: params.id, tag: 'NOVA', badgeUrl: null } : null,
+      }]] : [])),
+    );
+    return { identities };
   });
 
   // GET /api/dashboard/guilds/:id/members/:userId
@@ -283,25 +331,74 @@ export function registerMembersRoutes(): void {
         breakdown: { WARN: suspected ? 2 : 0, KICK: 0, TIMEOUT: suspected ? 1 : 0, TEMP_BAN: 0, BAN: 0, SOFTBAN: 0, JAIL: 0 },
         recent: suspected
           ? [
-              { type: 'WARN', status: 'ACTIVE', durationSeconds: null, reason: 'Spam de liens', createdAt: ago(12 * DAY), guildId: '930000000000000011', guildName: 'Le Repaire' },
-              { type: 'TIMEOUT', status: 'RESOLVED', durationSeconds: 3600, reason: 'Pub en MP', createdAt: ago(30 * DAY), guildId: '930000000000000012', guildName: 'Pixel Café' },
-            ]
+            { type: 'WARN', status: 'ACTIVE', durationSeconds: null, reason: 'Spam de liens', createdAt: ago(12 * DAY), guildId: '930000000000000011', guildName: 'Le Repaire' },
+            { type: 'TIMEOUT', status: 'RESOLVED', durationSeconds: 3600, reason: 'Pub en MP', createdAt: ago(30 * DAY), guildId: '930000000000000012', guildName: 'Pixel Café' },
+          ]
           : [],
       },
       crossServerLinks: { enabled: true, serverCount: 0, suggestions: [] },
+      serverTag: {
+        guildId: '930000000000000011',
+        tag: person.username === 'vantar' ? 'DEVH' : 'KODA',
+        badge: null,
+        badgeUrl: null,
+        serverName: person.username === 'vantar' ? 'DevHub Community' : 'Koda',
+        serverIconUrl: null,
+        isOwnGuild: false,
+        updatedAt: ago(6 * HOUR),
+      },
       verifications: person.username === 'tom'
         ? {
-            entries: [{ id: 'verif-tom', status: 'PENDING', level: 'MEDIUM', requestedAt: ago(2 * HOUR), verifiedAt: null, expiresAt: ago(-22 * HOUR) }],
-            total: 1,
-            lastRequestedAt: ago(2 * HOUR),
-            lastVerifiedAt: null,
-            hasPending: true,
-            cooldownUntil: null,
-          }
+          entries: [{ id: 'verif-tom', status: 'PENDING', level: 'MEDIUM', requestedAt: ago(2 * HOUR), verifiedAt: null, expiresAt: ago(-22 * HOUR) }],
+          total: 1,
+          lastRequestedAt: ago(2 * HOUR),
+          lastVerifiedAt: null,
+          hasPending: true,
+          cooldownUntil: null,
+        }
         : { entries: [], total: 0, lastRequestedAt: null, lastVerifiedAt: null, hasPending: false, cooldownUntil: null },
+      history: historyOf(person),
     };
 
     return response;
+  });
+
+  // GET /api/dashboard/guilds/:id/members/:userId/summary
+  route('GET', '/api/dashboard/guilds/:id/members/:userId/summary', ({ params }) => {
+    const person = MEMBERS.find((p) => p.id === params.userId) || MEMBERS[0];
+    const sanctionCount = demoDb.get<SanctionItem[]>('sanctions', sanctionsSeed).filter((s) => s.targetUserId === person.id).length;
+    return {
+      summary: {
+        level: { level: Math.max(1, Math.round(person.messages / 120)), xp: person.messages * 18, rank: 1 + (Number(person.id.slice(-2)) % 20) },
+        reputation: { received: Math.round(person.messages / 90), given: Math.round(person.messages / 140) },
+        economy: { balance: person.messages * 4, rank: 1 + (Number(person.id.slice(-2)) % 25) },
+        invites: { total: 0, stillHere: 0, leftWithinWeek: 0 },
+        support: { tickets: 0, openTickets: 0, averageRating: null, ratings: 0 },
+        community: { suggestions: 0, forms: 0, giveawayWins: 0 },
+        joins: 1,
+        signals: sanctionCount > 0 ? [{ key: 'sanctions', label: `${sanctionCount} sanction(s)`, tone: 'warning', count: sanctionCount }] : [],
+      },
+      insights: null,
+      climate: null,
+    };
+  });
+
+  // GET /api/dashboard/guilds/:id/members/:userId/timeline
+  route('GET', '/api/dashboard/guilds/:id/members/:userId/timeline', ({ params }) => {
+    const person = MEMBERS.find((p) => p.id === params.userId) || MEMBERS[0];
+    const logs = memberLogs(person, demoDb.get<SanctionItem[]>('sanctions', sanctionsSeed).filter((s) => s.targetUserId === person.id));
+    const items = logs.map((l) => ({
+      id: l.id,
+      type: l.action,
+      category: 'membership' as const,
+      at: l.dateIso,
+      title: l.action,
+      description: l.details,
+      actor: { id: null, name: l.user },
+      link: null,
+      tone: 'neutral' as const,
+    }));
+    return { items, nextBefore: null };
   });
 
   // POST /api/dashboard/guilds/:id/members/:userId/actions

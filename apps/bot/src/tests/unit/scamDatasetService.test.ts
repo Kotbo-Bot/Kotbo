@@ -34,6 +34,10 @@ function fakeTable() {
       rows.push(row);
       return row;
     },
+    createMany: async ({ data }: Row) => {
+      for (const item of data) rows.push({ id: String(nextId++), hits: 1, ...item });
+      return { count: data.length };
+    },
     update: async ({ where, data }: Row) => {
       const row = rows.find((r) => r.id === where.id)!;
       if (data.hits?.increment) row.hits += data.hits.increment;
@@ -42,10 +46,14 @@ function fakeTable() {
   };
 }
 
+/** Lignes que rend la recherche SQL d'images voisines (dHash proche). */
+let nearRows: Row[] = [];
+
 const prismaMock = {
   scamDomain: fakeTable(),
   scamTextSample: fakeTable(),
   scamImageHash: fakeTable(),
+  $queryRaw: async () => nearRows,
 };
 const silentLogger = { info: () => {}, warn: () => {}, error: () => {}, success: () => {}, debug: () => {} };
 
@@ -64,7 +72,10 @@ const {
   findKnownScamText,
   promoteImageIfWidespread,
   recordScamSignals,
+  seedVisionCatalog,
 } = await import('../../services/moderation/scamDatasetService.js');
+const { compareFingerprints, parseFingerprint } = await import('../../services/moderation/imageForensics.js');
+const { default: visionSeed } = await import('../../data/visionSeed.json');
 
 const FAKE_GIVEAWAY =
   'MrBeast is giving away $3,500 to everyone who registers on his crypto casino. Go to sedowin.com and enter promo code TAKE, hurry limited time';
@@ -73,6 +84,7 @@ beforeEach(() => {
   prismaMock.scamDomain.rows.length = 0;
   prismaMock.scamTextSample.rows.length = 0;
   prismaMock.scamImageHash.rows.length = 0;
+  nearRows = [];
   clearScamDatasetCaches();
 });
 
@@ -146,6 +158,48 @@ describe('promotion en global', () => {
     }
     await promoteImageIfWidespread('abc', '0f0f', 'scam.png');
     expect(prismaMock.scamImageHash.rows.filter((r) => r.guildId === null)).toHaveLength(1);
+  });
+
+  test('une image rediffusée sous des fichiers différents est promue par ressemblance', async () => {
+    // La même capture, repostée sur trois serveurs : jamais le même SHA-256.
+    const fingerprint = visionSeed[0].f;
+    const other = visionSeed.find((e) => compareFingerprints(parseFingerprint(e.f)!, parseFingerprint(fingerprint)!).verdict === null)!.f;
+    const phash = '35757e7c73389f2b';
+    nearRows = [
+      { guildId: 'g1', fingerprint },
+      { guildId: 'g2', fingerprint },
+      // Voisine par le dHash seulement : une autre image, elle ne compte pas.
+      { guildId: 'g3', fingerprint: other },
+    ];
+    await promoteImageIfWidespread('sha-g4', phash, 'scam.png', fingerprint);
+    expect(prismaMock.scamImageHash.rows.filter((r) => r.guildId === null)).toHaveLength(0);
+
+    nearRows[2] = { guildId: 'g3', fingerprint };
+    await promoteImageIfWidespread('sha-g4', phash, 'scam.png', fingerprint);
+    expect(prismaMock.scamImageHash.rows.filter((r) => r.guildId === null)).toHaveLength(1);
+  });
+});
+
+describe("catalogue d'amorce", () => {
+  test('ajoute les empreintes absentes, sans doublon au second passage', async () => {
+    const entries = visionSeed.slice(0, 3);
+    await prismaMock.scamImageHash.create({ data: { guildId: null, hash: entries[0].h } });
+
+    expect(await seedVisionCatalog(entries)).toBe(2);
+    expect(await seedVisionCatalog(entries)).toBe(0);
+    const globals = prismaMock.scamImageHash.rows.filter((r) => r.guildId === null);
+    expect(globals).toHaveLength(3);
+    expect(globals[2]).toMatchObject({ hash: entries[2].h, fingerprint: entries[2].f, source: 'SEED' });
+  });
+
+  test("chaque empreinte livrée est lisible et n'est pas une image unie", () => {
+    expect(visionSeed.length).toBeGreaterThan(300);
+    for (const entry of visionSeed) {
+      expect(entry.h).toMatch(/^[0-9a-f]{64}$/);
+      const fp = parseFingerprint(entry.f);
+      expect(fp?.flat).toBe(false);
+      expect(fp?.signature).toBeDefined();
+    }
   });
 });
 

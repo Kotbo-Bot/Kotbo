@@ -6,6 +6,7 @@
   les plus actifs. Période seule.
 -->
 <script lang="ts">
+  import UserDisplay from '../UserDisplay.svelte';
   import { untrack } from 'svelte';
   import { Button, Callout, SectionCard } from '../ui';
   import ActivityChartCard, { type ChartMetric } from './ActivityChartCard.svelte';
@@ -13,13 +14,13 @@
   import TopList from './TopList.svelte';
   import BarList from './BarList.svelte';
   import AnalyticsSkeleton from './AnalyticsSkeleton.svelte';
+  import TagJoinsCard from './TagJoinsCard.svelte';
   import {
     fetchActivityRankings,
     fetchMemberOverview,
     rescanMemberStats,
     type MemberOverview,
   } from '../../api';
-  import { memberAvatarSrc } from '../../discordMedia';
   import { toast } from '../../stores/toast.svelte';
   import { m } from '../../i18n';
   import { analyticsLoader } from './analyticsLoader.svelte';
@@ -118,11 +119,14 @@
         prevDaily: s.map((d) => d.prevPeakOnline),
       },
     ];
-    if (legacy?.clanTag && tagByDay.size > 0) {
-      const tagged = s.map((d) => tagByDay.get(d.dateKey) ?? 0);
+    const measured = data.tag !== null;
+    if (legacy?.clanTag && (measured || tagByDay.size > 0)) {
+      // Relevés du soir quand ils existent, sinon reconstitution depuis les dates d'arrivée.
+      const tagged = s.map((d) => (measured ? d.tagHolders ?? 0 : tagByDay.get(d.dateKey) ?? 0));
       list.push({
         id: 'tag',
-        label: m.anx_mem_tagged({ tag: legacy.clanTag }),
+        label: m.mcm_server_tag(),
+        tag: { text: legacy.clanTag, badgeUrl: legacy.clanTagBadgeUrl },
         color: SERIES[4]!,
         format: fmtNumber,
         value: fmtNumber(legacy.clanTaggedMembersCount ?? tagged[tagged.length - 1] ?? 0),
@@ -217,6 +221,10 @@
       forecastAllowed={false}
     />
 
+    {#if legacy?.clanTag}
+      <TagJoinsCard tag={data.tag} />
+    {/if}
+
     <div class="mem-grid">
       <SectionCard title={m.anx_mem_sources_title()} description={m.anx_mem_sources_desc({ count: fmtNumber(data.sources.tracked) })}>
         {#if kindItems.length === 0}
@@ -292,8 +300,7 @@
               <li>
                 <button type="button" disabled={!onOpenMember} class="inviter" onclick={() => onOpenMember?.(inv.userId, inv.name ?? '')}>
                   <span class="inviter__rank">{i + 1}</span>
-                  <img class="inviter__avatar" src={memberAvatarSrc(inv.avatarUrl, inv.name, inv.userId)} alt="" width="24" height="24" loading="lazy" />
-                  <span class="inviter__name">{inv.name ?? m.an_member_fallback()}</span>
+                  <UserDisplay userId={inv.userId} name={inv.name} avatarUrl={inv.avatarUrl} size="sm" class="min-w-0 flex-1" />
                   <span class="inviter__meta" title={m.anx_mem_retention()}>{inv.retention === null ? '' : m.anx_mem_still_here({ pct: fmtPct(inv.retention, 0) })}</span>
                   <span class="inviter__value">{fmtNumber(inv.joined)}</span>
                   {#if filters.compare}<span class="inviter__delta">{fmtDelta(relativeDelta(inv.joined, inv.previous), 'pct')}</span>{/if}
@@ -449,22 +456,7 @@
     color: var(--color-on-surface-variant);
   }
 
-  .inviter__avatar {
-    width: 1.5rem;
-    height: 1.5rem;
-    border-radius: 999px;
-    object-fit: cover;
-  }
 
-  .inviter__name {
-    flex: 1;
-    min-width: 0;
-    font-size: 0.875rem;
-    color: var(--color-on-surface);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
 
   .inviter__meta {
     flex-shrink: 0;

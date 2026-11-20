@@ -1,235 +1,237 @@
+import type { Client } from 'discord.js';
+import { Hono } from 'hono';
 /** Routes dashboard du module `regulation`. */
 import { publishOrUpdateRegulationMessage, renumberRegulationArticles } from '../../../../services/staff/regulationService.js';
 import prisma from '../../../../utils/db.js';
 import { logger } from '../../../../utils/logger.js';
-import { getGuildName, json, pushAudit, readJsonBody } from '../../../shared.js';
-import { type ModuleRouteContext } from './_shared.js';
+import { getGuildName, pushAudit } from '../../../shared.js';
 
-import { jsonFailure } from '../../../shared/failure.js';
+import { auditUserOf, fail, guildRoute, readBody, send } from '../../../hono/dashboard/kit.js';
 import { publicErrorMessage } from '../../../../utils/publicError.js';
-export async function handleRegulationRoutes(ctx: ModuleRouteContext): Promise<boolean> {
-  const { req, res, parts, client, guildId, method, auditUser, moduleKey } = ctx;
+export function createRegulationRouter(client: Client) {
+  const router = new Hono();
+  const base = '/api/dashboard/guilds/:guildId';
+  const gate = guildRoute(client);
 
-  // Regulation routes
-  if (moduleKey === 'regulation') {
-    // POST /api/dashboard/guilds/:guildId/regulation/articles
-    if (parts.length === 6 && parts[5] === 'articles' && method === 'POST') {
-      try {
-        const body = await readJsonBody<{
-          title?: string;
-          description?: string;
-          emoji?: string | null;
-          sortOrder?: number | string | null;
-          enabled?: boolean;
-        }>(req);
 
-        const title = body?.title?.trim() ?? '';
-        const description = body?.description?.trim() ?? '';
-        const emoji = body?.emoji?.trim() ?? null;
-        const providedSortOrder = body?.sortOrder !== undefined ? Number(body.sortOrder) : null;
-        const highestSortOrder = await prisma.guildRegulationArticle.findFirst({
-          where: { guildId },
-          orderBy: { sortOrder: 'desc' },
-          select: { sortOrder: true },
-        });
-        const sortOrder = Number.isFinite(providedSortOrder)
-          ? (providedSortOrder as number)
-          : (highestSortOrder?.sortOrder ?? -1) + 1;
+  router.post(`${base}/regulation/articles`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const auditUser = auditUserOf(c);
+    try {
+      const body = await readBody<{
+        title?: string;
+        description?: string;
+        emoji?: string | null;
+        sortOrder?: number | string | null;
+        enabled?: boolean;
+      }>(c);
 
-        if (!title || !description) {
-          json(res, 400, { error: 'Le titre et la description sont obligatoires.' });
-          return true;
-        }
+      const title = body?.title?.trim() ?? '';
+      const description = body?.description?.trim() ?? '';
+      const emoji = body?.emoji?.trim() ?? null;
+      const providedSortOrder = body?.sortOrder !== undefined ? Number(body.sortOrder) : null;
+      const highestSortOrder = await prisma.guildRegulationArticle.findFirst({
+        where: { guildId },
+        orderBy: { sortOrder: 'desc' },
+        select: { sortOrder: true },
+      });
+      const sortOrder = Number.isFinite(providedSortOrder)
+        ? (providedSortOrder as number)
+        : (highestSortOrder?.sortOrder ?? -1) + 1;
 
-        const article = await prisma.guildRegulationArticle.create({
-          data: {
-            guildId,
-            title,
-            description,
-            emoji: emoji || null,
-            sortOrder,
-            enabled: body?.enabled ?? true,
-          },
-        });
-
-        await renumberRegulationArticles(guildId);
-
-        await pushAudit(guildId, {
-          user: auditUser,
-          action: 'Création article règlement',
-          context: getGuildName(client, guildId),
-          module: 'Règlement',
-          eventType: 'Manuel',
-          details: `Article "${article.title}" ajouté au règlement.`,
-          channelId: null
-        });
-
-        json(res, 201, { ok: true, articleId: article.id });
-      } catch (err) {
-        logger.error('RegulationAPI', 'Error creating regulation article:', err);
-        jsonFailure(res, err, "Erreur lors de la création de l'article", 'RegulationAPI');
+      if (!title || !description) {
+        return send(c, { error: 'Le titre et la description sont obligatoires.' }, 400);
       }
-      return true;
+
+      const article = await prisma.guildRegulationArticle.create({
+        data: {
+          guildId,
+          title,
+          description,
+          emoji: emoji || null,
+          sortOrder,
+          enabled: body?.enabled ?? true,
+        },
+      });
+
+      await renumberRegulationArticles(guildId);
+
+      await pushAudit(guildId, {
+        user: auditUser,
+        action: 'Création article règlement',
+        context: getGuildName(client, guildId),
+        module: 'Règlement',
+        eventType: 'Manuel',
+        details: `Article "${article.title}" ajouté au règlement.`,
+        channelId: null
+      });
+
+      return send(c, { ok: true, articleId: article.id }, 201);
+    } catch (err) {
+      logger.error('RegulationAPI', 'Error creating regulation article:', err);
+      return fail(c, err, "Erreur lors de la création de l'article", 'RegulationAPI');
     }
+  });
 
-    // PATCH /api/dashboard/guilds/:guildId/regulation/articles/reorder
-    if (parts.length === 7 && parts[5] === 'articles' && parts[6] === 'reorder' && method === 'PATCH') {
-      try {
-        const body = await readJsonBody<{ articleIds?: unknown }>(req);
-        const requestedIds = Array.isArray(body?.articleIds)
-          ? body.articleIds.filter((entry): entry is string => typeof entry === 'string' && entry.length > 0)
-          : [];
+  router.patch(`${base}/regulation/articles/reorder`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const auditUser = auditUserOf(c);
+    try {
+      const body = await readBody<{ articleIds?: unknown }>(c);
+      const requestedIds = Array.isArray(body?.articleIds)
+        ? body.articleIds.filter((entry): entry is string => typeof entry === 'string' && entry.length > 0)
+        : [];
 
-        if (requestedIds.length === 0) {
-          json(res, 400, { error: 'La liste des articles à réordonner est invalide.' });
-          return true;
-        }
-
-        const orderedIds = await renumberRegulationArticles(guildId, requestedIds);
-
-        await pushAudit(guildId, {
-          user: auditUser,
-          action: 'Réordonnancement articles règlement',
-          context: getGuildName(client, guildId),
-          module: 'Règlement',
-          eventType: 'Manuel',
-          details: `${orderedIds.length} article(s) réorganisé(s).`,
-          channelId: null
-        });
-
-        json(res, 200, { ok: true });
-      } catch (err) {
-        logger.error('RegulationAPI', 'Error reordering articles:', err);
-        jsonFailure(res, err, 'Erreur lors du réordonnancement des articles', 'RegulationAPI');
+      if (requestedIds.length === 0) {
+        return send(c, { error: 'La liste des articles à réordonner est invalide.' }, 400);
       }
-      return true;
+
+      const orderedIds = await renumberRegulationArticles(guildId, requestedIds);
+
+      await pushAudit(guildId, {
+        user: auditUser,
+        action: 'Réordonnancement articles règlement',
+        context: getGuildName(client, guildId),
+        module: 'Règlement',
+        eventType: 'Manuel',
+        details: `${orderedIds.length} article(s) réorganisé(s).`,
+        channelId: null
+      });
+
+      return send(c, { ok: true });
+    } catch (err) {
+      logger.error('RegulationAPI', 'Error reordering articles:', err);
+      return fail(c, err, 'Erreur lors du réordonnancement des articles', 'RegulationAPI');
     }
+  });
 
-    // PATCH /api/dashboard/guilds/:guildId/regulation/articles/:articleId
-    if (parts.length === 7 && parts[5] === 'articles' && method === 'PATCH') {
-      const articleId = parts[6];
-      try {
-        const existingArticle = await prisma.guildRegulationArticle.findFirst({
-          where: { id: articleId, guildId },
-        });
+  router.patch(`${base}/regulation/articles/:articleId`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const auditUser = auditUserOf(c);
+    const articleId = c.req.param('articleId');
+    try {
+      const existingArticle = await prisma.guildRegulationArticle.findFirst({
+        where: { id: articleId, guildId },
+      });
 
-        if (!existingArticle) {
-          json(res, 404, { error: 'Article de règlement introuvable.' });
-          return true;
-        }
-
-        const body = await readJsonBody<{
-          title?: string;
-          description?: string;
-          emoji?: string | null;
-          sortOrder?: number | string | null;
-          enabled?: boolean;
-        }>(req);
-
-        const title = typeof body?.title === 'string' ? body.title.trim() : existingArticle.title;
-        const description = typeof body?.description === 'string' ? body.description.trim() : existingArticle.description;
-        const emoji = typeof body?.emoji === 'string' ? body.emoji.trim() : existingArticle.emoji;
-        const sortOrderValue = body?.sortOrder !== undefined ? Number(body.sortOrder) : existingArticle.sortOrder;
-
-        if (!title || !description) {
-          json(res, 400, { error: 'Le titre et la description sont obligatoires.' });
-          return true;
-        }
-
-        const article = await prisma.guildRegulationArticle.update({
-          where: { id: existingArticle.id },
-          data: {
-            title,
-            description,
-            emoji: emoji || null,
-            sortOrder: Number.isFinite(sortOrderValue) ? sortOrderValue : existingArticle.sortOrder,
-            enabled: typeof body?.enabled === 'boolean' ? body.enabled : existingArticle.enabled,
-          },
-        });
-
-        await pushAudit(guildId, {
-          user: auditUser,
-          action: 'Modification article règlement',
-          context: getGuildName(client, guildId),
-          module: 'Règlement',
-          eventType: 'Manuel',
-          details: `Article "${article.title}" mis à jour.`,
-          channelId: null
-        });
-
-        json(res, 200, { ok: true });
-      } catch (err) {
-        logger.error('RegulationAPI', 'Error patching article:', err);
-        jsonFailure(res, err, "Erreur lors de la modification de l'article", 'RegulationAPI');
+      if (!existingArticle) {
+        return send(c, { error: 'Article de règlement introuvable.' }, 404);
       }
-      return true;
-    }
 
-    // DELETE /api/dashboard/guilds/:guildId/regulation/articles/:articleId
-    if (parts.length === 7 && parts[5] === 'articles' && method === 'DELETE') {
-      const articleId = parts[6];
-      try {
-        const article = await prisma.guildRegulationArticle.findFirst({ where: { id: articleId, guildId } });
+      const body = await readBody<{
+        title?: string;
+        description?: string;
+        emoji?: string | null;
+        sortOrder?: number | string | null;
+        enabled?: boolean;
+      }>(c);
 
-        if (!article) {
-          json(res, 404, { error: 'Article de règlement introuvable.' });
-          return true;
-        }
+      const title = typeof body?.title === 'string' ? body.title.trim() : existingArticle.title;
+      const description = typeof body?.description === 'string' ? body.description.trim() : existingArticle.description;
+      const emoji = typeof body?.emoji === 'string' ? body.emoji.trim() : existingArticle.emoji;
+      const sortOrderValue = body?.sortOrder !== undefined ? Number(body.sortOrder) : existingArticle.sortOrder;
 
-        await prisma.guildRegulationArticle.delete({ where: { id: article.id } });
-
-        await renumberRegulationArticles(guildId);
-
-        await pushAudit(guildId, {
-          user: auditUser,
-          action: 'Suppression article règlement',
-          context: getGuildName(client, guildId),
-          module: 'Règlement',
-          eventType: 'Manuel',
-          details: `Article "${article.title}" supprimé du règlement.`,
-          channelId: null
-        });
-
-        json(res, 200, { ok: true });
-      } catch (err) {
-        logger.error('RegulationAPI', 'Error deleting article:', err);
-        jsonFailure(res, err, "Erreur lors de la suppression de l'article", 'RegulationAPI');
+      if (!title || !description) {
+        return send(c, { error: 'Le titre et la description sont obligatoires.' }, 400);
       }
-      return true;
+
+      const article = await prisma.guildRegulationArticle.update({
+        where: { id: existingArticle.id },
+        data: {
+          title,
+          description,
+          emoji: emoji || null,
+          sortOrder: Number.isFinite(sortOrderValue) ? sortOrderValue : existingArticle.sortOrder,
+          enabled: typeof body?.enabled === 'boolean' ? body.enabled : existingArticle.enabled,
+        },
+      });
+
+      await pushAudit(guildId, {
+        user: auditUser,
+        action: 'Modification article règlement',
+        context: getGuildName(client, guildId),
+        module: 'Règlement',
+        eventType: 'Manuel',
+        details: `Article "${article.title}" mis à jour.`,
+        channelId: null
+      });
+
+      return send(c, { ok: true });
+    } catch (err) {
+      logger.error('RegulationAPI', 'Error patching article:', err);
+      return fail(c, err, "Erreur lors de la modification de l'article", 'RegulationAPI');
     }
+  });
 
-    // POST /api/dashboard/guilds/:guildId/regulation/publish
-    if (parts.length === 6 && parts[5] === 'publish' && method === 'POST') {
-      try {
-        const result = await publishOrUpdateRegulationMessage(client, guildId);
+  router.delete(`${base}/regulation/articles/:articleId`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const auditUser = auditUserOf(c);
+    const articleId = c.req.param('articleId');
+    try {
+      const article = await prisma.guildRegulationArticle.findFirst({ where: { id: articleId, guildId } });
 
-        await pushAudit(guildId, {
-          user: auditUser,
-          action: result.mode === 'updated' ? 'Actualisation règlement' : 'Publication règlement',
-          context: getGuildName(client, guildId),
-          module: 'Règlement',
-          eventType: 'Manuel',
-          details: result.mode === 'updated'
-              ? `Règlement mis à jour dans le salon de publication (${result.messageIds.length} message(s)).`
-              : `Règlement publié dans le salon de publication (${result.messageIds.length} message(s)).`,
-          channelId: null
-        });
-
-        json(res, 200, {
-          ok: true,
-          mode: result.mode,
-          messageId: result.messageId,
-          messageIds: result.messageIds,
-        });
-      } catch (error) {
-        logger.error('RegulationAPI', `Erreur lors de la publication du règlement pour la guilde ${guildId}:`, error);
-        json(res, 400, {
-          error: publicErrorMessage(error, 'Impossible de publier le règlement.'),
-        });
+      if (!article) {
+        return send(c, { error: 'Article de règlement introuvable.' }, 404);
       }
-      return true;
-    }
-  }
 
-  return false;
+      await prisma.guildRegulationArticle.delete({ where: { id: article.id } });
+
+      await renumberRegulationArticles(guildId);
+
+      await pushAudit(guildId, {
+        user: auditUser,
+        action: 'Suppression article règlement',
+        context: getGuildName(client, guildId),
+        module: 'Règlement',
+        eventType: 'Manuel',
+        details: `Article "${article.title}" supprimé du règlement.`,
+        channelId: null
+      });
+
+      return send(c, { ok: true });
+    } catch (err) {
+      logger.error('RegulationAPI', 'Error deleting article:', err);
+      return fail(c, err, "Erreur lors de la suppression de l'article", 'RegulationAPI');
+    }
+  });
+
+  router.post(`${base}/regulation/publish`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const auditUser = auditUserOf(c);
+    try {
+      const result = await publishOrUpdateRegulationMessage(client, guildId);
+
+      await pushAudit(guildId, {
+        user: auditUser,
+        action: result.mode === 'updated' ? 'Actualisation règlement' : 'Publication règlement',
+        context: getGuildName(client, guildId),
+        module: 'Règlement',
+        eventType: 'Manuel',
+        details: result.mode === 'updated'
+            ? `Règlement mis à jour dans le salon de publication (${result.messageIds.length} message(s)).`
+            : `Règlement publié dans le salon de publication (${result.messageIds.length} message(s)).`,
+        channelId: null
+      });
+
+      return send(c, {
+        ok: true,
+        mode: result.mode,
+        messageId: result.messageId,
+        messageIds: result.messageIds,
+      });
+    } catch (error) {
+      logger.error('RegulationAPI', `Erreur lors de la publication du règlement pour la guilde ${guildId}:`, error);
+      return send(c, {
+        error: publicErrorMessage(error, 'Impossible de publier le règlement.'),
+      }, 400);
+    }
+  });
+
+  return router;
 }
+

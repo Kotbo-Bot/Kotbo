@@ -158,41 +158,6 @@ export function registerWriteMembersTools(ctx: McpToolContext) {
     );
 
     server.registerTool(
-      'get_member_level',
-      {
-        description: "Récupère le niveau et l'XP d'un membre dans le système de leveling.",
-        inputSchema: {
-          member: z.string().describe('Nom, surnom, @mention ou ID Discord du membre'),
-        },
-        _meta: toolMeta,
-      },
-      guard('WRITE_MEMBERS', async ({ member }) => {
-        const resolved = await resolveMember(guildId, member);
-        if (!resolved.ok) return resolved.response;
-
-        const level = await prisma.memberLevel.findUnique({
-          where: { guildId_userId: { guildId, userId: resolved.userId } },
-        });
-
-        if (!level) return err('Aucune donnée de niveau pour ce membre.');
-
-        const rewards = await prisma.levelRoleReward.findMany({
-          where: { guildId, level: { lte: level.level } },
-          orderBy: { level: 'asc' },
-        });
-
-        return ok({
-          userId: resolved.userId,
-          name: resolved.label,
-          level: level.level,
-          xp: level.xp,
-          lastXpGain: level.lastXpGain?.toISOString() ?? null,
-          unlockedRewards: rewards.map((r) => ({ level: r.level, roleId: r.roleId })),
-        });
-      })
-    );
-
-    server.registerTool(
       'get_invite_stats',
       {
         description: "Statistiques d'invitations d'un membre (nombre d'invités, codes utilisés).",

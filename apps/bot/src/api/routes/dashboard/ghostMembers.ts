@@ -1,8 +1,7 @@
-import { IncomingMessage, ServerResponse } from 'node:http';
-import { Client } from 'discord.js';
+import { Hono, type Context } from 'hono';
+import type { Client } from 'discord.js';
 import { logger } from '../../../utils/logger.js';
-import { json, readJsonBody, getGuildName, safePushAudit, type AuthClaims, type DashboardAccess } from '../../shared.js';
-import { jsonFailure } from '../../shared/failure.js';
+import { getGuildName, safePushAudit } from '../../shared.js';
 import {
   GHOST_STATUSES,
   PRUNABLE_STATUSES,
@@ -18,8 +17,9 @@ import {
   upsertGhostConfig,
   type GhostStatus,
 } from '../../../services/analytics/ghostMembersService.js';
+import { fail, guildRoute, readBody, send } from '../../hono/dashboard/kit.js';
 
-function parseStatus(raw: string | null): GhostStatus | undefined {
+function parseStatus(raw: string | undefined): GhostStatus | undefined {
   if (!raw) return undefined;
   return GHOST_STATUSES.includes(raw as GhostStatus) ? (raw as GhostStatus) : undefined;
 }
@@ -31,176 +31,152 @@ function parseTargetStatuses(raw: unknown): GhostStatus[] {
   return statuses.length > 0 ? statuses : ['INACTIVE'];
 }
 
-export async function handleGhostMembersRoutes(
-  req: IncomingMessage,
-  res: ServerResponse,
-  parts: string[],
-  url: URL,
-  client: Client,
-  user: AuthClaims,
-  guildId: string,
-  _access: DashboardAccess,
-): Promise<boolean> {
-  if (parts[4] !== 'ghost-members') return false;
+const auditUserOf = (c: Context) => `${c.var.dashboardUser.username ?? 'Inconnu'} (${c.var.dashboardUser.userId})`;
 
-  const method = req.method;
-  const sub = parts[5];
-  const auditUser = `${user.username ?? 'Inconnu'} (${user.userId})`;
+export function createGhostMembersRouter(client: Client) {
+  const router = new Hono();
+  const base = '/api/dashboard/guilds/:guildId/ghost-members';
+  const gate = guildRoute(client);
 
-  const audit = (action: string, details: string) => safePushAudit(guildId, {
-    user: auditUser,
-    action,
-    context: getGuildName(client, guildId),
-    module: 'Ghost Members',
-    eventType: 'Manuel',
-    details,
-    channelId: null,
-  }, action);
+  const audit = (c: Context, action: string, details: string) => {
+    const guildId = c.req.param('guildId')!;
+    return safePushAudit(guildId, {
+      user: auditUserOf(c),
+      action,
+      context: getGuildName(client, guildId),
+      module: 'Ghost Members',
+      eventType: 'Manuel',
+      details,
+      channelId: null,
+    }, action);
+  };
 
-  // GET /ghost-members - répartition de la communauté + configuration
-  if (!sub && method === 'GET') {
+  // Répartition de la communauté + configuration
+  router.get(base, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
     try {
       const [distribution, config] = await Promise.all([
         getGhostDistribution(guildId),
         getGhostConfig(guildId),
       ]);
-      json(res, 200, { distribution, config });
+      return send(c, { distribution, config });
     } catch (err) {
       logger.error('GhostMembersAPI', 'Erreur GET répartition:', err);
-      jsonFailure(res, err, 'Erreur lors du calcul de la répartition', 'GhostMembersAPI');
+      return fail(c, err, 'Erreur lors du calcul de la répartition', 'GhostMembersAPI');
     }
-    return true;
-  }
+  });
 
-  // GET /ghost-members/members?status=&page=&pageSize=&search=&onlyPrunable=
-  if (sub === 'members' && method === 'GET') {
+  // ?status=&page=&pageSize=&search=&onlyPrunable=
+  router.get(`${base}/members`, ...gate, async (c) => {
     try {
-      const result = await listGhostMembers(client, guildId, {
-        status: parseStatus(url.searchParams.get('status')),
-        search: url.searchParams.get('search') ?? undefined,
-        onlyPrunable: url.searchParams.get('onlyPrunable') === 'true',
-        page: Number(url.searchParams.get('page')) || 1,
-        pageSize: Number(url.searchParams.get('pageSize')) || 50,
-      });
-      json(res, 200, result);
+      return send(c, await listGhostMembers(client, c.req.param('guildId'), {
+        status: parseStatus(c.req.query('status')),
+        search: c.req.query('search') ?? undefined,
+        onlyPrunable: c.req.query('onlyPrunable') === 'true',
+        page: Number(c.req.query('page')) || 1,
+        pageSize: Number(c.req.query('pageSize')) || 50,
+      }));
     } catch (err) {
       logger.error('GhostMembersAPI', 'Erreur GET membres:', err);
-      jsonFailure(res, err, 'Erreur lors de la récupération des membres', 'GhostMembersAPI');
+      return fail(c, err, 'Erreur lors de la récupération des membres', 'GhostMembersAPI');
     }
-    return true;
-  }
+  });
 
-  // PATCH /ghost-members/config - seuils et garde-fous
-  if (sub === 'config' && method === 'PATCH') {
+  // Seuils et garde-fous
+  router.patch(`${base}/config`, ...gate, async (c) => {
     try {
-      const body = await readJsonBody<Record<string, unknown>>(req);
-      if (!body) {
-        json(res, 400, { error: 'Corps de requête manquant' });
-        return true;
-      }
+      const body = await readBody(c);
+      if (!body) return send(c, { error: 'Corps de requête manquant' }, 400);
       const patch = sanitizeGhostConfigPatch(body);
-      if (Object.keys(patch).length === 0) {
-        json(res, 400, { error: 'Aucun champ valide à mettre à jour' });
-        return true;
-      }
-      const config = await upsertGhostConfig(guildId, patch);
+      if (Object.keys(patch).length === 0) return send(c, { error: 'Aucun champ valide à mettre à jour' }, 400);
+      const config = await upsertGhostConfig(c.req.param('guildId'), patch);
       await audit(
+        c,
         'Mise à jour Ghost Members',
         `Seuils: inactif ${config.inactiveDays}j, spectateur ${config.spectatorWindowDays}j, grâce ${config.gracePeriodDays}j.`,
       );
-      json(res, 200, { config });
+      return send(c, { config });
     } catch (err) {
       logger.error('GhostMembersAPI', 'Erreur PATCH config:', err);
-      jsonFailure(res, err, 'Erreur lors de la mise à jour de la configuration', 'GhostMembersAPI');
+      return fail(c, err, 'Erreur lors de la mise à jour de la configuration', 'GhostMembersAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /ghost-members/recompute - reclassement complet du serveur
-  if (sub === 'recompute' && method === 'POST') {
+  // Reclassement complet du serveur
+  router.post(`${base}/recompute`, ...gate, async (c) => {
     try {
-      const counts = await recomputeGhostStatuses(guildId);
+      const counts = await recomputeGhostStatuses(c.req.param('guildId'));
       await audit(
+        c,
         'Recalcul Ghost Members',
         `Actifs: ${counts.ACTIVE}, spectateurs: ${counts.SPECTATOR}, inactifs: ${counts.INACTIVE}, récents: ${counts.NEW}.`,
       );
-      json(res, 200, { counts });
+      return send(c, { counts });
     } catch (err) {
       logger.error('GhostMembersAPI', 'Erreur recompute:', err);
-      jsonFailure(res, err, 'Erreur lors du recalcul des statuts', 'GhostMembersAPI');
+      return fail(c, err, 'Erreur lors du recalcul des statuts', 'GhostMembersAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /ghost-members/prune/preview - étape 1 : prévisualisation
-  if (sub === 'prune' && parts[6] === 'preview' && method === 'POST') {
+  // Étape 1 : prévisualisation
+  router.post(`${base}/prune/preview`, ...gate, async (c) => {
     try {
-      const body = await readJsonBody<{ statuses?: unknown }>(req);
-      const preview = await previewGhostPrune(client, guildId, {
+      const body = await readBody<{ statuses?: unknown }>(c);
+      return send(c, await previewGhostPrune(client, c.req.param('guildId'), {
         statuses: parseTargetStatuses(body?.statuses),
-      });
-      json(res, 200, preview);
+      }));
     } catch (err) {
       logger.error('GhostMembersAPI', 'Erreur prévisualisation prunage:', err);
-      jsonFailure(res, err, 'Erreur lors de la prévisualisation', 'GhostMembersAPI');
+      return fail(c, err, 'Erreur lors de la prévisualisation', 'GhostMembersAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /ghost-members/prune - étape 2 : expulsion confirmée
-  if (sub === 'prune' && !parts[6] && method === 'POST') {
+  // Étape 2 : expulsion confirmée
+  router.post(`${base}/prune`, ...gate, async (c) => {
     try {
-      const body = await readJsonBody<{
+      const body = await readBody<{
         statuses?: unknown;
         userIds?: unknown;
         confirmCount?: unknown;
         reason?: unknown;
-      }>(req);
-
-      if (!body || !Array.isArray(body.userIds)) {
-        json(res, 400, { error: 'Liste de membres manquante' });
-        return true;
-      }
+      }>(c);
+      if (!body || !Array.isArray(body.userIds)) return send(c, { error: 'Liste de membres manquante' }, 400);
 
       const result = await executeGhostPrune(
         client,
-        guildId,
+        c.req.param('guildId'),
         {
           statuses: parseTargetStatuses(body.statuses),
           userIds: body.userIds.filter((id): id is string => typeof id === 'string'),
           confirmCount: typeof body.confirmCount === 'number' ? body.confirmCount : -1,
           reason: typeof body.reason === 'string' ? body.reason : undefined,
         },
-        { userId: user.userId, username: auditUser },
+        { userId: c.var.dashboardUser.userId, username: auditUserOf(c) },
       );
 
       await audit(
+        c,
         'Prunage Ghost Members',
         `${result.successCount} membre(s) expulsé(s), ${result.failureCount} échec(s) sur ${result.totalTargeted} ciblé(s).`,
       );
-      json(res, 200, result);
+      return send(c, result);
     } catch (err) {
-      if (err instanceof GhostPruneValidationError) {
-        json(res, 400, { error: err.message });
-        return true;
-      }
+      if (err instanceof GhostPruneValidationError) return send(c, { error: err.message }, 400);
       logger.error('GhostMembersAPI', 'Erreur exécution prunage:', err);
-      jsonFailure(res, err, 'Erreur lors du prunage', 'GhostMembersAPI');
+      return fail(c, err, 'Erreur lors du prunage', 'GhostMembersAPI');
     }
-    return true;
-  }
+  });
 
-  // GET /ghost-members/runs - historique des prunages
-  if (sub === 'runs' && method === 'GET') {
+  // Historique des prunages
+  router.get(`${base}/runs`, ...gate, async (c) => {
     try {
-      const runs = await getGhostPruneRuns(guildId, Number(url.searchParams.get('take')) || 20);
-      json(res, 200, { runs });
+      const runs = await getGhostPruneRuns(c.req.param('guildId'), Number(c.req.query('take')) || 20);
+      return send(c, { runs });
     } catch (err) {
       logger.error('GhostMembersAPI', 'Erreur GET historique:', err);
-      jsonFailure(res, err, 'Erreur lors de la récupération de l\'historique', 'GhostMembersAPI');
+      return fail(c, err, 'Erreur lors de la récupération de l\'historique', 'GhostMembersAPI');
     }
-    return true;
-  }
+  });
 
-  return false;
+  return router;
 }

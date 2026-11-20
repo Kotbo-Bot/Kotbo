@@ -35,31 +35,31 @@
   type Config = Record<string, any>;
 
   const MODES = [
-    { value: 'OFF', label: m.common_disabled() },
-    { value: 'BLACKLIST', label: m.sff_mode_blacklist() },
-    { value: 'WHITELIST', label: m.sff_mode_whitelist() },
+    { value: 'OFF', get label() { return m.common_disabled(); } },
+    { value: 'BLACKLIST', get label() { return m.sff_mode_blacklist(); } },
+    { value: 'WHITELIST', get label() { return m.sff_mode_whitelist(); } },
   ];
   const SANCTIONS = [
-    { value: 'DELETE', label: m.sff_sanction_delete() },
-    { value: 'WARN', label: m.arx_sanction_warn() },
+    { value: 'DELETE', get label() { return m.sff_sanction_delete(); } },
+    { value: 'WARN', get label() { return m.arx_sanction_warn(); } },
     { value: 'TIMEOUT', label: 'Timeout' },
-    { value: 'JAIL', label: m.arx_jail_title() },
-    { value: 'KICK', label: m.arx_sanction_kick() },
-    { value: 'BAN', label: m.arx_sanction_ban() },
+    { value: 'JAIL', get label() { return m.arx_jail_title(); } },
+    { value: 'KICK', get label() { return m.arx_sanction_kick(); } },
+    { value: 'BAN', get label() { return m.arx_sanction_ban(); } },
   ];
   const DURATIONS = [
     { value: 10, label: '10 minutes' },
-    { value: 60, label: m.arx_duration_1h() },
-    { value: 1440, label: m.arx_duration_1d() },
-    { value: 10080, label: m.arx_duration_7d() },
+    { value: 60, get label() { return m.arx_duration_1h(); } },
+    { value: 1440, get label() { return m.arx_duration_1d(); } },
+    { value: 10080, get label() { return m.arx_duration_7d(); } },
   ];
   const GROUP_LABELS: Record<string, string> = {
-    EXECUTABLES: m.sff_group_executables(),
-    IMAGES: m.sff_group_images(),
-    VIDEOS: m.sff_group_videos(),
+    get EXECUTABLES() { return m.sff_group_executables(); },
+    get IMAGES() { return m.sff_group_images(); },
+    get VIDEOS() { return m.sff_group_videos(); },
     AUDIO: 'Audio',
-    ARCHIVES: m.sff_group_archives(),
-    DOCUMENTS: m.sff_group_documents(),
+    get ARCHIVES() { return m.sff_group_archives(); },
+    get DOCUMENTS() { return m.sff_group_documents(); },
   };
 
   let config = $state<Config>({});
@@ -77,7 +77,7 @@
   // La barre « Modifications non enregistrées » est celle de MainLayout.
   useUnsavedChanges({
     id: 'server-file-filters',
-    label: m.am_page_title(),
+    get label() { return m.am_page_title(); },
     getConfig: () => config,
     getSaved: () => original,
     onSave: save,
@@ -193,7 +193,7 @@
 {#snippet modeSelect(field: string, label: string, help: string)}
   <label class="block">
     <span class="text-xs font-medium text-on-surface-variant">{label}</span>
-    <select bind:value={config[field]} class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface">
+    <select bind:value={config[field]} class="mt-1 w-full rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface">
       {#each MODES as mode (mode.value)}<option value={mode.value}>{mode.label}</option>{/each}
     </select>
     <p class="text-2xs text-on-surface-variant mt-1">{help}</p>
@@ -204,7 +204,7 @@
   <div class="grid sm:grid-cols-2 gap-3">
     <label class="block">
       <span class="text-xs font-medium text-on-surface-variant">{m.sff_sanction()}</span>
-      <select bind:value={config[sanctionField]} class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface">
+      <select bind:value={config[sanctionField]} class="mt-1 w-full rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface">
         {#each SANCTIONS as s (s.value)}<option value={s.value}>{s.label}</option>{/each}
       </select>
       <p class="text-2xs text-on-surface-variant mt-1">{m.sff_sanction_hint()}</p>
@@ -212,7 +212,7 @@
     {#if ['TIMEOUT', 'BAN', 'JAIL'].includes(config[sanctionField])}
       <label class="block">
         <span class="text-xs font-medium text-on-surface-variant">{m.arx_vision_duration()}</span>
-        <select bind:value={config[durationField]} class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface">
+        <select bind:value={config[durationField]} class="mt-1 w-full rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface">
           {#each DURATIONS as d (d.value)}<option value={d.value}>{d.label}</option>{/each}
         </select>
       </label>
@@ -241,13 +241,17 @@
           {#if config.otherInvitesMode !== 'OFF'}
             <label class="block sm:w-1/2">
               <span class="text-xs font-medium text-on-surface-variant">{m.sff_friend_invites()}</span>
-              <select bind:value={config.otherFriendInvites} class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface">
+              <select bind:value={config.otherFriendInvites} class="mt-1 w-full rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface">
                 <option value="FOLLOW">{m.sff_follow_list()}</option>
                 <option value="ALLOW">{m.sff_always_allowed()}</option>
                 <option value="BLOCK">{m.sff_always_deleted()}</option>
               </select>
             </label>
           {/if}
+          <Callout variant="info">
+            {m.tam_sff_hint()}
+            {#snippet actions()}<Button size="sm" variant="secondary" icon="Tag" onclick={() => gotoTab('/security/filters', 'tags', 'bot')}>{m.tam_tab()}</Button>{/snippet}
+          </Callout>
           {#if config.otherTagsMode !== 'OFF' && !config.jailRoleId}
             <Callout variant="warning">{m.sff_no_jail()}</Callout>
           {/if}
@@ -267,7 +271,7 @@
               </div>
             {/if}
             <form class="flex gap-2" onsubmit={(e) => { e.preventDefault(); void addServer(); }}>
-              <input type="text" bind:value={invite} placeholder={m.sff_invite_ph()} class="flex-1 rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface" />
+              <input aria-label={m.sff_invite_ph()} type="text" bind:value={invite} placeholder={m.sff_invite_ph()} class="flex-1 rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface" />
               <Button type="submit" size="sm" icon="Plus" disabled={busy || !invite.trim() || servers.length >= 25}>{m.sff_add()}</Button>
             </form>
           </div>
@@ -298,7 +302,7 @@
                 value={(config.fileExtensions ?? []).join(', ')}
                 onchange={(e) => (config.fileExtensions = e.currentTarget.value.split(/[,\s]+/).map((x) => x.trim().replace(/^\./, '')).filter(Boolean))}
                 placeholder="exe, msi"
-                class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface font-mono"
+                class="mt-1 w-full rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface font-mono"
               />
             </label>
             {#if config.fileFilterMode === 'WHITELIST' && !(config.fileGroups ?? []).length && !(config.fileExtensions ?? []).length}
@@ -329,7 +333,7 @@
               <div class="grid sm:grid-cols-[1fr_1fr_auto] gap-2 items-end">
                 <label class="block">
                   <span class="text-xs font-medium text-on-surface-variant">{m.sff_target()}</span>
-                  <select bind:value={draft.targetId} class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface">
+                  <select bind:value={draft.targetId} class="mt-1 w-full rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface">
                     <option value="">{m.sff_choose()}</option>
                     {#each categories as category (category.id)}<option value={category.id}>📁 {category.name}</option>{/each}
                     {#each channels as channel (channel.id)}<option value={channel.id}>#{channel.name}</option>{/each}
@@ -337,7 +341,7 @@
                 </label>
                 <label class="block">
                   <span class="text-xs font-medium text-on-surface-variant">{m.sff_mode()}</span>
-                  <select bind:value={draft.mode} class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface">
+                  <select bind:value={draft.mode} class="mt-1 w-full rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface">
                     <option value="BLACKLIST">{m.sff_blacklist()}</option>
                     <option value="WHITELIST">{m.sff_whitelist()}</option>
                   </select>
@@ -352,7 +356,7 @@
                       {GROUP_LABELS[group]}
                     </label>
                   {/each}
-                  <input type="text" bind:value={draft.extensions} placeholder={m.sff_extra_ext_ph()} class="flex-1 min-w-40 rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-1.5 text-body-sm text-on-surface font-mono" />
+                  <input aria-label={m.sff_extra_ext_ph()} type="text" bind:value={draft.extensions} placeholder={m.sff_extra_ext_ph()} class="flex-1 min-w-40 rounded-lg bg-surface-container border border-field-border px-3 py-1.5 text-body-sm text-on-surface font-mono" />
                 </div>
               {/if}
             {/if}

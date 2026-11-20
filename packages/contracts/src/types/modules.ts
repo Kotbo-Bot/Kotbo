@@ -563,26 +563,6 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
     paths: ['/fun'],
   },
   {
-    key: 'daily_algo',
-    name: 'Daily Algo',
-    description: "Défi d'algorithmique quotidien, soumissions et classement hebdomadaire.",
-    category: 'community',
-    icon: 'FlaskConical',
-    defaultEnabled: false,
-    guildFields: ['dailyAlgoEnabled'],
-    legacyField: 'dailyAlgoEnabled',
-    aliases: ['dailyalgo'],
-    paused: true,
-    apiSegments: [
-      'daily-algo-problems',
-      'daily-algo-runs',
-      'daily-algo-weeks',
-      'daily-algo-submissions',
-    ],
-    paths: ['/dailyalgo'],
-    interactionPrefixes: ['daily-algo-', 'modal:daily-algo-'],
-  },
-  {
     key: 'tickets',
     name: 'Tickets support',
     description: "Système d'assistance avec catégories, prise en charge et transcriptions.",
@@ -871,6 +851,16 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
     // sur le widget Pulse, pas besoin d'un écran de réglages à part.
     defaultEnabled: true,
   },
+  {
+    key: 'rich_links',
+    name: 'Aperçus de liens',
+    description: 'Répond aux liens GitHub, X, Bluesky, TikTok, Instagram, YouTube, Steam, npm et autres par une carte : description, chiffres, image et bouton pour ouvrir.',
+    category: 'integrations',
+    icon: 'Link2',
+    // Éteint au départ : le bot se met à répondre dans tous les salons, ce
+    // qu'un serveur doit avoir choisi.
+    defaultEnabled: false,
+  },
 
   // ───────────────────── Cross-serveur ─────────────────────
   {
@@ -882,19 +872,6 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
     defaultEnabled: false,
     apiSegments: ['channel-links'],
     paths: ['/channel-links'],
-  },
-  {
-    key: 'partnerships',
-    name: 'Partenariats',
-    description:
-      'Partenaires, accords, avantages accordés, publicités croisées et retombées mesurées.',
-    category: 'cross_server',
-    icon: 'Handshake',
-    defaultEnabled: false,
-    paused: true,
-    apiSegments: ['partnerships', 'partners', 'partner-applications', 'partnership-directory'],
-    paths: ['/partnerships', '/partnerships/directory'],
-    interactionPrefixes: ['partnership:', 'partnership_modal:'],
   },
   {
     key: 'staff_server',

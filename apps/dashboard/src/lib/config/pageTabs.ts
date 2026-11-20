@@ -1,4 +1,3 @@
-import { isModulePaused } from '@kotbo/contracts';
 import { m } from '../i18n';
 import { allPages } from './pages';
 
@@ -45,7 +44,6 @@ export const PAGE_TABS: Record<string, PageTabConfig[]> = {
     { id: 'pulse', label: () => m.an_tab_pulse(), icon: 'Activity' },
     { id: 'weekly', label: () => m.an_tab_weekly(), icon: 'Calendar' },
     { id: 'commands', label: () => m.an_tab_commands(), icon: 'Code' },
-    ...(isModulePaused('daily_algo') ? [] : [{ id: 'algo', label: () => m.an_tab_algo(), icon: 'Code' }]),
     { id: 'content', label: () => m.anx_section_content(), icon: 'ChatCircleDots' },
     { id: 'emojis', label: () => m.anx_tab_emojis(), icon: 'Smile' },
     { id: 'stickers', label: () => m.anx_tab_stickers(), icon: 'image' },
@@ -107,11 +105,14 @@ export const PAGE_TABS: Record<string, PageTabConfig[]> = {
     { id: 'security', label: () => m.am_tab_security(), icon: 'lock' },
     { id: 'behavioral', label: () => m.am_tab_behavioral(), icon: 'activity' },
     { id: 'servers', label: () => m.am_tab_servers(), icon: 'globe' },
+    { id: 'emojis', label: () => m.am_tab_emojis(), icon: 'smile' },
     { id: 'exceptions', label: () => m.am_tab_exceptions(), icon: 'filter' },
     { id: 'simulator', label: () => m.sim_tab_label(), icon: 'history' },
     // Page a part (/security/filters/nicknames), rangee ici en onglet : elle
     // n'occupe plus de ligne dans le menu, qui depassait sept entrees.
     { id: 'nicknames', label: () => m.nav_nicknames(), icon: 'user' },
+    // Automod des tags : page à part (/security/filters/tags), comme les pseudos.
+    { id: 'tags', label: () => m.tam_tab(), icon: 'tag' },
   ],
 
   '/security/filters/nicknames': [

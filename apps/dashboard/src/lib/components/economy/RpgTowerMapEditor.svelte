@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { dialogFocus } from '../../actions/dialogFocus';
   import { stripCustomEmoji } from '../../emojiParser';
   import { explainDisabled } from '../../actions/explainDisabled';
   import { untrack } from 'svelte';
@@ -1329,7 +1330,7 @@
     <div class="flex flex-wrap gap-1.5">
       {#each POWERS as power}
         <button type="button" disabled={disabled} use:explainDisabled={(!canManage) ? m.common_reason_no_permission() : ''} onclick={() => updateSelected({ powerPercent: power })}
-          class="px-2 py-1 rounded-lg text-2xs font-bold border font-mono {room.powerPercent === power ? (power > 100 ? 'border-error bg-error/15 text-error' : power < 100 ? 'border-success bg-success/15 text-success' : 'border-primary bg-primary/15') : 'border-outline-variant/15'}">×{power / 100}</button>
+          class="px-2 py-1 rounded-lg text-2xs font-bold border font-mono {room.powerPercent === power ? (power > 100 ? 'border-error bg-error/15 text-on-error-container' : power < 100 ? 'border-success bg-success/15 text-on-success-container' : 'border-primary bg-primary/15') : 'border-outline-variant/15'}">×{power / 100}</button>
       {/each}
     </div>
     <p class="text-2xs text-on-surface-variant">{m.eco_tower_map_power_hint()}</p>
@@ -1371,24 +1372,24 @@
         <label for="floorName" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_tower_floor_name()} · {floorTitle(current)}</label>
         <input id="floorName" type="text" maxlength="40" bind:value={layout.name} disabled={disabled} oninput={() => { dirty = true; }}
           placeholder={m.eco_tower_floor_name_placeholder()}
-          class="w-56 bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none" />
+          class="w-56 bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
       </div>
       <div class="space-y-1">
         <label for="mapWidth" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_tower_map_width()}</label>
         <input id="mapWidth" type="number" min={sizeLimits.min} max={sizeLimits.max} value={layout.width} disabled={disabled}
           onchange={(e) => resize(Number((e.currentTarget as HTMLInputElement).value), layout.height)}
-          class="w-20 bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none" />
+          class="w-20 bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
       </div>
       <div class="space-y-1">
         <label for="mapHeight" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_tower_map_height()}</label>
         <input id="mapHeight" type="number" min={sizeLimits.min} max={sizeLimits.max} value={layout.height} disabled={disabled}
           onchange={(e) => resize(layout.width, Number((e.currentTarget as HTMLInputElement).value))}
-          class="w-20 bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none" />
+          class="w-20 bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
       </div>
       <button type="button" onclick={loadExample} disabled={disabled} class="px-3 py-2 bg-outline-variant/10 hover:bg-outline-variant/25 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 disabled:opacity-50">
         <Papicon icon="Sparkles" size={12} /> {m.eco_tower_map_example()}
       </button>
-      <button type="button" onclick={clearMap} disabled={disabled} class="px-3 py-2 bg-error/10 hover:bg-error/20 text-error text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 disabled:opacity-50">
+      <button type="button" onclick={clearMap} disabled={disabled} class="px-3 py-2 bg-error/10 hover:bg-error/20 text-on-error-container text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 disabled:opacity-50">
         <Papicon icon="trash" size={12} /> {m.eco_tower_map_clear()}
       </button>
       <div class="flex items-center gap-1 px-1 py-1 rounded-lg bg-outline-variant/10">
@@ -1424,14 +1425,14 @@
           <label for="floorWeight" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_tower_floor_weight({ chance: floorTags[current].chance })}</label>
           <input id="floorWeight" type="number" min={WEIGHT.min} max={WEIGHT.max} value={layout.weight} disabled={disabled}
             onchange={(e) => { remember(); layout.weight = Math.min(WEIGHT.max, Math.max(WEIGHT.min, Math.trunc(Number((e.currentTarget as HTMLInputElement).value)) || WEIGHT.default)); dirty = true; }}
-            class="w-20 bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none" />
+            class="w-20 bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
         </div>
       {/if}
       <div class="space-y-1" title={m.eco_tower_modifier_tip()}>
         <label for="floorModifier" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_tower_modifier()}</label>
         <select id="floorModifier" value={layout.modifier} disabled={disabled}
           onchange={(e) => { remember(); layout.modifier = (e.currentTarget as HTMLSelectElement).value as Modifier; dirty = true; }}
-          class="bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none">
+          class="bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary">
           {#each MODIFIERS as modifier}<option value={modifier}>{modifierLabel(modifier)}</option>{/each}
         </select>
       </div>
@@ -1439,7 +1440,7 @@
         <label for="floorTheme" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_tower_theme()}</label>
         <select id="floorTheme" value={layout.theme} disabled={disabled}
           onchange={(e) => { remember(); layout.theme = (e.currentTarget as HTMLSelectElement).value as Theme; dirty = true; }}
-          class="bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none">
+          class="bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary">
           {#each THEMES as theme}<option value={theme}>{themeLabel(theme)}</option>{/each}
         </select>
       </div>
@@ -1459,7 +1460,7 @@
         <button type="button" onclick={() => pickTool('SELECT')} title={m.eco_tower_map_tool_select_tip()} class="px-3 py-1.5 rounded-lg text-xs font-bold border transition-all flex items-center gap-1.5 {tool === 'SELECT' ? 'border-primary bg-primary/15' : 'border-transparent hover:bg-outline-variant/10'}">
           <Papicon icon="MousePointer" size={12} /> {m.eco_tower_map_tool_select()}
         </button>
-        <button type="button" onclick={() => pickTool('ERASE')} title={m.eco_tower_map_tool_erase_tip()} class="px-3 py-1.5 rounded-lg text-xs font-bold border transition-all flex items-center gap-1.5 {tool === 'ERASE' ? 'border-error bg-error/15 text-error' : 'border-transparent hover:bg-outline-variant/10'}">
+        <button type="button" onclick={() => pickTool('ERASE')} title={m.eco_tower_map_tool_erase_tip()} class="px-3 py-1.5 rounded-lg text-xs font-bold border transition-all flex items-center gap-1.5 {tool === 'ERASE' ? 'border-error bg-error/15 text-on-error-container' : 'border-transparent hover:bg-outline-variant/10'}">
           <Papicon icon="Eraser" size={12} /> {m.eco_tower_map_tool_erase()}
         </button>
         <button type="button" onclick={undo} disabled={disabled} use:explainDisabled={(past.length === 0) ? m.common_reason_select_one() : ''} title={m.eco_tower_map_undo_tip()} aria-label={m.eco_tower_map_undo()}
@@ -1576,11 +1577,11 @@
         <div class="flex items-center gap-1.5">
           <input type="number" min="1" max={floorCount} bind:value={jumpTo} placeholder={m.eco_tower_floor_jump_placeholder()} aria-label={m.eco_tower_floor_jump()}
             onkeydown={(event) => { if (event.key === 'Enter') jumpToFloor(); }}
-            class="w-20 bg-surface-container-high/40 border border-outline-variant/10 rounded-md px-2 py-1 text-2xs focus:outline-none" />
+            class="w-20 bg-surface-container-high/40 border border-field-border rounded-md px-2 py-1 text-2xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
           <button type="button" onclick={jumpToFloor} class="px-2 py-1 rounded-md bg-outline-variant/10 hover:bg-outline-variant/25 text-2xs font-bold">{m.eco_tower_floor_jump()}</button>
           {#if invalidFloors > 0}
             <button type="button" onclick={nextInvalid} title={m.eco_tower_floor_next_invalid()} aria-label={m.eco_tower_floor_next_invalid()}
-              class="ml-auto px-2 py-1 rounded-md bg-warning/10 hover:bg-warning/20 text-warning text-2xs font-bold flex items-center gap-1">
+              class="ml-auto px-2 py-1 rounded-md bg-warning/10 hover:bg-warning/20 text-on-warning-container text-2xs font-bold flex items-center gap-1">
               <Papicon icon="AlertTriangle" size={11} /> {invalidFloors}
             </button>
           {/if}
@@ -1600,7 +1601,7 @@
           <button type="button" onclick={duplicateFloor} disabled={disabled || floors.length >= floorsMax} class="px-2 py-1.5 rounded-md bg-outline-variant/10 hover:bg-outline-variant/25 text-2xs font-bold flex items-center justify-center gap-1 disabled:opacity-40">
             <Papicon icon="Copy" size={11} /> {m.eco_tower_floor_duplicate()}
           </button>
-          <button type="button" onclick={removeFloor} disabled={disabled} class="px-2 py-1.5 rounded-md bg-error/10 hover:bg-error/20 text-error text-2xs font-bold flex items-center justify-center gap-1 disabled:opacity-40">
+          <button type="button" onclick={removeFloor} disabled={disabled} class="px-2 py-1.5 rounded-md bg-error/10 hover:bg-error/20 text-on-error-container text-2xs font-bold flex items-center justify-center gap-1 disabled:opacity-40">
             <Papicon icon="trash" size={11} /> {m.eco_tower_floor_delete()}
           </button>
           <button type="button" onclick={exportTower} title={m.eco_tower_export_all_tip()} class="px-2 py-1.5 rounded-md bg-outline-variant/10 hover:bg-outline-variant/25 text-2xs font-bold flex items-center justify-center gap-1">
@@ -1824,7 +1825,7 @@
                 <label for="roomCollapse" class="text-xs font-semibold text-on-surface-variant">{m.eco_tower_map_collapse_steps()}</label>
                 <input id="roomCollapse" type="number" min="3" max="40" value={selected.collapseSteps} disabled={!canManage || disabled}
                   onchange={(e) => updateSelected({ collapseSteps: Math.min(40, Math.max(3, Number((e.currentTarget as HTMLInputElement).value) || 10)) })}
-                  class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none" />
+                  class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
                 <p class="text-2xs text-on-surface-variant">{m.eco_tower_map_collapse_hint({ shortest: bossDepth ?? 0 })}</p>
               </div>
               <p class="text-xs font-semibold pt-1">{m.eco_tower_map_collapse_guardian()}</p>
@@ -1847,7 +1848,7 @@
               <div class="flex flex-wrap gap-1.5">
                 {#each TRAITS as trait}
                   <button type="button" disabled={disabled || (!selected.traits.includes(trait) && selected.traits.length >= TRAITS_MAX)} use:explainDisabled={(!canManage) ? m.common_reason_no_permission() : ''} title={traitTip(trait)} onclick={() => toggleTrait(trait)}
-                    class="px-2 py-1 rounded-lg text-2xs font-bold border disabled:opacity-40 {selected.traits.includes(trait) ? 'border-error bg-error/15 text-error' : 'border-outline-variant/15'}">{traitLabel(trait)}</button>
+                    class="px-2 py-1 rounded-lg text-2xs font-bold border disabled:opacity-40 {selected.traits.includes(trait) ? 'border-error bg-error/15 text-on-error-container' : 'border-outline-variant/15'}">{traitLabel(trait)}</button>
                 {/each}
               </div>
               <p class="text-2xs text-on-surface-variant">{m.eco_tower_map_traits_hint()}</p>
@@ -1870,7 +1871,7 @@
               <label for="roomToll" class="text-xs font-semibold text-on-surface-variant">{m.eco_tower_map_toll_gold()}</label>
               <input id="roomToll" type="number" min="1" max="10000" value={selected.tollGold} disabled={!canManage || disabled}
                 onchange={(e) => updateSelected({ tollGold: Math.min(10000, Math.max(1, Number((e.currentTarget as HTMLInputElement).value) || 60)) })}
-                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none" />
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
               <p class="text-2xs text-on-surface-variant">{m.eco_tower_map_toll_hint()}</p>
             </div>
           {:else if selected.type === 'TRIAL'}
@@ -1915,7 +1916,7 @@
               <label for="roomHeal" class="text-xs font-semibold text-on-surface-variant">{m.eco_tower_map_heal()}</label>
               <input id="roomHeal" type="number" min="5" max="100" value={selected.healPercent} disabled={!canManage || disabled}
                 onchange={(e) => updateSelected({ healPercent: Math.min(100, Math.max(5, Number((e.currentTarget as HTMLInputElement).value) || 35)) })}
-                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none" />
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
             </div>
           {:else if selected.type === 'MERCHANT'}
             <div class="space-y-2">
@@ -1931,7 +1932,7 @@
               <label for="roomPrice" class="text-xs font-semibold text-on-surface-variant">{m.eco_tower_map_price()}</label>
               <input id="roomPrice" type="number" min="10" max="500" value={selected.pricePercent} disabled={!canManage || disabled}
                 onchange={(e) => updateSelected({ pricePercent: Math.min(500, Math.max(10, Number((e.currentTarget as HTMLInputElement).value) || 100)) })}
-                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none" />
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
             </div>
           {:else}
             <p class="text-2xs text-on-surface-variant">{m.eco_tower_map_no_option()}</p>
@@ -1971,7 +1972,7 @@
 {#if preview}
   <!-- Aperçu : l'image exacte que verront les joueurs en arrivant sur cet étage. -->
   <div class="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" role="presentation" onclick={() => { preview = null; }}>
-    <div class="bg-surface-container rounded-xl border border-outline-variant/30 p-4 max-w-4xl w-full space-y-3" role="dialog" aria-label={m.eco_tower_preview_btn()} tabindex="-1" onclick={(event) => event.stopPropagation()} onkeydown={(event) => { if (event.key === 'Escape') preview = null; }}>
+    <div class="bg-surface-container rounded-xl border border-outline-variant/30 p-4 max-w-4xl w-full space-y-3" use:dialogFocus={{}} role="dialog" aria-modal="true" aria-label={m.eco_tower_preview_btn()} tabindex="-1" onclick={(event) => event.stopPropagation()} onkeydown={(event) => { if (event.key === 'Escape') preview = null; }}>
       <div class="flex items-center justify-between">
         <p class="text-sm font-bold flex items-center gap-2"><Papicon icon="Image" size={14} /> {m.eco_tower_preview_title()}</p>
         <button type="button" onclick={() => { preview = null; }} class="px-3 py-1.5 bg-outline-variant/10 hover:bg-outline-variant/25 text-xs font-bold rounded-lg">{m.eco_btn_cancel()}</button>

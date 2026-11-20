@@ -6,7 +6,6 @@ enum SeasonStatus {
   UPCOMING
   ACTIVE
   ENDED
-  ARCHIVED
 }
 
 model LevelingSeason {
@@ -21,17 +20,43 @@ model LevelingSeason {
   startDate DateTime
   endDate   DateTime
 
-  // Récompenses de fin de saison (JSON: [{ rank, roleId?, coins?, badge? }])
+  /// Récompenses de fin de saison : `[{ rank, roleId, coins }]`, validées par
+  /// `validateSeasonRewards` (@kotbo/shared).
   rewards Json?
+
+  /// Paliers d'XP : `[{ minXp, roleId, coins, rotate? }]`, validés par
+  /// `validateSeasonTiers` (@kotbo/shared).
+  tiers Json?
 
   // Rôle exclusif attribué au top 1
   topRoleId String?
 
+  /// Salon où annoncer l'ouverture et la clôture. Vide = aucune annonce.
+  announceChannelId String?
+
+  /// À la clôture, une saison de même durée prend la suite, sauf si une autre
+  /// est déjà prévue.
+  autoRenew Boolean @default(false)
+
+  /// Rappel dans le salon d'annonce pendant les dernières 24 h.
+  remindBeforeEnd Boolean @default(false)
+  /// Rappel déjà envoyé ; remis à vide quand la date de fin change.
+  reminderSentAt DateTime?
+
   // Leaderboard final archivé (JSON: [{ userId, xp, level, rank }])
   finalLeaderboard Json?
 
+  /// Ce qui a réellement été donné à la clôture : `SeasonRewardOutcome[]`
+  /// (@kotbo/shared), relu par `readSeasonRewardOutcomes`.
+  grantedRewards Json?
+
+  /// Bilan chiffré figé à la clôture : `SeasonStats` (@kotbo/shared), pour
+  /// comparer les saisons au-delà des 100 membres figés au classement.
+  stats Json?
+
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
   snapshots SeasonSnapshot[]
+  baselines SeasonBaseline[]
   rankedEntries RankedSeasonEntry[]
 
   createdAt DateTime @default(now())
@@ -42,6 +67,23 @@ model LevelingSeason {
   @@map("leveling_seasons")
 }
 
+/// XP de chaque membre à l'ouverture de la saison. Le classement de saison est
+/// l'XP actuelle moins cette valeur : rien n'est remis à zéro. Un membre sans
+/// ligne (arrivé en cours de saison) part de 0. Supprimées à la clôture, une
+/// fois le classement figé dans `SeasonSnapshot`.
+model SeasonBaseline {
+  seasonId String
+  userId   String
+  xp       Int
+
+  season LevelingSeason @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+
+  @@id([seasonId, userId])
+  @@map("season_baselines")
+}
+
+/// Classement figé à la clôture. Depuis les saisons à référence, `xp` est l'XP
+/// gagnée pendant la saison ; avant, c'était l'XP totale du membre.
 model SeasonSnapshot {
   id String @id @default(cuid())
 

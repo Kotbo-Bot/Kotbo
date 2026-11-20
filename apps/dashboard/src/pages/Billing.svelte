@@ -16,10 +16,13 @@
    *     jours pour corriger sa carte avant la coupure.
    */
   import { onMount } from 'svelte';
-  import { fetchBillingStatus, openBillingPortal, startCheckout } from '../lib/api';
+  import { fetchBillingStatus, openBillingPortal, startCheckout, transferSubscription } from '../lib/api';
+  import { authStore } from '../lib/stores/auth.svelte';
+  import ConfirmModal from '../lib/components/ConfirmModal.svelte';
   import type { BillingInterval, BillingStatus, PlanCard, PlanKey } from '../lib/api/billing';
   import { toast } from '../lib/stores/toast.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
+  import GuildSelect from '../lib/components/GuildSelect.svelte';
   import Callout from '../lib/components/ui/Callout.svelte';
   import Button from '../lib/components/ui/Button.svelte';
   import { confetti } from '../lib/onboarding/celebrate';
@@ -177,6 +180,34 @@
     window.location.href = url;
   }
 
+  /** Serveurs où le compte gère la facturation, hors le serveur courant et les serveurs d'équipe. */
+  const transferTargets = $derived(
+    authStore.guilds.filter((g) => g.billingAccess && !g.isStaffServer && g.id !== authStore.selectedGuildId),
+  );
+  let transferOpen = $state(false);
+  let transferTarget = $state<string | null>(null);
+  let confirmTransfer = $state(false);
+  let transferring = $state(false);
+  const transferTargetName = $derived(transferTargets.find((g) => g.id === transferTarget)?.name ?? '');
+
+  async function transfer() {
+    if (!transferTarget) return;
+    transferring = true;
+    try {
+      await transferSubscription(transferTarget);
+      toast.success(m.bill_transfer_done({ server: transferTargetName }));
+      // Le serveur courant n'a plus d'abonnement : on bascule sur celui qui l'a reçu.
+      authStore.setGuild(transferTarget);
+      transferOpen = false;
+      await load();
+    } catch (err) {
+      toast.error(errorMessage(err) || m.bill_transfer_err());
+    } finally {
+      transferring = false;
+      confirmTransfer = false;
+    }
+  }
+
   onMount(() => {
     // Retour de Stripe. Le webhook a peut-être quelques secondes de retard sur
     // la redirection : on recharge une seconde fois pour éviter d'afficher
@@ -196,6 +227,16 @@
     load();
   });
 </script>
+
+<ConfirmModal
+  bind:open={confirmTransfer}
+  variant="warning"
+  title={m.bill_transfer_confirm_title({ server: transferTargetName })}
+  description={m.bill_transfer_confirm_desc()}
+  confirmLabel={m.bill_transfer_confirm_btn()}
+  loading={transferring}
+  onConfirm={transfer}
+/>
 
 <div class="pb-24 space-y-6">
   <header class="flex flex-col md:flex-row md:items-end justify-between gap-x-6 gap-y-3">
@@ -260,10 +301,10 @@
             {#if statusInfo}
               <span
                 class="px-2 py-0.5 rounded-md text-2xs font-medium border {statusInfo.tone === 'ok'
-                  ? 'bg-success/10 text-success border-success/20'
+                  ? 'bg-success/10 text-on-success-container border-success/20'
                   : statusInfo.tone === 'warn'
-                    ? 'bg-warning/10 text-warning border-warning/20'
-                    : 'bg-error/10 text-error border-error/20'}"
+                    ? 'bg-warning/10 text-on-warning-container border-warning/20'
+                    : 'bg-error/10 text-on-error-container border-error/20'}"
               >
                 {statusInfo.label()}
               </span>
@@ -293,8 +334,37 @@
         {/if}
       </div>
 
+      {#if status.hasSubscription && status.canManage !== false && transferTargets.length > 0}
+        <div class="pt-3 border-t border-outline-variant/40 space-y-3">
+          <button
+            type="button"
+            onclick={() => (transferOpen = !transferOpen)}
+            aria-expanded={transferOpen}
+            class="flex items-center gap-2 text-sm font-medium text-primary hover:underline"
+          >
+            <Papicon name="ArrowRight" size={16} />
+            {m.bill_transfer_button()}
+          </button>
+          {#if transferOpen}
+            <div class="flex flex-wrap items-end gap-3">
+              <div class="space-y-1 text-xs text-on-surface-variant">
+                <label for="transfer-target">{m.bill_transfer_target()}</label>
+                <GuildSelect
+                  id="transfer-target"
+                  className="w-full min-w-56"
+                  bind:value={transferTarget}
+                  guilds={transferTargets}
+                  placeholder={m.bill_transfer_pick()}
+                />
+              </div>
+              <Button variant="primary" size="sm" disabled={!transferTarget} onclick={() => (confirmTransfer = true)}>{m.bill_transfer_confirm_btn()}</Button>
+            </div>
+          {/if}
+        </div>
+      {/if}
+
       {#if status.status === 'past_due'}
-        <div class="rounded-lg bg-warning/10 border border-warning/20 p-3 text-body-sm text-warning leading-relaxed">
+        <div class="rounded-lg bg-warning/10 border border-warning/20 p-3 text-body-sm text-on-warning-container leading-relaxed">
           {m.bill_past_due()}
         </div>
       {/if}
@@ -317,7 +387,7 @@
             aria-label={m.bill_trial_title()}
             placeholder={m.bill_referral_placeholder()}
             autocomplete="off"
-            class="w-full max-w-xs rounded-lg border border-outline-variant/40 bg-surface-container px-3 py-2 text-body-sm text-on-surface uppercase placeholder:normal-case placeholder:text-on-surface-variant/40 focus:outline-none focus:ring-2 focus:ring-primary/40"
+            class="w-full max-w-xs rounded-lg border border-field-border bg-surface-container px-3 py-2 text-body-sm text-on-surface uppercase placeholder:normal-case placeholder:text-on-surface-variant/40 focus:outline-none focus:ring-2 focus:ring-primary/40"
           />
         </div>
       </div>
@@ -345,7 +415,7 @@
           {m.bill_yearly()}
 
           {#if yearlySavingPercent > 0}
-            <span class="text-2xs px-1.5 py-0.5 rounded bg-success/20 text-success font-semibold">
+            <span class="text-2xs px-1.5 py-0.5 rounded bg-success/20 text-on-success-container font-semibold">
               −{yearlySavingPercent}%
             </span>
           {/if}

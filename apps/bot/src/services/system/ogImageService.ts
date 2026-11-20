@@ -5,30 +5,27 @@ import { logger } from '../../utils/logger.js';
 // ============================================================================
 // CARTES D'APERÇU OPEN GRAPH
 //
-// Une image 1200x630 par lien partageable. Discord, Slack, Twitter et consorts
-// affichent cette image dans l'embed : c'est le seul rendu visuel qu'un lien
-// Kotbo obtient hors du dashboard, il doit donc raconter la page a lui seul.
+// Une vignette carree de 512 px par lien partageable, affichee en miniature a
+// cote du texte de l'embed : elle ne repete pas le titre en grand, elle donne
+// l'identite (icone du serveur ou logo), le type de page et une donnee cle.
 //
-// La carte reprend le theme sombre du dashboard (cf. apps/dashboard/src/app.css) :
-// surfaces zinc, indigo, Outfit pour les titres et Inter pour le texte, sans
-// halo ni libelle en capitales. Un lien partage doit ressembler a la page sur
-// laquelle il ouvre.
+// Elle reprend les cartes du dashboard (cf. apps/dashboard/src/app.css) :
+// surfaces zinc, filet, indigo, Outfit pour les titres et Inter pour le texte,
+// sans halo, degrade ni trame.
 //
 // Deux regles structurent ce module :
 //
-//  1. **Rendu deterministe.** Les seules variations (largeur des bulles d'une
-//     conversation caviardee) sont tirees d'un PRNG seede par l'identifiant de
-//     la carte. Une meme URL rend donc toujours les memes octets, ce qui rend
-//     l'ETag stable et evite que les CDN des reseaux sociaux gardent deux
-//     versions d'une meme carte.
+//  1. **Rendu deterministe.** Une meme carte rend toujours les memes octets, ce
+//     qui rend l'ETag stable et evite que les CDN gardent deux versions.
 //  2. **Aucune donnee privee.** Une carte est servie sans authentification :
 //     ce qui n'est pas deja public sur la page ne doit pas y figurer. Les
-//     ressources protegees (transcriptions, preuves) sont rendues
-//     « caviardees » - la forme d'une conversation, jamais son contenu.
+//     ressources protegees (transcriptions, preuves) n'y laissent que leur nature.
 // ============================================================================
 
-const W = 1200;
-const H = 630;
+/** Vignette carree : Discord l'affiche en miniature a cote du texte, pas en banniere. */
+export const OG_CARD_SIZE = 512;
+const W = OG_CARD_SIZE;
+const H = OG_CARD_SIZE;
 
 /** Theme sombre du dashboard, recopie de apps/dashboard/src/app.css. */
 const UI = {
@@ -49,7 +46,7 @@ const UI = {
  * dessin, le proxy d'images de Discord et les CDN garderaient l'ancienne carte.
  * A incrementer a chaque changement visible du rendu.
  */
-export const OG_CARD_VERSION = 5;
+export const OG_CARD_VERSION = 6;
 
 /** Indigo du dashboard en theme sombre : accent par defaut des cartes et barre de l'embed. */
 export const OG_ACCENT = '#818cf8';
@@ -172,23 +169,6 @@ export function invalidateOgCard(cacheKeyPrefix: string): void {
 // ---------------------------------------------------------------------------
 // Utilitaires de rendu
 // ---------------------------------------------------------------------------
-
-/** PRNG mulberry32 seede par une chaine : rendu identique d'un appel a l'autre. */
-function seededRandom(seed: string): () => number {
-  let h = 1779033703 ^ seed.length;
-  for (let i = 0; i < seed.length; i++) {
-    h = Math.imul(h ^ seed.charCodeAt(i), 3432918353);
-    h = (h << 13) | (h >>> 19);
-  }
-  let a = h >>> 0;
-  return () => {
-    a |= 0;
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
 
 function roundRect(
   ctx: SKRSContext2D,
@@ -387,343 +367,43 @@ async function drawGuildAvatar(
   ctx.restore();
 }
 
-// Grille de la carte : en-tete sur un filet, colonne de texte a gauche,
-// illustration a droite, tuiles et illustration alignees en bas.
-const PAD = 72;
-const HEADER_LINE = 124;
-const ART_X = 704;
-const ART_W = W - PAD - ART_X;
-const ART_TOP = 160;
-const ART_H = H - 56 - ART_TOP;
-const STAT_H = 108;
-/** Les tuiles finissent a la meme hauteur que l'illustration, a 56 px du bas. */
-const STATS_TOP = H - 56 - STAT_H;
+// Vignette carree : une carte du dashboard (surface zinc, filet, coins larges),
+// pas une affiche. Pastille du type, titre, puis UNE donnee qui dit pourquoi on
+// clique, dans une tuile comme celles de l'accueil.
+const PAD = 40;
+const CARD_INSET = 14;
+const TILE_H = 104;
 
-/** Pastille arrondie ; renvoie sa largeur. */
-function drawPill(
-  ctx: SKRSContext2D,
-  label: string,
-  x: number,
-  y: number,
-  colors: { fill: string; stroke?: string; text: string },
-): number {
-  ctx.font = font(19, 'semibold');
-  const text = truncate(label, 32);
+/** Pastille teintee de l'accent, comme les badges du dashboard ; renvoie sa largeur. */
+function drawPill(ctx: SKRSContext2D, label: string, x: number, y: number, accent: string, maxWidth: number): number {
+  ctx.font = font(20, 'semibold');
+  const text = fitText(ctx, label, maxWidth - 32);
   const width = ctx.measureText(text).width + 32;
-  roundRect(ctx, x, y, width, 38, 19, colors.fill, colors.stroke);
-  ctx.fillStyle = colors.text;
-  ctx.fillText(text, x + 16, y + 26);
+  roundRect(ctx, x, y, width, 40, 20, hexToRgba(accent, 0.16), hexToRgba(accent, 0.4));
+  ctx.fillStyle = accent;
+  ctx.fillText(text, x + 16, y + 27);
   return width;
 }
 
-/** Tuile de chiffre cle, comme les tuiles de l'accueil du dashboard. */
-function drawStat(ctx: SKRSContext2D, x: number, y: number, w: number, value: string, label: string) {
-  roundRect(ctx, x, y, w, STAT_H, 16, UI.card, UI.border);
-  ctx.fillStyle = UI.textMuted;
-  ctx.font = font(18, 'medium');
-  ctx.fillText(fitText(ctx, label, w - 44), x + 22, y + 38);
-  ctx.fillStyle = UI.text;
-  ctx.font = font(40, 'title');
-  ctx.fillText(fitText(ctx, value, w - 44), x + 22, y + 84);
-}
-
-// ---------------------------------------------------------------------------
-// Panneaux d'illustration
-// ---------------------------------------------------------------------------
-
-/** Panneau « verre » : fond translucide, contour et halo de la couleur de la page. */
-function drawPanel(ctx: SKRSContext2D, accent: string, top = ART_TOP, height = ART_H) {
-  ctx.save();
-  ctx.shadowColor = hexToRgba(accent, 0.45);
-  ctx.shadowBlur = 48;
-  roundRect(ctx, ART_X, top, ART_W, height, 24, 'rgba(24, 24, 27, 0.82)');
-  ctx.restore();
-  roundRect(ctx, ART_X, top, ART_W, height, 24, undefined, hexToRgba(accent, 0.55));
-}
-
-/** Fond : degrade teinte de l'accent, halos de lumiere et trame de points. */
-function drawBackground(ctx: SKRSContext2D, accent: string) {
-  const base = ctx.createLinearGradient(0, 0, W, H);
-  base.addColorStop(0, '#12122a');
-  base.addColorStop(0.55, '#0b0b14');
-  base.addColorStop(1, '#09090b');
-  ctx.fillStyle = base;
-  ctx.fillRect(0, 0, W, H);
-
-  const glow = (x: number, y: number, r: number, color: string, alpha: number) => {
-    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
-    g.addColorStop(0, hexToRgba(color, alpha));
-    g.addColorStop(1, hexToRgba(color, 0));
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, W, H);
-  };
-  glow(W - 120, 120, 620, accent, 0.5);
-  glow(120, H - 40, 520, '#00e5ff', 0.22);
-
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.07)';
-  for (let x = 24; x < W; x += 32) {
-    for (let y = 24; y < H; y += 32) ctx.fillRect(x, y, 2, 2);
-  }
-}
-
-function drawPanelLabel(ctx: SKRSContext2D, label: string, top = ART_TOP) {
-  ctx.fillStyle = UI.textMuted;
-  ctx.font = font(18, 'semibold');
-  ctx.fillText(label, ART_X + 28, top + 44);
-}
-
 /**
- * Silhouette de conversation caviardee.
- *
- * Les transcriptions ne sont lisibles qu'apres authentification : leur carte
- * d'apercu, elle, est servie a qui possede le lien. On dessine donc la *forme*
- * d'un echange - bulles de largeurs variables, avatars anonymes - sans jamais
- * lire le HTML de la transcription. Le cadenas dit explicitement au lecteur
- * pourquoi il ne voit rien.
+ * La donnee unique de la vignette. Aucune n'est inventee : elle vient de la
+ * specification, deja limitee a ce qui est public sur la page.
  */
-function drawRedactedChat(ctx: SKRSContext2D, rand: () => number, accent: string, rows: number) {
-  drawPanel(ctx, accent);
-
-  let y = ART_TOP + 48;
-  for (let i = 0; i < rows; i++) {
-    const mine = rand() > 0.6;
-    const avatarX = mine ? ART_X + ART_W - 40 : ART_X + 40;
-    ctx.beginPath();
-    ctx.arc(avatarX, y, 14, 0, Math.PI * 2);
-    ctx.fillStyle = mine ? hexToRgba(accent, 0.35) : UI.borderStrong;
-    ctx.fill();
-
-    const bubbleW = 140 + rand() * 150;
-    const bubbleX = mine ? avatarX - 26 - bubbleW : avatarX + 26;
-    roundRect(ctx, bubbleX, y - 18, bubbleW, 36, 12, mine ? hexToRgba(accent, 0.16) : UI.cardRaised);
-
-    // Deux barres de « texte » par bulle : la longueur varie, le contenu non.
-    roundRect(ctx, bubbleX + 14, y - 9, (bubbleW - 28) * (0.6 + rand() * 0.35), 7, 3, 'rgba(250, 250, 250, 0.18)');
-    roundRect(ctx, bubbleX + 14, y + 3, (bubbleW - 28) * (0.35 + rand() * 0.4), 7, 3, 'rgba(250, 250, 250, 0.1)');
-
-    y += 54;
-    if (y > ART_TOP + ART_H - 60) break;
+function keyFigure(spec: OgCardSpec): { label: string; value: string } | null {
+  if (spec.stats?.length) return spec.stats[0];
+  const art = spec.art;
+  switch (art?.type) {
+    case 'countdown':
+      return { label: art.label, value: art.value };
+    case 'podium': {
+      const top = art.entries.find((entry) => entry.highlight) ?? art.entries[0];
+      return top ? { label: `#${top.rank ?? 1} ${top.name}`, value: top.score } : null;
+    }
+    case 'questions':
+      return { label: 'Questions', value: String(art.items.length + (art.more ?? 0)) };
+    default:
+      return null;
   }
-
-  // Voile + cadenas : l'illustration doit se lire comme « verrouille ».
-  const veil = ctx.createLinearGradient(0, ART_TOP + ART_H * 0.35, 0, ART_TOP + ART_H);
-  veil.addColorStop(0, 'rgba(24, 24, 27, 0)');
-  veil.addColorStop(1, 'rgba(24, 24, 27, 0.95)');
-  roundRect(ctx, ART_X, ART_TOP, ART_W, ART_H, 20, veil);
-
-  const lockY = ART_TOP + ART_H - 62;
-  ctx.strokeStyle = accent;
-  ctx.lineWidth = 4;
-  ctx.beginPath();
-  ctx.arc(ART_X + ART_W / 2, lockY - 12, 11, Math.PI, 0);
-  ctx.stroke();
-  roundRect(ctx, ART_X + ART_W / 2 - 17, lockY - 12, 34, 26, 6, accent);
-}
-
-/** Trois intitules de questions : ce que le visiteur devra reellement remplir. */
-function drawQuestions(ctx: SKRSContext2D, accent: string, items: string[], more: number) {
-  drawPanel(ctx, accent);
-  drawPanelLabel(ctx, 'Au programme');
-
-  let y = ART_TOP + 96;
-  items.slice(0, 3).forEach((item, index) => {
-    roundRect(ctx, ART_X + 28, y - 23, 32, 32, 9, hexToRgba(accent, 0.16));
-    ctx.fillStyle = accent;
-    ctx.font = font(17, 'semibold');
-    ctx.textAlign = 'center';
-    ctx.fillText(String(index + 1), ART_X + 44, y - 1);
-    ctx.textAlign = 'left';
-
-    ctx.fillStyle = UI.text;
-    ctx.font = font(20, 'text');
-    const lines = wrapText(ctx, item, ART_W - 104, 2);
-    lines.forEach((line, lineIndex) => ctx.fillText(line, ART_X + 76, y + lineIndex * 28));
-    y += 34 + lines.length * 28;
-  });
-
-  if (more > 0) {
-    ctx.fillStyle = UI.textMuted;
-    ctx.font = font(18, 'text');
-    const label = `+ ${more} autre${more > 1 ? 's' : ''} question${more > 1 ? 's' : ''}`;
-    ctx.fillText(label, ART_X + 28, Math.min(y + 6, ART_TOP + ART_H - 28));
-  }
-}
-
-/** Grand compteur : le temps restant est l'information utile d'un giveaway. */
-function drawCountdown(ctx: SKRSContext2D, accent: string, label: string, value: string, ended: boolean) {
-  const color = ended ? UI.textMuted : accent;
-  drawPanel(ctx, accent);
-
-  const center = ART_X + ART_W / 2;
-  const middle = ART_TOP + ART_H / 2;
-  ctx.textAlign = 'center';
-  ctx.fillStyle = UI.textMuted;
-  ctx.font = font(20, 'semibold');
-  ctx.fillText(truncate(label, 28), center, middle - 72);
-
-  ctx.fillStyle = color;
-  ctx.font = font(value.length > 8 ? 56 : 76, 'title');
-  ctx.fillText(fitText(ctx, value, ART_W - 56), center, middle + 28);
-
-  ctx.fillStyle = UI.textSecondary;
-  ctx.font = font(19, 'text');
-  ctx.fillText(ended ? 'Tirage terminé' : 'Avant le tirage', center, middle + 80);
-  ctx.textAlign = 'left';
-}
-
-/** Podium ou extrait cible d'un classement (jusqu'a 4 lignes, rang reel et ligne mise en avant). */
-function drawPodium(ctx: SKRSContext2D, accent: string, entries: OgPodiumEntry[], label = 'Podium') {
-  drawPanel(ctx, accent);
-
-  if (entries.length === 0) {
-    ctx.fillStyle = UI.textMuted;
-    ctx.font = font(20, 'text');
-    ctx.fillText('Classement en construction', ART_X + 40, ART_TOP + ART_H / 2);
-    return;
-  }
-
-  drawPanelLabel(ctx, label);
-  const medals: Record<number, string> = { 1: '#facc15', 2: '#d4d4d8', 3: '#d97706' };
-  const visible = entries.slice(0, 4);
-  const compact = visible.length > 3;
-  const rowH = compact ? 58 : 64;
-  const stepY = compact ? 74 : 84;
-  let y = ART_TOP + (compact ? 106 : 118);
-
-  visible.forEach((entry, index) => {
-    const rank = entry.rank ?? index + 1;
-    const highlighted = Boolean(entry.highlight);
-    const rowFill = highlighted
-      ? hexToRgba(accent, 0.2)
-      : index === 0 && !visible.some((e) => e.highlight)
-        ? UI.cardRaised
-        : undefined;
-    const rowStroke = highlighted ? accent : undefined;
-    roundRect(ctx, ART_X + 20, y - 38, ART_W - 40, rowH, 14, rowFill, rowStroke);
-
-    const medalColor = medals[rank];
-    ctx.beginPath();
-    ctx.arc(ART_X + 56, y - (compact ? 9 : 6), 17, 0, Math.PI * 2);
-    ctx.fillStyle = medalColor ?? (highlighted ? accent : UI.borderStrong);
-    ctx.fill();
-    ctx.fillStyle = medalColor || highlighted ? '#18181b' : UI.textSecondary;
-    ctx.font = font(rank >= 100 ? 13 : 16, 'semibold');
-    ctx.textAlign = 'center';
-    ctx.fillText(String(rank), ART_X + 56, y - (compact ? 3 : 0));
-    ctx.textAlign = 'left';
-
-    ctx.fillStyle = highlighted ? UI.text : accent;
-    ctx.font = font(18, 'medium');
-    ctx.textAlign = 'right';
-    const score = truncate(entry.score, 20);
-    ctx.fillText(score, ART_X + ART_W - 36, y - (compact ? 2 : -1));
-    const scoreWidth = ctx.measureText(score).width;
-    ctx.textAlign = 'left';
-
-    ctx.fillStyle = UI.text;
-    ctx.font = font(compact ? 20 : 22, 'semibold');
-    ctx.fillText(fitText(ctx, entry.name, ART_W - 146 - scoreWidth), ART_X + 88, y - (compact ? 2 : -1));
-
-    y += stepY;
-  });
-}
-
-/**
- * Grille « bento » des pages d'une famille : la page du lien en grande tuile
- * coloree, ses voisines en tuiles de verre. Ne depend que des libelles de
- * sections, jamais d'une donnee de serveur.
- */
-function drawSections(ctx: SKRSContext2D, accent: string, label: string, items: string[], active: number) {
-  const gap = 16;
-  const tileW = (ART_W - gap) / 2;
-  const heroH = 178;
-  const smallH = (ART_H - heroH - gap * 2) / 2;
-
-  // Grande tuile : degrade de l'accent, halo, nom de la famille puis de la page.
-  ctx.save();
-  ctx.shadowColor = hexToRgba(accent, 0.55);
-  ctx.shadowBlur = 40;
-  const hero = ctx.createLinearGradient(ART_X, ART_TOP, ART_X + ART_W, ART_TOP + heroH);
-  hero.addColorStop(0, accent);
-  hero.addColorStop(1, hexToRgba(accent, 0.55));
-  roundRect(ctx, ART_X, ART_TOP, ART_W, heroH, 26, hero);
-  ctx.restore();
-  ctx.fillStyle = 'rgba(9, 9, 11, 0.7)';
-  ctx.font = font(19, 'semibold');
-  ctx.fillText(truncate(label, 30), ART_X + 28, ART_TOP + 46);
-  ctx.fillStyle = UI.background;
-  ctx.font = font(40, 'title');
-  ctx.fillText(fitText(ctx, items[active] ?? label, ART_W - 56), ART_X + 28, ART_TOP + heroH - 38);
-
-  // Tuiles voisines, en grille 2 x 2.
-  const others = items.filter((_, index) => index !== active).slice(0, 4);
-  others.forEach((item, index) => {
-    const x = ART_X + (index % 2) * (tileW + gap);
-    const y = ART_TOP + heroH + gap + Math.floor(index / 2) * (smallH + gap);
-    roundRect(ctx, x, y, tileW, smallH, 22, 'rgba(24, 24, 27, 0.8)', hexToRgba(accent, 0.4));
-    ctx.beginPath();
-    ctx.arc(x + 28, y + 22, 6, 0, Math.PI * 2);
-    ctx.fillStyle = accent;
-    ctx.fill();
-    ctx.fillStyle = UI.text;
-    ctx.font = font(20, 'semibold');
-    const lines = wrapText(ctx, item, tileW - 48, 2);
-    lines.forEach((line, i) => ctx.fillText(line, x + 24, y + smallH - 22 - (lines.length - 1 - i) * 25));
-  });
-}
-
-/** Gros bouton de la colonne de texte : dit ou mene le lien (l'image entiere est cliquable). */
-function drawCta(ctx: SKRSContext2D, accent: string, label: string) {
-  ctx.font = font(24, 'semibold');
-  const w = ctx.measureText(label).width + 96;
-  const y = H - 56 - 68;
-  ctx.save();
-  ctx.shadowColor = hexToRgba(accent, 0.55);
-  ctx.shadowBlur = 36;
-  roundRect(ctx, PAD, y, w, 68, 34, accent);
-  ctx.restore();
-  ctx.fillStyle = UI.background;
-  ctx.fillText(label, PAD + 36, y + 44);
-  ctx.font = font(30, 'semibold');
-  ctx.fillText('→', PAD + w - 52, y + 45);
-}
-
-// ---------------------------------------------------------------------------
-// Rendu principal
-// ---------------------------------------------------------------------------
-
-/**
- * En-tete facon barre du dashboard : le logo, puis le serveur comme dans le
- * selecteur de serveur (« Kotbo / Atelier Nova »), sur un filet pleine largeur.
- */
-async function drawHeader(ctx: SKRSContext2D, spec: OgCardSpec) {
-  ctx.fillStyle = UI.textFaint;
-  ctx.font = font(20, 'medium');
-  ctx.textAlign = 'right';
-  ctx.fillText('kotbo.fr', W - PAD, 81);
-  ctx.textAlign = 'left';
-  const siteWidth = ctx.measureText('kotbo.fr').width;
-
-  drawLogo(ctx, PAD, 48, 48);
-  ctx.fillStyle = UI.text;
-  ctx.font = font(30, 'title');
-  ctx.fillText('Kotbo', PAD + 64, 83);
-  let cursor = PAD + 64 + ctx.measureText('Kotbo').width;
-
-  if (spec.guildName) {
-    ctx.fillStyle = UI.borderStrong;
-    ctx.font = font(30, 'text');
-    ctx.fillText('/', cursor + 18, 83);
-    cursor += 18 + ctx.measureText('/').width + 18;
-
-    await drawGuildAvatar(ctx, spec.guildIconUrl, cursor, 52, 40, spec.guildName);
-    ctx.fillStyle = UI.textSecondary;
-    ctx.font = font(24, 'semibold');
-    ctx.fillText(fitText(ctx, spec.guildName, W - PAD - siteWidth - 40 - cursor - 54), cursor + 54, 81);
-  }
-
-  ctx.fillStyle = UI.border;
-  ctx.fillRect(0, HEADER_LINE, W, 1.5);
 }
 
 export async function renderOgCard(spec: OgCardSpec): Promise<Buffer> {
@@ -731,86 +411,54 @@ export async function renderOgCard(spec: OgCardSpec): Promise<Buffer> {
   if (cached) return cached;
 
   ensureFonts();
-  const rand = seededRandom(spec.cacheKey);
   const accent = readableAccent(normalizeAccent(spec.accent, OG_ACCENT));
   const canvas = createCanvas(W, H);
   const ctx = canvas.getContext('2d');
 
-  drawBackground(ctx, accent);
+  ctx.fillStyle = UI.background;
+  ctx.fillRect(0, 0, W, H);
+  roundRect(ctx, CARD_INSET, CARD_INSET, W - CARD_INSET * 2, H - CARD_INSET * 2, 36, UI.card, UI.border);
 
-  await drawHeader(ctx, spec);
+  // Identite : l'icone du serveur quand la page est la sienne, le logo sinon.
+  const top = CARD_INSET + 28;
+  if (spec.guildName) await drawGuildAvatar(ctx, spec.guildIconUrl, PAD, top, 64, spec.guildName);
+  else drawLogo(ctx, PAD, top, 64);
+  drawPill(ctx, spec.kicker, PAD + 80, top + 12, accent, W - PAD * 2 - 80);
 
-  const hasArt = Boolean(spec.art && spec.art.type !== 'none');
-  const textWidth = hasArt ? ART_X - PAD - 48 : W - PAD * 2;
-
-  // Pastille du type de ressource, teintee de l'accent, puis les pastilles
-  // d'etat sur la meme ligne : la colonne garde sa hauteur pour le titre.
-  let pillX = PAD + drawPill(ctx, spec.kicker, PAD, ART_TOP, { fill: accent, text: UI.background }) + 10;
-  for (const badge of spec.badges?.slice(0, 2) ?? []) {
-    pillX += drawPill(ctx, badge, pillX, ART_TOP, { fill: UI.card, stroke: UI.borderStrong, text: UI.textSecondary }) + 10;
-  }
-
-  // Titre.
+  // Titre : au plus trois lignes, la vignette n'a pas la place d'un paragraphe.
   ctx.fillStyle = UI.text;
-  const bento = spec.art?.type === 'sections';
-  ctx.font = font(bento ? 70 : 58, 'title');
-  const titleLines = wrapText(ctx, spec.title, textWidth, 2);
-  let cursorY = ART_TOP + 38 + 70;
-  for (const line of titleLines) {
-    ctx.fillText(line, PAD, cursorY);
-    cursorY += bento ? 78 : 66;
+  ctx.font = font(46, 'title');
+  const lines = wrapText(ctx, spec.title, W - PAD * 2, 3);
+  let y = top + 64 + 62;
+  for (const line of lines) {
+    ctx.fillText(line, PAD, y);
+    y += 54;
   }
 
-  // Sous-titre. Avec un titre sur deux lignes, les tuiles de chiffres ne
-  // laissent la place qu'a une ligne.
-  const hasStats = Boolean(spec.stats?.length);
-  if (spec.subtitle) {
+  // Bas de carte : la donnee cle, sinon les pastilles d'etat.
+  const figure = keyFigure(spec);
+  const bottom = H - CARD_INSET - 28;
+  if (figure) {
+    const tileY = bottom - TILE_H;
+    roundRect(ctx, PAD, tileY, W - PAD * 2, TILE_H, 20, UI.cardRaised, UI.borderStrong);
     ctx.fillStyle = UI.textMuted;
-    ctx.font = font(25, 'text');
-    const maxLines = hasStats && titleLines.length > 1 ? 1 : 2;
-    for (const line of wrapText(ctx, spec.subtitle, textWidth, maxLines)) {
-      ctx.fillText(line, PAD, cursorY + 6);
-      cursorY += 36;
+    ctx.font = font(19, 'medium');
+    ctx.fillText(fitText(ctx, figure.label, W - PAD * 2 - 44), PAD + 22, tileY + 36);
+    ctx.fillStyle = accent;
+    ctx.font = font(40, 'title');
+    ctx.fillText(fitText(ctx, figure.value, W - PAD * 2 - 44), PAD + 22, tileY + 82);
+  } else if (spec.badges?.length) {
+    let x = PAD;
+    for (const badge of spec.badges.slice(0, 2)) {
+      ctx.font = font(19, 'semibold');
+      const text = fitText(ctx, badge, W - PAD * 2 - 32);
+      const w = ctx.measureText(text).width + 32;
+      if (x + w > W - PAD) break;
+      roundRect(ctx, x, bottom - 40, w, 40, 20, UI.cardRaised, UI.borderStrong);
+      ctx.fillStyle = UI.textSecondary;
+      ctx.fillText(text, x + 16, bottom - 13);
+      x += w + 10;
     }
-  }
-
-  // Tuiles de chiffres cles, posees en bas de la colonne de texte.
-  if (hasStats) {
-    const stats = spec.stats!.slice(0, 3);
-    const gap = 16;
-    const tileW = hasArt ? Math.floor((textWidth - gap * (stats.length - 1)) / stats.length) : 220;
-    stats.forEach((stat, index) => drawStat(ctx, PAD + index * (tileW + gap), STATS_TOP, tileW, stat.value, stat.label));
-  }
-
-  // Illustration.
-  switch (spec.art?.type) {
-    case 'redactedChat':
-      drawRedactedChat(ctx, rand, accent, spec.art.rows ?? 6);
-      break;
-    case 'questions':
-      drawQuestions(ctx, accent, spec.art.items, spec.art.more ?? 0);
-      break;
-    case 'countdown':
-      drawCountdown(ctx, accent, spec.art.label, spec.art.value, spec.art.ended ?? false);
-      break;
-    case 'podium':
-      drawPodium(ctx, accent, spec.art.entries, spec.art.label);
-      break;
-    case 'sections':
-      drawSections(ctx, accent, spec.art.label, spec.art.items, spec.art.active);
-      drawCta(ctx, accent, spec.art.cta);
-      break;
-    default:
-      break;
-  }
-
-  // Mention en bas a droite, dans la marge sous l'illustration.
-  if (spec.footerRight) {
-    ctx.fillStyle = UI.textFaint;
-    ctx.font = font(18, 'medium');
-    ctx.textAlign = 'right';
-    ctx.fillText(truncate(spec.footerRight, 60), W - PAD, H - 22);
-    ctx.textAlign = 'left';
   }
 
   const buffer = canvas.toBuffer('image/png');

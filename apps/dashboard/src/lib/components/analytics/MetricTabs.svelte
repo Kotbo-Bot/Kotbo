@@ -18,12 +18,15 @@
     spark?: number[];
     color?: string;
     hint?: string;
+    /** Tag de serveur affiché en pastille à côté du libellé, comme dans la fiche membre. */
+    tag?: { text: string; badgeUrl?: string | null };
   }
 </script>
 
 <script lang="ts">
   import Papicon from '../Papicon.svelte';
   import Sparkline from './Sparkline.svelte';
+  import ServerTagPill from '../ServerTagPill.svelte';
   import { m } from '../../i18n';
   import { fmtDelta } from './analyticsFormat';
 
@@ -67,13 +70,18 @@
     const next = metrics[(index + delta + metrics.length) % metrics.length];
     if (!next) return;
     onchange(next.id);
-    const buttons = (event.currentTarget as HTMLElement).parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]');
+    const buttons = (event.currentTarget as HTMLElement).parentElement?.querySelectorAll<HTMLButtonElement>('[role="radio"]');
     buttons?.[(index + delta + metrics.length) % metrics.length]?.focus();
   }
 </script>
 
 {#snippet content(metric: MetricTab, selected: boolean, verdict: boolean | null)}
-  <span class="metric-tab__label">{metric.label}</span>
+  <span class="metric-tab__label">
+    {metric.label}
+    {#if metric.tag}
+      <ServerTagPill tag={metric.tag.text} badgeUrl={metric.tag.badgeUrl} />
+    {/if}
+  </span>
   <span class="metric-tab__row">
     <span class="metric-tab__value">{metric.value}</span>
     {#if metric.spark && metric.spark.length > 1}
@@ -98,14 +106,16 @@
 {/snippet}
 
 {#if interactive}
-  <div class="metric-tabs" role="tablist" aria-label={label}>
+  <!-- Les tuiles choisissent la mesure de la courbe : un groupe de boutons
+       radio, pas des onglets (il n'y a pas de panneau a relier, RGAA 7.1). -->
+  <div class="metric-tabs" role="radiogroup" aria-label={label}>
     {#each metrics as metric, index (metric.id)}
       {@const selected = metric.id === active}
       <button
         type="button"
-        role="tab"
+        role="radio"
         class="metric-tab"
-        aria-selected={selected}
+        aria-checked={selected}
         tabindex={selected ? 0 : -1}
         title={metric.hint || undefined}
         style="--metric-color: {metric.color ?? 'var(--series-1)'};"
@@ -162,11 +172,11 @@
     background: var(--color-surface-container);
   }
 
-  .metric-tab[aria-selected='true'] {
+  .metric-tab[aria-checked='true'] {
     background: var(--color-surface-container);
   }
 
-  .metric-tab[aria-selected='true']::before {
+  .metric-tab[aria-checked='true']::before {
     background: var(--metric-color);
   }
 
@@ -181,11 +191,16 @@
   }
 
   .metric-tab__label {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    min-width: 0;
     font-size: 0.8125rem;
     color: var(--color-on-surface-variant);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    /* Passe a la ligne plutot que d'etre coupe quand l'utilisateur agrandit
+       l'espacement du texte (RGAA 10.12). */
+    flex-wrap: wrap;
+    overflow-wrap: anywhere;
   }
 
   .metric-tab__row {
@@ -214,6 +229,6 @@
     gap: 0.25rem;
     font-size: 0.75rem;
     font-weight: 500;
-    white-space: nowrap;
+    flex-wrap: wrap;
   }
 </style>

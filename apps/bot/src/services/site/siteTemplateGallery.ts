@@ -38,7 +38,7 @@ import { invalidateSiteCache } from './siteService.js';
 import { buildSiteBlueprint, SITE_TEMPLATES, type SiteTemplateKey } from './siteTemplates.js';
 import { readSiteAsset, storeSiteAsset } from './siteUploads.js';
 
-export const TEMPLATE_CATEGORIES = ['general', 'gaming', 'rp', 'esport', 'etude', 'autre'] as const;
+export const TEMPLATE_CATEGORIES = ['general', 'gaming', 'rp', 'esport', 'etude', 'dev', 'autre'] as const;
 export type TemplateCategory = (typeof TEMPLATE_CATEGORIES)[number];
 
 const MAX_TEMPLATES_PER_GUILD = 5;
@@ -63,7 +63,7 @@ interface TemplatePageData {
   inNav: boolean;
 }
 
-type TemplateNavItem = { label: string; pageKey?: string; section?: 'home' | 'wiki' | 'blog' | 'search' | 'me' };
+type TemplateNavItem = { label: string; pageKey?: string; section?: 'home' | 'wiki' | 'blog' | 'search' | 'me' | 'forum' };
 
 // ─── Document d'exemple ─────────────────────────────────────────────────────
 

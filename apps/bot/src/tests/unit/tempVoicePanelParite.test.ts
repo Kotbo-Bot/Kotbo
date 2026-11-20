@@ -67,6 +67,12 @@ import {
   type DispositionEtat,
 } from '../../services/features/tempVoiceService.js';
 import { logger } from '../../utils/logger.js';
+import { legacyModuleCall, mockDashboardGate, type LegacyModuleContext } from '../helpers/honoDashboard.js';
+// Session et garde serveur simulées : la route est servie par Hono.
+mockDashboardGate(
+  { level: 'admin', canViewDashboard: true, canModerateContent: true, canManageSettings: true, canManageTutoring: true },
+  { userId: 'user-1', username: 'Admin' },
+);
 
 const GUILD_A = '100000000000000001';
 const GUILD_B = '100000000000000002';
@@ -150,7 +156,9 @@ mock.module('@kotbo/contracts', () => contractsDuWorktree);
 
 const { registerTempVoiceListener, tempChannels } = await import('../../events/tempVoice.js');
 const { DASHBOARD_ACCESS_ADMIN } = await import('../../api/shared.js');
-const { handleChannelsManagementRoutes } = await import('../../api/routes/dashboard/modules/channels-management.js');
+const { createChannelsManagementRouter } = await import('../../api/routes/dashboard/modules/channels-management.js');
+const handleChannelsManagementRoutes = (ctx: LegacyModuleContext & { client: unknown }) =>
+  legacyModuleCall(createChannelsManagementRouter(ctx.client as never), ctx);
 
 /**
  * Les avertissements du module, sans `mock.module` sur `../../utils/logger` :
@@ -616,7 +624,7 @@ describe('T4/T5/T6/T7 — les quatre dispositions', () => {
     expect(imageDe(charge)).toBeNull();
 
     const embeds = (charge?.embeds ?? []) as Array<{ data?: { fields?: unknown[]; image?: unknown } }>;
-    expect(embeds[0]?.data?.fields?.length).toBe(6);
+    expect(embeds[0]?.data?.fields?.length).toBe(7);
     expect(embeds[0]?.data?.image).toBeUndefined();
   }, 60_000);
 
@@ -793,7 +801,7 @@ describe('T8/T9 — les teintes ne touchent que les rendus en image', () => {
     // Les trois lignes doivent être identiques hors le nom de la teinte.
     const sansNom = observees.map(({ teinte: _t, ...reste }) => JSON.stringify(reste));
     expect(new Set(sansNom).size).toBe(1);
-    expect(observees.every((o) => o.image === false && o.champs === 6)).toBe(true);
+    expect(observees.every((o) => o.image === false && o.champs === 7)).toBe(true);
   }, 120_000);
 });
 
@@ -836,8 +844,8 @@ describe('T10/T11 — CLASSIC et FLAT : messages et composants', () => {
     );
     expect(ecrit).toBe(true);
 
-    // Quatre rangées : actions, propriété+réglages, mode d'écriture, présents.
-    expect(((charge?.components as unknown[]) ?? []).length).toBe(4);
+    // Cinq rangées : actions, propriété+réglages, mode d'écriture, visibilité, présents.
+    expect(((charge?.components as unknown[]) ?? []).length).toBe(5);
 
     const publics = composantsDe(charge);
     const ids = idsDe(publics);
@@ -1132,7 +1140,7 @@ describe('T14/T15 — ce que la route accepte et ce qu’elle sert par défaut',
     expect(ecrit).toBe(true);
     expect(imageDe(charge)).toBeNull();
     const embeds = (charge?.embeds ?? []) as Array<{ data?: { fields?: unknown[] } }>;
-    expect(embeds[0]?.data?.fields?.length).toBe(6);
+    expect(embeds[0]?.data?.fields?.length).toBe(7);
     expect(porteLaMarque(charge)).toBe(false);
   }, 60_000);
 });

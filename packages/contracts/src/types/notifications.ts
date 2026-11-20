@@ -14,7 +14,6 @@ export const NOTIFICATION_CATEGORIES = [
   'moderation',
   'security',
   'tickets',
-  'partnerships',
   'community',
   'system',
 ] as const;
@@ -93,15 +92,11 @@ export const NOTIFICATION_KINDS = {
   'tickets.update': { category: 'tickets', mandatory: true },
   'tickets.queue': { category: 'tickets' },
 
-  // Partenariats
-  'partnerships.alert': { category: 'partnerships' },
-  'partnerships.application_decided': { category: 'partnerships', mandatory: true },
-
   // Communauté
-  'community.daily_algo_feedback': { category: 'community', mandatory: true },
   'community.level_up': { category: 'community' },
   'community.shop': { category: 'community' },
   'community.site': { category: 'community' },
+  'community.boost_lost': { category: 'community' },
 
   // Système
   'system.workflow_failed': { category: 'system' },

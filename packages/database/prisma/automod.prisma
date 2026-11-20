@@ -16,6 +16,28 @@ model BannedWord {
 }
 
 
+/// Emoji, sticker ou serveur d'origine interdit, avec sa propre sanction.
+model EmojiBanRule {
+  id      String @id @default(cuid())
+  guildId String
+  /// EMOJI (personnalisé) | UNICODE | STICKER | SOURCE_GUILD (tous les emojis et stickers d'un serveur)
+  kind    String
+  /// id de l'emoji / du sticker / du serveur, ou emoji unicode sans sélecteur de variation.
+  key     String
+  /// Nom et image au moment de la règle (affichage seulement).
+  name    String?
+  iconUrl String?
+  /// DELETE | WARN | TIMEOUT | KICK | SOFTBAN | BAN | JAIL (voir autoSanction).
+  action      String @default("DELETE")
+  durationMin Int?
+  createdBy   String?
+  createdAt   DateTime @default(now())
+
+  @@unique([guildId, kind, key])
+  @@index([guildId])
+  @@map("emoji_ban_rules")
+}
+
 model AutoModConfig {
   guildId              String   @id
   discordAutoModEnabled Boolean  @default(true)

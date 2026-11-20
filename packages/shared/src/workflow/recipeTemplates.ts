@@ -162,6 +162,58 @@ export const RECIPE_TEMPLATES: RecipeTemplate[] = [
       ],
     }),
   },
+  // Réputation : le membre remercié l'apprend en privé ; un palier se fête en
+  // public une seule fois, « exactement » plutôt que « au moins ».
+  {
+    id: 'reputation-thanks-dm',
+    icon: 'Heart',
+    build: (): Recipe => ({
+      trigger: { type: 'OnReputationReceived' },
+      steps: [
+        {
+          id: 'reputation-dm',
+          kind: 'action',
+          action: 'SendDM',
+          values: {
+            member: { from: 'context', path: 'member' },
+            text: {
+              from: 'text',
+              template: '{giver.displayName} t\'a remercié sur {guild.name} : {reason}. Tu as maintenant {reputation} points de réputation.',
+            },
+          },
+        },
+      ],
+    }),
+  },
+  {
+    id: 'reputation-milestone',
+    icon: 'Star',
+    build: (): Recipe => ({
+      trigger: { type: 'OnReputationReceived' },
+      steps: [
+        {
+          id: 'reputation-milestone-check',
+          kind: 'condition',
+          match: 'all',
+          tests: [
+            { id: 'reputation-milestone-test', condition: 'reputation.points', operator: 'eq', value: { from: 'number', value: 50 } },
+          ],
+          then: [
+            {
+              id: 'reputation-milestone-message',
+              kind: 'action',
+              action: 'SendMessage',
+              values: {
+                text: { from: 'text', template: '{member.displayName} atteint {reputation} points de réputation. Merci pour ton aide !' },
+                channel: { from: 'channel', channelId: '' },
+              },
+            },
+          ],
+          otherwise: [],
+        },
+      ],
+    }),
+  },
   {
     id: 'ticket-welcome',
     icon: 'TextBubble',

@@ -477,6 +477,7 @@ figcaption { color: var(--site-muted); font-size: 0.88rem; text-align: center; m
 .pill-muted { opacity: 0.85; }
 .pill-live { color: #ef4444; background: rgb(239 68 68 / 0.12); border-color: rgb(239 68 68 / 0.3); }
 .pill-status-approved, .pill-status-implemented { color: #16a34a; background: rgb(34 197 94 / 0.12); border-color: rgb(34 197 94 / 0.3); }
+.pill-status-in_progress { color: #ca8a04; background: rgb(234 179 8 / 0.12); border-color: rgb(234 179 8 / 0.3); }
 .pill-status-rejected { color: #dc2626; background: rgb(239 68 68 / 0.1); border-color: rgb(239 68 68 / 0.3); }
 .tag { display: inline-block; padding: 2px 9px; border-radius: 4px; background: var(--site-surface-strong); color: var(--site-muted); font-size: 0.8rem; text-decoration: none; margin: 0 6px 6px 0; }
 .tag:hover { color: var(--site-text); }

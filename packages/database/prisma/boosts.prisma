@@ -1,0 +1,33 @@
+// ── Suivi des boosts ─────────────────────────────────────────────────────────
+// Discord ne donne que la date de début du boost en cours (`premiumSince`) et
+// le total de boosts du serveur. L'historique (arrêts, reprises, durée cumulée)
+// n'existe que si le bot le note lui-même : c'est le rôle de ces tables. Le
+// boost en cours d'un membre est recopié sur MemberProfile.boostingSince.
+
+model BoostEvent {
+  id      String @id @default(cuid())
+  guildId String
+  userId  String
+  /// START | STOP
+  type    String
+  /// `premiumSince` du boost concerné : date de début, aussi pour un STOP.
+  boostingSince DateTime?
+  /// START : date de début réelle du boost (même rattrapé plus tard). STOP : constat de l'arrêt.
+  createdAt DateTime @default(now())
+
+  @@index([guildId, createdAt])
+  @@index([guildId, userId, createdAt])
+  @@map("boost_events")
+}
+
+model GuildBoostSnapshot {
+  guildId      String
+  /// AAAA-MM-JJ (UTC)
+  dateKey      String
+  boostCount   Int
+  boosterCount Int
+  tier         Int
+
+  @@id([guildId, dateKey])
+  @@map("guild_boost_snapshots")
+}

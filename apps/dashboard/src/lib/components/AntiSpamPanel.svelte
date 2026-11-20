@@ -91,30 +91,30 @@
   };
 
   const SIGNAL_LABELS: Record<string, string> = {
-    no_typing: m.asp_sig_no_typing(),
-    paste_burst: m.asp_sig_paste_burst(),
-    inhuman_rate: m.asp_sig_inhuman_rate(),
-    regular_intervals: m.asp_sig_regular_intervals(),
-    cross_channel_burst: m.asp_sig_cross_channel_burst(),
-    attachment_flood: m.asp_sig_attachment_flood(),
-    near_duplicate: m.asp_sig_near_duplicate(),
-    repeat_identical: m.asp_sig_repeat_identical(),
-    mention_burst: m.asp_sig_mention_burst(),
-    everyone_attempt: m.asp_sig_everyone_attempt(),
-    unicode_obfuscation: m.asp_sig_unicode_obfuscation(),
-    invite_link: m.asp_sig_invite_link(),
-    first_message_link: m.asp_sig_first_message_link(),
-    link_from_newcomer: m.asp_sig_link_from_newcomer(),
+    get no_typing() { return m.asp_sig_no_typing(); },
+    get paste_burst() { return m.asp_sig_paste_burst(); },
+    get inhuman_rate() { return m.asp_sig_inhuman_rate(); },
+    get regular_intervals() { return m.asp_sig_regular_intervals(); },
+    get cross_channel_burst() { return m.asp_sig_cross_channel_burst(); },
+    get attachment_flood() { return m.asp_sig_attachment_flood(); },
+    get near_duplicate() { return m.asp_sig_near_duplicate(); },
+    get repeat_identical() { return m.asp_sig_repeat_identical(); },
+    get mention_burst() { return m.asp_sig_mention_burst(); },
+    get everyone_attempt() { return m.asp_sig_everyone_attempt(); },
+    get unicode_obfuscation() { return m.asp_sig_unicode_obfuscation(); },
+    get invite_link() { return m.asp_sig_invite_link(); },
+    get first_message_link() { return m.asp_sig_first_message_link(); },
+    get link_from_newcomer() { return m.asp_sig_link_from_newcomer(); },
   };
 
   const SIGNAL_TOGGLES: { field: keyof SpamConfig; label: string; help: string }[] = [
-    { field: 'typingSignalEnabled', label: m.asp_toggle_typing(), help: m.asp_toggle_typing_help() },
-    { field: 'pasteSignalEnabled', label: m.asp_toggle_paste(), help: m.asp_toggle_paste_help() },
-    { field: 'crossChannelEnabled', label: m.asp_toggle_cross_channel(), help: m.asp_toggle_cross_channel_help() },
-    { field: 'duplicateEnabled', label: m.asp_toggle_duplicate(), help: m.asp_toggle_duplicate_help() },
-    { field: 'cadenceEnabled', label: m.asp_toggle_cadence(), help: m.asp_toggle_cadence_help() },
-    { field: 'contentEnabled', label: m.asp_toggle_content(), help: m.asp_toggle_content_help() },
-    { field: 'trustEnabled', label: m.asp_toggle_trust(), help: m.asp_toggle_trust_help() },
+    { field: 'typingSignalEnabled', get label() { return m.asp_toggle_typing(); }, get help() { return m.asp_toggle_typing_help(); } },
+    { field: 'pasteSignalEnabled', get label() { return m.asp_toggle_paste(); }, get help() { return m.asp_toggle_paste_help(); } },
+    { field: 'crossChannelEnabled', get label() { return m.asp_toggle_cross_channel(); }, get help() { return m.asp_toggle_cross_channel_help(); } },
+    { field: 'duplicateEnabled', get label() { return m.asp_toggle_duplicate(); }, get help() { return m.asp_toggle_duplicate_help(); } },
+    { field: 'cadenceEnabled', get label() { return m.asp_toggle_cadence(); }, get help() { return m.asp_toggle_cadence_help(); } },
+    { field: 'contentEnabled', get label() { return m.asp_toggle_content(); }, get help() { return m.asp_toggle_content_help(); } },
+    { field: 'trustEnabled', get label() { return m.asp_toggle_trust(); }, get help() { return m.asp_toggle_trust_help(); } },
   ];
 
   let config = $state<SpamConfig>({ ...DEFAULTS });
@@ -304,7 +304,7 @@
             <span class="text-xs font-medium text-on-surface-variant">{m.asp_alert_channel()}</span>
             <select
               bind:value={config.alertChannelId}
-              class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
+              class="mt-1 w-full rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface"
             >
               <option value={null}>{m.asp_alert_channel_default()}</option>
               {#each channels as channel (channel.id)}
@@ -322,7 +322,7 @@
               min="1"
               max="40320"
               bind:value={config.timeoutMinutes}
-              class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
+              class="mt-1 w-full rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface"
             />
           </label>
         </div>
@@ -395,7 +395,7 @@
               <span class="text-body-sm font-medium text-on-surface">{row.label}</span>
               <span class="text-body-sm font-semibold tabular-nums text-on-surface">{config[row.field]}</span>
             </div>
-            <input
+            <input aria-label={row.label}
               type="range"
               min="0"
               max="101"
@@ -451,7 +451,7 @@
           <input
             type="number" min="5" max="300"
             bind:value={config.windowSeconds}
-            class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
+            class="mt-1 w-full rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface"
           />
         </label>
         <label class="block">
@@ -459,7 +459,7 @@
           <input
             type="number" min="2" max="20"
             bind:value={config.crossChannelThreshold}
-            class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
+            class="mt-1 w-full rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface"
           />
         </label>
         <label class="block">
@@ -467,7 +467,7 @@
           <input
             type="number" min="0.5" max="1" step="0.01"
             bind:value={config.duplicateSimilarity}
-            class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
+            class="mt-1 w-full rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface"
           />
         </label>
       </div>
@@ -578,9 +578,9 @@
                     <span
                       class="text-xs font-semibold tabular-nums px-1.5 py-0.5 rounded
                       {sample.score >= config.timeoutThreshold
-                        ? 'bg-error/15 text-error'
+                        ? 'bg-error/15 text-on-error-container'
                         : sample.score >= config.deleteThreshold
-                          ? 'bg-warning/15 text-warning'
+                          ? 'bg-warning/15 text-on-warning-container'
                           : 'bg-sky-500/15 text-sky-500'}"
                     >
                       {sample.score}/100
@@ -594,8 +594,8 @@
                     {#if sample.label}
                       <span
                         class="text-2xs px-1.5 py-0.5 rounded {sample.label === 'TRUE_POSITIVE'
-                          ? 'bg-error/10 text-error'
-                          : 'bg-success/10 text-success'}"
+                          ? 'bg-error/10 text-on-error-container'
+                          : 'bg-success/10 text-on-success-container'}"
                       >
                         {sample.label === 'TRUE_POSITIVE' ? m.asp_label_true_positive() : m.asp_label_false_positive()}
                       </span>
@@ -622,7 +622,7 @@
                   <div class="flex flex-col gap-1.5 shrink-0">
                     <button
                       type="button"
-                      class="px-2.5 py-1 rounded-lg text-xs font-medium bg-error/15 text-error border border-error/30 hover:bg-error/25 disabled:opacity-50 transition-colors"
+                      class="px-2.5 py-1 rounded-lg text-xs font-medium bg-error/15 text-on-error-container border border-error/30 hover:bg-error/25 disabled:opacity-50 transition-colors"
                       disabled={decidingId !== null}
                       onclick={() => decide(sample, true)}
                     >
@@ -630,7 +630,7 @@
                     </button>
                     <button
                       type="button"
-                      class="px-2.5 py-1 rounded-lg text-xs font-medium bg-success/15 text-success border border-success/30 hover:bg-success/25 disabled:opacity-50 transition-colors"
+                      class="px-2.5 py-1 rounded-lg text-xs font-medium bg-success/15 text-on-success-container border border-success/30 hover:bg-success/25 disabled:opacity-50 transition-colors"
                       disabled={decidingId !== null}
                       onclick={() => decide(sample, false)}
                     >

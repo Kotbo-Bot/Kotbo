@@ -21,6 +21,7 @@
    * cadre imite Discord, il ne suit pas le theme de Kotbo.
    */
   import { m } from '../../i18n';
+  import { bot } from '../../stores/botLocale.svelte';
   import type { ModerationLevel } from '../../onboarding';
   import Papicon from '../Papicon.svelte';
 
@@ -48,7 +49,7 @@
       author: 'Maë',
       color: '#3ba55d',
       initial: 'M',
-      text: 'Quelqu’un a vu le dernier patch ? Ça a l’air énorme',
+      get text() { return m.bot_sim_patch({}, bot()); },
       verdict: KEPT,
       reason: () => m.onb_sim_passes(),
     },
@@ -56,7 +57,7 @@
       author: 'promo_bot',
       color: '#faa61a',
       initial: 'P',
-      text: 'REJOIGNEZ VITE discord.gg/xxxxxx 5000 MEMBRES 🔥🔥🔥',
+      get text() { return m.bot_sim_promo({}, bot()); },
       // Un lien d'invitation saute a tous les niveaux : c'est precisement ce que
       // « le strict necessaire » veut dire.
       verdict: { light: 'deleted', standard: 'deleted', strict: 'deleted' },
@@ -66,7 +67,7 @@
       author: 'Tom',
       color: '#5865f2',
       initial: 'T',
-      text: 'perso je trouve ça bien équilibré cette fois',
+      get text() { return m.bot_sim_opinion({}, bot()); },
       verdict: KEPT,
       reason: () => m.onb_sim_passes(),
     },
@@ -82,7 +83,7 @@
       author: 'kkkkk',
       color: '#eb459e',
       initial: 'K',
-      text: '@Maë @Tom @Léa @Sam @Noa @Ana @Jo @Max répondez',
+      get text() { return m.bot_sim_flood({}, bot()); },
       verdict: { light: 'kept', standard: 'deleted', strict: 'deleted' },
       reason: () => m.onb_sim_reason_flood(),
     },
@@ -90,7 +91,7 @@
       author: 'user_84021',
       color: '#747f8d',
       initial: 'U',
-      text: 'salut, je viens d’arriver',
+      get text() { return m.bot_sim_hello({}, bot()); },
       fresh: true,
       // Le seul cas ou « strict » se distingue : un compte de quelques heures
       // n'est pas fautif, il est simplement mis a l'ecart le temps d'un captcha.
@@ -168,7 +169,7 @@
   <div class="flex items-center justify-between gap-2 px-3.5 py-2.5 bg-[#2b2d31] border-b border-black/25">
     <span class="flex items-center gap-2 min-w-0">
       <span class="text-[#80848e] text-[17px] leading-none font-medium">#</span>
-      <span class="text-body-sm font-semibold text-[#dbdee1] truncate">général</span>
+      <span class="text-body-sm font-semibold text-[#dbdee1] truncate">{m.bot_ch_general({}, bot())}</span>
     </span>
     <button
       type="button"

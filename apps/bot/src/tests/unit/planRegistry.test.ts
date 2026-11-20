@@ -10,6 +10,7 @@
 import { describe, expect, test } from 'bun:test';
 import {
   FREE_MODULES,
+  FREE_QUOTAS,
   MODULE_REGISTRY,
   PLAN_KEYS,
   getModuleDefinition,
@@ -115,6 +116,14 @@ describe('modules ouverts par une offre', () => {
     for (const key of ['sanctions', 'automod', 'raid_protection', 'security_verification', 'logs']) {
       expect(planIncludesModule('FREE', key)).toBe(true);
     }
+  });
+
+  test('grille du 2026-11-17 : comptes suspects, formulaires et recrutement gratuits, declencheurs payants', () => {
+    for (const key of ['double_accounts', 'custom_forms', 'recruitment']) {
+      expect(planIncludesModule('FREE', key)).toBe(true);
+    }
+    expect(planIncludesModule('FREE', 'workflows')).toBe(false);
+    expect(FREE_QUOTAS).toEqual({ customForms: 3, recruitmentForms: 1, backups: 2, scheduledTasks: 2 });
   });
 
   test('un module inconnu du registre est considere inclus', () => {

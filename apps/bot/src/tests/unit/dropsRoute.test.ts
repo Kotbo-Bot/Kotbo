@@ -1,11 +1,10 @@
 import { describe, expect, test, mock, beforeEach } from 'bun:test';
-import { IncomingMessage, ServerResponse } from 'node:http';
-import { Socket } from 'node:net';
 import path from 'node:path';
 import type { Client } from 'discord.js';
 import { DASHBOARD_ACCESS_ADMIN, type AuthClaims, type DashboardAccess } from '../../api/shared.js';
 import { PlanLockedError } from '../../services/core/moduleActivationService.js';
 import { completeModuleMock } from '../helpers/moduleMock.js';
+import { mockDashboardGate } from '../helpers/honoDashboard.js';
 
 let inOnboardingResult = false;
 const mockSetStatus = mock(async () => ({
@@ -25,7 +24,30 @@ const mockDb = {
   dashboardAuditLog: {
     create: mock(async () => ({})),
   },
+  dropConfig: {
+    findMany: mock(async () => ['XP', 'RPG_XP', 'CLAN_POINTS', 'COINS', 'RPG_ITEM'].map((type) => ({ id: `config-${type}`, type }))),
+    createMany: mock(async () => ({ count: 0 })),
+  },
+  drop: {
+    findMany: mock(async () => recentDropRows),
+    // Premier appel : drops terminés ; second : ceux sans gagnant.
+    groupBy: mock(async (args: { where: { claimCount?: number } }) => (args.where.claimCount === 0
+      ? [{ type: 'XP', _count: { _all: 6 } }]
+      : [{ type: 'XP', _count: { _all: 10 } }, { type: 'COINS', _count: { _all: 3 } }])),
+  },
+  rpgItem: {
+    findMany: mock(async () => [{ id: 'epee', name: 'Lame du Crépuscule', emoji: 'E' }]),
+  },
+  dropClaim: {
+    count: mock(async (_args?: unknown) => abandonedClaimCount),
+    findMany: mock(async (_args?: unknown) => claimRows),
+  },
 };
+
+let abandonedClaimCount = 0;
+let claimRows: Array<Record<string, unknown>> = [];
+
+let recentDropRows: Array<Record<string, unknown>> = [];
 
 for (const dbPath of ['../../utils/db.ts', '../../utils/db.js']) {
   mock.module(path.resolve(__dirname, dbPath), () => ({
@@ -57,52 +79,32 @@ for (const suffix of [
 }
 
 // Import après les mocks
-const { handleDropsRoutes } = await import('../../api/routes/dashboard/drops.js');
+mockDashboardGate(DASHBOARD_ACCESS_ADMIN, { userId: 'user-1', username: 'Admin' });
+const { createDropsRouter } = await import('../../api/routes/dashboard/drops.js');
 
-function createMockRequest(body: Record<string, unknown>): IncomingMessage {
-  const socket = new Socket();
-  const req = new IncomingMessage(socket);
-  req.method = 'PUT';
-  req.url = '/api/dashboard/guilds/guild-123/drops';
-  req.headers = { 'content-type': 'application/json' };
-  const raw = JSON.stringify(body);
-  req.push(raw);
-  req.push(null);
-  return req;
-}
+type MockRequest = { method: string; body: string; url?: string };
+type MockResponse = { statusCode: number; body: string };
 
-interface MockResponse extends ServerResponse {
-  body: string;
+function createMockRequest(body: Record<string, unknown>, method = 'PUT', url?: string): MockRequest {
+  return { method, body: JSON.stringify(body), url };
 }
 
 function createMockResponse(): MockResponse {
-  const socket = new Socket();
-  const res = new ServerResponse(new IncomingMessage(socket)) as MockResponse;
+  return { statusCode: 0, body: '' };
+}
 
-  let _statusCode = 200;
-  let _body = '';
-
-  Object.defineProperty(res, 'statusCode', {
-    get: () => _statusCode,
-    set: (code: number) => {
-      _statusCode = code;
-    },
+/** Garde la forme des appels d'origine, mais passe par le routeur Hono. */
+async function handleDropsRoutes(req: MockRequest, res: MockResponse, parts: string[], client: Client, ..._rest: unknown[]): Promise<boolean> {
+  // L'URL de la requête porte la query ; sinon on la reconstitue depuis le chemin.
+  const target = req.url && req.url.split('?')[0] === `/${parts.join('/')}` ? req.url : `/${parts.join('/')}`;
+  const response = await createDropsRouter(client).request(target, {
+    method: req.method,
+    headers: { cookie: 'kotbo_session=test', 'content-type': 'application/json' },
+    ...(req.method === 'GET' ? {} : { body: req.body }),
   });
-
-  res.setHeader = () => res;
-  res.getHeader = () => undefined;
-  res.writeHead = (statusCode: number) => {
-    _statusCode = statusCode;
-    return res;
-  };
-
-  res.end = (chunk?: unknown) => {
-    if (chunk) _body += String(chunk);
-    res.body = _body;
-    return res;
-  };
-
-  return res;
+  res.statusCode = response.status;
+  res.body = await response.text();
+  return response.status !== 404;
 }
 
 const mockClient = {
@@ -195,5 +197,355 @@ describe('handleDropsRoutes - onboarding et offres', () => {
     expect(data.code).toBe('plan_locked');
     expect(data.moduleKey).toBe('drops');
     expect(data.requiredPlan).toBe('PRO');
+  });
+});
+
+describe('handleDropsRoutes - historique', () => {
+  beforeEach(() => {
+    guildRow = {
+      id: 'guild-123',
+      dropsEnabled: true,
+      dropChannelId: null,
+      dropMentionRoleId: null,
+      dropLifetimeMinutes: 60,
+      dropDeleteAfterMinutes: 0,
+    };
+    const base = { mode: 'FIRST', channelId: 'salon-1', maxClaims: 1, claimCount: 1, createdAt: new Date(), expiresAt: new Date(), closedAt: null };
+    recentDropRows = [
+      { ...base, id: 'drop-objet', type: 'RPG_ITEM', itemId: 'epee', amount: 2 },
+      { ...base, id: 'drop-xp', type: 'XP', itemId: null, amount: 120 },
+    ];
+  });
+
+  test('un drop d\'objet nomme la pièce tombée, les autres non', async () => {
+    const res = createMockResponse();
+    await handleDropsRoutes(
+      createMockRequest({}, 'GET'),
+      res,
+      ['api', 'dashboard', 'guilds', 'guild-123', 'drops'],
+      mockClient,
+      mockUser,
+      'guild-123',
+      mockAccess,
+    );
+
+    expect(res.statusCode).toBe(200);
+    const { recentDrops } = JSON.parse(res.body);
+    expect(recentDrops[0].item).toEqual({ name: 'Lame du Crépuscule', emoji: 'E' });
+    expect(recentDrops[1].item).toBeNull();
+  });
+
+  test('les gabarits de l\'annonce arrivent avec leurs trous, pour l\'aperçu', async () => {
+    const res = createMockResponse();
+    await handleDropsRoutes(
+      createMockRequest({}, 'GET'),
+      res,
+      ['api', 'dashboard', 'guilds', 'guild-123', 'drops'],
+      mockClient,
+      mockUser,
+      'guild-123',
+      mockAccess,
+    );
+
+    const { announcement } = JSON.parse(res.body);
+    expect(announcement.first).toContain('{amount}');
+    expect(announcement.first).toContain('{resource}');
+    expect(announcement.race).toContain('{winners}');
+    expect(announcement.window).toContain('{closes}');
+    expect(Object.keys(announcement.resources).sort()).toEqual(['CLAN_POINTS', 'COINS', 'RPG_ITEM', 'RPG_XP', 'XP']);
+  });
+});
+
+describe('handleDropsRoutes - jackpot', () => {
+  beforeEach(() => {
+    mockDb.guild.update.mockClear();
+    guildRow = {
+      id: 'guild-123',
+      dropsEnabled: true,
+      dropChannelId: null,
+      dropMentionRoleId: null,
+      dropLifetimeMinutes: 60,
+      dropDeleteAfterMinutes: 0,
+      dropJackpotEnabled: false,
+      dropJackpotChance: 20,
+      dropJackpotMultiplier: 5,
+    };
+  });
+
+  test('les réglages sont enregistrés, une valeur hors des choix retombe sur le défaut', async () => {
+    const res = createMockResponse();
+    await handleDropsRoutes(
+      createMockRequest({ dropJackpotEnabled: true, dropJackpotChance: 50, dropJackpotMultiplier: 7 }),
+      res,
+      ['api', 'dashboard', 'guilds', 'guild-123', 'drops'],
+      mockClient,
+      mockUser,
+      'guild-123',
+      mockAccess,
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(mockDb.guild.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ dropJackpotEnabled: true, dropJackpotChance: 50, dropJackpotMultiplier: 5 }),
+    }));
+  });
+});
+
+describe('handleDropsRoutes - bilan de la semaine', () => {
+  beforeEach(() => {
+    guildRow = {
+      id: 'guild-123',
+      dropsEnabled: true,
+      dropChannelId: null,
+      dropMentionRoleId: null,
+      dropLifetimeMinutes: 60,
+      dropDeleteAfterMinutes: 0,
+    };
+    recentDropRows = [];
+  });
+
+  test('chaque type a son nombre de drops terminés et de drops sans gagnant', async () => {
+    const res = createMockResponse();
+    await handleDropsRoutes(
+      createMockRequest({}, 'GET'),
+      res,
+      ['api', 'dashboard', 'guilds', 'guild-123', 'drops'],
+      mockClient,
+      mockUser,
+      'guild-123',
+      mockAccess,
+    );
+
+    expect(res.statusCode).toBe(200);
+    const { weeklyOutcomes } = JSON.parse(res.body);
+    expect(weeklyOutcomes.XP).toEqual({ closed: 10, unclaimed: 6 });
+    expect(weeklyOutcomes.COINS).toEqual({ closed: 3, unclaimed: 0 });
+    expect(weeklyOutcomes.RPG_ITEM).toEqual({ closed: 0, unclaimed: 0 });
+  });
+});
+
+describe('handleDropsRoutes - mention réservée aux jackpots', () => {
+  beforeEach(() => {
+    mockDb.guild.update.mockClear();
+    guildRow = {
+      id: 'guild-123',
+      dropsEnabled: true,
+      dropChannelId: null,
+      dropMentionRoleId: 'role-drops',
+      dropMentionJackpotOnly: false,
+      dropLifetimeMinutes: 60,
+      dropDeleteAfterMinutes: 0,
+    };
+  });
+
+  test('l\'option est enregistrée', async () => {
+    const res = createMockResponse();
+    await handleDropsRoutes(
+      createMockRequest({ dropMentionJackpotOnly: true }),
+      res,
+      ['api', 'dashboard', 'guilds', 'guild-123', 'drops'],
+      mockClient,
+      mockUser,
+      'guild-123',
+      mockAccess,
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(mockDb.guild.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ dropMentionRoleId: 'role-drops', dropMentionJackpotOnly: true }),
+    }));
+  });
+});
+
+describe('handleDropsRoutes - règles de ramassage', () => {
+  beforeEach(() => {
+    mockDb.guild.update.mockClear();
+    guildRow = {
+      id: 'guild-123',
+      dropsEnabled: true,
+      dropChannelId: null,
+      dropMentionRoleId: null,
+      dropMentionJackpotOnly: false,
+      dropLifetimeMinutes: 60,
+      dropDeleteAfterMinutes: 0,
+      dropClaimRules: { dailyLimit: 0, minMemberDays: 7, requiredRoleId: null },
+    };
+  });
+
+  test('une règle envoyée seule garde les autres', async () => {
+    const res = createMockResponse();
+    await handleDropsRoutes(
+      createMockRequest({ dropClaimRules: { dailyLimit: 5 } }),
+      res,
+      ['api', 'dashboard', 'guilds', 'guild-123', 'drops'],
+      mockClient,
+      mockUser,
+      'guild-123',
+      mockAccess,
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(mockDb.guild.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        dropClaimRules: { dailyLimit: 5, minMemberDays: 7, requiredRoleId: null },
+      }),
+    }));
+  });
+
+  test('les règles sont relues à la lecture de la page', async () => {
+    const res = createMockResponse();
+    await handleDropsRoutes(
+      createMockRequest({}, 'GET'),
+      res,
+      ['api', 'dashboard', 'guilds', 'guild-123', 'drops'],
+      mockClient,
+      mockUser,
+      'guild-123',
+      mockAccess,
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body).dropClaimRules).toEqual({ dailyLimit: 0, minMemberDays: 7, requiredRoleId: null });
+  });
+
+  /** Serveur en cache avec ses rôles : l'API peut vérifier le rôle requis. */
+  const clientAvecRoles = {
+    guilds: { cache: new Map([['guild-123', { name: 'Serveur', roles: { cache: new Map([['role-vip', {}]]) } }]]) },
+  } as unknown as Client;
+
+  test('un rôle requis absent du serveur est refusé', async () => {
+    const res = createMockResponse();
+    await handleDropsRoutes(
+      createMockRequest({ dropClaimRules: { requiredRoleId: 'role-inconnu' } }),
+      res,
+      ['api', 'dashboard', 'guilds', 'guild-123', 'drops'],
+      clientAvecRoles,
+      mockUser,
+      'guild-123',
+      mockAccess,
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(mockDb.guild.update).not.toHaveBeenCalled();
+  });
+
+  test('un rôle requis présent sur le serveur est enregistré', async () => {
+    const res = createMockResponse();
+    await handleDropsRoutes(
+      createMockRequest({ dropClaimRules: { requiredRoleId: 'role-vip' } }),
+      res,
+      ['api', 'dashboard', 'guilds', 'guild-123', 'drops'],
+      clientAvecRoles,
+      mockUser,
+      'guild-123',
+      mockAccess,
+    );
+
+    expect(res.statusCode).toBe(200);
+  });
+
+  test('un rôle supprimé depuis ne bloque pas l\'enregistrement des autres réglages', async () => {
+    guildRow = { ...guildRow, dropClaimRules: { requiredRoleId: 'role-supprime' } };
+    const res = createMockResponse();
+    await handleDropsRoutes(
+      createMockRequest({ dropLifetimeMinutes: 30 }),
+      res,
+      ['api', 'dashboard', 'guilds', 'guild-123', 'drops'],
+      clientAvecRoles,
+      mockUser,
+      'guild-123',
+      mockAccess,
+    );
+
+    expect(res.statusCode).toBe(200);
+  });
+
+  test('la page reçoit le nombre de versements abandonnés', async () => {
+    abandonedClaimCount = 2;
+    const res = createMockResponse();
+    await handleDropsRoutes(
+      createMockRequest({}, 'GET'),
+      res,
+      ['api', 'dashboard', 'guilds', 'guild-123', 'drops'],
+      mockClient,
+      mockUser,
+      'guild-123',
+      mockAccess,
+    );
+
+    expect(JSON.parse(res.body).abandonedClaims).toBe(2);
+    const [args] = mockDb.dropClaim.count.mock.calls.at(-1) as unknown as [{ where: { guildId: string; abandonedAt: { gte: Date } } }];
+    expect(args.where.guildId).toBe('guild-123');
+    // Seuls les abandons récents comptent : une alerte ancienne n'a plus rien à dire.
+    expect(args.where.abandonedAt.gte.getTime()).toBeGreaterThan(Date.now() - 8 * 24 * 60 * 60 * 1000);
+    expect(args.where.abandonedAt.gte.getTime()).toBeLessThan(Date.now() - 6 * 24 * 60 * 60 * 1000);
+    abandonedClaimCount = 0;
+  });
+});
+
+describe('handleDropsRoutes - historique', () => {
+  const HISTORY = ['api', 'dashboard', 'guilds', 'guild-123', 'drops', 'history'];
+  const base = { mode: 'FIRST', channelId: 'salon-1', itemId: null, maxClaims: 1, claimCount: 1, expiresAt: new Date(), closedAt: null, jackpot: false };
+  const rangee = (index: number) => ({ ...base, id: `drop-${index}`, type: 'XP', amount: 10, createdAt: new Date(Date.UTC(2026, 10, 13, 12, index)) });
+
+  beforeEach(() => {
+    mockDb.drop.findMany.mockClear();
+    mockDb.dropClaim.findMany.mockClear();
+  });
+
+  async function appeler(url: string, parts = HISTORY) {
+    const res = createMockResponse();
+    await handleDropsRoutes(createMockRequest({}, 'GET', url), res, parts, mockClient, mockUser, 'guild-123', mockAccess);
+    return res;
+  }
+
+  test('une page de dix drops, et le signal qu\'il en reste', async () => {
+    recentDropRows = Array.from({ length: 11 }, (_, index) => rangee(index));
+    const res = await appeler('/api/dashboard/guilds/guild-123/drops/history');
+
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.drops).toHaveLength(10);
+    expect(body.hasMore).toBe(true);
+    const [args] = mockDb.drop.findMany.mock.calls.at(-1) as unknown as [{ take: number; where: Record<string, unknown> }];
+    expect(args.take).toBe(11);
+    expect(args.where).toEqual({ guildId: 'guild-123' });
+  });
+
+  test('filtre par type et reprend avant le dernier drop affiché', async () => {
+    recentDropRows = [rangee(1)];
+    const before = '2026-11-13T12:05:00.000Z';
+    const res = await appeler(`/api/dashboard/guilds/guild-123/drops/history?type=COINS&before=${encodeURIComponent(before)}`);
+
+    expect(JSON.parse(res.body).hasMore).toBe(false);
+    const [args] = mockDb.drop.findMany.mock.calls.at(-1) as unknown as [{ where: Record<string, unknown> }];
+    expect(args.where).toEqual({ guildId: 'guild-123', type: 'COINS', createdAt: { lt: new Date(before) } });
+  });
+
+  test('un type ou une date illisible est ignoré plutôt que refusé', async () => {
+    recentDropRows = [];
+    await appeler('/api/dashboard/guilds/guild-123/drops/history?type=PIZZA&before=hier');
+
+    const [args] = mockDb.drop.findMany.mock.calls.at(-1) as unknown as [{ where: Record<string, unknown> }];
+    expect(args.where).toEqual({ guildId: 'guild-123' });
+  });
+
+  test('les gagnants d\'un drop, avec l\'état de leur versement', async () => {
+    const claimedAt = new Date('2026-11-13T12:00:00Z');
+    claimRows = [
+      { userId: 'membre-1', amount: 120, createdAt: claimedAt, paidAt: claimedAt, abandonedAt: null },
+      { userId: 'membre-2', amount: 120, createdAt: claimedAt, paidAt: null, abandonedAt: null },
+      { userId: 'membre-3', amount: 120, createdAt: claimedAt, paidAt: null, abandonedAt: claimedAt },
+    ];
+    const res = await appeler('/api/dashboard/guilds/guild-123/drops/history/drop-1', [...HISTORY, 'drop-1']);
+
+    expect(res.statusCode).toBe(200);
+    const { winners } = JSON.parse(res.body);
+    expect(winners.map((winner: { status: string }) => winner.status)).toEqual(['paid', 'pending', 'abandoned']);
+    expect(winners[0]).toMatchObject({ userId: 'membre-1', name: null, amount: 120 });
+    // Le drop est cherché dans ce serveur : un identifiant d'un autre serveur ne renvoie rien.
+    const [args] = mockDb.dropClaim.findMany.mock.calls.at(-1) as unknown as [{ where: Record<string, unknown> }];
+    expect(args.where).toEqual({ dropId: 'drop-1', guildId: 'guild-123' });
+    claimRows = [];
   });
 });

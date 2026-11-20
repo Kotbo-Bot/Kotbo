@@ -23,7 +23,7 @@ import { join } from 'node:path';
 const SRC = join(import.meta.dir, '..');
 const DARK_DECOR = new Set([
   'ClanBoardPublic.svelte', 'LevelingClanPublic.svelte', 'GiveawaysPublic.svelte',
-  'LevelingPublic.svelte', 'PrestigePublic.svelte', 'MCPSettings.svelte',
+  'LevelingPublic.svelte', 'PrestigePublic.svelte',
   'GlobalInteractionGraph.svelte', 'Activation.svelte', 'Verify.svelte',
   'SanctionEvidenceFile.svelte', 'Config.svelte',
 ]);
@@ -39,7 +39,7 @@ const PATTERNS = {
   /** Variante dark: : les jetons portent deja le theme sombre. */
   darkVariant: { regex: /(?<![\w-])dark:/g, max: 67 },
   /** Micro-libelle en majuscules espacees. */
-  shoutingLabel: { regex: /uppercase[^"'`\n]*tracking-(?:widest|wider)|tracking-(?:widest|wider)[^"'`\n]*uppercase/g, max: 8 },
+  shoutingLabel: { regex: /uppercase[^"'`\n]*tracking-(?:widest|wider)|tracking-(?:widest|wider)[^"'`\n]*uppercase/g, max: 6 },
   /** Onglet ecrit a la main plutot qu'avec <Tabs>. */
   handMadeTab: { regex: /class="[^"]*\btab-button\b/g, max: 0 },
   /** Onglets en segments ecrits a la main (fond surface-container, bouton actif bg-surface). */
@@ -50,7 +50,7 @@ const PATTERNS = {
    */
   localUnsavedBar: { regex: /sticky bottom-\d/g, max: 1 },
   /** Spinner ecrit a la main : Button loading pour une action, LoadingHint pour un chargement. */
-  handMadeSpinner: { regex: /animate-spin[^"'`\n]*rounded-full|rounded-full[^"'`\n]*animate-spin/g, max: 67 },
+  handMadeSpinner: { regex: /animate-spin[^"'`\n]*rounded-full|rounded-full[^"'`\n]*animate-spin/g, max: 66 },
   /**
    * Texte secondaire attenue sous 80 % : il tombe sous 4,5:1 (AA) sur les
    * fonds clairs comme sombres. Garder la couleur pleine ; /30 et /40 restent

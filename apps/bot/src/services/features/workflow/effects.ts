@@ -172,6 +172,9 @@ function parseColor(raw: unknown): number {
 }
 
 /** Discord refuse tout contenu vide et tronque au-delà de 2000 caractères. */
+/** Le texte mêle le gabarit de l'admin et des valeurs de membres : aucune mention n'est notifiée. */
+const NO_MENTIONS = { parse: [] as never[] };
+
 function safeContent(raw: unknown, action: string): string {
   const text = coerceToString(raw).trim();
   if (!text) throw new WorkflowActionError(action, 'le texte est vide');
@@ -415,7 +418,7 @@ export function createWorkflowEffects(guild: Guild, workflowId?: string): Workfl
           // Sans automatisation enregistrée (appel hors moteur), rien à quoi
           // rattacher le message : il est simplement publié.
           if (!workflowId || !context) {
-            const sent = await channel.send(text);
+            const sent = await channel.send({ content: text, allowedMentions: NO_MENTIONS });
             return { message: toMessageValue({ id: sent.id, content: text, channelId: channel.id, authorId: sent.author.id }) };
           }
           const where = { workflowId_nodeId: { workflowId, nodeId: context.nodeId } };
@@ -431,10 +434,10 @@ export function createWorkflowEffects(guild: Guild, workflowId?: string): Workfl
             edit: async (ref, content) => {
               const message = await channel.messages.fetch(ref.messageId).catch(() => null);
               if (!message) return false;
-              await message.edit(content);
+              await message.edit({ content, allowedMentions: NO_MENTIONS });
               return true;
             },
-            send: async (_channelId, content) => (await channel.send(content)).id,
+            send: async (_channelId, content) => (await channel.send({ content, allowedMentions: NO_MENTIONS })).id,
           }));
           return {
             message: toMessageValue({ id: kept.messageId, content: text, channelId: kept.channelId, authorId: guild.client.user?.id ?? '' }),
@@ -443,7 +446,7 @@ export function createWorkflowEffects(guild: Guild, workflowId?: string): Workfl
 
         case 'SendMessage': {
           const channel = await resolveTextChannel(guild, inputs.channel);
-          await channel.send(safeContent(inputs.text, 'Envoyer un message'));
+          await channel.send({ content: safeContent(inputs.text, 'Envoyer un message'), allowedMentions: NO_MENTIONS });
           return {};
         }
 
@@ -650,6 +653,7 @@ export function createWorkflowEffects(guild: Guild, workflowId?: string): Workfl
           // n'empêche pas la réponse, qui part alors sans citation.
           await channel.send({
             content: safeContent(inputs.text, action),
+            allowedMentions: NO_MENTIONS,
             reply: { messageReference: value.id, failIfNotExists: false },
           });
           return {};

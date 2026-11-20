@@ -16,6 +16,7 @@ import {
   buildVerificationEmbed,
 } from '../../services/moderation/securityVerificationService.js';
 import { deliverVerification } from '../../services/moderation/verificationDeliveryService.js';
+import { checkVerificationEligibility, isVerificationRequestSpam, VERIFICATION_SPAM_MESSAGE } from '../../services/moderation/verificationSpamGuard.js';
 import { queueAuditLog } from '../../utils/auditLogger.js';
 import { getCommandMetadata } from '../../utils/i18n.js';
 import * as m from '../../lib/paraglide/messages.js';
@@ -59,6 +60,16 @@ async function execute(interaction: ChatInputCommandInteraction | UserContextMen
 
   await interaction.deferReply({ flags: ["Ephemeral"] });
 
+  if (await isVerificationRequestSpam(interaction.client, {
+    guildId,
+    guildName: interaction.guild?.name || 'Serveur',
+    moderatorId: interaction.user.id,
+    moderatorTag: interaction.user.tag,
+  })) {
+    await interaction.editReply({ content: VERIFICATION_SPAM_MESSAGE });
+    return;
+  }
+
   const targetUser = interaction.isChatInputCommand()
     ? interaction.options.getUser('membre', true)
     : interaction.targetUser;
@@ -74,6 +85,17 @@ async function execute(interaction: ChatInputCommandInteraction | UserContextMen
 
     if (targetUser.bot) {
       await interaction.editReply({ content: "❌ Impossible de demander la vérification d'un bot." });
+      return;
+    }
+
+    const eligibility = await checkVerificationEligibility(interaction.client, {
+      guildId,
+      guildName: interaction.guild?.name || 'Serveur',
+      userId: targetUser.id,
+      moderatorTag: interaction.user.tag,
+    });
+    if (!eligibility.allowed) {
+      await interaction.editReply({ content: `❌ ${eligibility.message}` });
       return;
     }
 

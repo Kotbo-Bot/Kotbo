@@ -13,6 +13,8 @@
 
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
+import visionSeed from '../../data/visionSeed.json';
+import { compareFingerprints, parseFingerprint } from './imageForensics.js';
 import {
   MIN_FINGERPRINT_LENGTH,
   fingerprintText,
@@ -153,7 +155,47 @@ async function promoteTextIfWidespread(fingerprint: string, sample: string, sign
   }
 }
 
-/** Même principe pour une image : le SHA-256 vu sur plusieurs serveurs devient global. */
+/** dHash à 16 chiffres hexadécimaux, seul format que la comparaison SQL accepte. */
+const DHASH = /^[0-9a-f]{16}$/;
+/** Écart de dHash en deçà duquel une ligne mérite la comparaison complète. */
+const NEAR_DHASH_BITS = 10;
+
+/**
+ * Serveurs qui connaissent cette image : à l'octet près, ou quasi identique.
+ * Une campagne ne reposte jamais deux fois le même fichier (nom de domaine
+ * changé, recompression) : compter les seuls SHA-256 égaux ne promouvait rien.
+ * Le dHash trie en base, l'empreinte complète confirme ; les listes
+ * personnalisées et les images écartées par le staff ne comptent pas.
+ */
+async function guildsKnowingImage(hash: string, phash: string | null, fingerprint: string | null): Promise<number> {
+  const exact = await prisma.scamImageHash.findMany({
+    where: { hash, guildId: { not: null } },
+    select: { guildId: true },
+    distinct: ['guildId'],
+  });
+  const guilds = new Set(exact.map((r) => r.guildId));
+
+  const fp = parseFingerprint(fingerprint);
+  if (!fp || !phash || !DHASH.test(phash)) return guilds.size;
+  try {
+    const near = await prisma.$queryRaw<{ guildId: string; fingerprint: string }[]>`
+      SELECT "guildId", "fingerprint" FROM "scam_image_hashes"
+      WHERE "guildId" IS NOT NULL AND "status" = 'BLOCKED' AND "listId" IS NULL
+        AND "fingerprint" IS NOT NULL AND "phash" ~ '^[0-9a-f]{16}$'
+        AND bit_count(('x' || "phash")::bit(64) # ('x' || ${phash})::bit(64)) <= ${NEAR_DHASH_BITS}
+      LIMIT 500`;
+    for (const row of near) {
+      const known = parseFingerprint(row.fingerprint);
+      if (known && compareFingerprints(fp, known).verdict === 'CERTAIN') guilds.add(row.guildId);
+    }
+  } catch (err) {
+    // bit_count demande PostgreSQL 14 : en dessous, seule l'égalité exacte compte.
+    logger.debug('ScamDataset', `Recherche d'images voisines impossible: ${String(err)}`);
+  }
+  return guilds.size;
+}
+
+/** Même principe pour une image : vue sur plusieurs serveurs, elle devient globale. */
 export async function promoteImageIfWidespread(
   hash: string,
   phash: string | null,
@@ -161,22 +203,56 @@ export async function promoteImageIfWidespread(
   fingerprint: string | null = null,
   thumb: string | null = null
 ): Promise<void> {
-  const guilds = await prisma.scamImageHash.findMany({
-    where: { hash, guildId: { not: null } },
-    select: { guildId: true },
-    distinct: ['guildId'],
-  });
-  if (guilds.length < GLOBAL_PROMOTION_GUILDS) return;
+  const guildCount = await guildsKnowingImage(hash, phash, fingerprint);
+  if (guildCount < GLOBAL_PROMOTION_GUILDS) return;
 
   const existing = await prisma.scamImageHash.findFirst({ where: { hash, guildId: null }, select: { id: true } });
   if (existing) return;
 
   try {
     await prisma.scamImageHash.create({ data: { guildId: null, hash, phash, fingerprint, thumb, filename, source: 'HONEYPOT' } });
-    logger.info('ScamDataset', `Image promue en global: ${hash.slice(0, 12)} (${guilds.length} serveurs)`);
+    logger.info('ScamDataset', `Image promue en global: ${hash.slice(0, 12)} (${guildCount} serveurs)`);
   } catch (err) {
     if (!isUniqueViolation(err)) throw err;
   }
+}
+
+// ── Catalogue d'amorce ──────────────────────────────────────────────────────
+
+type SeedEntry = { h: string; f: string; s: string };
+
+/**
+ * Verse dans le catalogue global les empreintes livrées avec le bot (collection
+ * publique d'images d'arnaque et captures remontées par les serveurs, cf.
+ * scripts/build-vision-seed.ts) : un serveur est protégé dès l'installation,
+ * sans attendre que trois honeypots aient vu passer la campagne.
+ *
+ * Rejouable à chaque démarrage : seules les empreintes absentes sont ajoutées.
+ * Pour retirer une entrée d'amorce, la passer en ALLOWED plutôt que la
+ * supprimer, sinon elle reviendrait au démarrage suivant.
+ */
+export async function seedVisionCatalog(entries: SeedEntry[] = visionSeed): Promise<number> {
+  const rows = await prisma.scamImageHash.findMany({ where: { guildId: null }, select: { hash: true } });
+  const known = new Set(rows.map((r) => r.hash));
+  const missing = entries.filter((e) => !known.has(e.h));
+  if (missing.length === 0) return 0;
+  await prisma.scamImageHash.createMany({
+    data: missing.map((e) => ({ guildId: null, hash: e.h, fingerprint: e.f, filename: e.s, source: 'SEED' })),
+  });
+  logger.info('ScamDataset', `Catalogue d'amorce : ${missing.length} empreinte(s) d'image ajoutée(s)`);
+  return missing.length;
+}
+
+let seedScheduled = false;
+
+/** Programme l'amorce peu après le démarrage, une fois pour toute l'instance. */
+export function scheduleVisionSeed(shardIds: readonly number[] | undefined): void {
+  if (seedScheduled) return;
+  seedScheduled = true;
+  if (shardIds && !shardIds.includes(0)) return;
+  setTimeout(() => {
+    void seedVisionCatalog().catch((err) => logger.error('ScamDataset', "Catalogue d'amorce non chargé :", err));
+  }, 30_000).unref?.();
 }
 
 // ── Enregistrement ──────────────────────────────────────────────────────────

@@ -1,14 +1,14 @@
 import os from 'node:os';
-import { IncomingMessage, ServerResponse } from 'node:http';
-import { Client } from 'discord.js';
+import { Hono } from 'hono';
+import type { Client } from 'discord.js';
 import prisma from '../../../utils/db.js';
 import { cache } from '../../../utils/cache.js';
 import { logger } from '../../../utils/logger.js';
 import { homeWidgetFeatureKey, isHomeWidgetAdminOnly } from '@kotbo/contracts';
-import { json, type AuthClaims, type DashboardAccess, type FeatureAccessMap } from '../../shared.js';
+import { type DashboardAccess, type FeatureAccessMap } from '../../shared.js';
 import { getCachedFeatureAccess } from './featureGate.js';
 
-import { jsonFailure } from '../../shared/failure.js';
+import { fail, guildRoute, send } from '../../hono/dashboard/kit.js';
 const CACHE_TTL_SECONDS = 30;
 const WINDOW_DAYS = 7;
 const MAX_LIST_ITEMS = 5;
@@ -51,6 +51,11 @@ const SECTIONS = [
   'serverInfo',
   'quickGuide',
   'hosting',
+  'pulse',
+  'shield',
+  'myTasks',
+  'boosts',
+  'climate',
 ] as const;
 
 type Section = (typeof SECTIONS)[number];
@@ -281,77 +286,203 @@ function buildHosting(client: Client) {
   };
 }
 
-export async function handleHomeWidgetsRoutes(
-  req: IncomingMessage,
-  res: ServerResponse,
-  parts: string[],
-  url: URL,
-  client: Client,
-  user: AuthClaims,
-  guildId: string,
-  access: DashboardAccess,
-): Promise<boolean> {
-  if (parts[4] !== 'home-widgets') return false;
-  if (parts.length !== 5 || req.method !== 'GET') return false;
+function dateKeyDaysAgo(days: number): string {
+  return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
 
-  const featureAccess = await getCachedFeatureAccess(client, guildId, access, user.userId);
-  const sections = allowedSections(parseSections(url.searchParams.get('sections')), access, featureAccess);
+async function buildPulse(guildId: string) {
+  const rows = await prisma.pulseSnapshot.findMany({
+    where: { guildId },
+    orderBy: { dateKey: 'desc' },
+    take: WINDOW_DAYS,
+    select: { score: true, trend: true, trendDelta: true, alerts: true },
+  });
+  const latest = rows[0];
+  return {
+    hasData: Boolean(latest),
+    score: latest?.score ?? null,
+    trend: latest?.trend ?? null,
+    trendDelta: latest?.trendDelta ?? 0,
+    alertCount: Array.isArray(latest?.alerts) ? latest.alerts.length : 0,
+    history: rows.map((row) => row.score).reverse(),
+  };
+}
 
-  try {
-    // L'état d'hébergement est une lecture process, pas une requête : le mettre
-    // en cache n'apporterait rien et le rendrait faux jusqu'à 30 s.
-    const hosting = sections.includes('hosting') ? buildHosting(client) : undefined;
+async function buildShield(guildId: string, since: Date) {
+  const [config, jailed, jailedRecently, openWaves, pendingVision] = await Promise.all([
+    prisma.raidProtectionConfig.findUnique({ where: { guildId }, select: { guildId: true } }),
+    prisma.memberJail.count({ where: { guildId } }),
+    prisma.memberJail.count({ where: { guildId, createdAt: { gte: since } } }),
+    prisma.tagWave.count({ where: { guildId, status: 'OPEN' } }),
+    prisma.visionReview.count({ where: { guildId, status: 'PENDING' } }),
+  ]);
+  return { configured: Boolean(config), jailed, jailedRecently, openWaves, pendingVision };
+}
 
-    const persisted = sections.filter((section) => section !== 'hosting');
-    let payload: Record<string, unknown> = {};
+async function buildBoosts(guildId: string, since: Date) {
+  const [latest, weekAgo, lost] = await Promise.all([
+    prisma.guildBoostSnapshot.findFirst({ where: { guildId }, orderBy: { dateKey: 'desc' } }),
+    prisma.guildBoostSnapshot.findFirst({
+      where: { guildId, dateKey: { lte: dateKeyDaysAgo(WINDOW_DAYS) } },
+      orderBy: { dateKey: 'desc' },
+    }),
+    prisma.boostEvent.count({ where: { guildId, type: 'STOP', createdAt: { gte: since } } }),
+  ]);
+  return {
+    hasData: Boolean(latest),
+    tier: latest?.tier ?? null,
+    boostCount: latest?.boostCount ?? null,
+    boosterCount: latest?.boosterCount ?? null,
+    // Sans relevé d'il y a une semaine, une évolution serait inventée : on la laisse vide.
+    delta: latest && weekAgo ? latest.boostCount - weekAgo.boostCount : null,
+    lostRecently: lost,
+  };
+}
 
-    if (persisted.length > 0) {
-      const cacheKey = `guild:${guildId}:home-widgets:${persisted.join(',')}`;
-      const cached = await cache.get<Record<string, unknown>>(cacheKey);
-      if (cached) {
-        payload = cached;
-      } else {
-        const since = new Date(Date.now() - WINDOW_DAYS * 24 * 60 * 60 * 1000);
-        const builders: Array<[Section, Promise<unknown>]> = [];
+async function buildClimate(guildId: string) {
+  const [config, rows] = await Promise.all([
+    prisma.aegisConfig.findUnique({ where: { guildId }, select: { enabled: true } }),
+    prisma.aegisHourlyStat.groupBy({
+      by: ['dateKey'],
+      where: { guildId, dateKey: { gte: dateKeyDaysAgo(WINDOW_DAYS - 1) } },
+      _sum: {
+        analyzed: true, toxic: true, toxicityMilli: true, emotionAnalyzed: true,
+        joy: true, sad: true, anger: true, fear: true,
+      },
+      orderBy: { dateKey: 'asc' },
+    }),
+  ]);
 
-        for (const section of persisted) {
-          switch (section) {
-            case 'leveling': builders.push([section, buildLeveling(guildId, since)]); break;
-            case 'invites': builders.push([section, buildInvites(guildId, since)]); break;
-            case 'economy': builders.push([section, buildEconomy(guildId, since)]); break;
-            case 'tickets': builders.push([section, buildTickets(guildId, since)]); break;
-            case 'events': builders.push([section, buildEvents(guildId)]); break;
-            case 'polls': builders.push([section, buildPolls(guildId)]); break;
-            case 'serverInfo': builders.push([section, buildServerInfo(client, guildId)]); break;
-            case 'quickGuide': builders.push([section, buildQuickGuide(client, guildId)]); break;
+  const sum = (key: 'analyzed' | 'toxic' | 'joy' | 'sad' | 'anger' | 'fear' | 'toxicityMilli' | 'emotionAnalyzed') =>
+    rows.reduce((total, row) => total + (row._sum[key] ?? 0), 0);
+  const analyzed = sum('analyzed');
+  const emotionTotal = sum('emotionAnalyzed');
+  const emotions = { joy: sum('joy'), sad: sum('sad'), anger: sum('anger'), fear: sum('fear') };
+  const dominant = emotionTotal > 0
+    ? (Object.entries(emotions).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null)
+    : null;
+
+  return {
+    enabled: config?.enabled ?? false,
+    analyzed,
+    toxicPercent: percent(sum('toxic'), analyzed),
+    dominantEmotion: dominant,
+    // Toxicité moyenne par jour (0-100), pour la courbe.
+    history: rows.map((row) => {
+      const n = row._sum.analyzed ?? 0;
+      return n > 0 ? Math.round(((row._sum.toxicityMilli ?? 0) / n) / 10) : 0;
+    }),
+  };
+}
+
+/** Propre au lecteur, donc jamais dans le cache partagé de la guilde. */
+async function buildMyTasks(guildId: string, userId: string) {
+  const member = await prisma.staffMember.findFirst({ where: { guildId, userId }, select: { id: true } });
+  if (!member) return { isStaff: false, open: 0, overdue: 0, next: [] };
+
+  const where = { guildId, assigneeId: member.id, status: { not: 'COMPLETED' as const } };
+  const [open, overdue, next] = await Promise.all([
+    prisma.staffTask.count({ where }),
+    prisma.staffTask.count({ where: { ...where, dueDate: { lt: new Date() } } }),
+    prisma.staffTask.findMany({
+      where,
+      // Les tâches sans échéance passent après les datées (nulls en dernier).
+      orderBy: [{ dueDate: { sort: 'asc', nulls: 'last' } }, { priority: 'desc' }],
+      take: 3,
+      select: { id: true, title: true, dueDate: true, priority: true },
+    }),
+  ]);
+
+  return {
+    isStaff: true,
+    open,
+    overdue,
+    next: next.map((task) => ({
+      id: task.id,
+      title: task.title,
+      dueAt: task.dueDate ? task.dueDate.toISOString() : null,
+      priority: task.priority,
+    })),
+  };
+}
+
+export function createHomeWidgetsRouter(client: Client) {
+  const router = new Hono();
+
+  router.get('/api/dashboard/guilds/:guildId/home-widgets', ...guildRoute(client, { invalidateCache: false }), async (c) => {
+    const guildId = c.req.param('guildId');
+    const access = c.var.effectiveAccess;
+    const featureAccess = await getCachedFeatureAccess(client, guildId, access, c.var.dashboardUser.userId);
+    const sections = allowedSections(parseSections(c.req.query('sections') ?? null), access, featureAccess);
+
+    try {
+      // L'état d'hébergement est une lecture process, pas une requête : le mettre
+      // en cache n'apporterait rien et le rendrait faux jusqu'à 30 s.
+      const hosting = sections.includes('hosting') ? buildHosting(client) : undefined;
+
+      const myTasks = sections.includes('myTasks')
+        ? await buildMyTasks(guildId, c.var.dashboardUser.userId).catch((err) => {
+            logger.error('HomeWidgetsAPI', 'Section myTasks failed:', err);
+            return undefined;
+          })
+        : undefined;
+
+      const persisted = sections.filter((section) => section !== 'hosting' && section !== 'myTasks');
+      let payload: Record<string, unknown> = {};
+
+      if (persisted.length > 0) {
+        const cacheKey = `guild:${guildId}:home-widgets:${persisted.join(',')}`;
+        const cached = await cache.get<Record<string, unknown>>(cacheKey);
+        if (cached) {
+          payload = cached;
+        } else {
+          const since = new Date(Date.now() - WINDOW_DAYS * 24 * 60 * 60 * 1000);
+          const builders: Array<[Section, Promise<unknown>]> = [];
+
+          for (const section of persisted) {
+            switch (section) {
+              case 'leveling': builders.push([section, buildLeveling(guildId, since)]); break;
+              case 'invites': builders.push([section, buildInvites(guildId, since)]); break;
+              case 'economy': builders.push([section, buildEconomy(guildId, since)]); break;
+              case 'tickets': builders.push([section, buildTickets(guildId, since)]); break;
+              case 'events': builders.push([section, buildEvents(guildId)]); break;
+              case 'polls': builders.push([section, buildPolls(guildId)]); break;
+              case 'serverInfo': builders.push([section, buildServerInfo(client, guildId)]); break;
+              case 'quickGuide': builders.push([section, buildQuickGuide(client, guildId)]); break;
+              case 'pulse': builders.push([section, buildPulse(guildId)]); break;
+              case 'shield': builders.push([section, buildShield(guildId, since)]); break;
+              case 'boosts': builders.push([section, buildBoosts(guildId, since)]); break;
+              case 'climate': builders.push([section, buildClimate(guildId)]); break;
+            }
           }
+
+          // Une section qui échoue ne doit pas vider toute la page d'accueil : les
+          // autres widgets restent alimentés et celui-ci retombe sur son état vide.
+          const results = await Promise.allSettled(builders.map(([, promise]) => promise));
+          builders.forEach(([section], index) => {
+            const result = results[index];
+            if (result.status === 'fulfilled') {
+              payload[section] = result.value;
+            } else {
+              logger.error('HomeWidgetsAPI', `Section ${section} failed:`, result.reason);
+            }
+          });
+
+          await cache.set(cacheKey, payload, CACHE_TTL_SECONDS);
         }
-
-        // Une section qui échoue ne doit pas vider toute la page d'accueil : les
-        // autres widgets restent alimentés et celui-ci retombe sur son état vide.
-        const results = await Promise.allSettled(builders.map(([, promise]) => promise));
-        builders.forEach(([section], index) => {
-          const result = results[index];
-          if (result.status === 'fulfilled') {
-            payload[section] = result.value;
-          } else {
-            logger.error('HomeWidgetsAPI', `Section ${section} failed:`, result.reason);
-          }
-        });
-
-        await cache.set(cacheKey, payload, CACHE_TTL_SECONDS);
       }
+
+      return send(c, {
+        ...payload,
+        ...(hosting ? { hosting } : {}),
+        ...(myTasks ? { myTasks } : {}),
+        windowDays: WINDOW_DAYS,
+      });
+    } catch (err) {
+      logger.error('HomeWidgetsAPI', 'Error building home widgets data:', err);
+      return fail(c, err, 'Erreur lors de la récupération des widgets', 'HomeWidgetsAPI');
     }
+  });
 
-    json(res, 200, {
-      ...payload,
-      ...(hosting ? { hosting } : {}),
-      windowDays: WINDOW_DAYS,
-    });
-  } catch (err) {
-    logger.error('HomeWidgetsAPI', 'Error building home widgets data:', err);
-    jsonFailure(res, err, 'Erreur lors de la récupération des widgets', 'HomeWidgetsAPI');
-  }
-
-  return true;
+  return router;
 }

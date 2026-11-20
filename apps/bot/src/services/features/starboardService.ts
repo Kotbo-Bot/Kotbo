@@ -22,7 +22,9 @@ import {
   ButtonBuilder,
   ButtonStyle,
   EmbedBuilder,
+  MessageType,
   PermissionFlagsBits,
+  StickerFormatType,
   type Client,
   type GuildTextBasedChannel,
   type Message,
@@ -37,8 +39,19 @@ import { cache } from '../../utils/cache.js';
 import { logger } from '../../utils/logger.js';
 import { resolveGuildLocale } from '../../utils/i18n.js';
 import * as m from '../../lib/paraglide/messages.js';
+import {
+  isDiscordMediaUrl,
+  readStarboardChannelThresholds,
+  starboardExcerpt,
+  starboardSkipReason,
+  starboardThresholdFor,
+  type StarboardRemovalReason,
+} from '@kotbo/shared';
+import { broadcastDashboardStateChange } from '../../api/shared/sharding.js';
 import { normalizeEmojiKey, tallyVotes } from './starboardTally.js';
+import { onEntryBlocked, onEntryFeatured, publishEntryRemoved } from './starboardFeatureEffects.js';
 
+import { fetchGuildChannel } from '../../utils/panelMessage.js';
 export { normalizeEmojiKey } from './starboardTally.js';
 
 /** TTL du cache de configuration. Invalidé explicitement par le dashboard. */
@@ -88,6 +101,13 @@ export async function invalidateStarboardCache(guildId: string): Promise<void> {
   await cache.delete(cacheKey(guildId));
 }
 
+/** Motif temps réel : la page Starlight se recharge quand un message entre ou sort de la une. */
+export const STARBOARD_REALTIME_REASON = 'starboard_updated';
+
+export function notifyStarboardChange(guildId: string): void {
+  broadcastDashboardStateChange(guildId, STARBOARD_REALTIME_REASON);
+}
+
 // ── Emojis ───────────────────────────────────────────────────────────────────
 
 /** Même clé, mais depuis l'emoji d'une réaction reçue. */
@@ -132,6 +152,12 @@ function isWatchedChannel(config: StarboardConfig, channelId: string, parentId: 
   if (config.ignoredChannels.some((id) => ids.includes(id))) return false;
   if (config.watchedChannels.length === 0) return true;
   return config.watchedChannels.some((id) => ids.includes(id));
+}
+
+/** Un fil hérite du marquage NSFW de son salon parent. */
+function isNsfwChannel(channel: Message['channel'] | GuildTextBasedChannel): boolean {
+  if (channel.isThread()) return channel.parent?.nsfw ?? false;
+  return 'nsfw' in channel && channel.nsfw === true;
 }
 
 function channelParentId(message: Message): string | null {
@@ -180,21 +206,31 @@ async function hasReacted(reaction: MessageReaction, userId: string): Promise<bo
 
 const IMAGE_EXT = /\.(png|jpe?g|gif|webp|avif)(\?|$)/i;
 
+function isImageAttachment(attachment: { contentType: string | null; url: string }): boolean {
+  return attachment.contentType?.startsWith('image/') === true || IMAGE_EXT.test(attachment.url);
+}
+
 /**
  * Images liées au message : pièces jointes d'abord, puis celles portées par les
- * embeds (lien d'image collé, aperçu de tweet...).
+ * embeds (lien d'image collé, aperçu de tweet...). `proxied` prend pour un
+ * embed la copie relayée par Discord plutôt que l'adresse du site d'origine.
  */
-function collectImages(message: Message): string[] {
+function collectImages(message: Message, options: { proxied?: boolean } = {}): string[] {
   const urls: string[] = [];
 
   for (const attachment of message.attachments.values()) {
-    if (attachment.contentType?.startsWith('image/') || IMAGE_EXT.test(attachment.url)) {
-      urls.push(attachment.url);
-    }
+    if (isImageAttachment(attachment)) urls.push(attachment.url);
   }
   for (const embed of message.embeds) {
-    const url = embed.image?.url ?? embed.thumbnail?.url;
+    const url = options.proxied
+      ? embed.image?.proxyURL ?? embed.thumbnail?.proxyURL
+      : embed.image?.url ?? embed.thumbnail?.url;
     if (url) urls.push(url);
+  }
+  // Un sticker animé au format Lottie n'est pas une image : Discord ne
+  // l'affiche pas dans un embed.
+  for (const sticker of message.stickers.values()) {
+    if (sticker.format !== StickerFormatType.Lottie) urls.push(sticker.url);
   }
 
   return [...new Set(urls)].slice(0, 4);
@@ -203,13 +239,32 @@ function collectImages(message: Message): string[] {
 /** Pièces jointes non affichables en image : listées en liens. */
 function collectOtherAttachments(message: Message): string[] {
   return [...message.attachments.values()]
-    .filter((a) => !(a.contentType?.startsWith('image/') || IMAGE_EXT.test(a.url)))
+    .filter((a) => !isImageAttachment(a))
     .map((a) => `[${a.name ?? 'fichier'}](${a.url})`)
     .slice(0, 5);
 }
 
+/**
+ * Ce que la galerie du dashboard montre du message, repris à chaque recalcul :
+ * le message a pu être modifié depuis son passage à la une. Seule une image
+ * servie par Discord est gardée (voir `isDiscordMediaUrl`).
+ */
+function messageSnapshot(message: Message): { excerpt: string | null; imageUrl: string | null } {
+  const imageUrl = collectImages(message, { proxied: true }).find(isDiscordMediaUrl) ?? null;
+  return { excerpt: starboardExcerpt(message.content), imageUrl };
+}
+
 function parseColor(hex: string): number {
   return /^#[0-9a-fA-F]{6}$/.test(hex) ? Number.parseInt(hex.slice(1), 16) : 0xf5c518;
+}
+
+/**
+ * Message auquel celui-ci répond, pour situer le highlight : sans lui, une
+ * réponse sortie de son fil se lit souvent comme une phrase sans contexte.
+ */
+async function fetchRepliedMessage(message: Message): Promise<Message | null> {
+  if (message.type !== MessageType.Reply || !message.reference?.messageId) return null;
+  return message.fetchReference().catch(() => null);
 }
 
 async function buildHighlightPayload(
@@ -235,6 +290,14 @@ async function buildHighlightPayload(
   const content = message.content?.trim();
   if (content) main.setDescription(content.slice(0, 4000));
   if (images[0]) main.setImage(images[0]);
+  const replied = await fetchRepliedMessage(message);
+  if (replied) {
+    const repliedAuthor = replied.member?.displayName ?? replied.author.displayName ?? replied.author.username;
+    main.addFields({
+      name: m.starboard_reply_field({ author: repliedAuthor }, { locale }),
+      value: `${starboardExcerpt(replied.content) ?? m.starboard_reply_no_text({}, { locale })}\n[${m.starboard_reply_link({}, { locale })}](${replied.url})`.slice(0, 1024),
+    });
+  }
   if (others.length > 0) {
     main.addFields({ name: m.starboard_attachments_field({}, { locale }), value: others.join('\n').slice(0, 1024) });
   }
@@ -371,9 +434,10 @@ export function scheduleRefresh(client: Client, guildId: string, channelId: stri
   }, REFRESH_DEBOUNCE_MS));
 }
 
-function resolveTextChannel(client: Client, channelId: string): GuildTextBasedChannel | null {
+function resolveTextChannel(client: Client, channelId: string, guildId?: string): GuildTextBasedChannel | null {
   const channel = client.channels.cache.get(channelId);
   if (!channel || !channel.isTextBased() || channel.isDMBased()) return null;
+  if (guildId && channel.guildId !== guildId) return null;
   return channel as GuildTextBasedChannel;
 }
 
@@ -401,18 +465,37 @@ export async function refreshEntry(
       where: { guildId_messageId: { guildId, messageId } },
     }).catch(() => null);
 
-    const sourceChannel = resolveTextChannel(client, channelId)
-      ?? (await client.channels.fetch(channelId).catch(() => null)) as GuildTextBasedChannel | null;
+    const sourceChannel = resolveTextChannel(client, channelId, guildId)
+      ?? (await fetchGuildChannel(client, guildId, channelId)) as GuildTextBasedChannel | null;
     const message = sourceChannel
       ? await sourceChannel.messages.fetch(messageId).catch(() => null)
       : null;
 
     // Message source disparu : on retire le highlight, il ne mène plus nulle part.
     if (!message) {
-      if (entry) await removeEntry(client, entry);
+      if (entry) await removeEntry(client, entry, { reason: 'SOURCE_DELETED' });
       return;
     }
     if (message.author.bot && !config.allowBots) return;
+
+    // Garde-fous : message retiré par le staff, auteur exclu, NSFW vers un
+    // salon tout public, message trop ancien pour entrer. Un highlight déjà
+    // publié disparaît ; la ligne reste, avec la décision du staff.
+    const board = resolveTextChannel(client, config.channelId, config.guildId);
+    const skip = starboardSkipReason(config, {
+      authorId: message.author.id,
+      blocked: entry?.blockedAt != null,
+      sourceNsfw: isNsfwChannel(message.channel),
+      boardNsfw: board ? isNsfwChannel(board) : false,
+      messageCreatedAt: message.createdAt,
+      alreadyEntered: entry !== null,
+    });
+    if (skip) {
+      if (entry?.starMessageId) {
+        await removeEntry(client, entry, { keepRow: true, reason: skip === 'BLOCKED_MESSAGE' ? 'STAFF' : 'GUARD' });
+      }
+      return;
+    }
 
     // Le bot peut être l'auteur (allowBots) : sa réaction est déjà retirée.
     const excludedUserId = config.ignoreAuthorVotes && message.author.id !== client.user?.id
@@ -424,7 +507,7 @@ export async function refreshEntry(
 
     // Réactions posées sur le highlight lui-même.
     if (config.countEmbedReactions && entry?.starMessageId) {
-      const starChannel = resolveTextChannel(client, entry.starChannelId ?? config.channelId);
+      const starChannel = resolveTextChannel(client, entry.starChannelId ?? config.channelId, entry.guildId);
       const starMessage = starChannel
         ? await starChannel.messages.fetch(entry.starMessageId).catch(() => null)
         : null;
@@ -436,20 +519,26 @@ export async function refreshEntry(
     }
 
     const score = up - down;
-    const threshold = Math.max(1, config.threshold);
+    const threshold = Math.max(1, starboardThresholdFor(
+      { threshold: config.threshold, channelThresholds: readStarboardChannelThresholds(config.channelThresholds) },
+      channelId,
+      channelParentId(message),
+    ));
 
     // Sous le seuil et jamais publié : on ne crée pas de ligne pour rien.
     if (score < threshold && !entry) return;
 
     if (score < threshold && entry) {
-      if (entry.starMessageId && config.removeBelowThreshold) {
-        await removeEntry(client, entry, { keepRow: true });
-        return;
-      }
+      // Compteurs à jour avant tout retrait : la galerie du dashboard montre
+      // le score réel d'un message retombé sous le seuil.
       await prisma.starboardEntry.update({
         where: { id: entry.id },
-        data: { upvotes: up, downvotes: down, score, peakScore: Math.max(entry.peakScore, score) },
+        data: { upvotes: up, downvotes: down, score, peakScore: Math.max(entry.peakScore, score), ...messageSnapshot(message) },
       }).catch(() => null);
+      if (entry.starMessageId && config.removeBelowThreshold) {
+        await removeEntry(client, { ...entry, score }, { keepRow: true, reason: 'BELOW_THRESHOLD' });
+        return;
+      }
       // Le highlight publié reste affiché : son compteur doit suivre.
       if (entry.starMessageId) await editHighlight(client, entry, message, config, { up, down, score });
       return;
@@ -465,6 +554,7 @@ export async function refreshEntry(
         downvotes: down,
         score,
         peakScore: score,
+        ...messageSnapshot(message),
       },
     }).catch((err) => {
       logger.error('Starlight', `Création de l'entrée ${messageId} impossible`, err);
@@ -480,7 +570,7 @@ export async function refreshEntry(
 
     await prisma.starboardEntry.update({
       where: { id: record.id },
-      data: { upvotes: up, downvotes: down, score, peakScore: Math.max(record.peakScore, score) },
+      data: { upvotes: up, downvotes: down, score, peakScore: Math.max(record.peakScore, score), ...messageSnapshot(message) },
     }).catch(() => null);
   } finally {
     refreshing.delete(key);
@@ -495,7 +585,7 @@ async function postHighlight(
   config: StarboardConfig,
   tally: { up: number; down: number; score: number },
 ): Promise<void> {
-  const channel = resolveTextChannel(client, config.channelId!);
+  const channel = resolveTextChannel(client, config.channelId!, config.guildId);
   if (!channel) return;
 
   const me = channel.guild.members.me ?? (await channel.guild.members.fetchMe().catch(() => null));
@@ -525,6 +615,12 @@ async function postHighlight(
     where: { id: entry.id },
     data: { starMessageId: sent.id, starChannelId: channel.id, postedAt: new Date() },
   }).catch(() => null);
+  notifyStarboardChange(entry.guildId);
+
+  // Premier passage à la une : gains, paliers, message privé, workflows.
+  // Sans attendre : la publication ne dépend d'aucune de ces suites.
+  void onEntryFeatured(client, config, { ...entry, starMessageId: sent.id, starChannelId: channel.id, score: tally.score })
+    .catch((err) => logger.warn('Starlight', `Suites du passage à la une de ${entry.messageId} incomplètes`, err));
 
   if (config.autoReactEmbed && perms.has(PermissionFlagsBits.AddReactions)) {
     await seedReactions(client, sent, config);
@@ -541,7 +637,7 @@ async function editHighlight(
 ): Promise<void> {
   if (!entry.starMessageId) return;
 
-  const channel = resolveTextChannel(client, entry.starChannelId ?? config.channelId!);
+  const channel = resolveTextChannel(client, entry.starChannelId ?? config.channelId!, entry.guildId);
   const starMessage = channel
     ? await channel.messages.fetch(entry.starMessageId).catch(() => null)
     : null;
@@ -569,10 +665,12 @@ async function editHighlight(
 async function removeEntry(
   client: Client,
   entry: StarboardEntry,
-  options: { keepRow?: boolean } = {},
+  options: { keepRow?: boolean; reason: StarboardRemovalReason },
 ): Promise<void> {
+  // Seul un message affiché quitte la une : une entrée détachée ne prévient personne.
+  if (entry.starMessageId) publishEntryRemoved(entry, options.reason);
   if (entry.starMessageId) {
-    const channel = resolveTextChannel(client, entry.starChannelId ?? '');
+    const channel = resolveTextChannel(client, entry.starChannelId ?? '', entry.guildId);
     const starMessage = channel
       ? await channel.messages.fetch(entry.starMessageId).catch(() => null)
       : null;
@@ -584,10 +682,10 @@ async function removeEntry(
       where: { id: entry.id },
       data: { starMessageId: null, starChannelId: null, postedAt: null },
     }).catch(() => null);
-    return;
+  } else {
+    await prisma.starboardEntry.delete({ where: { id: entry.id } }).catch(() => null);
   }
-
-  await prisma.starboardEntry.delete({ where: { id: entry.id } }).catch(() => null);
+  notifyStarboardChange(entry.guildId);
 }
 
 /**
@@ -613,6 +711,7 @@ export async function handleStarboardMessageDelete(
       where: { id: entry.id },
       data: { starMessageId: null, starChannelId: null, postedAt: null },
     }).catch(() => null);
+    notifyStarboardChange(guildId);
     return;
   }
 
@@ -621,5 +720,64 @@ export async function handleStarboardMessageDelete(
   }).catch(() => null);
   if (!entry) return;
 
-  await removeEntry(client, entry);
+  await removeEntry(client, entry, { reason: 'SOURCE_DELETED' });
+}
+
+// ── Gestes du staff (dashboard) ──────────────────────────────────────────────
+
+/**
+ * Retire un message de la une et l'y empêche de revenir, quels que soient ses
+ * votes. `null` si l'entrée n'est pas de ce serveur.
+ */
+export async function blockStarboardEntry(
+  client: Client,
+  guildId: string,
+  entryId: string,
+  userId: string,
+): Promise<StarboardEntry | null> {
+  const entry = await prisma.starboardEntry.findFirst({ where: { id: entryId, guildId } });
+  if (!entry) return null;
+  const blocked = await prisma.starboardEntry.update({
+    where: { id: entry.id },
+    data: { blockedAt: new Date(), blockedById: userId },
+  });
+  if (blocked.starMessageId) await removeEntry(client, blocked, { keepRow: true, reason: 'STAFF' });
+  else notifyStarboardChange(guildId);
+  const config = await getStarboardConfig(guildId);
+  if (config) {
+    await onEntryBlocked(client, config, blocked).catch((err) =>
+      logger.warn('Starlight', `Reprise des suites du message ${blocked.messageId} incomplète`, err),
+    );
+  }
+  return prisma.starboardEntry.findUnique({ where: { id: entry.id } });
+}
+
+/**
+ * Annule le retrait : le message est recompté tout de suite et revient à la
+ * une s'il est toujours au-dessus du seuil.
+ */
+export async function unblockStarboardEntry(
+  client: Client,
+  guildId: string,
+  entryId: string,
+): Promise<StarboardEntry | null> {
+  const entry = await prisma.starboardEntry.findFirst({ where: { id: entryId, guildId } });
+  if (!entry) return null;
+  await prisma.starboardEntry.update({ where: { id: entry.id }, data: { blockedAt: null, blockedById: null } });
+  await refreshEntry(client, guildId, entry.channelId, entry.messageId);
+  notifyStarboardChange(guildId);
+  return prisma.starboardEntry.findUnique({ where: { id: entry.id } });
+}
+
+/**
+ * Membres tout juste exclus : leurs messages affichés quittent la une. Un par
+ * un, pour ne pas déclencher le rate limit de Discord sur un membre prolifique.
+ */
+export async function removeHighlightsOfAuthors(client: Client, guildId: string, authorIds: string[]): Promise<number> {
+  if (authorIds.length === 0) return 0;
+  const entries = await prisma.starboardEntry.findMany({
+    where: { guildId, authorId: { in: authorIds }, starMessageId: { not: null } },
+  });
+  for (const entry of entries) await removeEntry(client, entry, { keepRow: true, reason: 'GUARD' });
+  return entries.length;
 }

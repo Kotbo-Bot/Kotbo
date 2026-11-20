@@ -1,36 +1,34 @@
 /** Routes dashboard du module `notifications`. */
+import { Hono } from 'hono';
+import type { Client } from 'discord.js';
 import prisma from '../../../../utils/db.js';
 import { logger } from '../../../../utils/logger.js';
-import { getGuildName, getOrCreateRuntime, json, type NotificationSettings, pushAudit, readJsonBody } from '../../../shared.js';
-import { type ModuleRouteContext } from './_shared.js';
+import { getGuildName, getOrCreateRuntime, type NotificationSettings, pushAudit } from '../../../shared.js';
+import { auditUserOf, fail, guildRoute, readBody, send } from '../../../hono/dashboard/kit.js';
 
-import { jsonFailure } from '../../../shared/failure.js';
-export async function handleNotificationsRoutes(ctx: ModuleRouteContext): Promise<boolean> {
-  const { req, res, parts, client, guildId, access, method, auditUser, moduleKey } = ctx;
+export function createNotificationsRouter(client: Client) {
+  const router = new Hono();
+  const base = '/api/dashboard/guilds/:guildId/notifications';
+  const gate = guildRoute(client);
 
-  // GET /api/dashboard/guilds/:guildId/notifications/features
-  if (moduleKey === 'notifications' && parts.length === 6 && parts[5] === 'features' && method === 'GET') {
+  router.get(`${base}/features`, ...gate, async (c) => {
     try {
       const { getAvailableFeatureConfigs } = await import('../../../../services/core/dashboardManagementService.js');
-      const configs = await getAvailableFeatureConfigs(guildId);
-      json(res, 200, { features: configs });
+      return send(c, { features: await getAvailableFeatureConfigs(c.req.param('guildId')) });
     } catch (err) {
       logger.error('NotificationsAPI', 'Error fetching feature configurations:', err);
-      jsonFailure(res, err, 'Erreur lors de la récupération des configurations des modules', 'NotificationsAPI');
+      return fail(c, err, 'Erreur lors de la récupération des configurations des modules', 'NotificationsAPI');
     }
-    return true;
-  }
+  });
 
-  // PATCH /api/dashboard/guilds/:guildId/notifications/features/:featureKey
-  if (moduleKey === 'notifications' && parts.length === 7 && parts[5] === 'features' && method === 'PATCH') {
-    if (!access.canManageSettings) {
-      json(res, 403, { error: 'Accès refusé. Permissions administratives requises.' });
-      return true;
+  router.patch(`${base}/features/:featureKey`, ...gate, async (c) => {
+    if (!c.var.effectiveAccess.canManageSettings) {
+      return send(c, { error: 'Accès refusé. Permissions administratives requises.' }, 403);
     }
-
-    const featureKey = parts[6];
+    const guildId = c.req.param('guildId');
+    const featureKey = c.req.param('featureKey');
     try {
-      const body = await readJsonBody<{
+      const body = await readBody<{
         channelId?: string | null;
         secondaryChannelId?: string | null;
         requiredRoleId?: string | null;
@@ -40,12 +38,8 @@ export async function handleNotificationsRoutes(ctx: ModuleRouteContext): Promis
         loggingEnabled?: boolean;
         userActivityTracking?: boolean;
         metadata?: Record<string, unknown>;
-      }>(req);
-
-      if (!body) {
-        json(res, 400, { error: 'Payload de configuration invalide' });
-        return true;
-      }
+      }>(c);
+      if (!body) return send(c, { error: 'Payload de configuration invalide' }, 400);
 
       // Cette route ecrit la ligne de configuration, rien d'autre. Y accepter
       // `enabled` en faisait une seconde porte pour allumer un module : la
@@ -54,18 +48,17 @@ export async function handleNotificationsRoutes(ctx: ModuleRouteContext): Promis
       // cache d'etats - la page disait une chose et le bot en faisait une autre.
       // L'activation passe par PUT /modules/:moduleId, qui fait les cinq.
       if (Object.prototype.hasOwnProperty.call(body, 'enabled')) {
-        json(res, 400, {
+        return send(c, {
           error: "L'activation d'un module ne s'ecrit pas ici. Utiliser PUT /modules/:moduleId.",
           code: 'use_module_route',
-        });
-        return true;
+        }, 400);
       }
 
       const { updateFeatureConfig } = await import('../../../../services/core/dashboardManagementService.js');
       const updated = await updateFeatureConfig(guildId, featureKey, body);
 
       await pushAudit(guildId, {
-        user: auditUser,
+        user: auditUserOf(c),
         action: 'Mise à jour module',
         context: getGuildName(client, guildId),
         module: 'Configuration',
@@ -74,30 +67,25 @@ export async function handleNotificationsRoutes(ctx: ModuleRouteContext): Promis
         channelId: null
       });
 
-      json(res, 200, { ok: true, config: updated });
+      return send(c, { ok: true, config: updated });
     } catch (err) {
       logger.error('NotificationsAPI', `Error updating feature configuration for ${featureKey}:`, err);
-      jsonFailure(res, err, 'Erreur lors de la mise à jour de la configuration du module', 'NotificationsAPI');
+      return fail(c, err, 'Erreur lors de la mise à jour de la configuration du module', 'NotificationsAPI');
     }
-    return true;
-  }
+  });
 
-  // PUT /api/dashboard/guilds/:guildId/notifications
-  if (moduleKey === 'notifications' && parts.length === 5 && method === 'PUT') {
+  router.put(base, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
     try {
-      const body = await readJsonBody<NotificationSettings>(req);
-      if (!body) {
-        json(res, 400, { error: 'Payload notifications invalide' });
-        return true;
-      }
+      const body = await readBody<NotificationSettings>(c);
+      if (!body) return send(c, { error: 'Payload notifications invalide' }, 400);
 
       const runtime = await getOrCreateRuntime(guildId);
+      const statusChannelId = body.discordChannel?.replace(/[^0-9]/g, '') || null;
 
       await prisma.guild.update({
         where: { id: guildId },
-        data: {
-          statusCheckChannelId: body.discordChannel?.replace(/[^0-9]/g, '') || null
-        }
+        data: { statusCheckChannelId: statusChannelId }
       });
 
       await prisma.dashboardSettings.update({
@@ -113,22 +101,21 @@ export async function handleNotificationsRoutes(ctx: ModuleRouteContext): Promis
       });
 
       await pushAudit(guildId, {
-        user: auditUser,
+        user: auditUserOf(c),
         action: 'Sauvegarde notifications',
         context: getGuildName(client, guildId),
         module: 'Notifications',
         eventType: 'Manuel',
         details: 'Paramètres globaux mis à jour.',
-        channelId: body.discordChannel?.replace(/[^0-9]/g, '') || null
+        channelId: statusChannelId
       });
 
-      json(res, 200, { ok: true });
+      return send(c, { ok: true });
     } catch (err) {
       logger.error('NotificationsAPI', 'Error updating notifications:', err);
-      jsonFailure(res, err, 'Erreur lors de la mise à jour des notifications', 'NotificationsAPI');
+      return fail(c, err, 'Erreur lors de la mise à jour des notifications', 'NotificationsAPI');
     }
-    return true;
-  }
+  });
 
-  return false;
+  return router;
 }

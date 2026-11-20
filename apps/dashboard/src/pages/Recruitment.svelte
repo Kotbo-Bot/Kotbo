@@ -834,8 +834,8 @@
 <Modal open={!!oralPassTarget} onClose={() => (oralPassTarget = null)} title={m.recruit_oral_pass_title()} subtitle={m.recruit_oral_pass_desc()}>
   <div class="space-y-4">
     <Field label={m.recruit_assign_tutor_label()} error={tutors.length === 0 ? m.recruit_no_tutor_found() : ''}>
-      {#snippet children(id)}
-        <SearchableSelect
+      {#snippet children(id, describedBy)}
+        <SearchableSelect {describedBy}
           {id}
           bind:value={tutorSelected}
           options={tutors.map((t) => ({ id: t.userId, name: `${t.displayName || t.username} (${t.grade})` }))}
@@ -905,8 +905,8 @@
       {/snippet}
     </Field>
     <Field label={m.recruit_field_category()} hint={m.recruit_field_category_hint()}>
-      {#snippet children(id)}
-        <SearchableSelect
+      {#snippet children(id, describedBy)}
+        <SearchableSelect {describedBy}
           {id}
           bind:value={cfgCategoryId}
           options={(dashboardStore.state.discordCategories as any[]).map((c) => ({ id: c.id, name: c.name }))}

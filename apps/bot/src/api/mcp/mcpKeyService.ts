@@ -26,7 +26,8 @@ const ownerStillAllowed = async (client: Client | undefined, key: McpApiKey): Pr
 
   const { resolveDashboardAccess } = await import('../shared/core.js');
   const access = await resolveDashboardAccess(client, key.guildId, key.ownerId);
-  return access.canViewDashboard;
+  // Le niveau requis pour créer la clé : un modérateur rétrogradé en simple lecteur la coupe aussi.
+  return access.canManageSettings;
 };
 
 export const hashMcpKey = (key: string): string => {

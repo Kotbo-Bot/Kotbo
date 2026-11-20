@@ -37,7 +37,7 @@
 </script>
 
 {#if moduleOff}
-  <p class="flex items-start gap-2 px-3 py-2.5 rounded-xl bg-warning/10 border border-warning/20 text-xs text-warning">
+  <p class="flex items-start gap-2 px-3 py-2.5 rounded-xl bg-warning/10 border border-warning/20 text-xs text-on-warning-container">
     <Papicon icon="AlertTriangle" size={14} class="shrink-0 mt-px" />
     <span>
       {m.wf_fun_notice_module_off()}
@@ -45,7 +45,7 @@
     </span>
   </p>
 {:else if noChannel}
-  <p class="flex items-start gap-2 px-3 py-2.5 rounded-xl bg-warning/10 border border-warning/20 text-xs text-warning">
+  <p class="flex items-start gap-2 px-3 py-2.5 rounded-xl bg-warning/10 border border-warning/20 text-xs text-on-warning-container">
     <Papicon icon="AlertTriangle" size={14} class="shrink-0 mt-px" />
     <span>
       {m.wf_fun_notice_no_channel()}

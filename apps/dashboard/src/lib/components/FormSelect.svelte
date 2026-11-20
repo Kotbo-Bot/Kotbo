@@ -5,6 +5,7 @@
 
   let {
     id = '',
+    ariaLabel,
     value = $bindable<SelectValue>(),
     multiple = false,
     disabled = false,
@@ -13,6 +14,8 @@
     children,
   }: {
     id?: string;
+    /** Nom accessible quand aucun <label for> ne vise le champ (RGAA 11.1). */
+    ariaLabel?: string;
     value?: SelectValue;
     multiple?: boolean;
     disabled?: boolean;
@@ -25,6 +28,7 @@
 {#if multiple}
   <select
     {id}
+    aria-label={ariaLabel}
     bind:value
     multiple
     {disabled}
@@ -38,6 +42,7 @@
 {:else}
   <select
     {id}
+    aria-label={ariaLabel}
     bind:value
     {disabled}
     onchange={onchange}

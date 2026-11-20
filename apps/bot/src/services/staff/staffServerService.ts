@@ -16,6 +16,7 @@ import { resolveLogChannel } from '../../utils/logChannel.js';
 import { COLORS } from '../../utils/embeds.js';
 import { cache } from '../../utils/cache.js';
 import { reconcileStaffGuildActivation } from '../../utils/activation.js';
+import { canManageGuild } from '../../utils/guildAdmin.js';
 import { INVITE_SOURCE, recordBotInvite } from '../analytics/inviteService.js';
 import type { StaffServerLink, StaffServerRoleMapping } from '@prisma/client';
 
@@ -66,9 +67,23 @@ export async function createStaffServerLink(opts: {
   mainLogChannelId?: string;
   staffLogChannelId?: string;
   createdByUserId: string;
+  client: Client;
 }): Promise<StaffServerLink | { error: string }> {
   if (opts.mainGuildId === opts.staffGuildId) {
     return { error: 'Le serveur principal et le serveur staff doivent être différents.' };
+  }
+
+  // Le serveur staff reçoit des rôles et en perd : son admin doit être celui qui crée le lien.
+  if (!(await canManageGuild(opts.client, opts.staffGuildId, opts.createdByUserId))) {
+    return { error: 'Vous devez être admin du serveur staff pour le lier.' };
+  }
+
+  if (opts.hierarchyId) {
+    const hierarchy = await prisma.staffHierarchy.findFirst({
+      where: { id: opts.hierarchyId, guildId: opts.mainGuildId },
+      select: { id: true },
+    });
+    if (!hierarchy) return { error: 'Hiérarchie introuvable sur le serveur principal.' };
   }
 
   const mainGuild = await prisma.guild.findUnique({

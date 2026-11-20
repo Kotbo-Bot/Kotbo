@@ -318,7 +318,8 @@ export async function purchaseShopOffer(client: Client, guildId: string, buyerId
   const order = await prisma.$transaction(async (tx) => {
     // Une commande à la fois par offre et bénéficiaire : la limite par membre
     // compte les commandes déjà passées, deux achats simultanés la doubleraient.
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`shop:${offer.id}:${recipientId}`}))`;
+    // `$executeRaw` et non `$queryRaw` : l'adaptateur pg refuse de lire une colonne `void`.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`shop:${offer.id}:${recipientId}`}))`;
     if (offer.perMemberLimit !== null) {
       const count = await tx.shopOrder.count({ where: { offerId: offer.id, recipientId, status: { in: [...OPEN_STATUSES] }, source: { not: 'renewal' } } });
       if (count >= offer.perMemberLimit) throw new ShopError('limit_reached');

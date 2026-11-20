@@ -372,20 +372,20 @@
     <!-- Nom -->
     <div class="space-y-2">
       <span class="block text-xs font-semibold text-on-surface-variant ml-2">{m.schedules_form_task_name()}</span>
-      <input
+      <input aria-label={m.schedules_form_task_name()}
         type="text"
         bind:value={formName}
         placeholder={m.schedules_form_task_name_placeholder()}
-        class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+        class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
       />
     </div>
 
     <!-- Type -->
     <div class="space-y-2">
       <span class="block text-xs font-semibold text-on-surface-variant ml-2">{m.schedules_form_action_type()}</span>
-      <FormSelect
+      <FormSelect ariaLabel={m.schedules_form_action_type()}
         bind:value={formType}
-        className="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+        className="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
       >
         <option value="CHANNEL_RESET">{m.schedules_form_type_reset_option()}</option>
         <option value="SERVER_BACKUP">{m.schedules_form_type_backup_option()}</option>
@@ -412,7 +412,7 @@
     {#if formType === 'SEND_MESSAGE'}
       <div class="space-y-2">
         <span class="block text-xs font-semibold text-on-surface-variant ml-2">{m.schx_message()}</span>
-        <FormTextarea
+        <FormTextarea ariaLabel={m.schx_message()}
           bind:value={formMessage}
           placeholder={m.schx_message_ph()}
           className="w-full h-24"
@@ -420,27 +420,27 @@
       </div>
 
       <details class="rounded-lg border border-outline-variant/10 bg-surface-container-high/20 px-4 py-3">
-        <summary class="text-xs font-semibold text-on-surface cursor-pointer select-none">Embed (facultatif)</summary>
+        <summary class="text-xs font-semibold text-on-surface cursor-pointer select-none">{m.schx_embed_optional()}</summary>
         <div class="mt-3 space-y-3">
-          <input
+          <input aria-label={m.schx_embed_title()}
             type="text"
             bind:value={formEmbedTitle}
-            placeholder="Titre"
-            class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+            placeholder={m.schx_embed_title()}
+            class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
           />
-          <FormTextarea bind:value={formEmbedDescription} placeholder="Description" className="w-full h-20" />
+          <FormTextarea ariaLabel={m.schx_embed_description()} bind:value={formEmbedDescription} placeholder={m.schx_embed_description()} className="w-full h-20" />
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <input
+            <input aria-label={m.schx_embed_color()}
               type="text"
               bind:value={formEmbedColor}
               placeholder="#5865F2"
-              class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none font-mono"
+              class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none font-mono"
             />
-            <input
+            <input aria-label={m.schx_embed_image()}
               type="text"
               bind:value={formEmbedImageUrl}
-              placeholder="https://… (image)"
-              class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+              placeholder="https://…"
+              class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
             />
           </div>
           <p class="text-2xs text-on-surface-variant">
@@ -473,10 +473,10 @@
     <!-- Fréquence -->
     <div class="space-y-2">
       <span class="block text-xs font-semibold text-on-surface-variant ml-2">{m.schedules_form_frequency()}</span>
-      <FormSelect
+      <FormSelect ariaLabel={m.schedules_form_frequency()}
         value={formFrequency}
         onchange={(e) => handleFrequencyChange((e.target as HTMLSelectElement).value)}
-        className="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+        className="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
       >
         {#each frequencies as freq}
           <option value={freq.key}>{freq.label}</option>
@@ -488,11 +488,11 @@
     {#if formFrequency === 'custom'}
       <div class="space-y-2">
         <span class="block text-xs font-semibold text-on-surface-variant ml-2">{m.schedules_form_cron_expr()}</span>
-        <input
+        <input aria-label={m.schedules_form_cron_expr()}
           type="text"
           bind:value={formCron}
           placeholder={m.schedules_form_cron_placeholder()}
-          class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none font-mono"
+          class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none font-mono"
         />
         <p class="text-2xs text-on-surface-variant ml-2">{m.schedules_form_cron_help()}</p>
       </div>
@@ -511,7 +511,7 @@
 <Modal bind:open={showDeleteModal} title={m.schedules_modal_delete_title()}>
   <div class="space-y-4">
     <p class="text-sm font-medium">{m.schedules_confirm_delete({ name: selectedSchedule?.name ?? '' })}</p>
-    <p class="text-xs text-error font-bold bg-error/10 border border-error/20 px-4 py-3 rounded-lg flex items-center gap-2">
+    <p class="text-xs text-on-error-container font-bold bg-error/10 border border-error/20 px-4 py-3 rounded-lg flex items-center gap-2">
       <Papicon icon="alert-triangle" size={16} />
       {m.schedules_confirm_delete_warning()}
     </p>

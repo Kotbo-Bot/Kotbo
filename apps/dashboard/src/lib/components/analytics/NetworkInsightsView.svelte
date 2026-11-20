@@ -5,12 +5,12 @@
   écrivent sans jamais répondre ni recevoir de réponse ou de mention).
 -->
 <script lang="ts">
+  import UserDisplay from '../UserDisplay.svelte';
   import { untrack } from 'svelte';
   import { Callout, SectionCard } from '../ui';
   import MetricTabs, { type MetricTab } from './MetricTabs.svelte';
   import AnalyticsSkeleton from './AnalyticsSkeleton.svelte';
   import { fetchConversationNetwork, type ConversationNetwork, type NetworkMember } from '../../api';
-  import { memberAvatarSrc } from '../../discordMedia';
   import { m } from '../../i18n';
   import { analyticsExport, analyticsFilters as filters } from './analyticsFilters.svelte';
   import { fmtNumber, fmtPct, SERIES } from './analyticsFormat';
@@ -47,10 +47,6 @@
   const nameOf = (member: NetworkMember) => member.name ?? m.an_member_fallback();
 </script>
 
-{#snippet avatar(member: NetworkMember, size = 24)}
-  <img class="net-avatar" src={memberAvatarSrc(member.avatarUrl, member.name, member.userId)} alt="" width={size} height={size} loading="lazy" style="width: {size}px; height: {size}px;" />
-{/snippet}
-
 {#if failed}
   <Callout variant="danger">{m.an_error_generic()}</Callout>
 {:else if !data}
@@ -73,7 +69,7 @@
                 <span class="net-group__leaders">
                   {#each group.leaders as leader (leader.userId)}
                     <button type="button" disabled={!onOpenMember} class="net-chip" onclick={() => onOpenMember?.(leader.userId, nameOf(leader))}>
-                      {@render avatar(leader, 20)}<span class="truncate">{nameOf(leader)}</span>
+                      <UserDisplay userId={leader.userId} name={leader.name} avatarUrl={leader.avatarUrl} size="xs" />
                     </button>
                   {/each}
                 </span>
@@ -91,8 +87,7 @@
             {#each data.bridges as bridge (bridge.userId)}
               <li>
                 <button type="button" disabled={!onOpenMember} class="net-row" onclick={() => onOpenMember?.(bridge.userId, nameOf(bridge))}>
-                  {@render avatar(bridge)}
-                  <span class="net-row__name">{nameOf(bridge)}</span>
+                  <UserDisplay userId={bridge.userId} name={bridge.name} avatarUrl={bridge.avatarUrl} size="sm" class="min-w-0 flex-1" />
                   <span class="net-row__meta">{m.anx_net_bridge_groups({ count: fmtNumber(bridge.groups) })}</span>
                 </button>
               </li>
@@ -105,9 +100,9 @@
         <ul class="net-list">
           {#each data.pairs as pair (pair.a.userId + pair.b.userId)}
             <li class="net-pair">
-              <button type="button" disabled={!onOpenMember} class="net-chip" onclick={() => onOpenMember?.(pair.a.userId, nameOf(pair.a))}>{@render avatar(pair.a, 20)}<span class="truncate">{nameOf(pair.a)}</span></button>
+              <button type="button" disabled={!onOpenMember} class="net-chip" onclick={() => onOpenMember?.(pair.a.userId, nameOf(pair.a))}><UserDisplay userId={pair.a.userId} name={pair.a.name} avatarUrl={pair.a.avatarUrl} size="xs" /></button>
               <span class="text-on-surface-variant" aria-label={pair.reciprocal ? m.anx_net_mutual() : m.anx_net_one_way()} title={pair.reciprocal ? m.anx_net_mutual() : m.anx_net_one_way()}>{pair.reciprocal ? '⇄' : '→'}</span>
-              <button type="button" disabled={!onOpenMember} class="net-chip" onclick={() => onOpenMember?.(pair.b.userId, nameOf(pair.b))}>{@render avatar(pair.b, 20)}<span class="truncate">{nameOf(pair.b)}</span></button>
+              <button type="button" disabled={!onOpenMember} class="net-chip" onclick={() => onOpenMember?.(pair.b.userId, nameOf(pair.b))}><UserDisplay userId={pair.b.userId} name={pair.b.name} avatarUrl={pair.b.avatarUrl} size="xs" /></button>
               <span class="net-pair__count">{m.anx_net_pair_counts({ replies: fmtNumber(pair.replies), mentions: fmtNumber(pair.mentions) })}</span>
             </li>
           {/each}
@@ -122,8 +117,7 @@
             {#each data.isolated as member (member.userId)}
               <li>
                 <button type="button" disabled={!onOpenMember} class="net-row" onclick={() => onOpenMember?.(member.userId, nameOf(member))}>
-                  {@render avatar(member)}
-                  <span class="net-row__name">{nameOf(member)}</span>
+                  <UserDisplay userId={member.userId} name={member.name} avatarUrl={member.avatarUrl} size="sm" class="min-w-0 flex-1" />
                   <span class="net-row__meta">{m.anx_net_messages({ count: fmtNumber(member.messages) })}</span>
                 </button>
               </li>
@@ -201,15 +195,6 @@
     background: var(--color-surface-container);
   }
 
-  .net-row__name {
-    flex: 1;
-    min-width: 0;
-    font-size: 0.875rem;
-    color: var(--color-on-surface);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
 
   .net-row__meta {
     flex-shrink: 0;
@@ -231,9 +216,4 @@
     color: var(--color-on-surface-variant);
   }
 
-  .net-avatar {
-    flex-shrink: 0;
-    border-radius: 999px;
-    object-fit: cover;
-  }
 </style>

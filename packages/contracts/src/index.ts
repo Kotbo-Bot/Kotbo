@@ -47,6 +47,8 @@ export type {
   MemberCaseVerificationEntry,
   MemberCaseVerifications,
   MemberCaseResponse,
+  MemberHistoryField,
+  MemberHistoryEntry,
 } from './types/memberCase.js';
 
 export {
@@ -117,6 +119,7 @@ export {
 export {
   FREE_ANALYTICS_DAYS,
   FREE_MODULES,
+  FREE_QUOTAS,
   GIFT_DURATIONS_MONTHS,
   PLAN_KEYS,
   PLAN_REGISTRY,
@@ -137,6 +140,7 @@ export {
 } from './types/plans.js';
 export type {
   BillingInterval,
+  FreeQuotaKey,
   GiftDurationMonths,
   PaidPlanKey,
   PlanDefinition,
@@ -203,55 +207,6 @@ export type {
   HomeTodoPrefs,
 } from './types/homeTasks.js';
 
-export {
-  PARTNERSHIP_BENEFIT_KINDS,
-  PARTNERSHIP_BENEFIT_META,
-  PARTNERSHIP_COMMITMENT_KINDS,
-  PARTNERSHIP_COMMITMENT_META,
-  PARTNERSHIP_PERMISSIONS,
-  PARTNERSHIP_PERMISSION_META,
-  PARTNERSHIP_PRESETS,
-  getPartnershipPreset,
-  PARTNERSHIP_STAGES,
-  PARTNERSHIP_STAGE_META,
-  PARTNERSHIP_TIERS,
-  PARTNERSHIP_TIER_META,
-  PARTNERSHIP_TYPES,
-  PARTNERSHIP_TYPE_META,
-  PARTNER_KINDS,
-  PARTNER_KIND_META,
-  getPartnershipBenefit,
-  getPartnershipCommitment,
-  getPartnershipStage,
-  getPartnershipTier,
-  getPartnershipType,
-  isLivePartnershipStage,
-  isPartnershipBenefitKind,
-  isPartnershipCommitmentKind,
-  isPartnershipStage,
-  isPartnershipTier,
-  isPartnershipType,
-  isTerminalPartnershipStage,
-  nextPartnershipStages,
-  partnershipTypesForKind,
-} from './types/partnerships.js';
-export type {
-  PartnerKind,
-  PartnerKindMeta,
-  PartnershipBenefitKind,
-  PartnershipBenefitMeta,
-  PartnershipCommitmentKind,
-  PartnershipCommitmentMeta,
-  PartnershipPermission,
-  PartnershipPermissionMeta,
-  PartnershipPreset,
-  PartnershipStage,
-  PartnershipStageMeta,
-  PartnershipTier,
-  PartnershipTierMeta,
-  PartnershipType,
-  PartnershipTypeMeta,
-} from './types/partnerships.js';
 
 export type { RpgItemType, RpgItemRarity, RpgItemPayload } from './types/economy.js';
 export {
@@ -357,3 +312,17 @@ export type {
   ReactionRolePresetKey,
   RoleBlocker,
 } from './types/reactionRoles.js';
+
+export {
+  BOOST_BADGE_MONTHS,
+  BOOST_PERKS,
+  BOOST_TIER_THRESHOLDS,
+  BOOSTS_PER_NITRO,
+  boostBadge,
+  boostGoal,
+  boostMargin,
+  boostMonths,
+  boostTierFor,
+  tierForPerks,
+} from './types/boosts.js';
+export type { BoostBadge, BoostGoal, BoostPerkId } from './types/boosts.js';

@@ -13,16 +13,20 @@
   import AutoMod from '../AutoMod.svelte';
   import NicknameModeration from '../NicknameModeration.svelte';
   import ServerFileFilters from '../ServerFileFilters.svelte';
+  import TagAutomod from './TagAutomod.svelte';
 
   const showNicknames = $derived($router.path.startsWith('/security/filters/nicknames'));
   // « Serveurs & fichiers » : réglages de l'Anti-raid, rendus en onglet de Filtres.
   const showServers = $derived($router.path.startsWith('/security/filters/servers'));
+  const showTags = $derived($router.path.startsWith('/security/filters/tags'));
 </script>
 
 {#if showNicknames}
   <NicknameModeration />
 {:else if showServers}
   <ServerFileFilters />
+{:else if showTags}
+  <TagAutomod />
 {:else}
   <AutoMod />
 {/if}

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { m } from '../../../i18n';
   /**
    * La rencontre : le bot et le serveur, cote a cote.
@@ -13,8 +14,17 @@
    */
   import { authStore } from '../../../stores/auth.svelte';
   import { wizard } from '../../../stores/onboardingWizard.svelte';
+  import { onboardingData } from '../../../stores/onboardingData.svelte';
+  import { toast } from '../../../stores/toast.svelte';
+  import {
+    ADMIN_INVITE_PERMISSIONS,
+    buildBotInviteUrl,
+    fetchDiscordClientId,
+  } from '../../../api';
   import KotboMark from '../KotboMark.svelte';
   import Papicon from '../../Papicon.svelte';
+  import Modal from '../../Modal.svelte';
+  import { Button, Callout } from '../../ui';
   import WizardShell from '../WizardShell.svelte';
 
   const selectedGuild = $derived(
@@ -27,11 +37,49 @@
       : null
   );
 
+  const template = $derived(onboardingData.template);
+  const isAdministrator = $derived(template?.isAdministrator ?? true);
+
+  let clientId = $state('');
+  let refreshingPerms = $state(false);
+  let acknowledgedDetailed = $state(false);
+  let frictionModalOpen = $state(false);
+
+  onMount(async () => {
+    clientId = await fetchDiscordClientId();
+  });
+
+  async function refreshPermissions() {
+    refreshingPerms = true;
+    try {
+      await onboardingData.loadCore();
+      toast.success(m.obx_wc_perms_refreshed());
+    } catch {
+      toast.error(m.obx_wc_perms_refresh_failed());
+    } finally {
+      refreshingPerms = false;
+    }
+  }
+
+  function handleStart() {
+    if (!isAdministrator && !acknowledgedDetailed) {
+      frictionModalOpen = true;
+      return;
+    }
+    wizard.next();
+  }
+
+  function confirmDetailedAndProceed() {
+    if (!acknowledgedDetailed) return;
+    frictionModalOpen = false;
+    wizard.next();
+  }
+
   const PROMISES = [
-    { icon: 'layout-grid', title: m.obx_wc_structure(), text: m.obx_wc_structure_desc() },
-    { icon: 'shield', title: m.obx_wc_moderation(), text: m.obx_wc_moderation_desc() },
-    { icon: 'door-open', title: m.obx_wc_welcome(), text: m.obx_wc_welcome_desc() },
-    { icon: 'sparkles', title: m.obx_wc_rest(), text: m.obx_wc_rest_desc() },
+    { icon: 'layout-grid', get title() { return m.obx_wc_structure(); }, get text() { return m.obx_wc_structure_desc(); } },
+    { icon: 'shield', get title() { return m.obx_wc_moderation(); }, get text() { return m.obx_wc_moderation_desc(); } },
+    { icon: 'door-open', get title() { return m.obx_wc_welcome(); }, get text() { return m.obx_wc_welcome_desc(); } },
+    { icon: 'sparkles', get title() { return m.obx_wc_rest(); }, get text() { return m.obx_wc_rest_desc(); } },
   ];
 </script>
 
@@ -60,6 +108,36 @@
       <Papicon icon="clock" size={13} class="text-primary" />
       <span class="text-xs font-medium text-on-surface-variant">{m.obx_wc_duration()}</span>
     </div>
+
+    {#if !isAdministrator}
+      <div class="mt-6 w-full max-w-xl text-left">
+        <Callout variant="warning" title={m.obx_wc_restricted_title()}>
+          {m.obx_wc_restricted_desc()}
+          {#snippet actions()}
+            {#if clientId}
+              <Button
+                variant="primary"
+                size="sm"
+                iconRight="ExternalLink"
+                href={buildBotInviteUrl(clientId, ADMIN_INVITE_PERMISSIONS, selectedGuild?.id)}
+                target="_blank"
+              >
+                {m.obx_wc_grant_admin()}
+              </Button>
+            {/if}
+            <Button
+              variant="secondary"
+              size="sm"
+              icon="refresh-cw"
+              loading={refreshingPerms}
+              onclick={refreshPermissions}
+            >
+              {m.obx_wc_check_status()}
+            </Button>
+          {/snippet}
+        </Callout>
+      </div>
+    {/if}
   </div>
 
   <ul class="mt-9 grid gap-3 sm:grid-cols-2">
@@ -77,7 +155,7 @@
   {#snippet footer()}
     <button
       type="button"
-      onclick={() => wizard.next()}
+      onclick={handleStart}
       class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-on-primary text-sm font-semibold hover:opacity-90 transition-opacity"
     >
       {m.obx_wc_start()}
@@ -85,3 +163,52 @@
     </button>
   {/snippet}
 </WizardShell>
+
+<Modal
+  bind:open={frictionModalOpen}
+  onClose={() => (frictionModalOpen = false)}
+  size="md"
+  title={m.obx_wc_detailed_title()}
+  subtitle={m.obx_wc_detailed_subtitle()}
+>
+  <div class="space-y-4 text-left">
+    <Callout variant="warning" title={m.obx_wc_manual_title()}>
+      {m.obx_wc_manual_desc()}
+    </Callout>
+
+    <label class="flex items-start gap-2.5 cursor-pointer select-none">
+      <input
+        type="checkbox"
+        bind:checked={acknowledgedDetailed}
+        class="mt-0.5 rounded border-field-border text-primary focus:ring-primary"
+      />
+      <span class="text-xs text-on-surface-variant leading-relaxed">
+        {m.obx_wc_manual_ack()}
+      </span>
+    </label>
+  </div>
+
+  {#snippet footer()}
+    <div class="flex items-center justify-end gap-2">
+      {#if clientId}
+        <Button
+          variant="primary"
+          size="sm"
+          iconRight="ExternalLink"
+          href={buildBotInviteUrl(clientId, ADMIN_INVITE_PERMISSIONS, selectedGuild?.id)}
+          target="_blank"
+        >
+          {m.obx_wc_switch_admin()}
+        </Button>
+      {/if}
+      <Button
+        variant="secondary"
+        size="sm"
+        disabled={!acknowledgedDetailed}
+        onclick={confirmDetailedAndProceed}
+      >
+        {m.obx_wc_continue_restricted()}
+      </Button>
+    </div>
+  {/snippet}
+</Modal>

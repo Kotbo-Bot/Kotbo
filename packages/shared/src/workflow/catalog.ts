@@ -40,9 +40,22 @@ export const SANCTION_TYPE_LABELS: Record<string, string> = {
  * « Décision ». Les clés sont celles de l'événement `suggestion:resolved`.
  */
 export const SUGGESTION_STATUS_LABELS: Record<string, string> = {
+  PENDING: 'En attente',
   APPROVED: 'Approuvée',
+  IN_PROGRESS: 'En cours',
   REJECTED: 'Refusée',
   IMPLEMENTED: 'Implémentée',
+};
+
+/**
+ * Libellé affiché du motif de retrait d'un message à la une, exposé par le port
+ * « Motif ». Les clés sont celles de l'événement `starboard:removed`.
+ */
+export const STARBOARD_REMOVAL_LABELS: Record<string, string> = {
+  BELOW_THRESHOLD: 'Score repassé sous le seuil',
+  STAFF: 'Retiré par le staff',
+  GUARD: 'Garde-fou (auteur exclu, salon NSFW)',
+  SOURCE_DELETED: "Message d'origine supprimé",
 };
 
 const EXEC_IN: PortDef = { id: 'exec', label: '', type: 'Exec' };
@@ -370,7 +383,30 @@ const TRIGGERS: NodeDef[] = [
       EXEC_OUT,
       { id: 'member', label: 'Auteur', type: 'Member' },
       { id: 'content', label: 'Suggestion', type: 'String' },
+      { id: 'title', label: 'Titre', type: 'String' },
+      { id: 'category', label: 'Catégorie', type: 'String' },
       { id: 'channel', label: 'Salon des suggestions', type: 'Channel' },
+      { id: 'message', label: 'Message de la suggestion', type: 'Message' },
+    ],
+  },
+  {
+    type: 'OnSuggestionThresholdReached',
+    label: 'Seuil de votes atteint',
+    category: 'trigger',
+    description:
+      "Se déclenche quand une suggestion atteint le nombre de votes « pour » réglé dans le module Suggestions, une seule fois par suggestion. Sans seuil réglé, il ne se déclenche jamais.",
+    event: 'suggestion:threshold-reached',
+    module: 'suggestions',
+    inputs: [],
+    outputs: [
+      EXEC_OUT,
+      { id: 'member', label: 'Auteur', type: 'Member' },
+      { id: 'content', label: 'Suggestion', type: 'String' },
+      { id: 'title', label: 'Titre', type: 'String' },
+      { id: 'category', label: 'Catégorie', type: 'String' },
+      { id: 'upvotes', label: 'Votes pour', type: 'Number' },
+      { id: 'downvotes', label: 'Votes contre', type: 'Number' },
+      { id: 'threshold', label: 'Seuil', type: 'Number' },
       { id: 'message', label: 'Message de la suggestion', type: 'Message' },
     ],
   },
@@ -379,7 +415,7 @@ const TRIGGERS: NodeDef[] = [
     label: 'Suggestion traitée',
     category: 'trigger',
     description:
-      "Se déclenche quand le staff approuve, refuse ou marque comme implémentée une suggestion, depuis le dashboard ou l'assistant. L'auteur est réduit à son pseudo s'il a quitté le serveur ; le staff est vide pour une réponse de l'assistant.",
+      "Se déclenche quand le staff change le statut d'une suggestion (approuvée, en cours, refusée, implémentée), depuis le dashboard ou l'assistant, y compris en révisant une décision. Une remise en attente ne déclenche rien. L'auteur est réduit à son pseudo s'il a quitté le serveur ; le staff est vide pour une réponse de l'assistant.",
     event: 'suggestion:resolved',
     inputs: [],
     outputs: [
@@ -388,10 +424,14 @@ const TRIGGERS: NodeDef[] = [
       { id: 'staff', label: 'Traitée par', type: 'Member' },
       { id: 'content', label: 'Suggestion', type: 'String' },
       { id: 'response', label: 'Réponse du staff', type: 'String' },
+      { id: 'title', label: 'Titre', type: 'String' },
+      { id: 'category', label: 'Catégorie', type: 'String' },
       { id: 'statusLabel', label: 'Décision', type: 'String' },
+      { id: 'previousStatusLabel', label: 'Statut précédent', type: 'String' },
       { id: 'upvotes', label: 'Votes pour', type: 'Number' },
       { id: 'downvotes', label: 'Votes contre', type: 'Number' },
       { id: 'isApproved', label: 'Approuvée', type: 'Boolean' },
+      { id: 'isInProgress', label: 'En cours', type: 'Boolean' },
       { id: 'isRejected', label: 'Refusée', type: 'Boolean' },
       { id: 'isImplemented', label: 'Implémentée', type: 'Boolean' },
     ],
@@ -442,55 +482,6 @@ const TRIGGERS: NodeDef[] = [
     outputs: [EXEC_OUT],
     config: [
       { key: 'cron', label: 'Planification', type: 'text', defaultValue: '0 9 * * *', placeholder: '0 9 * * *' },
-    ],
-  },
-  {
-    type: 'OnPartnershipStage',
-    label: "Partenariat : changement d'étape",
-    category: 'trigger',
-    description:
-      "Se déclenche quand un dossier de partenariat change d'étape. L'événement part après l'application des avantages : le rôle partenaire est déjà posé.",
-    event: 'partnership:stage',
-    module: 'partnerships',
-    inputs: [],
-    outputs: [
-      EXEC_OUT,
-      { id: 'partnerName', label: 'Partenaire', type: 'String' },
-      { id: 'stage', label: 'Nouvelle étape', type: 'String' },
-      { id: 'previousStage', label: 'Étape précédente', type: 'String' },
-      { id: 'partnershipType', label: 'Type', type: 'String' },
-      { id: 'reason', label: 'Motif', type: 'String' },
-    ],
-  },
-  {
-    type: 'OnPartnershipCommitmentFailed',
-    label: 'Partenariat : engagement non tenu',
-    category: 'trigger',
-    description:
-      "Se déclenche au constat d'un manquement. « Périodes manquées » permet de ne réagir qu'à partir de la deuxième ou de la troisième fois.",
-    event: 'partnership:commitment-failed',
-    module: 'partnerships',
-    inputs: [],
-    outputs: [
-      EXEC_OUT,
-      { id: 'partnerName', label: 'Partenaire', type: 'String' },
-      { id: 'commitment', label: 'Engagement', type: 'String' },
-      { id: 'failureStreak', label: 'Périodes manquées', type: 'Number' },
-    ],
-  },
-  {
-    type: 'OnPartnershipReferral',
-    label: 'Partenariat : arrivée attribuée',
-    category: 'trigger',
-    description:
-      "Se déclenche quand un membre arrive par l'invitation d'un partenariat. Ne part que pour les arrivées réellement attribuées, pas pour toutes les arrivées.",
-    event: 'partnership:referral',
-    module: 'partnerships',
-    inputs: [],
-    outputs: [
-      EXEC_OUT,
-      { id: 'member', label: 'Membre', type: 'Member' },
-      { id: 'partnerName', label: 'Partenaire', type: 'String' },
     ],
   },
   {
@@ -556,6 +547,121 @@ const TRIGGERS: NodeDef[] = [
       { id: 'answer', label: 'Réponse trouvée', type: 'String' },
       { id: 'isGuessNumber', label: 'Nombre mystère', type: 'Boolean' },
       { id: 'isEmojiRiddle', label: 'Rébus emoji', type: 'Boolean' },
+    ],
+  },
+  {
+    type: 'OnReputationGiven',
+    label: 'Remerciement donné',
+    category: 'trigger',
+    description:
+      "Se déclenche quand un membre en remercie un autre (commande, menu ou réaction), une fois le vote accepté. Les ajustements du staff ne comptent pas. Le filtre de salons porte sur le salon du remerciement.",
+    event: 'reputation:given',
+    module: 'reputation',
+    inputs: [],
+    outputs: [
+      EXEC_OUT,
+      { id: 'member', label: 'Membre qui remercie', type: 'Member' },
+      { id: 'receiver', label: 'Membre remercié', type: 'Member' },
+      { id: 'channel', label: 'Salon', type: 'Channel' },
+      { id: 'reason', label: 'Motif', type: 'String' },
+      { id: 'reputation', label: 'Réputation du membre remercié', type: 'Number' },
+    ],
+    config: [CHANNEL_FILTER_FIELD],
+  },
+  {
+    type: 'OnReputationReceived',
+    label: 'Remerciement reçu',
+    category: 'trigger',
+    description:
+      "Se déclenche quand un membre est remercié (commande, menu ou réaction), une fois le vote accepté. Les ajustements du staff ne comptent pas. Le filtre de salons porte sur le salon du remerciement.",
+    event: 'reputation:given',
+    module: 'reputation',
+    inputs: [],
+    outputs: [
+      EXEC_OUT,
+      { id: 'member', label: 'Membre remercié', type: 'Member' },
+      { id: 'giver', label: 'Membre qui remercie', type: 'Member' },
+      { id: 'channel', label: 'Salon', type: 'Channel' },
+      { id: 'reason', label: 'Motif', type: 'String' },
+      { id: 'reputation', label: 'Réputation après ce vote', type: 'Number' },
+    ],
+    config: [CHANNEL_FILTER_FIELD],
+  },
+  {
+    type: 'OnStarboardFeatured',
+    label: 'Message mis à la une',
+    category: 'trigger',
+    description:
+      "Se déclenche quand un message passe à la une pour la première fois (ou de nouveau après un retrait du staff annulé), une fois ses gains et ses paliers appliqués. Une republication après une suppression à la main ne compte pas. Le filtre de salons porte sur le salon du message d'origine.",
+    event: 'starboard:featured',
+    module: 'starboard',
+    inputs: [],
+    outputs: [
+      EXEC_OUT,
+      { id: 'member', label: 'Auteur', type: 'Member' },
+      { id: 'channel', label: "Salon d'origine", type: 'Channel' },
+      { id: 'score', label: 'Score', type: 'Number' },
+      { id: 'featuredCount', label: "Messages de l'auteur à la une", type: 'Number' },
+      { id: 'messageUrl', label: "Lien du message d'origine", type: 'String' },
+      { id: 'starMessageUrl', label: 'Lien de la republication', type: 'String' },
+    ],
+    config: [CHANNEL_FILTER_FIELD],
+  },
+  {
+    type: 'OnStarboardRemoved',
+    label: 'Message retiré de la une',
+    category: 'trigger',
+    description:
+      "Se déclenche quand un message affiché à la une en est retiré : score repassé sous le seuil, retrait par le staff, garde-fou (auteur exclu, salon NSFW) ou message d'origine supprimé. Le filtre de salons porte sur le salon du message d'origine.",
+    event: 'starboard:removed',
+    module: 'starboard',
+    inputs: [],
+    outputs: [
+      EXEC_OUT,
+      { id: 'member', label: 'Auteur', type: 'Member' },
+      { id: 'channel', label: "Salon d'origine", type: 'Channel' },
+      { id: 'score', label: 'Score', type: 'Number' },
+      { id: 'reason', label: 'Motif', type: 'String' },
+      { id: 'isStaffRemoval', label: 'Retiré par le staff', type: 'Boolean' },
+    ],
+    config: [CHANNEL_FILTER_FIELD],
+  },
+  {
+    type: 'OnSeasonStarted',
+    label: 'Saison ouverte',
+    category: 'trigger',
+    description:
+      "Se déclenche à l'ouverture d'une saison de leveling : à la main, à sa date de début ou par enchaînement automatique.",
+    event: 'season:started',
+    module: 'seasons',
+    inputs: [],
+    outputs: [
+      EXEC_OUT,
+      { id: 'season', label: 'Nom de la saison', type: 'String' },
+      { id: 'number', label: 'Numéro de la saison', type: 'Number' },
+    ],
+  },
+  {
+    /**
+     * `member` porte le premier du classement : les actions du catalogue
+     * s'adressent à un membre. Personne de classé, ou un premier parti du
+     * serveur : rien ne part, aucune action n'aurait qui nommer.
+     */
+    type: 'OnSeasonEnded',
+    label: 'Saison clôturée',
+    category: 'trigger',
+    description:
+      "Se déclenche à la clôture d'une saison, une fois le classement figé et les récompenses données. « Premier » est le gagnant ; sans membre classé, rien ne part.",
+    event: 'season:ended',
+    module: 'seasons',
+    inputs: [],
+    outputs: [
+      EXEC_OUT,
+      { id: 'member', label: 'Premier', type: 'Member' },
+      { id: 'season', label: 'Nom de la saison', type: 'String' },
+      { id: 'number', label: 'Numéro de la saison', type: 'Number' },
+      { id: 'participants', label: 'Participants', type: 'Number' },
+      { id: 'winnerXp', label: 'XP gagnée par le premier', type: 'Number' },
     ],
   },
   {
@@ -798,6 +904,23 @@ const TRIGGERS: NodeDef[] = [
       { id: 'member', label: 'Membre', type: 'Member' },
       { id: 'oldNickname', label: 'Ancien surnom', type: 'String' },
       { id: 'newNickname', label: 'Nouveau surnom', type: 'String' },
+    ],
+  },
+  {
+    type: 'OnServerTagChanged',
+    label: 'Tag de serveur modifié',
+    category: 'trigger',
+    description:
+      "Se déclenche quand un membre ajoute, change ou retire le tag de serveur affiché sur son profil Discord.",
+    event: 'member:tag',
+    inputs: [],
+    outputs: [
+      EXEC_OUT,
+      { id: 'member', label: 'Membre', type: 'Member' },
+      { id: 'newTag', label: 'Nouveau tag', type: 'String' },
+      { id: 'oldTag', label: 'Ancien tag', type: 'String' },
+      { id: 'serverId', label: 'ID du serveur du tag', type: 'String' },
+      { id: 'isOwnGuild', label: 'Tag de ce serveur', type: 'Boolean' },
     ],
   },
   {

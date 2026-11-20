@@ -1,8 +1,10 @@
 <script lang="ts">
+  import MemberTag from '../lib/components/MemberTag.svelte';
   import { explainDisabled } from '../lib/actions/explainDisabled';
   import { channelDisplayName } from '../lib/channelUtils';
   import { isMissingReference } from '../lib/discordReferences';
   import { m } from '../lib/i18n';
+  import { bot } from '../lib/stores/botLocale.svelte';
   import { onMount, onDestroy, untrack } from 'svelte';
   import { router } from 'tinro';
   import { resolveTabFromUrl, gotoTab } from '../lib/tabRouting';
@@ -49,6 +51,7 @@
     addLevelingReward,
     deleteLevelingReward,
     importLevelingData,
+    extractLevelingLeaderboard,
     fetchClansData,
     updateClanSettings
   } from '../lib/api';
@@ -127,7 +130,7 @@
     cooldownSeconds: 60,
     vocalXpPerMin: 5,
     levelUpChannelId: null as string | null,
-    levelUpMessage: 'Félicitations {user} ! Tu passes au niveau **{level}** ! 🎉',
+    levelUpMessage: m.bot_levelup_message({ user: '{user}', level: '{level}' }, bot()),
     stackRewards: false,
     ignoredChannels: [] as string[],
     ignoredRoles: [] as string[],
@@ -157,7 +160,7 @@
     cooldownSeconds: 60,
     vocalXpPerMin: 5,
     levelUpChannelId: null as string | null,
-    levelUpMessage: 'Félicitations {user} ! Tu passes au niveau **{level}** ! 🎉',
+    levelUpMessage: m.bot_levelup_message({ user: '{user}', level: '{level}' }, bot()),
     stackRewards: false,
     ignoredChannels: [] as string[],
     ignoredRoles: [] as string[],
@@ -938,6 +941,62 @@
   const maxLevel = $derived(leaderboardStats?.maxLevel ?? 0);
 
   // Import states
+  // `file` : JSON collé ou déposé ; sinon le classement public de l'autre bot.
+  // `ai` : captures ou texte lus par l'IA, versés ensuite dans la zone JSON.
+  let importSource = $state<'file' | 'ai' | 'mee6' | 'draftbot' | 'lurkr' | 'tatsu'>('file');
+  let aiImages = $state<File[]>([]);
+  let aiText = $state('');
+  const aiActionState = createAsyncActionState();
+  const AI_MAX_IMAGES = 8;
+  const AI_MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
+  function handleAiImages(e: Event) {
+    importFileError = null;
+    const files = Array.from((e.target as HTMLInputElement).files ?? []);
+    if (files.length > AI_MAX_IMAGES) {
+      importFileError = m.lv_import_ai_too_many({ max: AI_MAX_IMAGES });
+      return;
+    }
+    if (files.some((file) => file.size > AI_MAX_IMAGE_BYTES)) {
+      importFileError = m.lv_import_ai_too_big();
+      return;
+    }
+    aiImages = files;
+  }
+
+  function toBase64(file: File): Promise<{ mediaType: string; data: string }> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve({ mediaType: file.type, data: String(reader.result).split(',')[1] ?? '' });
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function handleAiExtract() {
+    importFileError = null;
+    importResults = null;
+    await aiActionState.run(async () => {
+      const images = await Promise.all(aiImages.map(toBase64));
+      const res = await extractLevelingLeaderboard({ text: aiText.trim() || undefined, images });
+      const rows = res?.rows ?? [];
+      if (rows.length === 0) throw new Error(m.lv_import_ai_empty());
+      // Le résultat passe par la zone JSON : l'admin le relit et lance l'analyse
+      // comme pour un fichier, rien n'est écrit avant.
+      importRawJson = JSON.stringify(rows, null, 2);
+      importSource = 'file';
+      return true;
+    }, { successMessage: m.lv_import_ai_done() });
+  }
+  let importFetched = $state<number | null>(null);
+  // Jamais conservée : envoyée le temps de la lecture, puis oubliée avec la page.
+  let importApiKey = $state('');
+  const IMPORT_SOURCE_HINTS = {
+    mee6: m.lv_import_source_mee6_hint,
+    draftbot: m.lv_import_source_draftbot_hint,
+    lurkr: m.lv_import_source_lurkr_hint,
+    tatsu: m.lv_import_source_tatsu_hint,
+  };
   let importRawJson = $state('');
   let importFileError = $state<string | null>(null);
   const importActionState = createAsyncActionState();
@@ -946,6 +1005,7 @@
     importedCount: number;
     failedCount: number;
     failedMembers: Array<{ username?: string; display_name?: string; reason: string }>;
+    leftCount?: number;
     createdCount?: number;
     levelChangeCount?: number;
     xpLoweredCount?: number;
@@ -956,26 +1016,33 @@
   async function handleImportSubmit(dryRun = false) {
     importFileError = null;
     importResults = null;
-    if (!importRawJson.trim()) {
-      importFileError = m.lv_import_err_empty();
-      return;
-    }
-
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(importRawJson);
-    } catch (err) {
-      importFileError = m.lv_import_err_json({ message: (err as Error).message });
-      return;
-    }
-
-    if (!Array.isArray(parsed)) {
-      importFileError = m.lv_import_err_not_array();
-      return;
+    const source = importSource === 'file' || importSource === 'ai' ? undefined : importSource;
+    let parsed: unknown = [];
+    if (!source) {
+      if (!importRawJson.trim()) {
+        importFileError = m.lv_import_err_empty();
+        return;
+      }
+      try {
+        parsed = JSON.parse(importRawJson);
+      } catch (err) {
+        importFileError = m.lv_import_err_json({ message: (err as Error).message });
+        return;
+      }
+      if (!Array.isArray(parsed)) {
+        importFileError = m.lv_import_err_not_array();
+        return;
+      }
     }
 
     await importActionState.run(async () => {
-      const res = await importLevelingData(parsed, { dryRun });
+      importFetched = source ? 0 : null;
+      const res = await importLevelingData(parsed as unknown[], {
+        dryRun,
+        source,
+        apiKey: source === 'tatsu' ? importApiKey.trim() : undefined,
+        onProgress: (fetched) => (importFetched = fetched),
+      }).finally(() => (importFetched = null));
       if (!res) throw new Error(m.lv_import_err_failed());
       importResults = res;
       // Rien n'a ete ecrit en mode analyse : le classement affiche est encore
@@ -1242,7 +1309,7 @@
               id="xpMin"
               type="number" 
               bind:value={config.xpMin} 
-              class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+              class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
               disabled={!canManageSettings}
             />
           </div>
@@ -1253,7 +1320,7 @@
               id="xpMax"
               type="number" 
               bind:value={config.xpMax} 
-              class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+              class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
               disabled={!canManageSettings}
             />
           </div>
@@ -1264,7 +1331,7 @@
               id="cooldown"
               type="number" 
               bind:value={config.cooldownSeconds} 
-              class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+              class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
               disabled={!canManageSettings}
             />
           </div>
@@ -1275,7 +1342,7 @@
               id="vocalXp"
               type="number" 
               bind:value={config.vocalXpPerMin} 
-              class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+              class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
               disabled={!canManageSettings}
             />
           </div>
@@ -1334,7 +1401,7 @@
                   min="1"
                   max="25"
                   bind:value={config.voiceMinMembers}
-                  class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+                  class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
                   disabled={!canManageSettings}
                 />
                 <p class="text-2xs text-on-surface-variant ml-2">{m.lv_voice_min_members_hint({ count: config.voiceMinMembers })}</p>
@@ -1356,7 +1423,7 @@
                 type="number"
                 min="0"
                 bind:value={config.dailyXpCap}
-                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
                 disabled={!canManageSettings}
               />
               <p class="text-2xs text-on-surface-variant ml-2">{m.lv_daily_cap_hint()}</p>
@@ -1415,7 +1482,7 @@
                       type="number"
                       min="1"
                       bind:value={config.lengthBonusThreshold}
-                      class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+                      class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
                       disabled={!canManageSettings}
                     />
                     <p class="text-2xs text-on-surface-variant ml-2">{m.lv_length_bonus_threshold_hint({ count: config.lengthBonusThreshold })}</p>
@@ -1430,7 +1497,7 @@
                       max="10"
                       step="0.1"
                       bind:value={config.lengthBonusMaxMultiplier}
-                      class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+                      class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
                       disabled={!canManageSettings}
                     />
                     <p class="text-2xs text-on-surface-variant ml-2">{m.lv_length_bonus_max_hint({ max: config.lengthBonusMaxMultiplier })}</p>
@@ -1639,7 +1706,7 @@
                     min="0.1"
                     max="10"
                     bind:value={newMultValue} 
-                    class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+                    class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
                   />
                 </div>
 
@@ -1675,7 +1742,7 @@
                           <td class="px-6 py-3.5 text-sm font-semibold flex items-center gap-2">
                             <Papicon icon="Trophy" size={15} class="shrink-0 text-warning" />
                             <span>{getRoleName(winningClan.roleId)}</span>
-                            <span class="text-xs bg-warning/20 text-warning px-1.5 py-0.5 rounded font-semibold">{m.lv_winning_clan_badge()}</span>
+                            <span class="text-xs bg-warning/20 text-on-warning-container px-1.5 py-0.5 rounded font-semibold">{m.lv_winning_clan_badge()}</span>
                           </td>
                           <td class="px-6 py-3.5 text-sm font-semibold text-warning">{clanRewardXpBoostRate}x</td>
                           {#if canManageSettings}
@@ -1807,7 +1874,7 @@
                 min={LEVEL_CURVE_LIMITS.baseXp.min}
                 max={LEVEL_CURVE_LIMITS.baseXp.max}
                 bind:value={config.curveBaseXp}
-                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
                 disabled={!canManageSettings}
               />
               <p class="text-2xs text-on-surface-variant ml-2">{m.lv_curve_base_hint()}</p>
@@ -1821,7 +1888,7 @@
                 min={LEVEL_CURVE_LIMITS.linearXp.min}
                 max={LEVEL_CURVE_LIMITS.linearXp.max}
                 bind:value={config.curveLinearXp}
-                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
                 disabled={!canManageSettings}
               />
               <p class="text-2xs text-on-surface-variant ml-2">{m.lv_curve_linear_hint()}</p>
@@ -1836,7 +1903,7 @@
                 max={LEVEL_CURVE_LIMITS.exponent.max}
                 step="0.1"
                 bind:value={config.curveExponent}
-                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
                 disabled={!canManageSettings}
               />
               <p class="text-2xs text-on-surface-variant ml-2">{m.lv_curve_exponent_hint()}</p>
@@ -1852,7 +1919,7 @@
                 min={LEVEL_CURVE_LIMITS.maxLevel.min}
                 max={LEVEL_CURVE_LIMITS.maxLevel.max}
                 bind:value={config.maxLevel}
-                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
                 disabled={!canManageSettings}
               />
               <p class="text-2xs text-on-surface-variant ml-2">{m.lv_curve_max_level_hint()}</p>
@@ -1947,7 +2014,7 @@
               {/each}
             </div>
 
-            <div class="p-3 bg-warning/10 border border-warning/20 rounded-lg text-2xs text-warning leading-relaxed flex items-start gap-2">
+            <div class="p-3 bg-warning/10 border border-warning/20 rounded-lg text-2xs text-on-warning-container leading-relaxed flex items-start gap-2">
               <Papicon icon="AlertTriangle" size={13} class="shrink-0 mt-0.5" />
               <div class="min-w-0 flex-1">
               {#if curveDirty && curveStats}
@@ -1987,7 +2054,7 @@
                     <button
                       type="button"
                       onclick={stopRoleResync}
-                      class="px-4 py-2 bg-error/10 text-error font-medium text-xs rounded-lg hover:bg-error/20 transition-all"
+                      class="px-4 py-2 bg-error/10 text-on-error-container font-medium text-xs rounded-lg hover:bg-error/20 transition-all"
                     >
                       {m.lv_role_resync_stop()}
                     </button>
@@ -2062,7 +2129,7 @@
                       min="1.0"
                       max="10"
                       bind:value={clanRewardXpBoostRate} 
-                      class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none font-bold"
+                      class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none font-bold"
                       disabled={!canManageSettings}
                     />
                   </div>
@@ -2102,7 +2169,7 @@
                 min="1"
                 placeholder="Ex: 5"
                 bind:value={newRewardLevel} 
-                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
                 required
               />
             </div>
@@ -2147,7 +2214,7 @@
                     Lvl {reward.level}
                     {#if unreachableRewardIds.has(reward.id)}
                       <span
-                        class="ml-2 px-2 py-0.5 rounded-full bg-warning/15 text-warning text-2xs font-bold align-middle"
+                        class="ml-2 px-2 py-0.5 rounded-full bg-warning/15 text-on-warning-container text-2xs font-bold align-middle"
                         title={m.lv_reward_unreachable_hint({ level: levelCurve.maxLevel })}
                       >{m.lv_reward_unreachable()}</span>
                     {/if}
@@ -2228,7 +2295,7 @@
               id="lvlMsg"
               type="text" 
               bind:value={config.levelUpMessage} 
-              class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
+              class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary/30 transition-all text-on-surface focus:outline-none"
               placeholder={m.lv_levelup_message_ph({ user: '{user}', level: '{level}' })}
               disabled={!canManageSettings}
             />
@@ -2312,11 +2379,11 @@
 
           <!-- Barre de recherche -->
           <div class="relative w-full md:w-80">
-            <input 
+            <input aria-label={m.lv_search_member()} 
               type="text" 
               placeholder={m.lv_search_member()} 
               bind:value={searchQuery}
-              class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 pl-11 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-tertiary/30 placeholder:text-on-surface-variant transition-all shadow-inner"
+              class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 pl-11 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-tertiary/30 placeholder:text-on-surface-variant transition-all shadow-inner"
             />
             <div class="absolute left-4 top-1/2 -translate-y-1/2 text-sm opacity-40 text-on-surface flex items-center">
               <Papicon icon="Search" size={14} />
@@ -2363,6 +2430,7 @@
                     <p class="font-bold text-on-surface truncate group-hover:text-primary transition-colors" title={podium[1].displayName}>
                       {podium[1].displayName || podium[1].username || m.lv_unknown_member()}
                     </p>
+                    <MemberTag userId={podium[1].userId} />
                     {#if podium[1].username && podium[1].displayName !== podium[1].username}
                       <p class="text-xs text-on-surface-variant font-medium truncate">@{podium[1].username}</p>
                     {/if}
@@ -2405,6 +2473,7 @@
                     <p class="font-semibold text-on-surface text-lg truncate group-hover:text-tertiary transition-colors" title={podium[0].displayName}>
                       {podium[0].displayName || podium[0].username || m.lv_unknown_member()}
                     </p>
+                    <MemberTag userId={podium[0].userId} />
                     {#if podium[0].username && podium[0].displayName !== podium[0].username}
                       <p class="text-xs text-tertiary/70 font-medium truncate">@{podium[0].username}</p>
                     {/if}
@@ -2444,6 +2513,7 @@
                     <p class="font-bold text-on-surface truncate group-hover:text-primary transition-colors" title={podium[2].displayName}>
                       {podium[2].displayName || podium[2].username || m.lv_unknown_member()}
                     </p>
+                    <MemberTag userId={podium[2].userId} />
                     {#if podium[2].username && podium[2].displayName !== podium[2].username}
                       <p class="text-xs text-on-surface-variant font-medium truncate">@{podium[2].username}</p>
                     {/if}
@@ -2474,7 +2544,7 @@
             <div class="flex items-center gap-4 p-4 rounded-lg bg-surface-container-high/15 border border-outline-variant/5 hover:bg-surface-container-high/30 hover:border-outline-variant/15 transition-all duration-350 group">
               <!-- Rang -->
               <div class="w-10 h-10 rounded-xl flex items-center justify-center font-semibold text-sm shrink-0 font-mono
- {index === 0 ? 'bg-warning/15 text-warning border border-warning/25 shadow-sm shadow-amber-400/5' : 
+ {index === 0 ? 'bg-warning/15 text-on-warning-container border border-warning/25 shadow-sm shadow-amber-400/5' : 
                  index === 1 ? 'bg-slate-400/15 text-on-surface-variant border border-slate-400/25 shadow-sm shadow-slate-400/5' : 
                  index === 2 ? 'bg-amber-700/15 text-warning border border-amber-700/25 shadow-sm shadow-amber-700/5' : 
                  'bg-surface-container text-on-surface-variant border border-outline-variant/5'}">
@@ -2494,6 +2564,7 @@
               <div class="flex-1 min-w-0">
                 <div class="flex items-baseline gap-2 mb-1.5">
                   <button type="button" class="min-w-0 text-left text-sm font-semibold text-on-surface truncate enabled:hover:text-primary transition-colors" disabled={!memberCaseModal.canOpen} onclick={() => openMember(userLvl)}>{userLvl.displayName || userLvl.username || m.lv_unknown_member()}</button>
+                  <MemberTag userId={userLvl.userId} />
                   {#if userLvl.username && userLvl.displayName !== userLvl.username}
                     <span class="text-2xs text-on-surface-variant/40 truncate font-semibold font-mono">@{userLvl.username}</span>
                   {/if}
@@ -2518,7 +2589,7 @@
               <!-- Niveau Badge -->
               <div class="text-right shrink-0">
                 <span class="text-body-sm font-medium px-3.5 py-2 rounded-xl border whitespace-nowrap shadow-xs
- {index === 0 ? 'bg-warning/10 text-warning border-warning/20' : 
+ {index === 0 ? 'bg-warning/10 text-on-warning-container border-warning/20' : 
                    index === 1 ? 'bg-slate-400/10 text-on-surface-variant border-slate-400/20' : 
                    index === 2 ? 'bg-amber-700/10 text-warning border-amber-700/20' : 
                    'bg-primary/10 text-primary border-primary/15'}">
@@ -2603,8 +2674,78 @@
               {m.lv_import_input_title()}
             </h3>
 
+            <FilterPills
+              label={m.lv_import_source_label()}
+              options={[
+                { value: 'file', label: m.lv_import_source_file() },
+                { value: 'ai', label: m.lv_import_source_ai() },
+                { value: 'mee6', label: 'MEE6' },
+                { value: 'draftbot', label: 'DraftBot' },
+                { value: 'lurkr', label: 'Lurkr' },
+                { value: 'tatsu', label: 'Tatsu' },
+              ]}
+              value={importSource}
+              onchange={(value) => { importSource = value; importFileError = null; importResults = null; }}
+              disabled={importActionState.state.loading || aiActionState.state.loading}
+            />
+
+            {#if importSource === 'ai'}
+              <div class="space-y-3 text-xs text-on-surface-variant leading-relaxed">
+                <p>{m.lv_import_ai_hint()}</p>
+                <label for="aiImages" class="block font-semibold">{m.lv_import_ai_images({ max: AI_MAX_IMAGES })}</label>
+                <input
+                  id="aiImages"
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  multiple
+                  onchange={handleAiImages}
+                  class="block w-full text-xs text-on-surface"
+                />
+                {#if aiImages.length > 0}
+                  <p>{m.lv_import_ai_images_count({ count: aiImages.length })}</p>
+                {/if}
+                <label for="aiText" class="block font-semibold">{m.lv_import_ai_text()}</label>
+                <textarea
+                  id="aiText"
+                  rows="6"
+                  bind:value={aiText}
+                  class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-xs font-mono focus:ring-2 focus:ring-secondary/30 text-on-surface focus:outline-none resize-y"
+                ></textarea>
+                <InlineFeedback state={aiActionState} />
+                <div class="flex justify-end">
+                  <button
+                    type="button"
+                    onclick={handleAiExtract}
+                    use:explainDisabled={aiActionState.state.loading ? m.lv_import_source_busy() : aiImages.length === 0 && !aiText.trim() ? m.common_reason_fill_field() : ''}
+                    class="px-8 py-3.5 bg-secondary text-on-secondary font-medium text-body-sm rounded-lg transition-all disabled:opacity-50"
+                  >
+                    {aiActionState.state.loading ? m.lv_import_ai_reading() : m.lv_import_ai_run()}
+                  </button>
+                </div>
+              </div>
+            {:else if importSource !== 'file'}
+              <div class="space-y-2 text-xs text-on-surface-variant leading-relaxed">
+                <p>{IMPORT_SOURCE_HINTS[importSource]()}</p>
+                {#if importSource === 'tatsu'}
+                  <label for="importApiKey" class="block text-xs font-semibold text-on-surface-variant">{m.lv_import_source_tatsu_key()}</label>
+                  <input
+                    id="importApiKey"
+                    type="password"
+                    autocomplete="off"
+                    bind:value={importApiKey}
+                    class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-xs font-mono focus:ring-2 focus:ring-secondary/30 text-on-surface focus:outline-none"
+                  />
+                {/if}
+                <p>{importSource === 'tatsu' ? m.lv_import_source_score_as_xp() : m.lv_import_source_kept_level()}</p>
+                {#if importFetched !== null}
+                  <p class="font-semibold text-on-surface" role="status">
+                    {m.lv_import_source_fetching({ count: importFetched.toLocaleString() })}
+                  </p>
+                {/if}
+              </div>
+            {:else}
             <!-- Glisser-déposer / Sélecteur de fichier -->
-            <div 
+            <div
               role="button"
               tabindex="0"
               class="w-full border-2 border-dashed border-outline-variant/20 rounded-xl p-8 text-center hover:bg-surface-container-high/20 transition-all cursor-pointer flex flex-col items-center justify-center space-y-2 relative {isDragging ? 'border-primary bg-primary/5 scale-[1.01]' : ''}"
@@ -2612,7 +2753,7 @@
               ondragleave={() => isDragging = false}
               ondrop={handleFileDrop}
             >
-              <input 
+              <input aria-label={m.lv_import_file()} 
                 type="file" 
                 accept=".json" 
                 class="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
@@ -2633,13 +2774,14 @@
                 rows="10"
                 bind:value={importRawJson}
                 placeholder={`[\n  {\n    "username": "@klaynight",\n    "display_name": "Klaynight",\n    "level": 48,\n    "xp": 119652\n  }\n]`}
-                class="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-4 py-3 text-xs font-mono focus:ring-2 focus:ring-secondary/30 transition-all text-on-surface focus:outline-none resize-y"
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-xs font-mono focus:ring-2 focus:ring-secondary/30 transition-all text-on-surface focus:outline-none resize-y"
               ></textarea>
             </div>
+            {/if}
 
             <!-- Messages d'erreur locaux / globaux -->
             {#if importFileError}
-              <div class="bg-error/10 text-error text-xs font-bold px-4 py-3 rounded-lg border border-error/20 flex items-center gap-2">
+              <div class="bg-error/10 text-on-error-container text-xs font-bold px-4 py-3 rounded-lg border border-error/20 flex items-center gap-2">
                 <Papicon icon="x" size={13} />
                 <span>{importFileError}</span>
               </div>
@@ -2648,7 +2790,7 @@
             <InlineFeedback state={importActionState} />
 
             <!-- Boutons de validation -->
-            <div class="flex justify-end gap-3 pt-2">
+            <div class="flex justify-end gap-3 pt-2" class:hidden={importSource === 'ai'}>
               <button
                 type="button"
                 onclick={() => { importRawJson = ''; importFileError = null; importResults = null; }}
@@ -2659,7 +2801,7 @@
               <button
                 type="button"
                 onclick={() => handleImportSubmit(true)}
-                use:explainDisabled={(!importRawJson.trim()) ? m.common_reason_fill_field() : ''}
+                use:explainDisabled={importActionState.state.loading ? m.lv_import_source_busy() : (importSource === 'file' && !importRawJson.trim()) || (importSource === 'tatsu' && !importApiKey.trim()) ? m.common_reason_fill_field() : ''}
                 class="px-6 py-3.5 bg-surface-container-high/50 text-on-surface-variant font-medium text-body-sm rounded-lg hover:bg-surface-container-high transition-all disabled:opacity-50"
               >
                 {m.lv_import_dry_run()}
@@ -2667,7 +2809,7 @@
               <button
                 type="button"
                 onclick={() => handleImportSubmit(false)}
-                use:explainDisabled={(!importRawJson.trim()) ? m.common_reason_fill_field() : ''}
+                use:explainDisabled={importActionState.state.loading ? m.lv_import_source_busy() : (importSource === 'file' && !importRawJson.trim()) || (importSource === 'tatsu' && !importApiKey.trim()) ? m.common_reason_fill_field() : ''}
                 class="px-8 py-3.5 bg-secondary text-on-secondary font-medium text-body-sm rounded-lg transition-all disabled:opacity-50"
               >
                 {m.lv_run_import()}
@@ -2774,6 +2916,12 @@
 
               {#if importResults.levelChangeCount !== undefined}
                 <dl class="text-2xs text-on-surface-variant space-y-1">
+                  {#if importResults.leftCount}
+                    <div class="flex justify-between gap-4">
+                      <dt>{m.lv_import_stat_left()}</dt>
+                      <dd class="font-semibold text-on-surface">{importResults.leftCount.toLocaleString()}</dd>
+                    </div>
+                  {/if}
                   <div class="flex justify-between gap-4">
                     <dt>{m.lv_import_stat_created()}</dt>
                     <dd class="font-semibold text-on-surface">{importResults.createdCount?.toLocaleString()}</dd>
@@ -2790,7 +2938,7 @@
               {/if}
 
               {#if importResults.dryRun}
-                <p class="p-3 bg-warning/10 border border-warning/20 rounded-lg text-2xs text-warning leading-relaxed">
+                <p class="p-3 bg-warning/10 border border-warning/20 rounded-lg text-2xs text-on-warning-container leading-relaxed">
                   {m.lv_import_dry_run_notice()}
                 </p>
               {/if}

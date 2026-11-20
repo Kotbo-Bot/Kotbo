@@ -9,7 +9,7 @@ import { FREE_ANALYTICS_DAYS } from '@kotbo/contracts';
 /** Sous-routes qui ne servent que des onglets payants. */
 const PAID_ROUTES = new Set([
   'audience', 'conversation', 'insights', 'climate', 'reports', 'advanced', 'interactions',
-  'weekly-comparison', 'daily-algo', 'commands', 'channel-tree', 'categories', 'correlation',
+  'weekly-comparison', 'commands', 'channel-tree', 'categories', 'correlation',
   'growth-retention', 'reaction-roles',
 ]);
 

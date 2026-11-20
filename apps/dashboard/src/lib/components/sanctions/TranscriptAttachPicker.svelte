@@ -76,12 +76,12 @@
       <div class="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant">
         <Papicon icon="search" size={16} />
       </div>
-      <input
+      <input aria-label={m.sta_search_placeholder()}
         type="text"
         bind:value={query}
         oninput={handleSearchInput}
         placeholder={m.sta_search_placeholder()}
-        class="w-full pl-10 pr-4 py-2.5 bg-surface-container-low border border-outline-variant/30 rounded-lg text-xs text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:border-primary/60 transition-colors"
+        class="w-full pl-10 pr-4 py-2.5 bg-surface-container-low border border-field-border rounded-lg text-xs text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:border-primary/60 transition-colors"
       />
     </div>
 

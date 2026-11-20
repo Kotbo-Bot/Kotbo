@@ -1,5 +1,4 @@
 import { type IncomingMessage, ServerResponse } from 'node:http';
-import { gzip } from 'node:zlib';
 
 
 import { type Client, TextChannel, Collection, GuildMember, Guild } from 'discord.js';
@@ -8,8 +7,10 @@ import jwt from 'jsonwebtoken';
 import prisma from '../../utils/db.js';
 import { upsertRetryingRace } from '../../utils/upsertRetry.js';
 import { cache } from '../../utils/cache.js';
+import { scopedGuildId } from '../../services/system/customDomain.js';
 import { logger } from '../../utils/logger.js';
 import { fetchExternal } from '../../utils/http.js';
+import { guildNameCache } from '../../services/core/serverTagService.js';
 
 // Contrat partage avec le dashboard : la definition vit dans @kotbo/contracts,
 // on la re-expose ici pour que le reste du bot continue d'importer depuis
@@ -173,8 +174,6 @@ export {
   configRateLimiter,
   errorReportRateLimiter,
   feedbackReportRateLimiter,
-  partnershipRateLimiter,
-  partnerPortalRateLimiter,
   dashboardWriteRateLimiter,
   dashboardSensitiveRateLimiter,
   rankCardPreviewRateLimiter,
@@ -276,7 +275,7 @@ export const PRESET_LABELS: Record<DashboardPresetKey, string> = {
 export const PRESET_COMMAND_OVERRIDES: Record<DashboardPresetKey, Partial<Record<string, CommandAccessLevel>>> = {
   general: {},
   gaming: {},
-  dev: { dailyAlgo: 'tout_le_monde' },
+  dev: {},
 };
 
 export type RoleDisplay = {
@@ -359,14 +358,12 @@ export const buildModuleUpdatesForPreset = (presetKey: DashboardPresetKey) => {
   if (presetKey === 'dev') {
     return {
       codePoliceEnabled: true,
-      dailyAlgoEnabled: true,
       translationEnabled: false,
     };
   }
 
   return {
     codePoliceEnabled: false,
-    dailyAlgoEnabled: false,
     translationEnabled: true,
   };
 };
@@ -444,7 +441,6 @@ export type DashboardAccess = {
   level: DashboardAccessLevel;
   canViewDashboard: boolean;
   canModerateContent: boolean;
-  canModerateDailyAlgo: boolean;
   canManageSettings: boolean;
   canManageTutoring: boolean;
   /** Acces obtenu uniquement parce que l'utilisateur est admin global Kotbo : ses ecritures sont journalisees. */
@@ -459,72 +455,6 @@ export type FeatureAccess = {
 };
 
 export type FeatureAccessMap = Record<string, FeatureAccess>;
-
-export function resolveDailyAlgoFinalScore(submission: {
-  scoreFinal: number | null;
-  scoreCorrectness: number | null;
-  scoreComments: number | null;
-  scoreCompactness: number | null;
-  scoreOptimization: number | null;
-  scoreReadability: number | null;
-}): number | null {
-  if (submission.scoreFinal !== null) {
-    return submission.scoreFinal;
-  }
-
-  const components = [
-    submission.scoreCorrectness,
-    submission.scoreComments,
-    submission.scoreCompactness,
-    submission.scoreOptimization,
-    submission.scoreReadability,
-  ];
-
-  if (components.some((value) => value === null)) {
-    return null;
-  }
-
-  const sum = (components as number[]).reduce((acc, value) => acc + value, 0);
-  return Math.round((sum / 5) * 10) / 10;
-}
-
-/**
- * Total de points d'une soumission Daily Algo, toujours en entier.
- *
- * `pointsAwarded` est la source de vérité : il a été figé à la notation, plancher
- * de participation et majoration du week-end compris. Les soumissions notées avant
- * la v2 ne l'ont pas ; on retombe alors sur la moyenne plus le bonus de rapidité,
- * arrondis à l'unité supérieure - ce qui évite une migration de données.
- */
-export function resolveDailyAlgoTotalPoints(submission: {
-  status?: string;
-  pointsAwarded?: number | null;
-  scoreFinal: number | null;
-  scoreCorrectness: number | null;
-  scoreComments: number | null;
-  scoreCompactness: number | null;
-  scoreOptimization: number | null;
-  scoreReadability: number | null;
-  speedBonusPoints?: number | null;
-}): number | null {
-  // Seule une soumission approuvée rapporte des points : un rejet survenu après
-  // une approbation ne doit rien conserver. `null` et non 0, pour que l'interface
-  // continue d'afficher « - » sur une soumission en attente plutôt que « 0 pt ».
-  if (submission.status !== undefined && submission.status !== 'APPROVED') {
-    return null;
-  }
-
-  if (typeof submission.pointsAwarded === 'number') {
-    return submission.pointsAwarded;
-  }
-
-  const finalScore = resolveDailyAlgoFinalScore(submission);
-  if (finalScore === null) {
-    return null;
-  }
-
-  return Math.max(0, Math.ceil(finalScore + (submission.speedBonusPoints ?? 0)));
-}
 
 export type DashboardState = {
   guildName: string;
@@ -563,38 +493,14 @@ export type DashboardState = {
   publicChannelId: string;
   newsChannelId: string;
   digestChannelId: string;
-  dailyAlgoChannelId: string;
   baseStaffRoleId: string;
   testStaffRoleId: string;
   propagateSanctions: boolean;
   crossServerSanctionsEnabled: boolean;
   translationEnabled: boolean;
   codePoliceEnabled: boolean;
-  dailyAlgoEnabled: boolean;
   /** Collecte des statistiques d'activité. À false, plus rien n'est enregistré. */
   analyticsEnabled: boolean;
-  // ── Daily Algo v2 : barème, semaine, sanctions, pont clans ──
-  dailyAlgoTimezone: string;
-  dailyAlgoParticipationPoints: number;
-  dailyAlgoWeekendMultiplier: number;
-  dailyAlgoWeeklyRewardsEnabled: boolean;
-  dailyAlgoWeekRole1Id: string;
-  dailyAlgoWeekRole2Id: string;
-  dailyAlgoWeekRole3Id: string;
-  dailyAlgoWeekRoleRotate: boolean;
-  dailyAlgoWeekXp1: number;
-  dailyAlgoWeekXp2: number;
-  dailyAlgoWeekXp3: number;
-  dailyAlgoWeekParticipationXp: number;
-  dailyAlgoWeekAnnouncementChannelId: string;
-  dailyAlgoSanctionType: string;
-  dailyAlgoSanctionWeight: number;
-  dailyAlgoSanctionDurationMinutes: number;
-  clanPointsFromDailyAlgo: boolean;
-  clanPointsFromDailyAlgoRate: number;
-  clanPointsDailyAlgoTop1: number;
-  clanPointsDailyAlgoTop2: number;
-  clanPointsDailyAlgoTop3: number;
   githubReleasesEnabled: boolean;
   digestEnabled: boolean;
   youtubeEnabled: boolean;
@@ -639,7 +545,6 @@ export type DashboardState = {
   access: {
     level: Exclude<DashboardAccessLevel, 'none'>;
     canModerateContent: boolean;
-    canModerateDailyAlgo: boolean;
     canManageSettings: boolean;
   };
   featureAccess: FeatureAccessMap;
@@ -680,7 +585,6 @@ export type RuntimeState = {
 
 export const MODULE_DESCRIPTIONS: Record<string, string> = {
   codepolice: 'Vérification de la syntaxe et bonnes pratiques sur les snippets.',
-  dailyalgo: "Génération quotidienne d'un défi d'algorithmique.",
   traduction: 'Traduction instantanée vers la langue configurée.',
   regulation: 'Configuration et publication du règlement du serveur.',
   staff_management: 'Gestion complète du personnel, recrutements et absences.',
@@ -710,7 +614,6 @@ export const MODULE_DESCRIPTIONS: Record<string, string> = {
 
 export const DEFAULT_SEVERITY_BY_MODULE: Array<{ module: string; level: SeverityLevel }> = [
   { module: 'Auto-Modération', level: 'attention' },
-  { module: 'Daily Algo', level: 'info' }
 ];
 
 export const DEFAULT_MESSAGE_TEMPLATE =
@@ -724,166 +627,6 @@ export const isRecruitmentAutoRejectEnabled = (guildId: string) => {
 
 export const makeId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 export const nowIso = () => new Date().toISOString();
-
-export function getDailyAlgoDateKeyWithOffset(offsetDays: number, baseDate = new Date()): string {
-  const anchor = new Date(Date.UTC(baseDate.getUTCFullYear(), baseDate.getUTCMonth(), baseDate.getUTCDate()));
-  anchor.setUTCDate(anchor.getUTCDate() + offsetDays);
-
-  const year = anchor.getUTCFullYear();
-  const month = String(anchor.getUTCMonth() + 1).padStart(2, '0');
-  const day = String(anchor.getUTCDate()).padStart(2, '0');
-
-  return `${year}-${month}-${day}`;
-}
-
-export async function getDailyAlgoScheduleRuns(guildId: string, daysBack: number, daysForward: number) {
-  const safeDaysBack = Math.max(0, Math.trunc(daysBack));
-  const safeDaysForward = Math.max(0, Math.trunc(daysForward));
-  const startDateKey = getDailyAlgoDateKeyWithOffset(-safeDaysBack);
-  const endDateKey = getDailyAlgoDateKeyWithOffset(safeDaysForward);
-
-  const runs = await prisma.dailyAlgoRun.findMany({
-    where: {
-      guildId,
-      dateKey: {
-        gte: startDateKey,
-        lte: endDateKey,
-      },
-    },
-    include: {
-      problem: true,
-      _count: {
-        select: {
-          submissions: true,
-        },
-      },
-    },
-    orderBy: {
-      dateKey: 'asc',
-    },
-  });
-
-  return runs.map((run) => ({
-    id: run.id,
-    guildId: run.guildId,
-    dateKey: run.dateKey,
-    problemId: run.problemId,
-    challengeChannelId: run.challengeChannelId,
-    validationChannelId: run.validationChannelId,
-    challengeMessageId: run.challengeMessageId,
-    leaderboardMessageId: run.leaderboardMessageId,
-    summarySentAt: run.summarySentAt?.toISOString() ?? null,
-    createdAt: run.createdAt.toISOString(),
-    updatedAt: run.updatedAt.toISOString(),
-    submissionsCount: run._count.submissions,
-    problem: {
-      id: run.problem.id,
-      title: run.problem.title,
-      description: run.problem.description,
-      solution: run.problem.solution,
-      difficulty: run.problem.difficulty,
-      language: run.problem.language,
-      functionName: run.problem.functionName,
-      functionArgs: run.problem.functionArgs,
-      unitTests: run.problem.unitTests,
-      allowedLanguages: run.problem.allowedLanguages,
-      usedAt: run.problem.usedAt?.toISOString() ?? null,
-      createdAt: run.problem.createdAt.toISOString(),
-      updatedAt: run.problem.updatedAt.toISOString(),
-    },
-  }));
-}
-
-export async function ensureDailyAlgoScheduleRuns(guildId: string, daysForward: number) {
-  const safeDaysForward = Math.max(1, Math.trunc(daysForward));
-  const guild = await prisma.guild.findUnique({
-    where: { id: guildId },
-    select: {
-      id: true,
-      dailyAlgoChannelId: true,
-      dailyAlgoValidationChannelId: true,
-    },
-  });
-
-  if (!guild) {
-    throw new Error('Guilde introuvable.');
-  }
-
-  if (!guild.dailyAlgoChannelId) {
-    return {
-      createdDateKeys: [],
-      createdCount: 0,
-    };
-  }
-
-  const createdDateKeys: string[] = [];
-
-  for (let offsetDays = 0; offsetDays <= safeDaysForward; offsetDays += 1) {
-    const dateKey = getDailyAlgoDateKeyWithOffset(offsetDays);
-    const existingRun = await prisma.dailyAlgoRun.findUnique({
-      where: {
-        guildId_dateKey: {
-          guildId,
-          dateKey,
-        },
-      },
-    });
-
-    if (existingRun) {
-      continue;
-    }
-
-    const existingRunForDate = await prisma.dailyAlgoRun.findFirst({
-      where: { dateKey },
-      select: { problemId: true }
-    });
-
-    let problemId = existingRunForDate?.problemId;
-
-    if (!problemId) {
-      const problemCandidate = await prisma.dailyAlgoProblem.findFirst({
-        where: {
-          language: 'fr',
-          usedAt: null,
-        },
-        orderBy: [
-          { createdAt: 'asc' },
-          { id: 'asc' },
-        ],
-        select: {
-          id: true,
-        },
-      });
-
-      if (!problemCandidate) {
-        break;
-      }
-      problemId = problemCandidate.id;
-
-      await prisma.dailyAlgoProblem.update({
-        where: { id: problemId },
-        data: { usedAt: new Date() }
-      });
-    }
-
-    await prisma.dailyAlgoRun.create({
-      data: {
-        guildId,
-        dateKey,
-        problemId: problemId,
-        challengeChannelId: guild.dailyAlgoChannelId!,
-        validationChannelId: guild.dailyAlgoValidationChannelId ?? null,
-      },
-    });
-
-    createdDateKeys.push(dateKey);
-  }
-
-  return {
-    createdDateKeys,
-    createdCount: createdDateKeys.length,
-  };
-}
 
 export function normalizeLangCode(value: string | null | undefined): string | null {
   const normalized = value?.trim().toUpperCase();
@@ -1014,7 +757,7 @@ function applyConditionalGet(res: ServerResponse, statusCode: number, body: stri
   const method = res.req?.method;
   if (method !== 'GET' && method !== 'HEAD') return false;
 
-  const etag = `W/"${crypto.createHash('sha1').update(body).digest('base64url')}"`;
+  const etag = weakEtag(body);
   if (!res.headersSent) {
     res.setHeader('ETag', etag);
     // Sans directive de cache, un navigateur ne conserve pas une réponse
@@ -1029,9 +772,16 @@ function applyConditionalGet(res: ServerResponse, statusCode: number, body: stri
   }
 
   // `If-None-Match` peut lister plusieurs entités séparées par des virgules.
-  const ifNoneMatch = res.req.headers['if-none-match'];
-  if (!ifNoneMatch) return false;
+  return etagMatches(res.req.headers['if-none-match'], etag);
+}
 
+export function weakEtag(body: string): string {
+  return `W/"${crypto.createHash('sha1').update(body).digest('base64url')}"`;
+}
+
+/** `If-None-Match` peut lister plusieurs entités séparées par des virgules. */
+export function etagMatches(ifNoneMatch: string | undefined, etag: string): boolean {
+  if (!ifNoneMatch) return false;
   const candidates = ifNoneMatch.split(',').map((value) => value.trim());
   return candidates.includes(etag) || candidates.includes('*');
 }
@@ -1077,7 +827,15 @@ function legacyBearerAuthEnabled(): boolean {
 }
 
 export const verifyAuth = async (req: IncomingMessage): Promise<AuthClaims | null> => {
-  const authHeader = req.headers.authorization;
+  const cookie = req.headers.cookie;
+  return verifyAuthHeaders(req.headers.authorization, Array.isArray(cookie) ? cookie[0] : cookie);
+};
+
+/** Même contrôle que `verifyAuth`, à partir des seuls en-têtes (routes Hono). */
+export const verifyAuthHeaders = async (
+  authHeader: string | undefined,
+  cookieHeader: string | undefined,
+): Promise<AuthClaims | null> => {
   if (legacyBearerAuthEnabled() && authHeader?.startsWith('Bearer ')) {
     const token = authHeader.split(' ')[1];
     try {
@@ -1088,8 +846,8 @@ export const verifyAuth = async (req: IncomingMessage): Promise<AuthClaims | nul
     }
   }
 
-  const { getDashboardSession, sessionIdFromRequest } = await import('../auth/sessionStore.js');
-  const session = await getDashboardSession(sessionIdFromRequest(req));
+  const { getDashboardSession, sessionIdFromCookieHeader } = await import('../auth/sessionStore.js');
+  const session = await getDashboardSession(sessionIdFromCookieHeader(cookieHeader));
   if (!session) return null;
   return {
     userId: session.userId,
@@ -1104,15 +862,21 @@ export type RecruitmentWebhookAuthResult = {
   reason: 'ok_jwt' | 'ok_api_key' | 'missing_credentials' | 'invalid_jwt' | 'invalid_api_key' | 'insufficient_permissions';
 };
 
-export const verifyRecruitmentWebhookAuth = async (req: IncomingMessage, guildId: string): Promise<RecruitmentWebhookAuthResult> => {
+export const verifyRecruitmentWebhookAuth = async (req: Pick<IncomingMessage, 'headers'>, guildId: string): Promise<RecruitmentWebhookAuthResult> => {
   const authHeader = req.headers.authorization;
   let bearerToken: string | undefined;
 
   if (authHeader && authHeader.startsWith('Bearer ')) {
     const token = authHeader.split(' ')[1];
     try {
+      const claims = jwt.verify(token, getJwtSecret()) as AuthClaims & Record<string, unknown>;
+      // Les jetons MCP (OAuth ou lien direct) sont signés avec le même secret quand aucun secret
+      // dédié n'est configuré : ils portent un émetteur, une audience ou un `guildId`, qu'un jeton
+      // de session n'a jamais. Les accepter ici ouvrirait la route à toute clé MCP, sur tout serveur.
+      const isMcpShaped = Boolean(claims.iss || claims.aud || claims.scope || claims.typ || claims.guildId);
+      if (isMcpShaped) return { auth: null, reason: 'invalid_jwt' };
       return {
-        auth: jwt.verify(token, getJwtSecret()) as AuthClaims,
+        auth: claims,
         reason: 'ok_jwt',
       };
     } catch {
@@ -1177,7 +941,6 @@ export const DASHBOARD_ACCESS_NONE: DashboardAccess = {
   level: 'none',
   canViewDashboard: false,
   canModerateContent: false,
-  canModerateDailyAlgo: false,
   canManageSettings: false,
   canManageTutoring: false,
 };
@@ -1186,16 +949,14 @@ export const DASHBOARD_ACCESS_MODERATOR: DashboardAccess = {
   level: 'moderator',
   canViewDashboard: true,
   canModerateContent: true,
-  canModerateDailyAlgo: true,
   canManageSettings: false,
   canManageTutoring: false,
 };
 
-export const DASHBOARD_ACCESS_DAILY_ALGO_REVIEWER: DashboardAccess = {
+export const DASHBOARD_ACCESS_STAFF_VIEWER: DashboardAccess = {
   level: 'moderator',
   canViewDashboard: true,
   canModerateContent: false,
-  canModerateDailyAlgo: true,
   canManageSettings: false,
   canManageTutoring: false,
 };
@@ -1204,7 +965,6 @@ export const DASHBOARD_ACCESS_ADMIN: DashboardAccess = {
   level: 'admin',
   canViewDashboard: true,
   canModerateContent: true,
-  canModerateDailyAlgo: true,
   canManageSettings: true,
   canManageTutoring: true,
 };
@@ -1235,6 +995,12 @@ export const resolveDashboardAccess = async (
   userId: string,
   knownPermissions?: bigint | null,
 ): Promise<DashboardAccess> => {
+  // Requete arrivee par le domaine perso d'un serveur : aucun autre serveur, meme pour un admin global.
+  const scoped = scopedGuildId();
+  if (scoped && scoped !== guildId) {
+    return { level: 'none', canViewDashboard: false, canModerateContent: false, canManageSettings: false, canManageTutoring: false };
+  }
+
   // Le cache n'est utilise que sur le chemin nominal. Quand des permissions
   // sont fournies par l'appelant, le resultat depend d'un parametre supplementaire :
   // on recalcule plutot que de risquer de servir une reponse calculee avec
@@ -1316,7 +1082,7 @@ const computeMemberDashboardAccess = async (
     };
   }
 
-  return DASHBOARD_ACCESS_DAILY_ALGO_REVIEWER;
+  return DASHBOARD_ACCESS_STAFF_VIEWER;
 };
 
 export async function resolveAdminAccess(client: Client, userId: string): Promise<boolean> {
@@ -1348,130 +1114,6 @@ export class HttpError extends Error {
   /** Un refus (4xx) est rédigé pour l'utilisateur ; une panne (5xx), non. */
   get expose(): boolean {
     return this.statusCode < 500;
-  }
-}
-
-/**
- * En dessous de ce seuil, gzip coute plus (CPU, en-tetes) qu'il ne rapporte.
- */
-const RESPONSE_GZIP_MIN_BYTES = 1024;
-
-export class BunServerResponse extends ServerResponse {
-  private chunks: Buffer[] = [];
-  private resolvePromise: (res: Response) => void;
-  private acceptEncoding: string;
-
-  constructor(req: IncomingMessage, resolvePromise: (res: Response) => void) {
-    super(req);
-    this.resolvePromise = resolvePromise;
-    this.acceptEncoding = String(req.headers['accept-encoding'] ?? '');
-  }
-
-  override write(chunk: unknown, cb?: (error: Error | null | undefined) => void): boolean;
-  override write(chunk: unknown, encoding: BufferEncoding, cb?: (error: Error | null | undefined) => void): boolean;
-  override write(chunk: unknown, encodingOrCb?: unknown, cb?: unknown): boolean {
-    const actualChunk = typeof chunk === 'string'
-      ? Buffer.from(chunk, typeof encodingOrCb === 'string' ? (encodingOrCb as BufferEncoding) : 'utf8')
-      : (chunk instanceof Uint8Array ? Buffer.from(chunk) : Buffer.from(String(chunk || '')));
-    this.chunks.push(actualChunk);
-    
-    const callback = typeof encodingOrCb === 'function' ? encodingOrCb : cb;
-    if (typeof callback === 'function') {
-      (callback as (error: Error | null | undefined) => void)(null);
-    }
-    return true;
-  }
-
-  override writeHead(statusCode: number, statusMessage?: unknown, headers?: unknown): this {
-    this.statusCode = statusCode;
-    const actualHeaders = typeof statusMessage === 'object' && statusMessage !== null ? statusMessage : headers;
-    if (actualHeaders && typeof actualHeaders === 'object') {
-      for (const [key, val] of Object.entries(actualHeaders)) {
-        if (typeof val === 'string' || Array.isArray(val)) {
-          this.setHeader(key, val);
-        }
-      }
-    }
-    return this;
-  }
-
-  override flushHeaders(): void {}
-
-  override end(cb?: () => void): this;
-  override end(chunk: unknown, cb?: () => void): this;
-  override end(chunk: unknown, encoding: BufferEncoding, cb?: () => void): this;
-  override end(chunk?: unknown, encodingOrCb?: unknown, cb?: unknown): this {
-    if (chunk !== undefined && chunk !== null) {
-      const actualChunk = typeof chunk === 'string'
-        ? Buffer.from(chunk, typeof encodingOrCb === 'string' ? (encodingOrCb as BufferEncoding) : 'utf8')
-        : (chunk instanceof Uint8Array ? Buffer.from(chunk) : Buffer.from(String(chunk)));
-      this.chunks.push(actualChunk);
-    }
-    
-    const body = Buffer.concat(this.chunks);
-    const headers = new Headers();
-    const nodeHeaders = this.getHeaders();
-    for (const [key, val] of Object.entries(nodeHeaders)) {
-      if (val !== undefined) {
-        if (Array.isArray(val)) {
-          val.forEach(v => headers.append(key, String(v)));
-        } else {
-          headers.set(key, String(val));
-        }
-      }
-    }
-    
-    // Compression des reponses JSON.
-    //
-    // L'API du bot est joignable directement (api.kotbo.fr) : contrairement au
-    // dashboard, aucun nginx ne se trouve devant pour compresser. Les payloads
-    // du dashboard, eux, se comptent en centaines de kilo-octets.
-    //
-    // Le corps est entierement bufferise a ce stade, donc rien n'est diffuse en
-    // flux ici. On se limite malgre tout au JSON : cela exclut par construction
-    // les reponses `text/event-stream` du serveur MCP, qu'il ne faudrait
-    // surtout pas bufferiser.
-    const contentType = String(headers.get('content-type') ?? '');
-    const callback = typeof encodingOrCb === 'function' ? encodingOrCb : cb;
-    const finish = (responseBody: Buffer) => {
-      // Buffer est typé avec ArrayBufferLike dans les types Node récents,
-      // alors que BodyInit exige un ArrayBuffer concret.
-      const webBody = new Uint8Array(responseBody.byteLength);
-      webBody.set(responseBody);
-      const response = new Response(webBody, {
-        status: this.statusCode,
-        headers
-      });
-      this.resolvePromise(response);
-      if (typeof callback === 'function') callback();
-    };
-
-    if (
-      body.byteLength >= RESPONSE_GZIP_MIN_BYTES &&
-      contentType.includes('application/json') &&
-      !headers.has('content-encoding') &&
-      /\bgzip\b/.test(this.acceptEncoding)
-    ) {
-      // La variante synchrone bloquait la boucle d'événements sur les gros
-      // états. Le pont HTTP attend déjà resolvePromise, la compression peut
-      // donc être déportée à libuv sans modifier le contrat des routes.
-      gzip(body, (err, compressed) => {
-        if (err) {
-          logger.warn('DashboardAPI', `Compression gzip impossible: ${String(err)}`);
-          finish(body);
-          return;
-        }
-        const responseBody = Buffer.from(compressed);
-        headers.set('content-encoding', 'gzip');
-        headers.set('content-length', String(responseBody.byteLength));
-        headers.append('vary', 'Accept-Encoding');
-        finish(responseBody);
-      });
-      return this;
-    }
-
-    finish(body);
-    return this;
   }
 }
 
@@ -1830,6 +1472,7 @@ export function safeIsoDate(value: unknown, fallback: string | null = null): str
   }
 }
 
-export const getGuildName = (client: Client, guildId: string) => client.guilds.cache.get(guildId)?.name ?? `Serveur ${guildId}`;
+export const getGuildName = (client: Client, guildId: string) =>
+  client.guilds.cache.get(guildId)?.name ?? guildNameCache.get(guildId) ?? `Serveur ${guildId}`;
 
 export const splitPath = (pathname: string) => pathname.split('/').filter(Boolean);

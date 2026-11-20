@@ -816,8 +816,8 @@ export async function generateProfileCard(options: {
   rank?: number;
   joinedAt?: string;
   roles: string[];
-  streak?: number;
-  tier?: string;
+  /** Libellé du boost en cours (« Booster · 3 mois »), absent si le membre ne booste pas. */
+  booster?: string;
   isPrivate?: boolean;
   curve?: LevelCurve;
 }): Promise<Buffer> {
@@ -865,17 +865,11 @@ export async function generateProfileCard(options: {
   ctx.font = canvasFont(16, 'normal');
   ctx.fillText(`@${options.username}`, nameX, avatarCY + 14);
 
-  // Tier badge (post-it style)
-  if (options.tier) {
-    const tierX = nameX + ctx.measureText(`@${options.username}`).width + 16;
-    ctx.save();
-    ctx.translate(tierX + 20, avatarCY + 6);
-    ctx.rotate(-3 * Math.PI / 180);
-    roundRect(ctx, -20, -10, ctx.measureText(options.tier).width + 24, 20, 2, BRAND.postItYellow);
-    ctx.fillStyle = '#3A3A3A';
-    ctx.font = canvasFont(11, 'bold');
-    ctx.fillText(options.tier, -12, 4);
-    ctx.restore();
+  if (options.booster) {
+    ctx.font = canvasFont(12, 'bold');
+    roundRect(ctx, nameX, avatarCY + 26, ctx.measureText(options.booster).width + 20, 22, 6, BRAND.pink);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillText(options.booster, nameX + 10, avatarCY + 41);
   }
 
   // Rank (chalk, top right, circled)
@@ -912,13 +906,12 @@ export async function generateProfileCard(options: {
 
   drawSeparatorLine(ctx, 40, contentY + 30, W - 80);
 
-  // Stats Grid (4 cards)
+  // Stats Grid (3 cards)
   const statsY = contentY + 48;
   const statCards = [
     { label: 'Messages', value: options.messageCount.toLocaleString('fr-FR'), color: BRAND.blurple },
     { label: 'Vocal', value: options.voiceTime, color: BRAND.green },
     { label: 'Niveau', value: options.level !== undefined ? String(options.level) : '-', color: BRAND.pink },
-    { label: 'Streak', value: options.streak !== undefined ? `${options.streak}j` : '-', color: BRAND.yellow },
   ];
 
   const statW = 195, statH = 72, statGap = 16;

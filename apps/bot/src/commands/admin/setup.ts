@@ -5,7 +5,7 @@ import {
   PermissionFlagsBits,
 } from 'discord.js';
 
-import { sendSetupWelcome } from '../../panels/setupPanel.js';
+import { runSetupCommand } from '../../panels/setupPanel.js';
 import { getCommandMetadata } from '../../utils/i18n.js';
 
 const meta = getCommandMetadata('c1_setup');
@@ -18,9 +18,7 @@ const data = new SlashCommandBuilder()
   .setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
 
 async function execute(interaction: ChatInputCommandInteraction) {
-  const guildId = interaction.guildId!;
-
-  await sendSetupWelcome(interaction.client, guildId, interaction);
+  await runSetupCommand(interaction);
 }
 
 export const setupCommand = { data, execute } satisfies SlashCommandDefinition;

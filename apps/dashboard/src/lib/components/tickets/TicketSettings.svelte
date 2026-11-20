@@ -218,7 +218,7 @@
 
   useUnsavedChanges({
     id: 'tickets',
-    label: m.e1_tickets_config_label(),
+    get label() { return m.e1_tickets_config_label(); },
     getConfig: () => currentSettings,
     getSaved: () => savedSettingsConfig,
     onSave: () => saveSettings(),
@@ -310,9 +310,9 @@
   );
 
   const STAFF_LOAD_MODES = [
-    { value: 'OFF', label: m.tq_load_off() },
-    { value: 'WARN', label: m.tq_load_warn() },
-    { value: 'BLOCK', label: m.tq_load_block() },
+    { value: 'OFF', get label() { return m.tq_load_off(); } },
+    { value: 'WARN', get label() { return m.tq_load_warn(); } },
+    { value: 'BLOCK', get label() { return m.tq_load_block(); } },
   ] as const;
 
   /** Badge de l'accordeon : combien de quotas imposent effectivement une limite. */
@@ -333,7 +333,7 @@
   /**
    * Les réglages « verrouillage » et « validation » d'un type de ticket sont
    * tri-états côté bot (`true` / `false` / `null` = suivre le serveur). Un
-   * `<select>` ne manipulant que des chaînes, la conversion se fait ici, dans
+   * une liste `select` ne manipulant que des chaînes, la conversion se fait ici, dans
    * les deux sens, plutôt que d'éparpiller des ternaires dans le balisage.
    */
   function inheritedToSelect(value: unknown): '' | 'YES' | 'NO' {
@@ -936,7 +936,7 @@
           <button
             type="button"
             class="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
-            bg-warning/15 text-warning border border-warning/30 hover:bg-warning/25 transition-colors"
+            bg-warning/15 text-on-warning-container border border-warning/30 hover:bg-warning/25 transition-colors"
             onclick={() => (expandedConfigSection = 'channels')}
           >
             <Papicon icon="arrow-right" size={13} />
@@ -958,7 +958,7 @@
   <div data-guide="tickets-channels" class="rounded-xl border border-outline-variant/10 bg-surface-container-low/40 overflow-hidden">
     <button onclick={() => toggleConfigSection('channels')} class="w-full flex items-center justify-between p-4 lg:p-5 hover:bg-white/3 transition-colors text-left">
       <div class="flex items-center gap-3">
-        <div class="w-9 h-9 rounded-lg bg-success/10 text-success flex items-center justify-center shrink-0">
+        <div class="w-9 h-9 rounded-lg bg-success/10 text-on-success-container flex items-center justify-center shrink-0">
           <Papicon icon="hash" size={18} />
         </div>
         <div>
@@ -1190,7 +1190,7 @@
       </div>
       <div class="flex items-center gap-2 shrink-0">
         {#if ticketLockUntilClaim || ticketApprovalEnabled}
-          <span class="px-2 py-0.5 rounded-full text-2xs font-semibold uppercase bg-success/10 text-success border border-success/20">{m.e1_tickets_active_badge()}</span>
+          <span class="px-2 py-0.5 rounded-full text-2xs font-semibold uppercase bg-success/10 text-on-success-container border border-success/20">{m.e1_tickets_active_badge()}</span>
         {/if}
         <Papicon icon={expandedConfigSection === 'gatekeeping' ? 'chevron-up' : 'chevron-down'} size={16} class="text-on-surface-variant/40" />
       </div>
@@ -1244,7 +1244,7 @@
       </div>
       <div class="flex items-center gap-2 shrink-0">
         {#if ticketArchiveCategoryId || ticketHistoryPanelEnabled}
-          <span class="px-2 py-0.5 rounded-full text-2xs font-semibold uppercase bg-success/10 text-success border border-success/20">{m.e1_tickets_active_badge()}</span>
+          <span class="px-2 py-0.5 rounded-full text-2xs font-semibold uppercase bg-success/10 text-on-success-container border border-success/20">{m.e1_tickets_active_badge()}</span>
         {/if}
         <Papicon icon={expandedConfigSection === 'archive' ? 'chevron-up' : 'chevron-down'} size={16} class="text-on-surface-variant/40" />
       </div>
@@ -1309,7 +1309,7 @@
   <div class="rounded-xl border border-outline-variant/10 bg-surface-container-low/40 overflow-hidden">
     <button onclick={() => toggleConfigSection('inactivity')} class="w-full flex items-center justify-between p-4 lg:p-5 hover:bg-white/3 transition-colors text-left">
       <div class="flex items-center gap-3">
-        <div class="w-9 h-9 rounded-lg bg-warning/10 text-warning flex items-center justify-center shrink-0">
+        <div class="w-9 h-9 rounded-lg bg-warning/10 text-on-warning-container flex items-center justify-center shrink-0">
           <Papicon icon="clock" size={18} />
         </div>
         <div>
@@ -1319,7 +1319,7 @@
       </div>
       <div class="flex items-center gap-2 shrink-0">
         {#if ticketInactivityEnabled || ticketStaffReminderEnabled}
-          <span class="px-2 py-0.5 rounded-full text-2xs font-semibold uppercase bg-success/10 text-success border border-success/20">{m.e1_tickets_active_badge()}</span>
+          <span class="px-2 py-0.5 rounded-full text-2xs font-semibold uppercase bg-success/10 text-on-success-container border border-success/20">{m.e1_tickets_active_badge()}</span>
         {/if}
         <Papicon icon={expandedConfigSection === 'inactivity' ? 'chevron-up' : 'chevron-down'} size={16} class="text-on-surface-variant/40" />
       </div>
@@ -1337,7 +1337,7 @@
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <label class="block">
               <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">{m.e1_tickets_delay_hours()}</span>
-              <input type="number" bind:value={ticketInactivityHours} min={1} max={168} class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-outline-variant/10 focus:ring-1 ring-primary/30 transition-all outline-none" />
+              <input type="number" bind:value={ticketInactivityHours} min={1} max={168} class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-field-border focus:ring-1 ring-primary/30 transition-all outline-none" />
             </label>
             <label class="block sm:col-span-2">
               <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">{m.e1_tickets_inactivity_message_label()}</span>
@@ -1356,7 +1356,7 @@
         {#if ticketStaffReminderEnabled}
           <label class="block sm:max-w-[33%]">
             <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">{m.e1_tickets_staff_reminder_minutes()}</span>
-            <input type="number" bind:value={ticketStaffReminderMinutes} min={1} max={10080} class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-outline-variant/10 focus:ring-1 ring-primary/30 transition-all outline-none" />
+            <input type="number" bind:value={ticketStaffReminderMinutes} min={1} max={10080} class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-field-border focus:ring-1 ring-primary/30 transition-all outline-none" />
           </label>
         {/if}
       </div>
@@ -1377,7 +1377,7 @@
       </div>
       <div class="flex items-center gap-2 shrink-0">
         {#if ticketRecordingNoticeEnabled}
-          <span class="px-2 py-0.5 rounded-full text-2xs font-semibold bg-success/10 text-success border border-success/20">{m.e1_tickets_active_badge()}</span>
+          <span class="px-2 py-0.5 rounded-full text-2xs font-semibold bg-success/10 text-on-success-container border border-success/20">{m.e1_tickets_active_badge()}</span>
         {/if}
         <Papicon icon={expandedConfigSection === 'recording' ? 'chevron-up' : 'chevron-down'} size={16} class="text-on-surface-variant/40" />
       </div>
@@ -1432,7 +1432,7 @@
       </div>
       <div class="flex items-center gap-2 shrink-0">
         {#if ticketSlaFirstResponseMinutes || ticketSlaResolutionHours}
-          <span class="px-2 py-0.5 rounded-full text-2xs font-semibold bg-success/10 text-success border border-success/20">{m.e1_tickets_active_badge()}</span>
+          <span class="px-2 py-0.5 rounded-full text-2xs font-semibold bg-success/10 text-on-success-container border border-success/20">{m.e1_tickets_active_badge()}</span>
         {/if}
         <Papicon icon={expandedConfigSection === 'sla' ? 'chevron-up' : 'chevron-down'} size={16} class="text-on-surface-variant/40" />
       </div>
@@ -1469,7 +1469,7 @@
       </div>
       <div class="flex items-center gap-2 shrink-0">
         {#if activeQuotaCount > 0}
-          <span class="px-2 py-0.5 rounded-full text-2xs font-semibold uppercase bg-success/10 text-success border border-success/20">
+          <span class="px-2 py-0.5 rounded-full text-2xs font-semibold uppercase bg-success/10 text-on-success-container border border-success/20">
             {activeQuotaCount > 1 ? m.tq_active_many({ count: activeQuotaCount }) : m.tq_active_one()}
           </span>
         {/if}
@@ -1493,7 +1493,7 @@
           {#if ticketQuotaOpenEnabled}
             <label class="block ml-7 max-w-[220px]">
               <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">{m.tq_open_max()}</span>
-              <input type="number" bind:value={ticketQuotaOpenMax} min={1} max={50} class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-outline-variant/10 focus:ring-1 ring-primary/30 transition-all outline-none" />
+              <input type="number" bind:value={ticketQuotaOpenMax} min={1} max={50} class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-field-border focus:ring-1 ring-primary/30 transition-all outline-none" />
             </label>
           {/if}
         </div>
@@ -1509,7 +1509,7 @@
           {#if ticketQuotaCooldownEnabled}
             <label class="block ml-7 max-w-[220px]">
               <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">{m.tq_cooldown_minutes()}</span>
-              <input type="number" bind:value={ticketQuotaCooldownMinutes} min={1} max={10080} class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-outline-variant/10 focus:ring-1 ring-primary/30 transition-all outline-none" />
+              <input type="number" bind:value={ticketQuotaCooldownMinutes} min={1} max={10080} class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-field-border focus:ring-1 ring-primary/30 transition-all outline-none" />
             </label>
           {/if}
         </div>
@@ -1526,11 +1526,11 @@
             <div class="ml-7 grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-[460px]">
               <label class="block">
                 <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">{m.tq_period_max()}</span>
-                <input type="number" bind:value={ticketQuotaPeriodMax} min={1} max={500} class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-outline-variant/10 focus:ring-1 ring-primary/30 transition-all outline-none" />
+                <input type="number" bind:value={ticketQuotaPeriodMax} min={1} max={500} class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-field-border focus:ring-1 ring-primary/30 transition-all outline-none" />
               </label>
               <label class="block">
                 <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">{m.tq_period_hours()}</span>
-                <input type="number" bind:value={ticketQuotaPeriodHours} min={1} max={720} class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-outline-variant/10 focus:ring-1 ring-primary/30 transition-all outline-none" />
+                <input type="number" bind:value={ticketQuotaPeriodHours} min={1} max={720} class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-field-border focus:ring-1 ring-primary/30 transition-all outline-none" />
               </label>
             </div>
           {/if}
@@ -1561,7 +1561,7 @@
             <div class="space-y-3">
               <label class="block max-w-[220px]">
                 <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">{m.tq_load_max()}</span>
-                <input type="number" bind:value={ticketQuotaStaffLoadMax} min={1} max={200} class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-outline-variant/10 focus:ring-1 ring-primary/30 transition-all outline-none" />
+                <input type="number" bind:value={ticketQuotaStaffLoadMax} min={1} max={200} class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-field-border focus:ring-1 ring-primary/30 transition-all outline-none" />
               </label>
               <div>
                 <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-1 block">{m.tq_load_bypass()}</span>
@@ -1591,7 +1591,7 @@
           {#if ticketQuotaReopenEnabled}
             <label class="block ml-7 max-w-[220px]">
               <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">{m.tq_reopen_max()}</span>
-              <input type="number" bind:value={ticketQuotaReopenMax} min={1} max={50} class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-outline-variant/10 focus:ring-1 ring-primary/30 transition-all outline-none" />
+              <input type="number" bind:value={ticketQuotaReopenMax} min={1} max={50} class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-field-border focus:ring-1 ring-primary/30 transition-all outline-none" />
             </label>
           {/if}
         </div>
@@ -1603,7 +1603,7 @@
   <div class="rounded-xl border border-outline-variant/10 bg-surface-container-low/40 overflow-hidden">
     <button onclick={() => toggleConfigSection('satisfaction')} class="w-full flex items-center justify-between p-4 lg:p-5 hover:bg-white/3 transition-colors text-left">
       <div class="flex items-center gap-3">
-        <div class="w-9 h-9 rounded-lg bg-success/10 text-success flex items-center justify-center shrink-0">
+        <div class="w-9 h-9 rounded-lg bg-success/10 text-on-success-container flex items-center justify-center shrink-0">
           <Papicon icon="smile" size={18} />
         </div>
         <div>
@@ -1613,7 +1613,7 @@
       </div>
       <div class="flex items-center gap-2 shrink-0">
         {#if ticketSatisfactionCommentEnabled || ticketSatisfactionLogChannelId}
-          <span class="px-2 py-0.5 rounded-full text-2xs font-semibold uppercase bg-success/10 text-success border border-success/20">{m.e1_tickets_active_badge()}</span>
+          <span class="px-2 py-0.5 rounded-full text-2xs font-semibold uppercase bg-success/10 text-on-success-container border border-success/20">{m.e1_tickets_active_badge()}</span>
         {/if}
         <Papicon icon={expandedConfigSection === 'satisfaction' ? 'chevron-up' : 'chevron-down'} size={16} class="text-on-surface-variant/40" />
       </div>
@@ -1635,7 +1635,7 @@
             </label>
             <label class="block">
               <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">{m.e1_tickets_sat_comment_timeout_label()}</span>
-              <input type="number" bind:value={ticketSatisfactionCommentTimeout} min={30} max={900} step={10} class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-outline-variant/10 focus:ring-1 ring-primary/30 transition-all outline-none" />
+              <input type="number" bind:value={ticketSatisfactionCommentTimeout} min={30} max={900} step={10} class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-field-border focus:ring-1 ring-primary/30 transition-all outline-none" />
             </label>
           </div>
           <p class="text-2xs text-on-surface-variant ml-1">{m.e1_tickets_sat_comment_hint()}</p>
@@ -1668,7 +1668,7 @@
   <div class="rounded-xl border border-outline-variant/10 bg-surface-container-low/40 overflow-hidden">
     <button onclick={() => toggleConfigSection('types')} class="w-full flex items-center justify-between p-4 lg:p-5 hover:bg-white/3 transition-colors text-left">
       <div class="flex items-center gap-3">
-        <div class="w-9 h-9 rounded-lg bg-error/10 text-error flex items-center justify-center shrink-0">
+        <div class="w-9 h-9 rounded-lg bg-error/10 text-on-error-container flex items-center justify-center shrink-0">
           <Papicon icon="layers" size={18} />
         </div>
         <div>
@@ -1711,7 +1711,7 @@
                       {:else if ticketType.mode === 'DM'}
                         <span class="px-1.5 py-0.5 rounded text-xs font-semibold bg-purple-500/10 text-purple-400 border border-purple-500/15">{m.e1_tickets_badge_dm()}</span>
                       {:else if ticketType.mode === 'THREAD'}
-                        <span class="px-1.5 py-0.5 rounded text-xs font-semibold bg-warning/10 text-warning border border-warning/15">{m.e1_tickets_badge_thread()}</span>
+                        <span class="px-1.5 py-0.5 rounded text-xs font-semibold bg-warning/10 text-on-warning-container border border-warning/15">{m.e1_tickets_badge_thread()}</span>
                       {:else}
                         <span class="px-1.5 py-0.5 rounded text-xs font-semibold bg-surface-container-high text-on-surface-variant border border-outline-variant/10">{m.e1_tickets_badge_global_mode()}</span>
                       {/if}
@@ -1719,7 +1719,7 @@
                       <!-- Staff Role Badge -->
                       {#if ticketType.staffRoleId}
                         {@const role = discordRoles.find(r => r.id === ticketType.staffRoleId)}
-                        <span class="px-1.5 py-0.5 rounded text-2xs font-semibold tracking-wider bg-success/10 text-success border border-success/15">Staff: @{role?.name || m.e1_tickets_unknown_role()}</span>
+                        <span class="px-1.5 py-0.5 rounded text-2xs font-semibold tracking-wider bg-success/10 text-on-success-container border border-success/15">Staff: @{role?.name || m.e1_tickets_unknown_role()}</span>
                       {:else}
                         <span class="px-1.5 py-0.5 rounded text-2xs font-semibold tracking-wider bg-surface-container-high text-on-surface-variant/40 border border-outline-variant/10">{m.e1_tickets_badge_inherited_staff()}</span>
                       {/if}
@@ -1767,7 +1767,7 @@
                   <!-- Delete button -->
                   <button
                     onclick={() => removeTicketType(index)}
-                    class="p-1.5 rounded-lg bg-error/10 text-error hover:bg-rose-500 hover:text-white border border-error/15 transition-all"
+                    class="p-1.5 rounded-lg bg-error/10 text-on-error-container hover:bg-rose-500 hover:text-white border border-error/15 transition-all"
                     title={m.e1_tickets_type_delete()}
                   >
                     <Papicon icon="trash-2" size={13} />

@@ -13,7 +13,7 @@
 
   const {
     open = false,
-    title = m.wfm_edit_message(),
+    title,
     initialText = '',
     onSave,
     onClose,
@@ -50,7 +50,7 @@
             <Papicon icon="TextBubble" size={18} />
           </div>
           <div>
-            <h3 class="text-sm font-bold text-on-surface">{title}</h3>
+            <h3 class="text-sm font-bold text-on-surface">{title ?? m.wfm_edit_message()}</h3>
             <p class="text-2xs text-on-surface-variant">{m.wfm_desc()}</p>
           </div>
         </div>
@@ -80,7 +80,7 @@
             bind:value={text}
             rows="5"
             placeholder={m.wfm_content_ph()}
-            class="w-full px-3.5 py-2.5 rounded-xl bg-surface-container-highest border border-outline-variant/30 text-sm text-on-surface focus:border-primary/50 focus:outline-none transition-all resize-y"
+            class="w-full px-3.5 py-2.5 rounded-xl bg-surface-container-highest border border-field-border text-sm text-on-surface focus:border-primary/50 focus:outline-none transition-all resize-y"
           ></textarea>
         </div>
 

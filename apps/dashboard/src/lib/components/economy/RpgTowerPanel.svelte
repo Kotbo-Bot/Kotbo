@@ -4,6 +4,7 @@
   /** La Tour (mode roguelite du RPG) et la Tour de clan, dans une coque façon Analytics. */
   import { onMount } from 'svelte';
   import { m } from '../../i18n';
+  import { bot } from '../../stores/botLocale.svelte';
   import { channelDisplayName } from '../../channelUtils';
   import { confirmDialog } from '../../stores/confirmDialog.svelte';
   import { dashboardStore } from '../../stores/dashboard.svelte';
@@ -184,7 +185,7 @@
     skillPrice: 10,
     weeklyShardCap: 0,
     idleTimeoutMinutes: 30,
-    currencyName: 'Éclats de Tour',
+    currencyName: m.bot_currency_tower_shards({}, bot()),
     currencyEmoji: '',
     upgrades: defaultUpgrades(),
     merchant: { ...MERCHANT_DEFAULTS, offers: [...OFFERS] },
@@ -1663,7 +1664,7 @@
                 <div class="flex flex-wrap gap-1.5">
                   {#each SIM_HEATS as heat, index}
                     <button type="button" aria-pressed={(simHeat & (1 << index)) !== 0} onclick={() => { simHeat ^= 1 << index; }}
-                      class="px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors {(simHeat & (1 << index)) !== 0 ? 'border-error bg-error/15 text-error' : 'border-outline-variant hover:bg-surface-container-low'}">{heat.label()}</button>
+                      class="px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors {(simHeat & (1 << index)) !== 0 ? 'border-error bg-error/15 text-on-error-container' : 'border-outline-variant hover:bg-surface-container-low'}">{heat.label()}</button>
                   {/each}
                 </div>
               </div>

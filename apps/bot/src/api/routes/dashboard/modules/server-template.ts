@@ -1,10 +1,13 @@
 /** Routes dashboard de la mise en place guidee du serveur. */
+import { Hono } from 'hono';
+import { createMiddleware } from 'hono/factory';
+import type { Client } from 'discord.js';
 import prisma from '../../../../utils/db.js';
 import { upsertRetryingRace } from '../../../../utils/upsertRetry.js';
 import { errorMessage } from '../../../../utils/errors.js';
 import { resolveGuildLocale } from '../../../../utils/i18n.js';
 import { logger } from '../../../../utils/logger.js';
-import { getGuildName, json, pushAudit, readJsonBody } from '../../../shared.js';
+import { getGuildName, pushAudit } from '../../../shared.js';
 import {
   DEFAULT_SELECTION,
   TAKEOVER_SELECTION,
@@ -34,9 +37,8 @@ import {
   provisionOnboardingRoles,
 } from '../../../../services/core/onboardingProvisioningService.js';
 import { ChannelType, PermissionFlagsBits, type Guild, type GuildBasedChannel } from 'discord.js';
-import { type ModuleRouteContext } from './_shared.js';
 
-import { jsonFailure } from '../../../shared/failure.js';
+import { auditUserOf, fail, guildRoute, readBody, send } from '../../../hono/dashboard/kit.js';
 import { publicErrorMessage } from '../../../../utils/publicError.js';
 /**
  * Ce que le serveur porte deja de la maquette, et par quoi.
@@ -270,25 +272,28 @@ function adoptableKind(guild: Guild) {
   };
 }
 
-export async function handleServerTemplateRoutes(ctx: ModuleRouteContext): Promise<boolean> {
-  const { req, res, parts, client, guildId, access, method, auditUser, user, moduleKey } = ctx;
-  if (moduleKey !== 'server-template') return false;
-
+export function createServerTemplateRouter(client: Client) {
+  const router = new Hono();
+  const base = '/api/dashboard/guilds/:guildId';
   // Elle cree des salons, des roles, et ne se lance qu'une fois : elle n'a rien
   // a faire dans les mains d'un moderateur.
-  if (access.level !== 'admin') {
-    json(res, 403, { error: 'Seuls les administrateurs peuvent mettre le serveur en place.' });
-    return true;
-  }
+  const templateAccess = createMiddleware<{ Variables: { discordGuild: Guild } }>(async (c, next) => {
+    if (c.var.effectiveAccess.level !== 'admin') {
+      return send(c, { error: 'Seuls les administrateurs peuvent mettre le serveur en place.' }, 403);
+    }
+    const guildId = c.req.param('guildId')!;
+    const discordGuild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
+    if (!discordGuild) return send(c, { error: 'Serveur Discord introuvable.' }, 404);
+    c.set('discordGuild', discordGuild);
+    await next();
+  });
+  const gate = guildRoute(client);
+  const ownedGate = [...gate, templateAccess] as const;
 
-  const discordGuild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
-  if (!discordGuild) {
-    json(res, 404, { error: 'Serveur Discord introuvable.' });
-    return true;
-  }
 
-  // GET /api/dashboard/guilds/:guildId/server-template
-  if (parts.length === 5 && method === 'GET') {
+  router.get(`${base}/server-template`, ...ownedGate, async (c) => {
+    const discordGuild = c.var.discordGuild;
+    const guildId = c.req.param('guildId');
     try {
       // Les noms sont rendus dans la langue du serveur, pas dans celle du
       // dashboard : la previsualisation doit montrer ce qui sera reellement
@@ -360,7 +365,7 @@ export async function handleServerTemplateRoutes(ctx: ModuleRouteContext): Promi
       ).size;
       const structured = ownMatches.length > 0 || unknownChannels > 3;
 
-      json(res, 200, {
+      return send(c, {
         locale,
         plan,
         // Ce que le serveur porte deja, pour qu'une reprise complete au lieu de
@@ -407,17 +412,18 @@ export async function handleServerTemplateRoutes(ctx: ModuleRouteContext): Promi
       });
     } catch (err) {
       logger.error('ServerTemplateAPI', `Error reading template plan: ${errorMessage(err)}`);
-      jsonFailure(res, err, 'Erreur lors de la lecture du plan de mise en place.', 'ServerTemplateAPI');
+      return fail(c, err, 'Erreur lors de la lecture du plan de mise en place.', 'ServerTemplateAPI');
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/server-template/apply
-  if (parts.length === 6 && parts[5] === 'apply' && method === 'POST') {
+  router.post(`${base}/server-template/apply`, ...ownedGate, async (c) => {
+    const discordGuild = c.var.discordGuild;
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const auditUser = auditUserOf(c);
     const lockKey = `server-template:${guildId}`;
     if (!acquireProvisionLock(lockKey)) {
-      json(res, 409, { error: 'Une mise en place est déjà en cours sur ce serveur.' });
-      return true;
+      return send(c, { error: 'Une mise en place est déjà en cours sur ce serveur.' }, 409);
     }
 
     // Le verrou ci-dessus ne vaut que pour ce serveur. Celui-ci borne le total :
@@ -431,8 +437,7 @@ export async function handleServerTemplateRoutes(ctx: ModuleRouteContext): Promi
     // bout d'une minute d'attente, ou si la file est deja pleine.
     if (!(await waitForProvisionSlot())) {
       releaseProvisionLock(lockKey);
-      json(res, 429, { error: "Trop de mises en place en cours en ce moment. Réessayez dans quelques minutes." });
-      return true;
+      return send(c, { error: "Trop de mises en place en cours en ce moment. Réessayez dans quelques minutes." }, 429);
     }
 
     try {
@@ -441,14 +446,13 @@ export async function handleServerTemplateRoutes(ctx: ModuleRouteContext): Promi
         select: { serverTemplateAppliedAt: true, serverTemplateAppliedBy: true, serverTemplateRefs: true },
       });
 
-      const body = await readJsonBody<{ selection?: unknown; adopt?: unknown }>(req);
+      const body = await readBody<{ selection?: unknown; adopt?: unknown }>(c);
       const requested = Array.isArray(body?.selection)
         ? body.selection.filter((key): key is string => typeof key === 'string')
         : DEFAULT_SELECTION;
       const selection = normalizeSelection(requested);
       if (selection.length === 0) {
-        json(res, 400, { error: 'Aucun élément sélectionné.' });
-        return true;
+        return send(c, { error: 'Aucun élément sélectionné.' }, 400);
       }
 
       /**
@@ -473,10 +477,9 @@ export async function handleServerTemplateRoutes(ctx: ModuleRouteContext): Promi
       const { adopt, rejected } = parseAdoptions(body?.adopt, adoptableKind(discordGuild), locale);
 
       if (rejected.length > 0) {
-        json(res, 400, {
+        return send(c, {
           error: `Ces éléments ne correspondent à rien d'utilisable sur le serveur : ${rejected.join(', ')}. Rechargez la page, le serveur a peut-être changé depuis.`,
-        });
-        return true;
+        }, 400);
       }
 
       /**
@@ -503,18 +506,16 @@ export async function handleServerTemplateRoutes(ctx: ModuleRouteContext): Promi
             : !discordGuild.channels.cache.has(id);
         });
         if (unaccounted.length > 0 && !Array.isArray(body?.selection)) {
-          json(res, 409, {
+          return send(c, {
             error: `La mise en place a déjà été faite par ${guildRow.serverTemplateAppliedBy ?? 'un administrateur'}. Reprenez-la depuis le parcours de configuration pour ne compléter que ce qui manque.`,
             appliedAt: guildRow.serverTemplateAppliedAt.toISOString(),
-          });
-          return true;
+          }, 409);
         }
       }
 
       const missing = await missingProvisionPermissions(discordGuild, requiredPermissionsFor(selection));
       if (missing.length > 0) {
-        json(res, 400, { error: `Kotbo n'a pas les permissions nécessaires : ${missing.join(', ')}.` });
-        return true;
+        return send(c, { error: `Kotbo n'a pas les permissions nécessaires : ${missing.join(', ')}.` }, 400);
       }
 
       // La mise en place est souvent le premier geste sur un serveur neuf : la
@@ -553,18 +554,17 @@ export async function handleServerTemplateRoutes(ctx: ModuleRouteContext): Promi
       });
 
       if (result.interrupted) {
-        json(res, 500, {
+        return send(c, {
           error: `Mise en place interrompue : ${result.interrupted}`,
           items: result.items,
           modules: result.modules,
           preparedModules: result.preparedModules,
           warnings: result.warnings,
           panelSent: result.panelSent,
-        });
-        return true;
+        }, 500);
       }
 
-      json(res, 200, {
+      return send(c, {
         success: true,
         items: result.items,
         modules: result.modules,
@@ -574,32 +574,31 @@ export async function handleServerTemplateRoutes(ctx: ModuleRouteContext): Promi
       });
     } catch (err) {
       logger.error('ServerTemplateAPI', `Error applying server template: ${errorMessage(err)}`);
-      json(res, 500, { error: `Mise en place interrompue : ${publicErrorMessage(err)}` });
+      return send(c, { error: `Mise en place interrompue : ${publicErrorMessage(err)}` }, 500);
     } finally {
       releaseProvisionSlot();
       releaseProvisionLock(lockKey);
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/server-template/channel
   //
   // Le parcours demande de designer un salon ; le serveur n'en a pas. Plutot
   // que de renvoyer l'administrateur creer un `#log` sur Discord et revenir
   // rafraichir la page, on le pose ici et l'ecran le selectionne dans la
   // foulee.
-  if (parts.length === 6 && parts[5] === 'channel' && method === 'POST') {
+  router.post(`${base}/server-template/channel`, ...ownedGate, async (c) => {
+    const discordGuild = c.var.discordGuild;
+    const guildId = c.req.param('guildId');
+    const auditUser = auditUserOf(c);
     const lockKey = `onboarding-channel:${guildId}`;
     if (!acquireProvisionLock(lockKey)) {
-      json(res, 409, { error: 'Un salon est déjà en cours de création sur ce serveur.' });
-      return true;
+      return send(c, { error: 'Un salon est déjà en cours de création sur ce serveur.' }, 409);
     }
 
     try {
-      const body = await readJsonBody<{ purpose?: unknown; name?: unknown }>(req);
+      const body = await readBody<{ purpose?: unknown; name?: unknown }>(c);
       if (!isOnboardingChannelPurpose(body?.purpose)) {
-        json(res, 400, { error: 'Usage de salon inconnu.' });
-        return true;
+        return send(c, { error: 'Usage de salon inconnu.' }, 400);
       }
 
       const locale = await resolveGuildLocale(guildId, discordGuild.preferredLocale);
@@ -627,34 +626,33 @@ export async function handleServerTemplateRoutes(ctx: ModuleRouteContext): Promi
         });
       }
 
-      json(res, 200, channel);
+      return send(c, channel);
     } catch (err) {
       logger.error('ServerTemplateAPI', `Error creating onboarding channel: ${errorMessage(err)}`);
-      jsonFailure(res, err, publicErrorMessage(err, "Le salon n'a pas pu être créé."), 'ServerTemplateAPI');
+      return fail(c, err, publicErrorMessage(err, "Le salon n'a pas pu être créé."), 'ServerTemplateAPI');
     } finally {
       releaseProvisionLock(lockKey);
     }
-    return true;
-  }
+  });
 
-  // POST /api/dashboard/guilds/:guildId/server-template/roles
   //
   // Une hierarchie de staff, ou une echelle de roles de niveau. Les deux
   // ecrans en ont besoin et demandent la meme chose : quelques roles, dans un
   // ordre, avec des pouvoirs choisis dans une liste fermee cote serveur.
-  if (parts.length === 6 && parts[5] === 'roles' && method === 'POST') {
+  router.post(`${base}/server-template/roles`, ...ownedGate, async (c) => {
+    const discordGuild = c.var.discordGuild;
+    const guildId = c.req.param('guildId');
+    const auditUser = auditUserOf(c);
     const lockKey = `onboarding-roles:${guildId}`;
     if (!acquireProvisionLock(lockKey)) {
-      json(res, 409, { error: 'Des rôles sont déjà en cours de création sur ce serveur.' });
-      return true;
+      return send(c, { error: 'Des rôles sont déjà en cours de création sur ce serveur.' }, 409);
     }
 
     try {
-      const body = await readJsonBody<{ roles?: unknown }>(req);
+      const body = await readBody<{ roles?: unknown }>(c);
       const roles = parseRoleRequests(body?.roles);
       if (roles.length === 0) {
-        json(res, 400, { error: 'Aucun rôle à créer.' });
-        return true;
+        return send(c, { error: 'Aucun rôle à créer.' }, 400);
       }
 
       const locale = await resolveGuildLocale(guildId, discordGuild.preferredLocale);
@@ -680,15 +678,15 @@ export async function handleServerTemplateRoutes(ctx: ModuleRouteContext): Promi
         });
       }
 
-      json(res, 200, result);
+      return send(c, result);
     } catch (err) {
       logger.error('ServerTemplateAPI', `Error creating onboarding roles: ${errorMessage(err)}`);
-      jsonFailure(res, err, publicErrorMessage(err, "Les rôles n'ont pas pu être créés."), 'ServerTemplateAPI');
+      return fail(c, err, publicErrorMessage(err, "Les rôles n'ont pas pu être créés."), 'ServerTemplateAPI');
     } finally {
       releaseProvisionLock(lockKey);
     }
-    return true;
-  }
+  });
 
-  return false;
+  return router;
 }
+

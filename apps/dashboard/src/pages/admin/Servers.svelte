@@ -26,6 +26,7 @@
     reconcileStaffServers,
     resetAdminGuildServerTemplate,
     skipAdminGuildOnboarding,
+    type AdminPlanKey,
   } from '../../lib/api';
   import Papicon from '../../lib/components/Papicon.svelte';
   import AdminShell from '../../lib/components/admin/AdminShell.svelte';
@@ -46,6 +47,7 @@
     joinedAt: string;
     activated: boolean;
     activationCode: string | null;
+    plan: AdminPlanKey;
     serverTemplateAppliedAt: string | null;
     serverTemplateAppliedBy: string | null;
     onboardingCompletedAt: string | null;
@@ -79,7 +81,8 @@
   let reconciling = $state(false);
   let busyIds = $state<string[]>([]);
 
-  let search = $state('');
+  // `?q=` : l'accueil de la console ouvre cette page sur un serveur precis.
+  let search = $state(new URLSearchParams(location.search).get('q') ?? '');
   let statusFilter = $state('ALL');
   let sortKey = $state('memberCount');
   let sortDir = $state<'asc' | 'desc'>('desc');
@@ -198,7 +201,10 @@
   const filtered = $derived.by(() => {
     const needle = search.trim().toLowerCase();
     let rows = guilds.filter((guild) =>
-      !needle || guild.name.toLowerCase().includes(needle) || guild.id.includes(needle),
+      !needle ||
+      guild.name.toLowerCase().includes(needle) ||
+      guild.id.includes(needle) ||
+      (guild.plan && guild.plan.toLowerCase().includes(needle)),
     );
 
     if (statusFilter === 'ACTIVATED') rows = rows.filter((g) => g.activated);
@@ -210,6 +216,7 @@
     return [...rows].sort((a, b) => {
       switch (sortKey) {
         case 'name': return a.name.localeCompare(b.name, 'fr') * direction;
+        case 'plan': return (a.plan ?? 'FREE').localeCompare(b.plan ?? 'FREE') * direction;
         case 'joinedAt': return (new Date(a.joinedAt).getTime() - new Date(b.joinedAt).getTime()) * direction;
         case 'shardId': return (a.shardId - b.shardId) * direction;
         case 'activated': return (Number(a.activated) - Number(b.activated)) * direction;
@@ -376,8 +383,16 @@
     return null;
   }
 
+  function planTone(plan?: AdminPlanKey | null): AdminTone {
+    if (plan === 'CUSTOM') return 'warning';
+    if (plan === 'ULTIMATE' || plan === 'PRO') return 'primary';
+    if (plan === 'PLUS') return 'info';
+    return 'neutral';
+  }
+
   const columns: AdminTableColumn[] = [
     { key: 'name', label: 'Serveur', sortKey: 'name' },
+    { key: 'plan', label: 'Offre', sortKey: 'plan', width: 'w-28' },
     { key: 'status', label: 'État', sortKey: 'activated', width: 'w-44' },
     { key: 'members', label: 'Membres', sortKey: 'memberCount', align: 'right', width: 'w-28' },
     { key: 'shard', label: 'Shard', sortKey: 'shardId', align: 'right', width: 'w-20', hideBelow: 'md' },
@@ -470,7 +485,8 @@
       {@const progress = syncProgress(guild)}
       <tr class="border-b border-outline-variant/12 hover:bg-on-surface/3 transition-colors">
         <td class="px-4 py-3">
-          <button type="button" onclick={() => openDetail(guild)} class="flex items-center gap-3 min-w-0 text-left group">
+          <!-- Le nom mene a la fiche ; les actions restent dans le panneau, a droite de la ligne. -->
+          <a href="/admin/servers/{guild.id}" class="flex items-center gap-3 min-w-0 text-left group rounded-lg focus-visible:outline-2 focus-visible:outline-primary">
             <div class="w-9 h-9 shrink-0 rounded-xl bg-on-surface/6 overflow-hidden flex items-center justify-center">
               {#if guild.icon}
                 <img src={guild.icon} alt="" class="w-full h-full object-cover" loading="lazy" />
@@ -482,7 +498,11 @@
               <p class="text-body-sm font-semibold text-on-surface truncate group-hover:text-primary transition-colors">{guild.name}</p>
               <p class="text-2xs text-on-surface-variant font-mono truncate">{guild.id}</p>
             </div>
-          </button>
+          </a>
+        </td>
+
+        <td class="px-4 py-3">
+          <AdminBadge size="sm" tone={planTone(guild.plan)} label={guild.plan ?? 'FREE'} />
         </td>
 
         <td class="px-4 py-3">
@@ -561,6 +581,7 @@
         <div class="min-w-0">
           <div class="flex items-center gap-2 flex-wrap">
             <AdminBadge label={guild.activated ? 'Activé' : 'Non activé'} tone={guild.activated ? 'success' : 'neutral'} dot />
+            <AdminBadge label="Offre {guild.plan ?? 'FREE'}" tone={planTone(guild.plan)} />
             <AdminBadge label="Shard #{guild.shardId}" tone="neutral" size="sm" />
           </div>
           <p class="text-xs text-on-surface-variant mt-1">
@@ -616,7 +637,11 @@
 
       <!-- Activation -->
       <div class="rounded-xl border border-outline-variant/25 bg-surface-container-low/40 p-3.5 space-y-2">
-        <p class="text-xs font-semibold text-on-surface-variant">Activation</p>
+        <p class="text-xs font-semibold text-on-surface-variant">Offre et activation</p>
+        <div class="flex items-center justify-between gap-3">
+          <span class="text-body-sm text-on-surface-variant">Offre</span>
+          <AdminBadge size="sm" tone={planTone(guild.plan)} label={guild.plan ?? 'FREE'} />
+        </div>
         <div class="flex items-center justify-between gap-3">
           <span class="text-body-sm text-on-surface-variant">Code utilisé</span>
           <span class="text-body-sm font-mono font-semibold text-on-surface">{guild.activationCode ?? '-'}</span>
@@ -695,7 +720,7 @@
             type="button"
             onclick={() => handleDeactivate(guild)}
             disabled={busy}
-            class="w-full h-10 rounded-xl bg-warning/12 text-warning border border-warning/25 hover:bg-warning/18 text-body-sm font-semibold transition disabled:opacity-50 inline-flex items-center justify-center gap-2"
+            class="w-full h-10 rounded-xl bg-warning/12 text-on-warning-container border border-warning/25 hover:bg-warning/18 text-body-sm font-semibold transition disabled:opacity-50 inline-flex items-center justify-center gap-2"
           >
             <Papicon icon="Ban" size={14} />
             Désactiver le serveur
@@ -705,7 +730,7 @@
             type="button"
             onclick={() => handleActivate(guild)}
             disabled={busy}
-            class="w-full h-10 rounded-xl bg-success/12 text-success border border-success/25 hover:bg-success/18 text-body-sm font-semibold transition disabled:opacity-50 inline-flex items-center justify-center gap-2"
+            class="w-full h-10 rounded-xl bg-success/12 text-on-success-container border border-success/25 hover:bg-success/18 text-body-sm font-semibold transition disabled:opacity-50 inline-flex items-center justify-center gap-2"
           >
             <Papicon icon="Key" size={14} />
             Activer automatiquement
@@ -716,7 +741,7 @@
           type="button"
           onclick={() => handleLeave(guild)}
           disabled={busy}
-          class="w-full h-10 rounded-xl bg-error/12 text-error border border-error/25 hover:bg-error/18 text-body-sm font-semibold transition disabled:opacity-50 inline-flex items-center justify-center gap-2"
+          class="w-full h-10 rounded-xl bg-error/12 text-on-error-container border border-error/25 hover:bg-error/18 text-body-sm font-semibold transition disabled:opacity-50 inline-flex items-center justify-center gap-2"
         >
           <Papicon icon="LogOut" size={14} />
           Faire quitter le bot

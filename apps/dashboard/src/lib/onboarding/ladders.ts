@@ -1,4 +1,5 @@
 import { m } from '../i18n';
+import { bot } from '../stores/botLocale.svelte';
 /**
  * Les échelles de rôles que le parcours sait créer lui-même.
  *
@@ -64,37 +65,36 @@ export type StaffStructure = {
 export const STAFF_STRUCTURES: StaffStructure[] = [
   {
     key: 'founder',
-    label: m.obl_founder(),
-    pitch: m.obl_founder_pitch(),
-    detail:
-      m.obl_founder_detail(),
+    get label() { return m.obl_founder(); },
+    get pitch() { return m.obl_founder_pitch(); },
+    get detail() { return m.obl_founder_detail(); },
     icon: 'crown',
     top: [
       {
         key: 'staff.founder',
-        name: 'Fondateur',
+        get name() { return m.bot_role_founder({}, bot()); },
         color: '#F59E0B',
         power: 'admin',
         hoist: true,
-        duty: m.obl_duty_owner(),
+        get duty() { return m.obl_duty_owner(); },
       },
       {
         key: 'staff.admin',
-        name: 'Administrateur',
+        get name() { return m.bot_role_admin({}, bot()); },
         color: '#EF4444',
         power: 'admin',
         hoist: true,
-        duty: m.obl_duty_admin(),
+        get duty() { return m.obl_duty_admin(); },
       },
     ],
     ground: [
       {
         key: 'staff.moderator',
-        name: 'Modérateur',
+        get name() { return m.bot_role_moderator({}, bot()); },
         color: '#3B82F6',
         power: 'moderate',
         hoist: true,
-        duty: m.obl_duty_mod(),
+        get duty() { return m.obl_duty_mod(); },
       },
       {
         key: 'staff.helper',
@@ -102,43 +102,42 @@ export const STAFF_STRUCTURES: StaffStructure[] = [
         color: '#10B981',
         power: 'assist',
         hoist: true,
-        duty: m.obl_duty_helper(),
+        get duty() { return m.obl_duty_helper(); },
       },
     ],
   },
   {
     key: 'admin',
-    label: m.obl_admin(),
-    pitch: m.obl_admin_pitch(),
-    detail:
-      m.obl_admin_detail(),
+    get label() { return m.obl_admin(); },
+    get pitch() { return m.obl_admin_pitch(); },
+    get detail() { return m.obl_admin_detail(); },
     icon: 'shield',
     top: [
       {
         key: 'staff.admin',
-        name: 'Administrateur',
+        get name() { return m.bot_role_admin({}, bot()); },
         color: '#EF4444',
         power: 'admin',
         hoist: true,
-        duty: m.obl_duty_owner(),
+        get duty() { return m.obl_duty_owner(); },
       },
       {
         key: 'staff.supermod',
-        name: 'Responsable staff',
+        get name() { return m.bot_role_staff_lead({}, bot()); },
         color: '#F97316',
         power: 'manage',
         hoist: true,
-        duty: m.obl_duty_staff_lead(),
+        get duty() { return m.obl_duty_staff_lead(); },
       },
     ],
     ground: [
       {
         key: 'staff.moderator',
-        name: 'Modérateur',
+        get name() { return m.bot_role_moderator({}, bot()); },
         color: '#3B82F6',
         power: 'moderate',
         hoist: true,
-        duty: m.obl_duty_mod(),
+        get duty() { return m.obl_duty_mod(); },
       },
       {
         key: 'staff.helper',
@@ -146,35 +145,34 @@ export const STAFF_STRUCTURES: StaffStructure[] = [
         color: '#10B981',
         power: 'assist',
         hoist: true,
-        duty: m.obl_duty_helper(),
+        get duty() { return m.obl_duty_helper(); },
       },
     ],
   },
   {
     key: 'flat',
-    label: m.obl_flat(),
-    pitch: m.obl_flat_pitch(),
-    detail:
-      m.obl_flat_detail(),
+    get label() { return m.obl_flat(); },
+    get pitch() { return m.obl_flat_pitch(); },
+    get detail() { return m.obl_flat_detail(); },
     icon: 'users',
     top: [
       {
         key: 'staff.admin',
-        name: 'Administrateur',
+        get name() { return m.bot_role_admin({}, bot()); },
         color: '#EF4444',
         power: 'admin',
         hoist: true,
-        duty: m.obl_duty_owner(),
+        get duty() { return m.obl_duty_owner(); },
       },
     ],
     ground: [
       {
         key: 'staff.moderator',
-        name: 'Modérateur',
+        get name() { return m.bot_role_moderator({}, bot()); },
         color: '#3B82F6',
         power: 'moderate',
         hoist: true,
-        duty: m.obl_duty_mod(),
+        get duty() { return m.obl_duty_mod(); },
       },
     ],
   },
@@ -199,57 +197,47 @@ export type StaffPole = RoleBlueprint & {
 const ALL_STAFF_POLES: StaffPole[] = [
   {
     key: 'staff.pole.moderation',
-    name: 'Responsable modération',
+    get name() { return m.bot_role_pole_moderation({}, bot()); },
     color: '#6366F1',
     power: 'moderate',
     hoist: false,
-    duty: m.obl_duty_mod_lead(),
+    get duty() { return m.obl_duty_mod_lead(); },
     byDefault: true,
   },
   {
     key: 'staff.pole.events',
-    name: 'Responsable événements',
+    get name() { return m.bot_role_pole_events({}, bot()); },
     color: '#EC4899',
     power: 'coordinate',
     hoist: false,
-    duty: m.obl_duty_events(),
+    get duty() { return m.obl_duty_events(); },
     byDefault: true,
   },
   {
     key: 'staff.pole.communication',
-    name: 'Responsable communication',
+    get name() { return m.bot_role_pole_comms({}, bot()); },
     color: '#0EA5E9',
     power: 'coordinate',
     hoist: false,
-    duty: m.obl_duty_comms(),
+    get duty() { return m.obl_duty_comms(); },
     byDefault: false,
   },
   {
     key: 'staff.pole.recruitment',
-    name: 'Responsable recrutement',
+    get name() { return m.bot_role_pole_recruit({}, bot()); },
     color: '#8B5CF6',
     power: 'coordinate',
     hoist: false,
-    duty: m.obl_duty_recruit(),
-    byDefault: false,
-  },
-  {
-    key: 'staff.pole.partnerships',
-    module: 'partnerships',
-    name: 'Responsable partenariats',
-    color: '#14B8A6',
-    power: 'coordinate',
-    hoist: false,
-    duty: m.obl_duty_partners(),
+    get duty() { return m.obl_duty_recruit(); },
     byDefault: false,
   },
   {
     key: 'staff.pole.animation',
-    name: 'Animateur',
+    get name() { return m.bot_role_pole_host({}, bot()); },
     color: '#F59E0B',
     power: 'coordinate',
     hoist: false,
-    duty: m.obl_duty_host(),
+    get duty() { return m.obl_duty_host(); },
     byDefault: false,
   },
 ];
@@ -295,29 +283,29 @@ export type LevelLadder = {
 export const LEVEL_LADDERS: LevelLadder[] = [
   {
     key: 'metals',
-    label: m.obl_metals(),
-    pitch: m.obl_metals_pitch(),
+    get label() { return m.obl_metals(); },
+    get pitch() { return m.obl_metals_pitch(); },
     icon: 'award',
-    names: ['Bronze', 'Argent', 'Or', 'Platine', 'Diamant', 'Maître', 'Champion', 'Légende'],
+    get names() { return m.bot_ladder_metals({}, bot()).split(','); },
   },
   {
     key: 'seniority',
-    label: m.obl_seniority(),
-    pitch: m.obl_seniority_pitch(),
+    get label() { return m.obl_seniority(); },
+    get pitch() { return m.obl_seniority_pitch(); },
     icon: 'clock',
-    names: ['Nouveau', 'Habitué', 'Régulier', 'Fidèle', 'Pilier', 'Vétéran', 'Ancien', 'Légende'],
+    get names() { return m.bot_ladder_seniority({}, bot()).split(','); },
   },
   {
     key: 'ranks',
-    label: m.obl_ranks(),
-    pitch: m.obl_ranks_pitch(),
+    get label() { return m.obl_ranks(); },
+    get pitch() { return m.obl_ranks_pitch(); },
     icon: 'trophy',
-    names: ['Recrue', 'Initié', 'Confirmé', 'Expert', 'Élite', 'Vétéran', 'Maître', 'Légende'],
+    get names() { return m.bot_ladder_ranks({}, bot()).split(','); },
   },
   {
     key: 'plain',
-    label: m.obl_plain(),
-    pitch: m.obl_plain_pitch(),
+    get label() { return m.obl_plain(); },
+    get pitch() { return m.obl_plain_pitch(); },
     icon: 'hash',
     names: [],
   },
@@ -393,13 +381,13 @@ export function buildLevelLadder(ladder: LevelLadder, count: number): LevelRoleB
   const names =
     ladder.names.length > 0
       ? spread(ladder.names, tiers.length)
-      : tiers.map((level) => `Niveau ${level}`);
+      : tiers.map((level) => m.bot_role_level({ level }, bot()));
   const colors = spread(LADDER_COLORS, tiers.length);
 
   return tiers
     .map((level, index) => ({
       key: `level.${level}`,
-      name: names[index] ?? `Niveau ${level}`,
+      name: names[index] ?? m.bot_role_level({ level }, bot()),
       color: colors[index] ?? LADDER_COLORS[LADDER_COLORS.length - 1],
       // Aucun pouvoir : un rôle de palier récompense, il n'administre rien.
       power: 'none' as const,

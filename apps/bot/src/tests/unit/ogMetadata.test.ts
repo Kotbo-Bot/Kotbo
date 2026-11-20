@@ -89,7 +89,7 @@ const { normalizeAccent, renderOgCard } = await import('../../services/system/og
 // la base : un client Discord vide suffit, et le test reste hors-ligne.
 const emptyClient = { guilds: { cache: new Map() }, users: { fetch: async () => null } } as unknown as Client;
 
-// Le rendu d'une carte compose une image 1200x630 : quelques secondes par appel,
+// Le rendu d'une carte compose une image 512x512 : quelques secondes par appel,
 // et bien davantage quand la suite tourne en parallèle. Les scripts de test
 // relèvent déjà le délai global ; ce plafond garde le fichier exécutable seul,
 // où bun coupe à 5 s.
@@ -262,7 +262,8 @@ describe('renderPreviewHtml', () => {
     const html = renderPreviewHtml(meta, 'https://dash.kotbo.fr/form/abc', 'https://api.kotbo.fr');
     expect(html).toContain('<meta property="og:title"');
     expect(html).toContain('<meta property="og:image" content="https://api.kotbo.fr/api/og/image');
-    expect(html).toContain('<meta name="twitter:card" content="summary_large_image"');
+    expect(html).toContain('<meta name="twitter:card" content="summary"');
+    expect(html).toContain('<meta property="og:image:width" content="512"');
     // La couleur de la barre latérale de l'embed vient de `theme-color`.
     expect(html).toContain('<meta name="theme-color" content="#a8c8ff"');
     // oEmbed : c'est ce qui fait apparaître le nom du serveur au-dessus du titre.
@@ -321,7 +322,7 @@ describe('normalizeAccent', () => {
 });
 
 describe('renderOgCard', () => {
-  test('rend un PNG 1200x630 déterministe', async () => {
+  test('rend une vignette PNG 512x512 déterministe', async () => {
     const spec = {
       cacheKey: 'test:carte-1',
       kicker: 'Formulaire',
@@ -336,8 +337,8 @@ describe('renderOgCard', () => {
     const first = await renderOgCard(spec);
     // Signature PNG + dimensions lues dans l'en-tête IHDR.
     expect(first.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a');
-    expect(first.readUInt32BE(16)).toBe(1200);
-    expect(first.readUInt32BE(20)).toBe(630);
+    expect(first.readUInt32BE(16)).toBe(512);
+    expect(first.readUInt32BE(20)).toBe(512);
 
     // Même clé de cache => mêmes octets : l'ETag servi aux CDN reste stable.
     const second = await renderOgCard({ ...spec, cacheKey: 'test:carte-1' });
@@ -345,9 +346,9 @@ describe('renderOgCard', () => {
   }, RENDER_TIMEOUT_MS);
 
   test('deux clés différentes donnent deux cartes différentes', async () => {
-    const base = { kicker: 'Ticket', title: 'Contenu protégé', art: { type: 'redactedChat' as const } };
-    const a = await renderOgCard({ ...base, cacheKey: 'test:carte-a' });
-    const b = await renderOgCard({ ...base, cacheKey: 'test:carte-b' });
+    const base = { kicker: 'Ticket', art: { type: 'redactedChat' as const } };
+    const a = await renderOgCard({ ...base, title: 'Contenu protégé #1', cacheKey: 'test:carte-a' });
+    const b = await renderOgCard({ ...base, title: 'Contenu protégé #2', cacheKey: 'test:carte-b' });
     expect(a.equals(b)).toBe(false);
   }, RENDER_TIMEOUT_MS);
 });

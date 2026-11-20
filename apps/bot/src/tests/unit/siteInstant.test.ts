@@ -13,6 +13,7 @@ describe('type de communauté', () => {
     expect(guessSiteTemplate({ name: 'Team Nova', description: null, channels: ['scrims', 'roster', 'valorant'] })).toBe('esport');
     expect(guessSiteTemplate({ name: 'Entraide Bac 2027', channels: ['maths', 'physique'] })).toBe('etude');
     expect(guessSiteTemplate({ name: 'Le QG', channels: ['minecraft', 'fortnite', 'général'] })).toBe('gaming');
+    expect(guessSiteTemplate({ name: 'DevHub Community', channels: ['python', 'javascript', 'projets'] })).toBe('dev');
   });
 
   test('un seul indice ne suffit pas, les accents ne gênent pas', () => {

@@ -38,7 +38,7 @@ import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { getDashboardOrigin } from '../../api/shared/core.js';
 import { checkoutConsent, getStripe } from './stripeService.js';
-import { setGuildPlan } from '../system/planService.js';
+import { getGuildPlan, setGuildPlan } from '../system/planService.js';
 import { extendAccess, getAccessStatus } from '../system/accessService.js';
 import { activateGuild, isGuildActivated } from '../../utils/activation.js';
 import type { Stripe } from './stripeService.js';
@@ -223,10 +223,13 @@ async function applyGiftToGuild(
     };
   }
 
+  // Lu avant l'écriture de l'offre. Depuis le freemium, un serveur gratuit porte `PERMANENT`
+  // par défaut : ce n'est pas un accès payé à vie, le cadeau doit donc poser une vraie date de fin.
+  const previousPlan = await getGuildPlan(guildId);
   await setGuildPlan(guildId, plan, context.reason);
 
   const current = await getAccessStatus(guildId);
-  if (current?.accessType === 'PERMANENT') {
+  if (current?.accessType === 'PERMANENT' && previousPlan !== 'FREE') {
     logger.info('Billing', `Cadeau appliqué à ${guildId} sans date : accès déjà permanent.`);
     return { guildId, plan, months, expiresAt: null, keptPermanentAccess: true };
   }
@@ -487,23 +490,33 @@ export async function redeemGiftCode(
   if (comparePlans(plan, requiredPlan) < 0) {
     return { ok: false, reason: 'plan_below_tier', requiredPlan };
   }
-  const application = await applyGiftToGuild(guildId, plan, gift.months, {
-    reason: `code cadeau ${code}`,
-  });
 
-  // `updateMany` avec la condition « pas encore activé » : deux clics
-  // simultanés sur le même code ne doivent pas créditer deux serveurs. Le
-  // second ne trouve plus de ligne à mettre à jour.
+  // Le code est réclamé AVANT d'appliquer l'offre : `updateMany` conditionnel, un seul des clics
+  // simultanés l'obtient. Appliquer d'abord laissait les deux requêtes créditer leur serveur.
   const claimed = await prisma.billingGift.updateMany({
     where: { id: gift.id, redeemedAt: null },
     data: {
       redeemedByGuildId: guildId,
       redeemedById,
       redeemedAt: new Date(),
-      expiresAt: application.expiresAt,
     },
   });
   if (claimed.count === 0) return { ok: false, reason: 'already_used' };
+
+  let application: GiftApplication;
+  try {
+    application = await applyGiftToGuild(guildId, plan, gift.months, {
+      reason: `code cadeau ${code}`,
+    });
+  } catch (err) {
+    // L'octroi a échoué : le code redevient utilisable plutôt que d'être brûlé pour rien.
+    await prisma.billingGift.updateMany({
+      where: { id: gift.id, redeemedByGuildId: guildId },
+      data: { redeemedByGuildId: null, redeemedById: null, redeemedAt: null },
+    });
+    throw err;
+  }
+  await prisma.billingGift.update({ where: { id: gift.id }, data: { expiresAt: application.expiresAt } });
 
   const updated = await prisma.billingGift.findUnique({ where: { id: gift.id } });
   logger.success('Billing', `Code cadeau ${code} activé sur ${guildId} (${plan}, ${gift.months} mois).`);

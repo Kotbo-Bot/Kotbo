@@ -9,6 +9,8 @@
   dans la fenêtre que le reste du dashboard ouvre déjà.
 -->
 <script lang="ts">
+  import UserDisplay from '../UserDisplay.svelte';
+  import MemberTag from '../MemberTag.svelte';
   import { router } from 'tinro';
   import Papicon from '../Papicon.svelte';
   import Skeleton from '../Skeleton.svelte';
@@ -180,14 +182,14 @@
   }
 
   const SIGNAL_CLASS = {
-    danger: 'bg-error/10 text-error',
-    warning: 'bg-warning/10 text-warning',
+    danger: 'bg-error/10 text-on-error-container',
+    warning: 'bg-warning/10 text-on-warning-container',
     info: 'bg-surface-container text-on-surface-variant',
   } as const;
 
   // ── Dossier détaillé ───────────────────────────────────
   let modalOpen = $state(false);
-  let modalTab = $state<'resume' | 'notes' | 'messages' | 'sanctions'>('resume');
+  let modalTab = $state<'resume' | 'notes' | 'messages' | 'sanctions' | 'identite'>('resume');
 
   function openCase(tab: typeof modalTab) {
     modalTab = tab;
@@ -224,6 +226,18 @@
   const trend = $derived(stats?.activity.dailyTrend ?? []);
   const maxMessages = $derived(Math.max(1, ...trend.map((day) => day.messages)));
   const voiceHours = $derived(Math.round((stats?.activity.totalVoiceMinutes ?? 0) / 6) / 10);
+
+  function historyIcon(field: string): string {
+    switch (field) {
+      case 'username': return 'user';
+      case 'displayName': return 'badge-check';
+      case 'avatar': return 'image';
+      case 'bio': return 'align-left';
+      case 'tag': return 'tag';
+      case 'pronouns': return 'heart';
+      default: return 'edit';
+    }
+  }
 </script>
 
 {#if caseLoading && !caseData}
@@ -247,8 +261,9 @@
       <div class="min-w-0">
         <div class="flex flex-wrap items-center gap-2">
           <h2 class="text-xl font-semibold text-on-surface truncate">{displayName}</h2>
+          <MemberTag {userId} />
           {#if profile?.isOnServer}
-            <span class="mp-chip bg-success/10 text-success">{m.mp_on_server()}</span>
+            <span class="mp-chip bg-success/10 text-on-success-container">{m.mp_on_server()}</span>
           {:else}
             <span class="mp-chip bg-surface-container text-on-surface-variant">{m.mp_left()}</span>
           {/if}
@@ -274,6 +289,7 @@
     </div>
     <div class="flex flex-wrap gap-2 shrink-0">
       <Button variant="ghost" size="sm" icon="arrow-left" href="/members">{m.mp_back()}</Button>
+      <Button size="sm" icon="history" onclick={() => openCase('identite')}>{m.mcm_identity_history()}</Button>
       <Button size="sm" icon="message-square" onclick={() => openCase('messages')}>{m.mp_messages()}</Button>
       <Button size="sm" icon="folder" onclick={() => openCase('resume')}>{m.mp_open_case()}</Button>
       {#if canModerateMembers}
@@ -344,6 +360,31 @@
             {#each caseData.roles.slice(0, 30) as role (role.id)}
               <span class="mp-role"><span class="w-2 h-2 rounded-full" style="background: {role.color && role.color !== '#000000' ? role.color : 'var(--outline-variant)'}"></span>{role.name}</span>
             {/each}
+          </div>
+        </SectionCard>
+      {/if}
+
+      {#if caseData.history && caseData.history.length > 0}
+        <SectionCard title={m.mcm_identity_history()} description={m.mcm_identity_history_desc()}>
+          <div class="px-5 pb-4 pt-3 space-y-2.5">
+            {#each caseData.history.slice(0, 4) as item (item.id)}
+              <div class="flex items-center justify-between gap-2 text-xs">
+                <span class="flex items-center gap-1.5 min-w-0 text-on-surface truncate">
+                  <Papicon icon={historyIcon(item.field)} size={12} class="text-on-surface-variant shrink-0" />
+                  {#if item.field === 'avatar'}
+                    <span class="truncate">{m.mcm_history_avatar()}</span>
+                  {:else if item.field === 'username'}
+                    <span class="truncate">@{item.newValue ?? item.oldValue ?? '—'}</span>
+                  {:else}
+                    <span class="truncate">{item.newValue ?? item.oldValue ?? '—'}</span>
+                  {/if}
+                </span>
+                <span class="text-2xs text-on-surface-variant shrink-0">{relativeDays(item.recordedAt)}</span>
+              </div>
+            {/each}
+            <div class="pt-2 border-t border-outline-variant">
+              <Button size="sm" variant="ghost" class="w-full justify-center" onclick={() => openCase('identite')}>{m.mcm_see_more()}</Button>
+            </div>
           </div>
         </SectionCard>
       {/if}
@@ -457,8 +498,7 @@
             {#each stats.social.topInterlocutors.slice(0, 6) as peer (peer.userId)}
               <li>
                 <a class="flex items-center gap-2.5 rounded-lg -mx-1.5 px-1.5 py-1 hover:bg-surface-container-low" href={`/members/${peer.userId}`}>
-                  <img src={memberAvatarSrc(peer.avatarUrl, peer.userTag, peer.userId)} alt="" class="w-6 h-6 rounded-full" />
-                  <span class="text-body-sm text-on-surface truncate flex-1">{peer.userTag ?? peer.userId}</span>
+                  <UserDisplay userId={peer.userId} name={peer.userTag} avatarUrl={peer.avatarUrl} size="xs" class="min-w-0 flex-1" />
                   <span class="text-2xs text-on-surface-variant tabular-nums">{peer.total}</span>
                 </a>
               </li>
@@ -475,8 +515,7 @@
             {#each caseData.linkedAccounts as account (account.userId)}
               <li>
                 <a class="flex items-center gap-2.5 rounded-lg -mx-1.5 px-1.5 py-1 hover:bg-surface-container-low" href={`/members/${account.userId}`}>
-                  <img src={memberAvatarSrc(account.avatarUrl, account.userTag, account.userId)} alt="" class="w-6 h-6 rounded-full" />
-                  <span class="text-body-sm text-on-surface truncate flex-1">{account.userTag ?? account.userId}</span>
+                  <UserDisplay userId={account.userId} name={account.userTag} avatarUrl={account.avatarUrl} size="xs" class="min-w-0 flex-1" />
                   <span class="text-2xs text-on-surface-variant">{account.status === 'VALIDATED' ? m.mp_linked_validated() : m.mp_linked_pending()}</span>
                 </a>
               </li>

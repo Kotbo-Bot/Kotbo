@@ -9,6 +9,7 @@
  * avant ce curseur, la fusion garde les `limit` premiers, et le dernier gardé
  * devient le curseur suivant. Aucun événement ne peut donc être sauté.
  */
+import { isSuggestionAccepted, isSuggestionStatus } from '@kotbo/shared';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 
@@ -373,7 +374,7 @@ const SOURCES: Source[] = [
         description: truncate(s.content),
         actor: null,
         link: '/suggestions',
-        tone: s.status === 'APPROVED' || s.status === 'IMPLEMENTED' ? 'success' as const : 'neutral' as const,
+        tone: isSuggestionStatus(s.status) && isSuggestionAccepted(s.status) ? 'success' as const : 'neutral' as const,
       }));
     },
   },
@@ -428,18 +429,22 @@ const SOURCES: Source[] = [
         where: { guildId, OR: [{ receiverId: userId }, { giverId: userId }], createdAt: { lt: before } },
         orderBy: { createdAt: 'desc' },
         take: limit,
-        select: { id: true, giverId: true, receiverId: true, value: true, reason: true, createdAt: true },
+        select: { id: true, kind: true, giverId: true, receiverId: true, value: true, reason: true, createdAt: true },
       });
       return votes.map((v) => {
         const received = v.receiverId === userId;
         const other = received ? v.giverId : v.receiverId;
-        const sign = v.value > 0 ? '+' : '−';
+        const points = `${v.value > 0 ? '+' : '−'}${Math.abs(v.value)}`;
+        // Un ajustement est écrit par le staff : « donné » n'aurait pas de sens.
+        const title = v.kind === 'ADJUSTMENT'
+          ? (received ? `Réputation ajustée de ${points} par le staff` : `A ajusté de ${points} la réputation d'un membre`)
+          : (received ? `A reçu ${points} de réputation` : `A donné ${points} de réputation`);
         return {
           id: `rep:${v.id}`,
           type: received ? 'reputation.received' : 'reputation.given',
           category: 'community' as const,
           at: v.createdAt.toISOString(),
-          title: received ? `A reçu ${sign}1 de réputation` : `A donné ${sign}1 de réputation`,
+          title,
           description: truncate(v.reason),
           actor: { id: other, name: null },
           link: `/members/${other}`,
@@ -470,6 +475,54 @@ const SOURCES: Source[] = [
         link: '/activity',
         tone: 'neutral' as const,
       }));
+    },
+  },
+
+  // ── Historique d'identité (pseudos, description, pseudo d'affichage, avatar, tag, pronoms) ──
+  {
+    category: 'changes',
+    load: async ({ guildId, userId, before, limit }) => {
+      const historyRows = await prisma.memberProfileHistory.findMany({
+        where: { guildId, userId, recordedAt: { lt: before } },
+        orderBy: { recordedAt: 'desc' },
+        take: limit,
+      }).catch(() => []);
+
+      return historyRows.map((h) => {
+        let title = "Modification d'identité";
+        let description: string | null = null;
+
+        if (h.field === 'username') {
+          title = 'A changé de pseudo';
+          description = h.oldValue ? `@${h.oldValue} → @${h.newValue}` : `@${h.newValue}`;
+        } else if (h.field === 'displayName') {
+          title = "A changé de pseudo d'affichage";
+          description = h.oldValue ? `${h.oldValue} → ${h.newValue}` : h.newValue;
+        } else if (h.field === 'avatar') {
+          title = 'A mis à jour sa photo de profil';
+        } else if (h.field === 'bio') {
+          title = 'A modifié sa description';
+          description = truncate(h.newValue, 150);
+        } else if (h.field === 'tag') {
+          title = 'A mis à jour son tag';
+          description = h.oldValue ? `${h.oldValue} → ${h.newValue}` : h.newValue;
+        } else if (h.field === 'pronouns') {
+          title = 'A mis à jour ses pronoms';
+          description = h.oldValue ? `${h.oldValue} → ${h.newValue}` : h.newValue;
+        }
+
+        return {
+          id: `identity:${h.id}`,
+          type: `member.identity.${h.field}`,
+          category: 'changes' as const,
+          at: h.recordedAt.toISOString(),
+          title,
+          description,
+          actor: null,
+          link: null,
+          tone: 'info' as const,
+        };
+      });
     },
   },
 ];

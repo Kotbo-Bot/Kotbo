@@ -12,11 +12,16 @@
     type OrphanInstanceBan,
   } from '../../lib/api/instances';
   import AdminShell from '../../lib/components/admin/AdminShell.svelte';
+  import AdminCard from '../../lib/components/admin/AdminCard.svelte';
+  import AdminTable from '../../lib/components/admin/AdminTable.svelte';
+  import AdminToolbar from '../../lib/components/admin/AdminToolbar.svelte';
+  import AdminBadge from '../../lib/components/admin/AdminBadge.svelte';
+  import type { AdminTableColumn } from '../../lib/components/admin/types';
+  import MetricTabs from '../../lib/components/analytics/MetricTabs.svelte';
+  import { SERIES, fmtNumber } from '../../lib/components/analytics/analyticsFormat';
   import Papicon from '../../lib/components/Papicon.svelte';
-  import { Button, Callout, EmptyState, Field, FilterPills, Modal, SectionCard } from '../../lib/components/ui';
+  import { Button, Callout, EmptyState, Field, Modal } from '../../lib/components/ui';
   import { errorMessage } from '@kotbo/shared';
-
-  type Filter = 'all' | 'selfhost' | 'banned';
 
   let instances = $state<BotInstance[]>([]);
   let orphanBans = $state<OrphanInstanceBan[]>([]);
@@ -24,7 +29,7 @@
   let refreshing = $state(false);
   let loadError = $state<string | null>(null);
 
-  let filter = $state<Filter>('selfhost');
+  let filter = $state('selfhost');
   let search = $state('');
 
   let banTarget = $state<BotInstance | null>(null);
@@ -43,6 +48,7 @@
     all: instances.length,
     selfhost: instances.filter((i) => i.isSelfHosted).length,
     banned: instances.filter((i) => i.banned).length,
+    online: instances.filter((i) => i.status === 'online').length,
   });
 
   const visible = $derived.by(() => {
@@ -52,18 +58,28 @@
       if (filter === 'banned' && !i.banned) return false;
       if (!q) return true;
       return (
-        i.botName.toLowerCase().includes(q) ||
-        i.botClientId.includes(q) ||
-        (i.dashboardUrl ?? '').toLowerCase().includes(q)
+        i.botName.toLowerCase().includes(q)
+        || i.botClientId.includes(q)
+        || (i.dashboardUrl ?? '').toLowerCase().includes(q)
       );
     });
   });
 
+  const columns: AdminTableColumn[] = [
+    { key: 'bot', label: 'Bot' },
+    { key: 'guilds', label: 'Serveurs', align: 'right', hideBelow: 'sm' },
+    { key: 'users', label: 'Membres', align: 'right', hideBelow: 'md' },
+    { key: 'version', label: 'Version', hideBelow: 'lg' },
+    { key: 'ping', label: 'Dernier ping', hideBelow: 'sm' },
+    { key: 'state', label: 'État' },
+    { key: 'action', label: '', align: 'right', width: 'w-32' },
+  ];
+
   async function load() {
     try {
       const data = await fetchBotInstances();
-      instances = data.instances;
-      orphanBans = data.orphanBans ?? [];
+      instances = data?.instances ?? [];
+      orphanBans = data?.orphanBans ?? [];
       loadError = null;
     } catch (err) {
       loadError = errorMessage(err);
@@ -158,15 +174,22 @@
     recrée une application. C’est un garde-fou, pas une protection : quelqu’un qui modifie le code peut retirer le ping.
   </Callout>
 
-  {#if loading}
-    <SectionCard title="Instances" flush>
-      <div class="animate-pulse space-y-3 p-5">
-        <div class="h-12 bg-surface-container rounded-lg"></div>
-        <div class="h-12 bg-surface-container rounded-lg"></div>
-        <div class="h-12 bg-surface-container rounded-lg"></div>
-      </div>
-    </SectionCard>
-  {:else if loadError}
+  {#if !loading && !loadError}
+    <MetricTabs
+      interactive={false}
+      active=""
+      onchange={() => {}}
+      label="Indicateurs des instances"
+      metrics={[
+        { id: 'all', label: 'Instances actives', value: fmtNumber(counts.all), color: SERIES[0] },
+        { id: 'selfhost', label: 'Self-host', value: fmtNumber(counts.selfhost), color: SERIES[1] },
+        { id: 'online', label: 'En ligne', value: fmtNumber(counts.online), color: SERIES[2] },
+        { id: 'banned', label: 'Bannies', value: fmtNumber(counts.banned), color: SERIES[3] },
+      ]}
+    />
+  {/if}
+
+  {#if loadError}
     <Callout variant="danger" title="Impossible de charger les instances">
       {loadError}
       {#snippet actions()}
@@ -174,123 +197,111 @@
       {/snippet}
     </Callout>
   {:else}
-    <div class="flex flex-wrap items-center justify-between gap-3">
-      <FilterPills
-        label="Filtrer les instances"
-        value={filter}
-        onchange={(v) => (filter = v)}
-        options={[
-          { value: 'selfhost', label: 'Self-host', count: counts.selfhost },
-          { value: 'banned', label: 'Bannies', count: counts.banned },
-          { value: 'all', label: 'Toutes', count: counts.all },
-        ]}
-      />
-      <input
-        type="search"
-        class="input w-full sm:w-72"
-        placeholder="Nom, ID du bot ou URL…"
-        aria-label="Rechercher une instance"
-        bind:value={search}
-      />
-    </div>
+    <AdminToolbar
+      bind:search
+      bind:activeFilter={filter}
+      placeholder="Nom, ID du bot ou URL…"
+      resultCount={visible.length}
+      resultLabel="instance"
+      filters={[
+        { value: 'selfhost', label: 'Self-host', count: counts.selfhost },
+        { value: 'banned', label: 'Bannies', count: counts.banned },
+        { value: 'all', label: 'Toutes', count: counts.all },
+      ]}
+    />
 
-    <SectionCard title="Instances" description="Une instance sans ping depuis 48 h disparaît de cette liste." flush>
-      {#if visible.length === 0}
-        <EmptyState
-          icon="Server"
-          title={instances.length === 0 ? 'Aucune instance n’a encore pingué' : 'Aucune instance ne correspond'}
-          description={instances.length === 0
-            ? 'Les bots envoient leurs statistiques au démarrage puis toutes les 15 minutes.'
-            : 'Change de filtre ou de recherche.'} reason="accumulating" />
-      {:else}
-        <div class="overflow-x-auto">
-          <table class="w-full text-left text-body-sm">
-            <thead class="text-xs font-medium text-on-surface-variant border-b border-outline-variant">
-              <tr>
-                <th class="px-5 py-3 font-medium">Bot</th>
-                <th class="px-5 py-3 font-medium">Serveurs</th>
-                <th class="px-5 py-3 font-medium">Membres</th>
-                <th class="px-5 py-3 font-medium">Version</th>
-                <th class="px-5 py-3 font-medium">Dernier ping</th>
-                <th class="px-5 py-3 font-medium">État</th>
-                <th class="px-5 py-3 font-medium text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-outline-variant/40">
-              {#each visible as inst (inst.id)}
-                <tr class="hover:bg-surface-container/60 transition-colors">
-                  <td class="px-5 py-3">
-                    <div class="flex items-center gap-3 min-w-0">
-                      {#if inst.botAvatarUrl}
-                        <img src={inst.botAvatarUrl} alt="" class="w-8 h-8 rounded-full shrink-0 bg-surface-container" loading="lazy" />
-                      {:else}
-                        <span class="w-8 h-8 rounded-full shrink-0 bg-surface-container flex items-center justify-center text-on-surface-variant">
-                          <Papicon icon="Server" size={14} />
-                        </span>
-                      {/if}
-                      <div class="min-w-0">
-                        <p class="font-semibold text-on-surface truncate flex items-center gap-2">
-                          {inst.botName}
-                          {#if !inst.isSelfHosted}
-                            <span class="badge badge-info">Officielle</span>
-                          {/if}
-                        </p>
-                        <p class="text-2xs font-mono text-on-surface-variant truncate">{inst.botClientId}</p>
-                        {#if inst.dashboardUrl}
-                          <p class="text-2xs text-on-surface-variant truncate max-w-64" title={inst.dashboardUrl}>{inst.dashboardUrl}</p>
-                        {/if}
-                      </div>
-                    </div>
-                  </td>
-                  <td class="px-5 py-3 tabular-nums text-on-surface">{nf.format(inst.guildCount)}</td>
-                  <td class="px-5 py-3 tabular-nums text-on-surface">{nf.format(inst.userCount)}</td>
-                  <td class="px-5 py-3 font-mono text-xs text-on-surface-variant">{inst.version ?? '–'}</td>
-                  <td class="px-5 py-3">
-                    <span class="badge {inst.status === 'online' ? 'badge-success' : 'badge-neutral'}" title={formatDate(inst.lastPingAt)}>
-                      {inst.status === 'online' ? 'En ligne' : 'Silencieuse'}
-                    </span>
-                    <p class="text-2xs text-on-surface-variant mt-1">{relativeTime(inst.lastPingAt)}</p>
-                  </td>
-                  <td class="px-5 py-3">
-                    {#if inst.ban}
-                      <span class="badge badge-danger">{MODE_LABEL[inst.ban.mode]}</span>
-                      <p class="text-2xs text-on-surface-variant mt-1" title={inst.ban.reason ?? ''}>
-                        depuis le {formatDate(inst.ban.createdAt)}
-                      </p>
-                      {#if inst.ban.reason}
-                        <p class="text-2xs text-on-surface-variant truncate max-w-56" title={inst.ban.reason}>{inst.ban.reason}</p>
-                      {/if}
-                    {:else}
-                      <span class="badge badge-neutral">Actif</span>
+    {#if !loading && visible.length === 0}
+      <EmptyState
+        icon="Server"
+        title={instances.length === 0 ? 'Aucune instance n’a encore pingué' : 'Aucune instance ne correspond'}
+        description={instances.length === 0
+          ? 'Les bots envoient leurs statistiques au démarrage puis toutes les 15 minutes.'
+          : 'Change de filtre ou de recherche.'}
+        reason="accumulating"
+      />
+    {:else}
+      <AdminTable
+        {columns}
+        rows={visible}
+        {loading}
+        emptyTitle="Aucune instance"
+        emptyHint="Une instance sans ping depuis 48 h disparaît de cette liste."
+      >
+        {#snippet row(item, _index)}
+          {@const inst = item as BotInstance}
+          <tr class="border-b border-outline-variant/60 hover:bg-on-surface/3 transition-colors">
+            <td class="px-4 py-3">
+              <div class="flex items-center gap-3 min-w-0">
+                {#if inst.botAvatarUrl}
+                  <img src={inst.botAvatarUrl} alt="" class="w-8 h-8 rounded-full shrink-0 bg-surface-container" loading="lazy" />
+                {:else}
+                  <span class="w-8 h-8 rounded-full shrink-0 bg-surface-container flex items-center justify-center text-on-surface-variant">
+                    <Papicon icon="Server" size={14} />
+                  </span>
+                {/if}
+                <div class="min-w-0">
+                  <div class="font-semibold text-on-surface truncate flex items-center gap-2">
+                    <span class="truncate">{inst.botName}</span>
+                    {#if !inst.isSelfHosted}
+                      <AdminBadge size="sm" tone="info" label="Officielle" />
                     {/if}
-                  </td>
-                  <td class="px-5 py-3 text-right whitespace-nowrap">
-                    {#if inst.banned}
-                      <Button
-                        size="sm"
-                        icon="Unlock"
-                        loading={unbanningId === inst.botClientId}
-                        onclick={() => unban(inst.botClientId, inst.botName)}
-                      >
-                        Débannir
-                      </Button>
-                    {:else}
-                      <Button size="sm" variant="danger" icon="Ban" onclick={() => openBan(inst)}>Bannir</Button>
-                    {/if}
-                  </td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
-        </div>
-      {/if}
-    </SectionCard>
+                  </div>
+                  <p class="text-2xs font-mono text-on-surface-variant truncate">{inst.botClientId}</p>
+                  {#if inst.dashboardUrl}
+                    <p class="text-2xs text-on-surface-variant truncate max-w-64" title={inst.dashboardUrl}>{inst.dashboardUrl}</p>
+                  {/if}
+                </div>
+              </div>
+            </td>
+            <td class="px-4 py-3 text-right tabular-nums text-on-surface hidden sm:table-cell">{nf.format(inst.guildCount)}</td>
+            <td class="px-4 py-3 text-right tabular-nums text-on-surface hidden md:table-cell">{nf.format(inst.userCount)}</td>
+            <td class="px-4 py-3 font-mono text-xs text-on-surface-variant hidden lg:table-cell">{inst.version ?? '–'}</td>
+            <td class="px-4 py-3 hidden sm:table-cell">
+              <AdminBadge
+                size="sm"
+                tone={inst.status === 'online' ? 'success' : 'neutral'}
+                label={inst.status === 'online' ? 'En ligne' : 'Silencieuse'}
+                dot
+              />
+              <p class="text-2xs text-on-surface-variant mt-1" title={formatDate(inst.lastPingAt)}>{relativeTime(inst.lastPingAt)}</p>
+            </td>
+            <td class="px-4 py-3">
+              {#if inst.ban}
+                <AdminBadge size="sm" tone="danger" label={MODE_LABEL[inst.ban.mode]} />
+                <p class="text-2xs text-on-surface-variant mt-1" title={inst.ban.reason ?? ''}>
+                  depuis le {formatDate(inst.ban.createdAt)}
+                </p>
+                {#if inst.ban.reason}
+                  <p class="text-2xs text-on-surface-variant truncate max-w-56" title={inst.ban.reason}>{inst.ban.reason}</p>
+                {/if}
+              {:else}
+                <AdminBadge size="sm" tone="neutral" label="Actif" />
+              {/if}
+            </td>
+            <td class="px-4 py-3 text-right whitespace-nowrap">
+              {#if inst.banned}
+                <Button
+                  size="sm"
+                  icon="Unlock"
+                  loading={unbanningId === inst.botClientId}
+                  onclick={() => unban(inst.botClientId, inst.botName)}
+                >
+                  Débannir
+                </Button>
+              {:else}
+                <Button size="sm" variant="danger" icon="Ban" onclick={() => openBan(inst)}>Bannir</Button>
+              {/if}
+            </td>
+          </tr>
+        {/snippet}
+      </AdminTable>
+    {/if}
 
     {#if orphanBans.length > 0}
-      <SectionCard
+      <AdminCard
         title="Bans sans ping récent"
         description="Ces instances sont toujours bannies mais n’ont pas pingué depuis plus de 48 h, souvent parce qu’elles ont été arrêtées."
-        flush
+        padded={false}
       >
         <ul class="divide-y divide-outline-variant/40">
           {#each orphanBans as ban (ban.id)}
@@ -315,7 +326,7 @@
             </li>
           {/each}
         </ul>
-      </SectionCard>
+      </AdminCard>
     {/if}
   {/if}
 </AdminShell>
@@ -340,7 +351,7 @@
         { value: 'SHUTDOWN', title: 'Arrêter le bot', text: 'Le processus s’arrête dès le ping suivant, et à chaque redémarrage tant que le ban reste actif.' },
       ] as option (option.value)}
         <label
-          class="flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors
+          class="flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors
             {banMode === option.value ? 'border-primary bg-primary/5' : 'border-outline-variant hover:bg-surface-container/60'}"
         >
           <input

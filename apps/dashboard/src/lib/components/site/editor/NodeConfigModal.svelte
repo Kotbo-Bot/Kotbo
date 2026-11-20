@@ -354,13 +354,13 @@
           {#each partners() as partner, index (index)}
             <div class="cfg-row space-y-2">
               <div class="flex gap-2">
-                <input class="input flex-1" maxlength="80" placeholder={m.ste_partner_name()} value={partner.name} oninput={(e) => setPartner(index, { name: (e.currentTarget as HTMLInputElement).value })} />
+                <input aria-label={m.ste_partner_name()} class="input flex-1" maxlength="80" placeholder={m.ste_partner_name()} value={partner.name} oninput={(e) => setPartner(index, { name: (e.currentTarget as HTMLInputElement).value })} />
                 <Button size="sm" variant="ghost" icon="trash-2" aria-label={m.common_delete()} onclick={() => (config.items = partners().filter((_, i) => i !== index))} />
               </div>
-              <input class="input w-full" maxlength="400" placeholder={m.ste_partner_desc()} value={partner.description} oninput={(e) => setPartner(index, { description: (e.currentTarget as HTMLInputElement).value })} />
+              <input aria-label={m.ste_partner_desc()} class="input w-full" maxlength="400" placeholder={m.ste_partner_desc()} value={partner.description} oninput={(e) => setPartner(index, { description: (e.currentTarget as HTMLInputElement).value })} />
               <div class="flex gap-2">
-                <input class="input flex-1" type="url" placeholder={m.ste_partner_url()} value={partner.url} oninput={(e) => setPartner(index, { url: (e.currentTarget as HTMLInputElement).value })} />
-                <input class="input flex-1" type="url" placeholder={m.ste_partner_logo()} value={partner.logoUrl} oninput={(e) => setPartner(index, { logoUrl: (e.currentTarget as HTMLInputElement).value })} />
+                <input aria-label={m.ste_partner_url()} class="input flex-1" type="url" placeholder={m.ste_partner_url()} value={partner.url} oninput={(e) => setPartner(index, { url: (e.currentTarget as HTMLInputElement).value })} />
+                <input aria-label={m.ste_partner_logo()} class="input flex-1" type="url" placeholder={m.ste_partner_logo()} value={partner.logoUrl} oninput={(e) => setPartner(index, { logoUrl: (e.currentTarget as HTMLInputElement).value })} />
               </div>
             </div>
           {/each}
@@ -446,8 +446,9 @@
       </Field>
     {:else if request?.type === 'banner'}
       <Field label={m.ste_cfg_image()} hint={m.ste_cfg_banner_image_hint()}>
-        {#snippet children()}
-          <div class="flex items-center gap-3">
+        {#snippet children(_id, describedBy)}
+          <!-- Un groupe de boutons, pas un champ : le label de Field ne le vise pas, il est nomme ici. -->
+          <div class="flex items-center gap-3" role="group" aria-label={m.ste_cfg_image()} aria-describedby={describedBy}>
             {#if attrs.image}<img class="cfg-thumb cfg-thumb-wide" src={String(attrs.image)} alt="" />{/if}
             <Button size="sm" icon="image" onclick={() => pickAsset((src) => (attrs.image = src))}>{m.ste_cfg_image_choose()}</Button>
             {#if attrs.image}<Button size="sm" variant="ghost" onclick={() => (attrs.image = '')}>{m.ste_cover_remove()}</Button>{/if}

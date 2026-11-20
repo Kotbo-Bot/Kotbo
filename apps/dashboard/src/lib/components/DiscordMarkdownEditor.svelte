@@ -8,7 +8,7 @@
 
   let {
     value = $bindable(''),
-    placeholder = m.d1_dme_placeholder(),
+    placeholder,
     rows = 8,
     disabled = false,
     showPreview = true,
@@ -35,19 +35,19 @@
 
   const agendaTemplates = [
     {
-      name: m.d1_dme_tpl_agenda_name(),
+      get name() { return m.d1_dme_tpl_agenda_name(); },
       icon: '📋',
-      content: m.d1_dme_tpl_agenda_content(),
+      get content() { return m.d1_dme_tpl_agenda_content(); },
     },
     {
-      name: m.d1_dme_tpl_summary_name(),
+      get name() { return m.d1_dme_tpl_summary_name(); },
       icon: '📊',
-      content: m.d1_dme_tpl_summary_content(),
+      get content() { return m.d1_dme_tpl_summary_content(); },
     },
     {
-      name: m.d1_dme_tpl_announce_name(),
+      get name() { return m.d1_dme_tpl_announce_name(); },
       icon: '📢',
-      content: m.d1_dme_tpl_announce_content(),
+      get content() { return m.d1_dme_tpl_announce_content(); },
     },
   ];
 
@@ -62,21 +62,21 @@
   };
 
   const formatActions: FormatAction[] = [
-    { icon: 'bold', label: m.d1_dme_bold(), prefix: '**', suffix: '**' },
-    { icon: 'italic', label: m.d1_dme_italic(), prefix: '*', suffix: '*' },
-    { icon: 'underline', label: m.d1_dme_underline(), prefix: '__', suffix: '__' },
-    { icon: 'strikethrough', label: m.d1_dme_strike(), prefix: '~~', suffix: '~~' },
-    { icon: 'code', label: m.d1_dme_inline_code(), prefix: '`', suffix: '`' },
-    { icon: 'terminal', label: m.d1_dme_code_block(), prefix: '```\n', suffix: '\n```', block: true },
-    { icon: 'minus', label: m.d1_dme_separator(), prefix: '\n---\n', suffix: '' },
+    { icon: 'bold', get label() { return m.d1_dme_bold(); }, prefix: '**', suffix: '**' },
+    { icon: 'italic', get label() { return m.d1_dme_italic(); }, prefix: '*', suffix: '*' },
+    { icon: 'underline', get label() { return m.d1_dme_underline(); }, prefix: '__', suffix: '__' },
+    { icon: 'strikethrough', get label() { return m.d1_dme_strike(); }, prefix: '~~', suffix: '~~' },
+    { icon: 'code', get label() { return m.d1_dme_inline_code(); }, prefix: '`', suffix: '`' },
+    { icon: 'terminal', get label() { return m.d1_dme_code_block(); }, prefix: '```\n', suffix: '\n```', block: true },
+    { icon: 'minus', get label() { return m.d1_dme_separator(); }, prefix: '\n---\n', suffix: '' },
   ];
 
   const blockActions: FormatAction[] = [
-    { icon: 'hash', label: m.d1_dme_heading1(), prefix: '', suffix: '', linePrefix: '# ', heading: 'H1' },
-    { icon: 'hash', label: m.d1_dme_heading2(), prefix: '', suffix: '', linePrefix: '## ', heading: 'H2' },
-    { icon: 'hash', label: m.d1_dme_heading3(), prefix: '', suffix: '', linePrefix: '### ', heading: 'H3' },
-    { icon: 'list', label: m.d1_dme_list(), prefix: '', suffix: '', linePrefix: '- ' },
-    { icon: 'message-square', label: m.d1_dme_quote(), prefix: '', suffix: '', linePrefix: '> ' },
+    { icon: 'hash', get label() { return m.d1_dme_heading1(); }, prefix: '', suffix: '', linePrefix: '# ', heading: 'H1' },
+    { icon: 'hash', get label() { return m.d1_dme_heading2(); }, prefix: '', suffix: '', linePrefix: '## ', heading: 'H2' },
+    { icon: 'hash', get label() { return m.d1_dme_heading3(); }, prefix: '', suffix: '', linePrefix: '### ', heading: 'H3' },
+    { icon: 'list', get label() { return m.d1_dme_list(); }, prefix: '', suffix: '', linePrefix: '- ' },
+    { icon: 'message-square', get label() { return m.d1_dme_quote(); }, prefix: '', suffix: '', linePrefix: '> ' },
   ];
 
   function insertFormat(action: FormatAction) {
@@ -314,11 +314,11 @@
         bind:this={textareaEl}
         {id}
         bind:value
-        {placeholder}
+        placeholder={placeholder ?? m.d1_dme_placeholder()}
         {disabled}
         {rows}
         onkeydown={handleKeydown}
-        class="w-full h-full min-h-[200px] bg-transparent px-4 py-3 text-sm text-on-surface font-mono leading-relaxed resize-y focus:outline-none placeholder:text-on-surface-variant/30 disabled:opacity-50 disabled:cursor-not-allowed"
+        class="w-full h-full min-h-[200px] bg-transparent px-4 py-3 text-sm text-on-surface font-mono leading-relaxed resize-y focus:outline-none focus-visible:ring-2 focus-visible:ring-primary placeholder:text-on-surface-variant/30 disabled:opacity-50 disabled:cursor-not-allowed"
         style="tab-size: 2;"
       ></textarea>
     {:else}

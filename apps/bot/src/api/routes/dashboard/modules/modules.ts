@@ -1,21 +1,46 @@
 /** Routes dashboard du module `modules`. */
+import { Hono } from 'hono';
+import type { Client } from 'discord.js';
 import { getModuleActivationStats, getModulePerformanceStats, getModuleStatsSummary, getModuleUsageStats, KOTBO_MODULES, type KotboModule } from '../../../../services/analytics/moduleStatsService.js';
 import { CoreModuleError, PlanLockedError, setDashboardModuleStatus } from '../../../../services/core/moduleActivationService.js';
 import { logger } from '../../../../utils/logger.js';
-import { getGuildName, json, type ModuleStatus, pushAudit, readJsonBody } from '../../../shared.js';
-import { type ModuleRouteContext } from './_shared.js';
+import { getGuildName, type ModuleStatus, pushAudit } from '../../../shared.js';
+import { auditUserOf, fail, guildRoute, readBody, send } from '../../../hono/dashboard/kit.js';
 
-import { jsonFailure } from '../../../shared/failure.js';
-export async function handleModuleToggleRoutes(ctx: ModuleRouteContext): Promise<boolean> {
-  const { req, res, parts, url, client, guildId, method, auditUser, moduleKey } = ctx;
+export function createModuleToggleRouter(client: Client) {
+  const router = new Hono();
+  const base = '/api/dashboard/guilds/:guildId/modules';
 
-  // PUT /api/dashboard/guilds/:guildId/modules/:moduleId
-  if (moduleKey === 'modules' && parts.length === 6 && method === 'PUT') {
-    const moduleId = parts[5];
+  // Statistiques des modules : déclarée avant `/:moduleId`, qui ne prend que PUT.
+  router.get(`${base}/stats`, ...guildRoute(client), async (c) => {
+    const guildId = c.req.param('guildId');
     try {
-      const body = (await readJsonBody<{ status: ModuleStatus }>(req)) ?? { status: 'inactive' };
+      const moduleName = (c.req.query('moduleName') as KotboModule | undefined) ?? undefined;
+      const startDate = c.req.query('startDate') || undefined;
+      const endDate = c.req.query('endDate') || undefined;
+      const period = c.req.query('period');
+      const periodDays = period ? parseInt(period) : 30;
 
-      const result = await setDashboardModuleStatus(guildId, moduleId, body.status === 'active');
+      if (c.req.query('summary') === 'true') {
+        return send(c, await getModuleStatsSummary({ guildId, periodDays }));
+      }
+      const [activation, usage, performance] = await Promise.all([
+        getModuleActivationStats(guildId),
+        getModuleUsageStats({ guildId, moduleName, startDate, endDate, periodDays }),
+        getModulePerformanceStats({ guildId, moduleName, startDate, endDate, periodDays }),
+      ]);
+      return send(c, { modules: KOTBO_MODULES, activation, usage, performance });
+    } catch (err) {
+      logger.error('ModulesAPI', 'Error fetching module stats:', err);
+      return fail(c, err, 'Erreur interne du serveur', 'ModulesAPI');
+    }
+  });
+
+  router.put(`${base}/:moduleId`, ...guildRoute(client), async (c) => {
+    const guildId = c.req.param('guildId');
+    try {
+      const body = (await readBody<{ status: ModuleStatus }>(c)) ?? { status: 'inactive' };
+      const result = await setDashboardModuleStatus(guildId, c.req.param('moduleId'), body.status === 'active');
 
       // La cascade fait partie du journal : sans elle, un module éteint « tout
       // seul » n'aurait aucune trace expliquant pourquoi.
@@ -25,7 +50,7 @@ export async function handleModuleToggleRoutes(ctx: ModuleRouteContext): Promise
       ];
 
       await pushAudit(guildId, {
-        user: auditUser,
+        user: auditUserOf(c),
         action: 'Mise à jour module',
         context: getGuildName(client, guildId),
         module: result.moduleKey,
@@ -34,64 +59,28 @@ export async function handleModuleToggleRoutes(ctx: ModuleRouteContext): Promise
         channelId: null
       });
 
-      json(res, 200, { ok: true, ...result });
+      return send(c, { ok: true, ...result });
     } catch (err) {
       if (err instanceof CoreModuleError) {
-        json(res, 400, { error: err.message, code: 'core_module' });
-        return true;
+        return send(c, { error: err.message, code: 'core_module' }, 400);
       }
       // 402 et non 400 : ce n'est pas une requete malformee, c'est un module
       // qui se vend. Le dashboard s'en sert pour ouvrir la page des offres
       // plutot que d'afficher une erreur que l'administrateur ne peut pas
       // corriger lui-meme.
       if (err instanceof PlanLockedError) {
-        json(res, 402, {
+        return send(c, {
           error: err.message,
           code: 'plan_locked',
           moduleKey: err.moduleKey,
           currentPlan: err.currentPlan,
           requiredPlan: err.requiredPlan,
-        });
-        return true;
+        }, 402);
       }
       logger.error('ModulesAPI', 'Error updating module:', err);
-      jsonFailure(res, err, 'Erreur lors de la mise à jour du module', 'ModulesAPI');
+      return fail(c, err, 'Erreur lors de la mise à jour du module', 'ModulesAPI');
     }
-    return true;
-  }
+  });
 
-  // GET /api/dashboard/guilds/:guildId/modules/stats - Module statistics
-  if (moduleKey === 'modules' && parts.length === 6 && parts[5] === 'stats' && method === 'GET') {
-    try {
-      const moduleName = (url.searchParams.get('moduleName') as KotboModule | null) ?? undefined;
-      const startDate = url.searchParams.get('startDate') || undefined;
-      const endDate = url.searchParams.get('endDate') || undefined;
-      const periodDays = url.searchParams.get('period') ? parseInt(url.searchParams.get('period')!) : 30;
-      const summary = url.searchParams.get('summary') === 'true';
-
-      if (summary) {
-        const data = await getModuleStatsSummary({ guildId, periodDays });
-        json(res, 200, data);
-      } else {
-        const [activation, usage, performance] = await Promise.all([
-          getModuleActivationStats(guildId),
-          getModuleUsageStats({ guildId, moduleName, startDate, endDate, periodDays }),
-          getModulePerformanceStats({ guildId, moduleName, startDate, endDate, periodDays }),
-        ]);
-
-        json(res, 200, {
-          modules: KOTBO_MODULES,
-          activation,
-          usage,
-          performance,
-        });
-      }
-    } catch (err) {
-      logger.error('ModulesAPI', 'Error fetching module stats:', err);
-      jsonFailure(res, err, 'Erreur interne du serveur', 'ModulesAPI');
-    }
-    return true;
-  }
-
-  return false;
+  return router;
 }

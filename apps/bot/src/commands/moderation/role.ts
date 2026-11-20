@@ -1,5 +1,5 @@
 import type { SlashCommandDefinition } from '../../commands.js';
-import { SlashCommandBuilder, PermissionFlagsBits, MessageFlags, type ChatInputCommandInteraction } from 'discord.js';
+import { SlashCommandBuilder, PermissionFlagsBits, MessageFlags, type ChatInputCommandInteraction, type GuildMember } from 'discord.js';
 import { errorEmbed, successEmbed } from '../../utils/embeds.js';
 import { roleGrantsAdministrator } from '../../services/moderation/adminLockService.js';
 import { getEffectiveLocale, getCommandMetadata } from '../../utils/i18n.js';
@@ -114,6 +114,19 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
     return;
   }
 
+  // Comme l'interface Discord : on ne gère pas un rôle placé au moins aussi haut que son rôle le
+  // plus élevé (le propriétaire fait exception). Sinon le bot sert de relais d'élévation.
+  const executor = interaction.member as GuildMember | null;
+  const executorIsOwner = guild.ownerId === interaction.user.id;
+  const executorTop = executor?.roles?.highest?.position ?? -1;
+  if (!executorIsOwner && guildRole.position >= executorTop) {
+    await interaction.reply({
+      embeds: [errorEmbed(m.b2_role_insufficient_title({}, { locale }), 'Ce rôle est placé au même rang que ton rôle le plus élevé, ou au-dessus : tu ne peux pas le gérer.')],
+      flags: [MessageFlags.Ephemeral],
+    });
+    return;
+  }
+
   await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
 
   // Admin Permission Lock - un octroi de rôle donnant ADMINISTRATOR peut être
@@ -165,6 +178,11 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
   for (const userId of userIds) {
     try {
       const member = await guild.members.fetch(userId);
+      // Une cible placée au moins aussi haut que l'exécutant lui est interdite, y compris pour lui retirer un rôle.
+      if (!executorIsOwner && userId !== interaction.user.id && (userId === guild.ownerId || member.roles.highest.position >= executorTop)) {
+        failed.push(`<@${userId}>`);
+        continue;
+      }
       if (subcommand === 'add') {
         await member.roles.add(guildRole);
       } else {

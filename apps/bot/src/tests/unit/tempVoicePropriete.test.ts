@@ -5,6 +5,12 @@ import path from 'node:path';
 import { Events, type Client } from 'discord.js';
 import { completeModuleMock } from '../helpers/moduleMock.js';
 import { DASHBOARD_ACCESS_ADMIN, type AuthClaims, type DashboardAccess } from '../../api/shared.js';
+import { legacyModuleCall, mockDashboardGate, type LegacyModuleContext } from '../helpers/honoDashboard.js';
+// Session et garde serveur simulées : la route est servie par Hono.
+mockDashboardGate(
+  { level: 'admin', canViewDashboard: true, canModerateContent: true, canManageSettings: true, canManageTutoring: true },
+  { userId: 'user-1', username: 'Admin' },
+);
 
 /**
  * Passation d'un salon temporaire dont le propriétaire part.
@@ -56,9 +62,9 @@ for (const [relatif, fabrique] of moduleMocks) {
 }
 
 const { registerTempVoiceListener, tempChannels } = await import('../../events/tempVoice.js');
-const { handleChannelsManagementRoutes, normalizeTempVoiceModPermissionsInput } = await import(
-  '../../api/routes/dashboard/modules/channels-management.js'
-);
+const { createChannelsManagementRouter, normalizeTempVoiceModPermissionsInput } = await import('../../api/routes/dashboard/modules/channels-management.js');
+const handleChannelsManagementRoutes = (ctx: LegacyModuleContext & { client: unknown }) =>
+  legacyModuleCall(createChannelsManagementRouter(ctx.client as never), ctx);
 
 const GUILD = '100000000000000000';
 const SALON = '400000000000000000';

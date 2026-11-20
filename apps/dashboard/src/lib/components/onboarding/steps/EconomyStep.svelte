@@ -18,6 +18,7 @@
   import { m, dateLocale } from '../../../i18n';
   import { authStore } from '../../../stores/auth.svelte';
   import { toast } from '../../../stores/toast.svelte';
+  import { bot } from '../../../stores/botLocale.svelte';
   import { wizard } from '../../../stores/onboardingWizard.svelte';
   import { onboardingData } from '../../../stores/onboardingData.svelte';
   import {
@@ -38,7 +39,7 @@
   import { errorMessage } from '@kotbo/shared';
   const { onEditTracks, skip }: { onEditTracks: () => void; skip: () => void } = $props();
 
-  const name = $derived(wizard.currencyName ?? 'Pièces');
+  const name = $derived(wizard.currencyName ?? m.bot_currency_coins({}, bot()));
   const emoji = $derived(wizard.currencyEmoji ?? '🪙');
   const rhythm = $derived<EconomyRhythm>(wizard.economyRhythm ?? 'standard');
 
@@ -128,7 +129,7 @@
               value={emoji}
               maxlength="4"
               oninput={(event) => wizard.answer({ currencyEmoji: event.currentTarget.value })}
-              class="h-11 min-w-0 flex-1 rounded-xl border border-outline-variant/40 bg-surface-container-lowest/60 px-3
+              class="h-11 min-w-0 flex-1 rounded-xl border border-field-border bg-surface-container-lowest/60 px-3
                      text-center text-[20px] leading-none focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
             />
           {/if}
@@ -145,7 +146,7 @@
           value={name}
           maxlength="24"
           oninput={(event) => wizard.answer({ currencyName: event.currentTarget.value })}
-          class="w-full rounded-xl border border-outline-variant/40 bg-surface-container-lowest/60 px-3.5 py-2.5
+          class="w-full rounded-xl border border-field-border bg-surface-container-lowest/60 px-3.5 py-2.5
                  text-sm text-on-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
         />
       </div>
@@ -194,17 +195,17 @@
   </div>
 
   {#snippet preview()}
-    <DiscordPreview channel="économie">
+    <DiscordPreview channel={m.bot_ch_economy({}, bot())}>
       <DiscordEmbed
         color={panelColor}
         title={m.onb_economy_preview_daily()}
         description={m.onb_economy_preview_daily_line({
           amount: `${emoji} ${sample}`,
-          currency: name.trim() || 'pièces',
+          currency: name.trim() || m.bot_currency_coins_lc({}, bot()),
           hours: config.dailyCooldownHour,
         })}
         fields={[
-          { emoji, name: m.onb_economy_preview_balance(), value: `${(sample * 7).toLocaleString(dateLocale())} ${name.trim() || 'pièces'}` },
+          { emoji, name: m.onb_economy_preview_balance(), value: `${(sample * 7).toLocaleString(dateLocale())} ${name.trim() || m.bot_currency_coins_lc({}, bot())}` },
         ]}
       />
     </DiscordPreview>

@@ -1,8 +1,5 @@
-import type { GuildLogEventConfig } from '@prisma/client';
 import {
   AuditLogEvent,
-  ActionRowBuilder,
-  ButtonBuilder,
   EmbedBuilder,
   Events,
   Guild,
@@ -20,9 +17,8 @@ import { kotboEventBus } from '@kotbo/core';
 import prisma from '../utils/db.js';
 import { upsertRetryingRace } from '../utils/upsertRetry.js';
 import { logger } from '../utils/logger.js';
-import { isLogIgnoredChannel, sendLogEmbed } from '../utils/logDispatch.js';
+import { isLogEventEnabled, isLogIgnoredChannel, sendLogEmbed } from '../utils/logDispatch.js';
 import { queueAuditLog } from '../utils/auditLogger.js';
-import { cache, getCachedGuild } from '../utils/cache.js';
 import { prendreIntentionVocale } from '../services/moderation/voiceIntentRegistry.js';
 import { recordStaffActivity, syncStaffHierarchyMembership } from '../services/staff/staffManagementService.js';
 import { resolveOnlineMembersCount } from '../services/core/presenceDetectionService.js';
@@ -39,7 +35,11 @@ import {
   touchSanctionTargetIdentity,
 } from '../services/moderation/memberCaseService.js';
 import * as dcDetectionService from '../services/moderation/dcDetectionService.js';
+import { getKnownGuildNames, guildTagBadgeUrl } from '../services/core/serverTagService.js';
+import { recordMemberIdentityChange } from '../services/moderation/memberHistoryService.js';
+import { pronounsFromRoles } from '../api/shared/pronouns.js';
 import { pickRecentAuditEntry } from './auditEntryMatch.js';
+import { attribuerLot, creerRegroupeurLots, type ReleveAudit } from './voiceAuditAttribution.js';
 
 type MessageSnapshot = {
   guildId: string;
@@ -268,7 +268,7 @@ async function processSingleGuildSnapshot(guild: Guild, dateKey: string, hour: n
 
     // 1. Gather counts
     const totalMembers = guild.memberCount;
-    
+
     // Attempt to get more accurate counts via fetch if the cache seems incomplete
     // GuildPresences intent should keep cache updated, but for large guilds or on startup it might be off.
     const breakdown = collectPresenceBreakdown(guild);
@@ -289,7 +289,7 @@ async function processSingleGuildSnapshot(guild: Guild, dateKey: string, hour: n
         }
       },
     });
-    
+
     const idleMembers = breakdown.idle;
     const dndMembers = breakdown.dnd;
     const offlineMembers = totalMembers - onlineMembers;
@@ -387,28 +387,6 @@ async function processSingleGuildSnapshot(guild: Guild, dateKey: string, hour: n
 function truncate(value: string, max = 1000): string {
   if (value.length <= max) return value;
   return `${value.slice(0, max - 1)}…`;
-}
-
-function stripLeadingEmoji(value: string): string {
-  return value.replace(/^[^\p{L}\p{N}]+/u, '').trim();
-}
-
-function embedSummary(embed: EmbedBuilder): { action: string; details: string } {
-  const payload = embed.toJSON();
-  const rawTitle = payload.title?.trim() || 'Événement Discord';
-  const action = stripLeadingEmoji(rawTitle) || rawTitle;
-  const description = payload.description?.trim() || '';
-  const fieldPreview = (payload.fields ?? [])
-    .slice(0, 4)
-    .map((field) => {
-      const fieldName = field.name.trim().toLowerCase();
-      if (fieldName.startsWith('membre')) return `${field.value}`;
-      return `${field.name}: ${field.value}`;
-    })
-    .join(' | ');
-
-  const details = truncate([description, fieldPreview].filter(Boolean).join(' | '), 900) || 'Aucun détail.';
-  return { action, details };
 }
 
 function formatUser(id: string, tag: string): string {
@@ -634,6 +612,57 @@ async function resolveAuditEntry(
     // le log part sans pied de page plutot que d'inventer un auteur.
     return { executor: null, reason: null };
   }
+}
+
+type TypeAuditVocal = AuditLogEvent.MemberMove | AuditLogEvent.MemberDisconnect;
+type DemandeAuditVocale = { guild: Guild; type: TypeAuditVocal; salonId: string | null; botId: string | undefined };
+
+const relevesAuditVocal = new Map<string, ReleveAudit>();
+
+/**
+ * Une seule lecture du journal d'audit par rafale d'événements, une fois le
+ * calme revenu : Discord écrit l'entrée un peu après l'événement vocal, et des
+ * événements jugés séparément se prendraient les hausses des uns des autres.
+ */
+const lireAuteursAuditVocal = creerRegroupeurLots<DemandeAuditVocale, string | null>(async (cle, demandes) => {
+  const { guild, type, botId } = demandes[0];
+  const audit = await guild.fetchAuditLogs({ type, limit: 10 }).catch(() => null);
+  if (!audit) {
+    // Les hausses de ce lot ne seront jamais lues : pas de relevé périmé.
+    relevesAuditVocal.delete(cle);
+    return demandes.map(() => null);
+  }
+  const entrees = [...audit.entries.values()].map((e) => {
+    const extra = e.extra as { count?: number; channel?: { id: string } } | null;
+    return { id: e.id, createdTimestamp: e.createdTimestamp, executorId: e.executorId, count: extra?.count ?? 1, channelId: extra?.channel?.id ?? null };
+  });
+  const { auteurs, releve } = attribuerLot(entrees, relevesAuditVocal.get(cle), demandes.map((d) => d.salonId), botId, Date.now(), AUDIT_LOOKBACK_MS);
+  relevesAuditVocal.set(cle, releve);
+  return auteurs;
+}, { calmeMs: 3_000, plafondMs: 10_000 });
+
+/**
+ * Champ « Déplacé par » / « Déconnecté par » et nom du pied de page, d'après le
+ * journal d'audit (`salonId` = salon d'arrivée d'un déplacement). `null` quand
+ * rien ne désigne un modérateur. Aucune lecture si ce log est désactivé.
+ */
+async function auteurAuditVocal(
+  client: Client,
+  guild: Guild,
+  type: TypeAuditVocal,
+  salonId: string | null,
+  eventType: 'voice_leave' | 'voice_move',
+): Promise<{ valeur: string; nom: string } | null> {
+  const cle = `${guild.id}:${type}`;
+  if (!(await isLogEventEnabled(guild.id, eventType))) {
+    // Log coupé : les hausses à venir ne seront pas lues, le relevé périmerait.
+    relevesAuditVocal.delete(cle);
+    return null;
+  }
+  const auteurId = await lireAuteursAuditVocal(cle, { guild, type, salonId, botId: client.user?.id });
+  if (!auteurId) return null;
+  const tag = await resolveUserTag(client, auteurId);
+  return { valeur: formatUser(auteurId, tag), nom: tag };
 }
 
 async function resolveAuditExecutorName(
@@ -1113,8 +1142,14 @@ export function registerAdvancedLogsListener(client: Client): void {
       // change, jamais qui l'a change : le pied de page annoncait « Action
       // realisee par » la victime elle-meme. Quand rien n'a ete annonce, on
       // n'affiche aucun auteur plutot qu'un faux.
+      // Sinon, le journal d'audit (une déconnexion par un modérateur y laisse
+      // une trace). L'intention d'abord : elle expire en 10 s.
       const auteurDepart = prendreIntentionVocale(guild.id, userId, 'disconnect');
-      await sendLogEmbed(guild, embed, 'voice_leave', [buildMemberCaseActionRow(userId)], auteurDepart?.libelle ?? null, [previousChannelId]);
+      const qui = auteurDepart
+        ? { valeur: auteurDepart.libelle, nom: auteurDepart.libelle }
+        : await auteurAuditVocal(client, guild, AuditLogEvent.MemberDisconnect, null, 'voice_leave');
+      if (qui) embed.addFields({ name: 'Déconnecté par', value: qui.valeur, inline: true });
+      await sendLogEmbed(guild, embed, 'voice_leave', [buildMemberCaseActionRow(userId)], qui?.nom ?? null, [previousChannelId]);
       return;
     }
 
@@ -1157,10 +1192,14 @@ export function registerAdvancedLogsListener(client: Client): void {
         });
       }
 
-      // Meme correction qu'au depart : seul un deplacement annonce par Kotbo
-      // porte un auteur, les autres n'en portent aucun.
+      // Meme logique qu'au depart : Kotbo d'abord, sinon le journal d'audit,
+      // sinon aucun auteur plutot qu'un faux.
       const auteurDeplacement = prendreIntentionVocale(guild.id, userId, 'move');
-      await sendLogEmbed(guild, embed, 'voice_move', [buildMemberCaseActionRow(userId)], auteurDeplacement?.libelle ?? null, [oldState.channelId, newState.channelId]);
+      const quiMove = auteurDeplacement
+        ? { valeur: auteurDeplacement.libelle, nom: auteurDeplacement.libelle }
+        : await auteurAuditVocal(client, guild, AuditLogEvent.MemberMove, newState.channelId, 'voice_move');
+      if (quiMove) embed.addFields({ name: 'Déplacé par', value: quiMove.valeur, inline: true });
+      await sendLogEmbed(guild, embed, 'voice_move', [buildMemberCaseActionRow(userId)], quiMove?.nom ?? null, [oldState.channelId, newState.channelId]);
     }
   });
 
@@ -1205,9 +1244,9 @@ export function registerAdvancedLogsListener(client: Client): void {
 
     if (isInviteSuspended || isCreatorSuspended) {
       logger.info('Sécurité', `Expulsion automatique du membre ${member.user.tag} (${member.id}) : ${suspensionReason}`);
-      
+
       const kickReason = `[Kotbo Sécurité] ${suspensionReason}`;
-      
+
       // Kick member immediately
       await member.kick(kickReason).catch((error) => {
         logger.error('Sécurité', `Impossible de kicker le membre suspendu ${member.id}:`, error);
@@ -1319,10 +1358,10 @@ export function registerAdvancedLogsListener(client: Client): void {
 
     const stayDuration = member.joinedAt ? Date.now() - member.joinedAt.getTime() : null;
     const stayDurationDays = stayDuration ? Math.floor(stayDuration / (1000 * 60 * 60 * 24)) : null;
-    const stayDurationFmt = stayDurationDays !== null 
-      ? (stayDurationDays === 0 ? "Moins d'un jour" : `${stayDurationDays} jours`) 
+    const stayDurationFmt = stayDurationDays !== null
+      ? (stayDurationDays === 0 ? "Moins d'un jour" : `${stayDurationDays} jours`)
       : 'Inconnu';
-    
+
     void recordInvitedMemberLeave(member.guild.id, member.id);
 
     const embed = buildMemberEmbed(
@@ -1367,7 +1406,7 @@ export function registerAdvancedLogsListener(client: Client): void {
   client.on(Events.MessageReactionAdd, async (reaction, user) => {
     if (!reaction.message.guildId || user.bot) return;
     void incrementGuildHourlyStat(reaction.message.guildId, 'reaction');
-    
+
     // Log the reaction interaction for the graph
     await prisma.dashboardAuditLog.create({
       data: {
@@ -1524,6 +1563,12 @@ export function registerAdvancedLogsListener(client: Client): void {
 
     const roleChanges = summarizeMemberRoleChanges(oldMember, newMember);
     if (roleChanges) {
+      const oldPronouns = pronounsFromRoles([...oldMember.roles.cache.values()]);
+      const newPronouns = pronounsFromRoles([...newMember.roles.cache.values()]);
+      if (oldPronouns !== newPronouns) {
+        void recordMemberIdentityChange(newMember.guild.id, newMember.id, 'pronouns', oldPronouns, newPronouns).catch(() => {});
+      }
+
       void syncStaffHierarchyMembership(newMember.guild.id, newMember.id).catch((error) => {
         logger.warn('StaffManagement', `Impossible de synchroniser l'organigramme pour ${newMember.id}: ${String(error)}`);
       });
@@ -1637,6 +1682,32 @@ export function registerAdvancedLogsListener(client: Client): void {
     }
 
     if (entry.action === AuditLogEvent.MemberUpdate) {
+      // Micro coupé / sourdine imposés par un modérateur (clic droit dans Discord).
+      const etat = (cle: string, oui: string, non: string) => {
+        const change = entry.changes.find((c) => c.key === cle);
+        return change ? (change.new ? oui : non) : null;
+      };
+      const micro = etat('mute', '🔇 Coupé', '🎙️ Rétabli');
+      const casque = etat('deaf', '🔕 Sourdine imposée', '🔔 Sourdine retirée');
+      if (micro || casque) {
+        const embed = buildModerationEmbed(
+          '🎙️ Micro / sourdine serveur',
+          0x457b9d,
+          targetId,
+          targetTag,
+          executorId,
+          moderatorTag,
+          reason,
+          [
+            ...(micro ? [{ name: 'Micro', value: micro, inline: true }] : []),
+            ...(casque ? [{ name: 'Casque', value: casque, inline: true }] : []),
+          ],
+        );
+        // Un modérateur peut se couper le micro : Discord refuse deux `custom_id` identiques.
+        const casiers = [...new Set([targetId, executorId])].map((id) => buildMemberCaseActionRow(id));
+        await sendLogEmbed(guild, embed, 'voice_moderation', casiers, moderatorTag);
+      }
+
       const timeoutChange = entry.changes.find((change) => change.key === 'communication_disabled_until');
       if (!timeoutChange) return;
 
@@ -1663,6 +1734,54 @@ export function registerAdvancedLogsListener(client: Client): void {
 
       await sendLogEmbed(guild, embed, 'moderation_timeout', [buildMemberCaseActionRow(targetId), buildMemberCaseActionRow(executorId)], moderatorTag);
     }
+  });
+
+  kotboEventBus.subscribe('member:tag', async (payload) => {
+    const guild = client.guilds.cache.get(payload.guildId);
+    if (!guild) return;
+
+    const idsToResolve = [payload.oldGuildId, payload.newGuildId].filter((id): id is string => Boolean(id));
+    const serverNames = idsToResolve.length > 0 ? await getKnownGuildNames(client, idsToResolve) : new Map<string, string>();
+    const formatTag = (tag: string | null, gId: string | null) => {
+      if (!tag) return 'Aucun';
+      const serverName = gId ? (serverNames.get(gId) ?? gId) : null;
+      return serverName ? `**${tag}** (${serverName})` : `**${tag}**`;
+    };
+
+    const actionLabel = !payload.oldTag && payload.newTag
+      ? 'Tag de serveur ajouté'
+      : payload.oldTag && !payload.newTag
+        ? 'Tag de serveur retiré'
+        : 'Tag de serveur modifié';
+
+    void queueAuditLog({
+      guildId: payload.guildId,
+      user: `${payload.userTag} (${payload.userId})`,
+      action: actionLabel,
+      context: guild.name,
+      module: 'Membres',
+      eventType: 'MEMBER_TAG_UPDATE',
+      details: `${formatTag(payload.oldTag, payload.oldGuildId)} → ${formatTag(payload.newTag, payload.newGuildId)}`,
+    });
+
+    if (!(await isLogEventEnabled(payload.guildId, 'member_tag_update'))) return;
+
+    const color = !payload.newTag ? 0xe76f51 : payload.isOwnGuild ? 0x2a9d8f : 0x5865f2;
+    const badgeUrl = guildTagBadgeUrl(payload.newGuildId, payload.newBadge)
+      ?? guildTagBadgeUrl(payload.oldGuildId, payload.oldBadge);
+
+    const embed = new EmbedBuilder()
+      .setColor(color)
+      .setTitle(`🏷️ ${actionLabel}`)
+      .setDescription(`<@${payload.userId}> (\`${payload.userId}\`)`)
+      .addFields(
+        { name: 'Ancien tag', value: formatTag(payload.oldTag, payload.oldGuildId), inline: true },
+        { name: 'Nouveau tag', value: formatTag(payload.newTag, payload.newGuildId), inline: true },
+      )
+      .setTimestamp();
+
+    if (badgeUrl) embed.setThumbnail(badgeUrl);
+    await sendLogEmbed(guild, embed, 'member_tag_update', [buildMemberCaseActionRow(payload.userId)], payload.userTag);
   });
 
   logger.success('Logs', 'Écouteur de logs avancés enregistré');

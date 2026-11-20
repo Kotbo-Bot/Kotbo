@@ -23,6 +23,7 @@ import {
   syncMemberAutoRoles,
 } from '../services/features/serverTagRoleService.js';
 import { admitJoiningMember } from '../services/moderation/joinAdmissionService.js';
+import { touchMemberProfileFromMember } from '../services/moderation/memberCaseService.js';
 
 export function registerServerTagRoleListener(client: Client): void {
   // ── Arrivée : le membre peut déjà porter le tag ou le mot-clé ───────────────
@@ -65,6 +66,8 @@ export function registerServerTagRoleListener(client: Client): void {
         const member = guild.members.cache.get(user.id);
         // Pas en cache : la mise à jour de ce serveur arrive par GuildMemberAvailable.
         if (!member) continue;
+
+        void touchMemberProfileFromMember(member).catch(() => {});
 
         const config = await getAutoRoleConfig(guild.id);
         if (!config?.tagAutoRoleEnabled || !config.tagAutoRoleId) continue;

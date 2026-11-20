@@ -114,7 +114,7 @@
             max="999"
             aria-label={m.eco_inventory_quantity()}
             bind:value={grantQuantity}
-            class="w-full sm:w-24 bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:outline-none"
+            class="w-full sm:w-24 bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           />
           <button
             type="button"
@@ -168,7 +168,7 @@
                     type="button"
                     onclick={() => remove(entry, entry.quantity)}
                     disabled={actionState.state.loading}
-                    class="px-2.5 py-1.5 bg-error/10 hover:bg-error/20 text-error text-xs font-bold rounded-lg transition-all disabled:opacity-50"
+                    class="px-2.5 py-1.5 bg-error/10 hover:bg-error/20 text-on-error-container text-xs font-bold rounded-lg transition-all disabled:opacity-50"
                   >
                     {m.eco_inventory_remove_all()}
                   </button>

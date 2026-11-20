@@ -1,13 +1,33 @@
 import { describe, expect, test } from 'bun:test';
+import { getModuleDefinition } from '@kotbo/contracts';
 import {
+  DEFAULT_DROP_CLAIM_RULES,
+  DROP_CLAIM_DAILY_LIMIT_RANGE,
+  DROP_CLAIM_MIN_MEMBER_DAYS_RANGE,
+  dropClaimBlocker,
+  dropClaimRoleMissing,
+  effectiveDropClaimRules,
+  hasDropClaimRules,
+  DROP_ACTIVITY_RECHECK_MINUTES,
+  dropActivityCheckDue,
+  DROP_CLAIM_SETTLE_MAX_ATTEMPTS,
+  dropClaimSettleAction,
+  normalizeDropClaimRules,
+  DROP_ACTIVITY_DISABLED,
+  DROP_ACTIVITY_MESSAGES_RANGE,
+  DROP_ACTIVITY_WINDOW_MINUTES_RANGE,
   DROP_AMOUNT_RANGE,
   DROP_DELETE_AFTER_DISABLED,
+  DROP_JACKPOT_CHANCE_CHOICES,
+  DROP_JACKPOT_MULTIPLIER_CHOICES,
   DROP_INTERVAL_MINUTES_RANGE,
   DROP_MIN_OPEN_MINUTES,
   DROP_MIN_PUBLISH_GAP_MINUTES,
   DROP_ITEM_POOL_MAX,
   DROP_ITEM_QUANTITY_RANGE,
   DROP_ITEM_WEIGHT_TOTAL,
+  DROP_TYPES,
+  DROP_TYPE_MODULE,
   dropItemsTotalWeight,
   normalizeDropItems,
   pickWeightedDropItem,
@@ -16,12 +36,20 @@ import {
   dropExpiresAt,
   dropMaxClaims,
   dropMessageDeleteAt,
+  dropActivityVerdict,
+  dropMentionRoleId,
+  estimateWeeklyDrops,
+  DROP_ADVICE_MIN_SAMPLE,
+  shouldAdviseActivityWait,
+  dropJackpotAmount,
+  dropTypeBlocker,
   enabledDropModes,
   nextAllowedPublicationAt,
   normalizeDropGlobalSettings,
   normalizeDropTypeSettings,
   pickDropMode,
   planNextDropAt,
+  rollDropJackpot,
   type DropTypeSettings,
 } from '@kotbo/shared';
 
@@ -275,5 +303,312 @@ describe('tirage pondéré d’un objet', () => {
   test('une liste vide ou sans poids ne tire rien', () => {
     expect(pickWeightedDropItem([])).toBeNull();
     expect(pickWeightedDropItem([{ itemId: 'a', weight: 0 }])).toBeNull();
+  });
+});
+
+describe('module qui verse la récompense d\'un drop', () => {
+  test('chaque type de drop est rattaché à un module du registre', () => {
+    for (const type of DROP_TYPES) {
+      expect(getModuleDefinition(DROP_TYPE_MODULE[type])).toBeDefined();
+    }
+  });
+
+  test('l\'XP de niveau dépend du leveling, les points de clan des clans, le reste de l\'économie', () => {
+    expect(DROP_TYPE_MODULE).toEqual({
+      XP: 'leveling',
+      RPG_XP: 'economy',
+      CLAN_POINTS: 'clans',
+      COINS: 'economy',
+      RPG_ITEM: 'economy',
+    });
+  });
+});
+
+describe('ce qui empêche un type de drop de tomber', () => {
+  const pret = { defaultChannelId: 'salon-defaut', resourceModuleActive: true, rpgEnabled: true };
+
+  test('un type complet n\'est pas bloqué', () => {
+    expect(dropTypeBlocker('XP', defaultDropTypeSettings('XP'), pret)).toBeNull();
+  });
+
+  test('module de la ressource éteint', () => {
+    expect(dropTypeBlocker('COINS', defaultDropTypeSettings('COINS'), { ...pret, resourceModuleActive: false }))
+      .toBe('MODULE_OFF');
+  });
+
+  test('aucun salon, ni propre ni par défaut', () => {
+    expect(dropTypeBlocker('XP', defaultDropTypeSettings('XP'), { ...pret, defaultChannelId: null })).toBe('NO_CHANNEL');
+    expect(dropTypeBlocker('XP', { ...defaultDropTypeSettings('XP'), channelId: 'salon-xp' }, { ...pret, defaultChannelId: null }))
+      .toBeNull();
+  });
+
+  test('aucun mode de ramassage', () => {
+    const settings = defaultDropTypeSettings('XP');
+    expect(dropTypeBlocker('XP', { ...settings, first: { ...settings.first, enabled: false } }, pret)).toBe('NO_MODE');
+  });
+
+  test('drop d\'objet : RPG éteint, puis liste vide', () => {
+    const settings = { ...defaultDropTypeSettings('RPG_ITEM'), items: [{ itemId: 'epee', weight: 100 }] };
+    expect(dropTypeBlocker('RPG_ITEM', settings, { ...pret, rpgEnabled: false })).toBe('RPG_OFF');
+    expect(dropTypeBlocker('RPG_ITEM', { ...settings, items: [] }, pret)).toBe('NO_ITEMS');
+    expect(dropTypeBlocker('RPG_ITEM', settings, pret)).toBeNull();
+  });
+
+  test('le RPG éteint ne bloque que le drop d\'objet', () => {
+    expect(dropTypeBlocker('COINS', defaultDropTypeSettings('COINS'), { ...pret, rpgEnabled: false })).toBeNull();
+  });
+});
+
+describe('attente d\'activité dans le salon', () => {
+  const dueAt = since;
+  const activity = { minMessages: 5, windowMinutes: 15 };
+
+  test('éteinte par défaut, et bornée à la normalisation', () => {
+    expect(defaultDropTypeSettings('XP').activity.minMessages).toBe(DROP_ACTIVITY_DISABLED);
+
+    const normalized = normalizeDropTypeSettings('XP', { activity: { minMessages: 10_000, windowMinutes: 1 } });
+    expect(normalized.activity.minMessages).toBe(DROP_ACTIVITY_MESSAGES_RANGE.max);
+    expect(normalized.activity.windowMinutes).toBe(DROP_ACTIVITY_WINDOW_MINUTES_RANGE.min);
+    expect(normalizeDropTypeSettings('XP', { activity: { minMessages: -3, windowMinutes: 15 } }).activity.minMessages)
+      .toBe(DROP_ACTIVITY_DISABLED);
+  });
+
+  test('éteinte : le drop part sans rien compter', () => {
+    expect(dropActivityVerdict({
+      dueAt, now: dueAt, intervalMinutes: 60, activity: { minMessages: DROP_ACTIVITY_DISABLED, windowMinutes: 15 }, recentMessages: 0,
+    })).toBe('publish');
+  });
+
+  test('assez de messages : le drop part', () => {
+    expect(dropActivityVerdict({ dueAt, now: dueAt, intervalMinutes: 60, activity, recentMessages: 5 })).toBe('publish');
+  });
+
+  test('salon calme : le drop attend', () => {
+    expect(dropActivityVerdict({ dueAt, now: new Date(dueAt.getTime() + 30 * MINUTE_MS), intervalMinutes: 60, activity, recentMessages: 4 }))
+      .toBe('wait');
+  });
+
+  test('salon calme depuis un intervalle entier : le drop part quand même', () => {
+    expect(dropActivityVerdict({ dueAt, now: new Date(dueAt.getTime() + 60 * MINUTE_MS), intervalMinutes: 60, activity, recentMessages: 0 }))
+      .toBe('publish');
+  });
+});
+
+describe('relecture de l\'activité d\'un salon calme', () => {
+  test('jamais lue : la lecture est due', () => {
+    expect(dropActivityCheckDue(null, since)).toBe(true);
+  });
+
+  test('lue il y a moins que le délai : on ne relit pas Discord', () => {
+    const last = new Date(since.getTime() - (DROP_ACTIVITY_RECHECK_MINUTES * MINUTE_MS - 1));
+    expect(dropActivityCheckDue(last, since)).toBe(false);
+  });
+
+  test('lue il y a au moins le délai : la lecture est due', () => {
+    const last = new Date(since.getTime() - DROP_ACTIVITY_RECHECK_MINUTES * MINUTE_MS);
+    expect(dropActivityCheckDue(last, since)).toBe(true);
+  });
+});
+
+describe('reprise d\'un versement en suspens', () => {
+  test('module allumé, tentatives restantes : on verse', () => {
+    expect(dropClaimSettleAction({ moduleEnabled: true, attempts: 0 })).toBe('pay');
+    expect(dropClaimSettleAction({ moduleEnabled: true, attempts: DROP_CLAIM_SETTLE_MAX_ATTEMPTS - 1 })).toBe('pay');
+  });
+
+  test('module éteint : le gain promis attend son retour, sans user de tentative', () => {
+    expect(dropClaimSettleAction({ moduleEnabled: false, attempts: 0 })).toBe('hold');
+    expect(dropClaimSettleAction({ moduleEnabled: false, attempts: DROP_CLAIM_SETTLE_MAX_ATTEMPTS })).toBe('hold');
+  });
+
+  test('tentatives épuisées : le versement est abandonné plutôt que repris sans fin', () => {
+    expect(dropClaimSettleAction({ moduleEnabled: true, attempts: DROP_CLAIM_SETTLE_MAX_ATTEMPTS })).toBe('abandon');
+  });
+});
+
+describe('drops jackpot', () => {
+  const on = normalizeDropGlobalSettings({ dropJackpotEnabled: true, dropJackpotChance: 20, dropJackpotMultiplier: 5 });
+
+  test('éteint par défaut, et seules les valeurs proposées sont retenues', () => {
+    const defaults = normalizeDropGlobalSettings({});
+    expect(defaults.dropJackpotEnabled).toBe(false);
+    expect(DROP_JACKPOT_CHANCE_CHOICES as readonly number[]).toContain(defaults.dropJackpotChance);
+    expect(DROP_JACKPOT_MULTIPLIER_CHOICES as readonly number[]).toContain(defaults.dropJackpotMultiplier);
+
+    const odd = normalizeDropGlobalSettings({ dropJackpotChance: 7, dropJackpotMultiplier: 1_000 });
+    expect(odd.dropJackpotChance).toBe(defaults.dropJackpotChance);
+    expect(odd.dropJackpotMultiplier).toBe(defaults.dropJackpotMultiplier);
+  });
+
+  test('tiré à une chance sur N', () => {
+    expect(rollDropJackpot('XP', on, () => 0.049)).toBe(true);
+    expect(rollDropJackpot('XP', on, () => 0.05)).toBe(false);
+  });
+
+  test('jamais quand il est éteint, jamais sur un drop d\'objet', () => {
+    expect(rollDropJackpot('XP', { ...on, dropJackpotEnabled: false }, () => 0)).toBe(false);
+    expect(rollDropJackpot('RPG_ITEM', on, () => 0)).toBe(false);
+  });
+
+  test('le gain est multiplié, sans dépasser le plafond des montants', () => {
+    expect(dropJackpotAmount(120, 5)).toBe(600);
+    expect(dropJackpotAmount(DROP_AMOUNT_RANGE.max, 10)).toBe(DROP_AMOUNT_RANGE.max);
+  });
+});
+
+describe('conseil : attendre l\'activité quand les drops expirent sans gagnant', () => {
+  const off = { minMessages: DROP_ACTIVITY_DISABLED, windowMinutes: 15 };
+
+  test('la plupart des drops expirent sans gagnant : conseil', () => {
+    expect(shouldAdviseActivityWait({ closed: 10, unclaimed: 6 }, off)).toBe(true);
+  });
+
+  test('moins de la moitié : pas de conseil', () => {
+    expect(shouldAdviseActivityWait({ closed: 10, unclaimed: 4 }, off)).toBe(false);
+  });
+
+  test('trop peu de drops pour conclure : pas de conseil', () => {
+    expect(shouldAdviseActivityWait({ closed: DROP_ADVICE_MIN_SAMPLE - 1, unclaimed: DROP_ADVICE_MIN_SAMPLE - 1 }, off))
+      .toBe(false);
+  });
+
+  test('l\'attente d\'activité est déjà allumée : pas de conseil', () => {
+    expect(shouldAdviseActivityWait({ closed: 10, unclaimed: 9 }, { minMessages: 5, windowMinutes: 15 })).toBe(false);
+  });
+});
+
+describe('estimation de ce qu\'un type distribue par semaine', () => {
+  const noJackpot = { dropJackpotEnabled: false, dropJackpotChance: 20, dropJackpotMultiplier: 5 };
+  const xp = defaultDropTypeSettings('XP');
+
+  test('premier arrivé seul : fréquence fois le milieu de la fourchette', () => {
+    // 360 min d'intervalle : 28 drops par semaine, 150 XP en moyenne.
+    expect(estimateWeeklyDrops('XP', xp, noJackpot)).toEqual({ drops: 28, distributed: 4_200, window: null });
+  });
+
+  test('les modes se partagent les drops, une course paie chacun de ses gagnants', () => {
+    const settings = { ...xp, race: { ...xp.race, enabled: true } };
+    // 14 drops au premier arrivé (150) + 14 courses de 3 gagnants (75 chacun).
+    expect(estimateWeeklyDrops('XP', settings, noJackpot)?.distributed).toBe(14 * 150 + 14 * 3 * 75);
+  });
+
+  test('ouvert à tous : compté par participant, à part', () => {
+    const settings = { ...xp, first: { ...xp.first, enabled: false }, window: { ...xp.window, enabled: true } };
+    expect(estimateWeeklyDrops('XP', settings, noJackpot)).toEqual({
+      drops: 28,
+      distributed: 0,
+      window: { drops: 28, perParticipant: (xp.window.minAmount + xp.window.maxAmount) / 2 },
+    });
+  });
+
+  test('le jackpot relève la moyenne, sauf pour les objets', () => {
+    const jackpot = { dropJackpotEnabled: true, dropJackpotChance: 20, dropJackpotMultiplier: 5 };
+    // Un drop sur 20 vaut 5 fois plus : la moyenne gagne 4/20, soit 20 %.
+    expect(estimateWeeklyDrops('XP', xp, jackpot)?.distributed).toBeCloseTo(4_200 * 1.2);
+
+    const items = defaultDropTypeSettings('RPG_ITEM');
+    expect(estimateWeeklyDrops('RPG_ITEM', items, jackpot)?.distributed)
+      .toBe(estimateWeeklyDrops('RPG_ITEM', items, noJackpot)?.distributed);
+  });
+
+  test('aucun mode : rien à estimer', () => {
+    expect(estimateWeeklyDrops('XP', { ...xp, first: { ...xp.first, enabled: false } }, noJackpot)).toBeNull();
+  });
+});
+
+describe('rôle mentionné à l\'apparition d\'un drop', () => {
+  const always = { dropMentionRoleId: 'role-drops', dropMentionJackpotOnly: false };
+  const jackpotOnly = { ...always, dropMentionJackpotOnly: true };
+
+  test('par défaut, chaque drop mentionne le rôle', () => {
+    expect(normalizeDropGlobalSettings({}).dropMentionJackpotOnly).toBe(false);
+    expect(dropMentionRoleId(always, false)).toBe('role-drops');
+    expect(dropMentionRoleId(always, true)).toBe('role-drops');
+  });
+
+  test('réservée aux jackpots : seuls eux mentionnent', () => {
+    expect(dropMentionRoleId(jackpotOnly, false)).toBeNull();
+    expect(dropMentionRoleId(jackpotOnly, true)).toBe('role-drops');
+  });
+
+  test('sans rôle choisi, personne n\'est mentionné', () => {
+    expect(dropMentionRoleId({ dropMentionRoleId: null, dropMentionJackpotOnly: false }, true)).toBeNull();
+  });
+});
+
+describe('règles de ramassage (configuration avancée)', () => {
+  const now = new Date('2026-11-12T12:00:00Z');
+  const daysAgo = (days: number) => new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+  const membre = { joinedAt: daysAgo(400), roleIds: ['role-membre'], claimsLast24h: 0, now };
+
+  test('sans configuration, aucune règle et personne n\'est bloqué', () => {
+    const rules = normalizeDropGlobalSettings({}).dropClaimRules;
+    expect(rules).toEqual(DEFAULT_DROP_CLAIM_RULES);
+    expect(hasDropClaimRules(rules)).toBe(false);
+    expect(dropClaimBlocker(rules, { joinedAt: now, roleIds: [], claimsLast24h: 1_000, now })).toBeNull();
+  });
+
+  test('une colonne vide ou illisible revient aux réglages par défaut', () => {
+    expect(normalizeDropClaimRules(null)).toEqual(DEFAULT_DROP_CLAIM_RULES);
+    expect(normalizeDropClaimRules('n\'importe quoi')).toEqual(DEFAULT_DROP_CLAIM_RULES);
+    expect(normalizeDropClaimRules([])).toEqual(DEFAULT_DROP_CLAIM_RULES);
+  });
+
+  test('les valeurs sont bornées, zéro éteint la règle', () => {
+    const rules = normalizeDropClaimRules({ dailyLimit: 10_000, minMemberDays: -3, requiredRoleId: '' });
+    expect(rules.dailyLimit).toBe(DROP_CLAIM_DAILY_LIMIT_RANGE.max);
+    expect(rules.minMemberDays).toBe(0);
+    expect(rules.requiredRoleId).toBeNull();
+    expect(normalizeDropClaimRules({ minMemberDays: 9_999 }).minMemberDays).toBe(DROP_CLAIM_MIN_MEMBER_DAYS_RANGE.max);
+    expect(normalizeDropClaimRules({ dailyLimit: 0 }).dailyLimit).toBe(0);
+  });
+
+  test('plafond par 24 h : atteint, le ramassage est refusé', () => {
+    const rules = normalizeDropClaimRules({ dailyLimit: 3 });
+    expect(hasDropClaimRules(rules)).toBe(true);
+    expect(dropClaimBlocker(rules, { ...membre, claimsLast24h: 2 })).toBeNull();
+    expect(dropClaimBlocker(rules, { ...membre, claimsLast24h: 3 })).toBe('DAILY_LIMIT');
+  });
+
+  test('ancienneté : un membre arrivé trop récemment est refusé', () => {
+    const rules = normalizeDropClaimRules({ minMemberDays: 7 });
+    expect(dropClaimBlocker(rules, { ...membre, joinedAt: daysAgo(2) })).toBe('MEMBER_TOO_NEW');
+    expect(dropClaimBlocker(rules, { ...membre, joinedAt: daysAgo(7) })).toBeNull();
+  });
+
+  test('ancienneté inconnue : le membre n\'est pas bloqué sur une donnée absente', () => {
+    const rules = normalizeDropClaimRules({ minMemberDays: 7 });
+    expect(dropClaimBlocker(rules, { ...membre, joinedAt: null })).toBeNull();
+  });
+
+  test('rôle requis : sans lui, le ramassage est refusé', () => {
+    const rules = normalizeDropClaimRules({ requiredRoleId: 'role-vip' });
+    expect(dropClaimBlocker(rules, membre)).toBe('MISSING_ROLE');
+    expect(dropClaimBlocker(rules, { ...membre, roleIds: ['role-membre', 'role-vip'] })).toBeNull();
+  });
+
+  test('plusieurs règles : la première non respectée est donnée', () => {
+    const rules = normalizeDropClaimRules({ dailyLimit: 1, minMemberDays: 7, requiredRoleId: 'role-vip' });
+    expect(dropClaimBlocker(rules, { joinedAt: daysAgo(1), roleIds: [], claimsLast24h: 5, now })).toBe('DAILY_LIMIT');
+  });
+
+  test('rôle requis supprimé du serveur : signalé, et la règle ne bloque plus personne', () => {
+    const rules = normalizeDropClaimRules({ dailyLimit: 2, requiredRoleId: 'role-supprime' });
+    expect(dropClaimRoleMissing(rules, ['role-membre'])).toBe(true);
+    const effective = effectiveDropClaimRules(rules, ['role-membre']);
+    expect(effective).toEqual({ ...rules, requiredRoleId: null });
+    expect(dropClaimBlocker(effective, membre)).toBeNull();
+  });
+
+  test('rôle requis présent, ou rôles du serveur inconnus : la règle s\'applique', () => {
+    const rules = normalizeDropClaimRules({ requiredRoleId: 'role-vip' });
+    expect(dropClaimRoleMissing(rules, ['role-vip'])).toBe(false);
+    expect(dropClaimRoleMissing(rules, null)).toBe(false);
+    expect(effectiveDropClaimRules(rules, null)).toEqual(rules);
+    expect(dropClaimBlocker(effectiveDropClaimRules(rules, ['role-vip']), membre)).toBe('MISSING_ROLE');
+  });
+
+  test('sans rôle requis, rien n\'est signalé', () => {
+    expect(dropClaimRoleMissing(DEFAULT_DROP_CLAIM_RULES, [])).toBe(false);
   });
 });

@@ -1,5 +1,6 @@
 import { describe, expect, test, mock, beforeEach } from 'bun:test';
 import path from 'node:path';
+import { PermissionFlagsBits } from 'discord.js';
 
 /**
  * Diffusion d'un pont à plus de deux salons.
@@ -64,7 +65,7 @@ const dbJsPath = path.resolve(import.meta.dir, '../../utils/db.js');
 mock.module(dbPath, () => ({ default: mockDb, prisma: mockDb, prismaRead: mockDb, upsertRetryingRace: (upsert: () => Promise<unknown>) => upsert() }));
 mock.module(dbJsPath, () => ({ default: mockDb, prisma: mockDb, prismaRead: mockDb, upsertRetryingRace: (upsert: () => Promise<unknown>) => upsert() }));
 
-const { relayMessageEdit, relayMessageDelete, relayReactionAdd, neutralizeMassMentions } = await import(
+const { relayMessageEdit, relayMessageDelete, relayReactionAdd, neutralizeMassMentions, permissionsSalonDePont } = await import(
   '../../services/features/channelLinkService'
 );
 
@@ -153,6 +154,19 @@ function channelIds(): [string, string, string] {
 beforeEach(() => {
   groupRows = [];
   mappingRows = [];
+});
+
+describe('permissionsSalonDePont', () => {
+  test('source publique : aucune restriction sur le salon créé', () => {
+    expect(permissionsSalonDePont(true, 'guilde', 'bot')).toEqual([]);
+  });
+
+  test('source non publique : caché à @everyone, visible du bot', () => {
+    expect(permissionsSalonDePont(false, 'guilde', 'bot')).toEqual([
+      { id: 'guilde', deny: [PermissionFlagsBits.ViewChannel] },
+      { id: 'bot', allow: [PermissionFlagsBits.ViewChannel] },
+    ]);
+  });
 });
 
 describe('relayMessageEdit', () => {

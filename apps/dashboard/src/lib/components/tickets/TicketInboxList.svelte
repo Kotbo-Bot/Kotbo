@@ -117,9 +117,9 @@
   function slaBadge(ticket: InboxTicket): { label: string; tone: string } | null {
     const clocks = [ticket.sla.firstResponse, ticket.sla.resolution].filter((clock) => clock && !clock.completedAt);
     const breached = clocks.find((clock) => clock!.status === 'breached');
-    if (breached) return { label: m.th_sla_breached({ time: ago(breached.dueAt) }), tone: 'bg-error/10 text-error' };
+    if (breached) return { label: m.th_sla_breached({ time: ago(breached.dueAt) }), tone: 'bg-error/10 text-on-error-container' };
     const atRisk = clocks.find((clock) => clock!.status === 'at_risk');
-    if (atRisk) return { label: m.th_sla_due({ time: remaining(atRisk.dueAt) }), tone: 'bg-warning/10 text-warning' };
+    if (atRisk) return { label: m.th_sla_due({ time: remaining(atRisk.dueAt) }), tone: 'bg-warning/10 text-on-warning-container' };
     return null;
   }
 

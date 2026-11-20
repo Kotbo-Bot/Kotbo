@@ -1,9 +1,10 @@
-import { IncomingMessage, ServerResponse } from 'node:http';
-import { Client } from 'discord.js';
+import { Hono, type Context } from 'hono';
+import { createMiddleware } from 'hono/factory';
+import type { Client } from 'discord.js';
 import { validateScenario, type ScenarioStep } from '@kotbo/shared';
 import { logger } from '../../../utils/logger.js';
-import { json, readJsonBody, getGuildName, safePushAudit, type AuthClaims, type DashboardAccess } from '../../shared.js';
-import { jsonFailure } from '../../shared/failure.js';
+import { getGuildName, safePushAudit } from '../../shared.js';
+import { fail, guildRoute, readBody, send } from '../../hono/dashboard/kit.js';
 import {
   ScenarioValidationError,
   createScenario,
@@ -31,205 +32,167 @@ function parseSteps(raw: unknown): ScenarioStep[] | null {
   return Array.isArray(raw) ? (raw as ScenarioStep[]) : null;
 }
 
-export async function handleSimulationRoutes(
-  req: IncomingMessage,
-  res: ServerResponse,
-  parts: string[],
-  url: URL,
-  client: Client,
-  user: AuthClaims,
-  guildId: string,
-  access: DashboardAccess,
-): Promise<boolean> {
-  if (parts[4] !== 'simulation') return false;
-
-  const method = req.method;
-  const sub = parts[5];
+export function createSimulationRouter(client: Client) {
+  const router = new Hono();
+  const base = '/api/dashboard/guilds/:guildId/simulation';
 
   // Ces routes n'avaient aucun controle : n'importe quel membre du staff
   // pouvait reecrire la configuration et supprimer les scenarios. La lecture
   // reste ouverte a qui a deja acces au dashboard, comme sur les autres modules.
-  if (method !== 'GET' && !access.canManageSettings) {
-    json(res, 403, { error: 'Accès refusé. Permissions administratives requises.' });
-    return true;
-  }
+  const writeAccess = createMiddleware(async (c, next) => {
+    if (c.req.method !== 'GET' && !c.var.effectiveAccess.canManageSettings) {
+      return send(c, { error: 'Accès refusé. Permissions administratives requises.' }, 403);
+    }
+    await next();
+  });
+  const gate = [...guildRoute(client), writeAccess] as const;
 
-  const audit = (action: string, details: string) => safePushAudit(guildId, {
-    user: `${user.username ?? 'Inconnu'} (${user.userId})`,
-    action,
-    context: getGuildName(client, guildId),
-    module: 'Staff Simulator',
-    eventType: 'Manuel',
-    details,
-    channelId: null,
-  }, action);
+  const audit = (c: Context, action: string, details: string) => {
+    const guildId = c.req.param('guildId')!;
+    const user = c.var.dashboardUser;
+    return safePushAudit(guildId, {
+      user: `${user.username ?? 'Inconnu'} (${user.userId})`,
+      action,
+      context: getGuildName(client, guildId),
+      module: 'Staff Simulator',
+      eventType: 'Manuel',
+      details,
+      channelId: null,
+    }, action);
+  };
 
-  // GET /simulation - configuration + scénarios
-  if (!sub && method === 'GET') {
+  /** Champs communs à la création et à la mise à jour d'un scénario. */
+  const scenarioInput = (body: ScenarioBody & { title: string }, steps: ScenarioStep[]) => ({
+    title: body.title,
+    description: typeof body.description === 'string' ? body.description : '',
+    difficulty: DIFFICULTIES.includes(String(body.difficulty)) ? String(body.difficulty) : 'MEDIUM',
+    enabled: body.enabled !== false,
+    steps,
+  });
+
+  // Configuration + scénarios
+  router.get(base, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
     try {
       const [config, scenarios] = await Promise.all([
         getSimulationConfig(guildId),
         listScenarios(guildId),
       ]);
-      json(res, 200, { config, scenarios });
+      return send(c, { config, scenarios });
     } catch (err) {
       logger.error('SimulationAPI', 'Erreur GET:', err);
-      jsonFailure(res, err, 'Erreur lors de la récupération du simulateur', 'SimulationAPI');
+      return fail(c, err, 'Erreur lors de la récupération du simulateur', 'SimulationAPI');
     }
-    return true;
-  }
+  });
 
-  // PATCH /simulation/config
-  if (sub === 'config' && method === 'PATCH') {
+  router.patch(`${base}/config`, ...gate, async (c) => {
     try {
-      const body = await readJsonBody<Record<string, unknown>>(req);
-      if (!body) {
-        json(res, 400, { error: 'Corps de requête manquant' });
-        return true;
-      }
-
+      const body = await readBody(c);
+      if (!body) return send(c, { error: 'Corps de requête manquant' }, 400);
       const patch = sanitizeSimulationConfigPatch(body);
-      if (Object.keys(patch).length === 0) {
-        json(res, 400, { error: 'Aucun champ valide à mettre à jour' });
-        return true;
-      }
-
-      const config = await upsertSimulationConfig(guildId, patch);
-      await audit('Mise à jour simulateur', `Actif : ${config.enabled}, salon de test : ${config.testChannelId ?? 'aucun'}.`);
-      json(res, 200, { config });
+      if (Object.keys(patch).length === 0) return send(c, { error: 'Aucun champ valide à mettre à jour' }, 400);
+      const config = await upsertSimulationConfig(c.req.param('guildId'), patch);
+      await audit(c, 'Mise à jour simulateur', `Actif : ${config.enabled}, salon de test : ${config.testChannelId ?? 'aucun'}.`);
+      return send(c, { config });
     } catch (err) {
       logger.error('SimulationAPI', 'Erreur PATCH config:', err);
-      jsonFailure(res, err, 'Erreur lors de la mise à jour de la configuration', 'SimulationAPI');
+      return fail(c, err, 'Erreur lors de la mise à jour de la configuration', 'SimulationAPI');
     }
-    return true;
-  }
+  });
 
   // ── Sessions ─────────────────────────────────────────────────────────────
-  if (sub === 'sessions' && method === 'GET') {
+  router.get(`${base}/sessions`, ...gate, async (c) => {
     try {
-      if (parts[6]) {
-        const session = await getSessionDetail(guildId, parts[6]);
-        if (!session) {
-          json(res, 404, { error: 'Session introuvable' });
-          return true;
-        }
-        json(res, 200, { session });
-        return true;
-      }
-
       const sessions = await listSessions(
-        guildId,
-        url.searchParams.get('traineeId') ?? undefined,
-        Number(url.searchParams.get('take')) || 25,
+        c.req.param('guildId'),
+        c.req.query('traineeId') ?? undefined,
+        Number(c.req.query('take')) || 25,
       );
-      json(res, 200, { sessions });
+      return send(c, { sessions });
     } catch (err) {
       logger.error('SimulationAPI', 'Erreur GET sessions:', err);
-      jsonFailure(res, err, 'Erreur lors de la récupération des sessions', 'SimulationAPI');
+      return fail(c, err, 'Erreur lors de la récupération des sessions', 'SimulationAPI');
     }
-    return true;
-  }
+  });
+
+  router.get(`${base}/sessions/:sessionId`, ...gate, async (c) => {
+    try {
+      const session = await getSessionDetail(c.req.param('guildId'), c.req.param('sessionId'));
+      if (!session) return send(c, { error: 'Session introuvable' }, 404);
+      return send(c, { session });
+    } catch (err) {
+      logger.error('SimulationAPI', 'Erreur GET sessions:', err);
+      return fail(c, err, 'Erreur lors de la récupération des sessions', 'SimulationAPI');
+    }
+  });
 
   // ── Scénarios ────────────────────────────────────────────────────────────
-  if (sub === 'scenarios') {
-    const scenarioId = parts[6];
+  router.post(`${base}/scenarios`, ...gate, async (c) => {
+    try {
+      const body = await readBody<ScenarioBody>(c);
+      const steps = parseSteps(body?.steps);
+      if (!body || typeof body.title !== 'string' || !steps) return send(c, { error: 'Titre ou étapes manquants' }, 400);
 
-    if (!scenarioId && method === 'POST') {
-      try {
-        const body = await readJsonBody<ScenarioBody>(req);
-        const steps = parseSteps(body?.steps);
-        if (typeof body?.title !== 'string' || !steps) {
-          json(res, 400, { error: 'Titre ou étapes manquants' });
-          return true;
-        }
-
-        const scenario = await createScenario(guildId, {
-          title: body.title,
-          description: typeof body.description === 'string' ? body.description : '',
-          difficulty: DIFFICULTIES.includes(String(body.difficulty)) ? String(body.difficulty) : 'MEDIUM',
-          enabled: body.enabled !== false,
-          steps,
-        }, user.userId);
-
-        await audit('Création scénario', `« ${scenario.title} », ${steps.length} étape(s).`);
-        json(res, 201, { scenario });
-      } catch (err) {
-        if (err instanceof ScenarioValidationError) {
-          json(res, 400, { error: 'Scénario invalide', issues: err.issues });
-          return true;
-        }
-        logger.error('SimulationAPI', 'Erreur création scénario:', err);
-        jsonFailure(res, err, 'Erreur lors de la création du scénario', 'SimulationAPI');
-      }
-      return true;
+      const scenario = await createScenario(
+        c.req.param('guildId'),
+        scenarioInput(body as ScenarioBody & { title: string }, steps),
+        c.var.dashboardUser.userId,
+      );
+      await audit(c, 'Création scénario', `« ${scenario.title} », ${steps.length} étape(s).`);
+      return send(c, { scenario }, 201);
+    } catch (err) {
+      if (err instanceof ScenarioValidationError) return send(c, { error: 'Scénario invalide', issues: err.issues }, 400);
+      logger.error('SimulationAPI', 'Erreur création scénario:', err);
+      return fail(c, err, 'Erreur lors de la création du scénario', 'SimulationAPI');
     }
+  });
 
-    if (scenarioId && method === 'PUT') {
-      try {
-        const body = await readJsonBody<ScenarioBody>(req);
-        const steps = parseSteps(body?.steps);
-        if (typeof body?.title !== 'string' || !steps) {
-          json(res, 400, { error: 'Titre ou étapes manquants' });
-          return true;
-        }
+  router.put(`${base}/scenarios/:scenarioId`, ...gate, async (c) => {
+    try {
+      const body = await readBody<ScenarioBody>(c);
+      const steps = parseSteps(body?.steps);
+      if (!body || typeof body.title !== 'string' || !steps) return send(c, { error: 'Titre ou étapes manquants' }, 400);
 
-        const scenario = await updateScenario(guildId, scenarioId, {
-          title: body.title,
-          description: typeof body.description === 'string' ? body.description : '',
-          difficulty: DIFFICULTIES.includes(String(body.difficulty)) ? String(body.difficulty) : 'MEDIUM',
-          enabled: body.enabled !== false,
-          steps,
-        });
+      const scenario = await updateScenario(
+        c.req.param('guildId'),
+        c.req.param('scenarioId'),
+        scenarioInput(body as ScenarioBody & { title: string }, steps),
+      );
+      if (!scenario) return send(c, { error: 'Scénario introuvable' }, 404);
 
-        if (!scenario) {
-          json(res, 404, { error: 'Scénario introuvable' });
-          return true;
-        }
-
-        await audit('Mise à jour scénario', `« ${scenario.title} », ${steps.length} étape(s).`);
-        json(res, 200, { scenario });
-      } catch (err) {
-        if (err instanceof ScenarioValidationError) {
-          json(res, 400, { error: 'Scénario invalide', issues: err.issues });
-          return true;
-        }
-        logger.error('SimulationAPI', 'Erreur mise à jour scénario:', err);
-        jsonFailure(res, err, 'Erreur lors de la mise à jour du scénario', 'SimulationAPI');
-      }
-      return true;
+      await audit(c, 'Mise à jour scénario', `« ${scenario.title} », ${steps.length} étape(s).`);
+      return send(c, { scenario });
+    } catch (err) {
+      if (err instanceof ScenarioValidationError) return send(c, { error: 'Scénario invalide', issues: err.issues }, 400);
+      logger.error('SimulationAPI', 'Erreur mise à jour scénario:', err);
+      return fail(c, err, 'Erreur lors de la mise à jour du scénario', 'SimulationAPI');
     }
+  });
 
-    if (scenarioId && method === 'DELETE') {
-      try {
-        const deleted = await deleteScenario(guildId, scenarioId);
-        if (!deleted) {
-          json(res, 404, { error: 'Scénario introuvable' });
-          return true;
-        }
-        await audit('Suppression scénario', `Scénario ${scenarioId} supprimé.`);
-        json(res, 200, { success: true });
-      } catch (err) {
-        logger.error('SimulationAPI', 'Erreur suppression scénario:', err);
-        jsonFailure(res, err, 'Erreur lors de la suppression', 'SimulationAPI');
-      }
-      return true;
+  router.delete(`${base}/scenarios/:scenarioId`, ...gate, async (c) => {
+    const scenarioId = c.req.param('scenarioId');
+    try {
+      const deleted = await deleteScenario(c.req.param('guildId'), scenarioId);
+      if (!deleted) return send(c, { error: 'Scénario introuvable' }, 404);
+      await audit(c, 'Suppression scénario', `Scénario ${scenarioId} supprimé.`);
+      return send(c, { success: true });
+    } catch (err) {
+      logger.error('SimulationAPI', 'Erreur suppression scénario:', err);
+      return fail(c, err, 'Erreur lors de la suppression', 'SimulationAPI');
     }
+  });
 
-    // Validation à la volée, utilisée par l'éditeur avant enregistrement
-    if (!scenarioId && method === 'PATCH') {
-      try {
-        const body = await readJsonBody<ScenarioBody>(req);
-        const steps = parseSteps(body?.steps) ?? [];
-        json(res, 200, {
-          issues: validateScenario({ title: String(body?.title ?? ''), steps }),
-        });
-      } catch (err) {
-        logger.error('SimulationAPI', 'Erreur validation scénario:', err);
-        jsonFailure(res, err, 'Erreur lors de la validation', 'SimulationAPI');
-      }
-      return true;
+  // Validation à la volée, utilisée par l'éditeur avant enregistrement
+  router.patch(`${base}/scenarios`, ...gate, async (c) => {
+    try {
+      const body = await readBody<ScenarioBody>(c);
+      const steps = parseSteps(body?.steps) ?? [];
+      return send(c, { issues: validateScenario({ title: String(body?.title ?? ''), steps }) });
+    } catch (err) {
+      logger.error('SimulationAPI', 'Erreur validation scénario:', err);
+      return fail(c, err, 'Erreur lors de la validation', 'SimulationAPI');
     }
-  }
+  });
 
-  return false;
+  return router;
 }

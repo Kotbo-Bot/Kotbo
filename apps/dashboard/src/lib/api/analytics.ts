@@ -181,19 +181,6 @@ export async function fetchGrowthAndRetention(options: { days?: number, startDat
   });
 }
 
-export async function fetchDailyAlgoAnalytics(options: { days?: number, startDate?: string, endDate?: string } = {}, guildId = authStore.selectedGuildId) {
-  const params = new URLSearchParams();
-  if (options.days) params.append('days', options.days.toString());
-  if (options.startDate) params.append('startDate', options.startDate);
-  if (options.endDate) params.append('endDate', options.endDate);
-
-  return dashboardRequest(`/analytics/daily-algo?${params.toString()}`, {
-    method: 'GET',
-    guildId,
-    errorContext: 'API Error (Daily Algo Analytics):'
-  });
-}
-
 export async function fetchGlobalInteractions(options: { period?: number, startDate?: string, endDate?: string } = {}, guildId = authStore.selectedGuildId) {
   const params = new URLSearchParams();
   if (options.period) params.append('period', options.period.toString());
@@ -562,6 +549,8 @@ export interface LifecycleMember {
   recentDays: number;
   previousDays: number;
   joinedAt: string | null;
+  /** Tag de serveur affiché par le membre, comme sur Discord. */
+  serverTag?: { tag: string; badgeUrl: string | null } | null;
 }
 
 export interface LifecycleAnalytics {
@@ -812,9 +801,11 @@ export const deleteSavedView = (id: string) => req<{ ok: boolean }>(`/analytics/
 export interface MemberOverview {
   memberCount: number | null;
   series: Array<{
-    dateKey: string; members: number; joined: number; left: number; peakOnline: number; onlineMembers: number;
+    dateKey: string; members: number; joined: number; left: number; peakOnline: number; onlineMembers: number; tagHolders: number | null;
     prevMembers: number; prevJoined: number; prevLeft: number; prevPeakOnline: number; prevOnlineMembers: number;
   }>;
+  /** Estimation : Discord ne relie pas une arrivée à un tag. null tant qu'aucun relevé du soir n'existe. */
+  tag: { holders: number; gained: number; unknownJoins: number; unknownShare: number | null; daysMeasured: number } | null;
   sources: {
     tracked: number;
     kinds: Array<{ kind: 'invite' | 'vanity' | 'label' | 'unknown'; joined: number; retention: number | null }>;
@@ -918,5 +909,204 @@ export async function fetchAnalyticsFilterOptions(guildId = authStore.selectedGu
     method: 'GET',
     guildId,
     errorContext: 'API Error (Analytics Filters):'
+  });
+}
+
+export interface ServerTagServerSummary {
+  guildId: string;
+  name: string | null;
+  iconUrl: string | null;
+  tag: string | null;
+  badgeUrl: string | null;
+  count: number;
+  share: number;
+  isOwnGuild: boolean;
+  botPresent: boolean;
+}
+
+export interface ServerTagMemberItem {
+  userId: string;
+  name: string;
+  username: string | null;
+  avatarUrl: string | null;
+  tag: string;
+  badgeUrl: string | null;
+  serverId: string;
+  serverName: string | null;
+  isOwnGuild: boolean;
+  updatedAt: string | null;
+}
+
+export interface ServerTagsAnalytics {
+  totalMembers: number;
+  taggedMembers: number;
+  ownGuildTagged: number;
+  externalTagged: number;
+  untaggedMembers: number;
+  serverCount: number;
+  ownGuild: {
+    guildId: string;
+    name: string;
+    iconUrl: string | null;
+    tag: string | null;
+    badgeUrl: string | null;
+    count: number;
+  };
+  servers: ServerTagServerSummary[];
+  members: ServerTagMemberItem[];
+}
+
+export interface ServerDetailsAsset {
+  id: string;
+  kind: 'emoji' | 'sticker';
+  name: string | null;
+  animated: boolean;
+  imageUrl: string;
+  uses: number;
+}
+
+export interface ServerDetails {
+  server: {
+    guildId: string;
+    name: string | null;
+    iconUrl: string | null;
+    bannerUrl: string | null;
+    description: string | null;
+    memberCount: number | null;
+    onlineCount: number | null;
+    tag: string | null;
+    badgeUrl: string | null;
+    isOwnGuild: boolean;
+    botPresent: boolean;
+    source: string;
+  };
+  tagHolders: {
+    count: number;
+    members: Array<{
+      userId: string;
+      name: string;
+      username: string | null;
+      avatarUrl: string | null;
+      tag: string;
+      badgeUrl: string | null;
+      updatedAt: string | null;
+    }>;
+  };
+  assets: {
+    emojis: ServerDetailsAsset[];
+    stickers: ServerDetailsAsset[];
+    totalUses: number;
+    /** Absent des réponses mises en cache avant son ajout. */
+    usageByDay?: Array<{ date: string; count: number }>;
+  };
+  /** Absent des réponses mises en cache avant son ajout. */
+  profile?: {
+    defaultInvite: { code: string; url: string; kind: 'vanity' | 'widget' | 'tracked' } | null;
+    discoveryUrl: string | null;
+    discoverable: boolean;
+    siteUrl: string | null;
+    features: string[];
+    vanityCode: string | null;
+    createdAt: string;
+    premiumTier: number | null;
+    boostCount: number | null;
+    locale: string | null;
+    verificationLevel: number | null;
+  };
+  activity?: {
+    messages: number;
+    voiceHours: number;
+    active7d: number;
+    shareOfGuild: number | null;
+  };
+}
+
+export async function fetchServerTagAnalytics(
+  query: AnalyticsQuery = {},
+  guildId = authStore.selectedGuildId,
+): Promise<ServerTagsAnalytics | null> {
+  const params = new URLSearchParams();
+  if (query.includeBots) params.append('includeBots', '1');
+  const suffix = params.toString() ? `?${params.toString()}` : '';
+  return dashboardRequest<ServerTagsAnalytics>(`/analytics/server-tags${suffix}`, {
+    method: 'GET',
+    guildId,
+    errorContext: 'API Error (Server Tags Analytics):',
+  });
+}
+
+export interface BoostAnalytics {
+  boostCount: number;
+  tier: number;
+  boosterCount: number;
+  started: number;
+  stopped: number;
+  avgCurrentDays: number | null;
+  avgEndedDays: number | null;
+  series: Array<{ date: string; boostCount: number | null; boosterCount: number | null }>;
+  boosters: Array<{ userId: string; since: string }>;
+  formerBoosters: Array<{ userId: string; since: string | null; endedAt: string }>;
+  events: Array<{ userId: string; type: 'START' | 'STOP'; at: string; since: string | null }>;
+}
+
+export async function fetchBoostAnalytics(
+  days: number,
+  guildId = authStore.selectedGuildId,
+): Promise<BoostAnalytics | null> {
+  return dashboardRequest<BoostAnalytics>(`/analytics/boosts?days=${days}`, {
+    method: 'GET',
+    guildId,
+    errorContext: 'API Error (Boost Analytics):',
+  });
+}
+
+export async function fetchServerDetails(
+  targetGuildId: string,
+  guildId = authStore.selectedGuildId,
+): Promise<ServerDetails | null> {
+  return dashboardRequest<ServerDetails>(`/analytics/servers/${encodeURIComponent(targetGuildId)}`, {
+    method: 'GET',
+    guildId,
+    errorContext: 'API Error (Server Details):',
+  });
+}
+
+export interface ServerInsightsGroup {
+  members: number;
+  active: number;
+  messages: number;
+  voiceMinutes: number;
+  analyzed: number;
+  toxic: number;
+  sanctions: number;
+}
+
+/** Porteurs du tag d'un serveur chez nous, recoupement en nombre et modération. */
+export interface ServerMemberInsights {
+  holders: ServerInsightsGroup;
+  others: ServerInsightsGroup;
+  activityByDay: Array<{ date: string; holders: number; others: number }>;
+  topHolders: Array<{ userId: string; messages: number; voiceMinutes: number }>;
+  movement: { joined30d: number; left30d: number; leftTotal: number };
+  overlap: { botPresent: boolean; shared: number | null; share: number | null };
+  moderation: {
+    sanctionsByType: Array<{ type: string; count: number }>;
+    recentSanctions: Array<{ id: string; type: string; targetUserId: string; targetTag: string | null; reason: string; createdAt: string }>;
+    fleet: { blocks: number; waveReports: number };
+    rule: { id: string; name: string; effect: 'BLOCK' | 'ALLOW'; action: string; enabled: boolean; expiresAt: string | null } | null;
+    events: Array<{ id: string; userId: string; userTag: string | null; trigger: string; action: string; status: string; createdAt: string }>;
+    waves: number;
+  };
+}
+
+export async function fetchServerMemberInsights(
+  targetGuildId: string,
+  guildId = authStore.selectedGuildId,
+): Promise<ServerMemberInsights | null> {
+  return dashboardRequest<ServerMemberInsights>(`/analytics/servers/${encodeURIComponent(targetGuildId)}/insights`, {
+    method: 'GET',
+    guildId,
+    errorContext: 'API Error (Server Insights):',
+    silent: true,
   });
 }

@@ -100,7 +100,7 @@
 
   useUnsavedChanges({
     id: UNSAVED_ID,
-    label: m.wf_page_title(),
+    get label() { return m.wf_page_title(); },
     getConfig: () => (editingDraft ? workflowDraftKey(form, graph) : null),
     getSaved: () => (editingDraft && saved ? workflowDraftKey(saved.form, saved.graph) : null),
     onSave: save,
@@ -566,14 +566,16 @@
     'anti-invite': { name: m.wf_tpl_invite, description: m.wf_tpl_invite_desc },
     'level-reward': { name: m.wf_tpl_level, description: m.wf_tpl_level_desc },
     'ticket-welcome': { name: m.wf_tpl_ticket, description: m.wf_tpl_ticket_desc },
+    'reputation-thanks-dm': { name: m.wf_tpl_rep_dm, description: m.wf_tpl_rep_dm_desc },
+    'reputation-milestone': { name: m.wf_tpl_rep_milestone, description: m.wf_tpl_rep_milestone_desc },
     'reaction-role': { name: m.wf_tpl_reaction_role, description: m.wf_tpl_reaction_role_desc },
     'reaction-role-remove': { name: m.wf_tpl_reaction_role_remove, description: m.wf_tpl_reaction_role_remove_desc },
   };
 
   const STATUS_META: Record<string, { label: () => string; color: string }> = {
-    COMPLETED: { label: () => m.wf_exec_status_completed(), color: 'bg-success/15 text-success' },
-    FAILED: { label: () => m.wf_exec_status_failed(), color: 'bg-error/15 text-error' },
-    WAITING: { label: () => m.wf_exec_status_waiting(), color: 'bg-warning/15 text-warning' },
+    COMPLETED: { label: () => m.wf_exec_status_completed(), color: 'bg-success/15 text-on-success-container' },
+    FAILED: { label: () => m.wf_exec_status_failed(), color: 'bg-error/15 text-on-error-container' },
+    WAITING: { label: () => m.wf_exec_status_waiting(), color: 'bg-warning/15 text-on-warning-container' },
     RUNNING: { label: () => m.wf_exec_status_running(), color: 'bg-sky-500/15 text-sky-700 dark:text-sky-300' },
     CANCELLED: { label: () => m.wf_exec_status_cancelled(), color: 'bg-surface-container-highest text-on-surface-variant' },
   };
@@ -688,7 +690,7 @@
     </div>
 
   {:else if error}
-    <div class="p-6 rounded-2xl bg-error/10 border border-error/20 text-error flex items-center gap-3">
+    <div class="p-6 rounded-2xl bg-error/10 border border-error/20 text-on-error-container flex items-center gap-3">
       <Papicon icon="Warning" size={20} />
       <span>{error}</span>
     </div>
@@ -777,7 +779,7 @@
         />
 
         {#if replay.error}
-          <span class="px-2.5 py-1 rounded-lg text-2xs font-semibold bg-error/10 text-error max-w-72 truncate" title={replay.error}>
+          <span class="px-2.5 py-1 rounded-lg text-2xs font-semibold bg-error/10 text-on-error-container max-w-72 truncate" title={replay.error}>
             {replay.error}
           </span>
         {/if}
@@ -821,7 +823,7 @@
             id="wf-name"
             bind:value={form.name}
             placeholder={m.wf_name_example()}
-            class="w-full px-3 py-2 rounded-xl bg-surface-container-highest border border-outline-variant/20 text-sm text-on-surface focus:border-primary/50 focus:outline-none"
+            class="w-full px-3 py-2 rounded-xl bg-surface-container-highest border border-field-border text-sm text-on-surface focus:border-primary/50 focus:outline-none"
           />
         </div>
 
@@ -922,11 +924,11 @@
 
         <div class="relative min-w-64">
           <Papicon icon="Search" size={14} class="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant" />
-          <input
+          <input aria-label={m.wf_search_placeholder()}
             type="text"
             bind:value={searchFilter}
             placeholder={m.wf_search_placeholder()}
-            class="w-full pl-9 pr-3 py-2 rounded-xl bg-surface-container-highest border border-outline-variant/20 text-xs text-on-surface focus:border-primary/50 focus:outline-none"
+            class="w-full pl-9 pr-3 py-2 rounded-xl bg-surface-container-highest border border-field-border text-xs text-on-surface focus:border-primary/50 focus:outline-none"
           />
         </div>
       </div>
@@ -972,7 +974,7 @@
                 {:else}
                   <span
                     class="px-2.5 py-1 rounded-full text-2xs font-bold shrink-0 {workflow.enabled
-                      ? 'bg-success/15 text-success border border-success/30'
+                      ? 'bg-success/15 text-on-success-container border border-success/30'
                       : 'bg-surface-container-highest text-on-surface-variant'}"
                   >{workflow.enabled ? m.wf_status_active() : m.wf_status_paused()}</span>
                 {/if}
@@ -1059,7 +1061,7 @@
               value={execStatus}
               onchange={(e) => { execStatus = e.currentTarget.value as typeof execStatus; applyExecutionFilters(); }}
               aria-label={m.wf_exec_filter_status()}
-              class="px-2.5 py-1.5 rounded-xl bg-surface-container-high border border-outline-variant/15 text-xs text-on-surface"
+              class="px-2.5 py-1.5 rounded-xl bg-surface-container-high border border-field-border text-xs text-on-surface"
             >
               <option value="">{m.wf_exec_filter_status_all()}</option>
               {#each Object.entries(STATUS_META) as [value, meta] (value)}
@@ -1070,7 +1072,7 @@
               value={execWorkflow}
               onchange={(e) => { execWorkflow = e.currentTarget.value; applyExecutionFilters(); }}
               aria-label={m.wf_exec_filter_workflow()}
-              class="px-2.5 py-1.5 rounded-xl bg-surface-container-high border border-outline-variant/15 text-xs text-on-surface max-w-56"
+              class="px-2.5 py-1.5 rounded-xl bg-surface-container-high border border-field-border text-xs text-on-surface max-w-56"
             >
               <option value="">{m.wf_exec_filter_workflow_all()}</option>
               {#each workflows as workflow (workflow.id)}

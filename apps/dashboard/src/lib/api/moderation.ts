@@ -326,6 +326,7 @@ export async function updateChannelsManagementConfig(
     honeypotReinvite?: boolean;
     honeypotGraceSeconds?: number;
     honeypotDurationMin?: number | null;
+    honeypotShowCount?: boolean;
     createHoneypotChannel?: boolean;
     wordStatsEnabled?: boolean;
   },
@@ -537,7 +538,7 @@ export async function deleteBannedWord(id: string, guildId = authStore.selectedG
 
 export async function fetchGlobalBannedWords() {
   const response = await authorizedFetch(`${API_BASE_URL}/api/admin/banned-words`, { method: 'GET' });
-  if (!response.ok) throw new Error('Impossible de charger les mots globaux. Réessaie.');
+  if (!response.ok) throw new Error(m.api_err_global_words_load());
   return response.json();
 }
 
@@ -552,7 +553,7 @@ export async function saveGlobalBannedWords(
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    throw new Error(error.error || "Erreur lors de l'enregistrement des mots globaux");
+    throw new Error(error.error || m.api_err_global_words_save());
   }
 
   return response.json();
@@ -566,7 +567,7 @@ export async function cleanupGlobalBannedWords() {
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    throw new Error(error.error || 'Erreur lors du nettoyage des mots globaux');
+    throw new Error(error.error || m.api_err_global_words_clean());
   }
 
   return response.json();
@@ -584,7 +585,7 @@ export async function updateGlobalBannedWord(
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    throw new Error(error.error || 'Impossible de mettre à jour le mot global. Réessaie.');
+    throw new Error(error.error || m.api_err_global_word_update());
   }
 
   return response.json();
@@ -596,6 +597,6 @@ export async function toggleGlobalBannedWord(id: string, enabled: boolean) {
 
 export async function deleteGlobalBannedWord(id: string) {
   const response = await authorizedFetch(`${API_BASE_URL}/api/admin/banned-words/${id}`, { method: 'DELETE' });
-  if (!response.ok) throw new Error('Impossible de supprimer le mot global. Réessaie.');
+  if (!response.ok) throw new Error(m.api_err_global_word_delete());
   return response.json();
 }

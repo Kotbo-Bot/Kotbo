@@ -1,7 +1,9 @@
 import { Message, EmbedBuilder, Client, ChannelType, PermissionFlagsBits, type TextBasedChannel, type GuildMember, type User } from 'discord.js';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
+import { firstKillRoleProblem } from './rpg/rpgFirstKillService.js';
 
+import { testSafeRegex } from '../../utils/safeRegex.js';
 interface WeightedMessage {
   message: string;
   weight: number;
@@ -166,6 +168,18 @@ const responsesCache = new Map<string, AutoResponse[]>();
 /**
  * Invalide le cache des auto-réponses pour une guilde donnée
  */
+/**
+ * Donne le rôle d'une réponse automatique, après contrôle à l'exécution : une règle déjà en base
+ * (ou écrite par l'agent MCP) ne doit jamais distribuer un rôle Administrateur, @everyone ou
+ * géré. Le bot étant l'exécutant, le verrou d'administration ne verrait pas l'ajout.
+ */
+async function addAutoResponseRole(member: GuildMember, roleId: string): Promise<void> {
+  const role = member.guild.roles.cache.get(roleId) ?? await member.guild.roles.fetch(roleId).catch(() => null);
+  const problem = firstKillRoleProblem(member.guild, role);
+  if (problem) throw new Error(`Rôle refusé pour une réponse automatique : ${problem}`);
+  await member.roles.add(roleId);
+}
+
 export function invalidateAutoResponseCache(guildId: string) {
   responsesCache.delete(guildId);
 }
@@ -210,8 +224,7 @@ export async function handleAutoResponse(message: Message) {
         isMatch = contentLower.includes(item.trigger.toLowerCase());
       } else if (item.matchType === 'REGEX') {
         try {
-          const regex = new RegExp(item.trigger, 'i');
-          isMatch = regex.test(content);
+          isMatch = testSafeRegex(item.trigger, content);
         } catch (e) {
           logger.warn('AutoResponseService', `Regex invalide pour l'auto-réponse ${item.id}:`, e);
         }
@@ -231,7 +244,7 @@ export async function handleAutoResponse(message: Message) {
         // 1. Actions sur les rôles
         if (member) {
           if (item.roleIdToAdd) {
-            await member.roles.add(item.roleIdToAdd).catch((e) => {
+            await addAutoResponseRole(member, item.roleIdToAdd).catch((e) => {
               logger.error('AutoResponseService', `Impossible d'ajouter le rôle ${item.roleIdToAdd} au membre ${member.id}:`, e);
             });
           }
@@ -471,8 +484,7 @@ export async function handleFormTrigger(
         isMatch = answerLower.includes(triggerLower);
       } else if (item.matchType === 'REGEX') {
         try {
-          const regex = new RegExp(item.trigger, 'i');
-          isMatch = regex.test(answerValue);
+          isMatch = testSafeRegex(item.trigger, answerValue);
         } catch (e) {
           logger.warn('AutoResponseService', `Regex invalide pour l'auto-réponse formulaire ${item.id}:`, e);
         }
@@ -482,7 +494,7 @@ export async function handleFormTrigger(
         // Exécuter les actions
         if (member) {
           if (item.roleIdToAdd) {
-            await member.roles.add(item.roleIdToAdd).catch((e) => {
+            await addAutoResponseRole(member, item.roleIdToAdd).catch((e) => {
               logger.error('AutoResponseService', `Impossible d'ajouter le rôle ${item.roleIdToAdd} au membre ${member.id} via formulaire:`, e);
             });
           }
@@ -579,8 +591,7 @@ export async function handleTicketTrigger(
         isMatch = valueLower.includes(triggerLower);
       } else if (item.matchType === 'REGEX') {
         try {
-          const regex = new RegExp(item.trigger, 'i');
-          isMatch = regex.test(fieldToCheck);
+          isMatch = testSafeRegex(item.trigger, fieldToCheck);
         } catch (e) {
           logger.warn('AutoResponseService', `Regex invalide pour l'auto-réponse ticket ${item.id}:`, e);
         }
@@ -590,7 +601,7 @@ export async function handleTicketTrigger(
         // Exécuter les actions
         if (member) {
           if (item.roleIdToAdd) {
-            await member.roles.add(item.roleIdToAdd).catch((e) => {
+            await addAutoResponseRole(member, item.roleIdToAdd).catch((e) => {
               logger.error('AutoResponseService', `Impossible d'ajouter le rôle ${item.roleIdToAdd} au membre ${member.id} via ticket:`, e);
             });
           }

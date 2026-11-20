@@ -21,6 +21,7 @@ import { COLORS, truncate } from '../../utils/embeds.js';
 import { resolveEmojiShortcodes } from '../../utils/emojis.js';
 import { resolveTextMentions } from '../../utils/mentions.js';
 
+import { fetchGuildChannel } from '../../utils/panelMessage.js';
 export type EventQuizConfig = {
   themeColor?: string;
 };
@@ -95,7 +96,7 @@ export async function publishEvent(client: Client, eventId: string) {
 
   if (!event.channelId) throw new Error('Salon introuvable');
 
-  const channel = (await client.channels.fetch(event.channelId).catch(() => null)) as TextChannel | null;
+  const channel = (await fetchGuildChannel(client, event.guildId, event.channelId)) as TextChannel | null;
   if (!channel) throw new Error('Salon Discord introuvable');
 
   if (event.type === 'CTF') {
@@ -1171,7 +1172,7 @@ export async function publishCustomEventAnnouncement(client: Client, eventId: st
     const channelId = event.announcementChannelId;
     if (!channelId) throw new Error("Aucun salon d'annonce configure pour cet evenement");
 
-    const channel = await client.channels.fetch(channelId).catch(() => null);
+    const channel = await fetchGuildChannel(client, event.guildId, channelId);
     if (!channel) throw new Error('Salon Discord introuvable');
 
     const embed = new EmbedBuilder()

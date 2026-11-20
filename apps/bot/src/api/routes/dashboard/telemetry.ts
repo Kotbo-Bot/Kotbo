@@ -1,26 +1,15 @@
-import { IncomingMessage, ServerResponse } from 'node:http';
-import { Client } from 'discord.js';
+import { Hono } from 'hono';
+import type { Client } from 'discord.js';
 import { DASHBOARD_TELEMETRY_LIMITS, sanitizeTelemetryEntry, type DashboardTelemetryEntry } from '@kotbo/contracts';
 import { logger } from '../../../utils/logger.js';
-import {
-  checkRateLimit,
-  json,
-  readJsonBody,
-  resolveAdminAccess,
-  resolveDashboardAccess,
-  type AuthClaims,
-} from '../../shared.js';
+import { checkRateLimit, resolveAdminAccess, resolveDashboardAccess } from '../../shared.js';
 import { ensureDashboardTelemetryFlusher, recordTelemetryBatch } from '../../../services/analytics/dashboardTelemetryService.js';
+import { dashboardAuth, readBody, send } from '../../hono/dashboard/kit.js';
 
 /** Un onglet envoie un lot toutes les 30 s, plus un au départ : 20/min laisse de la marge à plusieurs onglets. */
 const telemetryRateLimiter = new Map<string, number[]>();
 const RATE_LIMIT = 20;
 const RATE_WINDOW_MS = 60_000;
-
-function noContent(res: ServerResponse): void {
-  res.statusCode = 204;
-  res.end();
-}
 
 /**
  * POST /api/dashboard/telemetry
@@ -29,74 +18,67 @@ function noContent(res: ServerResponse): void {
  * quand la requête est bien formée, y compris quand le lot est écarté : la
  * télémétrie ne doit jamais faire apparaître d'erreur dans le dashboard.
  */
-export async function handleTelemetryRoute(
-  req: IncomingMessage,
-  res: ServerResponse,
-  parts: string[],
-  client: Client,
-  user: AuthClaims,
-): Promise<boolean> {
-  if (parts.length !== 3 || parts[2] !== 'telemetry') return false;
-  if (req.method !== 'POST') {
-    json(res, 405, { error: 'Méthode non autorisée' });
-    return true;
-  }
+export function createTelemetryRouter(client: Client) {
+  const router = new Hono();
+  const path = '/api/dashboard/telemetry';
 
-  if (!checkRateLimit(telemetryRateLimiter, user.userId, RATE_LIMIT, RATE_WINDOW_MS)) {
-    json(res, 429, { error: 'Trop de requêtes' });
-    return true;
-  }
-
-  let body: { entries?: unknown } | null;
-  try {
-    body = await readJsonBody<{ entries?: unknown }>(req);
-  } catch {
-    json(res, 400, { error: 'Corps invalide' });
-    return true;
-  }
-
-  const rawEntries = Array.isArray(body?.entries) ? body.entries : [];
-  if (rawEntries.length === 0) {
-    noContent(res);
-    return true;
-  }
-
-  // Les admins globaux parcourent tous les serveurs pour le support : les
-  // compter fausserait l'usage réel.
-  if (await resolveAdminAccess(client, user.userId)) {
-    noContent(res);
-    return true;
-  }
-
-  const entries: DashboardTelemetryEntry[] = [];
-  for (const raw of rawEntries.slice(0, DASHBOARD_TELEMETRY_LIMITS.maxEntriesPerBatch)) {
-    const entry = sanitizeTelemetryEntry(raw);
-    if (entry) entries.push(entry);
-  }
-
-  // Un compteur n'est rattaché qu'à un serveur dont la personne voit le dashboard.
-  const allowedGuilds = new Map<string, boolean>();
-  for (const guildId of new Set(entries.map((e) => e.guildId))) {
-    if (!guildId) {
-      allowedGuilds.set(guildId, true);
-      continue;
+  router.post(path, dashboardAuth, async (c) => {
+    const user = c.var.dashboardUser;
+    if (!checkRateLimit(telemetryRateLimiter, user.userId, RATE_LIMIT, RATE_WINDOW_MS)) {
+      return send(c, { error: 'Trop de requêtes' }, 429);
     }
+
+    let body: { entries?: unknown } | null;
     try {
-      const access = await resolveDashboardAccess(client, guildId, user.userId);
-      allowedGuilds.set(guildId, access.canViewDashboard);
+      body = await readBody<{ entries?: unknown }>(c);
     } catch {
-      allowedGuilds.set(guildId, false);
+      return send(c, { error: 'Corps invalide' }, 400);
     }
-  }
 
-  const accepted = entries.filter((e) => allowedGuilds.get(e.guildId));
-  try {
-    ensureDashboardTelemetryFlusher();
-    await recordTelemetryBatch(user.userId, accepted);
-  } catch (error) {
-    logger.error('DashboardTelemetry', 'Lot de télémétrie non enregistré :', error);
-  }
+    const rawEntries = Array.isArray(body?.entries) ? body.entries : [];
+    if (rawEntries.length === 0) {
+      return c.body(null, 204);
+    }
 
-  noContent(res);
-  return true;
+    // Les admins globaux parcourent tous les serveurs pour le support : les
+    // compter fausserait l'usage réel.
+    if (await resolveAdminAccess(client, user.userId)) {
+      return c.body(null, 204);
+    }
+
+    const entries: DashboardTelemetryEntry[] = [];
+    for (const raw of rawEntries.slice(0, DASHBOARD_TELEMETRY_LIMITS.maxEntriesPerBatch)) {
+      const entry = sanitizeTelemetryEntry(raw);
+      if (entry) entries.push(entry);
+    }
+
+    // Un compteur n'est rattaché qu'à un serveur dont la personne voit le dashboard.
+    const allowedGuilds = new Map<string, boolean>();
+    for (const guildId of new Set(entries.map((e) => e.guildId))) {
+      if (!guildId) {
+        allowedGuilds.set(guildId, true);
+        continue;
+      }
+      try {
+        const access = await resolveDashboardAccess(client, guildId, user.userId);
+        allowedGuilds.set(guildId, access.canViewDashboard);
+      } catch {
+        allowedGuilds.set(guildId, false);
+      }
+    }
+
+    const accepted = entries.filter((e) => allowedGuilds.get(e.guildId));
+    try {
+      ensureDashboardTelemetryFlusher();
+      await recordTelemetryBatch(user.userId, accepted);
+    } catch (error) {
+      logger.error('DashboardTelemetry', 'Lot de télémétrie non enregistré :', error);
+    }
+
+    return c.body(null, 204);
+  });
+
+  router.all(path, dashboardAuth, (c) => send(c, { error: 'Méthode non autorisée' }, 405));
+
+  return router;
 }

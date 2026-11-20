@@ -16,6 +16,7 @@ import { formatInTimezone, resolveGuildTimezone } from '../../utils/timezone.js'
 import * as m from '../../lib/paraglide/messages.js';
 
 import { publicErrorMessage } from '../../utils/publicError.js';
+import { resolveDashboardAccess } from '../../api/shared/core.js';
 const meta = getCommandMetadata('c6_rappel');
 const createMeta = getCommandMetadata('c6_rappel_create');
 const createTempsMeta = getCommandMetadata('c6_rappel_create_temps');
@@ -139,11 +140,24 @@ async function execute(interaction: ChatInputCommandInteraction) {
 
     await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
 
+    // Le bot publiera dans ce salon à l'échéance : l'auteur doit pouvoir y écrire lui-même.
+    if (channel) {
+      const target = interaction.guild?.channels.cache.get(channel.id);
+      const allowed = target?.permissionsFor(interaction.user.id)?.has(['ViewChannel', 'SendMessages']) ?? false;
+      if (!allowed) {
+        await interaction.editReply({ content: 'Tu ne peux pas écrire dans ce salon.' });
+        return;
+      }
+    }
+
+    // Le planning est interne au staff : lien et autocomplétion lui sont réservés.
+    const isStaff = (await resolveDashboardAccess(interaction.client, guildId, user.id)).canViewDashboard;
+
     let taskId: string | null = null;
     let callId: string | null = null;
     let meetingId: string | null = null;
 
-    if (planningItem) {
+    if (planningItem && isStaff) {
       const [type, id] = planningItem.split(':');
       if (type === 'task') taskId = id;
       else if (type === 'call') callId = id;
@@ -261,6 +275,10 @@ async function autocomplete(interaction: AutocompleteInteraction) {
 
   if (focusedName === createPlanningMeta.name) {
     try {
+      if (!(await resolveDashboardAccess(interaction.client, guildId, user.id)).canViewDashboard) {
+        await interaction.respond([]);
+        return;
+      }
       // Fetch meetings, calls and tasks matching query
       const [meetings, calls, tasks] = await Promise.all([
         prisma.staffMeeting.findMany({

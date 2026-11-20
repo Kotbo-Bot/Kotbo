@@ -1,137 +1,114 @@
 /** Routes dashboard du module `logs`. */
+import { Hono } from 'hono';
+import { createMiddleware } from 'hono/factory';
+import type { Client } from 'discord.js';
 import prisma from '../../../../utils/db.js';
 import { logger } from '../../../../utils/logger.js';
 import { cache } from '../../../../utils/cache.js';
-import { getGuildName, json, pushAudit, readJsonBody, resolveFeatureAccessMap } from '../../../shared.js';
-import { type ModuleRouteContext } from './_shared.js';
+import { getGuildName, pushAudit, resolveFeatureAccessMap } from '../../../shared.js';
+import { auditUserOf, fail, guildRoute, readBody, send } from '../../../hono/dashboard/kit.js';
 
-import { jsonFailure } from '../../../shared/failure.js';
-export async function handleLogsRoutes(ctx: ModuleRouteContext): Promise<boolean> {
-  const { req, res, parts, client, user, guildId, access, method, auditUser, moduleKey } = ctx;
+const LOG_EVENT_TYPES = [
+  'message_delete', 'message_edit', 'message_bulk_delete',
+  'member_join', 'member_leave', 'member_roles_update', 'member_timeout', 'member_tag_update',
+  'moderation_kick', 'moderation_ban', 'moderation_unban', 'moderation_timeout',
+  'voice_join', 'voice_leave', 'voice_move', 'voice_moderation', 'voice_panel',
+  'channel_lifecycle', 'role_lifecycle'
+];
 
-  // Logs event configurations
-  if (moduleKey === 'logs') {
+export function createLogsRouter(client: Client) {
+  const router = new Hono();
+  const path = '/api/dashboard/guilds/:guildId/logs/event-configs';
+
+  const logsAccess = createMiddleware(async (c, next) => {
+    const guildId = c.req.param('guildId')!;
+    const userId = c.var.dashboardUser.userId;
+    const access = c.var.effectiveAccess;
     const discordGuild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
-    const member = discordGuild ? await discordGuild.members.fetch(user.userId).catch(() => null) : null;
+    const member = discordGuild ? await discordGuild.members.fetch(userId).catch(() => null) : null;
     const roleIds = member
       ? member.roles.cache
-          .map((role) => role?.id)
-          .filter((roleId): roleId is string => !!roleId)
+        .map((role) => role?.id)
+        .filter((roleId): roleId is string => !!roleId)
       : [];
-    const featureAccess = await resolveFeatureAccessMap(client, guildId, access, user.userId, roleIds);
+    const featureAccess = await resolveFeatureAccessMap(client, guildId, access, userId, roleIds);
 
-    const isGetMethod = method === 'GET';
+    const isGetMethod = c.req.method === 'GET';
     if (!isGetMethod && !access.canManageSettings && !featureAccess.logs?.canConfigure) {
-      json(res, 403, { error: 'Accès refusé. Seuls les administrateurs peuvent modifier les logs.' });
-      return true;
+      return send(c, { error: 'Accès refusé. Seuls les administrateurs peuvent modifier les logs.' }, 403);
     }
-
     if (isGetMethod && !access.canViewDashboard) {
-      json(res, 403, { error: "Accès refusé. Vous n'avez pas accès au dashboard." });
-      return true;
+      return send(c, { error: "Accès refusé. Vous n'avez pas accès au dashboard." }, 403);
     }
+    await next();
+  });
+  const gate = [...guildRoute(client), logsAccess] as const;
 
-    // GET /api/dashboard/guilds/:guildId/logs/event-configs
-    if (parts.length === 6 && parts[5] === 'event-configs' && method === 'GET') {
-      try {
-        const LOG_EVENT_TYPES = [
-          'message_delete', 'message_edit', 'message_bulk_delete',
-          'member_join', 'member_leave', 'member_roles_update', 'member_timeout',
-          'moderation_kick', 'moderation_ban', 'moderation_unban', 'moderation_timeout',
-          'voice_join', 'voice_leave', 'voice_move', 'voice_panel',
-          'channel_lifecycle', 'role_lifecycle'
-        ];
+  router.get(path, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    try {
+      const existingConfigs = await prisma.guildLogEventConfig.findMany({ where: { guildId } });
+      const existingMap = new Map(existingConfigs.map(cfg => [cfg.eventType, cfg]));
+      const missingTypes = LOG_EVENT_TYPES.filter(t => !existingMap.has(t));
 
-        const existingConfigs = await prisma.guildLogEventConfig.findMany({
-          where: { guildId }
-        });
-
-        const existingMap = new Map(existingConfigs.map(c => [c.eventType, c]));
-        const missingTypes = LOG_EVENT_TYPES.filter(t => !existingMap.has(t));
-
-        if (missingTypes.length > 0) {
-          await prisma.$transaction(
-            missingTypes.map(t => prisma.guildLogEventConfig.create({
-              data: {
-                guildId,
-                eventType: t,
-                enabled: true,
-                channelId: null
-              }
-            }))
-          );
-        }
-
-        const allConfigs = await prisma.guildLogEventConfig.findMany({
-          where: { guildId },
-          orderBy: { eventType: 'asc' }
-        });
-
-        json(res, 200, { configs: allConfigs });
-      } catch (err) {
-        logger.error('LogsConfigAPI', 'Error fetching logs event configs:', err);
-        jsonFailure(res, err, 'Erreur lors de la récupération de la configuration des événements', 'LogsConfigAPI');
-      }
-      return true;
-    }
-
-    // PUT /api/dashboard/guilds/:guildId/logs/event-configs
-    if (parts.length === 6 && parts[5] === 'event-configs' && method === 'PUT') {
-      try {
-        const body = await readJsonBody<{
-          configs: Array<{
-            eventType: string;
-            enabled: boolean;
-            channelId: string | null;
-          }>;
-        }>(req);
-
-        if (!body?.configs || !Array.isArray(body.configs)) {
-          json(res, 400, { error: 'Format invalide. Liste de configurations attendue.' });
-          return true;
-        }
-
+      if (missingTypes.length > 0) {
         await prisma.$transaction(
-          body.configs.map(c => prisma.guildLogEventConfig.upsert({
-            where: {
-              guildId_eventType: { guildId, eventType: c.eventType }
-            },
-            update: {
-              enabled: c.enabled,
-              channelId: c.channelId ? c.channelId : null
-            },
-            create: {
-              guildId,
-              eventType: c.eventType,
-              enabled: c.enabled,
-              channelId: c.channelId ? c.channelId : null
-            }
+          missingTypes.map(t => prisma.guildLogEventConfig.create({
+            data: { guildId, eventType: t, enabled: true, channelId: null }
           }))
         );
-
-        // Sans ca, le bot applique l ancienne configuration jusqu a expiration
-        // du cache : soixante secondes de comportement garanti faux apres
-        // chaque sauvegarde. Efface aussi les entrees d absence de ligne.
-        await cache.invalidateGuild(guildId);
-
-        await pushAudit(guildId, {
-          user: auditUser,
-          action: 'Mise à jour configuration logs granulaires',
-          context: getGuildName(client, guildId),
-          module: 'Logs',
-          eventType: 'Manuel',
-          details: 'Configuration par événement mise à jour.',
-          channelId: null
-        });
-
-        json(res, 200, { ok: true });
-      } catch (err) {
-        logger.error('LogsConfigAPI', 'Error updating logs event configs:', err);
-        jsonFailure(res, err, 'Erreur lors de la mise à jour de la configuration des événements', 'LogsConfigAPI');
       }
-      return true;
-    }
-  }
 
-  return false;
+      const allConfigs = await prisma.guildLogEventConfig.findMany({
+        where: { guildId },
+        orderBy: { eventType: 'asc' }
+      });
+      return send(c, { configs: allConfigs });
+    } catch (err) {
+      logger.error('LogsConfigAPI', 'Error fetching logs event configs:', err);
+      return fail(c, err, 'Erreur lors de la récupération de la configuration des événements', 'LogsConfigAPI');
+    }
+  });
+
+  router.put(path, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    try {
+      const body = await readBody<{
+        configs: Array<{ eventType: string; enabled: boolean; channelId: string | null }>;
+      }>(c);
+      if (!body?.configs || !Array.isArray(body.configs)) {
+        return send(c, { error: 'Format invalide. Liste de configurations attendue.' }, 400);
+      }
+
+      await prisma.$transaction(
+        body.configs.map(cfg => prisma.guildLogEventConfig.upsert({
+          where: { guildId_eventType: { guildId, eventType: cfg.eventType } },
+          update: { enabled: cfg.enabled, channelId: cfg.channelId ? cfg.channelId : null },
+          create: { guildId, eventType: cfg.eventType, enabled: cfg.enabled, channelId: cfg.channelId ? cfg.channelId : null }
+        }))
+      );
+
+      // Sans ca, le bot applique l ancienne configuration jusqu a expiration
+      // du cache : soixante secondes de comportement garanti faux apres
+      // chaque sauvegarde. Efface aussi les entrees d absence de ligne.
+      await cache.invalidateGuild(guildId);
+
+      await pushAudit(guildId, {
+        user: auditUserOf(c),
+        action: 'Mise à jour configuration logs granulaires',
+        context: getGuildName(client, guildId),
+        module: 'Logs',
+        eventType: 'Manuel',
+        details: 'Configuration par événement mise à jour.',
+        channelId: null
+      });
+
+      return send(c, { ok: true });
+    } catch (err) {
+      logger.error('LogsConfigAPI', 'Error updating logs event configs:', err);
+      return fail(c, err, 'Erreur lors de la mise à jour de la configuration des événements', 'LogsConfigAPI');
+    }
+  });
+
+  return router;
 }

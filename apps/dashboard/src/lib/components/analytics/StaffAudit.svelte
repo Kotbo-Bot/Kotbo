@@ -1,6 +1,6 @@
 <script lang="ts">
+  import UserDisplay from '../UserDisplay.svelte';
   import Papicon from '../Papicon.svelte';
-  import { memberAvatarSrc } from '../../discordMedia';
   import DetailedAnalyticsModal from './DetailedAnalyticsModal.svelte';
   import { m } from '../../i18n';
 
@@ -16,8 +16,6 @@
   // Un repli sur l'avatar Discord generique donnerait la meme vignette a tous
   // les membres sans photo : on passe le nom et l'id pour obtenir une
   // initiale coloree distincte (issue #211).
-  const getAvatar = (url: string | null, name?: string | null, userId?: string | null) =>
-    memberAvatarSrc(url, name, userId);
 </script>
 
 <div class="space-y-6">
@@ -69,14 +67,7 @@
           <div class="flex items-center justify-center w-8 h-8 rounded-full font-semibold text-xs {i < 3 ? 'bg-warning/10 text-warning' : 'bg-on-surface/5 text-on-surface-variant/30'}">
             {i + 1}
           </div>
-          <div class="relative">
-            <img src={getAvatar(s.avatarUrl, s.name, s.userId)} alt="" class="w-10 h-10 rounded-xl object-cover" />
-            <div class="absolute -bottom-1 -right-1 w-3 h-3 rounded-full border-2 border-surface bg-emerald-500"></div>
-          </div>
-          <div class="flex-1 min-w-0">
-            <span class="text-base font-semibold text-on-surface block truncate">{s.name}</span>
-            <span class="text-xs font-semibold text-on-surface-variant/40">{s.grade || m.d1_sa_staff()}</span>
-          </div>
+          <UserDisplay userId={s.userId} name={s.name} avatarUrl={s.avatarUrl} subtitle={s.grade || m.d1_sa_staff()} size="lg" class="flex-1" />
           <div class="hidden md:flex items-center gap-6 mr-4">
             <div class="text-right">
               <p class="text-xs font-semibold text-on-surface-variant/30">{m.d1_sa_messages()}</p>

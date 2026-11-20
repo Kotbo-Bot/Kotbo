@@ -37,21 +37,21 @@
   let { channels = [] }: { channels?: { id: string; name: string }[] } = $props();
 
   const SANCTIONS: { value: VisionSanction; label: string }[] = [
-    { value: 'DELETE', label: m.arx_sanction_delete_only() },
-    { value: 'WARN', label: m.arx_sanction_warn() },
+    { value: 'DELETE', get label() { return m.arx_sanction_delete_only(); } },
+    { value: 'WARN', get label() { return m.arx_sanction_warn(); } },
     { value: 'TIMEOUT', label: 'Timeout' },
-    { value: 'JAIL', label: m.arx_jail_title() },
-    { value: 'KICK', label: m.arx_sanction_kick() },
+    { value: 'JAIL', get label() { return m.arx_jail_title(); } },
+    { value: 'KICK', get label() { return m.arx_sanction_kick(); } },
     { value: 'SOFTBAN', label: 'Softban' },
-    { value: 'BAN', label: m.arx_sanction_ban() },
+    { value: 'BAN', get label() { return m.arx_sanction_ban(); } },
   ];
   const DURATIONS: { value: number | null; label: string }[] = [
     { value: 5, label: '5 minutes' },
-    { value: 60, label: m.arx_duration_1h() },
-    { value: 1440, label: m.arx_duration_1d() },
-    { value: 10080, label: m.arx_duration_7d() },
-    { value: 43200, label: m.arx_duration_30d() },
-    { value: null, label: m.arx_duration_permanent() },
+    { value: 60, get label() { return m.arx_duration_1h(); } },
+    { value: 1440, get label() { return m.arx_duration_1d(); } },
+    { value: 10080, get label() { return m.arx_duration_7d(); } },
+    { value: 43200, get label() { return m.arx_duration_30d(); } },
+    { value: null, get label() { return m.arx_duration_permanent(); } },
   ];
   /** Le navigateur réduit l'image avant l'envoi : l'empreinte résiste au redimensionnement. */
   const UPLOAD_MAX_SIDE = 1280;
@@ -327,7 +327,7 @@
                 <select
                   value={list.reviewChannelId}
                   onchange={(e) => patchList(list, { reviewChannelId: e.currentTarget.value || null })}
-                  class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
+                  class="mt-1 w-full rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface"
                 >
                   <option value="">{m.common_none()}</option>
                   {#each channels as channel (channel.id)}
@@ -340,7 +340,7 @@
                 <select
                   value={list.sanction ?? ''}
                   onchange={(e) => patchList(list, { sanction: (e.currentTarget.value || null) as VisionSanction | null })}
-                  class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
+                  class="mt-1 w-full rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface"
                 >
                   <option value="">{m.vis_default_sanction()}</option>
                   {#each SANCTIONS as s (s.value)}
@@ -354,7 +354,7 @@
                   <select
                     value={list.durationMin === null ? '' : String(list.durationMin)}
                     onchange={(e) => patchList(list, { durationMin: e.currentTarget.value ? Number(e.currentTarget.value) : null })}
-                    class="mt-1 w-full rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
+                    class="mt-1 w-full rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface"
                   >
                     {#each DURATIONS as d (d.label)}
                       {#if d.value !== null || list.sanction === 'BAN' || list.sanction === 'JAIL'}
@@ -370,13 +370,13 @@
       {/each}
 
       <form class="flex gap-2 pt-1" onsubmit={(e) => { e.preventDefault(); void createList(); }}>
-        <input
+        <input aria-label={m.vis_new_list_ph()}
           type="text"
           maxlength="60"
           bind:value={newListName}
           placeholder={canCreateList ? m.vis_new_list_ph() : m.vis_max_lists()}
           disabled={!canCreateList}
-          class="flex-1 rounded-lg bg-surface-container border border-outline-variant/40 px-3 py-2 text-body-sm text-on-surface"
+          class="flex-1 rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface"
         />
         <Button type="submit" size="sm" icon="Plus" disabled={!canCreateList || !newListName.trim() || busy !== null}>{m.vis_create()}</Button>
       </form>

@@ -5,17 +5,14 @@ import {
   type StringSelectMenuInteraction,
   MessageFlags,
 } from 'discord.js';
-import { isModulePaused } from '@kotbo/contracts';
 import prisma from '../utils/db.js';
 import {
   sendMainConfigPanel,
   sendNewsConfigSectionPanel,
   sendCodePoliceConfig,
-  sendDailyAlgoConfig,
   sendGitHubReleasesConfig,
   sendStatusConfig,
   sendAdvancedLogsConfig,
-  buildSetTimeModal,
   buildSetReposModal,
 } from '../panels/generalConfigPanel.js';
 import { errorEmbed, successEmbed } from '../utils/embeds.js';
@@ -37,15 +34,11 @@ type ConfigInteraction =
   | ChannelSelectMenuInteraction
   | StringSelectMenuInteraction;
 
-/**
- * Le Daily Algo est en pause : un ancien panneau encore affiché sur Discord
- * garde ses boutons, qui ne doivent plus rien écrire. Renvoie `true` quand
- * l'interaction a été refusée.
- */
+/** Le Daily Algo a été supprimé : les boutons d'un ancien panneau n'écrivent plus rien. */
 async function refusePausedDailyAlgo(interaction: ConfigInteraction, id: string): Promise<boolean> {
-  if (!id.includes(':daily-algo') || !isModulePaused('daily_algo')) return false;
+  if (!id.includes(':daily-algo')) return false;
   await replyOrFollowUp(interaction, {
-    embeds: [errorEmbed('Daily Algo', 'Le Daily Algo est en pause : il ne peut pas être configuré pour le moment.')],
+    embeds: [errorEmbed('Daily Algo', 'Le Daily Algo a été supprimé.')],
     flags: [MessageFlags.Ephemeral],
   });
   return true;
@@ -59,9 +52,6 @@ export async function handleConfigSelectMenu(interaction: StringSelectMenuIntera
   switch (value) {
     case 'cfg:section:code-police':
       await sendCodePoliceConfig(interaction, guildId);
-      break;
-    case 'cfg:section:daily-algo':
-      await sendDailyAlgoConfig(interaction, guildId);
       break;
     case 'cfg:section:github-releases':
       await sendGitHubReleasesConfig(interaction, guildId);
@@ -93,8 +83,7 @@ export async function handleConfigButton(interaction: ButtonInteraction): Promis
       await sendNewsConfigSectionPanel(interaction, guildId);
     } else if (customId === 'cfg:section:code-police') {
       await sendCodePoliceConfig(interaction, guildId);
-    } else if (customId === 'cfg:section:daily-algo') {
-      await sendDailyAlgoConfig(interaction, guildId);
+
     } else if (customId === 'cfg:section:github-releases') {
       await sendGitHubReleasesConfig(interaction, guildId);
     } else if (customId === 'cfg:section:status') {
@@ -121,22 +110,7 @@ export async function handleConfigButton(interaction: ButtonInteraction): Promis
       });
 
       await sendCodePoliceConfig(interaction, guildId);
-    } else if (customId === 'cfg:toggle:daily-algo') {
-      await interaction.deferUpdate();
-      const next = await toggleGuildBoolean(guildId, 'dailyAlgoEnabled');
-      if (next === null) return;
 
-      await interaction.followUp({
-        embeds: [
-          successEmbed(
-            'Daily Algo',
-            `✅ ${next ? 'Activé' : 'Désactivé'}`
-          ),
-        ],
-        flags: [MessageFlags.Ephemeral],
-      });
-
-      await sendDailyAlgoConfig(interaction, guildId);
     } else if (customId === 'cfg:toggle:github-releases') {
       await interaction.deferUpdate();
       const next = await toggleGuildBoolean(guildId, 'githubReleasesEnabled');
@@ -153,22 +127,12 @@ export async function handleConfigButton(interaction: ButtonInteraction): Promis
       });
 
       await sendGitHubReleasesConfig(interaction, guildId);
-    } else if (customId === 'cfg:modal:daily-algo:time') {
-      const modal = await buildSetTimeModal();
-      await interaction.showModal(modal);
+
     } else if (customId === 'cfg:modal:github-releases:repos') {
       const modal = await buildSetReposModal();
       await interaction.showModal(modal);
-    } else if (customId === 'cfg:clear:daily-algo:channel') {
-      await interaction.deferUpdate();
-      await prisma.guild.update({ where: { id: guildId }, data: { dailyAlgoChannelId: null } });
-      await interaction.followUp({ embeds: [successEmbed('Daily Algo', 'Salon supprimé.')], flags: [MessageFlags.Ephemeral] });
-      await sendDailyAlgoConfig(interaction, guildId);
-    } else if (customId === 'cfg:clear:daily-algo:validation-channel') {
-      await interaction.deferUpdate();
-      await prisma.guild.update({ where: { id: guildId }, data: { dailyAlgoValidationChannelId: null } });
-      await interaction.followUp({ embeds: [successEmbed('Daily Algo', 'Salon de validation supprimé.')], flags: [MessageFlags.Ephemeral] });
-      await sendDailyAlgoConfig(interaction, guildId);
+
+
     } else if (customId === 'cfg:clear:github-releases:channel') {
       await interaction.deferUpdate();
       await prisma.guild.update({ where: { id: guildId }, data: { githubReleasesChannelId: null } });
@@ -197,31 +161,7 @@ export async function handleConfigModal(interaction: ModalSubmitInteraction): Pr
   if (await refusePausedDailyAlgo(interaction, customId)) return;
 
   try {
-    if (customId === 'cfg:modal:daily-algo:time') {
-      await interaction.deferUpdate();
-      const time = interaction.fields.getTextInputValue('time');
-
-      // Validate time format HH:MM
-      if (!/^([0-1]\d|2[0-3]):([0-5]\d)$/.test(time)) {
-        await interaction.followUp({
-          embeds: [errorEmbed('Format invalide', 'Utilise le format HH:MM (ex: 09:00)')],
-          flags: [MessageFlags.Ephemeral],
-        });
-        return;
-      }
-
-      await prisma.guild.update({
-        where: { id: guildId },
-        data: { dailyAlgoTime: time },
-      });
-
-      await interaction.followUp({
-        embeds: [successEmbed('Daily Algo', `Heure configurée : ${time} UTC`)],
-        flags: [MessageFlags.Ephemeral],
-      });
-
-      await sendDailyAlgoConfig(interaction, guildId);
-    } else if (customId === 'cfg:modal:github-releases:repos') {
+    if (customId === 'cfg:modal:github-releases:repos') {
       await interaction.deferUpdate();
       const reposText = interaction.fields.getTextInputValue('repos');
       const repos = reposText
@@ -263,20 +203,6 @@ export async function handleConfigChannelSelect(interaction: ChannelSelectMenuIn
 
   try {
     await interaction.deferUpdate();
-
-    if (customId === 'cfg:select:daily-algo:channel') {
-      await prisma.guild.update({ where: { id: guildId }, data: { dailyAlgoChannelId: channelId } });
-      await interaction.followUp({ embeds: [successEmbed('Daily Algo', `Salon configuré : <#${channelId}>`)], flags: [MessageFlags.Ephemeral] });
-      await sendDailyAlgoConfig(interaction, guildId);
-      return;
-    }
-
-    if (customId === 'cfg:select:daily-algo:validation-channel') {
-      await prisma.guild.update({ where: { id: guildId }, data: { dailyAlgoValidationChannelId: channelId } });
-      await interaction.followUp({ embeds: [successEmbed('Daily Algo', `Salon de validation configuré : <#${channelId}>`)], flags: [MessageFlags.Ephemeral] });
-      await sendDailyAlgoConfig(interaction, guildId);
-      return;
-    }
 
     if (customId === 'cfg:select:github-releases:channel') {
       await prisma.guild.update({ where: { id: guildId }, data: { githubReleasesChannelId: channelId } });

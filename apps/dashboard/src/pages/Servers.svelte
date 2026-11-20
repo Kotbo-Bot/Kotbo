@@ -23,6 +23,7 @@
   import EmptyState from '../lib/components/EmptyState.svelte';
   import RefreshButton from '../lib/components/RefreshButton.svelte';
   import KotboMark from '../lib/components/onboarding/KotboMark.svelte';
+  import BotInviteModal from '../lib/components/onboarding/BotInviteModal.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
 
   import { errorMessage } from '@kotbo/shared';
@@ -32,6 +33,14 @@
   let oauthUnavailable = $state(false);
   let loading = $state(true);
   let query = $state('');
+
+  let inviteModalOpen = $state(false);
+  let selectedServerForInvite = $state<ManageableServer | null>(null);
+
+  function openInviteModal(server: ManageableServer | null) {
+    selectedServerForInvite = server;
+    inviteModalOpen = true;
+  }
 
   const filtered = $derived.by(() => {
     const needle = query.trim().toLowerCase();
@@ -286,14 +295,14 @@
     <div class="flex items-center flex-wrap md:justify-end gap-2 shrink-0">
       <RefreshButton onclick={() => void load(true)} {loading} />
       {#if canInvite}
-        <a
-          href={inviteUrl()}
-          rel="noopener noreferrer"
+        <button
+          type="button"
+          onclick={() => openInviteModal(null)}
           class="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-primary text-on-primary text-sm font-medium hover:opacity-90 transition-opacity"
         >
           <Papicon icon="Plus" size={15} />
           {m.srv_add_to_server()}
-        </a>
+        </button>
       {/if}
     </div>
   </header>
@@ -347,11 +356,11 @@
       {#if servers.length > 3}
         <div class="relative">
           <Papicon icon="Search" size={15} class="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/40" />
-          <input
+          <input aria-label={m.srv_search_ph()}
             type="search"
             bind:value={query}
             placeholder={m.srv_search_ph()}
-            class="w-full h-10 pl-9 pr-3 rounded-lg bg-surface-container-low/40 border border-outline-variant/30 text-sm text-on-surface placeholder-on-surface-variant/40 focus:outline-none focus:border-primary/50"
+            class="w-full h-10 pl-9 pr-3 rounded-lg bg-surface-container-low/40 border border-field-border text-sm text-on-surface placeholder-on-surface-variant/40 focus:outline-none focus:border-primary/50"
           />
         </div>
       {/if}
@@ -389,15 +398,14 @@
                 </div>
 
                 {#if canInvite}
-                  <a
-                    href={inviteUrl(server.id)}
-                    rel="noopener noreferrer"
-                    onclick={() => watchForArrival(server.id)}
+                  <button
+                    type="button"
+                    onclick={() => openInviteModal(server)}
                     class="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-primary text-on-primary text-xs font-medium hover:opacity-90 transition-opacity"
                   >
                     <Papicon icon="Plus" size={13} />
                     {pendingGuildId === server.id ? m.srv_pending() : m.srv_add()}
-                  </a>
+                  </button>
                 {/if}
               </div>
             {/each}
@@ -456,4 +464,13 @@
     {/if}
     </div>
   </div>
+
+  <BotInviteModal
+    bind:open={inviteModalOpen}
+    guild={selectedServerForInvite}
+    {clientId}
+    onInviteStarted={(guildId) => {
+      if (guildId) watchForArrival(guildId);
+    }}
+  />
 </div>

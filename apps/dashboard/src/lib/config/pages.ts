@@ -1,4 +1,5 @@
 import { m } from '../i18n';
+import { lowestPlanWithModule } from '@kotbo/contracts';
 
 export interface PageConfig {
   name: string;
@@ -17,6 +18,18 @@ export interface PageConfig {
    * atteint depuis un hub (les configurations rapides, depuis Prise en main).
    */
   hidden?: boolean;
+  /**
+   * Couronne du menu, pour les pages dont l'offre ne se lit pas dans le
+   * registre des modules (verrou porté par l'API) ou qui sont bridées en
+   * gratuit (`freemium`). Sinon déduite de `featureKey` par `pagePlan`.
+   */
+  plan?: 'plus' | 'freemium';
+}
+
+/** `plus` : réservée aux offres payantes. `freemium` : gratuite, avec un plafond que Plus lève. */
+export function pagePlan(page: PageConfig): 'plus' | 'freemium' | null {
+  if (page.plan) return page.plan;
+  return page.featureKey && lowestPlanWithModule(page.featureKey) ? 'plus' : null;
 }
 
 export function isPageBeta(page: PageConfig): boolean {
@@ -28,16 +41,16 @@ export function isPageWip(page: PageConfig): boolean {
 }
 
 export const generalItems: PageConfig[] = [
-  { name: m.nav_home(),           icon: "home",      href: "/",          featureKey: "dashboard", beta: false, wip: false },
+  { get name() { return m.nav_home(); },           icon: "home",      href: "/",          featureKey: "dashboard", beta: false, wip: false },
   // Identité du bot juste après l'accueil : c'est ce qui fait que le bot est
   // celui du serveur. Réservée aux offres payantes, verrou porté par l'API.
-  { name: m.nav_custom_bot(),     icon: "bot",       href: "/custom-bot", featureKey: "settings", beta: false, wip: false },
+  { get name() { return m.nav_custom_bot(); },     icon: "bot",       href: "/custom-bot", featureKey: "settings", beta: false, wip: false, plan: "plus" },
   // Prise en main juste apres l'accueil : c'est la page qu'on ouvre en
   // arrivant, et celle vers laquelle on revient pour verifier qu'il ne
   // manque rien.
   // « Créer mon serveur » y a été fusionné : monter la structure et vérifier
   // ce qu'il reste à régler sont le même moment.
-  { name: m.nav_setup(),           icon: "compass",   href: "/setup",     featureKey: "settings", beta: false, wip: false },
+  { get name() { return m.nav_setup(); },           icon: "compass",   href: "/setup",     featureKey: "settings", beta: false, wip: false },
   // « Reprise » a quitte le menu : la detection des autres bots et la
   // recuperation de ce qui est lisible du serveur se font desormais dans le
   // parcours de configuration, imposees des qu'on repond « serveur existant ».
@@ -46,19 +59,19 @@ export const generalItems: PageConfig[] = [
   // les liens en favori et pour un second passage apres l'arrivee d'un
   // nouveau bot ; elle n'a simplement plus a occuper une ligne du menu de tous
   // les serveurs, y compris ceux qui n'ont jamais eu d'autre bot.
-  { name: m.nav_pulse(),        icon: "activity",  href: "/pulse",     featureKey: "dashboard", beta: true, wip: false },
-  { name: m.nav_inbox(),             icon: "inbox",     href: "/notifications", beta: false, wip: false },
-  { name: m.nav_analytics(),         icon: "pie-chart", href: "/analytics", featureKey: "analytics", beta: false, wip: false },
+  { get name() { return m.nav_pulse(); },        icon: "activity",  href: "/pulse",     featureKey: "dashboard", beta: true, wip: false },
+  { get name() { return m.nav_inbox(); },             icon: "inbox",     href: "/notifications", beta: false, wip: false },
+  { get name() { return m.nav_analytics(); },         icon: "pie-chart", href: "/analytics", featureKey: "analytics", beta: false, wip: false, plan: "freemium" },
 ];
 
 export const moderationItems: PageConfig[] = [
-  { name: m.nav_members(),             icon: "users",         href: "/members",            featureKey: "members", beta: false, wip: false },
-  { name: m.nav_invitations(),         icon: "link",          href: "/invitations",        featureKey: "members", beta: false, wip: false },
-  { name: m.nav_discord_logs(),        icon: "file-text",     href: "/logs",              featureKey: "logs", beta: false, wip: false },
-  { name: m.nav_message_search(),  icon: "search",        href: "/message-search",    featureKey: "logs", beta: false, wip: false },
-  { name: m.nav_activity_log(),  icon: "history",       href: "/activity",          featureKey: "activity", beta: false, wip: false },
-  { name: m.nav_events(),          icon: "zap",           href: "/events",            featureKey: "events", beta: false, wip: false },
-  { name: m.nav_forms(),         icon: "clipboard",     href: "/forms",             featureKey: "custom_forms", beta: false, wip: false },
+  { get name() { return m.nav_members(); },             icon: "users",         href: "/members",            featureKey: "members", beta: false, wip: false },
+  { get name() { return m.nav_invitations(); },         icon: "link",          href: "/invitations",        featureKey: "members", beta: false, wip: false },
+  { get name() { return m.nav_discord_logs(); },        icon: "file-text",     href: "/logs",              featureKey: "logs", beta: false, wip: false },
+  { get name() { return m.nav_message_search(); },  icon: "search",        href: "/message-search",    featureKey: "logs", beta: false, wip: false },
+  { get name() { return m.nav_activity_log(); },  icon: "history",       href: "/activity",          featureKey: "activity", beta: false, wip: false },
+  { get name() { return m.nav_events(); },          icon: "zap",           href: "/events",            featureKey: "events", beta: false, wip: false },
+  { get name() { return m.nav_forms(); },         icon: "clipboard",     href: "/forms",             featureKey: "custom_forms", beta: false, wip: false },
 ];
 
 /**
@@ -74,15 +87,15 @@ export const moderationItems: PageConfig[] = [
  * file de revue et modules derives en faisaient une page dans la page.
  */
 export const securityItems: PageConfig[] = [
-  { name: m.nav_security_overview(),  icon: "shieldcheck",   href: "/security",           featureKey: "raid_protection", beta: false, wip: false },
-  { name: m.nav_security_quick_setup(), icon: "sparkles",    href: "/security/quick-setup", featureKey: "automod", beta: false, wip: false, hidden: true },
-  { name: m.nav_security_antiraid(),  icon: "shieldwarning", href: "/security/anti-raid", featureKey: "raid_protection", beta: false, wip: false },
-  { name: m.nav_security_filters(),   icon: "shield-alert",  href: "/security/filters",   featureKey: "automod", beta: false, wip: false },
-  { name: m.nav_nicknames(),          icon: "user",          href: "/security/filters/nicknames", featureKey: "nickname_moderation", beta: false, wip: false, hidden: true },
-  { name: m.nav_aegis(),              icon: "sparkles",      href: "/security/aegis",     featureKey: "automod", beta: false, wip: false },
-  { name: m.nav_security_accounts(),  icon: "shield",        href: "/security/accounts",  featureKey: "double_accounts", beta: false, wip: false },
-  { name: m.nav_security_sanctions(), icon: "alert-triangle",href: "/security/sanctions", featureKey: "sanctions", beta: false, wip: false },
-  { name: m.nav_ban_appeals(),        icon: "gavel",         href: "/security/sanctions/appeals", featureKey: "ban_appeals", beta: false, wip: false, hidden: true },
+  { get name() { return m.nav_security_overview(); },  icon: "shieldcheck",   href: "/security",           featureKey: "raid_protection", beta: false, wip: false },
+  { get name() { return m.nav_security_quick_setup(); }, icon: "sparkles",    href: "/security/quick-setup", featureKey: "automod", beta: false, wip: false, hidden: true },
+  { get name() { return m.nav_security_antiraid(); },  icon: "shieldwarning", href: "/security/anti-raid", featureKey: "raid_protection", beta: false, wip: false },
+  { get name() { return m.nav_security_filters(); },   icon: "shield-alert",  href: "/security/filters",   featureKey: "automod", beta: false, wip: false },
+  { get name() { return m.nav_nicknames(); },          icon: "user",          href: "/security/filters/nicknames", featureKey: "nickname_moderation", beta: false, wip: false, hidden: true },
+  { get name() { return m.nav_aegis(); },              icon: "sparkles",      href: "/security/aegis",     featureKey: "automod", beta: false, wip: false, plan: "plus" },
+  { get name() { return m.nav_security_accounts(); },  icon: "shield",        href: "/security/accounts",  featureKey: "double_accounts", beta: false, wip: false },
+  { get name() { return m.nav_security_sanctions(); }, icon: "alert-triangle",href: "/security/sanctions", featureKey: "sanctions", beta: false, wip: false },
+  { get name() { return m.nav_ban_appeals(); },        icon: "gavel",         href: "/security/sanctions/appeals", featureKey: "ban_appeals", beta: false, wip: false, hidden: true },
 ];
 
 /**
@@ -141,22 +154,22 @@ export function resolveLegacyHref(path: string): string | null {
 }
 
 export const levelingItems: PageConfig[] = [
-  { name: m.nav_leveling(),       icon: "trophy",        href: "/leveling",         featureKey: "leveling", beta: false, wip: false },
-  { name: m.nav_prestige(),            icon: "crown",         href: "/prestige",         featureKey: "prestige", beta: true, wip: false },
-  { name: m.nav_seasons(),             icon: "flag",          href: "/seasons",          featureKey: "seasons", beta: false, wip: false },
-  { name: m.nav_reputation(),          icon: "star",          href: "/reputation",       featureKey: "reputation", beta: false, wip: false },
-  { name: m.nav_clans(),               icon: "shield",        href: "/clans",            featureKey: "clans", beta: true, wip: false },
-  { name: m.nav_drops(),               icon: "arrow-down-box", href: "/drops",            featureKey: "drops", beta: true, wip: false },
+  { get name() { return m.nav_leveling(); },       icon: "trophy",        href: "/leveling",         featureKey: "leveling", beta: false, wip: false },
+  { get name() { return m.nav_prestige(); },            icon: "crown",         href: "/prestige",         featureKey: "prestige", beta: true, wip: false },
+  { get name() { return m.nav_seasons(); },             icon: "flag",          href: "/seasons",          featureKey: "seasons", beta: false, wip: false },
+  { get name() { return m.nav_reputation(); },          icon: "star",          href: "/reputation",       featureKey: "reputation", beta: false, wip: false },
+  { get name() { return m.nav_clans(); },               icon: "shield",        href: "/clans",            featureKey: "clans", beta: true, wip: false },
+  { get name() { return m.nav_drops(); },               icon: "arrow-down-box", href: "/drops",            featureKey: "drops", beta: true, wip: false },
 ];
 
 export const economyItems: PageConfig[] = [
   // En tete du groupe : un rythme touche aux gains, au delai du daily et a l'energie a la
   // fois, il ne releve donc d'aucun onglet de la page, et c'est par la qu'on commence.
-  { name: m.nav_economy_quick_setup(), icon: "sparkles", href: "/economy-setup",    featureKey: "economy",  beta: false, wip: false, hidden: true },
-  { name: m.nav_economy(),      icon: "coins",         href: "/economy",          featureKey: "economy",  beta: false, wip: false },
-  { name: m.nav_rpg(),          icon: "sword",         href: "/rpg",              featureKey: "economy",  beta: false, wip: false },
-  { name: m.nav_marketplace(),              icon: "shopping-bag",  href: "/marketplace",      featureKey: "marketplace",  beta: false, wip: false },
-  { name: m.nav_quests(),              icon: "compass",       href: "/quests",           featureKey: "quests",  beta: false, wip: false },
+  { get name() { return m.nav_economy_quick_setup(); }, icon: "sparkles", href: "/economy-setup",    featureKey: "economy",  beta: false, wip: false, hidden: true },
+  { get name() { return m.nav_economy(); },      icon: "coins",         href: "/economy",          featureKey: "economy",  beta: false, wip: false },
+  { get name() { return m.nav_rpg(); },          icon: "sword",         href: "/rpg",              featureKey: "economy",  beta: false, wip: false },
+  { get name() { return m.nav_marketplace(); },              icon: "shopping-bag",  href: "/marketplace",      featureKey: "marketplace",  beta: false, wip: false },
+  { get name() { return m.nav_quests(); },              icon: "compass",       href: "/quests",           featureKey: "quests",  beta: false, wip: false },
 ];
 
 /**
@@ -165,71 +178,71 @@ export const economyItems: PageConfig[] = [
  * l'on vient faire : faire vivre le serveur (ici) ou y publier (ci-dessous).
  */
 export const communityItems: PageConfig[] = [
-  { name: m.nav_giveaways(),           icon: "sparkles",      href: "/giveaways",        featureKey: "giveaways", beta: false, wip: false },
-  { name: m.nav_suggestions(),         icon: "thumbs-up",     href: "/suggestions",      featureKey: "suggestions", beta: false, wip: false },
-  { name: m.nav_reaction_roles(),      icon: "mouse-pointer", href: "/reaction-roles",   featureKey: "reaction_roles", beta: false, wip: false },
-  { name: m.nav_starboard(),           icon: "star",          href: "/starboard",        featureKey: "starboard", beta: true, wip: false },
-  { name: m.nav_fun_channels(),          icon: "smile",         href: "/fun",              featureKey: "fun",  beta: false, wip: false },
-  { name: m.nav_triggers(),        icon: "git-branch",    href: "/triggers",         featureKey: "workflows", beta: true, wip: false },
+  { get name() { return m.nav_giveaways(); },           icon: "sparkles",      href: "/giveaways",        featureKey: "giveaways", beta: false, wip: false },
+  { get name() { return m.nav_suggestions(); },         icon: "thumbs-up",     href: "/suggestions",      featureKey: "suggestions", beta: false, wip: false },
+  { get name() { return m.nav_reaction_roles(); },      icon: "mouse-pointer", href: "/reaction-roles",   featureKey: "reaction_roles", beta: false, wip: false },
+  { get name() { return m.nav_starboard(); },           icon: "star",          href: "/starboard",        featureKey: "starboard", beta: true, wip: false },
+  { get name() { return m.nav_fun_channels(); },          icon: "smile",         href: "/fun",              featureKey: "fun",  beta: false, wip: false },
+  { get name() { return m.nav_triggers(); },        icon: "git-branch",    href: "/triggers",         featureKey: "workflows", beta: true, wip: false },
 ];
 
 export const communicationItems: PageConfig[] = [
-  { name: m.nav_announcements(), icon: "megaphone",    href: "/announcement",     featureKey: "welcome_goodbye", beta: false, wip: false },
-  { name: m.nav_campaigns(),       icon: "send",         href: "/campaigns",        featureKey: "campaigns", beta: true, wip: false },
-  { name: m.nav_embeds(),              icon: "file-plus",     href: "/embed-builder",    featureKey: "embed_builder", beta: false, wip: false },
-  { name: m.nav_regulation(),           icon: "book",          href: "/regulation",       featureKey: "regulation", beta: false, wip: false },
-  { name: m.nav_news(),    icon: "rss",           href: "/news",             featureKey: "news", beta: false, wip: false },
-  { name: m.nav_social_networks(),     icon: "share-2",       href: "/social-networks",  featureKey: "social_networks", beta: true, wip: false },
-  { name: m.nav_site(),    icon: "globe",         href: "/site",             featureKey: "site", beta: true, wip: false },
+  { get name() { return m.nav_announcements(); }, icon: "megaphone",    href: "/announcement",     featureKey: "welcome_goodbye", beta: false, wip: false },
+  { get name() { return m.nav_campaigns(); },       icon: "send",         href: "/campaigns",        featureKey: "campaigns", beta: true, wip: false },
+  { get name() { return m.nav_embeds(); },              icon: "file-plus",     href: "/embed-builder",    featureKey: "embed_builder", beta: false, wip: false },
+  { get name() { return m.nav_regulation(); },           icon: "book",          href: "/regulation",       featureKey: "regulation", beta: false, wip: false },
+  { get name() { return m.nav_news(); },    icon: "rss",           href: "/news",             featureKey: "news", beta: false, wip: false },
+  { get name() { return m.nav_social_networks(); },     icon: "share-2",       href: "/social-networks",  featureKey: "social_networks", beta: true, wip: false },
+  { get name() { return m.nav_site(); },    icon: "globe",         href: "/site",             featureKey: "site", beta: true, wip: false },
 ];
 
 export const staffItems: PageConfig[] = [
-  { name: m.nav_staff_directory(),            icon: "users",         href: "/staff-management/members", featureKey: "staff_directory", beta: false, wip: false },
-  { name: m.nav_staff_hierarchy(),  icon: "shield",        href: "/staff-management/roles",   featureKey: "staff_roles", beta: false, wip: false },
-  { name: m.nav_recruitment(),         icon: "user-plus",     href: "/recruitment",      featureKey: "recruitment", beta: false, wip: false },
-  { name: m.nav_tickets(), icon: "message-square",href: "/tickets",          featureKey: "tickets", beta: false, wip: false },
+  { get name() { return m.nav_staff_directory(); },            icon: "users",         href: "/staff-management/members", featureKey: "staff_directory", beta: false, wip: false },
+  { get name() { return m.nav_staff_hierarchy(); },  icon: "shield",        href: "/staff-management/roles",   featureKey: "staff_roles", beta: false, wip: false },
+  { get name() { return m.nav_recruitment(); },         icon: "user-plus",     href: "/recruitment",      featureKey: "recruitment", beta: false, wip: false },
+  { get name() { return m.nav_tickets(); }, icon: "message-square",href: "/tickets",          featureKey: "tickets", beta: false, wip: false },
 // { name: m.nav_staff_evaluations(),   icon: "award",         href: "/evaluations",      featureKey: "staff_directory", beta: true, wip: false },
-  { name: m.nav_tutoring(),             icon: "book-open",     href: "/tutoring",         featureKey: "tutoring", beta: false, wip: false },
-  { name: m.nav_planning(),            icon: "calendar",      href: "/planning",         featureKey: "absences", beta: false, wip: false },
-  { name: m.nav_doing_lists(),         icon: "list-checks",   href: "/doing-lists",      featureKey: "doing_lists", beta: true, wip: false },
+  { get name() { return m.nav_tutoring(); },             icon: "book-open",     href: "/tutoring",         featureKey: "tutoring", beta: false, wip: false },
+  { get name() { return m.nav_planning(); },            icon: "calendar",      href: "/planning",         featureKey: "absences", beta: false, wip: false },
+  { get name() { return m.nav_doing_lists(); },         icon: "list-checks",   href: "/doing-lists",      featureKey: "doing_lists", beta: true, wip: false },
   // Sondages et Discipline sont des onglets de la page staff : ils quittent le
   // menu (huit lignes, une de trop) mais restent dans la palette et les onglets.
-  { name: m.nav_polls(),            icon: "bar-chart",     href: "/staff-management/polls",    featureKey: "polls", beta: false, wip: false, hidden: true },
-  { name: m.nav_discipline(),          icon: "alert-circle",  href: "/staff-management/warnings", featureKey: "discipline", beta: false, wip: false, hidden: true },
+  { get name() { return m.nav_polls(); },            icon: "bar-chart",     href: "/staff-management/polls",    featureKey: "polls", beta: false, wip: false, hidden: true },
+  { get name() { return m.nav_discipline(); },          icon: "alert-circle",  href: "/staff-management/warnings", featureKey: "discipline", beta: false, wip: false, hidden: true },
 ];
 
 export const crossServerItems: PageConfig[] = [
-  { name: m.nav_channel_links(),        icon: "link",          href: "/channel-links",      featureKey: "channel_links", beta: false, wip: false },
-  { name: m.nav_staff_servers(),         icon: "shield",        href: "/staff-server",       featureKey: "staff_server", beta: false, wip: false },
+  { get name() { return m.nav_channel_links(); },        icon: "link",          href: "/channel-links",      featureKey: "channel_links", beta: false, wip: false },
+  { get name() { return m.nav_staff_servers(); },         icon: "shield",        href: "/staff-server",       featureKey: "staff_server", beta: false, wip: false },
 ];
 
 export const configItems: PageConfig[] = [
-  { name: m.nav_management_center(),   icon: "shield",        href: "/management",           featureKey: "centralized_config", beta: false, wip: false },
-  { name: m.nav_modules(),             icon: "package",       href: "/modules",              featureKey: "modules", beta: false, wip: false },
-  { name: m.nav_channel_health(),        icon: "activity",      href: "/channel-health",       featureKey: "channel_health", beta: true, wip: false },
-  { name: m.nav_channels(),              icon: "hash",          href: "/channels-management",  featureKey: "auto_thread", beta: false, wip: false },
-  { name: m.nav_commands(),           icon: "terminal",      href: "/command-access",       featureKey: "commands", beta: false, wip: false },
-  { name: m.nav_backups(),         icon: "archive",        href: "/backups",              featureKey: "settings", beta: false, wip: false },
-  { name: m.nav_schedules(),      icon: "calendar",      href: "/schedules",            featureKey: "settings", beta: false, wip: false },
+  { get name() { return m.nav_management_center(); },   icon: "shield",        href: "/management",           featureKey: "centralized_config", beta: false, wip: false },
+  { get name() { return m.nav_modules(); },             icon: "package",       href: "/modules",              featureKey: "modules", beta: false, wip: false },
+  { get name() { return m.nav_channel_health(); },        icon: "activity",      href: "/channel-health",       featureKey: "channel_health", beta: true, wip: false },
+  { get name() { return m.nav_channels(); },              icon: "hash",          href: "/channels-management",  featureKey: "auto_thread", beta: false, wip: false },
+  { get name() { return m.nav_commands(); },           icon: "terminal",      href: "/command-access",       featureKey: "commands", beta: false, wip: false },
+  { get name() { return m.nav_backups(); },         icon: "archive",        href: "/backups",              featureKey: "settings", beta: false, wip: false },
+  { get name() { return m.nav_schedules(); },      icon: "calendar",      href: "/schedules",            featureKey: "settings", beta: false, wip: false },
 ];
 
 /** Ce qui relie Kotbo a l'exterieur : agents, services tiers, autres serveurs. */
 export const integrationItems: PageConfig[] = [
-  { name: m.nav_mcp_api(),             icon: "cpu",           href: "/mcp-settings",         featureKey: "settings", beta: false, wip: false },
-  { name: m.nav_outgoing_webhooks(),   icon: "send",          href: "/webhooks",             featureKey: "settings", beta: true, wip: false },
+  { get name() { return m.nav_mcp_api(); },             icon: "cpu",           href: "/mcp-settings",         featureKey: "settings", beta: false, wip: false, plan: "plus" },
+  { get name() { return m.nav_outgoing_webhooks(); },   icon: "send",          href: "/webhooks",             featureKey: "settings", beta: true, wip: false },
 ];
 
 export const otherPages: PageConfig[] = [
-  { name: m.nav_administration(),      icon: "lock",          href: "/admin",                beta: false, wip: false },
+  { get name() { return m.nav_administration(); },      icon: "lock",          href: "/admin",                beta: false, wip: false },
   // Hors des groupes de navigation : la facturation vit en bas de la barre
   // laterale, au-dessus du profil, comme l'entree Administration. Elle ne
   // s'affiche pas pour tout le monde (le payeur, l'administrateur, ou tout le
   // staff quand le serveur l'a autorise), et `featureKey: "settings"` - un
   // module du coeur - garantit qu'un serveur sans abonnement peut encore
   // l'atteindre pour souscrire.
-  { name: m.nav_billing(),             icon: "credit-card",   href: "/billing",              featureKey: "settings", beta: false, wip: false },
-  { name: m.nav_my_profile(),          icon: "user",          href: "/profile",              beta: false, wip: false },
-  { name: m.nav_user_settings(), icon: "settings",   href: "/userSettings",         beta: false, wip: false },
+  { get name() { return m.nav_billing(); },             icon: "credit-card",   href: "/billing",              featureKey: "settings", beta: false, wip: false },
+  { get name() { return m.nav_my_profile(); },          icon: "user",          href: "/profile",              beta: false, wip: false },
+  { get name() { return m.nav_user_settings(); }, icon: "settings",   href: "/userSettings",         beta: false, wip: false },
 ];
 
 export const allPages: PageConfig[] = [

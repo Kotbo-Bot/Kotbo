@@ -9,7 +9,7 @@
     options,
     selectedIds,
     disabled = false,
-    placeholder = m.srb_no_rule_selected(),
+    placeholder,
     onToggle,
   }: {
     id: string;
@@ -21,7 +21,7 @@
   } = $props();
 
   const summaryLabel = $derived(
-    selectedIds.length > 0 ? `${selectedIds.length} regle(s) selectionnee(s)` : placeholder
+    selectedIds.length > 0 ? `${selectedIds.length} regle(s) selectionnee(s)` : placeholder ?? m.srb_no_rule_selected()
   );
 
   function handleToggle(event: Event, ruleId: string) {

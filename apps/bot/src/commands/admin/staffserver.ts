@@ -118,6 +118,7 @@ async function handleSetup(interaction: ChatInputCommandInteraction) {
     mainLogChannelId: logChannel?.id,
     staffLogChannelId,
     createdByUserId: interaction.user.id,
+    client: interaction.client,
   });
 
   if ('error' in result) {

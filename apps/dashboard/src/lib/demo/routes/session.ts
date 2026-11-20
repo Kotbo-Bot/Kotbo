@@ -89,7 +89,7 @@ export function registerSessionRoutes(): void {
       commandRestrictions: [],
       sidebarFavorites: [],
       commandCatalog: [],
-      access: { level: 'admin', canModerateContent: true, canModerateDailyAlgo: true, canManageSettings: true },
+      access: { level: 'admin', canModerateContent: true, canManageSettings: true },
       featureAccess: featureAccessFor(featureKeys),
       auditTrail: demoDb.get(AUDIT, auditSeed),
       sanctions: demoDb.get(SANCTIONS, sanctionsSeed),

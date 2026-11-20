@@ -23,6 +23,7 @@ import { recordScamSignals } from '../services/moderation/scamDatasetService.js'
 import { scheduleScamDatasetBackfill } from '../services/moderation/scamBackfillService.js';
 import { INVITE_SOURCE, recordBotInvite } from '../services/analytics/inviteService.js';
 import { notifyJoinBlocked } from '../services/notifications/notifyService.js';
+import { recordHoneypotCatch } from '../services/moderation/honeypotProvisioning.js';
 
 // ── Délai avant sanction ────────────────────────────────────────────────────
 //
@@ -290,6 +291,10 @@ async function punish(client: Client, message: Message, guildConfig: GuildConfig
         logTitle = '🚨 Détection Honeypot : Timeout appliqué';
         logger.warn('Honeypot', `Utilisateur mis en timeout car il a écrit dans le salon honeypot : ${author.tag} (${author.id})`);
       }
+
+      await recordHoneypotCatch(guild).catch((err) =>
+        logger.error('Honeypot', `Compteur du salon piège non mis à jour (${guild.id}) :`, err)
+      );
 
       // Log the action in the server logs channel
       let embedDescription = `L'utilisateur **${author.tag}** (<@${author.id}>) a été ${actionText} car il a écrit dans le salon piège <#${channelId}>.\n\n` +

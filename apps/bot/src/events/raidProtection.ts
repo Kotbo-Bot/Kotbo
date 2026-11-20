@@ -14,6 +14,7 @@ import { applyJailOverwrite, reapplyJailOnJoin, syncDiscordQuarantine } from '..
 import { decideCaptcha } from '../services/moderation/captchaTrigger.js';
 import { handleOtherServersMessage, syncServerTagQuarantine } from '../services/moderation/otherServersFilter.js';
 import { handleFileExtensionMessage } from '../services/moderation/fileExtensionFilter.js';
+import { scheduleVisionSeed } from '../services/moderation/scamDatasetService.js';
 
 export function registerRaidProtectionListener(client: Client): void {
   // ── Arrivées : join lock → raid kick → détection de raid → ancienneté → captcha → rôles rendus → tag role
@@ -157,4 +158,8 @@ export function registerRaidProtectionListener(client: Client): void {
       }
     }
   });
+
+  // Kotbo Vision : les images d'arnaque connues livrées avec le bot rejoignent
+  // le catalogue global.
+  scheduleVisionSeed(client.shard?.ids);
 }

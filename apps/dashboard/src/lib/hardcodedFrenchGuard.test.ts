@@ -14,23 +14,29 @@ import { join } from 'node:path';
 const SRC = join(import.meta.dir, '..');
 
 /**
- * Restent volontairement hors de la liste, parce que leur francais part dans
- * Discord et suit la langue du bot, pas celle du dashboard : les modeles de
- * workflow, les echelles de roles et les preselections de l'onboarding
- * (lib/onboarding/ladders.ts, presets.ts, modulePresets.ts), et les ecrans qui
- * en montrent le contenu brut (accueil, reglement, economie, quetes, drops).
+ * Un texte qui part sur Discord (role, regle, message par defaut...) passe lui
+ * aussi par une cle, mais dans la langue du bot : `m.bot_xxx({}, bot())`, voir
+ * stores/botLocale.svelte.ts.
  */
 const TRANSLATED = [
   'lib/api/client.ts',
   'lib/api/content.ts',
   'lib/api/guild.ts',
+  'lib/api/instances.ts',
+  'lib/api/moderation.ts',
   'lib/api/modules.ts',
   'lib/api/tournaments.ts',
+  'lib/api/whiteLabel.ts',
+  'lib/api/widgets.ts',
   'lib/asyncAction.svelte.ts',
+  'lib/components/AmountRangeSlider.svelte',
   'lib/components/analytics/AnalyticsFilterBar.svelte',
   'lib/components/CommandPalette.svelte',
   'lib/components/DemoBanner.svelte',
   'lib/components/DiscordMemberLookup.svelte',
+  'lib/components/DropClaimRulesPanel.svelte',
+  'lib/components/DurationPresets.svelte',
+  'lib/components/economy/RpgTowerPanel.svelte',
   'lib/components/EmptyState.svelte',
   'lib/components/FormColorPicker.svelte',
   'lib/components/MainLayout.svelte',
@@ -40,37 +46,54 @@ const TRANSLATED = [
   'lib/components/Navbar.svelte',
   'lib/components/onboarding/BuildSequence.svelte',
   'lib/components/onboarding/ChannelPicker.svelte',
+  'lib/components/onboarding/DiscordPreview.svelte',
+  'lib/components/onboarding/ModerationSim.svelte',
   'lib/components/onboarding/RecoveredContent.svelte',
   'lib/components/onboarding/steps/CheckoutStep.svelte',
+  'lib/components/onboarding/steps/DropsStep.svelte',
+  'lib/components/onboarding/steps/EconomyShopStep.svelte',
+  'lib/components/onboarding/steps/EconomyStep.svelte',
+  'lib/components/onboarding/steps/GreetingStep.svelte',
+  'lib/components/onboarding/steps/IdentityStep.svelte',
   'lib/components/onboarding/steps/KindStep.svelte',
   'lib/components/onboarding/steps/LevelsStep.svelte',
   'lib/components/onboarding/steps/LogsStep.svelte',
   'lib/components/onboarding/steps/MappingStep.svelte',
   'lib/components/onboarding/steps/McpStep.svelte',
   'lib/components/onboarding/steps/MigrationBotsStep.svelte',
+  'lib/components/onboarding/steps/MigrationFindingsStep.svelte',
   'lib/components/onboarding/steps/ModerationStep.svelte',
+  'lib/components/onboarding/steps/QuestsStep.svelte',
   'lib/components/onboarding/steps/RecapStep.svelte',
+  'lib/components/onboarding/steps/RulesStep.svelte',
   'lib/components/onboarding/steps/StaffStep.svelte',
   'lib/components/onboarding/steps/StructureStep.svelte',
   'lib/components/onboarding/steps/ThemeStep.svelte',
   'lib/components/onboarding/steps/TicketsStep.svelte',
   'lib/components/onboarding/steps/WelcomeStep.svelte',
   'lib/components/onboarding/WizardShell.svelte',
-  'lib/components/partnerships/PartnershipPanel.svelte',
-  'lib/components/partnerships/PartnershipSettingsPanel.svelte',
-  'lib/components/partnerships/PartnershipSetupBanner.svelte',
   'lib/components/ProfileWidgetPanel.svelte',
   'lib/components/RolePermissionSettings.svelte',
+  'lib/components/sanctions/ImportSanctionsModal.svelte',
   'lib/components/security/CaptchaFields.svelte',
   'lib/components/security/SecurityPage.svelte',
   'lib/components/security/ShieldCard.svelte',
   'lib/components/security/VisionPanel.svelte',
   'lib/components/ServerTemplatePanel.svelte',
   'lib/components/Sidebar.svelte',
+  'lib/components/starboard/StarboardMessagePreview.svelte',
+  'lib/components/suggestions/SuggestionDecisionModal.svelte',
+  'lib/components/suggestions/SuggestionMessagePreview.svelte',
+  'lib/components/suggestions/SuggestionVotersModal.svelte',
+  'lib/components/tickets/TicketMacros.svelte',
   'lib/components/tickets/TicketTranscripts.svelte',
   'lib/components/workflows/WorkflowMessageModal.svelte',
   'lib/components/workflows/WorkflowNodeCard.svelte',
+  'lib/components/workflows/workflowTemplates.ts',
+  'lib/onboarding/ladders.ts',
   'lib/onboarding/mapping.ts',
+  'lib/onboarding/modulePresets.ts',
+  'lib/onboarding/presets.ts',
   'lib/onboarding/steps.ts',
   'lib/sanctions/importParser.ts',
   'lib/stores/dashboard.svelte.ts',
@@ -80,6 +103,7 @@ const TRANSLATED = [
   'lib/workflowPreview.ts',
   'pages/Activation.svelte',
   'pages/Analytics.svelte',
+  'pages/Announcement.svelte',
   'pages/AutoMod.svelte',
   'pages/Campaigns.svelte',
   'pages/ChannelsManagement.svelte',
@@ -89,35 +113,37 @@ const TRANSLATED = [
   'pages/Economy.svelte',
   'pages/Evaluations.svelte',
   'pages/FormBuilder.svelte',
+  'pages/Leveling.svelte',
   'pages/LevelingPublic.svelte',
   'pages/Migration.svelte',
   'pages/NicknameModeration.svelte',
   'pages/NotificationsSettings.svelte',
   'pages/Onboarding.svelte',
-  'pages/PartnerPortal.svelte',
-  'pages/PartnershipDirectory.svelte',
-  'pages/Partnerships.svelte',
   'pages/Profile.svelte',
   'pages/PublicAppeal.svelte',
   'pages/PublicForm.svelte',
   'pages/PublicProfile.svelte',
+  'pages/Reputation.svelte',
   'pages/SanctionEvidenceFile.svelte',
   'pages/Schedules.svelte',
   'pages/security/Aegis.svelte',
   'pages/security/AntiRaid.svelte',
-  'pages/SecurityAudit.svelte',
   'pages/security/QuickSetup.svelte',
+  'pages/SecurityAudit.svelte',
   'pages/ServerFileFilters.svelte',
   'pages/Servers.svelte',
+  'pages/Starboard.svelte',
+  'pages/Suggestions.svelte',
   'pages/Tickets.svelte',
   'pages/Verify.svelte',
 ];
 
 /**
  * Francais legitime dans un fichier traduit : le nom d'une langue dans cette
- * langue, et un nom de role Discord compare tel quel.
+ * langue, un nom de role ou prefixe de salon Discord compare tel quel, les salons
+ * d'exemple de l'option francaise du choix de langue, et un prenom de membre fictif.
  */
-const ALLOWED = new Set(['Français', 'Gérant']);
+const ALLOWED = new Set(['Français', 'Gérant', 'fermé-', '#règlement', '#général', 'Maë']);
 
 const ACCENT = /[éèêëàâçùûüôîïœÉÈÊÀÂÇÔÎ]/;
 

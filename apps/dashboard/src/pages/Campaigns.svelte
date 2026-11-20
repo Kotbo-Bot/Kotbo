@@ -69,11 +69,11 @@
   };
 
   const STATUS_META: Record<string, { label: string; text: string; bg: string }> = {
-    DRAFT: { label: m.camp_status_draft(), text: 'text-on-surface-variant', bg: 'bg-surface-container' },
-    SCHEDULED: { label: m.camp_status_scheduled(), text: 'text-sky-500', bg: 'bg-sky-500/10' },
-    RUNNING: { label: m.camp_status_running(), text: 'text-success', bg: 'bg-success/10' },
-    COMPLETED: { label: m.camp_status_completed(), text: 'text-on-surface-variant', bg: 'bg-surface-container' },
-    CANCELLED: { label: m.camp_status_cancelled(), text: 'text-error', bg: 'bg-error/10' },
+    DRAFT: { get label() { return m.camp_status_draft(); }, text: 'text-on-surface-variant', bg: 'bg-surface-container' },
+    SCHEDULED: { get label() { return m.camp_status_scheduled(); }, text: 'text-sky-500', bg: 'bg-sky-500/10' },
+    RUNNING: { get label() { return m.camp_status_running(); }, text: 'text-success', bg: 'bg-success/10' },
+    COMPLETED: { get label() { return m.camp_status_completed(); }, text: 'text-on-surface-variant', bg: 'bg-surface-container' },
+    CANCELLED: { get label() { return m.camp_status_cancelled(); }, text: 'text-error', bg: 'bg-error/10' },
   };
 
   let campaigns = $state<Campaign[]>([]);
@@ -414,7 +414,7 @@
           <input
             type="datetime-local"
             bind:value={form.startAt}
-            class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-outline-variant/10 focus:ring-1 ring-primary/30 transition-all outline-none"
+            class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-field-border focus:ring-1 ring-primary/30 transition-all outline-none"
           />
         </label>
       </div>
@@ -470,7 +470,7 @@
                 <input
                   type="number"
                   bind:value={step.offsetMinutes}
-                  class="w-full bg-surface-container-high text-sm px-3 py-2 rounded-xl border border-outline-variant/10 focus:ring-1 ring-primary/30 outline-none"
+                  class="w-full bg-surface-container-high text-sm px-3 py-2 rounded-xl border border-field-border focus:ring-1 ring-primary/30 outline-none"
                 />
               </label>
               <label class="block">
@@ -493,7 +493,7 @@
               {/if}
             </div>
 
-            <FormTextarea
+            <FormTextarea ariaLabel={m.camp_content_ph({ server: '{server}', user: '{user}' })}
               bind:value={step.content}
               placeholder={m.camp_content_ph({ server: '{server}', user: '{user}' })}
               className="w-full h-20"

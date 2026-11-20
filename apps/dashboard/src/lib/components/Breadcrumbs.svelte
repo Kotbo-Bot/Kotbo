@@ -18,7 +18,7 @@
 </script>
 
 {#if parent}
-  <nav class="breadcrumbs mb-4 select-none" aria-label="Fil d’Ariane">
+  <nav class="breadcrumbs mb-4 select-none" aria-label={m.a11y_breadcrumbs()}>
     <a
       href={parent.href}
       class="inline-flex items-center gap-1 -ml-1 px-1 py-0.5 rounded-md text-body-sm text-on-surface-variant hover:text-on-surface transition-colors"

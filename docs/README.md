@@ -4,7 +4,6 @@ Documentation technique et fonctionnelle du bot Kotbo.
 
 ## Modules
 
-- [`partnerships-spec.md`](./partnerships-spec.md) - Module Partenariats :
   types et niveaux de suivi, cycle de vie des dossiers, avantages accordes et
   restitues, mesure des retombees, annuaire inter-serveurs et reputation
   partagee.

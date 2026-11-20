@@ -7,31 +7,25 @@
 import { embedToApiShape, resolveMentionsToText } from '../../services/features/transcriptService.js';
 import prisma from '../../utils/db.js';
 import { GENERIC_ERROR_MESSAGE, publicErrorMessage } from '../../utils/publicError.js';
+import { classifyFailure } from '../../utils/failureKind.js';
 import { embedToV2 } from '../../utils/patchV2.js';
 import { type CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { type APIEmbed, ChannelType, Client, ContainerBuilder, ForumChannel, type Guild, type GuildBasedChannel, type Message, type NonThreadGuildBasedChannel, MessageFlags, type NewsChannel, TextChannel, TextDisplayBuilder, ThreadChannel } from 'discord.js';
 import { z } from 'zod';
 import type { McpKeyPermission } from '@prisma/client';
 
-// Helpers annotés explicitement en `CallToolResult` (le type de retour attendu
-// par `registerTool`), plutôt qu'en union de types anonymes inférés. Cela donne
-// un point d'ancrage stable au vérificateur ; le vrai gain mémoire vient
-// toutefois du wrapper non générique dans `registerMcpTools` (voir plus bas).
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type McpToolHandler = (args: any) => CallToolResult | Promise<CallToolResult>;
+// `ok`, `err` et `McpToolHandler` vivent dans `toolResult.ts`, sans dépendance :
+// la garde de module des outils (`toolModules.ts`) les emploie et doit rester
+// testable sans base.
+import { ok, err, type McpToolHandler } from './toolResult.js';
+
+export { ok, err, type McpToolHandler };
 export type ToolSecurityScheme = { type: 'noauth' } | { type: 'oauth2'; scopes: string[] };
 
-export const ok = (data: unknown): CallToolResult => ({
-  content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
-});
-
-export const err = (msg: string, meta?: Record<string, unknown>): CallToolResult => ({
-  content: [{ type: 'text' as const, text: JSON.stringify({ error: msg }) }],
-  isError: true,
-  ...(meta ? { _meta: meta } : {}),
-});
-
 export { publicErrorMessage };
+
+/** Marque une panne, par opposition à un refus métier : l'API REST en fait une 500. */
+export const PANNE_INTERNE_META = 'kotbo/internal_failure';
 
 /**
  * Échec d'un outil : le message brut de l'erreur ne remonte que s'il est écrit
@@ -40,7 +34,11 @@ export { publicErrorMessage };
  */
 export const toolError = (e: unknown, context?: string): CallToolResult => {
   const message = publicErrorMessage(e, GENERIC_ERROR_MESSAGE, 'MCP');
-  return err(context ? `${context} : ${message}` : message);
+  const texte = context ? `${context} : ${message}` : message;
+  // Un message d'erreur métier reste une 400 ; une panne connue (base, réseau) a un message et un statut 5xx.
+  const { status, code } = classifyFailure(e);
+  const panne = code === 'internal_error' ? message === GENERIC_ERROR_MESSAGE : status >= 500;
+  return panne ? err(texte, { [PANNE_INTERNE_META]: true }) : err(texte);
 };
 
 // Renvoie une "erreur" structurée listant les candidats possibles quand une

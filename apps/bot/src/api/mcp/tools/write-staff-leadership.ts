@@ -775,7 +775,7 @@ export function registerWriteStaffLeadershipTools(ctx: McpToolContext) {
             keyHash,
             displayKey,
             name ?? 'Mon clé API',
-            permissions ?? ['daily_algo:create_exercise']
+            permissions ?? []
           );
           return ok({ ok: true, apiKey, fullKey });
         } catch (e) {
