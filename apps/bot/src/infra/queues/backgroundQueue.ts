@@ -53,6 +53,7 @@ export type BackgroundJobName =
   | 'acquisition-events-prune'
   | 'dashboard-telemetry-prune'
   | 'server-tag-roles-resync'
+  | 'server-tag-holders-snapshot'
   | 'site-analytics-prune'
   | 'site-scheduled-publish'
   | 'notification-dm-flush'

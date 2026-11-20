@@ -45,7 +45,7 @@ export async function getMemberOverview(client: Client, guildId: string, range: 
   const [daily, prevDaily, invites, prevInvites, guildInvites, joiners] = await Promise.all([
     prismaRead.guildDailyStat.findMany({
       where: { guildId, dateKey: { gte: range.start, lte: range.end } },
-      select: { dateKey: true, totalMembers: true, totalHumans: true, membersJoined: true, membersLeft: true, peakOnline: true, onlineMembers: true },
+      select: { dateKey: true, totalMembers: true, totalHumans: true, membersJoined: true, membersLeft: true, peakOnline: true, onlineMembers: true, tagHolders: true },
     }),
     prismaRead.guildDailyStat.findMany({
       where: { guildId, dateKey: { gte: range.prevStart, lte: range.prevEnd } },
@@ -77,11 +77,14 @@ export async function getMemberOverview(client: Client, guildId: string, range: 
   // Un jour sans ligne garde l'effectif connu la veille plutôt que de tomber à zéro.
   let lastTotal = 0;
   let lastPrevTotal = 0;
+  let lastTagHolders: number | null = null;
   const series = dayKeys(range.start, range.end).map((dateKey, i) => {
     const c = curMap.get(dateKey);
     const p = prevMap.get(prevKeys[i]!);
     if (c && total(c) > 0) lastTotal = total(c);
     if (p && total(p) > 0) lastPrevTotal = total(p);
+    // Relevé du soir reporté d'un jour sur l'autre ; null tant qu'aucun n'a été fait.
+    if (c?.tagHolders != null) lastTagHolders = c.tagHolders;
     return {
       dateKey,
       members: lastTotal,
@@ -89,6 +92,7 @@ export async function getMemberOverview(client: Client, guildId: string, range: 
       left: c?.membersLeft ?? 0,
       peakOnline: c?.peakOnline ?? 0,
       onlineMembers: c?.onlineMembers ?? 0,
+      tagHolders: lastTagHolders,
       prevMembers: lastPrevTotal,
       prevJoined: p?.membersJoined ?? 0,
       prevLeft: p?.membersLeft ?? 0,
@@ -155,6 +159,19 @@ export async function getMemberOverview(client: Client, guildId: string, range: 
     range,
     memberCount: guild ? (includeBots ? guild.memberCount : Math.max(0, guild.memberCount - guild.members.cache.filter((m) => m.user.bot).size)) : null,
     series,
+    // Estimation : Discord ne relie pas une arrivée à un tag. On donne les arrivées
+    // sans source et l'évolution des porteurs, à rapprocher soi-même.
+    tag: (() => {
+      const known = series.filter((d) => d.tagHolders !== null);
+      if (known.length === 0) return null;
+      return {
+        holders: known[known.length - 1]!.tagHolders as number,
+        gained: (known[known.length - 1]!.tagHolders as number) - (known[0]!.tagHolders as number),
+        unknownJoins: kinds.unknown.joined,
+        unknownShare: pct(kinds.unknown.joined, invites.length),
+        daysMeasured: known.length,
+      };
+    })(),
     sources: {
       tracked: invites.length,
       kinds: (Object.keys(kinds) as SourceKind[]).map((kind) => ({ kind, joined: kinds[kind].joined, retention: pct(kinds[kind].stayed, kinds[kind].joined) })),

@@ -4,6 +4,7 @@
 
 import type { Client } from 'discord.js';
 import prisma from '../../utils/db.js';
+import { getDateKey } from './analyticsService.js';
 import { ensureServerTagSchemaPatches } from '../../utils/schemaPatches.js';
 import {
   extractPrimaryGuildTag,
@@ -610,3 +611,29 @@ export async function getServerDetails(
   };
 }
 
+
+/**
+ * Releve du soir : combien de membres portent le tag de CE serveur. Sert a
+ * rapprocher la courbe des porteurs des arrivees de source inconnue
+ * (Discord ne dit pas qu'une arrivee vient d'un tag). Ignore les serveurs
+ * sans aucun porteur : pas de tag, rien a mesurer.
+ */
+export async function snapshotTagHolders(client: Client): Promise<void> {
+  await ensureServerTagSchemaPatches();
+  const dateKey = getDateKey();
+  for (const guildId of client.guilds.cache.keys()) {
+    try {
+      const tagHolders = await prisma.memberProfile.count({
+        where: { guildId, primaryGuildId: guildId, guildLeftAt: null, isBot: false },
+      });
+      if (tagHolders === 0) continue;
+      await prisma.guildDailyStat.upsert({
+        where: { guildId_dateKey: { guildId, dateKey } },
+        create: { guildId, dateKey, tagHolders },
+        update: { tagHolders },
+      });
+    } catch {
+      // Un serveur en echec ne bloque pas les suivants.
+    }
+  }
+}

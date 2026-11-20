@@ -29,6 +29,11 @@ import { isModuleEnabled } from '../services/core/moduleGate.js';
 
 const runningJobs = new Set<string>();
 
+async function runTagHoldersSnapshot(client: Client): Promise<void> {
+  const { snapshotTagHolders } = await import('../services/analytics/serverTagAnalyticsService.js');
+  await snapshotTagHolders(client);
+}
+
 /** Rescan des deux auto-rôles du tag (Annonces et Shield) sur chaque serveur qui en a un. */
 async function resyncServerTagRoles(client: Client): Promise<void> {
   const { rescanGuildAutoRoles } = await import('../services/features/serverTagRoleService.js');
@@ -423,6 +428,7 @@ export async function registerCrons(client: Client): Promise<void> {
       await pruneSiteAnalytics();
     },
     'server-tag-roles-resync': () => resyncServerTagRoles(client),
+    'server-tag-holders-snapshot': () => runTagHoldersSnapshot(client),
     'site-scheduled-publish': async () => {
       const { publishDuePages } = await import('../services/site/siteAdminService.js');
       await publishDuePages(client);
@@ -742,6 +748,11 @@ export async function registerCrons(client: Client): Promise<void> {
   // jamais chargé, bot redémarré entre-temps) : le rôle restait figé (#615).
   cron.schedule('25 */6 * * *', async () => {
     await runCronJob('server-tag-roles-resync', () => resyncServerTagRoles(client), 2000);
+  });
+
+  // 🏷️ Porteurs du tag : releve du soir (23:50) pour la courbe d'Analytics.
+  cron.schedule('50 23 * * *', async () => {
+    await runCronJob('server-tag-holders-snapshot', () => runTagHoldersSnapshot(client), 2000);
   });
 
   // 🧭 Telemetrie du dashboard : purge au-dela de 180 jours (03:55).
