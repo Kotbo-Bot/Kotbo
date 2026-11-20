@@ -1,13 +1,18 @@
-import { describe, expect, test, mock } from 'bun:test';
+import { describe, expect, test, mock, setSystemTime } from 'bun:test';
 import path from 'node:path';
 
-const mockDb = {};
+/** Lignes journalières rendues par toute requête brute. */
+let rows: Array<{ dateKey: string; messages: number }> = [];
+const mockDb = {
+  $queryRaw: async () => rows,
+  guildDailyStat: { findMany: async () => [], aggregate: async () => ({ _sum: {} }) },
+};
 const dbPath = path.resolve(import.meta.dir, '../../utils/db.ts');
 const dbJsPath = path.resolve(import.meta.dir, '../../utils/db.js');
 mock.module(dbPath, () => ({ default: mockDb, prisma: mockDb, prismaRead: mockDb }));
 mock.module(dbJsPath, () => ({ default: mockDb, prisma: mockDb, prismaRead: mockDb }));
 
-const { bucketize, detectAnomalies, validateAnnotation } = await import('../../services/analytics/activityInsightsService');
+const { bucketize, detectAnomalies, getActivityInsights, validateAnnotation } = await import('../../services/analytics/activityInsightsService');
 
 /** Historique de `days` jours finissant le 2026-09-30, une valeur par jour de semaine. */
 function history(days: number, valueOf: (dateKey: string) => number): Map<string, number> {
@@ -52,6 +57,23 @@ describe('detectAnomalies', () => {
     const h = history(15, () => 50);
     h.set('2026-09-30', 300);
     expect(detectAnomalies(['2026-09-30'], h, 'messages')).toEqual([]);
+  });
+});
+
+describe('getActivityInsights', () => {
+  test("la journée en cours, encore entamée, n'est pas signalée comme un creux", async () => {
+    const h = history(40, () => 120);
+    h.set('2026-09-30', 10);
+    rows = [...h].map(([dateKey, messages]) => ({ dateKey, messages }));
+    setSystemTime(new Date('2026-09-30T09:00:00Z'));
+    const { anomalies } = await getActivityInsights(
+      { guilds: { cache: new Map() } } as never,
+      'g',
+      { start: '2026-09-24', end: '2026-09-30', prevStart: '2026-09-17', prevEnd: '2026-09-23', days: 7 },
+      { channelIds: null, userIds: null, excludeUserIds: [], channelFilter: null, roleFilter: null, excludeStaff: false },
+    );
+    setSystemTime();
+    expect(anomalies).toEqual([]);
   });
 });
 
