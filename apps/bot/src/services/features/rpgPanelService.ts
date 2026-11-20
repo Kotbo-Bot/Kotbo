@@ -184,6 +184,7 @@ import { attackRaid, checkRaidAssaultGrant, getRaidPanelState, getRaidState, gra
 import { buildAssaultEmbed, buildRaidEmbed, healthBar, raidRefusalText } from './rpg/rpgRaidPanel.js';
 import { computeAttack } from './rpg/rpgCombatMath.js';
 import {
+  advanceSkillCooldowns,
   bossCooldownMs,
   fightCooldownMs,
   formatCooldown,
@@ -5254,6 +5255,7 @@ async function startFightSession(
       // Les postures ne durent qu'un tour : elles se réinitialisent à chaque action.
       defenseMultiplier = 1;
       let actionTaken = '';
+      let usedSkillId: string | null = null;
       const action = btnInt.customId.split(':')[1];
 
       if (action === 'combat_attack') {
@@ -5273,6 +5275,7 @@ async function startFightSession(
         }
 
         skillCooldowns.set(skill.id, skill.cooldownTurns);
+        usedSkillId = skill.id;
         if (skill.effect.defenseMultiplier) defenseMultiplier = skill.effect.defenseMultiplier;
         if (skill.effect.evadeNextAttack) evadeNextAttack = true;
         if (skill.effect.healPercent) {
@@ -5310,10 +5313,7 @@ async function startFightSession(
 
       turnsLog.push(actionTaken);
 
-      // Une compétence consommée fait progresser toutes les recharges d'un tour.
-      for (const [id, remaining] of skillCooldowns) {
-        if (remaining > 0) skillCooldowns.set(id, remaining - 1);
-      }
+      advanceSkillCooldowns(skillCooldowns, usedSkillId);
 
       if (monsterHp <= 0) {
         collector.stop('victory');
