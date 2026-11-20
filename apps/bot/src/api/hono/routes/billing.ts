@@ -49,7 +49,7 @@ import {
   sellablePlans,
   type Stripe,
 } from '../../../services/billing/stripeService.js';
-import { syncSubscription, guildIdForSubscription } from '../../../services/billing/subscriptionSync.js';
+import { syncSubscription, guildIdForSubscription, transferSubscription, TransferError } from '../../../services/billing/subscriptionSync.js';
 import { recordBillingConsent } from '../../../services/billing/consentService.js';
 import {
   recordFailedInvoice,
@@ -665,6 +665,48 @@ export function createBillingRouter(client: Client): OpenAPIHono {
     } catch (err) {
       logger.error('Billing', `Ouverture du portail impossible pour ${guildId}:`, err);
       throw new HTTPException(502, { message: "Stripe n'a pas pu ouvrir le portail client." });
+    }
+  });
+
+  // ─── Transfert de l'abonnement vers un autre serveur ──────────────────────
+
+  router.use(`${GUARDED}/transfer`, rateLimit(dashboardSensitiveRateLimiter, 5, 60 * 1000));
+
+  const transferRoute = createRoute({
+    method: 'post',
+    path: `${BASE}/transfer`,
+    summary: "Déplace l'abonnement vers un autre serveur",
+    tags: ['Billing'],
+    request: {
+      params: z.object({ guildId: z.string() }),
+      body: { content: { 'application/json': { schema: z.object({ targetGuildId: z.string().regex(/^\d{15,25}$/) }) } } },
+    },
+    responses: { 200: { description: 'Abonnement transféré', content: { 'application/json': { schema: z.object({ ok: z.literal(true) }) } } } },
+  });
+
+  router.openapi(transferRoute, async (c) => {
+    const { guildId } = c.req.valid('param');
+    const { targetGuildId } = c.req.valid('json');
+    const userId = c.var.auth.userId;
+
+    // L'appelant doit pouvoir administrer aussi le serveur cible : sans cela,
+    // n'importe quel administrateur pourrait loger son abonnement chez un tiers.
+    const target = client.guilds.cache.get(targetGuildId) ?? (await client.guilds.fetch(targetGuildId).catch(() => null));
+    const member = target ? await target.members.fetch(userId).catch(() => null) : null;
+    if (!target || !member) {
+      throw new HTTPException(404, { message: 'Serveur introuvable ou bot non présent.' });
+    }
+    if (member.id !== target.ownerId && !member.permissions.has('Administrator') && !member.permissions.has('ManageGuild')) {
+      throw new HTTPException(403, { message: "Tu dois administrer le serveur de destination." });
+    }
+
+    try {
+      await transferSubscription(guildId, targetGuildId, userId);
+      return c.json({ ok: true as const }, 200);
+    } catch (err) {
+      if (err instanceof TransferError) throw new HTTPException(err.status, { message: err.message });
+      logger.error('Billing', `Transfert ${guildId} -> ${targetGuildId} impossible :`, err);
+      throw new HTTPException(502, { message: "Le transfert n'a pas pu aboutir." });
     }
   });
 
