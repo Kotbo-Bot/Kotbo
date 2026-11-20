@@ -34,6 +34,8 @@ model GuildDailyStat {
   peakOnline       Int @default(0) // Pic de membres en ligne dans la journée
   peakVoice        Int @default(0) // Pic de membres en vocal simultanément
 
+  tagHolders       Int? // Membres portant le tag de ce serveur en fin de journée (null = non mesuré)
+
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
