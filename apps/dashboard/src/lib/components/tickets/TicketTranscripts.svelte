@@ -96,7 +96,7 @@
                 <span class="text-primary/70">#</span>{t.channelName}
               </td>
               <td class="py-3 px-4">
-                {#if t.channelName.startsWith('ticket-') || t.channelName.startsWith('fermer-')}
+                {#if t.channelName.startsWith('ticket-') || t.channelName.startsWith('fermé-') || t.channelName.startsWith('fermer-')}
                   <span class="px-2 py-0.5 rounded-full text-2xs font-semibold uppercase bg-blue-500/10 text-blue-400 border border-blue-500/20">{m.e1_tickets_badge_ticket()}</span>
                 {:else}
                   <span class="px-2 py-0.5 rounded-full text-2xs font-semibold uppercase bg-success/10 text-success border border-success/20">/transcript</span>
@@ -132,7 +132,7 @@
         <div class="rounded-xl border border-outline-variant/10 bg-surface-container/20 p-3.5">
           <div class="flex items-center justify-between gap-2 mb-2">
             <span class="font-mono text-sm font-bold text-on-surface truncate"><span class="text-primary/70">#</span>{t.channelName}</span>
-            {#if t.channelName.startsWith('ticket-') || t.channelName.startsWith('fermer-')}
+            {#if t.channelName.startsWith('ticket-') || t.channelName.startsWith('fermé-') || t.channelName.startsWith('fermer-')}
               <span class="px-2 py-0.5 rounded-full text-2xs font-semibold uppercase bg-blue-500/10 text-blue-400 border border-blue-500/20 shrink-0">{m.e1_tickets_badge_ticket()}</span>
             {:else}
               <span class="px-2 py-0.5 rounded-full text-2xs font-semibold uppercase bg-success/10 text-success border border-success/20 shrink-0">/transcript</span>

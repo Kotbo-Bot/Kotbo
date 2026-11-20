@@ -4013,7 +4013,7 @@ export async function renameChannelToClosed(client: Client, channelId: string): 
   const channel = await client.channels.fetch(channelId).catch(() => null);
   if (channel && channel instanceof TextChannel) {
     const currentName = channel.name;
-    const newName = currentName.startsWith('ticket-') ? currentName.replace(/^ticket-/, 'fermer-') : `fermer-${currentName}`;
+    const newName = currentName.startsWith('ticket-') ? currentName.replace(/^ticket-/, 'fermé-') : `fermé-${currentName}`;
     if (newName !== currentName) {
       await channel.setName(newName, 'Ticket fermé').catch((err) => 
         logger.error('Ticket', `Error renaming channel ${channelId} to closed:`, err)
@@ -4026,7 +4026,7 @@ export async function renameChannelToOpen(client: Client, channelId: string): Pr
   const channel = await client.channels.fetch(channelId).catch(() => null);
   if (channel && channel instanceof TextChannel) {
     const currentName = channel.name;
-    const newName = currentName.startsWith('fermer-') ? currentName.replace(/^fermer-/, 'ticket-') : `ticket-${currentName}`;
+    const newName = /^(fermé|fermer)-/.test(currentName) ? currentName.replace(/^(fermé|fermer)-/, 'ticket-') : `ticket-${currentName}`;
     if (newName !== currentName) {
       await channel.setName(newName, 'Ticket réouvert').catch((err) => 
         logger.error('Ticket', `Error renaming channel ${channelId} to open:`, err)
