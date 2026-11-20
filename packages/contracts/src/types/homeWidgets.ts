@@ -33,6 +33,11 @@ export const HOME_WIDGET_ACCESS: Record<string, HomeWidgetAccess> = {
   events: { feature: 'events' },
   polls: { feature: 'polls' },
   staffServer: { feature: 'staff_server' },
+  pulse: { feature: 'analytics' },
+  shield: { feature: 'raid_protection' },
+  myTasks: { feature: 'doing_lists' },
+  boosts: { feature: 'members' },
+  climate: { feature: 'analytics' },
 };
 
 export function homeWidgetFeatureKey(widgetId: string): string | undefined {
