@@ -185,6 +185,9 @@ export function createBillingRouter(client: Client): OpenAPIHono {
           // Avant d'appliquer quoi que ce soit : la preuve de ce qui a ete
           // accepte doit survivre meme si l'application echoue ensuite.
           await recordBillingConsent(session, 'GIFT');
+          // Un paiement différé (prélèvement SEPA...) termine la session avant
+          // l'encaissement : le cadeau attend alors async_payment_succeeded.
+          if (session.payment_status !== 'paid' && session.payment_status !== 'no_payment_required') return null;
           return applyGiftPayment(session);
         }
 
@@ -204,6 +207,21 @@ export function createBillingRouter(client: Client): OpenAPIHono {
         const subscription = await stripe!.subscriptions.retrieve(subscriptionId);
         await syncSubscription(subscription);
         return guildId ?? (await guildIdForSubscription(subscription));
+      }
+
+      case 'checkout.session.async_payment_succeeded': {
+        // Second temps d'un paiement différé : c'est maintenant qu'un cadeau
+        // est réellement payé. Un abonnement, lui, suit customer.subscription.*.
+        const session = event.data.object as Stripe.Checkout.Session;
+        return session.metadata?.kind === GIFT_METADATA_KIND ? applyGiftPayment(session) : null;
+      }
+
+      case 'checkout.session.async_payment_failed': {
+        // Prélèvement refusé : la session est close sans paiement et n'expirera
+        // jamais, c'est donc ici que le cadeau en attente disparaît.
+        const session = event.data.object as Stripe.Checkout.Session;
+        await releaseGiftSession(session.id);
+        return null;
       }
 
       case 'checkout.session.expired': {
