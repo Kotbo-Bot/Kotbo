@@ -41,7 +41,7 @@ export function registerWriteTicketsTools(ctx: McpToolContext) {
       'close_ticket',
       {
         description:
-          'Ferme un ticket : marque le ticket comme fermé en base et renomme son salon (préfixe « fermer- »). Requiert WRITE_TICKETS.',
+          'Ferme un ticket : marque le ticket comme fermé en base et renomme son salon (préfixe « fermé- »). Requiert WRITE_TICKETS.',
         inputSchema: {
           ticket_id: z.string().describe('ID du ticket (issu de get_tickets)'),
           reason: z.string().max(512).optional().describe('Raison de la fermeture'),
@@ -70,7 +70,7 @@ export function registerWriteTicketsTools(ctx: McpToolContext) {
         // - Update BDD (status CLOSED, closedBy, closedAt)
         // - Retrait des permissions de l'opener
         // - Envoi de l'embed de fermeture avec boutons Réouvrir/Supprimer
-        // - Renommage du salon (ticket- → fermer-)
+        // - Renommage du salon (ticket- → fermé-)
         // - Log dans le salon de logs
         // - Envoi du sondage de satisfaction
         await closeTicket(client, ticket.id, client.user?.id ?? 'mcp_agent', closerName);

@@ -26,10 +26,10 @@
  * fournisseur change sa politique, corriger `cooldownMinutes` dans
  * `BUMP_PROVIDERS` suffit - aucune autre logique n'en dépend.
  */
-import { EmbedBuilder, type Client, type Message, type TextChannel } from 'discord.js';
+import { MessageFlags, type Client, type Message, type TextChannel } from 'discord.js';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
-import { COLORS } from '../../utils/embeds.js';
+import { richContainer } from '../../utils/embeds.js';
 
 export interface BumpProvider {
   key: string;
@@ -150,18 +150,18 @@ export async function processDueBumpReminders(client: Client): Promise<void> {
     try {
       const channel = await client.channels.fetch(state.lastChannelId).catch(() => null);
       if (channel?.isTextBased()) {
-        const embed = new EmbedBuilder()
-          .setColor(COLORS.primary)
-          .setTitle('📈 Rappel de bump')
-          .setDescription(
-            `Le serveur peut à nouveau être bump sur **${state.providerLabel}** !\n`
-            + (state.lastBumpUserId ? `Dernier bump par <@${state.lastBumpUserId}>.` : ''),
-          )
-          .setTimestamp(state.nextBumpAt);
+        const container = richContainer({
+          title: '📈 Rappel de bump',
+          description:
+            `Le serveur peut à nouveau être bump sur **${state.providerLabel}** !`
+            + (state.lastBumpUserId ? `\nDernier bump par <@${state.lastBumpUserId}>.` : ''),
+          footer: `Disponible depuis <t:${Math.floor(state.nextBumpAt.getTime() / 1000)}:R>`,
+        });
 
         await (channel as TextChannel).send({
-          embeds: [embed],
-          allowedMentions: { parse: [] },
+          components: [container],
+          flags: MessageFlags.IsComponentsV2,
+          allowedMentions: { users: state.lastBumpUserId ? [state.lastBumpUserId] : [] },
         });
       }
     } catch (err) {
