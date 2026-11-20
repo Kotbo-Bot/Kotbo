@@ -134,6 +134,12 @@ export async function handleWelcomeThread(member: GuildMember, _client: Client):
       thread = await channel.threads.create({ name: threadName, autoArchiveDuration, reason });
     }
 
+    // Seuls les threads notés ici seront purgés après inactivité : le bot en
+    // ouvre d'autres dans ce salon (tickets, panneaux...) qu'il ne doit pas toucher.
+    await prisma.welcomeThreadCreated
+      .create({ data: { threadId: thread.id, guildId: member.guild.id } })
+      .catch((err) => logger.warn(TAG, `Thread d'accueil ${thread.id} non enregistré, il ne sera pas purgé :`, err));
+
     await thread.members.add(member.id).catch(() => null);
 
     // Séquence détachée : les délais entre messages ne doivent pas bloquer le traitement du join
@@ -300,7 +306,7 @@ async function collectArchivedBotThreads(
 }
 
 /**
- * Threads d'accueil du salon : ceux dont le bot est l'auteur, actifs comme archivés
+ * Threads du salon dont le bot est l'auteur, actifs comme archivés, d'accueil ou non.
  */
 async function collectWelcomeThreads(
   channel: TextChannel | NewsChannel,
@@ -346,9 +352,18 @@ async function cleanupGuildWelcomeThreads(
   const thresholdMs = hours * 3_600_000;
   const now = Date.now();
   const threads = await collectWelcomeThreads(channel, botId);
+  if (threads.length === 0) return 0;
+
+  // Seuls les threads enregistrés à leur création sont des threads d'accueil.
+  const recorded = await prisma.welcomeThreadCreated.findMany({
+    where: { guildId: guild.id, threadId: { in: threads.map((thread) => thread.id) } },
+    select: { threadId: true },
+  });
+  const welcomeThreadIds = new Set(recorded.map((row) => row.threadId));
 
   let deleted = 0;
   for (const thread of threads) {
+    if (!welcomeThreadIds.has(thread.id)) continue;
     if (now - resolveThreadLastActivityAt(thread) < thresholdMs) continue;
     if (deleted >= MAX_DELETIONS_PER_GUILD_PER_RUN) {
       logger.info(TAG, `Plafond de purge atteint sur ${guild.id}, le reste suivra au prochain passage`);
@@ -357,6 +372,7 @@ async function cleanupGuildWelcomeThreads(
 
     try {
       await thread.delete(`Thread d'accueil inactif depuis plus de ${hours}h`);
+      await prisma.welcomeThreadCreated.deleteMany({ where: { threadId: thread.id } }).catch(() => null);
       deleted += 1;
       await sleep(DELETION_SPACING_MS);
     } catch (err) {
