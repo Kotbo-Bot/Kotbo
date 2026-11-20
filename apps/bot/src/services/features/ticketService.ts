@@ -1258,20 +1258,20 @@ function buildTicketHistoryList(tickets: HistoryTicket[], locale: BotLocale): { 
   embed.setDescription(m.panel_tickets_history_desc({}, { locale }));
   embed.addFields(tickets.slice(0, 10).map((ticket) => ({
     name: `${historyStatusBadge(ticket.status)} · ${(ticket.ticketTypeLabel || 'Ticket').slice(0, 40)}`,
-    value: `${(ticket.reason || 'Sans motif').slice(0, 120)}\n<t:${Math.floor((ticket.closedAt ?? ticket.createdAt).getTime() / 1000)}:D>`,
+    value: `${(ticket.reason || m.panel_tickets_history_no_reason({}, { locale })).slice(0, 120)}\n<t:${Math.floor((ticket.closedAt ?? ticket.createdAt).getTime() / 1000)}:D>`,
     inline: true,
   })));
   if (tickets.length > 10) {
-    embed.setFooter({ text: `${tickets.length} tickets · les 10 plus récents sont détaillés ci-dessus` });
+    embed.setFooter({ text: m.panel_tickets_history_footer({ n: tickets.length }, { locale }) });
   }
 
   const select = new StringSelectMenuBuilder()
     .setCustomId('ticket:history_select')
     .setPlaceholder(m.panel_tickets_history_select({}, { locale }))
     .addOptions(tickets.map((ticket) => {
-      const date = new Date(ticket.closedAt ?? ticket.createdAt).toLocaleDateString('fr-FR');
+      const date = new Date(ticket.closedAt ?? ticket.createdAt).toLocaleDateString(locale);
       return {
-        label: `${date} · ${(ticket.reason || 'Sans motif').slice(0, 60)}`.slice(0, 100),
+        label: `${date} · ${(ticket.reason || m.panel_tickets_history_no_reason({}, { locale })).slice(0, 60)}`.slice(0, 100),
         description: `${historyStatusBadge(ticket.status)} · ${(ticket.ticketTypeLabel || 'Ticket')}`.slice(0, 100),
         value: ticket.id,
       };
@@ -1303,12 +1303,12 @@ function buildTicketHistoryDetail(
     .setTitle(`${historyStatusBadge(ticket.status)} · ${(ticket.ticketTypeLabel || 'Ticket').slice(0, 200)}`)
     .setColor(ticket.status === 'ARCHIVED' ? (COLORS.warning as ColorResolvable) : (COLORS.primary as ColorResolvable))
     .addFields([
-      { name: 'Motif', value: (ticket.reason || 'Aucun').slice(0, 1024), inline: false },
-      { name: 'Description', value: (ticket.description || 'Aucune').slice(0, 1024), inline: false },
-      { name: 'Ouvert le', value: `<t:${Math.floor(ticket.createdAt.getTime() / 1000)}:D>`, inline: true },
-      { name: 'Fermé le', value: ticket.closedAt ? `<t:${Math.floor(ticket.closedAt.getTime() / 1000)}:D>` : '-', inline: true },
+      { name: m.panel_tickets_history_f_reason({}, { locale }), value: (ticket.reason || m.panel_tickets_history_none_m({}, { locale })).slice(0, 1024), inline: false },
+      { name: m.panel_tickets_history_f_description({}, { locale }), value: (ticket.description || m.panel_tickets_history_none_f({}, { locale })).slice(0, 1024), inline: false },
+      { name: m.panel_tickets_history_f_opened({}, { locale }), value: `<t:${Math.floor(ticket.createdAt.getTime() / 1000)}:D>`, inline: true },
+      { name: m.panel_tickets_history_f_closed({}, { locale }), value: ticket.closedAt ? `<t:${Math.floor(ticket.closedAt.getTime() / 1000)}:D>` : '-', inline: true },
       {
-        name: 'Réouvertures',
+        name: m.panel_tickets_history_f_reopenings({}, { locale }),
         value: maxRestores === null
           ? `${ticket.restoreCount ?? 0}`
           : m.panel_tickets_history_reopen_quota({ used: ticket.restoreCount ?? 0, max: maxRestores }, { locale }),
