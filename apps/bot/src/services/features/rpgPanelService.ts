@@ -180,6 +180,7 @@ import {
 import { trackRpgObjective } from './rpg/rpgObjectiveTracker.js';
 import { isShopItemUnlocked, rpgGuildXpNeeded, type ShopModuleState } from './economyPolicy.js';
 import { lockRpgProfile, takeInventoryQuantity } from './rpg/rpgInventoryWrites.js';
+import { checkPlayerStats } from './rpg/rpgPlayerAdminService.js';
 import { attackRaid, checkRaidAssaultGrant, getRaidPanelState, getRaidState, grantRaidAssaults, RaidError, RaidRefused } from './rpg/rpgRaidService.js';
 import { buildAssaultEmbed, buildRaidEmbed, healthBar, raidRefusalText } from './rpg/rpgRaidPanel.js';
 import { computeAttack } from './rpg/rpgCombatMath.js';
@@ -6711,7 +6712,8 @@ async function handleAdminSetSubmit(interaction: ModalSubmitInteraction, guildId
     return;
   }
 
-  await adminSetStats(guildId, targetId, { [stat]: value });
+  // Mêmes bornes que le dashboard et les outils MCP : un refus remonte à replyPanelError.
+  await adminSetStats(guildId, targetId, checkPlayerStats({ [stat]: value }));
   await interaction.reply({ embeds: [successEmbed(m.rpg_admin_stats_updated_title({}, { locale }), m.rpg_admin_balance_set_desc({ id: targetId, value }, { locale }))], flags: [MessageFlags.Ephemeral] });
 }
 
