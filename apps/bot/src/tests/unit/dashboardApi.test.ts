@@ -211,7 +211,7 @@ import { createPublicCommunityRouter } from '../../api/hono/routes/public/public
 import { authRouter } from '../../api/hono/routes/auth.js';
 import { createReportErrorRouter } from '../../api/routes/error.js';
 import { createUserRouter } from '../../api/routes/user.js';
-import { handleAdminRoutes, createAdminLegacyRouter } from '../../api/routes/admin.js';
+import { createAdminRouter } from '../../api/routes/admin.js';
 import { createDashboardRouter } from '../../api/hono/dashboard/index.js';
 import { getMcpConnectionLogs, handleMCPRoutes, makeMcpDirectToken, createMcpServerRouter } from '../../api/mcp/mcpServer.js';
 
@@ -1139,26 +1139,8 @@ describe('Modular Routers Unit Tests', () => {
 
   describe('5. Admin Routes', () => {
     test('GET /api/admin/stats is blocked without admin access', async () => {
-      const req = createMockRequest({
-        method: 'GET',
-        url: '/api/admin/stats',
-        headers: authenticatedHeaders(),
-      });
-      const res = createMockResponse();
-      const parts = splitPath(req.url!);
-      const url = new URL(req.url!, 'http://localhost');
-
-      // Mock resolvesAdminAccess to false
       mockDb.globalAdmin.findUnique.mockResolvedValue(null);
-
-      const handled = await handleAdminRoutes(req, res, parts, url, mockClient);
-      expect(handled).toBeTrue();
-      expect(res.statusCode).toBe(403);
-    });
-
-    test('createAdminLegacyRouter routes admin requests correctly through Hono', async () => {
-      mockDb.globalAdmin.findUnique.mockResolvedValue(null);
-      const router = createAdminLegacyRouter(mockClient);
+      const router = createAdminRouter(mockClient);
       const res = await router.request('/api/admin/stats', {
         headers: authenticatedHeaders(),
       });
@@ -1280,20 +1262,15 @@ const ADMIN_ID = ADMIN_SESSION.userId;
 
 /** Requête sur une route `/api/admin`, au nom de l'admin global de test. */
 async function adminRequest(method: string, url: string, body?: unknown) {
-  const req = createMockRequest({
+  const res = await createAdminRouter(mockClient).request(url, {
     method,
-    url,
     headers: {
       cookie: `kotbo_session=${ADMIN_SESSION_ID}`,
       ...(body === undefined ? {} : { 'content-type': 'application/json' }),
     },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-  const res = createMockResponse();
-  const parsed = new URL(url, 'http://localhost');
-  // Comme le serveur : les segments viennent du chemin, la query n'en fait pas partie.
-  await handleAdminRoutes(req, res, splitPath(parsed.pathname), parsed, mockClient);
-  return res;
+  return { statusCode: res.status, body: await res.text() };
 }
 
 /** Entrées d'audit écrites pendant le cas, dans l'ordre. */

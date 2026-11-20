@@ -6,10 +6,11 @@
  * Vision. Lecture seule ; le controle d'acces administrateur est fait en
  * amont par `handleAdminRoutes`.
  */
-import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Client } from 'discord.js';
-import { json } from '../../shared.js';
-import { jsonFailure } from '../../shared/failure.js';
+import type { Context } from 'hono';
+import { fail, send } from '../../hono/dashboard/kit.js';
+
+const reply = (c: Context, status: number, data: unknown) => send(c, data, status);
 import { clampDays, getAiSupervision, getGlobalActivity, getGuildSheet } from '../../../services/analytics/adminInsightsService.js';
 import { getGuildMembersSheet, getSharedMembers } from '../../../services/analytics/adminGuildMembersService.js';
 import prisma from '../../../utils/db.js';
@@ -17,26 +18,25 @@ import prisma from '../../../utils/db.js';
 const SNOWFLAKE = /^\d{15,25}$/;
 
 export async function handleAdminInsightRoutes(
-  req: IncomingMessage,
-  res: ServerResponse,
+  c: Context,
   parts: string[],
   url: URL,
   client: Client,
-): Promise<boolean> {
-  if (parts[2] !== 'insights' || req.method !== 'GET') return false;
+): Promise<Response | null> {
+  if (parts[2] !== 'insights' || c.req.method !== 'GET') return null;
   const days = clampDays(url.searchParams.get('days'));
 
   try {
     // GET /api/admin/insights/activity : messages, salons et categories de toute la flotte.
     if (parts[3] === 'activity' && parts.length === 4) {
-      json(res, 200, await getGlobalActivity(client, days));
-      return true;
+      return reply(c, 200, await getGlobalActivity(client, days));
+
     }
 
     // GET /api/admin/insights/ai : supervision AegisAI et Kotbo Vision.
     if (parts[3] === 'ai' && parts.length === 4) {
-      json(res, 200, await getAiSupervision(client, days));
-      return true;
+      return reply(c, 200, await getAiSupervision(client, days));
+
     }
 
     // GET /api/admin/insights/ai/vision-images : catalogue d'images Kotbo Vision (toutes sources)
@@ -80,44 +80,44 @@ export async function handleAdminInsightRoutes(
         guildName: img.guildId ? (guildMap.get(img.guildId) ?? null) : 'Global',
       }));
 
-      json(res, 200, { images: enriched });
-      return true;
+      return reply(c, 200, { images: enriched });
+
     }
 
     // GET /api/admin/insights/guilds/:id/members : cohortes, profil, staff, risques, sources, recoupement.
     if (parts[3] === 'guilds' && parts.length === 6 && parts[5] === 'members') {
       if (!SNOWFLAKE.test(parts[4])) {
-        json(res, 400, { error: 'Identifiant de serveur invalide.' });
-        return true;
+        return reply(c, 400, { error: 'Identifiant de serveur invalide.' });
+
       }
-      json(res, 200, await getGuildMembersSheet(client, parts[4], days));
-      return true;
+      return reply(c, 200, await getGuildMembersSheet(client, parts[4], days));
+
     }
 
     // GET /api/admin/insights/guilds/:id/overlap/:otherId : membres communs, nommément (console admin seulement).
     if (parts[3] === 'guilds' && parts.length === 7 && parts[5] === 'overlap') {
       if (!SNOWFLAKE.test(parts[4]) || !SNOWFLAKE.test(parts[6])) {
-        json(res, 400, { error: 'Identifiant de serveur invalide.' });
-        return true;
+        return reply(c, 400, { error: 'Identifiant de serveur invalide.' });
+
       }
-      json(res, 200, { members: await getSharedMembers(parts[4], parts[6]) });
-      return true;
+      return reply(c, 200, { members: await getSharedMembers(parts[4], parts[6]) });
+
     }
 
     // GET /api/admin/insights/guilds/:id : fiche d'un serveur.
     if (parts[3] === 'guilds' && parts.length === 5) {
       if (!SNOWFLAKE.test(parts[4])) {
-        json(res, 400, { error: 'Identifiant de serveur invalide.' });
-        return true;
+        return reply(c, 400, { error: 'Identifiant de serveur invalide.' });
+
       }
       const sheet = await getGuildSheet(client, parts[4], days);
-      json(res, sheet ? 200 : 404, sheet ?? { error: 'Serveur inconnu.' });
-      return true;
+      return reply(c, sheet ? 200 : 404, sheet ?? { error: 'Serveur inconnu.' });
+
     }
   } catch (err) {
-    jsonFailure(res, err, 'Impossible de lire ces statistiques. Réessaie.', 'AdminInsightsAPI');
-    return true;
+    return fail(c, err, 'Impossible de lire ces statistiques. Réessaie.', 'AdminInsightsAPI');
+
   }
 
-  return false;
+  return null;
 }

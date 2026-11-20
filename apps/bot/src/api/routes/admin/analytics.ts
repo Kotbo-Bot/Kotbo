@@ -8,9 +8,8 @@
  * en amont par `handleAdminRoutes`.
  */
 
-import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Client } from 'discord.js';
-import { json, readJsonBody, type AuthClaims } from '../../shared.js';
+import type { AuthClaims } from '../../shared.js';
 import { logger } from '../../../utils/logger.js';
 import {
   getFunnelStats,
@@ -30,20 +29,22 @@ import type { AnalyticsDimension } from '@kotbo/contracts';
 import { getDashboardUsage } from '../../../services/analytics/dashboardUsageService.js';
 import { getModuleFleetStats } from '../../../services/analytics/moduleFleetStatsService.js';
 
-import { jsonFailure } from '../../shared/failure.js';
+import type { Context } from 'hono';
+import { fail, readBody, send } from '../../hono/dashboard/kit.js';
+
+const reply = (c: Context, status: number, data: unknown) => send(c, data, status);
 export async function handleAdminAnalyticsRoutes(
-  req: IncomingMessage,
-  res: ServerResponse,
+  c: Context,
   parts: string[],
   url: URL,
   client: Client,
   _user: AuthClaims
-): Promise<boolean> {
-  const method = req.method;
+): Promise<Response | null> {
+  const method = c.req.method;
 
   // Doit être /api/admin/analytics/...
   if (parts[0] !== 'api' || parts[1] !== 'admin' || parts[2] !== 'analytics') {
-    return false;
+    return null;
   }
 
   const sub = parts[3];
@@ -57,8 +58,8 @@ export async function handleAdminAnalyticsRoutes(
         guildId: url.searchParams.get('guildId'),
         compare: url.searchParams.get('compare') === 'previous',
       });
-      json(res, 200, usage);
-      return true;
+      return reply(c, 200, usage);
+
     }
 
     // GET /api/admin/analytics/module-fleet : activation, usage et performance des modules sur le parc.
@@ -67,8 +68,8 @@ export async function handleAdminAnalyticsRoutes(
         from: url.searchParams.get('from'),
         to: url.searchParams.get('to'),
       });
-      json(res, 200, stats);
-      return true;
+      return reply(c, 200, stats);
+
     }
 
     // 1. GET /api/admin/analytics/funnel/onboarding
@@ -79,8 +80,8 @@ export async function handleAdminAnalyticsRoutes(
         serverKind: url.searchParams.get('serverKind'),
         track: url.searchParams.get('track'),
       });
-      json(res, 200, stats);
-      return true;
+      return reply(c, 200, stats);
+
     }
 
     // 2. GET /api/admin/analytics/funnel
@@ -90,15 +91,15 @@ export async function handleAdminAnalyticsRoutes(
         to: url.searchParams.get('to'),
         compare: url.searchParams.get('compare') === 'previous',
       });
-      json(res, 200, stats);
-      return true;
+      return reply(c, 200, stats);
+
     }
 
     // 3. GET /api/admin/analytics/revenue/cohorts
     if (sub === 'revenue' && parts[4] === 'cohorts' && method === 'GET') {
       const cohorts = await getRetentionCohorts();
-      json(res, 200, cohorts);
-      return true;
+      return reply(c, 200, cohorts);
+
     }
 
     // 4. GET /api/admin/analytics/revenue
@@ -108,8 +109,8 @@ export async function handleAdminAnalyticsRoutes(
         to: url.searchParams.get('to'),
         compare: url.searchParams.get('compare') === 'previous',
       });
-      json(res, 200, stats);
-      return true;
+      return reply(c, 200, stats);
+
     }
 
     // 5. GET /api/admin/analytics/segments
@@ -119,15 +120,15 @@ export async function handleAdminAnalyticsRoutes(
         from: url.searchParams.get('from'),
         to: url.searchParams.get('to'),
       });
-      json(res, 200, stats);
-      return true;
+      return reply(c, 200, stats);
+
     }
 
     // 6. GET /api/admin/analytics/modules
     if (sub === 'modules' && method === 'GET') {
       const stats = await getModuleCorrelations();
-      json(res, 200, stats);
-      return true;
+      return reply(c, 200, stats);
+
     }
 
     // 7. GET /api/admin/analytics/guilds
@@ -147,15 +148,15 @@ export async function handleAdminAnalyticsRoutes(
         dimension,
         bucket,
       });
-      json(res, 200, data);
-      return true;
+      return reply(c, 200, data);
+
     }
 
     // 8. GET /api/admin/analytics/risks
     if (sub === 'risks' && method === 'GET') {
       const risks = await getRisksSummary(client);
-      json(res, 200, risks);
-      return true;
+      return reply(c, 200, risks);
+
     }
 
     // 9. GET /api/admin/analytics/export.csv
@@ -173,36 +174,36 @@ export async function handleAdminAnalyticsRoutes(
         filter,
       });
 
-      res.statusCode = 200;
-      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-      res.end(content);
-      return true;
+      return c.body(content, 200, {
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': `attachment; filename="${filename}"`,
+      });
+
     }
 
     // 10. GET /api/admin/analytics/alerts
     if (sub === 'alerts' && method === 'GET') {
       const data = await getAlertThresholds();
-      json(res, 200, data);
-      return true;
+      return reply(c, 200, data);
+
     }
 
     // 10. POST /api/admin/analytics/alerts
     if (sub === 'alerts' && method === 'POST') {
-      const body = await readJsonBody<Partial<AlertThresholds>>(req);
+      const body = await readBody<Partial<AlertThresholds>>(c);
       if (!body) {
-        json(res, 400, { error: 'Corps de requête manquant ou invalide' });
-        return true;
+        return reply(c, 400, { error: 'Corps de requête manquant ou invalide' });
+
       }
       const updated = await saveAlertThresholds(body);
-      json(res, 200, { thresholds: updated });
-      return true;
+      return reply(c, 200, { thresholds: updated });
+
     }
 
-    return false;
+    return null;
   } catch (error) {
     logger.error('AdminAnalyticsAPI', `Erreur sur /api/admin/analytics/${sub ?? ''}:`, error);
-    jsonFailure(res, error, "Erreur interne lors du traitement des statistiques d'acquisition.", 'AdminAnalyticsAPI');
-    return true;
+    return fail(c, error, "Erreur interne lors du traitement des statistiques d'acquisition.", 'AdminAnalyticsAPI');
+
   }
 }
