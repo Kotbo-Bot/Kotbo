@@ -300,11 +300,40 @@ export async function pushWidgetForUser(guildId: string, userId: string): Promis
   }
 }
 
+/** Le widget se construit depuis le cache Discord : seul le shard du serveur peut le pousser. */
+async function pushWidgetFromGuildShard(guildId: string, userId: string): Promise<{ ok: boolean; error?: string }> {
+  const client = getClient();
+  if (!client.shard || client.guilds.cache.has(guildId)) return pushWidgetForUser(guildId, userId);
+  // Le corps est sérialisé puis exécuté dans chaque shard : il recharge ce module par son URL.
+  const results = await client.shard.broadcastEval(async (shardClient, context) => {
+    if (!shardClient.guilds.cache.has(context.guildId)) return null;
+    const { pushWidgetForUser } = await import(context.servicePath);
+    return pushWidgetForUser(context.guildId, context.userId);
+  }, { context: { servicePath: import.meta.url, guildId, userId } }).catch((err: unknown) => {
+    logger.warn(TAG, `Widget de ${userId} non relayé au shard de ${guildId}:`, err);
+    return [];
+  });
+  return results.find((result) => result !== null) ?? { ok: false, error: 'Serveur inaccessible' };
+}
+
+/**
+ * Retire le widget d'un serveur désabonné. Le widget Discord étant unique par
+ * utilisateur, on y remet plutôt un autre serveur où le membre reste abonné.
+ */
 export async function clearWidgetForUser(userId: string): Promise<{ ok: boolean; error?: string }> {
   const botToken = process.env.DISCORD_TOKEN;
   const appId = process.env.DISCORD_CLIENT_ID;
   if (!botToken || !appId) {
     return { ok: false, error: 'DISCORD_TOKEN ou DISCORD_CLIENT_ID manquant' };
+  }
+
+  const stillSubscribed = await prisma.widgetSubscription.findFirst({
+    where: { userId, enabled: true },
+    orderBy: { updatedAt: 'desc' },
+    select: { guildId: true },
+  });
+  if (stillSubscribed && (await pushWidgetFromGuildShard(stillSubscribed.guildId, userId)).ok) {
+    return { ok: true };
   }
 
   const emptyPayload = { data: { dynamic: [] } };

@@ -20,6 +20,9 @@ const mockDb = {
   staffActivity: {
     findMany: mock((_args?: unknown): Promise<unknown[]> => Promise.resolve([])),
   },
+  widgetSubscription: {
+    findFirst: mock((_args?: unknown): Promise<{ guildId: string } | null> => Promise.resolve(null)),
+  },
 };
 
 const guild = {
@@ -37,6 +40,10 @@ const guild = {
   },
 };
 
+/** Client Discord du processus courant : celui d'un shard pendant son `broadcastEval`. */
+const clientSansShard = { guilds: { cache: new Map([[guildId, guild]]) } };
+let clientCourant: object = clientSansShard;
+
 const moduleMocks: Array<[string, () => Record<string, unknown>]> = [
   ['../../utils/db', () => ({ default: mockDb, prisma: mockDb, prismaRead: mockDb })],
   // Toutes les methodes du logger, meme celles dont ce test ne se sert pas :
@@ -53,7 +60,7 @@ const moduleMocks: Array<[string, () => Record<string, unknown>]> = [
     },
   })],
   ['../../utils/client', () => ({
-    getClient: () => ({ guilds: { cache: new Map([[guildId, guild]]) } }),
+    getClient: () => clientCourant,
   })],
   // Mocks COMPLETS : `mock.module` est global au process. Un mock partiel
   // supprimerait les autres exports (verifyAPIKey, getXpForLevel...) pour tous
@@ -216,6 +223,64 @@ describe('clearWidgetForUser identities', () => {
     process.env.DISCORD_CLIENT_ID = 'test-app';
     fetchMock.mockReset();
     fetchMock.mockImplementation(async () => new Response(null, { status: 204 }));
+    mockDb.widgetSubscription.findFirst.mockReset();
+    mockDb.widgetSubscription.findFirst.mockImplementation(() => Promise.resolve(null));
+  });
+
+  test('remet le widget d’un autre serveur encore abonné au lieu de vider le profil', async () => {
+    mockDb.widgetSubscription.findFirst.mockImplementation(() => Promise.resolve({ guildId }));
+
+    const result = await clearWidgetForUser(userId);
+
+    expect(result).toEqual({ ok: true });
+    expect(mockDb.widgetSubscription.findFirst.mock.calls[0]?.[0]).toMatchObject({ where: { userId, enabled: true } });
+    // Un seul PATCH, avec les statistiques du serveur restant : rien n'est vidé.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const payload = JSON.parse(String((fetchMock.mock.calls[0]?.[1] as RequestInit).body));
+    expect(payload.data.dynamic.length).toBeGreaterThan(0);
+  });
+
+  test('vide le profil quand le serveur restant ne peut pas être affiché', async () => {
+    mockDb.widgetSubscription.findFirst.mockImplementation(() => Promise.resolve({ guildId: 'serveur-inaccessible' }));
+
+    const result = await clearWidgetForUser(userId);
+
+    expect(result).toEqual({ ok: true });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const payload = JSON.parse(String((fetchMock.mock.calls[0]?.[1] as RequestInit).body));
+    expect(payload).toEqual({ data: { dynamic: [] } });
+  });
+
+  test('remet le widget d’un serveur encore abonné qui vit sur un autre shard', async () => {
+    mockDb.widgetSubscription.findFirst.mockImplementation(() => Promise.resolve({ guildId }));
+    // Désabonnement traité par le shard 0 ; le serveur restant est dans le cache du shard 1.
+    const shard1 = { guilds: { cache: new Map([[guildId, guild]]) } };
+    const shard0 = {
+      guilds: { cache: new Map() },
+      shard: {
+        // Script sérialisé comme par discord.js, exécuté shard par shard dans son propre processus.
+        broadcastEval: async (script: unknown, { context }: { context: unknown }) => {
+          const results = [];
+          for (const shardClient of [shard0, shard1]) {
+            clientCourant = shardClient;
+            results.push(await (0, eval)(`(${script})`)(shardClient, context));
+          }
+          clientCourant = shard0;
+          return results;
+        },
+      },
+    };
+    clientCourant = shard0;
+
+    try {
+      expect(await clearWidgetForUser(userId)).toEqual({ ok: true });
+    } finally {
+      clientCourant = clientSansShard;
+    }
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const payload = JSON.parse(String((fetchMock.mock.calls[0]?.[1] as RequestInit).body));
+    expect(payload.data.dynamic.length).toBeGreaterThan(0);
   });
 
   test('bascule sur l’identité legacy 0 sur mismatch', async () => {
