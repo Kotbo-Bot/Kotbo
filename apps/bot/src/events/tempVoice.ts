@@ -3445,7 +3445,9 @@ async function createTempChannel(
     .create({
       name: renderChannelName(modeleDeNom(generator.nameTemplate, locale), member.displayName || member.user.username),
       type: ChannelType.GuildVoice,
-      parent: generator.categoryId,
+      // La catégorie vérifiée plus haut, pas l'identifiant brut : Discord refuse
+      // un parent disparu, et le générateur cesserait de créer quoi que ce soit.
+      parent: parentCategory?.id,
       userLimit: generator.policy.userLimit,
       permissionOverwrites: surchargesCreation,
       reason: m.panel_tempvoice_audit_create({ user: member.user.tag }, { locale }),
