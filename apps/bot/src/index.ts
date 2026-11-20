@@ -32,7 +32,7 @@ import { customBotOnlyGuild, servesGuild, startGuildOwnershipSync } from './util
 import { startGlobalFlagsSync } from './utils/globalFlags.js';
 import { presenceFrom } from './services/system/customBotProfile.js';
 import { queueAuditLog } from './utils/auditLogger.js';
-import { replyOrFollowUp } from './utils/interactionResponses.js';
+import { notifyInteractionFailure, replyOrFollowUp } from './utils/interactionResponses.js';
 import { interactionFailureMessage } from './utils/failureKind.js';
 import { registerCrons } from './events/crons.js';
 import {
@@ -1040,16 +1040,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
     captureException(err, 'interaction-create');
     logger.error('Event', 'InteractionCreate error:', err);
     try {
-      if (interaction.isRepliable() && !interaction.deferred && !interaction.replied) {
-        // « Une erreur est survenue » ne disait ni quoi faire, ni si cela
-        // valait la peine de reessayer. Une base injoignable, une permission
-        // Discord manquante et un bug de commande appellent trois reactions
-        // differentes : on nomme la panne quand on sait la reconnaitre.
-        await replyOrFollowUp(interaction, {
-          content: `❌ ${interactionFailureMessage(err)}`,
-          flags: [MessageFlags.Ephemeral],
-        });
-      } else {
+      // « Une erreur est survenue » ne disait ni quoi faire, ni si cela
+      // valait la peine de reessayer. Une base injoignable, une permission
+      // Discord manquante et un bug de commande appellent trois reactions
+      // differentes : on nomme la panne quand on sait la reconnaitre.
+      if (!(await notifyInteractionFailure(interaction, `❌ ${interactionFailureMessage(err)}`))) {
         logger.warn('Event', "Interaction déjà acquittée au moment de la gestion d'erreur; aucun message supplémentaire envoyé.");
       }
     } catch (e) {
