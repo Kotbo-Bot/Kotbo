@@ -277,7 +277,7 @@
         <select
           value={actionFilter}
           onchange={(event) => applyFilter(event.currentTarget.value)}
-          class="h-8 rounded-lg bg-surface-container border border-outline-variant/25 px-2.5 text-xs text-on-surface"
+          class="h-8 rounded-lg bg-surface-container border border-field-border px-2.5 text-xs text-on-surface"
         >
           <option value="">Toutes les actions</option>
           {#each actionGroups as [domain, items] (domain)}

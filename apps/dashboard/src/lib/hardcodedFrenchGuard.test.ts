@@ -140,10 +140,10 @@ const TRANSLATED = [
 
 /**
  * Francais legitime dans un fichier traduit : le nom d'une langue dans cette
- * langue, un nom de role Discord compare tel quel, les salons d'exemple de
- * l'option francaise du choix de langue, et un prenom de membre fictif.
+ * langue, un nom de role ou prefixe de salon Discord compare tel quel, les salons
+ * d'exemple de l'option francaise du choix de langue, et un prenom de membre fictif.
  */
-const ALLOWED = new Set(['Français', 'Gérant', '#règlement', '#général', 'Maë']);
+const ALLOWED = new Set(['Français', 'Gérant', 'fermé-', '#règlement', '#général', 'Maë']);
 
 const ACCENT = /[éèêëàâçùûüôîïœÉÈÊÀÂÇÔÎ]/;
 

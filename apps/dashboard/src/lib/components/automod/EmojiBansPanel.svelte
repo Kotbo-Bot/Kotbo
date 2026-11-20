@@ -157,7 +157,7 @@
     <div class="flex flex-wrap items-start gap-4">
       <label class="space-y-1">
         <span class="text-2xs font-semibold uppercase tracking-wide text-on-surface-variant">{m.eb_sanction()}</span>
-        <select bind:value={newAction} disabled={!canManage} class="block bg-surface-container border border-outline-variant/20 rounded-lg px-3 py-2 text-sm">
+        <select bind:value={newAction} disabled={!canManage} class="block bg-surface-container border border-field-border rounded-lg px-3 py-2 text-sm">
           {#each ACTIONS as a (a)}
             <option value={a}>{actionLabel(a)}</option>
           {/each}
@@ -166,7 +166,7 @@
       {#if WITH_DURATION.has(newAction)}
         <label class="space-y-1">
           <span class="text-2xs font-semibold uppercase tracking-wide text-on-surface-variant">{m.eb_duration_min()}</span>
-          <input type="number" min="1" bind:value={newDuration} disabled={!canManage} class="block w-32 bg-surface-container border border-outline-variant/20 rounded-lg px-3 py-2 text-sm" />
+          <input type="number" min="1" bind:value={newDuration} disabled={!canManage} class="block w-32 bg-surface-container border border-field-border rounded-lg px-3 py-2 text-sm" />
           <DurationPresets bind:value={newDuration} presets={DURATION_PRESETS} label={m.eb_duration_min()} disabled={!canManage} />
         </label>
       {/if}
@@ -186,7 +186,7 @@
         placeholder="🍆"
         aria-label={m.eb_unicode_title()}
         disabled={!canManage}
-        class="w-28 bg-surface-container border border-outline-variant/20 rounded-lg px-3 py-2 text-lg"
+        class="w-28 bg-surface-container border border-field-border rounded-lg px-3 py-2 text-lg"
       />
       <Button type="submit" variant="primary" icon="plus" disabled={!canManage || !unicodeInput.trim()} loading={busy?.startsWith('UNICODE:') ?? false}>{m.eb_ban()}</Button>
     </form>
@@ -203,7 +203,7 @@
       oninput={onSearch}
       placeholder={m.eb_server_search()}
       aria-label={m.eb_server_search()}
-      class="w-full bg-surface-container border border-outline-variant/20 rounded-lg px-3 py-2 text-sm"
+      class="w-full bg-surface-container border border-field-border rounded-lg px-3 py-2 text-sm"
     />
     {#if searching}
       <p class="text-xs text-on-surface-variant">{m.eb_searching()}</p>
@@ -301,7 +301,7 @@
               aria-label={m.eb_sanction()}
               disabled={!canManage || busy !== null}
               onchange={(e) => changeAction(rule, (e.currentTarget as HTMLSelectElement).value as EmojiBanAction)}
-              class="bg-surface-container border border-outline-variant/20 rounded-lg px-2 py-1.5 text-xs"
+              class="bg-surface-container border border-field-border rounded-lg px-2 py-1.5 text-xs"
             >
               {#each ACTIONS as a (a)}
                 <option value={a}>{actionLabel(a)}</option>
@@ -316,7 +316,7 @@
                 aria-label={m.eb_duration_min()}
                 disabled={!canManage || busy !== null}
                 onchange={(e) => changeDuration(rule, Number((e.currentTarget as HTMLInputElement).value))}
-                class="w-24 bg-surface-container border border-outline-variant/20 rounded-lg px-2 py-1.5 text-xs"
+                class="w-24 bg-surface-container border border-field-border rounded-lg px-2 py-1.5 text-xs"
               />
             {/if}
             <Button size="sm" variant="ghost" icon="trash-2" aria-label={m.eb_unban()} disabled={!canManage} loading={busy === rule.id} onclick={() => remove(rule)} />
