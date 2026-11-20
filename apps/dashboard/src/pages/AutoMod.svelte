@@ -19,6 +19,7 @@
   import LoadingHint from '../lib/components/LoadingHint.svelte';
   import AntiSpamPanel from '../lib/components/AntiSpamPanel.svelte';
   import RuleSimulator from '../lib/components/automod/RuleSimulator.svelte';
+  import EmojiBansPanel from '../lib/components/automod/EmojiBansPanel.svelte';
   import Button from '../lib/components/ui/Button.svelte';
   import type { SimulatedRule, SimulatedRuleKind } from '../lib/api';
   import {
@@ -29,7 +30,7 @@
   const actionState = createAsyncActionState();
   let loading = $state(false);
   // « nicknames » est rendu par la page enveloppe (security/Filters) : il figure ici pour que l'onglet existe.
-  const FILTER_TABS = ['bot', 'discord', 'security', 'behavioral', 'servers', 'exceptions', 'simulator', 'nicknames', 'tags'] as const;
+  const FILTER_TABS = ['bot', 'discord', 'security', 'behavioral', 'servers', 'emojis', 'exceptions', 'simulator', 'nicknames', 'tags'] as const;
   let activeTab = $state<string>('bot');
 
   // L'onglet vit dans l'URL, comme ailleurs : la palette de commandes propose
@@ -1340,6 +1341,12 @@
         </div>
         <Papicon icon="chevron-right" size={16} class="shrink-0 text-on-surface-variant" />
       </a>
+
+    {:else if activeTab === 'emojis'}
+      <!-- Règles à part (EmojiBanRule) : le panneau charge et enregistre lui-même. -->
+      <div class="mt-6">
+        <EmojiBansPanel canManage={canManageSettings} />
+      </div>
 
     {:else if activeTab === 'behavioral'}
       <!-- Le panneau gere son propre chargement et son propre enregistrement :
