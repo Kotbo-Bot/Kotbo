@@ -11,6 +11,7 @@ import {
 import crypto from 'node:crypto';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
+import { isAutoGrantableRoleId } from '../../utils/adminLockPermissions.js';
 import { LinkedAccountType, LinkedAccountStatus, VerificationStatus, VerificationLevel } from '@prisma/client';
 import * as altAccountService from './altAccountService.js';
 import { notifyMany } from '../notifications/notifyService.js';
@@ -595,7 +596,7 @@ export async function completeVerification(params: {
         }
 
         // Grant role
-        if (guildConfig?.verificationRoleId && !duplicateDetected) {
+        if (guildConfig?.verificationRoleId && !duplicateDetected && isAutoGrantableRoleId(member.guild, guildConfig.verificationRoleId)) {
           await member.roles.add(guildConfig.verificationRoleId).catch(() => null);
         }
       }
@@ -759,7 +760,7 @@ export async function handleVerificationStaffAction(interaction: Interaction): P
       const guild = interaction.guild;
       if (guild) {
         const member = await guild.members.fetch(userId1).catch(() => null);
-        if (member) {
+        if (member && isAutoGrantableRoleId(guild, guildConfig.verificationRoleId)) {
           await member.roles.add(guildConfig.verificationRoleId).catch(() => null);
         }
       }

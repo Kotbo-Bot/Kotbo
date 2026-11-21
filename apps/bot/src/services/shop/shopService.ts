@@ -22,6 +22,7 @@ import {
 import prisma from '../../utils/db.js';
 import { notify } from '../notifications/notifyService.js';
 import { logger } from '../../utils/logger.js';
+import { isAutoGrantableRoleId } from '../../utils/adminLockPermissions.js';
 import { resolveGuildLocale } from '../../utils/i18n.js';
 import * as m from '../../lib/paraglide/messages.js';
 import { getModuleStates } from '../core/moduleGate.js';
@@ -384,6 +385,10 @@ const PERIOD_MS = 86_400_000;
 
 async function deliverOrder(client: Client, offer: ShopOffer, order: ShopOrder, member: GuildMember): Promise<void> {
   const reason = `Boutique : ${offer.name}`.slice(0, 512);
+  // Un rôle Administrateur ne s'achète pas : la livraison échoue et la commande est remboursée.
+  if ((offer.kind === 'ROLE' || offer.kind === 'SUBSCRIPTION') && !isAutoGrantableRoleId(member.guild, offer.roleId!)) {
+    throw new Error(`Rôle ${offer.roleId} non livrable : il donne la permission Administrateur`);
+  }
   switch (offer.kind) {
     case 'ROLE': {
       await member.roles.add(offer.roleId!, reason);

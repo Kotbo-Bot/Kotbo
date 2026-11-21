@@ -41,6 +41,7 @@ import { kotboEventBus } from '@kotbo/core';
 import prisma, { prismaRead } from '../../utils/db.js';
 import { upsertRetryingRace } from '../../utils/upsertRetry.js';
 import { logger } from '../../utils/logger.js';
+import { isAutoGrantableRoleId } from '../../utils/adminLockPermissions.js';
 import { cache, getCachedGuild } from '../../utils/cache.js';
 import { type BotLocale, resolveGuildLocale } from '../../utils/i18n.js';
 import * as m from '../../lib/paraglide/messages.js';
@@ -463,7 +464,7 @@ async function runRoleResync(guildId: string, client: Client, job: RoleResyncJob
       const member = await discordGuild.members.fetch(move.userId).catch(() => null);
       if (member) {
         const target = new Set(move.roles);
-        const toAdd = move.roles.filter((roleId) => !member.roles.cache.has(roleId));
+        const toAdd = move.roles.filter((roleId) => !member.roles.cache.has(roleId) && isAutoGrantableRoleId(member.guild, roleId));
         const toRemove = job.managedRoleIds.filter((roleId) => !target.has(roleId) && member.roles.cache.has(roleId));
         if (toRemove.length > 0) await member.roles.remove(toRemove).catch(() => null);
         if (toAdd.length > 0) await member.roles.add(toAdd).catch(() => null);
@@ -1150,7 +1151,7 @@ async function processLevelUp(
 
       for (const reward of rewards) {
         if (newLevel >= reward.level) {
-          if (!member.roles.cache.has(reward.roleId)) {
+          if (!member.roles.cache.has(reward.roleId) && isAutoGrantableRoleId(member.guild, reward.roleId)) {
             rolesToAdd.push(reward.roleId);
           }
         } else {
@@ -1686,7 +1687,7 @@ export async function updateMemberLevelRoles(guildId: string, userId: string, le
 
       for (const reward of rewards) {
         if (level >= reward.level) {
-          if (!member.roles.cache.has(reward.roleId)) {
+          if (!member.roles.cache.has(reward.roleId) && isAutoGrantableRoleId(member.guild, reward.roleId)) {
             rolesToAdd.push(reward.roleId);
           }
         } else {
