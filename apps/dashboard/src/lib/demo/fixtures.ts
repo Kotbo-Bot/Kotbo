@@ -29,6 +29,12 @@ export const ROLES = [
   { id: '900000000000000205', name: 'Habitué', color: '#eb459e', position: 5, permissions: [] },
   { id: '900000000000000206', name: 'Membre', color: '#949ba4', position: 2, permissions: [] },
   { id: '900000000000000207', name: 'Kotbo', color: '#22d3ee', position: 11, permissions: ['Administrator'], managed: true },
+  { id: '900000000000000221', name: 'Valorant', color: '#ff4655', position: 3, permissions: [] },
+  { id: '900000000000000222', name: 'Minecraft', color: '#62b47a', position: 3, permissions: [] },
+  { id: '900000000000000223', name: 'League of Legends', color: '#c8aa6e', position: 3, permissions: [] },
+  { id: '900000000000000224', name: 'Rocket League', color: '#0082ff', position: 3, permissions: [] },
+  { id: '900000000000000225', name: 'Annonces', color: '#f0b232', position: 1, permissions: [] },
+  { id: '900000000000000226', name: 'Événements', color: '#eb459e', position: 1, permissions: [] },
 ].map((role) => ({ ...role, mention: `<@&${role.id}>`, managed: role.managed ?? false }));
 
 export const role = (name: string) => ROLES.find((r) => r.name === name)!;
