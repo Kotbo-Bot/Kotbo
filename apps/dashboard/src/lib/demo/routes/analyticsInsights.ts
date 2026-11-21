@@ -919,4 +919,51 @@ export function registerAnalyticsInsightsRoutes(): void {
       },
     };
   });
+
+  // Recoupement des porteurs du tag chez nous : nombres, activité et modération.
+  route('GET', `${base}/servers/:targetGuildId/insights`, ({ params }) => {
+    const holderIds = demoTagMembers.filter((m) => m.serverId === params.targetGuildId).map((m) => m.userId);
+    const holders = MEMBERS.filter((m) => holderIds.includes(m.id));
+    const sum = (list: typeof MEMBERS, pick: (m: (typeof MEMBERS)[number]) => number) => list.reduce((total, m) => total + pick(m), 0);
+    const others = MEMBERS.filter((m) => !holderIds.includes(m.id) && !m.bot);
+    const group = (list: typeof MEMBERS, toxic: number, sanctions: number) => ({
+      members: list.length,
+      active: list.filter((m) => m.messages > 50).length,
+      messages: sum(list, (m) => m.messages),
+      voiceMinutes: sum(list, (m) => m.voiceMinutes),
+      analyzed: Math.round(sum(list, (m) => m.messages) * 0.8),
+      toxic,
+      sanctions,
+    });
+    const isPartner = params.targetGuildId === '930000000000000011';
+    const first = holders[0];
+    return {
+      holders: group(holders, isPartner ? 3 : 0, isPartner ? 1 : 0),
+      others: group(others, 14, 6),
+      activityByDay: Array.from({ length: 30 }, (_, i) => ({
+        date: new Date(Date.now() - (29 - i) * DAY_MS).toISOString().slice(0, 10),
+        holders: holders.length ? 4 + ((i * 7) % 9) : 0,
+        others: 60 + ((i * 13) % 35),
+      })),
+      topHolders: holders.map((m) => ({ userId: m.id, messages: m.messages, voiceMinutes: m.voiceMinutes })),
+      movement: { joined30d: holders.length ? 2 : 0, left30d: isPartner ? 1 : 0, leftTotal: isPartner ? 2 : 0 },
+      overlap: { botPresent: false, shared: null, share: null },
+      moderation: {
+        sanctionsByType: isPartner ? [{ type: 'WARN', count: 1 }] : [],
+        recentSanctions:
+          isPartner && first
+            ? [{ id: 'svdx-sanction-1', type: 'WARN', targetUserId: first.id, targetTag: first.username, reason: 'Pub pour son serveur en MP', createdAt: new Date(Date.now() - 12 * DAY_MS).toISOString() }]
+            : [],
+        fleet: { blocks: isPartner ? 1 : 0, waveReports: 0 },
+        rule: isPartner
+          ? { id: 'tag-rule-1', name: 'Surveiller DevHub', effect: 'BLOCK' as const, action: 'ALERT', enabled: true, expiresAt: null }
+          : null,
+        events:
+          isPartner && first
+            ? [{ id: 'svdx-event-1', userId: first.id, userTag: first.username, trigger: 'JOIN', action: 'ALERT', status: 'APPLIED', createdAt: new Date(Date.now() - 2 * DAY_MS).toISOString() }]
+            : [],
+        waves: 0,
+      },
+    };
+  });
 }
