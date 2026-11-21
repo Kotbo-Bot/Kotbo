@@ -20,6 +20,7 @@
   import AntiSpamPanel from '../lib/components/AntiSpamPanel.svelte';
   import RuleSimulator from '../lib/components/automod/RuleSimulator.svelte';
   import EmojiBansPanel from '../lib/components/automod/EmojiBansPanel.svelte';
+  import { hasUnsavedAutoModChanges, parseListLines } from '../lib/components/automod/automodDirty';
   import Button from '../lib/components/ui/Button.svelte';
   import type { SimulatedRule, SimulatedRuleKind } from '../lib/api';
   import {
@@ -148,7 +149,13 @@
   })));
 
   $effect(() => {
-    const dirty = JSON.stringify(config) !== JSON.stringify(savedConfig);
+    const dirty = hasUnsavedAutoModChanges(config, savedConfig, {
+      linksWhitelist: whitelistInput,
+      customWords: customWordsInput,
+      customWordsAllowList: customWordsAllowInput,
+      profanityAllowList: profanityAllowInput,
+      inviteFilterAllowedGuilds: inviteAllowedGuildsInput,
+    });
     if (dirty && canManageSettings) {
       untrack(() => {
         unsavedChanges.register({
@@ -157,11 +164,7 @@
           onSave: () => handleSave(),
           onReset: () => {
             config = JSON.parse(JSON.stringify(savedConfig));
-            whitelistInput = config.linksWhitelist.join('\n');
-            customWordsInput = (config.customWords || []).join('\n');
-            customWordsAllowInput = (config.customWordsAllowList || []).join('\n');
-            profanityAllowInput = (config.profanityAllowList || []).join('\n');
-            inviteAllowedGuildsInput = (config.inviteFilterAllowedGuilds || []).join('\n');
+            syncListInputs();
           }
         });
       });
@@ -187,6 +190,14 @@
   let antiBotBypassInput = $state('');
   let selectedAdminLockSecurityRole = $state('');
 
+  function syncListInputs() {
+    whitelistInput = (config.linksWhitelist || []).join('\n');
+    customWordsInput = (config.customWords || []).join('\n');
+    customWordsAllowInput = (config.customWordsAllowList || []).join('\n');
+    profanityAllowInput = (config.profanityAllowList || []).join('\n');
+    inviteAllowedGuildsInput = (config.inviteFilterAllowedGuilds || []).join('\n');
+  }
+
   onMount(async () => {
     loading = true;
     try {
@@ -195,11 +206,7 @@
       if (res && res.config) {
         config = res.config;
         savedConfig = JSON.parse(JSON.stringify(res.config));
-        whitelistInput = config.linksWhitelist.join('\n');
-        customWordsInput = (config.customWords || []).join('\n');
-        customWordsAllowInput = (config.customWordsAllowList || []).join('\n');
-        profanityAllowInput = (config.profanityAllowList || []).join('\n');
-        inviteAllowedGuildsInput = (config.inviteFilterAllowedGuilds || []).join('\n');
+        syncListInputs();
         if (res.isOwner) isOwner = true;
       }
     } catch (err) {
@@ -212,16 +219,11 @@
   async function handleSave(): Promise<boolean> {
     if (!canManageSettings) return false;
 
-    config.linksWhitelist = whitelistInput
-      .split('\n').map(d => d.trim().toLowerCase()).filter(d => d.length > 0);
-    config.customWords = customWordsInput
-      .split('\n').map(w => w.trim().toLowerCase()).filter(w => w.length > 0);
-    config.customWordsAllowList = customWordsAllowInput
-      .split('\n').map(w => w.trim().toLowerCase()).filter(w => w.length > 0);
-    config.profanityAllowList = profanityAllowInput
-      .split('\n').map(w => w.trim().toLowerCase()).filter(w => w.length > 0);
-    config.inviteFilterAllowedGuilds = inviteAllowedGuildsInput
-      .split('\n').map(g => g.trim()).filter(g => g.length > 0);
+    config.linksWhitelist = parseListLines(whitelistInput, true);
+    config.customWords = parseListLines(customWordsInput, true);
+    config.customWordsAllowList = parseListLines(customWordsAllowInput, true);
+    config.profanityAllowList = parseListLines(profanityAllowInput, true);
+    config.inviteFilterAllowedGuilds = parseListLines(inviteAllowedGuildsInput, false);
     let success = false;
     let syncWarning: string | null = null;
     await actionState.run(async () => {
@@ -230,6 +232,8 @@
         if (!res || !res.config) throw new Error(m.am_err_save_automod());
         config = res.config;
         savedConfig = JSON.parse(JSON.stringify(res.config));
+        // Les textarea reprennent les listes normalisées par l'enregistrement.
+        syncListInputs();
         syncWarning = res.syncWarning ?? null;
       }
 

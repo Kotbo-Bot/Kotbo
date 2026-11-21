@@ -210,13 +210,18 @@
     void refreshTicketsOnly();
   }
 
+  // Comme refreshTicketMessages, une reponse arrivee apres un changement de
+  // ticket ou un chargement plus recent est ignoree.
+  let detailLoadSeq = 0;
   async function loadTicketDetail(ticketId: string, autoScroll = true) {
     if (!authStore.selectedGuildId) return;
+    const seq = ++detailLoadSeq;
     loadingDetail = true;
     try {
       const res = await dashboardFetch(`/tickets/${ticketId}`);
       if (!res.ok) throw new Error(m.e1_tickets_err_load_detail());
       const data = await res.json();
+      if (seq !== detailLoadSeq || selectedTicketId !== ticketId) return;
       selectedTicketDetail = data.ticket;
       messages = data.messages || [];
       ticketRenameName = data.ticket?.channelName || '';
@@ -227,7 +232,7 @@
     } catch (err) {
       console.error(err);
     } finally {
-      loadingDetail = false;
+      if (seq === detailLoadSeq) loadingDetail = false;
     }
   }
 

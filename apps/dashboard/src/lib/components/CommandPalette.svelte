@@ -2,7 +2,7 @@
   import { dialogFocus } from '../actions/dialogFocus';
   import { portal } from '../actions/portal';
   import { m } from '../i18n';
-  import { router } from 'tinro';
+  import { guardedNavigate } from '../navigationGuard';
   import Papicon from './Papicon.svelte';
   import { authStore } from '../stores/auth.svelte';
   import { themeStore } from '../stores/theme.svelte';
@@ -83,7 +83,7 @@
       group,
       keywords: moduleKeywords(item.href),
       href: item.href,
-      action: () => router.goto(item.href)
+      action: () => guardedNavigate(item.href)
     });
 
     for (const tab of tabsForPage(item.href)) {
@@ -94,7 +94,7 @@
         icon: tab.icon || item.icon || fallbackIcon,
         group,
         keywords: moduleKeywords(tab.href),
-        action: () => router.goto(tab.href)
+        action: () => guardedNavigate(tab.href)
       });
     }
   };
@@ -110,21 +110,21 @@
 
     // Admin Items (only if isBotAdmin is true)
     if (authStore.isBotAdmin) {
-      items.push({ id: 'admin-overview', label: m.cp_adm_overview(), sublabel: m.cp_adm_overview_sub(), icon: 'activity', group: GROUP_ADMIN, action: () => router.goto('/admin') });
-      items.push({ id: 'admin-servers',  label: m.cp_adm_servers(), sublabel: m.cp_adm_servers_sub(), icon: 'Server', group: GROUP_ADMIN, action: () => router.goto('/admin/servers') });
-      items.push({ id: 'admin-shards',   label: m.cp_adm_shards(), sublabel: m.cp_adm_shards_sub(), icon: 'Zap', group: GROUP_ADMIN, action: () => router.goto('/admin/shards') });
-      items.push({ id: 'admin-analytics', label: m.cp_adm_analytics(), sublabel: m.cp_adm_analytics_sub(), icon: 'TrendingUp', group: GROUP_ADMIN, action: () => router.goto('/admin/analytics') });
-      items.push({ id: 'admin-dashboard-usage', label: m.cp_adm_usage(), sublabel: m.cp_adm_usage_sub(), icon: 'Eye', group: GROUP_ADMIN, action: () => router.goto('/admin/analytics/usage') });
-      items.push({ id: 'admin-modules',  label: m.cp_adm_modules(), sublabel: m.cp_adm_modules_sub(), icon: 'Box', group: GROUP_ADMIN, action: () => router.goto('/admin/analytics/modules') });
-      items.push({ id: 'admin-broadcast', label: m.cp_adm_broadcast(), sublabel: m.cp_adm_broadcast_sub(), icon: 'Megaphone', group: GROUP_ADMIN, action: () => router.goto('/admin/broadcast') });
-      items.push({ id: 'admin-security', label: m.cp_adm_security(), sublabel: m.cp_adm_security_sub(), icon: 'ShieldCheck', group: GROUP_ADMIN, action: () => router.goto('/admin/security') });
-      items.push({ id: 'admin-content',  label: m.cp_adm_content(), sublabel: m.cp_adm_content_sub(), icon: 'filter', group: GROUP_ADMIN, action: () => router.goto('/admin/content') });
-      items.push({ id: 'admin-activation', label: m.cp_adm_activation(), sublabel: m.cp_adm_activation_sub(), icon: 'Key', group: GROUP_ADMIN, action: () => router.goto('/admin/activation') });
-      items.push({ id: 'admin-audit',    label: m.cp_adm_audit(), sublabel: m.cp_adm_audit_sub(), icon: 'ClipboardList', group: GROUP_ADMIN, action: () => router.goto('/admin/audit') });
-      items.push({ id: 'admin-whitelabel', label: m.cp_adm_whitelabel(), sublabel: m.cp_adm_whitelabel_sub(), icon: 'Layers', group: GROUP_ADMIN, action: () => router.goto('/admin/whitelabel') });
-      items.push({ id: 'admin-instances', label: m.cp_adm_instances(), sublabel: m.cp_adm_instances_sub(), icon: 'Server', group: GROUP_ADMIN, action: () => router.goto('/admin/instances') });
-      items.push({ id: 'admin-gdpr',     label: m.cp_adm_gdpr(), sublabel: m.cp_adm_gdpr_sub(), icon: 'ShieldCheck', group: GROUP_ADMIN, action: () => router.goto('/admin/gdpr') });
-      items.push({ id: 'admin-config',   label: m.cp_adm_config(), sublabel: m.cp_adm_config_sub(), icon: 'Settings', group: GROUP_ADMIN, action: () => router.goto('/admin/config') });
+      items.push({ id: 'admin-overview', label: m.cp_adm_overview(), sublabel: m.cp_adm_overview_sub(), icon: 'activity', group: GROUP_ADMIN, action: () => guardedNavigate('/admin') });
+      items.push({ id: 'admin-servers',  label: m.cp_adm_servers(), sublabel: m.cp_adm_servers_sub(), icon: 'Server', group: GROUP_ADMIN, action: () => guardedNavigate('/admin/servers') });
+      items.push({ id: 'admin-shards',   label: m.cp_adm_shards(), sublabel: m.cp_adm_shards_sub(), icon: 'Zap', group: GROUP_ADMIN, action: () => guardedNavigate('/admin/shards') });
+      items.push({ id: 'admin-analytics', label: m.cp_adm_analytics(), sublabel: m.cp_adm_analytics_sub(), icon: 'TrendingUp', group: GROUP_ADMIN, action: () => guardedNavigate('/admin/analytics') });
+      items.push({ id: 'admin-dashboard-usage', label: m.cp_adm_usage(), sublabel: m.cp_adm_usage_sub(), icon: 'Eye', group: GROUP_ADMIN, action: () => guardedNavigate('/admin/analytics/usage') });
+      items.push({ id: 'admin-modules',  label: m.cp_adm_modules(), sublabel: m.cp_adm_modules_sub(), icon: 'Box', group: GROUP_ADMIN, action: () => guardedNavigate('/admin/analytics/modules') });
+      items.push({ id: 'admin-broadcast', label: m.cp_adm_broadcast(), sublabel: m.cp_adm_broadcast_sub(), icon: 'Megaphone', group: GROUP_ADMIN, action: () => guardedNavigate('/admin/broadcast') });
+      items.push({ id: 'admin-security', label: m.cp_adm_security(), sublabel: m.cp_adm_security_sub(), icon: 'ShieldCheck', group: GROUP_ADMIN, action: () => guardedNavigate('/admin/security') });
+      items.push({ id: 'admin-content',  label: m.cp_adm_content(), sublabel: m.cp_adm_content_sub(), icon: 'filter', group: GROUP_ADMIN, action: () => guardedNavigate('/admin/content') });
+      items.push({ id: 'admin-activation', label: m.cp_adm_activation(), sublabel: m.cp_adm_activation_sub(), icon: 'Key', group: GROUP_ADMIN, action: () => guardedNavigate('/admin/activation') });
+      items.push({ id: 'admin-audit',    label: m.cp_adm_audit(), sublabel: m.cp_adm_audit_sub(), icon: 'ClipboardList', group: GROUP_ADMIN, action: () => guardedNavigate('/admin/audit') });
+      items.push({ id: 'admin-whitelabel', label: m.cp_adm_whitelabel(), sublabel: m.cp_adm_whitelabel_sub(), icon: 'Layers', group: GROUP_ADMIN, action: () => guardedNavigate('/admin/whitelabel') });
+      items.push({ id: 'admin-instances', label: m.cp_adm_instances(), sublabel: m.cp_adm_instances_sub(), icon: 'Server', group: GROUP_ADMIN, action: () => guardedNavigate('/admin/instances') });
+      items.push({ id: 'admin-gdpr',     label: m.cp_adm_gdpr(), sublabel: m.cp_adm_gdpr_sub(), icon: 'ShieldCheck', group: GROUP_ADMIN, action: () => guardedNavigate('/admin/gdpr') });
+      items.push({ id: 'admin-config',   label: m.cp_adm_config(), sublabel: m.cp_adm_config_sub(), icon: 'Settings', group: GROUP_ADMIN, action: () => guardedNavigate('/admin/config') });
     }
 
     // Profil page. Son URL porte l'identifiant du membre : les onglets sont
@@ -137,7 +137,7 @@
       sublabel: m.cp_user_profile(),
       icon: 'user',
       group: GROUP_ACCOUNT,
-      action: () => router.goto(profileBase)
+      action: () => guardedNavigate(profileBase)
     });
     for (const tab of tabsForPage('/profile')) {
       items.push({
@@ -146,7 +146,7 @@
         sublabel: m.cp_tab_of({ page: m.cp_my_profile() }),
         icon: tab.icon || 'user',
         group: GROUP_ACCOUNT,
-        action: () => router.goto(`${profileBase}/${tab.id}`)
+        action: () => guardedNavigate(`${profileBase}/${tab.id}`)
       });
     }
 
@@ -157,7 +157,7 @@
         sublabel: m.cp_tab_of({ page: m.cp_preferences() }),
         icon: tab.icon || 'settings',
         group: GROUP_ACCOUNT,
-        action: () => router.goto(tab.href)
+        action: () => guardedNavigate(tab.href)
       });
     }
 
@@ -217,7 +217,7 @@
       sublabel: m.cp_page(),
       icon: page.icon || 'home',
       group,
-      action: () => router.goto(page.href),
+      action: () => guardedNavigate(page.href),
     });
     const groups: Record<string, PaletteItem[]> = {};
     const pinned = navigationStore.favoriteItems.slice(0, 5);
