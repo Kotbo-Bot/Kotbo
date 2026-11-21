@@ -1,4 +1,4 @@
-import { describe, expect, test, mock, beforeEach } from 'bun:test';
+import { describe, expect, test, mock, beforeEach, setSystemTime } from 'bun:test';
 import path from 'node:path';
 
 /**
@@ -84,10 +84,29 @@ describe('flush des statistiques serveur et salon', () => {
 
     const [sql, ...params] = rawCallsFor('channel_daily_stats')[0]!;
     expect(sql).toContain('"messagesCount" = m."messagesCount" + EXCLUDED."messagesCount"');
-    expect(sql).toContain('"uniqueAuthors" = EXCLUDED."uniqueAuthors"');
+    expect(sql).toContain('"uniqueAuthors" = GREATEST(m."uniqueAuthors", EXCLUDED."uniqueAuthors")');
     // (guildId, channelId, dateKey), puis messagesCount, voiceMinutes, uniqueAuthors.
     expect(params[3]).toBe(3);
     expect(params[5]).toBe(2);
+  });
+
+  test('le premier flush après minuit UTC garde les auteurs uniques de la veille', async () => {
+    // Messages de la veille encore en tampon au passage de minuit : leurs
+    // auteurs ne doivent pas être oubliés avant d'avoir été écrits.
+    setSystemTime(new Date('2026-03-14T23:59:30Z'));
+    try {
+      await trackMessage('guild-flush', 'salon-minuit', 'membre-1');
+      await trackMessage('guild-flush', 'salon-minuit', 'membre-2');
+
+      setSystemTime(new Date('2026-03-15T00:00:30Z'));
+      await flushAllAnalyticsStats();
+    } finally {
+      setSystemTime();
+    }
+
+    const [, ...params] = rawCallsFor('channel_daily_stats')[0]!;
+    // (guildId, channelId, dateKey), puis messagesCount, voiceMinutes, uniqueAuthors.
+    expect(params).toEqual(['guild-flush', 'salon-minuit', '2026-03-14', 2, 0, 2]);
   });
 
   test('un flush déjà en vol est rejoint, pas doublé', async () => {

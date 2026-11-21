@@ -481,6 +481,30 @@ describe('previewGhostPrune', () => {
     expect(preview.protectedCount).toBe(1);
     expect(preview.analyzedCount).toBe(2);
   });
+
+  test('un membre redevenu actif depuis le dernier recalcul n\'est ni proposé ni expulsé', async () => {
+    // La requête filtre sur la colonne ghostStatus, qu'aucun cron ne rafraîchit :
+    // « revenu » y est encore INACTIVE alors qu'il a écrit hier.
+    const profiles = [
+      { userId: 'revenu', ghostStatus: 'INACTIVE', guildJoinedAt: OLD_JOIN, lastMessageAt: realDaysAgo(1), messageCount: 12, voiceTimeSeconds: 0, interactionCount: 0 },
+      { userId: 'fantome', ghostStatus: 'INACTIVE', guildJoinedAt: OLD_JOIN, messageCount: 0, voiceTimeSeconds: 0, interactionCount: 0 },
+    ];
+    const client = clientWith(['revenu', 'fantome']);
+
+    mockDb.memberProfile.findMany.mockResolvedValueOnce(profiles);
+    const preview = await previewGhostPrune(client, 'guild-1', { statuses: ['INACTIVE'] });
+    expect(preview.candidates.map((c) => c.userId)).toEqual(['fantome']);
+
+    // L'expulsion repasse par une prévisualisation fraîche : demander « revenu »
+    // explicitement ne suffit pas à le faire sortir.
+    mockDb.memberProfile.findMany.mockResolvedValueOnce(profiles);
+    await expect(executeGhostPrune(
+      client,
+      'guild-1',
+      { statuses: ['INACTIVE'], userIds: ['revenu'], confirmCount: 1 },
+      { userId: 'admin-1', username: 'Admin (admin-1)' },
+    )).rejects.toThrow(/n'est encore éligible/);
+  });
 });
 
 describe('getGhostPruneRuns', () => {
