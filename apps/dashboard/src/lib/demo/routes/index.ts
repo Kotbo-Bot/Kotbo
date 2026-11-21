@@ -40,6 +40,7 @@ import { registerEventRoutes } from './events';
 import { registerFormRoutes } from './forms';
 import { registerEngagementRoutes } from './engagement';
 import { registerContentRoutes } from './content';
+import { registerWorkflowRoutes } from './workflows';
 
 export function registerDemoRoutes(): void {
   // Avant les routes Analytics historiques : la première route qui correspond gagne.
@@ -65,6 +66,7 @@ export function registerDemoRoutes(): void {
   registerFormRoutes();
   registerEngagementRoutes();
   registerContentRoutes();
+  registerWorkflowRoutes();
   registerSessionRoutes();
   registerHomeRoutes();
   registerTelemetryRoutes();
