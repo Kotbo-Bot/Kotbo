@@ -222,7 +222,8 @@ export function sessionMember() {
 // ── Modules ────────────────────────────────────────────────────────────
 
 /** Modules éteints au départ : ceux qui demandent un compte externe ou une config qu'une démo n'a pas. */
-const OFF_BY_DEFAULT = new Set(['youtube', 'twitch', 'social_networks', 'codepolice', 'translation', 'staff_server', 'channel_links', 'bump_reminder', 'rich_links']);
+// Tout est allumé : la démo montre chaque module en marche, aucun bandeau « désactivé ».
+const OFF_BY_DEFAULT = new Set<string>();
 
 export function moduleStatesSeed(): Record<string, boolean> {
   return Object.fromEntries(MODULE_REGISTRY.map((m) => [m.key, m.core ? true : !OFF_BY_DEFAULT.has(m.key)]));

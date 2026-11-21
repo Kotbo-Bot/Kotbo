@@ -7,6 +7,12 @@ import { row, merge } from '../model';
 
 function economyConfigSeed() {
   return row('EconomyConfig', {
+    enabled: true,
+    rpgEnabled: true,
+    guildsEnabled: true,
+    shopEnabled: true,
+    blackMarketEnabled: true,
+    raidEnabled: true,
     currencyName: 'Pièces',
     currencySymbol: '🪙',
     dailyMin: 100,
@@ -18,8 +24,8 @@ function economyConfigSeed() {
     workCooldownMinutes: 30,
     robSuccessRate: 40,
     robCooldownMinutes: 60,
-    clansEnabled: false,
-    clanPointsFromRpg: false,
+    clansEnabled: true,
+    clanPointsFromRpg: true,
   });
 }
 
@@ -27,7 +33,7 @@ export function registerEconomyRoutes(): void {
   // GET /api/dashboard/guilds/:id/economy/config
   route('GET', '/api/dashboard/guilds/:id/economy/config', () => {
     const config = demoDb.get('economy-config', economyConfigSeed);
-    return { config: { ...config, clansEnabled: false, clanPointsFromRpg: false } };
+    return { config };
   });
 
   // PATCH /api/dashboard/guilds/:id/economy/config
