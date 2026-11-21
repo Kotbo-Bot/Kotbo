@@ -93,6 +93,11 @@ export function registerContentRoutes(): void {
     }));
     return { campaign };
   });
+  route('GET', `${G}/campaigns/:campaignId/report`, ({ params }) => {
+    const sent = campaigns().find((c) => c.id === params.campaignId)?.steps.filter((x: any) => x.status === 'SENT') ?? [];
+    const recipients = sent.reduce((n: number, x: any) => n + x.recipientCount, 0);
+    return { report: { recipients, delivered: recipients, failed: 0, reactions: sent.reduce((n: number, x: any) => n + x.reactionCount, 0), joins: sent.length ? 9 : 0 } };
+  });
   route('DELETE', `${G}/campaigns/:campaignId`, ({ params }) => {
     demoDb.set('campaigns', campaigns().filter((c) => c.id !== params.campaignId));
     return { success: true };
