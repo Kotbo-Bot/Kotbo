@@ -42,6 +42,7 @@ import { registerEngagementRoutes } from './engagement';
 import { registerContentRoutes } from './content';
 import { registerWorkflowRoutes } from './workflows';
 import { registerProgressionRoutes } from './progression';
+import { registerClanRoutes } from './clans';
 
 export function registerDemoRoutes(): void {
   // Avant les routes Analytics historiques : la première route qui correspond gagne.
@@ -69,6 +70,7 @@ export function registerDemoRoutes(): void {
   registerContentRoutes();
   registerWorkflowRoutes();
   registerProgressionRoutes();
+  registerClanRoutes();
   registerSessionRoutes();
   registerHomeRoutes();
   registerTelemetryRoutes();

@@ -35,6 +35,10 @@ export const ROLES = [
   { id: '900000000000000224', name: 'Rocket League', color: '#0082ff', position: 3, permissions: [] },
   { id: '900000000000000225', name: 'Annonces', color: '#f0b232', position: 1, permissions: [] },
   { id: '900000000000000226', name: 'Événements', color: '#eb459e', position: 1, permissions: [] },
+  { id: '900000000000000231', name: 'Phénix', color: '#f97316', position: 4, permissions: [] },
+  { id: '900000000000000232', name: 'Kraken', color: '#0ea5e9', position: 4, permissions: [] },
+  { id: '900000000000000233', name: 'Griffon', color: '#eab308', position: 4, permissions: [] },
+  { id: '900000000000000234', name: 'Hydre', color: '#22c55e', position: 4, permissions: [] },
 ].map((role) => ({ ...role, mention: `<@&${role.id}>`, managed: role.managed ?? false }));
 
 export const role = (name: string) => ROLES.find((r) => r.name === name)!;
