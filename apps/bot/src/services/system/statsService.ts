@@ -4,7 +4,7 @@ import { logger } from '../../utils/logger.js';
 import { getCurrentInstance } from '../../utils/instanceContext.js';
 import { getMachineFingerprint } from '../../utils/machineFingerprint.js';
 import { fetchExternal } from '../../utils/http.js';
-import { isLicenseIssuer, verifyLease } from './instanceLicense.js';
+import { isRegistryIssuer, verifyLease } from './instanceRegistry.js';
 import botPackageJson from '../../../package.json';
 
 export interface BotPingPayload {
@@ -26,12 +26,12 @@ export interface BotPingResponse {
   banned?: boolean;
   mode?: 'SHUTDOWN' | 'DISABLE_FEATURES';
   reason?: string | null;
-  /** Bail de licence signé par le master (voir instanceLicense.ts). */
+  /** Bail signé par le master (voir instanceRegistry.ts). */
   lease?: string;
 }
 
-const LICENSE_BLOCK_REASON =
-  "Licence d'instance absente ou expirée : cette instance n'a pas été autorisée par l'administration Kotbo.";
+const LEASE_BLOCK_REASON =
+  "Instance absente du registre ou bail expiré : cette instance n'a pas été autorisée par l'administration Kotbo.";
 
 // Instance pour laquelle un bail est exigé, posée au premier ping complet.
 let leaseSubject: { botClientId: string; fingerprint: string } | null = null;
@@ -46,39 +46,39 @@ let storedLease: string | null | undefined;
  *
  * Un bail frais est conservé en base ; le dernier bail connu couvre les pannes
  * du master (72 h) et les redémarrages pendant celles-ci. Le process du master,
- * lui, n'a rien à prouver (voir `isLicenseIssuer`).
+ * lui, n'a rien à prouver (voir `isRegistryIssuer`).
  */
-async function applyLicense(freshLease?: string | null): Promise<void> {
-  if (isLicenseIssuer() || !leaseSubject) return;
+async function applyLeaseState(freshLease?: string | null): Promise<void> {
+  if (isRegistryIssuer() || !leaseSubject) return;
   const { botClientId, fingerprint } = leaseSubject;
 
-  const licensed = async (): Promise<boolean> => {
+  const hasValidLease = async (): Promise<boolean> => {
     if (freshLease && verifyLease(freshLease, botClientId, fingerprint)) {
       storedLease = freshLease;
       await prisma.localInstanceIdentity
-        .update({ where: { id: 'singleton' }, data: { licenseLease: freshLease } })
-        .catch((err) => logger.warn('StatsPing', 'Bail de licence non conservé en base :', err));
+        .update({ where: { id: 'singleton' }, data: { lease: freshLease } })
+        .catch((err) => logger.warn('StatsPing', 'Bail non conservé en base :', err));
       return true;
     }
     if (storedLease === undefined) {
       const row = await prisma.localInstanceIdentity
-        .findUnique({ where: { id: 'singleton' }, select: { licenseLease: true } })
+        .findUnique({ where: { id: 'singleton' }, select: { lease: true } })
         .catch(() => null);
-      storedLease = row?.licenseLease ?? null;
+      storedLease = row?.lease ?? null;
     }
     return verifyLease(storedLease, botClientId, fingerprint);
   };
 
-  if (await licensed()) {
+  if (await hasValidLease()) {
     // On ne lève que notre propre blocage : un bannissement posé par le master reste.
-    if (global.KOTBO_INSTANCE_BANNED?.reason === LICENSE_BLOCK_REASON) global.KOTBO_INSTANCE_BANNED = null;
+    if (global.KOTBO_INSTANCE_BANNED?.reason === LEASE_BLOCK_REASON) global.KOTBO_INSTANCE_BANNED = null;
     return;
   }
 
-  if (global.KOTBO_INSTANCE_BANNED?.reason !== LICENSE_BLOCK_REASON) {
-    logger.error('StatsPing', `${LICENSE_BLOCK_REASON} Les interactions sont désactivées.`);
+  if (global.KOTBO_INSTANCE_BANNED?.reason !== LEASE_BLOCK_REASON) {
+    logger.error('StatsPing', `${LEASE_BLOCK_REASON} Les interactions sont désactivées.`);
   }
-  global.KOTBO_INSTANCE_BANNED = { mode: 'DISABLE_FEATURES', reason: LICENSE_BLOCK_REASON };
+  global.KOTBO_INSTANCE_BANNED = { mode: 'DISABLE_FEATURES', reason: LEASE_BLOCK_REASON };
 }
 
 /**
@@ -92,8 +92,8 @@ async function applyLicense(freshLease?: string | null): Promise<void> {
  */
 function applyBanDirective(data: BotPingResponse | null): void {
   if (!data?.banned) {
-    // Ne lève pas le blocage de licence : c'est applyLicense qui le décide.
-    if (global.KOTBO_INSTANCE_BANNED?.reason !== LICENSE_BLOCK_REASON) global.KOTBO_INSTANCE_BANNED = null;
+    // Ne lève pas ce blocage-ci : c'est applyLeaseState qui le décide.
+    if (global.KOTBO_INSTANCE_BANNED?.reason !== LEASE_BLOCK_REASON) global.KOTBO_INSTANCE_BANNED = null;
     return;
   }
 
@@ -187,14 +187,14 @@ export async function pingMasterServer(client: Client): Promise<void> {
       const data = await response.json().catch(() => null) as BotPingResponse | null;
       applyBanDirective(data);
       // Un ban prime : inutile (et faux) de réclamer un bail à une instance bannie.
-      if (!data?.banned) await applyLicense(data?.lease);
+      if (!data?.banned) await applyLeaseState(data?.lease);
     } else {
       logger.error('StatsPing', `Failed to send stats ping: ${response.status} ${response.statusText}`);
-      await applyLicense();
+      await applyLeaseState();
     }
   } catch (err) {
     logger.error('StatsPing', 'Error sending stats ping:', err);
-    await applyLicense();
+    await applyLeaseState();
   }
 }
 

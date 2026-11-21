@@ -3228,7 +3228,7 @@ export async function handleAdminRoutes(
   }
 
   // POST /api/admin/instances/:botClientId/authorize - autorise une instance externe
-  // (liste blanche : voir instanceLicense.ts). L'instance doit avoir déjà pingué.
+  // (liste blanche : voir instanceRegistry.ts). L'instance doit avoir déjà pingué.
   if (parts.length === 5 && parts[2] === 'instances' && parts[4] === 'authorize' && method === 'POST') {
     const botClientId = parts[3];
     try {

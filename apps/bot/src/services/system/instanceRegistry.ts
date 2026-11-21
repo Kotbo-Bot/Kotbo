@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 
 /**
- * Bail de licence d'une instance self-host.
+ * Bail d'appartenance au registre des instances self-host.
  *
  * Le master signe (Ed25519) un bail `{ botClientId, machineFingerprint, exp }`
  * pour chaque instance qu'il a autorisée ; l'instance le présente à chaque
@@ -10,12 +10,11 @@ import crypto from 'node:crypto';
  * serveur maître ne peut pas répondre à sa place, faute de la clé privée.
  *
  * Limite assumée : le code est ouvert, quelqu'un qui retire ces vérifications de
- * sa copie les retire. Le verrou qui tient sans condition, c'est la licence du
- * dépôt ; ce module ne fait que rendre l'usage non autorisé volontaire et net.
+ * sa copie les retire. Le verrou qui tient sans condition, c'est la licence du dépôt ; ce module ne fait que rendre l'usage non autorisé volontaire et net.
  */
 
 /** Clé publique de vérification (SPKI DER, base64). La privée n'est jamais dans le dépôt. */
-const LICENSE_PUBLIC_KEY_B64 = 'MCowBQYDK2VwAyEApsPuktu31vgOUA7QVMpit0Embf5LAc00I4aeAaNb8Go=';
+const REGISTRY_PUBLIC_KEY_B64 = 'MCowBQYDK2VwAyEApsPuktu31vgOUA7QVMpit0Embf5LAc00I4aeAaNb8Go=';
 
 /** Durée de validité d'un bail : laisse une panne du master de 3 jours sans conséquence. */
 export const LEASE_TTL_MS = 72 * 60 * 60 * 1000;
@@ -28,7 +27,7 @@ export interface LeasePayload {
 }
 
 const publicKey = crypto.createPublicKey({
-  key: Buffer.from(LICENSE_PUBLIC_KEY_B64, 'base64'),
+  key: Buffer.from(REGISTRY_PUBLIC_KEY_B64, 'base64'),
   format: 'der',
   type: 'spki',
 });
@@ -48,7 +47,7 @@ let issuerKey: crypto.KeyObject | null | undefined;
 function getIssuerKey(): crypto.KeyObject | null {
   if (issuerKey !== undefined) return issuerKey;
   issuerKey = null;
-  const raw = process.env.KOTBO_LICENSE_PRIVATE_KEY?.trim();
+  const raw = process.env.KOTBO_REGISTRY_PRIVATE_KEY?.trim();
   if (!raw) return issuerKey;
   try {
     const priv = crypto.createPrivateKey({ key: Buffer.from(raw, 'base64'), format: 'der', type: 'pkcs8' });
@@ -61,15 +60,15 @@ function getIssuerKey(): crypto.KeyObject | null {
   return issuerKey;
 }
 
-/** Vrai pour le process du master (détenteur de la clé privée) : il n'a pas à se licencier lui-même. */
-export function isLicenseIssuer(): boolean {
+/** Vrai pour le process du master (détenteur de la clé privée) : il n'a pas à s'inscrire lui-même au registre. */
+export function isRegistryIssuer(): boolean {
   return getIssuerKey() !== null;
 }
 
 /** Émet un bail signé. Ne s'utilise que sur le master. */
 export function signLease(botClientId: string, machineFingerprint: string | null, now = Date.now()): string {
   const key = getIssuerKey();
-  if (!key) throw new Error("Clé privée d'émission absente ou invalide (KOTBO_LICENSE_PRIVATE_KEY).");
+  if (!key) throw new Error("Clé privée d'émission absente ou invalide (KOTBO_REGISTRY_PRIVATE_KEY).");
   const payload: LeasePayload = { botClientId, machineFingerprint, exp: now + LEASE_TTL_MS };
   const body = Buffer.from(JSON.stringify(payload));
   return `${b64url(body)}.${b64url(crypto.sign(null, body, key))}`;

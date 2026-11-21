@@ -1,5 +1,5 @@
--- Licence des instances self-host : liste blanche + bail conserve localement.
-ALTER TABLE "local_instance_identity" ADD COLUMN IF NOT EXISTS "licenseLease" TEXT;
+-- Registre des instances self-host : liste blanche + bail conserve localement.
+ALTER TABLE "local_instance_identity" ADD COLUMN IF NOT EXISTS "lease" TEXT;
 
 CREATE TABLE IF NOT EXISTS "authorized_instances" (
     "botClientId"  TEXT NOT NULL,

@@ -5,14 +5,14 @@ import path from 'node:path';
 
 // La clé privée réelle vit hors du dépôt : sans elle (CI), on saute les tests
 // qui signent plutôt que d'en fabriquer une qui ne correspondrait pas à la clé publique embarquée.
-const keyFile = path.resolve(import.meta.dir, '../../../../../.license-private-key');
+const keyFile = path.resolve(import.meta.dir, '../../../../../.registry-private-key');
 const hasKey = fs.existsSync(keyFile);
-if (hasKey) process.env.KOTBO_LICENSE_PRIVATE_KEY = fs.readFileSync(keyFile, 'utf8').trim();
+if (hasKey) process.env.KOTBO_REGISTRY_PRIVATE_KEY = fs.readFileSync(keyFile, 'utf8').trim();
 
-const { signLease, verifyLease, isLicenseIssuer, LEASE_TTL_MS } = await import('../../services/system/instanceLicense.js');
+const { signLease, verifyLease, isRegistryIssuer, LEASE_TTL_MS } = await import('../../services/system/instanceRegistry.js');
 
 afterAll(() => {
-  delete process.env.KOTBO_LICENSE_PRIVATE_KEY;
+  delete process.env.KOTBO_REGISTRY_PRIVATE_KEY;
 });
 
 describe('verifyLease sans clé privée', () => {
@@ -33,7 +33,7 @@ describe('verifyLease sans clé privée', () => {
 
 describe.skipIf(!hasKey)('bail signé par le master', () => {
   test("le détenteur de la vraie clé est reconnu comme émetteur", () => {
-    expect(isLicenseIssuer()).toBe(true);
+    expect(isRegistryIssuer()).toBe(true);
   });
 
   test('un bail valide passe', () => {

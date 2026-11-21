@@ -3,7 +3,7 @@ import type { Client } from 'discord.js';
 import prisma from '../../../../utils/db.js';
 import { logger } from '../../../../utils/logger.js';
 import { registerBotInstanceStats, cleanUpStaleStats } from '../../../../services/system/statsService.js';
-import { isInstanceAuthEnforced, isLicenseIssuer, signLease } from '../../../../services/system/instanceLicense.js';
+import { isInstanceAuthEnforced, isRegistryIssuer, signLease } from '../../../../services/system/instanceRegistry.js';
 import { isKotboPublicOrigin } from '../../../shared.js';
 
 // Rate limiter for stats pings (memory-based)
@@ -124,7 +124,7 @@ const pingStatsRoute = createRoute({
             banned: z.boolean().optional(),
             mode: z.enum(['SHUTDOWN', 'DISABLE_FEATURES']).optional(),
             reason: z.string().nullable().optional(),
-            lease: z.string().optional().openapi({ description: 'Signed license lease, delivered to authorized instances' }),
+            lease: z.string().optional().openapi({ description: 'Signed lease, delivered to authorized instances' }),
           }),
         },
       },
@@ -346,7 +346,7 @@ export function createPublicStatsRouter(client: Client) {
 
       if (!ban) {
         // Sans clé d'émission ce process n'est pas le master : aucun bail à délivrer.
-        if (!isLicenseIssuer()) return c.json({ ok: true, banned: false }, 200);
+        if (!isRegistryIssuer()) return c.json({ ok: true, banned: false }, 200);
 
         // Le bot du master pingue sa propre API : il n'a pas à se faire autoriser.
         const isOwnBot = payload.botClientId === client.user?.id;

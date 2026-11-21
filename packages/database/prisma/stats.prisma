@@ -45,10 +45,10 @@ model FeaturedGuild {
 model LocalInstanceIdentity {
   id                 String   @id @default("singleton")
   machineFingerprint String   @unique @default(uuid())
-  // Dernier bail de licence signe par le master (voir instanceLicense.ts) :
-  // conserve pour qu'un redemarrage pendant une panne du master ne coupe pas
-  // une instance autorisee.
-  licenseLease       String?
+  // Dernier bail signe par le master (voir instanceRegistry.ts) : conserve
+  // pour qu'un redemarrage pendant une panne du master ne coupe pas une
+  // instance autorisee.
+  lease              String?
   createdAt          DateTime @default(now())
 
   @@map("local_instance_identity")
