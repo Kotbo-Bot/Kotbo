@@ -24,6 +24,7 @@ import { registerRankCardRoutes } from './rankCard';
 import { registerServerRoutes } from './server';
 import { registerCommunityRoutes } from './community';
 import { registerPlanningRoutes } from './planning';
+import { registerToolsRoutes } from './tools';
 
 export function registerDemoRoutes(): void {
   // Avant les routes Analytics historiques : la première route qui correspond gagne.
@@ -33,6 +34,7 @@ export function registerDemoRoutes(): void {
   registerServerRoutes();
   registerCommunityRoutes();
   registerPlanningRoutes();
+  registerToolsRoutes();
   registerSessionRoutes();
   registerHomeRoutes();
   registerTelemetryRoutes();
