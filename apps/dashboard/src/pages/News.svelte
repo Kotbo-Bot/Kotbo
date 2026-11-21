@@ -25,6 +25,7 @@
     deleteNewsCategoryConfig 
   } from '../lib/api';
   import Papicon from '../lib/components/Papicon.svelte';
+  import { DEMO_BASE } from '../lib/demo/mode';
   import InlineFeedback from '../lib/components/InlineFeedback.svelte';
   import Skeleton from '../lib/components/Skeleton.svelte';
   import SearchableSelect from '../lib/components/SearchableSelect.svelte';
@@ -562,6 +563,17 @@
               <Papicon icon="copy" size={18} />
             </button>
           </div>
+          {#if !isPublicView && currentGuildId}
+            <a
+              href="{DEMO_BASE}/{currentGuildId}/news"
+              target="_blank"
+              rel="noopener"
+              class="inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline shrink-0"
+            >
+              <Papicon icon="external-link" size={16} />
+              {m.news_public_page_link()}
+            </a>
+          {/if}
         </section>
 
         <!-- Articles list table/cards -->
