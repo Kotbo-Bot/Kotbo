@@ -108,17 +108,17 @@ export async function publishEvent(client: Client, eventId: string) {
 
     const submitBtn = new ButtonBuilder()
       .setCustomId(`event-ctf-submit-flag-btn:${event.id}`)
-      .setLabel('ðŸš© Soumettre un Flag')
+      .setLabel('🚩 Soumettre un Flag')
       .setStyle(ButtonStyle.Primary);
 
     const progressBtn = new ButtonBuilder()
       .setCustomId(`event-ctf-progress-btn:${event.id}`)
-      .setLabel('ðŸŽ¯ Ma Progression')
+      .setLabel('🎯 Ma Progression')
       .setStyle(ButtonStyle.Secondary);
 
     const lbBtn = new ButtonBuilder()
       .setCustomId(`event-ctf-leaderboard-btn:${event.id}`)
-      .setLabel('ðŸ"Š Classement')
+      .setLabel('📊 Classement')
       .setStyle(ButtonStyle.Success);
 
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(submitBtn, progressBtn, lbBtn);
@@ -137,7 +137,7 @@ export async function publishEvent(client: Client, eventId: string) {
     .setTitle(resolveEmojiShortcodes(`🎉 Événement : ${event.title}`))
     .setDescription(resolveEmojiShortcodes(resolveTextMentions(channel.guild, event.description) || 'Un nouvel événement commence ! Préparez-vous.'))
     .setColor(COLORS.info)
-    .addFields({ name: 'Statut', value: 'âŒ› En attente du lancement...', inline: true })
+    .addFields({ name: 'Statut', value: '⌛ En attente du lancement...', inline: true })
     .setTimestamp();
 
   const message = await channel.send({ embeds: [embed], allowedMentions: { parse: [] } });
@@ -569,7 +569,7 @@ export async function finishEvent(client: Client, eventId: string) {
     return { status: 'completed' };
   }
 
-  if (!event || !event.messageId || !event.channelId) throw new Error('Ã‰vénement introuvable');
+  if (!event || !event.messageId || !event.channelId) throw new Error('Événement introuvable');
 
   const channel = (await client.channels.fetch(event.channelId).catch(() => null)) as TextChannel | null;
   if (!channel) throw new Error('Salon Discord introuvable');
@@ -578,7 +578,7 @@ export async function finishEvent(client: Client, eventId: string) {
 
   const leaderboard = event.participants
     .slice(0, 10)
-    .map((p: Record<string, unknown>, i: number) => `${i + 1}. **${p.userTag || p.userId}** â€" ${p.score} pts`)
+    .map((p: Record<string, unknown>, i: number) => `${i + 1}. **${p.userTag || p.userId}** — ${p.score} pts`)
     .join('\n') || 'Aucun participant.';
 
   let description = `Bravo à tous les participants !
@@ -628,12 +628,12 @@ ${leaderboard}`;
   if (message) {
     const statsButton = new ButtonBuilder()
       .setCustomId(`event-stats:${eventId}`)
-      .setLabel('ðŸ"Š Stats/Analytics')
+      .setLabel('📊 Stats/Analytics')
       .setStyle(ButtonStyle.Secondary);
 
     const detailsButton = new ButtonBuilder()
       .setCustomId(`event-result-page:${eventId}:0`)
-      .setLabel('ðŸ"� Détails')
+      .setLabel('🔍 Détails')
       .setStyle(ButtonStyle.Primary);
 
     const DASHBOARD_URL = process.env.DASHBOARD_URL || 'http://localhost:5173';
@@ -649,12 +649,12 @@ ${leaderboard}`;
   } else {
     const statsButton = new ButtonBuilder()
       .setCustomId(`event-stats:${eventId}`)
-      .setLabel('ðŸ"Š Stats/Analytics')
+      .setLabel('📊 Stats/Analytics')
       .setStyle(ButtonStyle.Secondary);
 
     const detailsButton = new ButtonBuilder()
       .setCustomId(`event-result-page:${eventId}:0`)
-      .setLabel('ðŸ"� Détails')
+      .setLabel('🔍 Détails')
       .setStyle(ButtonStyle.Primary);
 
     const DASHBOARD_URL = process.env.DASHBOARD_URL || 'http://localhost:5173';
@@ -689,11 +689,11 @@ export async function buildEventResultsView(interaction: RepliableInteraction, e
     });
 
     if (participations.length === 0) {
-      return { content: "â�Œ Tu n'as participé à aucun quiz pour le moment.", embeds: [], components: [] };
+      return { content: "❌ Tu n'as participé à aucun quiz pour le moment.", embeds: [], components: [] };
     }
 
     const embed = new EmbedBuilder()
-      .setTitle('ðŸ"ˆ Tes Résultats Quiz')
+      .setTitle('📈 Tes Résultats Quiz')
       .setDescription('Sélectionne un événement pour voir le détail de tes réponses.')
       .setColor(COLORS.info);
 
@@ -727,7 +727,7 @@ export async function buildEventResultsView(interaction: RepliableInteraction, e
     }
   });
 
-  if (!event) return { content: 'â�Œ Ã‰vénement introuvable.', embeds: [], components: [] };
+  if (!event) return { content: '❌ Événement introuvable.', embeds: [], components: [] };
 
   const pageSize = 10;
   const totalPages = Math.ceil(event.questions.length / pageSize) || 1;
@@ -736,7 +736,7 @@ export async function buildEventResultsView(interaction: RepliableInteraction, e
   const visibleQuestions = event.questions.slice(start, end);
 
   const embed = new EmbedBuilder()
-    .setTitle(`ðŸ"ˆ Résultats : ${event.title}`)
+    .setTitle(`📈 Résultats : ${event.title}`)
     .setDescription(`Voici le détail de tes réponses (Page ${page + 1}/${totalPages}).`)
     .setColor(COLORS.info)
     .setTimestamp();
@@ -752,11 +752,11 @@ export async function buildEventResultsView(interaction: RepliableInteraction, e
     const correctLabel = options[q.correctOptionIndex];
     
     let userLabel = '*Pas de réponse*';
-    let icon = 'âšª';
+    let icon = '⚪';
 
     if (userResponse) {
       userLabel = options[userResponse.optionIndex];
-      icon = userResponse.isCorrect ? '✅' : 'â�Œ';
+      icon = userResponse.isCorrect ? '✅' : '❌';
     }
 
     embed.addFields({
@@ -825,12 +825,12 @@ export async function handleCtfFlagSubmission(interaction: RepliableInteraction,
   });
 
   if (!event || event.status !== 'ONGOING') {
-    return interaction.reply({ content: "â�Œ Ce CTF n'est pas actif.", ephemeral: true });
+    return interaction.reply({ content: "❌ Ce CTF n'est pas actif.", ephemeral: true });
   }
 
   const challenge = event.ctfChallenges.find((c) => c.flag.trim().toLowerCase() === flag.trim().toLowerCase());
   if (!challenge) {
-    return interaction.reply({ content: 'â�Œ Flag incorrect. Essayez encore !', ephemeral: true });
+    return interaction.reply({ content: '❌ Flag incorrect. Essayez encore !', ephemeral: true });
   }
 
   await prisma.memberProfile.upsert({
@@ -886,7 +886,7 @@ export async function handleCtfFlagSubmission(interaction: RepliableInteraction,
   });
 
   if (existingSolve) {
-    return interaction.reply({ content: 'âš ï¸� Vous avez déjà résolu ce challenge !', ephemeral: true });
+    return interaction.reply({ content: '⚠️ Vous avez déjà résolu ce challenge !', ephemeral: true });
   }
 
   const previousSolvesCount = await prisma.eventCtfSolve.count({

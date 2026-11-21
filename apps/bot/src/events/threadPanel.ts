@@ -68,7 +68,10 @@ type PanelInteraction =
 const EPHEMERAL = { flags: [MessageFlags.Ephemeral] as const };
 
 /** Demandes d'accès en attente, `fil:membre` : une seule à la fois par membre. */
-const pendingRequests = new Set<string>();
+const pendingRequests = new Map<string, { messageId: string; expiresAt: number }>();
+
+/** Passé ce délai sans réponse, le membre peut renvoyer une demande. */
+const JOIN_REQUEST_TTL_MS = 30 * 60 * 1000;
 
 function formatDuration(seconds: number, locale: BotLocale): string {
   if (seconds >= 3600) return `${Math.ceil(seconds / 3600)} h`;
@@ -314,7 +317,8 @@ async function handleJoinRequest(interaction: ButtonInteraction<'cached'>, threa
     return;
   }
   const key = `${threadId}:${interaction.user.id}`;
-  if (pendingRequests.has(key)) {
+  const pending = pendingRequests.get(key);
+  if (pending && pending.expiresAt > Date.now() && await thread.messages.fetch(pending.messageId).catch(() => null)) {
     await interaction.editReply(t('Ta demande attend déjà une réponse.', 'Your request is already waiting for an answer.'));
     return;
   }
@@ -334,7 +338,7 @@ async function handleJoinRequest(interaction: ButtonInteraction<'cached'>, threa
     await interaction.editReply(t('❌ Impossible de transmettre ta demande.', '❌ Couldn’t pass on your request.'));
     return;
   }
-  pendingRequests.add(key);
+  pendingRequests.set(key, { messageId: sent.id, expiresAt: Date.now() + JOIN_REQUEST_TTL_MS });
   await interaction.editReply(t(`✅ Demande envoyée à <@${record.ownerId}>.`, `✅ Request sent to <@${record.ownerId}>.`));
 }
 

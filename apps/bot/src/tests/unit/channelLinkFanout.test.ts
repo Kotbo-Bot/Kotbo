@@ -204,6 +204,28 @@ describe('relayMessageEdit', () => {
     expect(copieB.edit).toHaveBeenCalledTimes(1);
     expect(copieC.edit).toHaveBeenCalledTimes(1);
   });
+
+  test('tronque à la limite d\'un embed une édition trop longue au lieu de la perdre', async () => {
+    const [a, b, c] = channelIds();
+    const group = makeGroup([a, b, c]);
+    groupRows = [group];
+    mappingRows = copies(group.id, a, [{ channelId: b, guildId: 'G-B', messageId: 'copie-b' }]);
+    const copieB = makeMessage('copie-b');
+    const client = makeClient({ 'G-A': [makeChannel(a, {})], 'G-B': [makeChannel(b, { 'copie-b': copieB })] });
+    const message = {
+      id: 'msg-origine',
+      content: 'x'.repeat(5000),
+      createdAt: new Date(),
+      author: { bot: false, username: 'kot', displayName: 'Kot', displayAvatarURL: () => 'https://cdn.discordapp.com/embed/avatars/0.png' },
+      guild: { id: 'G-A', name: 'Serveur A', iconURL: () => null },
+      channel: { id: a },
+    };
+
+    await relayMessageEdit(message as never, client as never);
+
+    expect(copieB.edit).toHaveBeenCalledTimes(1);
+    expect(copieB.edit.mock.calls[0][0].embeds[0].data.description.length).toBeLessThanOrEqual(4096);
+  });
 });
 
 describe('relayMessageDelete', () => {
