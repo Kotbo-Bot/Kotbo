@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { kotboEventBus } from '@kotbo/core';
 import { errorMessage } from '../../utils/errors.js';
 import type { Prisma } from '@prisma/client';
@@ -1480,11 +1481,21 @@ async function foldLinkedCandidates(
  * tirage, et l'atteindre par `endGiveaway` demanderait un serveur, un salon et
  * une remise de lots pour n'observer qu'un nom.
  */
+/**
+ * Réel dans [0, 1) tiré du générateur du système. Des lots se gagnent à ce tirage :
+ * `Math.random` n'est pas fait pour cela, et son état se déduit d'un nombre suffisant
+ * de sorties observées.
+ */
+export function secureRandom(): number {
+  return crypto.randomInt(0, 2 ** 40) / 2 ** 40;
+}
+
 export async function drawWinnersWeighted(
   candidates: string[],
   count: number,
   discordGuild: Guild | null,
-  bonus: ResolvedBonus
+  bonus: ResolvedBonus,
+  random: () => number = secureRandom,
 ): Promise<string[]> {
   if (candidates.length === 0 || count <= 0) return [];
 
@@ -1512,7 +1523,7 @@ export async function drawWinnersWeighted(
   if (bonus.entries.length === 0 || rolesByUser.size === 0) {
     const actualCount = Math.min(count, pool.length);
     for (let i = 0; i < actualCount; i++) {
-      const randIndex = Math.floor(Math.random() * pool.length);
+      const randIndex = Math.floor(random() * pool.length);
       winners.push(pool[randIndex]);
       pool.splice(randIndex, 1);
     }
@@ -1533,7 +1544,7 @@ export async function drawWinnersWeighted(
     }
 
     // Sélection aléatoire pondérée
-    let randomVal = Math.random() * totalWeight;
+    let randomVal = random() * totalWeight;
     let selectedIndex = 0;
 
     for (let j = 0; j < pool.length; j++) {

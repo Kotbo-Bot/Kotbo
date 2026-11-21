@@ -53,6 +53,7 @@ import {
   updateGiveawayTemplate,
   type GiveawayTemplateInput,
 } from '../../../services/features/giveawayTemplateService.js';
+import { roleGrantRefusal } from '../../shared/roleGrantGuard.js';
 import { createReactionRoleMenu, deleteReactionRoleMenu, updateReactionRoleMenu, getBotRoleAccess, menuMessageStatus, roleMemberCounts, normalizeEmbedColor, normalizeMenuDescription, normalizeMenuMode, MAX_REACTION_ROLE_BUTTONS, type ReactionRoleOption } from '../../../services/features/reactionRoleService.js';
 import { hasNewRoles, materializeNewRoles, previewReactionRolePreset, type ReactionRoleOptionInput } from '../../../services/features/reactionRolePresets.js';
 import { REACTION_ROLE_PRESET_KEYS, type ReactionRolePresetKey } from '@kotbo/contracts';
@@ -1979,6 +1980,10 @@ export function createGeneralistModulesRouter(client: Client) {
         return send(c, { error: `Un panneau ne peut pas dépasser ${MAX_REACTION_ROLE_BUTTONS} boutons` }, 400);
       }
 
+      // Le bot donnera ces rôles : ils ne doivent pas dépasser ceux de qui configure.
+      const grantRefusal = await roleGrantRefusal(client, guildId, user.userId, body.options.map((option) => option.roleId));
+      if (grantRefusal) return send(c, { error: grantRefusal }, 403);
+
       const options = await withNewRolesCreated(client, guildId, body.options, auditUser);
       if ('refused' in options) return send(c, { error: options.refused.error }, options.refused.status);
 
@@ -2065,6 +2070,11 @@ export function createGeneralistModulesRouter(client: Client) {
 
       if (body.options !== undefined && body.options.length > MAX_REACTION_ROLE_BUTTONS) {
         return send(c, { error: `Un panneau ne peut pas dépasser ${MAX_REACTION_ROLE_BUTTONS} boutons` }, 400);
+      }
+
+      if (body.options !== undefined) {
+        const grantRefusal = await roleGrantRefusal(client, guildId, user.userId, body.options.map((option) => option.roleId));
+        if (grantRefusal) return send(c, { error: grantRefusal }, 403);
       }
 
       const options = body.options === undefined
@@ -2165,6 +2175,9 @@ export function createGeneralistModulesRouter(client: Client) {
       if (!body.response && !body.roleIdToAdd && !body.roleIdToRemove && !body.deleteTrigger && !body.closeTicket && !body.rejectForm && (!body.reactions || body.reactions.length === 0) && !body.actions) {
         return send(c, { error: 'Au moins une action doit être configurée (réponse, ajout/retrait de rôle, suppression du message, fermeture de ticket, rejet de formulaire, réaction ou action avancée)' }, 400);
       }
+
+      const triggerGrantRefusal = await roleGrantRefusal(client, guildId, c.var.dashboardUser.userId, [body.roleIdToAdd]);
+      if (triggerGrantRefusal) return send(c, { error: triggerGrantRefusal }, 403);
 
       const autoResponse = await prisma.autoResponse.create({
         data: {
@@ -2271,6 +2284,11 @@ export function createGeneralistModulesRouter(client: Client) {
 
       if (!combinedResponse && !combinedRoleIdToAdd && !combinedRoleIdToRemove && !combinedDeleteTrigger && !combinedCloseTicket && !combinedRejectForm && (!combinedReactions || combinedReactions.length === 0) && !combinedActions) {
         return send(c, { error: 'Au moins une action doit être configurée (réponse, ajout/retrait de rôle, suppression du message, fermeture de ticket, rejet de formulaire, réaction ou action avancée)' }, 400);
+      }
+
+      if (body.roleIdToAdd) {
+        const triggerGrantRefusal = await roleGrantRefusal(client, guildId, c.var.dashboardUser.userId, [body.roleIdToAdd]);
+        if (triggerGrantRefusal) return send(c, { error: triggerGrantRefusal }, 403);
       }
 
       const autoResponse = await prisma.autoResponse.update({

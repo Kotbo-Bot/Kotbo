@@ -1565,20 +1565,36 @@ export async function transferCoins(guildId: string, senderId: string, receiverI
 
   // Atomic guard on the balance check to avoid a race between two concurrent transfers
   // from the same sender both passing the balance check above against a stale value.
+  // Le délai entre transferts est dans la même condition que le solde : deux envois
+  // simultanés ne peuvent pas passer tous les deux. Débit et crédit partent dans une
+  // transaction, sans quoi un crédit en échec ferait disparaître les pièces débitées.
   const now = new Date();
-  const debited = await prisma.rpgProfile.updateMany({
-    where: { id: senderProfile.id, balance: { gte: amount } },
-    data: { balance: { decrement: amount }, lastTransferAt: now }
+  const cooldownFloor = new Date(now.getTime() - config.transferCooldownMin * 60 * 1000);
+  const transferred = await prisma.$transaction(async (tx) => {
+    const debited = await tx.rpgProfile.updateMany({
+      where: {
+        id: senderProfile.id,
+        balance: { gte: amount },
+        OR: [{ lastTransferAt: null }, { lastTransferAt: { lte: cooldownFloor } }],
+      },
+      data: { balance: { decrement: amount }, lastTransferAt: now }
+    });
+    if (debited.count === 0) return false;
+
+    await tx.rpgProfile.update({
+      where: { id: receiverProfile.id },
+      data: { balance: { increment: amount } }
+    });
+    return true;
   });
 
-  if (debited.count === 0) {
-    throw new Error(`Solde insuffisant. Vous possédez actuellement **${senderProfile.balance}** pièces.`);
+  if (!transferred) {
+    const current = await prisma.rpgProfile.findUnique({ where: { id: senderProfile.id }, select: { balance: true } });
+    if ((current?.balance ?? 0) < amount) {
+      throw new Error(`Solde insuffisant. Vous possédez actuellement **${current?.balance ?? 0}** pièces.`);
+    }
+    throw new Error('Un transfert est déjà en cours ou le délai entre deux transferts n'est pas écoulé. Réessayez dans un instant.');
   }
-
-  await prisma.rpgProfile.update({
-    where: { id: receiverProfile.id },
-    data: { balance: { increment: amount } }
-  });
 
   return {
     senderBalance: senderProfile.balance - amount,
