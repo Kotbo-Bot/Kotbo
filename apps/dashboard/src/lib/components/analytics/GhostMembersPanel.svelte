@@ -337,7 +337,7 @@
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
       {#each ORDERED_STATUSES as status}
         {@const meta = STATUS_META[status]}
-        {@const count = distribution?.counts[status] ?? 0}
+        {@const count = distribution?.counts?.[status] ?? 0}
         <button
           onclick={() => selectStatus(statusFilter === status ? '' : status)}
           class="text-left p-4 rounded-2xl border transition-all duration-300 {statusFilter === status

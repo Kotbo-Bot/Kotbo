@@ -166,6 +166,16 @@ function fullAnalytics(period: number) {
     .map((r) => ({ roleId: r.id, roleName: r.name, color: r.color, count: MEMBERS.filter((m) => m.roles.includes(r.id)).length }))
     .sort((a, b) => b.count - a.count);
 
+  const inviterCounts = new Map<string, { inviterId: string; tag: string; count: number }>();
+  for (const inv of INVITES) {
+    const inviterId = personByName(inv.inviter).id;
+    const count = Math.round(inv.uses * Math.min(1, days / 120)) || 1;
+    const prev = inviterCounts.get(inviterId);
+    if (prev) prev.count += count;
+    else inviterCounts.set(inviterId, { inviterId, tag: inv.inviter, count });
+  }
+  const topInviters = [...inviterCounts.values()].sort((a, b) => b.count - a.count);
+
   return {
     period: days,
     timezone: 'Europe/Paris',
@@ -244,7 +254,7 @@ function fullAnalytics(period: number) {
       voiceTimeSeconds: t.voiceMinutes * 60,
       voiceSessionCount: Math.max(1, Math.round(t.voiceMinutes / 50)),
     })),
-    topInviters: INVITES.map((inv) => ({ inviterId: personByName(inv.inviter).id, tag: inv.inviter, count: Math.round(inv.uses * Math.min(1, days / 120)) || 1 })),
+    topInviters,
     topModerators,
     topSanctionedMembers: mostSanctioned,
     recentSanctions,

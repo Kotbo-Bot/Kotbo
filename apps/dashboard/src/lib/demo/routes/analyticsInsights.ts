@@ -7,7 +7,7 @@
 import { route } from '../backend';
 import { demoDb, demoId } from '../db';
 import { channelMessages, dateKey, memberSeries, memberTotals, serverSeries, voiceChannelMinutes, CHANNEL_SHARE, VOICE_SHARE } from '../activity';
-import { CATEGORIES, CHANNELS, MEMBERS, VOICE_CHANNELS, avatarOf, sessionUser } from '../fixtures';
+import { CATEGORIES, CHANNELS, MEMBERS, ROLES, VOICE_CHANNELS, avatarOf, sessionUser } from '../fixtures';
 import { DEMO_GUILD_ID, DEMO_GUILD_NAME } from '../mode';
 import { CATEGORY_OF, heatmap } from './analytics';
 
@@ -679,6 +679,48 @@ function commandStats(days: number) {
   };
 }
 
+function reactionRoleStats(days: number) {
+  const cur = serverSeries(days);
+  const prev = serverSeries(days, days);
+  const daily = cur.map((d, i) => {
+    const p = prev[i];
+    const added = Math.max(0, Math.round(d.membersJoined * 1.4 + (i % 3)));
+    const removed = Math.max(0, Math.round(d.membersJoined * 0.35));
+    const previousAdded = Math.max(0, Math.round((p?.membersJoined ?? d.membersJoined) * 1.2 + ((i + 1) % 3)));
+    const previousRemoved = Math.max(0, Math.round((p?.membersJoined ?? d.membersJoined) * 0.3));
+    return { dateKey: d.dateKey, added, removed, previousAdded, previousRemoved };
+  });
+  const added = sum(daily, (d) => d.added);
+  const removed = sum(daily, (d) => d.removed);
+  const previousAdded = sum(daily, (d) => d.previousAdded);
+  const previousRemoved = sum(daily, (d) => d.previousRemoved);
+  const pickRoles = ROLES.filter((r) => !r.managed).slice(0, 6);
+  const weights = [0.28, 0.22, 0.18, 0.14, 0.1, 0.08];
+  const roles = pickRoles.map((r, i) => {
+    const w = weights[i] ?? 0.08;
+    const roleAdded = Math.max(1, Math.round(added * w));
+    const roleRemoved = Math.round(removed * w);
+    return {
+      menuId: i < 3 ? 'rr-menu-games' : 'rr-menu-notifs',
+      roleId: r.id,
+      menuTitle: i < 3 ? 'Rôles de jeux' : 'Notifications',
+      roleName: r.name,
+      roleColor: r.color,
+      added: roleAdded,
+      removed: roleRemoved,
+      net: roleAdded - roleRemoved,
+      previousAdded: Math.max(1, Math.round(previousAdded * w)),
+      holders: MEMBERS.filter((m) => m.roles.includes(r.id)).length,
+      spark: bucketize(daily.map((d) => Math.round(d.added * w))),
+    };
+  });
+  return {
+    totals: { added, removed, net: added - removed, previousAdded, previousRemoved },
+    daily,
+    roles,
+  };
+}
+
 // ── Annotations ────────────────────────────────────────────────────────
 
 const ANNOTATIONS = 'analytics-annotations';
@@ -749,6 +791,7 @@ export function registerAnalyticsInsightsRoutes(): void {
   });
   route('GET', `${base}/members/overview`, ({ query }) => memberOverview(periodOf(query)));
   route('GET', `${base}/commands/stats`, ({ query }) => commandStats(periodOf(query)));
+  route('GET', `${base}/reaction-roles/stats`, ({ query }) => reactionRoleStats(periodOf(query)));
   route('GET', `${base}/heatmap`, ({ query }) => (query.get('compare') === '1' ? heatmapComparison(periodOf(query)) : heatmap()));
   route('GET', `${base}/weekly-comparison`, ({ query }) => periodComparison(Math.max(1, Number(query.get('offset')) || 1), query.get('mode') === 'month' ? 'month' : 'week'));
   route('GET', `${base}/annotations`, ({ query }) => {
