@@ -34,6 +34,7 @@ import { registerRaidRoutes } from './raid';
 import { registerSecurityRoutes } from './security';
 import { registerWelcomeRoutes } from './welcome';
 import { registerSiteRoutes } from './site';
+import { registerLinksRoutes } from './links';
 
 export function registerDemoRoutes(): void {
   // Avant les routes Analytics historiques : la première route qui correspond gagne.
@@ -53,6 +54,7 @@ export function registerDemoRoutes(): void {
   registerSecurityRoutes();
   registerWelcomeRoutes();
   registerSiteRoutes();
+  registerLinksRoutes();
   registerSessionRoutes();
   registerHomeRoutes();
   registerTelemetryRoutes();
