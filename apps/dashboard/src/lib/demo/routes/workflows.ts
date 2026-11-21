@@ -108,8 +108,9 @@ export function registerWorkflowRoutes(): void {
     save(workflows().map((w) => {
       if (w.id !== params.workflowId) return w;
       const graph = body?.graph ?? w.graph;
-      workflow = { ...w, ...(body ?? {}), graph, ...triggerOf(graph), updatedAt: new Date().toISOString() };
-      return workflow;
+      const next: Workflow = { ...w, ...(body ?? {}), graph, ...triggerOf(graph), updatedAt: new Date().toISOString() };
+      workflow = next;
+      return next;
     }));
     return { workflow, warnings: [] };
   });

@@ -149,7 +149,7 @@ export function registerSecurityRoutes(): void {
   route('POST', `${G}/aegis/detections/:id/:decision`, ({ params }) => {
     let detection: unknown;
     const status = params.decision === 'dismiss' ? 'DISMISSED' : 'CONFIRMED';
-    demoDb.set('aegis/detections', detections().map((d) => (d.id === params.id ? (detection = { ...d, status, reviewedAt: new Date().toISOString() }) as typeof d : d)));
+    demoDb.set('aegis/detections', detections().map((d) => (d.id === params.id ? (detection = { ...d, status, reviewedAt: new Date().toISOString() } as any) : d)));
     return { detection };
   });
 
@@ -201,5 +201,67 @@ export function registerSecurityRoutes(): void {
   route('POST', `${G}/appeals/:id/items/:itemId`, ({ params, body }) => {
     demoDb.set('appeals', appeals().map((a) => (a.id === params.id ? { ...a, sanctions: a.sanctions.map((s) => (s.id === params.itemId ? { ...s, outcome: body?.outcome ?? s.outcome, outcomeNote: body?.note ?? null } : s)) } : a)));
     return { success: true };
+  });
+}
+
+// ── Filtres : emojis bannis, pseudos, mots bannis ─────────────────────────
+
+const emojiBansSeed = () => [
+  { id: 'eb-1', kind: 'UNICODE', key: '🍆', name: null, iconUrl: null, action: 'DELETE', durationMin: null, createdBy: 'zenox', createdAt: ago(20 * DAY) },
+  { id: 'eb-2', kind: 'SOURCE_GUILD', key: '930000000000000013', name: 'Pixel Forge', iconUrl: null, action: 'WARN', durationMin: null, createdBy: 'lena', createdAt: ago(6 * DAY) },
+];
+
+const nicknameSeed = () => ({
+  enabled: true,
+  whitelist: ['Kotbo', 'Nova'],
+  bypass: [role('Modérateur').id],
+  onJoin: true,
+  onUpdate: true,
+  checkInvisible: true,
+  checkGlobal: true,
+  checkCustom: true,
+  discordAutoModSync: false,
+});
+
+const wordsSeed = () => ({
+  global: ['connard', 'pute', 'nazi', 'fdp'].map((word, i) => ({ id: `bwg-${i}`, word, category: 'insult', enabled: true, guildId: null })),
+  custom: ['discord.gg/', 'free nitro', 'robux gratuit'].map((word, i) => ({ id: `bwc-${i}`, word, category: 'custom', enabled: true, guildId: DEMO_GUILD_ID })),
+});
+
+export function registerFilterRoutes(): void {
+  const bans = () => demoDb.get('emoji-bans', emojiBansSeed);
+  route('GET', `${G}/emoji-bans`, () => ({ rules: bans(), maxRules: 50, jailConfigured: true }));
+  route('POST', `${G}/emoji-bans`, ({ body }) => {
+    const rule = { ...emojiBansSeed()[0], ...(body ?? {}), id: demoId(), createdBy: 'toi', createdAt: new Date().toISOString() };
+    demoDb.set('emoji-bans', [...bans(), rule]);
+    return { rule };
+  });
+  route('DELETE', `${G}/emoji-bans/:id`, ({ params }) => {
+    demoDb.set('emoji-bans', bans().filter((b) => b.id !== params.id));
+    return { success: true };
+  });
+  route('GET', `${G}/emoji-bans/search`, () => ({ servers: [{ guildId: '930000000000000013', name: 'Pixel Forge', iconUrl: null, memberCount: 15_300, kotboPresent: false }] }));
+  route('GET', `${G}/emoji-bans/sources/:id`, () => ({ kotboPresent: false, emojis: [], stickers: [] }));
+
+  route('GET', `${G}/nickname-moderation`, () => demoDb.get('nickname-moderation', nicknameSeed));
+  route('PATCH', `${G}/nickname-moderation`, ({ body }) => {
+    demoDb.update('nickname-moderation', nicknameSeed, (c) => ({ ...c, ...(body ?? {}) }));
+    return { ok: true };
+  });
+
+  const words = () => demoDb.get('banned-words', wordsSeed);
+  route('GET', `${G}/banned-words`, () => words());
+  route('POST', `${G}/banned-words`, ({ body }) => {
+    const id = demoId();
+    demoDb.update('banned-words', wordsSeed, (w) => ({ ...w, custom: [...w.custom, { id, word: String(body?.word ?? ''), category: body?.category ?? 'custom', enabled: true, guildId: DEMO_GUILD_ID }] }));
+    return { ok: true, id };
+  });
+  route('PATCH', `${G}/banned-words/:id`, ({ params, body }) => {
+    demoDb.update('banned-words', wordsSeed, (w) => ({ ...w, custom: w.custom.map((x) => (x.id === params.id ? { ...x, ...(body ?? {}) } : x)) }));
+    return { ok: true };
+  });
+  route('DELETE', `${G}/banned-words/:id`, ({ params }) => {
+    demoDb.update('banned-words', wordsSeed, (w) => ({ ...w, custom: w.custom.filter((x) => x.id !== params.id) }));
+    return { ok: true };
   });
 }

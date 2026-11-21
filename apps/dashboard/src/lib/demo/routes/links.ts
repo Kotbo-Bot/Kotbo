@@ -189,12 +189,12 @@ export function registerLinksRoutes(): void {
   route('POST', `${base}/:groupId/members`, ({ params }) => groups().find((g) => g.id === params.groupId));
   route('PATCH', `${base}/:groupId/members/:memberId`, ({ params, body }) => {
     let updated: unknown;
-    saveGroups(groups().map((g) => (g.id === params.groupId ? (updated = { ...g, members: g.members.map((m) => (m.id === params.memberId ? { ...m, ...(body ?? {}) } : m)) }) as typeof g : g)));
+    saveGroups(groups().map((g) => (g.id === params.groupId ? (updated = { ...g, members: g.members.map((m: any) => (m.id === params.memberId ? { ...m, ...(body ?? {}) } : m)) }) as typeof g : g)));
     return updated;
   });
   route('DELETE', `${base}/:groupId/members/:memberId`, ({ params }) => {
     let remaining: (ReturnType<typeof groupsSeed>[number]) | null = null;
-    saveGroups(groups().map((g) => (g.id === params.groupId ? (remaining = { ...g, members: g.members.filter((m) => m.id !== params.memberId) }) : g)));
+    saveGroups(groups().map((g) => (g.id === params.groupId ? (remaining = { ...g, members: g.members.filter((m: any) => m.id !== params.memberId) }) : g)));
     return { ok: true, group: remaining };
   });
   route('POST', `${base}/:groupId/invite`, () => ({ inviteUrl: 'https://discord.gg/atelier-nova', topicUpdated: true }));
@@ -218,7 +218,7 @@ export function registerLinksRoutes(): void {
     return mapping;
   });
   route('DELETE', `${G}/staff-server/:linkId/mappings/:mappingId`, ({ params }) => {
-    demoDb.set('staff-server', links().map((l) => (l.id === params.linkId ? { ...l, roleMappings: l.roleMappings.filter((m) => m.id !== params.mappingId) } : l)));
+    demoDb.set('staff-server', links().map((l) => (l.id === params.linkId ? { ...l, roleMappings: l.roleMappings.filter((m: any) => m.id !== params.mappingId) } : l)));
     return { ok: true };
   });
   route('POST', `${G}/staff-server/:linkId/sync`, () => ({ added: 2, removed: 0, unchanged: 5, errors: [] }));

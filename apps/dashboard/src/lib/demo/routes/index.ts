@@ -31,7 +31,7 @@ import { registerTutoringRoutes } from './tutoring';
 import { registerShopRoutes } from './shop';
 import { registerTagAutomodRoutes } from './tagAutomod';
 import { registerRaidRoutes } from './raid';
-import { registerSecurityRoutes } from './security';
+import { registerFilterRoutes, registerSecurityRoutes } from './security';
 import { registerWelcomeRoutes } from './welcome';
 import { registerSiteRoutes } from './site';
 import { registerLinksRoutes } from './links';
@@ -61,6 +61,7 @@ export function registerDemoRoutes(): void {
   registerTagAutomodRoutes();
   registerRaidRoutes();
   registerSecurityRoutes();
+  registerFilterRoutes();
   registerWelcomeRoutes();
   registerSiteRoutes();
   registerLinksRoutes();

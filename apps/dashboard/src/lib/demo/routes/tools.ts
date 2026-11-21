@@ -98,7 +98,7 @@ const scheduleSeed = () => [
   },
 ];
 
-const mcpSeed = () => [
+const mcpSeed = (): Array<Record<string, any> & { id: string }> => [
   {
     id: 'mcp-key-1',
     name: 'Claude du staff',

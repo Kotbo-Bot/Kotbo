@@ -108,7 +108,7 @@ const GAME_ROLES = [
 
 // ── Fun ──────────────────────────────────────────────────────────────────
 
-const funSeed = () => ({
+const funSeed = (): { config: Record<string, any>; gameState: Record<string, any> } => ({
   config: {
     funEnabled: true,
     funCountingChannelId: '900000000000000360',

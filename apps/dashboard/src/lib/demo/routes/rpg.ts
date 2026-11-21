@@ -65,7 +65,19 @@ const fishSeed = () => [
 const dungeonsSeed = () => [
   row('RpgDungeon', { id: 'dg-1', guildId: DEMO_GUILD_ID, name: 'Grotte des slimes', emoji: '🕳️', description: 'Trois salles et un slime géant.', levelRequired: 3, energyCost: 10, cooldownHours: 6, bossNames: ['Slime', 'Gobelin'], completionCoins: 300, completionXp: 150, enabled: true, firstClearUserId: players()[2].id, firstClearAt: ago(25 * DAY) }),
   row('RpgDungeon', { id: 'dg-2', guildId: DEMO_GUILD_ID, name: 'Repaire du dragon', emoji: '🌋', description: 'Seuls les plus forts en reviennent.', levelRequired: 20, energyCost: 40, cooldownHours: 24, bossNames: ['Golem de pierre', 'Dragon ancien'], completionCoins: 4_000, completionXp: 1_500, completionItemName: 'Écaille de dragon', firstClearCoins: 10_000, enabled: true }),
-].map((d) => ({ ...d, firstClear: d.firstClearUserId ? { userId: d.firstClearUserId, displayName: personById(d.firstClearUserId)?.displayName ?? null, at: d.firstClearAt } : null }));
+].map((d, i) => ({
+  ...d,
+  floors: d.bossNames.map((name: string) => {
+    const boss = monstersSeed().find((m) => m.name === name);
+    return { bossName: name, found: !!boss, emoji: boss?.emoji ?? null, level: boss?.level ?? null, bossEnabled: boss?.enabled ?? null };
+  }),
+  runs: [184, 37][i] ?? 0,
+  completions: [151, 9][i] ?? 0,
+  defeats: [33, 28][i] ?? 0,
+  completionTitle: null,
+  firstClearTitle: null,
+  firstClear: d.firstClearUserId ? { userId: d.firstClearUserId, displayName: personById(d.firstClearUserId)?.displayName ?? null, at: d.firstClearAt } : null,
+}));
 
 const titlesSeed = () => [
   { ...row('RpgTitle', { id: 'tt-1', guildId: DEMO_GUILD_ID, name: 'Tueur de dragons', description: 'A vaincu le dragon ancien.', color: '#ef4444', attackBonus: 5 }), owners: [{ userId: players()[1].id, displayName: players()[1].displayName, avatarUrl: avatarOf(players()[1]), obtainedAt: ago(30 * DAY) }] },
@@ -74,16 +86,25 @@ const titlesSeed = () => [
 ];
 
 const recipesSeed = () => [
-  row('RpgRecipe', { id: 'rec-1', guildId: DEMO_GUILD_ID, resultItemId: 'knight_armor', ingredients: [{ itemId: 'leather_armor', quantity: 1 }, { itemId: 'dragon_scale', quantity: 2 }], coinCost: 500, levelRequired: 12 }),
-  row('RpgRecipe', { id: 'rec-2', guildId: DEMO_GUILD_ID, resultItemId: 'health_potion', ingredients: [{ itemId: 'slime_gel', quantity: 3 }], coinCost: 10, levelRequired: 1 }),
-].map((r) => ({ ...r, result: itemsSeed().find((i) => i.id === r.resultItemId) ?? null }));
+  row('RpgRecipe', { id: 'rec-1', guildId: DEMO_GUILD_ID, resultItemId: 'knight_armor', ingredients: [{ itemName: 'Armure de cuir', quantity: 1 }, { itemName: 'Écaille de dragon', quantity: 2 }], coinCost: 500, levelRequired: 12 }),
+  row('RpgRecipe', { id: 'rec-2', guildId: DEMO_GUILD_ID, resultItemId: 'health_potion', ingredients: [{ itemName: 'Gelée de slime', quantity: 3 }], coinCost: 10, levelRequired: 1 }),
+].map((r) => {
+  const result = itemsSeed().find((i) => i.id === r.resultItemId);
+  return { ...r, resultItem: result ? { id: result.id, name: result.name, emoji: result.emoji, rarity: result.rarity, type: result.type } : { id: r.resultItemId, name: r.resultItemId, emoji: '📦', rarity: 'COMMON', type: 'MATERIAL' }, editable: true };
+});
 
 const raidSeed = () => ({
-  bosses: [row('RpgRaidBoss', { id: 'rb-1', guildId: DEMO_GUILD_ID, name: 'Titan de lave', emoji: '🌋', level: 30, attack: 180, defense: 90, speed: 30, spells: ['crushing_blow'], enabled: true, description: 'Le boss de raid de la semaine.' })],
+  bosses: [row('RpgRaidBoss', { id: 'rb-1', guildId: DEMO_GUILD_ID, name: 'Titan de lave', emoji: '🌋', level: 30, attack: 180, defense: 90, speed: 30, spells: [{ id: 'crushing_blow', name: 'Frappe écrasante', emoji: '💥', icon: 'AlertTriangle', description: 'Un coup massif à 190 % de dégâts.' }], enabled: true, description: 'Le boss de raid de la semaine.' })],
   spells: [{ id: 'crushing_blow', name: 'Frappe écrasante', emoji: '💥', icon: 'AlertTriangle', description: 'Un coup massif à 190 % de dégâts.' }],
-  state: { enabled: true, teamMode: 'CLANS', nextOpensAt: ago(-2 * DAY), open: null, teams: [] },
+  state: { enabled: true, teamMode: 'CLANS', nextOpensAt: ago(-2 * DAY), open: null as any, teams: [] as any[] },
   recap: null,
-  history: [{ id: 'raid-old', bossName: 'Titan de lave', startedAt: ago(9 * DAY), endedAt: ago(8 * DAY), defeated: true, totalDamage: 182_400, participants: 23, winnerTeam: 'Kraken' }],
+  history: [{
+    id: 'raid-old', bossName: 'Titan de lave', bossEmoji: '🌋', opensAt: ago(9 * DAY), resolvedAt: ago(8 * DAY),
+    teams: [
+      { id: 'rt-1', teamName: 'Kraken', defeated: true, defeatedAt: ago(8 * DAY + 120), remainingHealth: 0, totalHealth: 250_000 },
+      { id: 'rt-2', teamName: 'Phénix', defeated: false, defeatedAt: null, remainingHealth: 31_400, totalHealth: 250_000 },
+    ],
+  }],
 });
 
 const eventsSeed = () => [
@@ -163,7 +184,10 @@ export function registerRpgRoutes(): void {
     demoDb.update('rpg/fish', fishSeed, (list) => list.filter((f) => f.key !== params.key));
     return { success: true };
   });
-  editable('dungeons', 'dungeons', dungeonsSeed, () => ({ bosses: monstersSeed().map((m) => ({ name: m.name, emoji: m.emoji, level: m.level, isBoss: m.isBoss })), limits: { floorsMax: 10, dungeonsMax: 20 } }));
+  editable('dungeons', 'dungeons', dungeonsSeed, () => ({
+    bosses: monstersSeed().map((m) => ({ name: m.name, emoji: m.emoji, level: m.level, health: m.health, attack: m.attack, defense: m.defense, speed: m.speed, xpReward: m.xpReward, coinReward: m.coinReward, enabled: m.enabled })),
+    limits: { floorsMax: 10, dungeonsMax: 20 },
+  }));
   route('DELETE', `${E}/dungeons/:id/first-clear`, () => ({ success: true }));
   editable('titles', 'titles', titlesSeed);
   route('POST', `${E}/titles/:id/owners`, () => ({ success: true }));
@@ -198,4 +222,9 @@ export function registerRpgRoutes(): void {
   route('POST', `${E}/monsters/difficulty`, () => ({ success: true, updated: 3 }));
   route('POST', `${E}/items/difficulty`, () => ({ success: true, updated: 4 }));
   route('POST', `${E}/reset`, () => ({ success: true }));
+  // Tour : réglages d'usine de la page (elle comble ce qui manque), aucune course jouée.
+  route('GET', `${E}/tower`, () => ({ settings: {}, rewards: [], leaderboard: [], foes: [], deathMap: {}, insights: null, daily: { leaderboard: [] } }));
+  route('GET', `${E}/tower/clan`, () => ({ clansEnabled: true, settings: {}, current: null, last: null, nextOpensAt: null, items: itemsSeed(), titles: titlesSeed() }));
+  for (const path of ['tower', 'tower/layout', 'tower/clan', 'tower/clan/layout', 'tower/rewards', 'tower/reset', 'tower/season']) route('POST', `${E}/${path}`, () => ({ success: true }));
+  route('POST', `${E}/tower/preview`, () => ({ rows: [] }));
 }

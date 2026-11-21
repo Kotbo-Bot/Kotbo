@@ -194,15 +194,36 @@ export function registerRaidRoutes(): void {
     return { ok: true, status: body?.decision ?? 'BLOCKED', sanction: body?.decision === 'ALLOW' ? undefined : 'TIMEOUT' };
   });
 
-  // Anti-spam appris : configuration et échantillons à valider.
-  const spamSeed = () => ({ enabled: true, sensitivity: 'NORMAL', learnFromStaff: true, action: 'DELETE', notifyChannelId: channelByName('logs').id });
+  // Anti-spam comportemental : configuration (SpamDetectionConfig), calibration et échantillons.
+  const spamSeed = () => row('SpamDetectionConfig', { enabled: true, shadowMode: false, alertChannelId: channelByName('logs').id, bypassRoleIds: [role('Modérateur').id] });
   route('GET', `${base}/spam`, () => ({
     config: demoDb.get('raid/spam', spamSeed),
-    stats: { samples: 214, confirmed: 168, rejected: 21, precision: 0.89, days: 14 },
+    stats: {
+      total: 214,
+      shadow: 0,
+      pendingDecision: 4,
+      labeledTrue: 168,
+      labeledFalse: 21,
+      histogram: Array.from({ length: 10 }, (_, i) => ({ from: i * 10, to: i * 10 + 10, count: [62, 38, 24, 18, 15, 14, 12, 11, 9, 11][i] })),
+      signals: [
+        { type: 'no_typing', count: 88, weight: 18 },
+        { type: 'paste_burst', count: 41, weight: 22 },
+        { type: 'cross_channel_burst', count: 37, weight: 30 },
+        { type: 'near_duplicate', count: 72, weight: 25 },
+        { type: 'inhuman_rate', count: 19, weight: 35 },
+        { type: 'mention_burst', count: 11, weight: 28 },
+      ],
+      labelsNeeded: 0,
+    },
   }));
   route('PATCH', `${base}/spam`, ({ body }) => ({ config: demoDb.update('raid/spam', spamSeed, (c) => ({ ...c, ...(body ?? {}) })) }));
   route('GET', `${base}/spam/samples`, () => ({
-    samples: crowd().slice(7, 11).map((p, i) => ({ id: `spam-${i}`, userId: p.id, channelId: channelByName('général').id, content: ['🎁 Free Nitro : discord-gift.ru/xyz', 'Rejoins mon serveur, 500 € à gagner !!!', 'cliquez ici bit.ly/abc pour des robux', 'Promo -90 % sur les skins, MP moi'][i], score: 0.95 - i * 0.08, status: 'PENDING', createdAt: ago(20 + i * 45) })),
+    samples: crowd().slice(7, 11).map((p, i) => ({
+      id: `spam-${i}`, userId: p.id, channelId: channelByName('général').id, score: 92 - i * 9, action: ['BAN', 'TIMEOUT', 'DELETE', 'LOG'][i], shadow: false,
+      contentPreview: ['🎁 Free Nitro : discord-gift.ru/xyz', 'Rejoins mon serveur, 500 € à gagner !!!', 'cliquez ici bit.ly/abc pour des robux', 'Promo -90 % sur les skins, MP moi'][i],
+      label: null, createdAt: ago(20 + i * 45),
+      features: { signals: { no_typing: 18, near_duplicate: 25, cross_channel_burst: i < 2 ? 30 : 0 }, distinctFamilies: 3 - (i % 2), trustMultiplier: 1 },
+    })),
   }));
   route('POST', `${base}/spam/samples/:id/decision`, () => ({ success: true }));
 
