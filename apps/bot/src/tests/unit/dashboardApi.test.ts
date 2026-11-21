@@ -6,7 +6,7 @@ import { Socket, type AddressInfo } from 'node:net';
 import { completeModuleMock } from '../helpers/moduleMock.js';
 import { resetCurrentInstance } from '../../utils/instanceContext.js';
 import jwt from 'jsonwebtoken';
-import { type Client } from 'discord.js';
+import { PermissionFlagsBits, type Client } from 'discord.js';
 
 // Setup DB Mock before importing route modules
 const mockDb = {
@@ -293,6 +293,11 @@ function createMockResponse(): MockResponse {
   return res;
 }
 
+/** Droits de l'auteur dans le salon visé, tels que `permissionsFor(membre)` les rend. */
+const noChannelPermissions = { has: () => false };
+let authorChannelPermissions: { has: (flag: bigint) => boolean } = noChannelPermissions;
+const channelSend = mock((options: Record<string, unknown>) => Promise.resolve({ id: 'sent-msg-id', ...options }));
+
 // Mock Discord Client
 const mockClient = {
   users: {
@@ -323,7 +328,9 @@ const mockClient = {
             get: mock((channelId: string) => ({
               id: channelId,
               isTextBased: () => true,
-              send: mock((options: Record<string, unknown>) => Promise.resolve({ id: 'sent-msg-id', ...options })),
+              // Comme discord.js : un identifiant ne se résout que dans le cache des membres, vide ici.
+              permissionsFor: (cible: unknown) => (typeof cible === 'string' ? null : authorChannelPermissions),
+              send: channelSend,
               messages: {
                 fetch: mock((messageId: string) => Promise.resolve({
                   id: messageId,
@@ -1274,6 +1281,36 @@ describe('Modular Routers Unit Tests', () => {
       const data = await res.json() as { ok?: boolean; messageId?: string };
       expect(data.ok).toBeTrue();
       expect(data.messageId).toBe('sent-msg-id');
+    });
+
+    test('POST embed-builder ne notifie @everyone et les rôles que si l\'auteur peut les mentionner dans le salon', async () => {
+      mockDb.guild.findUnique.mockResolvedValue({ id: '1122334455667788' });
+      mockDb.dashboardFeatureConfig.findMany.mockResolvedValue([]);
+      const post = () => createDashboardRouter(mockClient).request(
+        '/api/dashboard/guilds/1122334455667788/embed-builder',
+        {
+          method: 'POST',
+          headers: authenticatedHeaders({ 'content-type': 'application/json' }),
+          body: JSON.stringify({ channelId: '12345678', content: '@everyone <@&998877665544332211> nouvelle annonce' }),
+        },
+      );
+
+      try {
+        // Sans « Mentionner @everyone » dans ce salon : seules les mentions d'utilisateurs notifient.
+        authorChannelPermissions = { has: (flag) => flag !== PermissionFlagsBits.MentionEveryone };
+        expect((await post()).status).toBe(200);
+        expect(channelSend).toHaveBeenLastCalledWith(expect.objectContaining({
+          content: '@everyone <@&998877665544332211> nouvelle annonce',
+          allowedMentions: { parse: ['users'] },
+        }));
+
+        // Avec ce droit, le message notifie comme l'auteur l'a écrit, même absent du cache des membres.
+        authorChannelPermissions = { has: (flag) => flag === PermissionFlagsBits.MentionEveryone };
+        expect((await post()).status).toBe(200);
+        expect(channelSend).toHaveBeenLastCalledWith(expect.objectContaining({ allowedMentions: undefined }));
+      } finally {
+        authorChannelPermissions = noChannelPermissions;
+      }
     });
   });
 });

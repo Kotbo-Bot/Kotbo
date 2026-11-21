@@ -2768,9 +2768,16 @@ export function createGeneralistModulesRouter(client: Client) {
         return send(c, { error: "Vous devez fournir du texte de message ou au moins un champ d'embed." }, 400);
       }
 
+      // Hors du cache des membres, `permissionsFor(id)` rend null : on récupère l'auteur.
+      const author = await discordGuild.members.fetch(user.userId).catch(() => null);
       const messageOptions = {
         content: body.content || undefined,
-        embeds: hasEmbedData ? [embed] : undefined
+        embeds: hasEmbedData ? [embed] : undefined,
+        // Comme /say : le bot écrit à la place de l'auteur, il ne notifie donc
+        // @everyone et les rôles que si l'auteur en a lui-même le droit ici.
+        allowedMentions: author && channel.permissionsFor(author).has(PermissionFlagsBits.MentionEveryone)
+          ? undefined
+          : { parse: ['users' as const] },
       };
 
       let messageSent;
