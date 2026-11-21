@@ -314,7 +314,7 @@ export async function resolveExternalGuild(
         onlineCount: live.approximatePresenceCount ?? undefined,
         ...(hint?.tag ? { tag: hint.tag } : {}),
         ...(hint?.badge ? { badge: hint.badge } : {}),
-        source: 'cache',
+        // La source d'origine reste : une fiche résolue publiquement ne redevient pas privée.
         botPresent: true,
         botLeftAt: null,
         lastSeenAt: now,
