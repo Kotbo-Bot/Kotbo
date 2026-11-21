@@ -8,6 +8,7 @@ import { route } from '../backend';
 import { demoDb, demoId } from '../db';
 import { channelMessages, dateKey, memberSeries, memberTotals, serverSeries, voiceChannelMinutes, CHANNEL_SHARE, VOICE_SHARE } from '../activity';
 import { CATEGORIES, CHANNELS, MEMBERS, VOICE_CHANNELS, avatarOf, sessionUser } from '../fixtures';
+import { DEMO_GUILD_ID, DEMO_GUILD_NAME } from '../mode';
 import { CATEGORY_OF, heatmap } from './analytics';
 
 const DAY_MS = 86_400_000;
@@ -770,10 +771,10 @@ export function registerAnalyticsInsightsRoutes(): void {
 
   const demoTagServers = [
     {
-      guildId: '930000000000000001',
-      name: 'Kotbo Community',
+      guildId: DEMO_GUILD_ID,
+      name: DEMO_GUILD_NAME,
       iconUrl: null,
-      tag: 'KTBO',
+      tag: 'NOVA',
       badgeUrl: null,
       memberCount: 14,
       isOwnGuild: true,
@@ -809,7 +810,7 @@ export function registerAnalyticsInsightsRoutes(): void {
 
   const demoTagMembers = [
     { userId: MEMBERS[0]?.id ?? '1', name: MEMBERS[0]?.username ?? 'vantar', username: MEMBERS[0]?.username ?? 'vantar', avatarUrl: null, tag: 'DEVH', badgeUrl: null, serverId: '930000000000000011', serverName: 'DevHub Community', isOwnGuild: false, updatedAt: new Date(Date.now() - 2 * DAY_MS).toISOString() },
-    { userId: MEMBERS[1]?.id ?? '2', name: MEMBERS[1]?.username ?? 'kyzo', username: MEMBERS[1]?.username ?? 'kyzo', avatarUrl: null, tag: 'KTBO', badgeUrl: null, serverId: '930000000000000001', serverName: 'Kotbo Community', isOwnGuild: true, updatedAt: new Date(Date.now() - 4 * DAY_MS).toISOString() },
+    { userId: MEMBERS[1]?.id ?? '2', name: MEMBERS[1]?.username ?? 'kyzo', username: MEMBERS[1]?.username ?? 'kyzo', avatarUrl: null, tag: 'NOVA', badgeUrl: null, serverId: DEMO_GUILD_ID, serverName: DEMO_GUILD_NAME, isOwnGuild: true, updatedAt: new Date(Date.now() - 4 * DAY_MS).toISOString() },
     { userId: MEMBERS[2]?.id ?? '3', name: MEMBERS[2]?.username ?? 'tom', username: MEMBERS[2]?.username ?? 'tom', avatarUrl: null, tag: 'KODA', badgeUrl: null, serverId: '930000000000000012', serverName: 'Koda', isOwnGuild: false, updatedAt: new Date(Date.now() - 6 * DAY_MS).toISOString() },
   ];
 
@@ -849,10 +850,10 @@ export function registerAnalyticsInsightsRoutes(): void {
     untaggedMembers: Math.max(0, MEMBERS.length - 24),
     serverCount: demoTagServers.length,
     ownGuild: {
-      guildId: '930000000000000001',
-      name: 'Kotbo Community',
+      guildId: DEMO_GUILD_ID,
+      name: DEMO_GUILD_NAME,
       iconUrl: null,
-      tag: 'KTBO',
+      tag: 'NOVA',
       badgeUrl: null,
       count: 14,
     },
@@ -913,10 +914,25 @@ export function registerAnalyticsInsightsRoutes(): void {
         members: holders,
       },
       assets: {
-        emojis: [],
-        stickers: [],
-        totalUses: 0,
+        emojis: ['pepe_gg', 'cat_vibe', 'party_blob', 'sus', 'gigachad', 'kekw'].map((name, i) => ({ id: `em-${i}`, kind: 'emoji' as const, name, animated: i % 3 === 0, imageUrl: '', uses: 420 - i * 55 })),
+        stickers: ['Salut !', 'GG', 'Bien joué'].map((name, i) => ({ id: `st-${i}`, kind: 'sticker' as const, name, animated: false, imageUrl: '', uses: 130 - i * 30 })),
+        totalUses: 1_790,
+        usageByDay: Array.from({ length: 14 }, (_, i) => ({ date: new Date(Date.now() - (13 - i) * DAY_MS).toISOString().slice(0, 10), count: 90 + ((i * 23) % 70) })),
       },
+      profile: {
+        defaultInvite: { code: 'atelier-nova', url: 'https://discord.gg/atelier-nova', kind: 'tracked' as const },
+        discoveryUrl: null,
+        discoverable: false,
+        siteUrl: srv.isOwnGuild ? 'https://kotbo.fr/s/atelier-nova' : null,
+        features: ['COMMUNITY', 'NEWS', 'ROLE_ICONS'],
+        vanityCode: null,
+        createdAt: new Date(Date.now() - 600 * DAY_MS).toISOString(),
+        premiumTier: 2,
+        boostCount: 12,
+        locale: 'fr',
+        verificationLevel: 2,
+      },
+      activity: { messages: srv.isOwnGuild ? 48_200 : 9_400, voiceHours: srv.isOwnGuild ? 1_860 : 310, active7d: srv.memberCount ? Math.round(srv.memberCount * 0.34) : 0, shareOfGuild: srv.isOwnGuild ? null : 4.2 },
     };
   });
 

@@ -296,3 +296,20 @@ export const COMMAND_RESTRICTIONS = [
   { commandName: 'clear', enabled: true, allowedChannelIds: [], blockedChannelIds: [], allowedRoleIds: ['900000000000000203'], blockedRoleIds: [], allowedUserIds: [], blockedUserIds: [] },
   { commandName: 'excuse', enabled: false, allowedChannelIds: [], blockedChannelIds: [], allowedRoleIds: [], blockedRoleIds: [], allowedUserIds: [], blockedUserIds: [] },
 ];
+
+// ── Règlement ──────────────────────────────────────────────────────────
+
+/** Articles du règlement de la démo : ce que le sélecteur « Règles enfreintes » des sanctions propose. */
+export function regulationSeed() {
+  const rule = (n: number, emoji: string, title: string, description: string) => ({
+    id: `reg-${n}`, title, description, emoji, sortOrder: n, enabled: true, createdAt: new Date(NOW - 90 * 24 * 3_600_000).toISOString(), updatedAt: new Date(NOW - 20 * 24 * 3_600_000).toISOString(),
+  });
+  return [
+    rule(1, '🤝', 'Respect', 'Pas d’insultes, de moqueries ni de harcèlement. On discute sans s’attaquer aux personnes.'),
+    rule(2, '🚫', 'Pas de publicité', 'Toute promotion (serveur, chaîne, produit) passe d’abord par le staff, en salon comme en MP.'),
+    rule(3, '💬', 'Pas de spam', 'Messages répétés, majuscules abusives et mentions de masse sont interdits.'),
+    rule(4, '🔞', 'Contenus adaptés', 'Aucun contenu choquant, violent ou NSFW, même en blague.'),
+    rule(5, '🪪', 'Pseudos lisibles', 'Ton pseudo doit rester lisible et ne pas usurper quelqu’un d’autre.'),
+    rule(6, '⚖️', 'Décisions du staff', 'Le staff a le dernier mot. Une sanction se conteste via un ticket, jamais en public.'),
+  ];
+}

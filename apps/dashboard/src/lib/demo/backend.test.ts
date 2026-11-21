@@ -23,3 +23,11 @@ describe('forgiving', () => {
     expect(await Promise.resolve(forgiving({ ok: true }))).toMatchObject({ ok: true });
   });
 });
+
+describe('forgiving, vide traité comme une chaîne', () => {
+  test('startsWith et trim sur une propriété absente ne plantent pas', () => {
+    const res = forgiving({});
+    expect(res.url.startsWith('http')).toBe(false);
+    expect(res.name.trim()).toBe('');
+  });
+});

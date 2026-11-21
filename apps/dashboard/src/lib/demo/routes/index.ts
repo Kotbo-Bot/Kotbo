@@ -38,6 +38,8 @@ import { registerLinksRoutes } from './links';
 import { registerDoingListRoutes } from './doingLists';
 import { registerEventRoutes } from './events';
 import { registerFormRoutes } from './forms';
+import { registerDetailRoutes } from './details';
+import { registerNotificationRoutes } from './notifications';
 import { registerEngagementRoutes } from './engagement';
 import { registerContentRoutes } from './content';
 import { registerWorkflowRoutes } from './workflows';
@@ -68,6 +70,8 @@ export function registerDemoRoutes(): void {
   registerDoingListRoutes();
   registerEventRoutes();
   registerFormRoutes();
+  registerDetailRoutes();
+  registerNotificationRoutes();
   registerEngagementRoutes();
   registerContentRoutes();
   registerWorkflowRoutes();

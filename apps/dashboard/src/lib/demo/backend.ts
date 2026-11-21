@@ -132,6 +132,9 @@ export function forgiving(value: unknown): any {
         if (key === Symbol.toPrimitive) return (hint: string) => (hint === 'number' ? 0 : '');
         if (typeof key === 'symbol' || key in target) return Reflect.get(target, key, receiver);
         if (key === 'toJSON' || key === 'then') return undefined;
+        // Une page peut traiter ce vide comme une chaîne absente : `.startsWith`, `.trim`…
+        const asString = (String.prototype as unknown as Record<string, unknown>)[key];
+        if (typeof asString === 'function') return (...args: unknown[]) => (asString as (...a: unknown[]) => unknown).apply('', args);
         return forgiving([]);
       },
     });

@@ -14,6 +14,7 @@ import {
   CATEGORIES,
   COMMAND_CATALOG,
   COMMAND_RESTRICTIONS,
+  regulationSeed,
   CHANNELS,
   ROLES,
   VOICE_CHANNELS,
@@ -53,7 +54,7 @@ export function registerSessionRoutes(): void {
   }));
 
   /** L'état complet du serveur, tel que le rend `buildGuildState`. */
-  route('GET', '/api/dashboard/guilds/:guildId', () => {
+  const guildState = () => {
     const states = moduleStates();
     const featureKeys = [...MODULE_REGISTRY.map((m) => m.key), 'centralized_config', 'commands', 'settings'];
 
@@ -66,6 +67,7 @@ export function registerSessionRoutes(): void {
       logChannelId: channelByName('logs').id,
       logIgnoredChannelIds: [],
       regulationChannelId: channelByName('règlement').id,
+      regulationMessageId: '900000000000009301',
       publicChannelId: channelByName('général').id,
       newsChannelId: channelByName('annonces').id,
       baseStaffRoleId: role('Helper').id,
@@ -97,9 +99,11 @@ export function registerSessionRoutes(): void {
       sanctions: demoDb.get(SANCTIONS, sanctionsSeed),
       sanctionReports: [],
       sanctionTables: [],
-      regulationRules: [],
+      regulationRules: demoDb.get('regulation/rules', regulationSeed),
       messageTemplate: '',
       member: sessionMember(),
     };
-  });
+  };
+  route('GET', '/api/dashboard/guilds/:guildId', guildState);
+  route('GET', '/api/dashboard/guilds/:guildId/state', guildState);
 }
