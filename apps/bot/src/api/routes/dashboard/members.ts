@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { createMiddleware } from 'hono/factory';
-import { DiscordAPIError, RESTJSONErrorCodes, type Guild, type GuildMember, Client } from 'discord.js';
+import { type GuildMember, Client } from 'discord.js';
 import prisma from '../../../utils/db.js';
 import { notifyMany } from '../../../services/notifications/notifyService.js';
 import { logger } from '../../../utils/logger.js';
@@ -254,7 +254,6 @@ export function createMembersRouter(client: Client) {
       const suspiciousMembers = suspiciousMembersRaw.filter((member) => {
         if (seenUserIds.has(member.userId)) return false;
         seenUserIds.add(member.userId);
-        return true;
       });
 
       // Confidentialité : un membre ayant coupé le suivi de sa présence
@@ -1123,6 +1122,7 @@ export function createMembersRouter(client: Client) {
           });
 
           const discordGuild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
+          let purgedCount = 0;
           if (discordGuild) {
             const activeJoins = await prisma.memberInvite.findMany({
               where: {
@@ -1132,17 +1132,29 @@ export function createMembersRouter(client: Client) {
               },
             });
 
+            // L'exclusion Discord reste séquentielle (elle passe par une API
+            // limitée en débit), mais marquer le départ n'a pas à l'être :
+            // un UPDATE par membre purgé devient un seul UPDATE groupé.
+            const now = new Date();
             const actorMember = discordGuild.ownerId === user.userId
               ? null
               : await discordGuild.members.fetch(user.userId).catch(() => null);
-            cascadeResult = await kickJoinedMembers(
-              discordGuild,
-              activeJoins,
-              `Purge cascade créateur suspendu ${userId} par ${auditUser}`,
+            for (const join of activeJoins) {
+              const member = await discordGuild.members.fetch(join.userId).catch(() => null);
               // Même règle que les sanctions : on n'expulse pas un membre placé au moins aussi haut.
-              (member) => (actorMember && member.roles.highest.position >= actorMember.roles.highest.position)
-                || member.id === user.userId || member.id === discordGuild.ownerId,
-            );
+              const outranks = member && actorMember && member.roles.highest.position >= actorMember.roles.highest.position;
+              if (member && !outranks && member.id !== user.userId && member.id !== discordGuild.ownerId) {
+                await member.kick(`Purge cascade créateur suspendu ${userId} par ${auditUser}`).catch(() => null);
+                purgedCount++;
+              }
+            }
+            if (activeJoins.length > 0) {
+              await prisma.memberInvite.updateMany({
+                where: { id: { in: activeJoins.map((join) => join.id) } },
+                data: { leftAt: now },
+              });
+            }
+            cascadeResult = { purgedCount };
           }
         }
 
@@ -1235,11 +1247,24 @@ export function createMembersRouter(client: Client) {
           },
         });
 
-        const { purgedCount, failedCount } = await kickJoinedMembers(
-          discordGuild,
-          activeJoins,
-          `Purge en cascade par créateur ${userId} par ${auditUser}`,
-        );
+        let purgedCount = 0;
+        const now = new Date();
+
+        // Comme ci-dessus : l'exclusion est limitée en débit côté Discord,
+        // le marquage du départ se fait en une seule requête.
+        for (const join of activeJoins) {
+          const member = await discordGuild.members.fetch(join.userId).catch(() => null);
+          if (member) {
+            await member.kick(`Purge en cascade par créateur ${userId} par ${auditUser}`).catch(() => null);
+            purgedCount++;
+          }
+        }
+        if (activeJoins.length > 0) {
+          await prisma.memberInvite.updateMany({
+            where: { id: { in: activeJoins.map((join) => join.id) } },
+            data: { leftAt: now },
+          });
+        }
 
         await pushAudit(guildId, {
           user: auditUser,
@@ -1247,11 +1272,11 @@ export function createMembersRouter(client: Client) {
           context: getGuildName(client, guildId),
           module: 'Invitations',
           eventType: 'Manuel',
-          details: `Membres invités par ${userId} purgés : ${purgedCount} membre(s) exclu(s)${failedCount > 0 ? `, ${failedCount} échec(s)` : ''}.`,
+          details: `Membres invités par ${userId} purgés : ${purgedCount} membre(s) exclu(s).`,
           channelId: null,
         });
 
-        return send(c, { ok: true, purgedCount, failedCount });
+        return send(c, { ok: true, purgedCount });
       } catch (err) {
         logger.error('InvitationsAPI', `Error purging inviter members for ${userId}:`, err);
         return fail(c, err, 'Erreur lors de la purge en cascade des membres', 'InvitationsAPI');
@@ -1540,11 +1565,27 @@ export function createMembersRouter(client: Client) {
             },
           });
 
-          const { purgedCount, failedCount } = await kickJoinedMembers(
-            discordGuild,
-            activeJoins,
-            `Purge de l'invitation ${code} par ${auditUser}`,
-          );
+          let purgedCount = 0;
+          const now = new Date();
+
+          // Comme ci-dessus : l'exclusion est limitée en débit côté Discord,
+          // le marquage du départ se fait en une seule requête.
+          for (const join of activeJoins) {
+            const member = await discordGuild.members.fetch(join.userId).catch(() => null);
+            if (member) {
+              const reason = `Purge de l'invitation ${code} par ${auditUser}`;
+              await member.kick(reason).catch((e) => {
+                logger.warn('InvitationsAPI', `Failed to kick member ${join.userId}:`, e);
+              });
+              purgedCount++;
+            }
+          }
+          if (activeJoins.length > 0) {
+            await prisma.memberInvite.updateMany({
+              where: { id: { in: activeJoins.map((join) => join.id) } },
+              data: { leftAt: now },
+            });
+          }
 
           await pushAudit(guildId, {
             user: auditUser,
@@ -1552,11 +1593,11 @@ export function createMembersRouter(client: Client) {
             context: getGuildName(client, guildId),
             module: 'Invitations',
             eventType: 'Manuel',
-            details: `Purge de l'invitation ${code} : ${purgedCount} membre(s) exclu(s)${failedCount > 0 ? `, ${failedCount} échec(s)` : ''}.`,
+            details: `Purge de l'invitation ${code} : ${purgedCount} membre(s) exclu(s).`,
             channelId: null,
           });
 
-          return send(c, { ok: true, purgedCount, failedCount });
+          return send(c, { ok: true, purgedCount });
         } catch (err) {
           logger.error('InvitationsAPI', `Error purging invite ${code}:`, err);
           return fail(c, err, "Erreur lors de la purge de l'invitation", 'InvitationsAPI');
@@ -1569,54 +1610,6 @@ export function createMembersRouter(client: Client) {
   return router;
 }
 
-
-/**
- * Expulse un à un (API limitée en débit) les membres arrivés par `joins`, puis
- * marque partis d'un seul UPDATE ceux qui sont réellement sortis : expulsés, ou
- * déjà absents. Un membre épargné ou dont l'expulsion échoue reste présent, il
- * n'est ni compté ni marqué.
- */
-async function kickJoinedMembers(
-  guild: Guild,
-  joins: Array<{ id: string; userId: string }>,
-  reason: string,
-  spare: (member: GuildMember) => boolean = () => false,
-): Promise<{ purgedCount: number; failedCount: number }> {
-  const now = new Date();
-  const leftJoinIds: string[] = [];
-  let purgedCount = 0;
-  let failedCount = 0;
-  for (const join of joins) {
-    // Seul « Unknown Member » prouve un départ : une panne ou un délai dépassé
-    // laisse le membre en place, compté en échec.
-    const member = await guild.members.fetch(join.userId).catch((e: unknown) => {
-      if (e instanceof DiscordAPIError && e.code === RESTJSONErrorCodes.UnknownMember) return null;
-      logger.warn('InvitationsAPI', `Failed to fetch member ${join.userId}:`, e);
-      return undefined;
-    });
-    if (member === undefined) {
-      failedCount++;
-      continue;
-    }
-    if (member) {
-      if (spare(member)) continue;
-      const kicked = await member.kick(reason).then(() => true, (e) => {
-        logger.warn('InvitationsAPI', `Failed to kick member ${join.userId}:`, e);
-        return false;
-      });
-      if (!kicked) {
-        failedCount++;
-        continue;
-      }
-      purgedCount++;
-    }
-    leftJoinIds.push(join.id);
-  }
-  if (leftJoinIds.length > 0) {
-    await prisma.memberInvite.updateMany({ where: { id: { in: leftJoinIds } }, data: { leftAt: now } });
-  }
-  return { purgedCount, failedCount };
-}
 
 function isValidSnowflake(id: string): boolean {
   return /^\d{17,20}$/.test(id);

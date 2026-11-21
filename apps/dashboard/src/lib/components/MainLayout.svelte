@@ -26,6 +26,7 @@
   import { serverSwitcherStore } from '../stores/serverSwitcher.svelte';
   import { searchStore } from '../stores/search.svelte';
   import { unsavedChanges } from '../stores/unsavedChanges.svelte';
+  import { confirmDialog } from '../stores/confirmDialog.svelte';
   import { isMobile, isPhone } from '../stores/media.svelte';
   import { navigationStore } from '../stores/navigation.svelte';
   import { mobileNav } from '../stores/mobileNav.svelte';
@@ -159,6 +160,24 @@
     } else if ((e.ctrlKey || e.metaKey) && isY) {
       e.preventDefault();
       historyStore.redo();
+    }
+  }
+
+  // Expose a navigation guard used by Sidebar & other nav elements
+  export async function guardedNavigate(href: string) {
+    if (!unsavedChanges.isDirty) {
+      router.goto(href);
+      return;
+    }
+    const confirmed = await confirmDialog.ask({
+      title: m.banner_unsaved_title(),
+      description: m.banner_unsaved_desc({ page: unsavedChanges.pageLabel }),
+      confirmLabel: m.banner_unsaved_leave(),
+      variant: 'warning',
+    });
+    if (confirmed) {
+      unsavedChanges.clear();
+      router.goto(href);
     }
   }
 </script>

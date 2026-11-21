@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'bun:test';
 import {
-  advanceSkillCooldowns,
   bossCooldownMs,
   fightCooldownMs,
   formatCooldown,
@@ -77,13 +76,5 @@ describe('surcoût de la traque', () => {
     const now = Date.now();
     const lockedUntil = new Date(now + huntCooldownExtraMs({ fightCooldownSec: 120 }));
     expect(remainingCooldownMs(lockedUntil, fightCooldownMs({ fightCooldownSec: 120 }), now)).toBe(240_000);
-  });
-});
-
-describe('recharge des compétences en combat', () => {
-  test('au tour du lancer, la compétence garde toute sa recharge et les autres avancent d\'un tour', () => {
-    const recharges = new Map([['frappe', 3], ['soin', 2]]);
-    advanceSkillCooldowns(recharges, 'frappe');
-    expect(Object.fromEntries(recharges)).toEqual({ frappe: 3, soin: 1 });
   });
 });

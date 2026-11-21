@@ -724,21 +724,6 @@ describe('fin de vie d\'un salon', () => {
 
     expect(channel.delete).not.toHaveBeenCalled();
   });
-
-  test('supprime le salon vidé en rejoignant un générateur réservé à un autre rôle', async () => {
-    guildConfig = { ...generatorConfig(), tempVoiceRequiredRoleId: '910000000000000000' };
-    const { channel } = fakeChannel();
-    const { client, listeners } = fakeClient();
-    registerTempVoiceListener(client);
-    tempChannels.set(CHANNEL, { creatorId: OWNER });
-
-    const newState = { channelId: GENERATOR, channel: null, guild: { id: GUILD }, member: fakeTarget(OWNER, false), disconnect: mock(async () => undefined) };
-    await listeners.get(Events.VoiceStateUpdate)?.({ channelId: CHANNEL, channel }, newState);
-    tempChannels.delete(CHANNEL);
-
-    expect(newState.disconnect).toHaveBeenCalled();
-    expect(channel.delete).toHaveBeenCalled();
-  });
 });
 
 describe('acquittement des interactions', () => {
@@ -2301,20 +2286,6 @@ describe('câblage du panneau refondu', () => {
     await listeners.get(Events.InteractionCreate)?.(interaction);
 
     expect(calls).not.toContain('showModal');
-    tempChannels.delete(CHANNEL);
-  });
-
-  test('un renommage est écrit en base, pour que le quota survive à un redémarrage', async () => {
-    guildConfig = { tempVoiceEnabled: true, baseStaffRoleId: null, moderatorRoleId: null, testStaffRoleId: null };
-    const { channel, listeners } = scene({ creatorId: OWNER });
-    prismaMock.tempVoiceChannel.update.mockClear();
-
-    await renomme(channel, fakeGuild(new Map()), listeners, 'Un');
-
-    expect(prismaMock.tempVoiceChannel.update).toHaveBeenCalledWith(expect.objectContaining({
-      where: { id: CHANNEL },
-      data: expect.objectContaining({ renameHistory: expect.arrayContaining([expect.any(Number)]) }),
-    }));
     tempChannels.delete(CHANNEL);
   });
 

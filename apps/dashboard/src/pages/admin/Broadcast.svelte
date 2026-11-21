@@ -723,9 +723,9 @@
         sourceGuildId = '';
         sourceChannelId = '';
         subscribeSummary = null;
-        toast.success(m.abc_source_removed());
+        toast.success("Salon d'annonces source retiré.");
       } else {
-        toast.success(m.abc_source_saved());
+        toast.success("Salon d'annonces source enregistré.");
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : m.abc_config_error());
@@ -747,7 +747,7 @@
       subscribeSummary = summary;
       await reloadAll();
       toast.success(
-        m.abc_subscribe_all_done({ subscribed: summary.subscribed, already: summary.alreadySubscribed, skipped: summary.skipped, failed: summary.failed }),
+        `Abonnement terminé : ${summary.subscribed} abonné(s), ${summary.alreadySubscribed} déjà abonné(s), ${summary.skipped} ignoré(s), ${summary.failed} échec(s).`,
       );
     } catch (err) {
       toast.error(err instanceof Error ? err.message : m.abc_config_error());
@@ -761,14 +761,14 @@
     try {
       const res = await subscribeBroadcastGuild(guild.id);
       if (res.status === 'SUBSCRIBED') {
-        toast.success(m.abc_subscribed({ guild: guild.name, channel: res.channelName ?? res.channelId }));
+        toast.success(`${guild.name} abonné dans #${res.channelName ?? res.channelId}.`);
         await reloadAll();
       } else if (res.status === 'ALREADY_SUBSCRIBED') {
-        toast.info(m.abc_already_subscribed({ guild: guild.name, channel: res.channelName ?? res.channelId }));
+        toast.info(`${guild.name} est déjà abonné (#${res.channelName ?? res.channelId}).`);
       } else if (res.status === 'SKIPPED') {
-        toast.warning(m.abc_subscribe_skipped({ guild: guild.name, reason: res.reason ?? m.abc_no_compatible_channel() }));
+        toast.warning(`${guild.name} ignoré : ${res.reason ?? 'aucun salon compatible'}`);
       } else {
-        toast.error(m.abc_subscribe_failed({ guild: guild.name, reason: res.reason ?? m.abc_subscribe_failed_default() }));
+        toast.error(`${guild.name} : ${res.reason ?? "échec de l'abonnement"}`);
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : m.abc_config_error());
@@ -791,9 +791,9 @@
         }
         : g);
       if (res.subscription?.status === 'SUBSCRIBED') {
-        toast.success(m.abc_channel_set_subscribed({ label: m.abc_channel_set({ channel: channel?.name ?? '', guild: guild.name }) }));
+        toast.success(`${m.abc_channel_set({ channel: channel?.name ?? '', guild: guild.name })} (abonné au salon source)`);
       } else if (res.subscription?.status === 'FAILED') {
-        toast.warning(m.abc_channel_set_not_subscribed({ label: m.abc_channel_set({ channel: channel?.name ?? '', guild: guild.name }), reason: res.subscription.reason ?? '' }));
+        toast.warning(`${m.abc_channel_set({ channel: channel?.name ?? '', guild: guild.name })} — abonnement impossible : ${res.subscription.reason}`);
       } else {
         toast.success(channelId ? m.abc_channel_set({ channel: channel?.name ?? '', guild: guild.name }) : m.abc_channel_removed({ guild: guild.name }));
       }

@@ -1575,9 +1575,7 @@ export async function handleTicketButton(client: Client, customId: string, inter
   if (!action || !ticketId) return;
 
   const ticket = await prisma.ticket.findUnique({ where: { id: ticketId } });
-  // Un ticket d'un autre serveur n'est pas pilotable d'ici : les droits qui suivent
-  // sont ceux de ce serveur-ci, pas ceux du serveur propriétaire du ticket.
-  if (!ticket || ticket.guildId !== guildId) {
+  if (!ticket) {
     await interaction.reply({ content: '❌ Ticket introuvable en base de données.', flags: [MessageFlags.Ephemeral] });
     return;
   }

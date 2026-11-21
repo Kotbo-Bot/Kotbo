@@ -479,7 +479,6 @@ export class FauxDiscord {
     if ((r = route.match(/^\/guilds\/(\d+)\/channels$/)) && methode === 'POST') {
       const id = nouvelId();
       const b = o.body ?? {};
-      if (b.parent_id && !this.salons.has(b.parent_id)) throw new RefusDiscord(50035, 'parent_id inconnu');
       const salon = this.salonBrut(id, b.name, (b.permission_overwrites ?? []).map((s: Brut) => ({ id: s.id, type: s.type, allow: String(s.allow ?? '0'), deny: String(s.deny ?? '0') })));
       salon.user_limit = b.user_limit ?? 0;
       salon.parent_id = b.parent_id ?? null;

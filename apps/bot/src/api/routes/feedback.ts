@@ -86,12 +86,12 @@ export function createReportFeedbackRouter(client: Client) {
       const embed = new EmbedBuilder()
         .setTitle(`💬 Nouveau retour : ${typeLabels[payload.type] || payload.type}`)
         .setColor(typeColors[payload.type] || 0x8b5cf6)
-        .setDescription(`📝 **Message / Description**\n${messageStr}`)
         .setTimestamp()
         .addFields(
           { name: '👤 Utilisateur', value: userInfo },
           { name: '🌐 Page / URL', value: `\`${sanitizeMarkdown(urlStr)}\`` },
           { name: '🏰 Serveur sélectionné', value: `\`${sanitizeMarkdown(guildIdStr)}\`` },
+          { name: '📝 Message / Description', value: messageStr },
         );
 
       let sentCount = 0;

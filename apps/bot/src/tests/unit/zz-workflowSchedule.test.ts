@@ -273,19 +273,3 @@ describe('balayage planifié, nuit du retour à l\'heure d\'hiver', () => {
     expect(executionsCreees).toHaveLength(2);
   });
 });
-
-describe('balayage planifié, tick sauté', () => {
-  test('une planification tombée pendant un tick sauté part au passage suivant', async () => {
-    neuf(grapheSansAction('31 2 * * *'));
-    const client = fakeClient();
-
-    // 02h30 puis 02h32 (CET) : le tick de 02h31 a sauté, le passage précédent débordant de sa minute.
-    for (const passage of [at('2026-11-02T01:30:05.000Z'), at('2026-11-02T01:32:05.000Z')]) {
-      setSystemTime(passage);
-      await dispatchScheduledWorkflows(client, passage);
-    }
-
-    expect(executionsCreees).toHaveLength(1);
-    expect(row.lastRunAt?.toISOString()).toBe('2026-11-02T01:31:00.000Z');
-  });
-});

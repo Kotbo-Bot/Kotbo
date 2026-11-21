@@ -3,7 +3,6 @@ import { type APIEmbed, Guild, Role, ButtonStyle, ActionRowBuilder, ButtonBuilde
 import { BackupData, RoleData, ChannelData, MemberData, EmojiData, StickerData , type MessageData } from './backupService.js';
 import { fetchExternal } from '../../utils/http.js';
 import { restoreKotboConfig } from './kotboConfigBackup.js';
-import { UserFacingError } from '../../utils/userFacingError.js';
 
 export interface RestoreOptions {
   fullRestore: boolean;
@@ -23,38 +22,10 @@ export interface ConflictResolution {
   applyToAll: boolean;
 }
 
-// Une restauration à la fois par serveur : deux en parallèle recréent rôles et salons en double.
-const restoring = new Set<string>();
-
-export class RestoreInProgressError extends UserFacingError {
-  constructor() {
-    super('Une restauration est déjà en cours sur ce serveur');
-  }
-}
-
-export function isRestoringBackup(guildId: string): boolean {
-  return restoring.has(guildId);
-}
-
 /**
  * Restaure un backup avec gestion des conflits
  */
 export async function restoreBackup(
-  guild: Guild,
-  backupData: BackupData,
-  options: RestoreOptions,
-  interaction?: ChatInputCommandInteraction,
-): Promise<void> {
-  if (restoring.has(guild.id)) throw new RestoreInProgressError();
-  restoring.add(guild.id);
-  try {
-    await runRestore(guild, backupData, options, interaction);
-  } finally {
-    restoring.delete(guild.id);
-  }
-}
-
-async function runRestore(
   guild: Guild,
   backupData: BackupData,
   options: RestoreOptions,

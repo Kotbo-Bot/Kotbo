@@ -3096,12 +3096,10 @@ export async function handleAdminRoutes(
   if (parts[2] === 'instances' && parts.length === 3 && method === 'GET') {
     try {
       const ONLINE_WINDOW_MS = 20 * 60 * 1000; // cadence de ping (15min) + marge
-      const [instances, activeBans, authorizations] = await Promise.all([
+      const [instances, activeBans] = await Promise.all([
         prisma.botInstanceStats.findMany({ orderBy: { lastPingAt: 'desc' } }),
         prisma.bannedInstance.findMany({ where: { unbannedAt: null } }),
-        prisma.authorizedInstance.findMany({ where: { revokedAt: null } }),
       ]);
-      const authorizedIds = new Set(authorizations.map(a => a.botClientId));
 
       const byClientId = new Map(activeBans.filter(b => b.botClientId).map(b => [b.botClientId as string, b]));
       const byFingerprint = new Map(activeBans.filter(b => b.machineFingerprint).map(b => [b.machineFingerprint as string, b]));
@@ -3114,7 +3112,6 @@ export async function handleAdminRoutes(
           status: (Date.now() - inst.lastPingAt.getTime() < ONLINE_WINDOW_MS ? 'online' : 'stale') as 'online' | 'stale',
           banned: !!ban,
           ban: ban ? { reason: ban.reason, mode: ban.mode, bannedBy: ban.bannedBy, createdAt: ban.createdAt } : null,
-          authorized: authorizedIds.has(inst.botClientId),
         };
       });
 
@@ -3223,61 +3220,6 @@ export async function handleAdminRoutes(
     } catch (err) {
       logger.error('AdminAPI', 'POST instances/:id/unban error:', err);
       return fail(c, err, "Erreur lors du débannissement de l'instance.", 'AdminAPI');
-    }
-
-  }
-
-  // POST /api/admin/instances/:botClientId/authorize - autorise une instance externe
-  // (liste blanche : voir instanceLicense.ts). L'instance doit avoir déjà pingué.
-  if (parts.length === 5 && parts[2] === 'instances' && parts[4] === 'authorize' && method === 'POST') {
-    const botClientId = parts[3];
-    try {
-      const instance = await prisma.botInstanceStats.findUnique({ where: { botClientId } });
-      if (!instance) {
-        return reply(c, 404, { error: "Instance introuvable : elle doit avoir envoyé au moins un ping." });
-      }
-
-      await prisma.authorizedInstance.upsert({
-        where: { botClientId },
-        create: { botClientId, label: instance.botName, authorizedBy: user.userId },
-        update: { revokedAt: null, revokedBy: null, authorizedBy: user.userId },
-      });
-
-      await audit({
-        action: 'instance.authorize',
-        targetType: 'botInstance',
-        targetId: botClientId,
-        summary: `Instance ${instance.botName} (${botClientId}) autorisée`,
-      });
-
-      return reply(c, 200, { ok: true });
-    } catch (err) {
-      logger.error('AdminAPI', 'POST instances/:id/authorize error:', err);
-      return fail(c, err, "Erreur lors de l'autorisation de l'instance.", 'AdminAPI');
-    }
-
-  }
-
-  // POST /api/admin/instances/:botClientId/revoke - retire l'autorisation
-  if (parts.length === 5 && parts[2] === 'instances' && parts[4] === 'revoke' && method === 'POST') {
-    const botClientId = parts[3];
-    try {
-      const { count } = await prisma.authorizedInstance.updateMany({
-        where: { botClientId, revokedAt: null },
-        data: { revokedAt: new Date(), revokedBy: user.userId },
-      });
-
-      await audit({
-        action: 'instance.revoke',
-        targetType: 'botInstance',
-        targetId: botClientId,
-        summary: `Autorisation de l'instance ${botClientId} révoquée (${count} entrée(s))`,
-      });
-
-      return reply(c, 200, { ok: true });
-    } catch (err) {
-      logger.error('AdminAPI', 'POST instances/:id/revoke error:', err);
-      return fail(c, err, "Erreur lors de la révocation de l'instance.", 'AdminAPI');
     }
 
   }

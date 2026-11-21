@@ -17,7 +17,6 @@ import {
 import { SanctionType } from '@prisma/client';
 import prisma from '../../../utils/db.js';
 import { logger } from '../../../utils/logger.js';
-import { isAutoGrantableRole } from '../../../utils/adminLockPermissions.js';
 import { isModuleEnabled } from '../../core/moduleGate.js';
 import { memberProfileIdentity } from '../../moderation/memberIdentityService.js';
 import type { WorkflowEffects } from './engine.js';
@@ -484,9 +483,6 @@ export function createWorkflowEffects(guild: Guild, workflowId?: string): Workfl
         case 'RemoveRole': {
           const member = await resolveMember(guild, inputs.member);
           const role = await resolveManageableRole(guild, inputs.role, 'Rôle');
-          if (type === 'AddRole' && !isAutoGrantableRole(role)) {
-            throw new WorkflowActionError('Rôle', `${role.name} donne la permission Administrateur et ne s'attribue pas par une automatisation`);
-          }
 
           // Annoncé avant d'agir : l'événement que Discord renverra est le
           // nôtre, à dépêcher dans la cascade en cours (cf. roleEcho.ts). Pas
@@ -679,10 +675,6 @@ export function createWorkflowEffects(guild: Guild, workflowId?: string): Workfl
           // Une prolongation ne raccourcit jamais une échéance plus lointaine.
           const requested = new Date(Date.now() + minutes * 60_000);
           const expiresAt = existing && existing.expiresAt > requested ? existing.expiresAt : requested;
-
-          if (!isAutoGrantableRole(role)) {
-            throw new WorkflowActionError('Rôle temporaire', `${role.name} donne la permission Administrateur et ne s'attribue pas par une automatisation`);
-          }
 
           // L'échéance est écrite avant le rôle : dans l'ordre inverse, une panne
           // de base entre les deux laisserait un rôle que personne ne retirerait.

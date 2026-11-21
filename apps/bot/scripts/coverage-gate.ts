@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
 
+// TODO: augmenter progressivement ces seuils avec l'ajout de tests.
 const minLines = Number(process.env.KOTBO_COVERAGE_LINES ?? '30');
 const minFuncs = Number(process.env.KOTBO_COVERAGE_FUNCS ?? '32');
 

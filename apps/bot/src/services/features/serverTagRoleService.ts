@@ -23,7 +23,6 @@ import type { WelcomeConfig } from '@prisma/client';
 import prisma from '../../utils/db.js';
 import { cache } from '../../utils/cache.js';
 import { logger } from '../../utils/logger.js';
-import { isAutoGrantableRole } from '../../utils/adminLockPermissions.js';
 import { memberDisplaysGuildTag } from '../moderation/tagRoleService.js';
 import { hasOptedOutOfPresenceTracking } from '../core/presencePrivacyService.js';
 
@@ -185,7 +184,6 @@ export async function syncMemberAutoRoles(
 
     const hasRole = member.roles.cache.has(roleId);
     if (shouldHave === hasRole) continue;
-    if (shouldHave && !isAutoGrantableRole(role)) continue;
 
     try {
       if (shouldHave) {

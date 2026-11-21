@@ -9,7 +9,6 @@
  * RP, donc jamais pour un membre inactif - devient une action explicite.
  */
 
-import type { Prisma } from '@prisma/client';
 import { Client, PermissionFlagsBits, type Guild as DiscordGuild } from 'discord.js';
 import { rankedTierIndex, type RankedLadder } from '@kotbo/shared';
 import prisma, { prismaRead } from '../../../utils/db.js';
@@ -252,17 +251,13 @@ export async function deleteTierRoles(
  * membre inactif garderait une clé de palier absente de l'échelle, et son profil
  * afficherait un palier qui n'existe plus.
  */
-export async function resyncRankedTiers(
-  guildId: string,
-  ladder: RankedLadder,
-  db: Prisma.TransactionClient = prisma,
-): Promise<number> {
+export async function resyncRankedTiers(guildId: string, ladder: RankedLadder): Promise<number> {
   let changed = 0;
 
   for (let index = 0; index < ladder.length; index++) {
     const tier = ladder[index];
     const next = ladder[index + 1];
-    const result = await db.rankedMember.updateMany({
+    const result = await prisma.rankedMember.updateMany({
       where: {
         guildId,
         // Le premier palier ramasse aussi un RP négatif, qu'aucun chemin ne

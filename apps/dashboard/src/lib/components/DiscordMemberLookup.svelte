@@ -114,8 +114,7 @@
     }
 
     abortController?.abort();
-    const controller = new AbortController();
-    abortController = controller;
+    abortController = new AbortController();
     isLoading = true;
     error = '';
 
@@ -127,7 +126,7 @@
       });
       const response = await dashboardFetch(`/staff/discord-members?${searchParams.toString()}`, { guildId,
         
-        signal: controller.signal
+        signal: abortController.signal
       });
 
       if (!response.ok) {
@@ -138,9 +137,7 @@
       suggestions = data.members || [];
       syncExactMatch(trimmed);
     } catch (err) {
-      // Requete remplacee ou composant demonte : on se fie a son signal, la
-      // couche API enveloppant l'erreur.
-      if (controller.signal.aborted) {
+      if (err instanceof DOMException && err.name === 'AbortError') {
         return;
       }
       console.error('Erreur chargement suggestions membres:', err);

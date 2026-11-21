@@ -4,8 +4,7 @@ import type { Client } from 'discord.js';
 import { Prisma } from '@prisma/client';
 import prisma from '../../../utils/db.js';
 import { logger } from '../../../utils/logger.js';
-import { createBackup, type BackupData } from '../../../services/system/backupService.js';
-import { isRestoringBackup, restoreBackup } from '../../../services/system/restoreService.js';
+import { createBackup } from '../../../services/system/backupService.js';
 import { parseBackupImport } from '../../../services/system/backupImportValidation.js';
 import { fail, guildRoute, readBody, send } from '../../hono/dashboard/kit.js';
 import { assertFreeQuota } from '../../../services/system/freeQuota.js';
@@ -125,69 +124,6 @@ export function createBackupsRouter(client: Client) {
     } catch (error) {
       logger.error('BackupAPI', 'Error deleting backup:', error);
       return fail(c, error, 'Erreur lors de la suppression de la sauvegarde', 'BackupAPI');
-    }
-  });
-
-  router.post(`${base}/backups/:backupId/restore`, ...gate, async (c) => {
-    const guildId = c.req.param('guildId');
-    const user = c.var.dashboardUser;
-    try {
-      // Présence garantie par la garde du routeur.
-      const guild = client.guilds.cache.get(guildId)!;
-      // Le bot recrée rôles, permissions et attributions hors Admin Lock, et Gérer le
-      // serveur suffit à importer un fichier forgé : Administrateur exigé, comme /backup.
-      const member = await guild.members.fetch(user.userId).catch(() => null);
-      if (!member?.permissions.has('Administrator')) {
-        return send(c, { error: 'La restauration demande la permission Administrateur' }, 403);
-      }
-
-      const backupId = c.req.param('backupId');
-      const backup = await prisma.serverBackup.findUnique({
-        where: { id: backupId },
-      });
-
-      if (!backup) {
-        return send(c, { error: 'Sauvegarde non trouvée' }, 404);
-      }
-
-      if (backup.guildId !== guildId) {
-        return send(c, { error: "Cette sauvegarde n'appartient pas à ce serveur" }, 403);
-      }
-
-      if (isRestoringBackup(guildId)) {
-        return send(c, { error: 'Une restauration est déjà en cours sur ce serveur' }, 409);
-      }
-
-      // Écrasement confirmé dans le dashboard, sans interaction Discord pour trancher
-      // au cas par cas : 'replace'. includeKotbo est sûr, la sauvegarde appartient à
-      // ce serveur et un import n'en porte jamais. La restauration dure plusieurs
-      // minutes : elle tourne en arrière-plan, la requête n'attend que son lancement.
-      void restoreBackup(guild, backup.data as unknown as BackupData, {
-        fullRestore: true,
-        includeRoles: backup.includeRoles,
-        includeChannels: backup.includeChannels,
-        includeMembers: backup.includeMembers,
-        includeEmojis: backup.includeEmojis,
-        includeStickers: backup.includeStickers,
-        includeMessages: backup.includeMessages,
-        includeKotbo: true,
-        conflictResolution: 'replace',
-      })
-        .then(() => pushAudit(guildId, {
-          channelId: null,
-          user: user.username || `User${user.userId}`,
-          action: 'Restauration sauvegarde',
-          context: backup.name,
-          module: 'Sauvegardes',
-          eventType: 'Settings',
-          details: `Nom: ${backup.name} | Créé par: ${backup.createdByUsername} | Date création: ${backup.createdAt.toISOString()}`,
-        }))
-        .catch((error) => logger.error('BackupAPI', `Restauration de ${backup.id} échouée :`, error));
-
-      return send(c, { started: true }, 202);
-    } catch (error) {
-      logger.error('BackupAPI', 'Error restoring backup:', error);
-      return fail(c, error, 'Erreur lors de la restauration de la sauvegarde', 'BackupAPI');
     }
   });
 

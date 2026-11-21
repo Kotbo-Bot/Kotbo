@@ -805,17 +805,6 @@ export async function registerCrons(client: Client): Promise<void> {
   // Hors file d'attente, volontairement : un job en file n'est traité que par
   // un seul processus par minute, qui ne voit que les serveurs de son shard.
   // Chaque processus balaie ici les siens.
-  // Rattrapage ponctuel : à lancer avec RESCAN_WORKFLOW_RIGHTS=1 pour désactiver
-  // les workflows enregistrés avant le contrôle des droits de leur auteur.
-  if (process.env.RESCAN_WORKFLOW_RIGHTS === '1') {
-    setTimeout(() => {
-      void runLocalSweep('workflow-rights-rescan', async () => {
-        const { rescanWorkflowActorRights } = await import('../services/features/workflow/workflowActorRescan.js');
-        await rescanWorkflowActorRights(client);
-      });
-    }, 30_000);
-  }
-
   cron.schedule('* * * * *', async () => {
     await runLocalSweep('workflow-resume', () => resumePendingExecutions(client));
   });

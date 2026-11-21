@@ -31,7 +31,7 @@
     avatarUrl?: string | null;
   };
 
-  const currentLocale = $derived(getLocale());
+  const currentLocale = getLocale();
   function switchLocale(loc: Locale) {
     if (loc === currentLocale) return;
     userPrefs.set('language', loc);

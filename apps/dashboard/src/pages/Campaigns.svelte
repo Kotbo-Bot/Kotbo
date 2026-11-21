@@ -34,7 +34,6 @@
   import MultiSelect from '../lib/components/MultiSelect.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
   import { dateLocale } from '../lib/i18n';
-  import { toLocalInputValue } from '../lib/datetimeLocal';
 
   import { errorMessage } from '@kotbo/shared';
   type Step = {
@@ -157,7 +156,7 @@
       name: campaign.name,
       description: campaign.description ?? '',
       // `datetime-local` n'accepte ni le fuseau ni les secondes.
-      startAt: campaign.startAt ? toLocalInputValue(new Date(campaign.startAt)) : '',
+      startAt: campaign.startAt ? campaign.startAt.slice(0, 16) : '',
       audienceRoleIds: [...campaign.audienceRoleIds],
       audienceExcludeRoleIds: [...campaign.audienceExcludeRoleIds],
       audienceMinLevel: campaign.audienceMinLevel?.toString() ?? '',

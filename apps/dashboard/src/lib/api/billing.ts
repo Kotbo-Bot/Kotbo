@@ -34,10 +34,7 @@ export interface BillingStatus {
   status: string | null;
   currentPeriodEnd: string | null;
   cancelAtPeriodEnd: boolean;
-  /** Un abonnement Stripe est rattaché, même clos : portail et factures. */
   hasSubscription: boolean;
-  /** Il vit encore chez Stripe, même impayé : il se gère au portail, pas par un second paiement. */
-  hasLiveSubscription: boolean;
   /**
    * Dépend de l'administrateur connecté autant que du serveur : l'essai se
    * consomme une fois par compte Discord, deux administrateurs du même serveur

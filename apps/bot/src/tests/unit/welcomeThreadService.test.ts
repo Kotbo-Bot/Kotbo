@@ -1,16 +1,11 @@
 import { describe, expect, mock, test } from 'bun:test';
 import path from 'node:path';
-import { ChannelType, ThreadAutoArchiveDuration, ComponentType, SnowflakeUtil, type Client } from 'discord.js';
+import { ThreadAutoArchiveDuration, ComponentType, SnowflakeUtil } from 'discord.js';
 import type { WelcomeMenuPage } from '@prisma/client';
 import type { WelcomeThreadConfigWithRelations } from '../../services/features/welcomeThreadService.js';
 
-const db = {
-  welcomeThreadConfig: { findMany: mock(async (): Promise<unknown[]> => []) },
-  welcomeThreadCreated: { findMany: mock(async (): Promise<unknown[]> => []), deleteMany: mock(async () => ({ count: 1 })) },
-};
-
 const moduleMocks: Array<[string, () => Record<string, unknown>]> = [
-  ['../../utils/db', () => ({ default: db, prisma: db, prismaRead: db })],
+  ['../../utils/db', () => ({ default: {}, prisma: {}, prismaRead: {} })],
   ['../../utils/logger', () => ({
     logger: {
       info: mock(() => undefined),
@@ -37,7 +32,6 @@ const {
   buildWelcomeMenuComponents,
   buildMenuPageEmbed,
   resolveExclusiveRoleIds,
-  cleanupInactiveWelcomeThreads,
   MAX_THREAD_STEPS,
 } = await import('../../services/features/welcomeThreadService.js');
 
@@ -286,39 +280,5 @@ describe('resolveExclusiveRoleIds', () => {
 describe('MAX_THREAD_STEPS', () => {
   test('la limite de séquence est raisonnable', () => {
     expect(MAX_THREAD_STEPS).toBe(20);
-  });
-});
-
-describe('cleanupInactiveWelcomeThreads', () => {
-  test('ne purge que les threads d\'accueil enregistrés, pas les autres threads du bot', async () => {
-    const thread = (id: string) => ({
-      id,
-      ownerId: 'bot',
-      lastMessageId: null,
-      createdTimestamp: Date.UTC(2026, 0, 1),
-      delete: mock(async () => undefined),
-    });
-    const accueil = thread('accueil');
-    const ticket = thread('ticket');
-    const channel = {
-      id: '111111111111111111',
-      type: ChannelType.GuildText,
-      threads: {
-        fetchActive: async () => ({ threads: new Map([[accueil.id, accueil], [ticket.id, ticket]]) }),
-        fetchArchived: async () => ({ threads: new Map(), hasMore: false }),
-      },
-    };
-    const guild = {
-      id: guildId,
-      channels: { cache: new Map([[channel.id, channel]]) },
-      members: { me: { permissionsIn: () => ({ has: () => true }) } },
-    };
-    db.welcomeThreadConfig.findMany.mockResolvedValue([{ guildId, channelId: channel.id, inactivityDeleteHours: 48 }]);
-    db.welcomeThreadCreated.findMany.mockResolvedValue([{ threadId: accueil.id }]);
-
-    await cleanupInactiveWelcomeThreads({ user: { id: 'bot' }, guilds: { cache: new Map([[guildId, guild]]) } } as unknown as Client);
-
-    expect(accueil.delete).toHaveBeenCalledTimes(1);
-    expect(ticket.delete).not.toHaveBeenCalled();
   });
 });

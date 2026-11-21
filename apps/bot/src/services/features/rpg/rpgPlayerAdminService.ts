@@ -49,8 +49,13 @@ async function findProfile(guildId: string, userId: string) {
   return profile;
 }
 
-/** Valeurs à écrire, chacune dans ses bornes. Un champ omis ou nul est ignoré. */
-export function checkPlayerStats(input: PlayerStatsInput): Partial<Record<PlayerStatField, number>> {
+/**
+ * Fixe des statistiques de base. Un champ omis ou nul n'est pas touché.
+ *
+ * Aucune valeur n'était vérifiée : un solde négatif ou un niveau à zéro passaient, et le
+ * jeu les lisait ensuite sans s'y attendre.
+ */
+export async function adminUpdatePlayerStats(guildId: string, userId: string, input: PlayerStatsInput) {
   const data: Partial<Record<PlayerStatField, number>> = {};
   for (const [field, range] of Object.entries(PLAYER_STAT_RANGES) as [PlayerStatField, { min: number; max: number }][]) {
     const value = input[field];
@@ -60,17 +65,6 @@ export function checkPlayerStats(input: PlayerStatsInput): Partial<Record<Player
     }
     data[field] = value;
   }
-  return data;
-}
-
-/**
- * Fixe des statistiques de base. Un champ omis ou nul n'est pas touché.
- *
- * Aucune valeur n'était vérifiée : un solde négatif ou un niveau à zéro passaient, et le
- * jeu les lisait ensuite sans s'y attendre.
- */
-export async function adminUpdatePlayerStats(guildId: string, userId: string, input: PlayerStatsInput) {
-  const data = checkPlayerStats(input);
   if (Object.keys(data).length === 0) throw new PlayerAdminError('Rien à modifier.', 400);
 
   const profile = await findProfile(guildId, userId);

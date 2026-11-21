@@ -120,12 +120,6 @@ export interface ExecutionState {
   triggerOutputs: Record<string, unknown>;
   /** Élément et index courants de chaque boucle en cours */
   loopValues: Record<string, { item: unknown; index: number }>;
-  /**
-   * Sorties de la dernière exécution de chaque action, par nœud puis par port.
-   * Contrairement au cache des valeurs, elles survivent aux itérations et aux
-   * reprises. Absente d'un état sérialisé avant son introduction.
-   */
-  actionOutputs?: Record<string, Record<string, unknown>>;
   nodeVisits: number;
   iterations: number;
   /**
@@ -240,11 +234,6 @@ export async function runWorkflow(options: RunOptions): Promise<ExecutionOutcome
         const value = state.triggerOutputs[portId] ?? null;
         memo.set(key, value);
         return value;
-      }
-
-      // Action : ses sorties sont celles de sa dernière exécution
-      if (def.category === 'action') {
-        return state.actionOutputs?.[nodeId]?.[portId] ?? null;
       }
 
       // Fréquence du membre : comptée au déclenchement, voir `workflowService`
@@ -457,7 +446,6 @@ export async function runWorkflow(options: RunOptions): Promise<ExecutionOutcome
         for (const [outId, outValue] of Object.entries(outputs)) {
           memo.set(`${generation}:${node.id}:${outId}`, outValue);
         }
-        (state.actionOutputs ??= {})[node.id] = outputs;
         steps.push(step(state.stepOrder++, node, inputs, outputs, now() - stepStart));
 
         const next = execTarget(graph, node.id, 'next');

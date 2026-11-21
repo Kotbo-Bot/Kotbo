@@ -37,10 +37,6 @@ import { isStandardSticker, noteAssets, startAssetSourceResolver } from '../serv
 
 const EXPLICIT_MENTION_RE = /<@[!&]?\d{17,20}>|@everyone|@here/;
 
-/** Messages déjà comptés « avec réaction » : retirer puis remettre leur seule réaction ramène le total à 1. */
-const reactedMessageIds = new Set<string>();
-const REACTED_MESSAGES_MAX = 50_000;
-
 type AnyChannel = Message['channel'] | PartialMessage['channel'];
 
 /** Salon de rattachement : le parent pour un fil. */
@@ -117,9 +113,7 @@ async function handleReaction(
   if (message.partial || !message.author || message.author.bot) return;
   let total = 0;
   for (const r of message.reactions.cache.values()) total += r.count ?? 0;
-  if (total !== 1 || reactedMessageIds.has(message.id)) return;
-  reactedMessageIds.add(message.id);
-  if (reactedMessageIds.size > REACTED_MESSAGES_MAX) reactedMessageIds.delete(reactedMessageIds.values().next().value!);
+  if (total !== 1) return;
   queueContentCounters(guild.id, dateKeyOf(message.createdAt), channelId, message.author.id, { reactedMessages: 1 });
 }
 

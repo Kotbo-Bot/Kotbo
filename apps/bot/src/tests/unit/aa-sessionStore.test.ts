@@ -16,7 +16,8 @@ const redis = {
 };
 
 mock.module('../../infra/redis.js', () => ({
-  getSessionRedis: () => redis,
+  getRedis: () => redis,
+  initRedis: async () => redis,
 }));
 
 setCurrentInstance({

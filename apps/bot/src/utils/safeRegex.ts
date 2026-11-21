@@ -10,10 +10,12 @@
  * passer à `re2` si ce garde-fou se révèle insuffisant.
  */
 
-import { ALTERNATION_UNDER_QUANTIFIER, BACKREFERENCE, NESTED_QUANTIFIER } from '@kotbo/shared';
-
 export const MAX_REGEX_LENGTH = 200;
 export const MAX_REGEX_INPUT = 1000;
+
+const NESTED_QUANTIFIER = /\((?:[^()\\]|\\.)*(?:[+*]|\{\d+,\d*\})(?:[^()\\]|\\.)*\)(?:[+*]|\{\d+,?\d*\})/;
+const ALTERNATION_UNDER_QUANTIFIER = /\((?:[^()\\]|\\.)*\|(?:[^()\\]|\\.)*\)(?:[+*]|\{\d+,\d*\})/;
+const BACKREFERENCE = /\\[1-9]|\\k</;
 
 /** Raison du refus, ou `null` si le motif est accepté. */
 export function regexProblem(pattern: string): string | null {

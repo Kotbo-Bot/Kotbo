@@ -107,48 +107,6 @@ function fallbackGet(path: string): unknown {
   return {};
 }
 
-/**
- * Valeur « vide mais sûre » pour une route que la démo ne connaît pas : chaque
- * propriété absente rend une autre valeur vide, `length` vaut 0, l'itération ne
- * donne rien et la conversion en texte ou en nombre rend '' ou 0. Une page qui
- * lit `res.config.exemptRoleIds.length` affiche donc un état vide au lieu de
- * planter. Les propriétés réellement présentes (celles du repli) restent lues
- * telles quelles.
- */
-export function forgiving(value: unknown): any {
-  if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
-    return new Proxy(value as Record<PropertyKey, unknown>, {
-      get(target, key) {
-        if (key in target) return forgiving(target[key as string]);
-        if (typeof key === 'symbol') return key === Symbol.toPrimitive ? () => '' : undefined;
-        if (key === 'toJSON' || key === 'then') return undefined;
-        return forgiving([]);
-      },
-    });
-  }
-  if (Array.isArray(value)) {
-    return new Proxy(value, {
-      get(target, key, receiver) {
-        if (key === Symbol.toPrimitive) return (hint: string) => (hint === 'number' ? 0 : '');
-        if (typeof key === 'symbol' || key in target) return Reflect.get(target, key, receiver);
-        if (key === 'toJSON' || key === 'then') return undefined;
-        // Une page peut traiter ce vide comme une chaîne absente : `.startsWith`, `.trim`…
-        const asString = (String.prototype as unknown as Record<string, unknown>)[key];
-        if (typeof asString === 'function') return (...args: unknown[]) => (asString as (...a: unknown[]) => unknown).apply('', args);
-        return forgiving([]);
-      },
-    });
-  }
-  return value;
-}
-
-function forgivingJson(status: number, body: unknown): Response {
-  const response = json(status, body);
-  // dashboardRequest lit `response.json()` : c'est là que la valeur sûre remplace l'objet nu.
-  Object.defineProperty(response, 'json', { value: async () => forgiving(body) });
-  return response;
-}
-
 async function handle(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const url = new URL(input instanceof Request ? input.url : String(input), window.location.origin);
   const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
@@ -180,8 +138,8 @@ async function handle(input: RequestInfo | URL, init?: RequestInit): Promise<Res
   remember(method, path);
 
   // Fallback sandbox : aucun 503 bloquant.
-  if (method === 'GET') return forgivingJson(200, fallbackGet(path));
-  return forgivingJson(200, {});
+  if (method === 'GET') return json(200, fallbackGet(path));
+  return json(200, {});
 }
 
 /** L'appel vise-t-il l'API ? Tout le reste (images, polices, modules) part au réseau. */

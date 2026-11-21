@@ -28,8 +28,6 @@ export type ApiErrorKind =
   | 'offline'
   /** Le serveur n'a pas repondu dans le delai imparti. */
   | 'timeout'
-  /** L'appelant a annule la requete via son `signal` : ni une panne, ni a rejouer. */
-  | 'aborted'
   /** 401 : jeton absent, expire ou invalide. */
   | 'unauthorized'
   /** 403 : authentifie mais pas autorise. */
@@ -78,9 +76,6 @@ function defaultMessage(kind: ApiErrorKind): string {
       return m.api_err_offline();
     case 'timeout':
       return m.api_err_timeout();
-    case 'aborted':
-      // Une requete annulee par l'appelant n'est jamais presentee : il l'ignore.
-      return '';
     case 'unauthorized':
       return m.api_err_unauthorized();
     case 'forbidden':

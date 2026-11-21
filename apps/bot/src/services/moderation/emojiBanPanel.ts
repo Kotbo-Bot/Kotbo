@@ -22,7 +22,6 @@ import {
   emojiSourceGuildId,
   extractCustomEmojis,
   extractUnicodeEmojis,
-  isPublicGuildRecord,
   stickerSourceGuildId,
   upsertEmojiBan,
   type EmojiBanKind,
@@ -84,16 +83,11 @@ async function collectItems(message: Message<true>): Promise<Item[]> {
   }
 
   if (sources.size > 0) {
-    const known = await prisma.discordExternalGuild.findMany({ where: { guildId: { in: [...sources.keys()] } }, select: { guildId: true, name: true, source: true } });
-    const records = new Map(known.map((g) => [g.guildId, g]));
+    const known = await prisma.discordExternalGuild.findMany({ where: { guildId: { in: [...sources.keys()] } }, select: { guildId: true, name: true } });
+    const names = new Map(known.map((g) => [g.guildId, g.name]));
     for (const guildId of sources.keys()) {
-      const live = message.client.guilds.cache.get(guildId);
-      // Sans fiche, le serveur n'est connu que par la présence de Kotbo : même règle qu'une fiche `cache`.
-      const record = records.get(guildId) ?? { guildId, name: live?.name ?? guildId, source: 'cache' };
-      const shown = isPublicGuildRecord(message.client, record);
-      const name = shown ? record.name : guildId;
-      const iconUrl = shown ? live?.iconURL() ?? null : null;
-      items.push({ kind: 'SOURCE_GUILD', key: guildId, name, iconUrl, display: `Tous les emojis et stickers de **${name}**` });
+      const name = message.client.guilds.cache.get(guildId)?.name ?? names.get(guildId) ?? guildId;
+      items.push({ kind: 'SOURCE_GUILD', key: guildId, name, iconUrl: message.client.guilds.cache.get(guildId)?.iconURL() ?? null, display: `Tous les emojis et stickers de **${name}**` });
     }
   }
   return items.slice(0, 25);

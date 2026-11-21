@@ -16,7 +16,6 @@
   import Callout from '../lib/components/ui/Callout.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
   import { createAsyncActionState } from '../lib/asyncAction.svelte';
-  import { resyncDraft } from '../lib/draftSync';
   import { m } from '../lib/i18n';
 
   const availableChannels = $derived(dashboardStore.state.discordChannels || []);
@@ -64,10 +63,8 @@
         killSwitchEnabled: !!dashboardStore.state.notifications?.killSwitchEnabled,
         severityByModule: dashboardStore.state.notifications?.severityByModule || []
       };
-      untrack(() => {
-        notificationsDraft = resyncDraft(notificationsDraft, savedNotifications, loaded);
-        savedNotifications = clone(loaded);
-      });
+      notificationsDraft = { ...loaded };
+      savedNotifications = clone(loaded);
     }
   });
 

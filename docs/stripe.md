@@ -442,29 +442,17 @@ Passer l'interrupteur « Mode test » sur off, puis :
 
    - URL : `https://api.kotbo.fr/api/billing/webhook`
      *(adapter au domaine réel de l'API du bot, pas celui du dashboard)*
-   - Événements à sélectionner - **exactement ces neuf** :
+   - Événements à sélectionner - **exactement ces cinq** :
      - `checkout.session.completed`
-     - `checkout.session.async_payment_succeeded`
-     - `checkout.session.async_payment_failed`
      - `checkout.session.expired`
      - `customer.subscription.created`
      - `customer.subscription.updated`
      - `customer.subscription.deleted`
-     - `invoice.paid`
-     - `invoice.payment_failed`
 
      `checkout.session.expired` est celui qu'on oublie : il libère l'essai
      gratuit réservé par quelqu'un qui a ouvert la page de paiement puis fermé
      l'onglet. Sans lui, ces personnes perdent leurs 15 jours sans les avoir
      utilisés, et il faut supprimer leur ligne `billing_trials` à la main.
-
-     `invoice.paid` et `invoice.payment_failed` sont la seule entrée des
-     factures dans `billing_invoices`. Sans eux, l'offre change bien, mais le
-     MRR, l'encaissé et le premier paiement restent vides jusqu'à une reprise
-     manuelle (`bun run analytics:backfill`).
-
-     Les deux `async_payment` concluent un cadeau payé par prélèvement : sans
-     eux, il n'est jamais appliqué, ou reste en attente après un refus.
    - Après création, révéler le **secret de signature** (`whsec_...`).
 
 4. **Portail client** : Paramètres → Facturation → **Portail client**. Activer

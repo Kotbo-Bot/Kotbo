@@ -2,19 +2,12 @@ import { Client, Events, ChannelType, VoiceChannel, CategoryChannel } from 'disc
 import prisma from '../utils/db.js';
 import { logger } from '../utils/logger.js';
 import { resolvePlaceholders, type PlaceholderContext } from '../utils/placeholders.js';
-import { fetchAllMembers, settleWithin, RENAME_TIMEOUT_MS } from '../utils/discord.js';
+import { fetchAllMembers } from '../utils/discord.js';
 import { readStatsConfig } from '../services/analytics/statsConfig.js';
 import * as m from '../lib/paraglide/messages.js';
 import { resolveGuildLocale } from '../utils/i18n.js';
 
 const updateTimeouts = new Map<string, NodeJS.Timeout>();
-
-// Salons dont le renommage attend la fenêtre Discord (2 par 10 min) : ne pas en
-// empiler un autre, la file REST grossirait à chaque passe.
-const pendingRenames = new Set<string>();
-
-// Une passe globale à la fois : setInterval n'attend pas la fin de la précédente.
-let globalPassRunning = false;
 
 export function registerStatsChannelListener(client: Client): void {
   client.on(Events.ClientReady, () => {
@@ -48,23 +41,17 @@ function triggerDebouncedUpdate(client: Client, guildId: string) {
 }
 
 async function updateAllGuildsStats(client: Client): Promise<void> {
-  if (globalPassRunning) return;
-  globalPassRunning = true;
-  try {
-    const activeConfigs = await prisma.guild.findMany({
-      where: { statsEnabled: true },
-      select: { id: true }
-    });
+  const activeConfigs = await prisma.guild.findMany({
+    where: { statsEnabled: true },
+    select: { id: true }
+  });
 
-    for (const config of activeConfigs) {
-      try {
-        await updateGuildStats(client, config.id);
-      } catch (err) {
-        logger.error('StatsChannels', `Erreur lors de la mise à jour globale des stats pour ${config.id} :`, err);
-      }
+  for (const config of activeConfigs) {
+    try {
+      await updateGuildStats(client, config.id);
+    } catch (err) {
+      logger.error('StatsChannels', `Erreur lors de la mise à jour globale des stats pour ${config.id} :`, err);
     }
-  } finally {
-    globalPassRunning = false;
   }
 }
 
@@ -159,14 +146,10 @@ export async function updateGuildStats(client: Client, guildId: string): Promise
       goal: customGoal,
     });
 
-    if (channel.name !== expectedName && !pendingRenames.has(channelId)) {
-      pendingRenames.add(channelId);
-      // `@discordjs/rest` attend la fenêtre au lieu de rejeter : l'attente est bornée
-      // pour ne pas figer la boucle, la requête se termine en arrière-plan.
-      const renaming: Promise<unknown> = channel.setName(expectedName).catch((err) =>
+    if (channel.name !== expectedName) {
+      await channel.setName(expectedName).catch((err) =>
         logger.warn('StatsChannels', `Impossible de renommer le salon ${channelId} vers "${expectedName}" (limitation Discord ?) :`, err)
-      ).finally(() => pendingRenames.delete(channelId));
-      await settleWithin(renaming, RENAME_TIMEOUT_MS);
+      );
     }
   };
 

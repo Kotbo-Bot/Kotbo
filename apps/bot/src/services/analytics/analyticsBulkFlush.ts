@@ -30,8 +30,6 @@ export type BulkTarget = {
   keys: BulkKeyColumn[];
   counterColumns: readonly string[];
   overwriteColumns?: readonly string[];
-  /** Sous-ensemble de `overwriteColumns` qui ne descend jamais : écrit avec `GREATEST(ancien, nouveau)`. */
-  maxOverwriteColumns?: readonly string[];
   /** false pour une table sans `createdAt` ni `updatedAt`. */
   timestamps?: boolean;
 };
@@ -94,12 +92,9 @@ async function flushBulkChunk(target: BulkTarget, chunk: BulkRow[]): Promise<voi
     .map((col) => `"${col}"`)
     .join(', ');
 
-  const maxColumns = new Set(target.maxOverwriteColumns ?? []);
   const setClause = [
     ...target.counterColumns.map((col) => `"${col}" = m."${col}" + EXCLUDED."${col}"`),
-    ...overwriteColumns.map((col) => maxColumns.has(col)
-      ? `"${col}" = GREATEST(m."${col}", EXCLUDED."${col}")`
-      : `"${col}" = EXCLUDED."${col}"`),
+    ...overwriteColumns.map((col) => `"${col}" = EXCLUDED."${col}"`),
     ...(timestamps ? ['"updatedAt" = NOW()'] : []),
   ].join(', ');
 

@@ -9,7 +9,6 @@
 
 import prisma from '../../../utils/db.js';
 import { getRpgClass, type RpgSkill } from './rpgClasses.js';
-import { lockRpgProfile } from './rpgInventoryWrites.js';
 import {
   RESPEC_COST,
   SKILL_TREE_UNLOCK_LEVEL,
@@ -144,11 +143,6 @@ export async function unlockSkillNode(guildId: string, userId: string, nodeId: s
   if (!node) throw new Error('Compétence inconnue.');
 
   return prisma.$transaction(async (tx) => {
-    // Verrou avant de lire l'arbre : un respec concurrent rembourserait sinon des rangs
-    // que ce déblocage recréerait aussitôt, gratuitement.
-    const owner = await tx.rpgProfile.findUnique({ where: { guildId_userId: { guildId, userId } }, select: { id: true } });
-    if (owner) await lockRpgProfile(tx, owner.id);
-
     const profile = await tx.rpgProfile.findUnique({
       where: { guildId_userId: { guildId, userId } },
       include: { skillUnlocks: { select: { nodeId: true, rank: true } } },
@@ -215,21 +209,15 @@ export async function respecSkillTree(guildId: string, userId: string): Promise<
   return prisma.$transaction(async (tx) => {
     const profile = await tx.rpgProfile.findUnique({
       where: { guildId_userId: { guildId, userId } },
+      include: { skillUnlocks: { select: { nodeId: true, rank: true } } },
     });
     if (!profile) throw new Error('Profil RPG introuvable.');
 
-    // Verrou avant de relire les nœuds : deux respec concurrents rembourseraient sinon deux fois.
-    await lockRpgProfile(tx, profile.id);
-
-    const unlocks = await tx.rpgSkillUnlock.findMany({
-      where: { rpgProfileId: profile.id },
-      select: { nodeId: true, rank: true },
-    });
-    if (unlocks.length === 0) {
+    if (profile.skillUnlocks.length === 0) {
       throw new Error("Votre arbre de compétences est déjà vierge.");
     }
 
-    const refunded = pointsSpent(unlocks);
+    const refunded = pointsSpent(profile.skillUnlocks);
 
     const paid = await tx.rpgProfile.updateMany({
       where: { id: profile.id, balance: { gte: RESPEC_COST } },
@@ -252,23 +240,20 @@ export async function respecSkillTree(guildId: string, userId: string): Promise<
  * nœuds de l'ancienne laisserait des bonus que le nouvel arbre ne sait plus expliquer.
  */
 export async function resetSkillTreeForClassChange(rpgProfileId: string): Promise<number> {
-  return prisma.$transaction(async (tx) => {
-    // Verrou avant de relire les nœuds : deux resets concurrents rembourseraient sinon deux fois.
-    await lockRpgProfile(tx, rpgProfileId);
+  const unlocks = await prisma.rpgSkillUnlock.findMany({
+    where: { rpgProfileId },
+    select: { nodeId: true, rank: true },
+  });
+  if (unlocks.length === 0) return 0;
 
-    const unlocks = await tx.rpgSkillUnlock.findMany({
-      where: { rpgProfileId },
-      select: { nodeId: true, rank: true },
-    });
-    if (unlocks.length === 0) return 0;
-
-    const refunded = pointsSpent(unlocks);
-    await tx.rpgSkillUnlock.deleteMany({ where: { rpgProfileId } });
-    await tx.rpgProfile.update({
+  const refunded = pointsSpent(unlocks);
+  await prisma.$transaction([
+    prisma.rpgSkillUnlock.deleteMany({ where: { rpgProfileId } }),
+    prisma.rpgProfile.update({
       where: { id: rpgProfileId },
       data: { skillPoints: { increment: refunded } },
-    });
+    }),
+  ]);
 
-    return refunded;
-  });
+  return refunded;
 }

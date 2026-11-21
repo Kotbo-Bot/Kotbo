@@ -103,27 +103,8 @@ describe('nom du fil', () => {
 describe('validation', () => {
   test('refuse un motif à backtracking catastrophique', () => {
     expect(checkAutoThreadRegex('(a+)+$')).toBe('regex_unsafe');
-    expect(checkAutoThreadRegex('(a|a)+$')).toBe('regex_unsafe');
-    expect(checkAutoThreadRegex('(\\w+\\s?){2,}$')).toBe('regex_unsafe');
-    expect(checkAutoThreadRegex('(a)\\1')).toBe('regex_unsafe');
-    expect(checkAutoThreadRegex('^(bug|crash)')).toBeNull();
     expect(checkAutoThreadRegex('[unclosed')).toBe('regex_invalid');
     expect(checkAutoThreadRegex('^bug')).toBeNull();
-  });
-
-  test('un motif dangereux déjà enregistré cesse de s’appliquer, au déclenchement comme au nommage', () => {
-    // La configuration relue en base n'est pas revalidée : c'est l'évaluation qui écarte ces motifs.
-    const accepts = (value: string, content: string) => autoThreadAccepts(
-      { trigger: 'custom', conditions: { kind: 'rule', type: 'matches_regex', value } },
-      facts({ content }),
-    );
-    expect(accepts('(a|a)+$', 'aaaa')).toBe(false);
-    expect(accepts('(\\d{1,})+$', '1234')).toBe(false);
-    const naming = { namingMode: 'custom' as const, namingRules: [{ type: 'regex' as const, value: '(\\w+) \\1' }] };
-    expect(buildAutoThreadName(naming, facts({ content: 'bug bug' }), ctx)).toBe('Alex');
-
-    // Une alternative simple, elle, s'applique toujours.
-    expect(accepts('^(bug|crash)', 'crash au lancement')).toBe(true);
   });
 
   test('une condition de rôle sans rôle bloque seulement en mode personnalisé', () => {

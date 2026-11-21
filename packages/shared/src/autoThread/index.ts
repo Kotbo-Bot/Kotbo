@@ -7,8 +7,6 @@
  * pur (pas de discord.js) : le bot traduit le message en `AutoThreadFacts`.
  */
 
-import { ALTERNATION_UNDER_QUANTIFIER, BACKREFERENCE, NESTED_QUANTIFIER } from '../regexSafety.js';
-
 // ── Vocabulaire ─────────────────────────────────────────────────────────────
 
 /** Messages qui ouvrent un fil. `custom` lit l'arbre de conditions. */
@@ -183,11 +181,17 @@ function clampInt(raw: unknown, min: number, max: number, fallback: number): num
 
 const SNOWFLAKE = /^\d{17,20}$/;
 
+/**
+ * Motifs qui font exploser le temps d'évaluation : un quantificateur appliqué
+ * à un groupe qui en contient déjà un, `(a+)+`, `(.*)*`. Le motif est écrit par
+ * un admin du serveur mais évalué sur chaque message : on refuse la forme
+ * plutôt que d'espérer que personne ne l'écrive.
+ */
+const NESTED_QUANTIFIER = /\([^()]*[+*][^()]*\)\s*[+*{]/;
+
 export function checkAutoThreadRegex(pattern: string): 'regex_invalid' | 'regex_unsafe' | null {
   if (!pattern || pattern.length > AUTO_THREAD_LIMITS.conditionText) return 'regex_invalid';
-  if (NESTED_QUANTIFIER.test(pattern) || ALTERNATION_UNDER_QUANTIFIER.test(pattern) || BACKREFERENCE.test(pattern)) {
-    return 'regex_unsafe';
-  }
+  if (NESTED_QUANTIFIER.test(pattern)) return 'regex_unsafe';
   try {
     new RegExp(pattern, 'i');
     return null;

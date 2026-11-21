@@ -20,7 +20,6 @@ import {
   dayKeys,
   getActivityAnalytics,
   hasUserScope,
-  keyOf,
   scopeSql,
   type AnalyticsScope,
   type DateRange,
@@ -207,10 +206,7 @@ export async function getActivityInsights(client: Client, guildId: string, range
     };
   });
 
-  // Seuls les jours révolus (UTC) sont jugés : entamée, la journée en cours
-  // passerait pour un creux face à des journées pleines.
-  const today = keyOf(new Date());
-  const days = dayKeys(range.start, range.end).filter((key) => key < today);
+  const days = dayKeys(range.start, range.end);
   const messageHistory = new Map(history.rows.map((r) => [r.dateKey, r.messages]));
   const voiceHistory = new Map(history.rows.map((r) => [r.dateKey, r.voiceMinutes]));
   const raw = [

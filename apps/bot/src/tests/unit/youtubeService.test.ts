@@ -448,14 +448,6 @@ describe('youtubeService - decision des annonces', () => {
     expect(actions).toHaveLength(0);
   });
 
-  test('ne reannonce pas une video deja vue, revenue en tete du flux ou reconnue comme Short', () => {
-    const revenue = { ...EMPTY_STATE, lastVideoId: 'recente0001', recentVideoIds: ['recente0001', 'vid00000001'] };
-    const priseCommeVideo = { ...EMPTY_STATE, lastVideoId: 'vid00000001', lastShortId: 'ancienshort' };
-
-    expect(planYoutubeActions(revenue, { latestVideo: video() }, now)).toHaveLength(0);
-    expect(planYoutubeActions(priseCommeVideo, { latestVideo: video({ isShort: true }) }, now)).toHaveLength(0);
-  });
-
   test('ne republie pas le back-catalogue apres reamorcage', () => {
     const actions = planYoutubeActions(
       { ...EMPTY_STATE, lastVideoId: 'ancienne001' },

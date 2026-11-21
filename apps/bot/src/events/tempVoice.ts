@@ -3445,9 +3445,7 @@ async function createTempChannel(
     .create({
       name: renderChannelName(modeleDeNom(generator.nameTemplate, locale), member.displayName || member.user.username),
       type: ChannelType.GuildVoice,
-      // La catégorie vérifiée plus haut, pas l'identifiant brut : Discord refuse
-      // un parent disparu, et le générateur cesserait de créer quoi que ce soit.
-      parent: parentCategory?.id,
+      parent: generator.categoryId,
       userLimit: generator.policy.userLimit,
       permissionOverwrites: surchargesCreation,
       reason: m.panel_tempvoice_audit_create({ user: member.user.tag }, { locale }),
@@ -4038,10 +4036,7 @@ export function registerTempVoiceListener(client: Client): void {
         const generators = resolveTempVoiceGenerators(guildConfig as unknown as TempVoiceGuildConfig, guild.id);
         const generator = generators.find((entry) => entry.channelId === newState.channelId);
 
-        // Pas de `return` ici : un membre venu d'un salon temporaire passe encore
-        // par la sortie plus bas, qui supprime ce salon s'il est resté vide.
         if (generator) {
-          const inFlightKey = `${guild.id}:${member.id}`;
           if (generator.requiredRoleId && !member.roles.cache.has(generator.requiredRoleId)) {
             const locale = await resolveGuildLocale(guild.id, guild.preferredLocale ?? null);
             const oublierRefus = annoncerIntentionVocale(guild.id, member.id, 'disconnect', {
@@ -4053,13 +4048,16 @@ export function registerTempVoiceListener(client: Client): void {
             await member
               .send(m.panel_tempvoice_dm_missing_role({ guild: guild.name }, { locale }))
               .catch(() => null);
-          } else if (!creationInFlight.has(inFlightKey)) {
-            creationInFlight.add(inFlightKey);
-            try {
-              await createTempChannel(newState, member, generator);
-            } finally {
-              creationInFlight.delete(inFlightKey);
-            }
+            return;
+          }
+
+          const inFlightKey = `${guild.id}:${member.id}`;
+          if (creationInFlight.has(inFlightKey)) return;
+          creationInFlight.add(inFlightKey);
+          try {
+            await createTempChannel(newState, member, generator);
+          } finally {
+            creationInFlight.delete(inFlightKey);
           }
         }
       }
@@ -7187,7 +7185,6 @@ async function handleTempVoiceAction(ctx: ActionContext): Promise<void> {
       // requête même quand il la met en attente, et c'est justement ce cas que le
       // bouton doit annoncer.
       noterRenommage(channel.id);
-      await persisterEtatSalon(guildId, channel.id);
       const renamed = await settleWithin(channel.setName(newName), RENAME_TIMEOUT_MS);
 
       if (renamed.status === 'failed') {

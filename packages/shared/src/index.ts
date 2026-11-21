@@ -6,7 +6,6 @@
  * et que le dashboard peut embarquer dans son bundle.
  */
 export * from './textDiff.js';
-export * from './regexSafety.js';
 export * from './workflow/types.js';
 export * from './workflow/cron.js';
 export * from './workflow/catalog.js';

@@ -42,8 +42,10 @@ export const SEGMENT_FEATURE_KEYS: Record<string, string | string[]> = {
   automod: 'automod',
   aegis: 'automod',
   'emoji-bans': 'automod',
-  // Seule la page Pseudos ecrit la liste de mots bannis ; AutoMod la lit.
-  'banned-words': ['nickname_moderation', 'automod'],
+  // La liste de mots bannis n'appartient pas a AutoMod : la moderation des
+  // pseudos la lit par le meme service, sans passer par AutoMod. Une seule
+  // clef fermait la page Pseudos a un role qui n'avait que cette section.
+  'banned-words': ['automod', 'nickname_moderation'],
   'raid-protection': 'raid_protection',
   'nickname-moderation': 'nickname_moderation',
   'tag-automod': 'raid_protection',
@@ -170,18 +172,6 @@ const SHARED_SEGMENT_MODULES: Record<string, string[]> = {
 export function sharedModulesForSegment(segment: string | undefined): string[] {
   if (!segment) return [];
   return SHARED_SEGMENT_MODULES[segment] ?? [];
-}
-
-/**
- * Fonctionnalites qui ouvrent l'ecriture d'un segment : la premiere de sa liste,
- * les suivantes n'y etant que pour partager la lecture. Seule exception, la page
- * Niveaux regle le bonus d'XP du clan vainqueur par `PATCH /clans`, dont la route
- * borne alors les champs.
- */
-export function writeFeatureKeysForSegment(method: string, segment: string | undefined, subSegment?: string): string[] | undefined {
-  const keys = featureKeysForSegment(segment, subSegment);
-  if (!keys) return undefined;
-  return segment === 'clans' && subSegment === undefined && method === 'PATCH' ? keys : keys.slice(0, 1);
 }
 
 export function featureKeysForSegment(

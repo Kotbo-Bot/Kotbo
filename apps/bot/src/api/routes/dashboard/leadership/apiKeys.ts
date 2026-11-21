@@ -37,9 +37,6 @@ import {
   
 } from '../../../../services/staff/staffManagementService.js';
 
-/** Permissions qu'une clé peut porter : celles que le serveur sait réellement honorer. */
-export const ALLOWED_API_KEY_PERMISSIONS = ['recruitment:forms', 'recruitment:manage'] as const;
-
 export function createApiKeysRouter(client: Client) {
   const router = new Hono();
   const base = '/api/dashboard/guilds/:guildId';
@@ -55,17 +52,6 @@ export function createApiKeysRouter(client: Client) {
         permissions?: string[];
       }>(c);
 
-      // Une clé agit au nom de son créateur : seul un membre du staff en crée une.
-      if (!(await getStaffMember(guildId, user.userId))) {
-        return send(c, { error: "Tu ne fais pas partie de l'équipe staff de ce serveur." }, 403);
-      }
-
-      const requested = Array.isArray(body?.permissions) ? body.permissions : [];
-      const allowed = new Set<string>(ALLOWED_API_KEY_PERMISSIONS);
-      if (requested.some((permission) => typeof permission !== 'string' || !allowed.has(permission))) {
-        return send(c, { error: `Permission inconnue. Permissions acceptées : ${ALLOWED_API_KEY_PERMISSIONS.join(', ')}.` }, 400);
-      }
-
       const { fullKey, displayKey } = generateAPIKey();
       const keyHash = hashAPIKey(fullKey);
 
@@ -75,7 +61,7 @@ export function createApiKeysRouter(client: Client) {
         keyHash,
         displayKey,
         body?.name || 'Mon clé API',
-        [...new Set(requested)]
+        body?.permissions || []
       );
 
       await pushAudit(guildId, {

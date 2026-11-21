@@ -1,5 +1,4 @@
 import type { Guild, GuildMember } from 'discord.js';
-import { neutralizeMassMentions } from './mentions.js';
 
 export type PlaceholderMember = Pick<GuildMember, 'id' | 'displayName'> & {
   user: Pick<GuildMember['user'], 'username'>;
@@ -55,12 +54,10 @@ const PLACEHOLDER_MAP: Record<string, (ctx: PlaceholderContext) => string> = {
   // Member-level
   '{user}': (ctx) => ctx.member ? `<@${ctx.member.id}>` : '',
   '{utilisateur}': (ctx) => ctx.member ? `<@${ctx.member.id}>` : '',
-  // Le pseudo vient du membre, pas de l'administrateur : un « @everyone » glissé
-  // dedans ne doit pas notifier tout le serveur quand le gabarit est envoyé.
-  '{username}': (ctx) => neutralizeMassMentions(ctx.member?.user.username ?? ''),
-  '{pseudo}': (ctx) => neutralizeMassMentions(ctx.member?.user.username ?? ''),
-  '{displayName}': (ctx) => neutralizeMassMentions(ctx.member?.displayName ?? ''),
-  '{nom}': (ctx) => neutralizeMassMentions(ctx.member?.displayName ?? ''),
+  '{username}': (ctx) => ctx.member?.user.username ?? '',
+  '{pseudo}': (ctx) => ctx.member?.user.username ?? '',
+  '{displayName}': (ctx) => ctx.member?.displayName ?? '',
+  '{nom}': (ctx) => ctx.member?.displayName ?? '',
 };
 
 export function resolvePlaceholders(template: string, ctx: PlaceholderContext): string {

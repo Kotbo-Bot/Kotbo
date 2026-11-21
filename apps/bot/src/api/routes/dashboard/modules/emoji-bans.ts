@@ -20,8 +20,6 @@ import {
   MAX_EMOJI_BAN_RULES,
   customEmojiUrl,
   deleteEmojiBan,
-  isPublicGuildRecord,
-  publicGuildRecordWhere,
   upsertEmojiBan,
   type EmojiBanKind,
 } from '../../../../services/moderation/emojiBanService.js';
@@ -98,8 +96,6 @@ export function createEmojiBansRouter(client: Client) {
       where: {
         guildId: { not: guildId },
         OR: [{ name: { contains: q, mode: 'insensitive' } }, ...(SNOWFLAKE.test(q) ? [{ guildId: q }] : [])],
-        // Filtré en base, avant `take` : des fiches privées mieux classées videraient sinon la page.
-        AND: publicGuildRecordWhere(client),
       },
       select: { guildId: true, name: true, icon: true, memberCount: true },
       orderBy: { memberCount: { sort: 'desc', nulls: 'last' } },
@@ -118,10 +114,9 @@ export function createEmojiBansRouter(client: Client) {
 
   router.get(`${base}/sources/:sourceId`, ...gate, async (c) => {
     const sourceId = c.req.param('sourceId');
-    const row = SNOWFLAKE.test(sourceId)
-      ? await prisma.discordExternalGuild.findUnique({ where: { guildId: sourceId }, select: { guildId: true, source: true } })
-      : null;
-    const source = row && isPublicGuildRecord(client, row) ? client.guilds.cache.get(sourceId) : undefined;
+    // Seulement les serveurs déjà recensés publiquement (tags, invitations) : pas de fuite d'un serveur privé où Kotbo est.
+    const listed = SNOWFLAKE.test(sourceId) && (await prisma.discordExternalGuild.count({ where: { guildId: sourceId } })) > 0;
+    const source = listed ? client.guilds.cache.get(sourceId) : undefined;
     if (!source) return send(c, { emojis: [], stickers: [], kotboPresent: false });
     const stickers = await source.stickers.fetch().catch(() => source.stickers.cache);
     return send(c, {

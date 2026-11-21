@@ -8,7 +8,6 @@ const mockDb = {
     findUnique: mock(() => Promise.resolve(null as unknown)),
     findMany: mock(() => Promise.resolve([] as unknown[])),
     update: mock(() => Promise.resolve({} as unknown)),
-    updateMany: mock(() => Promise.resolve({ count: 1 })),
   },
   activationCode: {
     findFirst: mock(() => Promise.resolve(null as unknown)),

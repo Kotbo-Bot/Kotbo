@@ -15,7 +15,6 @@ import { logger } from '../../utils/logger.js';
 import { COLORS } from '../../utils/embeds.js';
 import { broadcastDashboardStateChange } from '../../api/shared/sharding.js';
 import { generateTranscript, parseTranscriptHtml } from './transcriptService.js';
-import { resolveTicketQuotas } from './ticketQuotaService.js';
 
 /**
  * Cycle de vie d'un ticket au-dela de « ouvert / ferme » : rangement en
@@ -449,17 +448,14 @@ export async function restoreTicketFromTranscript(
   const ticket = await prisma.ticket.findUnique({ where: { id: ticketId } });
   if (!ticket) throw new Error('Ticket introuvable.');
 
-  const guildConfig = await prisma.guild.findUnique({ where: { id: ticket.guildId } });
-  if (!guildConfig) throw new Error('Serveur introuvable.');
-
-  // Le plafond du serveur, comme chez les appelants (`null` : aucun plafond).
-  const maxRestores = resolveTicketQuotas(guildConfig).reopenMax;
-  const eligibility = checkRestoreEligibility(ticket, maxRestores);
+  const eligibility = checkRestoreEligibility(ticket);
   if (!eligibility.ok) throw new Error(eligibility.error);
-  const restoreLabel = (count: number) => (maxRestores === null ? `${count}` : `${count}/${maxRestores}`);
 
   const transcript = await prisma.transcript.findUnique({ where: { id: ticket.transcriptId! } });
   if (!transcript) throw new Error('Transcription introuvable.');
+
+  const guildConfig = await prisma.guild.findUnique({ where: { id: ticket.guildId } });
+  if (!guildConfig) throw new Error('Serveur introuvable.');
 
   const discordGuild = client.guilds.cache.get(ticket.guildId)
     ?? await client.guilds.fetch(ticket.guildId).catch(() => null);
@@ -508,7 +504,7 @@ export async function restoreTicketFromTranscript(
     )
     .setColor(COLORS.primary as ColorResolvable)
     .setTimestamp()
-    .setFooter({ text: `Kotbo · Ticket ID: ${ticket.id} · Réouverture ${restoreLabel((ticket.restoreCount ?? 0) + 1)}` });
+    .setFooter({ text: `Kotbo · Ticket ID: ${ticket.id} · Réouverture ${(ticket.restoreCount ?? 0) + 1}/${MAX_TICKET_RESTORES}` });
 
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder().setCustomId(`ticket:claim:${ticket.id}`).setLabel('Prendre en charge').setStyle(ButtonStyle.Primary).setEmoji('🛠️'),
@@ -550,7 +546,7 @@ export async function restoreTicketFromTranscript(
           { name: 'Nouveau salon', value: `<#${ticketChannel.id}>`, inline: true },
         ])
         .setTimestamp()
-        .setFooter({ text: `Kotbo · Ticket ID: ${ticket.id} · Réouverture ${restoreLabel(updated.restoreCount)}` });
+        .setFooter({ text: `Kotbo · Ticket ID: ${ticket.id} · Réouverture ${updated.restoreCount}/${MAX_TICKET_RESTORES}` });
       await logCh.send({ embeds: [logEmbed], allowedMentions: { parse: [] } }).catch(() => null);
     }
   }

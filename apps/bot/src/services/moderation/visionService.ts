@@ -53,7 +53,6 @@ import {
 } from './imageForensics.js';
 import { applyAutoSanction, autoSanctionLabel, normalizeAutoSanction, type AutoSanction } from './autoSanction.js';
 import { readImageText } from './ocrService.js';
-import { isTrustedImageUrl } from './trustedImageUrl.js';
 import { compactOcrText } from './scamHeuristics.js';
 import { promoteImageIfWidespread, recordScamSignals } from './scamDatasetService.js';
 import { detectInImageText, reasonForScamDetection } from './phishingFeedService.js';
@@ -120,7 +119,6 @@ export type AnalyzedImage = {
 };
 
 async function downloadImage(url: string): Promise<Buffer | null> {
-  if (!isTrustedImageUrl(url)) return null;
   try {
     const res = await fetchExternal(url, {}, 5_000);
     if (!res.ok) return null;

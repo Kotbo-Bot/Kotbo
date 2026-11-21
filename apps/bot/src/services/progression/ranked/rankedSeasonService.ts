@@ -14,7 +14,6 @@ import prisma, { prismaRead } from '../../../utils/db.js';
 import { logger } from '../../../utils/logger.js';
 import { isModuleEnabled } from '../../core/moduleGate.js';
 import { getGuildLadder, getRankedConfigSafe } from './rankedConfigService.js';
-import { resyncRankedTiers } from './rankedTierRoleService.js';
 import { invalidateGlobalLeaderboard } from './rankedLeaderboardService.js';
 
 const LOG_TAG = 'RankedSeason';
@@ -70,7 +69,6 @@ export async function closeRankedSeason(
     bestStreak: member.bestStreak,
   }));
 
-  let reset = standings.length;
   await prisma.$transaction(async (tx) => {
     if (entries.length > 0) {
       await tx.rankedSeasonEntry.createMany({ data: entries, skipDuplicates: true });
@@ -82,15 +80,23 @@ export async function closeRankedSeason(
         data: { rp: 0, peakRp: 0, peakTierKey: null, previousTierKey: null, tierKey: ladder[0].key, lastDecayDate: null },
       });
     } else {
-      // Tous les classés, au-delà du top archivé, en un nombre fixe d'écritures
-      // sur le RP courant de la primaire : une écriture par membre dépassait le
-      // délai de la transaction sur un gros serveur.
-      reset = await tx.$executeRaw`
-        UPDATE "ranked_members"
-        SET "rp" = floor("rp" * ${keepRatio}::float8), "peakRp" = floor("rp" * ${keepRatio}::float8),
-            "peakTierKey" = NULL, "previousTierKey" = NULL, "lastDecayDate" = NULL
-        WHERE "guildId" = ${guildId} AND "rp" > 0`;
-      await resyncRankedTiers(guildId, ladder, tx);
+      // Le ratio ne se traduit pas en une seule requête SQL portable via
+      // Prisma : les membres sont donc réécrits un par un, mais uniquement
+      // ceux qui ont du RP - les autres sont déjà à zéro.
+      for (const member of standings) {
+        const kept = Math.floor(member.rp * keepRatio);
+        await tx.rankedMember.update({
+          where: { id: member.id },
+          data: {
+            rp: kept,
+            peakRp: kept,
+            peakTierKey: null,
+            previousTierKey: null,
+            tierKey: resolveRankedTier(kept, ladder).key,
+            lastDecayDate: null,
+          },
+        });
+      }
       await tx.rankedMember.updateMany({
         where: { guildId, rp: { lte: 0 } },
         data: { peakRp: 0, tierKey: ladder[0].key, peakTierKey: null, previousTierKey: null, lastDecayDate: null },
@@ -106,7 +112,7 @@ export async function closeRankedSeason(
   await invalidateGlobalLeaderboard();
   logger.info(LOG_TAG, `Saison RP clôturée sur ${guildId} : ${entries.length} archivés, mode ${mode}`);
 
-  return { archived: entries.length, reset, rewarded };
+  return { archived: entries.length, reset: standings.length, rewarded };
 }
 
 async function grantSeasonRewards(

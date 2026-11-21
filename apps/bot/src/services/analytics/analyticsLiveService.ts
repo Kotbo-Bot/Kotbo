@@ -93,16 +93,6 @@ export class LiveWindow {
       channels: [...channels.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6),
     };
   }
-
-  /** Messages d'un salon sur toute la fenêtre, sans la troncature au top 6 de `summary`. */
-  channelCount(channelId: string, now: number): number {
-    const current = Math.floor(now / MINUTE_MS);
-    let total = 0;
-    for (let i = LIVE_WINDOW_MINUTES - 1; i >= 0; i -= 1) {
-      total += this.buckets.get(current - i)?.channels.get(channelId) ?? 0;
-    }
-    return total;
-  }
 }
 
 const windows = new Map<string, LiveWindow>();
@@ -138,16 +128,6 @@ export function liveLeave(guildId: string, at = Date.now()): void {
 export function peekLiveSummary(guildId: string, now = Date.now()): ReturnType<LiveWindow['summary']> | null {
   const w = windows.get(guildId);
   return w ? w.summary(now) : null;
-}
-
-export function peekChannelCount(guildId: string, channelId: string, now = Date.now()): number {
-  const w = windows.get(guildId);
-  return w ? w.channelCount(channelId, now) : 0;
-}
-
-/** Vrai quand la fenêtre a eu le temps de se remplir depuis le démarrage. */
-export function isLiveWindowWarm(now = Date.now()): boolean {
-  return now - Date.parse(startedAt) >= LIVE_WINDOW_MINUTES * MINUTE_MS;
 }
 
 export function addLiveSubscriber(guildId: string): void {

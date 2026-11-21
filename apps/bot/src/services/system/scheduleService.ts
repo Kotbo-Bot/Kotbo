@@ -37,8 +37,7 @@ export async function startSchedule(client: Client, task: ScheduledTask): Promis
     activeCronJobs.delete(task.id);
   }
 
-  // Planifiée par le seul shard qui a son serveur : chaque autre shard l'exécuterait une fois de plus.
-  if (!task.enabled || !client.guilds.cache.has(task.guildId)) return;
+  if (!task.enabled) return;
 
   // Valider l'expression cron
   if (!cron.validate(task.cron)) {
@@ -80,21 +79,6 @@ export async function reloadSchedule(client: Client, scheduleId: string): Promis
   if (task && task.enabled) {
     await startSchedule(client, task);
   }
-}
-
-/**
- * Recharge la tâche dans chaque shard : seul celui de son serveur la planifie,
- * alors que l'API (dashboard, MCP) n'écrit que depuis le shard 0.
- */
-export async function reloadScheduleAcrossShards(client: Client, scheduleId: string): Promise<void> {
-  if (!client.shard) return reloadSchedule(client, scheduleId);
-  // Le corps est sérialisé puis exécuté dans chaque shard : il recharge ce module par son URL.
-  await client.shard.broadcastEval(async (shardClient, context) => {
-    const { reloadSchedule } = await import(context.servicePath);
-    await reloadSchedule(shardClient, context.scheduleId);
-  }, { context: { servicePath: import.meta.url, scheduleId } }).catch((err: unknown) => {
-    logger.error('Scheduler', `Rechargement de la tâche ${scheduleId} non propagé à tous les shards :`, err);
-  });
 }
 
 /** Forme attendue de `messageEmbed`. Tout champ absent est simplement ignore. */
@@ -164,8 +148,7 @@ export async function executeSchedule(client: Client, scheduleId: string): Promi
   
   if (!schedule) return;
 
-  // Le cache seul : l'API REST rendrait le serveur à n'importe quel shard.
-  const guild = client.guilds.cache.get(schedule.guildId);
+  const guild = client.guilds.cache.get(schedule.guildId) || await client.guilds.fetch(schedule.guildId).catch(() => null);
   if (!guild) {
     logger.warn('Scheduler', `Serveur ${schedule.guildId} introuvable pour la tâche planifiée ${schedule.id}`);
     return;

@@ -73,7 +73,7 @@ async function fetchRemote(client: Client, guildId: string, live: Guild | undefi
 }
 
 /** Invitation par defaut : lien personnalise, sinon invitation du widget, sinon la plus utilisee des invitations permanentes suivies. */
-export async function resolveDefaultInvite(client: Client, guildId: string, opts?: { includeTracked?: boolean }): Promise<DefaultInvite | null> {
+export async function resolveDefaultInvite(client: Client, guildId: string): Promise<DefaultInvite | null> {
   const live = client.guilds.cache.get(guildId);
   if (live?.vanityURLCode) {
     return { code: live.vanityURLCode, url: `https://discord.gg/${live.vanityURLCode}`, kind: 'vanity' };
@@ -82,9 +82,6 @@ export async function resolveDefaultInvite(client: Client, guildId: string, opts
   if (remote.widgetInvite) {
     return { code: remote.widgetInvite, url: `https://discord.gg/${remote.widgetInvite}`, kind: 'widget' };
   }
-  // Vanity et widget sont publics, l'invitation suivie non : elle ne sort pas pour
-  // un serveur tiers designe par son seul identifiant.
-  if (opts?.includeTracked === false) return null;
   const tracked = await prisma.guildInvite.findFirst({
     where: { guildId, expiresAt: null, isTemporary: false, isDeleted: false, isSuspended: false },
     orderBy: { uses: 'desc' },
@@ -96,7 +93,7 @@ export async function resolveDefaultInvite(client: Client, guildId: string, opts
 export async function getServerProfile(client: Client, guildId: string, name: string | null): Promise<ServerProfile> {
   const live = client.guilds.cache.get(guildId);
   const [defaultInvite, remote, site] = await Promise.all([
-    resolveDefaultInvite(client, guildId, { includeTracked: false }),
+    resolveDefaultInvite(client, guildId),
     fetchRemote(client, guildId, live),
     prisma.communitySite.findUnique({ where: { guildId }, select: { slug: true, published: true } }).catch(() => null),
   ]);

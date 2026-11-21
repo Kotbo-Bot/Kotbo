@@ -4,12 +4,9 @@
   exemples concrets. Rien n'est enregistré ni partagé pour l'entraînement.
 -->
 <script lang="ts">
-  import { onDestroy } from 'svelte';
   import { Button, Callout, Field } from '../ui';
-  import { m, getLocale } from '../../i18n';
+  import { m } from '../../i18n';
   import { testAegisText, type AegisTestResult } from '../../api';
-  import { DEMO_MODE } from '../../demo/mode';
-  import { aegisSamples, type AegisSample } from '../../demo/aegisSamples';
   import AegisScale from './AegisScale.svelte';
   import { EMOTION_COLORS, emotionLabel, points, zoneOf, ZONE_TONE } from './aegisFormat';
 
@@ -19,43 +16,6 @@
   let busy = $state(false);
   let result = $state<AegisTestResult | null>(null);
   let error = $state('');
-
-  // Démo : pas d'IA derrière, seules les phrases d'exemple ont une note. Un clic
-  // sur un exemple, ou n'importe quelle touche dans le champ, tape la phrase
-  // lettre par lettre à la place du visiteur, puis lance l'essai.
-  const samples = $derived(DEMO_MODE ? aegisSamples(getLocale()) : []);
-  let nextSample = 0;
-  let typing: ReturnType<typeof setInterval> | null = null;
-
-  function stopTyping() {
-    if (typing) clearInterval(typing);
-    typing = null;
-  }
-
-  function typeSample(sample: AegisSample) {
-    stopTyping();
-    result = null;
-    text = '';
-    let index = 0;
-    typing = setInterval(() => {
-      index += 1;
-      text = sample.text.slice(0, index);
-      if (index >= sample.text.length) {
-        stopTyping();
-        void run();
-      }
-    }, 28);
-  }
-
-  function onDemoKey(event: KeyboardEvent) {
-    if (event.key === 'Tab' || event.key === 'Enter' || event.metaKey || event.ctrlKey || event.altKey) return;
-    event.preventDefault();
-    if (typing || !samples.length) return;
-    typeSample(samples[nextSample % samples.length]);
-    nextSample += 1;
-  }
-
-  onDestroy(stopTyping);
 
   const zone = $derived(result ? zoneOf(points(result.toxicity), review, auto) : null);
   const verdict = $derived(
@@ -91,21 +51,11 @@
           placeholder={m.aegis_test_placeholder()}
           bind:value={text}
           {disabled}
-          readonly={DEMO_MODE}
-          onkeydown={DEMO_MODE ? onDemoKey : undefined}
         />
         <Button type="submit" variant="secondary" icon="sparkles" loading={busy} disabled={disabled || !text.trim()}>{m.aegis_test_button()}</Button>
       </div>
     {/snippet}
   </Field>
-
-  {#if samples.length}
-    <div class="tester__samples">
-      {#each samples as sample (sample.text)}
-        <Button type="button" variant="ghost" size="sm" onclick={() => typeSample(sample)} disabled={disabled}>{sample.label}</Button>
-      {/each}
-    </div>
-  {/if}
 
   {#if error}
     <Callout variant="danger">{error}</Callout>
@@ -144,12 +94,6 @@
     display: flex;
     flex-wrap: wrap;
     gap: 0.5rem;
-  }
-
-  .tester__samples {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.375rem;
   }
 
   .tester__row input {

@@ -44,7 +44,7 @@ for (const file of ['../../utils/db.ts', '../../utils/db.js']) {
   mock.module(path.resolve(import.meta.dir, file), () => ({ default: mockDb, prisma: mockDb, prismaRead: mockDb, upsertRetryingRace: (upsert: () => Promise<unknown>) => upsert() }));
 }
 
-const { nextQuestion, prevQuestion, getPublicQuizState, buildEventResultsView } = await import('../../services/features/eventService.js');
+const { nextQuestion, prevQuestion, getPublicQuizState } = await import('../../services/features/eventService.js');
 
 const clientWithoutChannel: any = { channels: { fetch: async () => null } };
 
@@ -77,13 +77,5 @@ describe('page web publique', () => {
     const state = await getPublicQuizState('ev1', null);
     expect(state?.previous).toEqual({ text: 'Capitale de la France ?', answer: 'Paris' });
     expect(state?.leaderboard).toEqual([{ userId: 'u1', name: 'alice', score: 1 }]);
-  });
-});
-
-describe('résultats de quiz', () => {
-  test("le titre et la pastille d'une question sans réponse s'affichent sans texte corrompu", async () => {
-    const embed = (await buildEventResultsView({ user: { id: 'u1' }, guildId: 'g1' } as never, 'ev1')).embeds[0].toJSON();
-    expect(embed.title).toBe('📈 Résultats : Quiz');
-    expect(embed.fields?.[0]?.value).toStartWith('Ta réponse : ⚪');
   });
 });

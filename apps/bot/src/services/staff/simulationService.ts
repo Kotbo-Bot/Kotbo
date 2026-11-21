@@ -307,9 +307,6 @@ async function runScenario(client: Client, guild: Guild, sessionId: string, step
         username: step.authorName.slice(0, 80),
         avatarURL: step.authorAvatarUrl || undefined,
         content: step.content.slice(0, 1900),
-        // Un exercice ne notifie personne : les scénarios de raid contiennent
-        // justement des @everyone et des mentions de rôle.
-        allowedMentions: { parse: [] },
         components: buildActionRows(sessionId, index),
       });
 

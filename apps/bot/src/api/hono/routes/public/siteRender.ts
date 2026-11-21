@@ -5,7 +5,6 @@ import { getApiUrl, getDashboardUrl } from '../../../shared.js';
 import { getAllInstances } from '../../../../utils/instanceResolver.js';
 import { logger } from '../../../../utils/logger.js';
 import { handleSiteRequest, robotsTxt } from '../../../../services/site/sitePages.js';
-import { SITE_PROXY_SECRET_HEADER, isTrustedSiteProxy } from '../../../../services/site/siteProxyAuth.js';
 
 // ============================================================================
 // RENDU PUBLIC DES SITES COMMUNAUTAIRES
@@ -60,9 +59,6 @@ function relayHost(c: Context): string | null {
 function proxiedDashboardOrigin(c: Context): string | null {
   const forwardedHost = relayHost(c);
   if (!forwardedHost) return null;
-  // Un en-tête d'hôte ne prouve pas le passage par le proxy du dashboard : avec
-  // SITE_PROXY_SECRET défini, il doit aussi présenter le secret partagé.
-  if (!isTrustedSiteProxy(c.req.header(SITE_PROXY_SECRET_HEADER), process.env.SITE_PROXY_SECRET)) return null;
   const candidates = [getDashboardUrl(), ...getAllInstances().map((i) => i.dashboardOrigin)].filter(Boolean);
   for (const candidate of candidates) {
     try {

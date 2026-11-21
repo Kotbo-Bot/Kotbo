@@ -89,10 +89,8 @@ export async function runGuildDecay(guildId: string, client: Client | null): Pro
       const tierAfter = resolveRankedTier(outcome.newRp, ladder);
       const demoted = tierAfter.key !== tierBefore.key;
 
-      // Conditionnée aux valeurs lues sur la réplique : un gain ou une activité
-      // arrivés depuis ne sont pas écrasés, le membre est revu au passage suivant.
-      const written = await prisma.rankedMember.updateMany({
-        where: { id: member.id, rp: member.rp, lastActiveDate: member.lastActiveDate, lastDecayDate: member.lastDecayDate },
+      await prisma.rankedMember.update({
+        where: { id: member.id },
         data: {
           rp: outcome.newRp,
           tierKey: tierAfter.key,
@@ -100,7 +98,6 @@ export async function runGuildDecay(guildId: string, client: Client | null): Pro
           lastDecayDate: today,
         },
       }).catch(() => null);
-      if (!written?.count) continue;
 
       await prisma.rankedRpLog.create({
         data: {

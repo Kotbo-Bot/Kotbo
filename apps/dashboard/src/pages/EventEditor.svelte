@@ -4,7 +4,6 @@
   import ModulePage from '../lib/components/ModulePage.svelte';
   import { Button, Callout, Field, FilterPills, SectionCard, SettingsRow, ToggleSwitch } from '../lib/components/ui';
   import { eventTypeMeta, hasRegistrations } from '../lib/components/events/eventTypes';
-  import { toLocalDateInput, toUtcIso } from '../lib/components/events/eventDates';
   import { DEFAULT_TOURNAMENT_SETTINGS, type TournamentFormat } from '../lib/api/tournaments';
   import { authStore } from '../lib/stores/auth.svelte';
   import { dashboardStore } from '../lib/stores/dashboard.svelte';
@@ -40,9 +39,6 @@
       const config = loaded.config && typeof loaded.config === 'object' ? loaded.config : {};
       loaded.config = { createDiscordEvent: true, sendEmbed: true, location: 'Discord', endTime: '', ...config };
       if (loaded.type === 'TOURNAMENT') loaded.config.tournament = { ...DEFAULT_TOURNAMENT_SETTINGS, ...(config.tournament ?? {}) };
-      // triggerValue n'est une date que pour un déclencheur SCHEDULED (un nombre pour MEMBER_COUNT).
-      if (loaded.triggerType === 'SCHEDULED') loaded.triggerValue = toLocalDateInput(loaded.triggerValue);
-      loaded.config.endTime = toLocalDateInput(loaded.config.endTime);
       event = loaded;
       if (hasRegistrations(loaded.type)) await loadCustomForms();
     } catch {
@@ -69,12 +65,7 @@
         guildId,
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        // Copie en UTC : `event` reste lié aux champs, en heure locale.
-        body: JSON.stringify({
-          ...event,
-          triggerValue: event.triggerType === 'SCHEDULED' ? toUtcIso(event.triggerValue) : event.triggerValue,
-          config: { ...event.config, endTime: toUtcIso(event.config?.endTime) },
-        }),
+        body: JSON.stringify(event),
       });
       if (!res.ok) throw new Error();
       if (!silent) toast.success(m.eve_saved_toast());
@@ -305,7 +296,7 @@
               </select>
             </SettingsRow>
             <SettingsRow label={m.eve_field_trigger_type()} labelFor="ev-trigger">
-              <select id="ev-trigger" class="input w-full sm:w-72" bind:value={event.triggerType} onchange={() => (event.triggerValue = '')}>
+              <select id="ev-trigger" class="input w-full sm:w-72" bind:value={event.triggerType}>
                 <option value={null}>{m.eve_trigger_manual()}</option>
                 <option value="MEMBER_COUNT">{m.eve_trigger_member_count()}</option>
                 <option value="SCHEDULED">{m.eve_trigger_scheduled()}</option>

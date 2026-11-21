@@ -1089,29 +1089,6 @@ function readSchedule(graph: WorkflowGraph): string | null {
   return expression.trim() || null;
 }
 
-/** Minutes qu'un balayage examine au plus, la courante comprise. */
-const SCHEDULE_CATCH_UP_MINUTES = 10;
-
-/** Dernière minute balayée par ce processus ; `null` avant le premier passage. */
-let lastSweptMinute: Date | null = null;
-
-/**
- * Minutes à examiner, de la plus récente à la plus ancienne : la courante, plus
- * celles qu'aucun passage n'a vues, car un balayage qui déborde de sa minute
- * fait sauter le tick suivant (voir `runLocalSweep`).
- */
-function minutesToSweep(minuteStart: Date): Date[] {
-  const previous = lastSweptMinute;
-  lastSweptMinute = minuteStart;
-  const minutes = [minuteStart];
-  for (let i = 1; i < SCHEDULE_CATCH_UP_MINUTES; i++) {
-    const minute = new Date(minuteStart.getTime() - i * 60_000);
-    if (!previous || minute <= previous) break;
-    minutes.push(minute);
-  }
-  return minutes;
-}
-
 /**
  * Lance les workflows planifiés dont le motif tombe sur cette minute.
  *
@@ -1134,11 +1111,6 @@ function minutesToSweep(minuteStart: Date): Date[] {
  * une minute sautée ne se rattrape pas, la planification ne partait jamais.
  */
 export async function dispatchScheduledWorkflows(client: Client, now = new Date()): Promise<void> {
-  const minuteStart = new Date(now);
-  minuteStart.setSeconds(0, 0);
-  // Avant les retours anticipés : une minute sans rien à lancer compte comme vue.
-  const minutes = minutesToSweep(minuteStart);
-
   const guildIds = [...client.guilds.cache.keys()];
   if (guildIds.length === 0) return;
 
@@ -1146,6 +1118,9 @@ export async function dispatchScheduledWorkflows(client: Client, now = new Date(
     where: { enabled: true, triggerEvent: 'schedule:fired', guildId: { in: guildIds } },
   });
   if (workflows.length === 0) return;
+
+  const minuteStart = new Date(now);
+  minuteStart.setSeconds(0, 0);
 
   /** Un fuseau par serveur : plusieurs planifications s'y partagent la lecture. */
   const timezones = new Map<string, string>();
@@ -1167,9 +1142,7 @@ export async function dispatchScheduledWorkflows(client: Client, now = new Date(
         timezone = await resolveGuildTimezone(workflow.guildId);
         timezones.set(workflow.guildId, timezone);
       }
-      // Un seul départ par passage, à la plus récente des minutes où le motif tombe.
-      const firedAt = minutes.find((minute) => cronMatches(expression, minute, timezone));
-      if (!firedAt) continue;
+      if (!cronMatches(expression, now, timezone)) continue;
 
       const guild = client.guilds.cache.get(workflow.guildId);
       if (!guild) continue;
@@ -1180,7 +1153,7 @@ export async function dispatchScheduledWorkflows(client: Client, now = new Date(
       // ci-dessous les accepte tous les deux - seule la minute murale les
       // confond, et c'est bien elle que l'admin a réglée.
       if (workflow.lastRunAt
-        && wallClockMinuteKey(workflow.lastRunAt, timezone) === wallClockMinuteKey(firedAt, timezone)) {
+        && wallClockMinuteKey(workflow.lastRunAt, timezone) === wallClockMinuteKey(now, timezone)) {
         continue;
       }
 
@@ -1190,16 +1163,16 @@ export async function dispatchScheduledWorkflows(client: Client, now = new Date(
       const { count } = await prisma.workflow.updateMany({
         where: {
           id: workflow.id,
-          OR: [{ lastRunAt: null }, { lastRunAt: { lt: firedAt } }],
+          OR: [{ lastRunAt: null }, { lastRunAt: { lt: minuteStart } }],
         },
-        // `firedAt` et non l'horloge : le balayage est séquentiel, un
+        // `minuteStart` et non l'horloge : le balayage est séquentiel, un
         // workflow lent en amont pousserait sinon le repère dans la minute
         // d'après et la garde de l'heure d'hiver ne le reconnaîtrait plus.
-        data: { lastRunAt: firedAt },
+        data: { lastRunAt: minuteStart },
       });
       if (count === 0) continue;
 
-      await runAndPersist(guild, workflow, { firedAt: firedAt.toISOString(), cron: expression }, 'schedule');
+      await runAndPersist(guild, workflow, { firedAt: minuteStart.toISOString(), cron: expression }, 'schedule');
     } catch (error) {
       logger.error('Workflow', `Échec du balayage planifié pour ${workflow.id}:`, error);
     }

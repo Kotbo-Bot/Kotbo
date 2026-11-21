@@ -156,7 +156,7 @@ export function registerReadServerAssetsTools(ctx: McpToolContext) {
               channelId: w.channelId,
               creatorId: w.owner?.id ?? null,
               creatorTag: w.owner && 'tag' in w.owner ? w.owner.tag : (w.owner?.username ?? null),
-              // Pas d'url : son jeton permet de poster, une clé de lecture n'a pas à l'avoir.
+              url: w.url,
               avatar: w.avatarURL(),
             }))
           );

@@ -12,7 +12,6 @@ import {
 } from 'discord.js';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
-import { isAutoGrantableRole } from '../../utils/adminLockPermissions.js';
 import { resolveLogChannel } from '../../utils/logChannel.js';
 import { COLORS } from '../../utils/embeds.js';
 import { cache } from '../../utils/cache.js';
@@ -606,7 +605,7 @@ async function applyRoleSync(
 
   for (const roleId of rolesToAdd) {
     const role = targetMember.guild.roles.cache.get(roleId);
-    if (role && isAutoGrantableRole(role) && !targetMember.roles.cache.has(roleId)) {
+    if (role && !targetMember.roles.cache.has(roleId)) {
       await targetMember.roles.add(role, 'Kotbo StaffServer: Sync automatique').catch((err) =>
         logger.warn(TAG, `Impossible d'ajouter le rôle ${roleId} à ${targetMember.user.tag}`, err),
       );
@@ -653,7 +652,7 @@ async function applySimpleStaffRole(
     const simpleRole = destGuild.roles.cache.get(link.simpleStaffRoleId);
     if (!simpleRole) return;
 
-    if (hasAnyStaffRole && isAutoGrantableRole(simpleRole) && !targetMember.roles.cache.has(simpleRole.id)) {
+    if (hasAnyStaffRole && !targetMember.roles.cache.has(simpleRole.id)) {
       await targetMember.roles.add(simpleRole, 'Kotbo StaffServer: Ajout rôle staff simple').catch(() => null);
     } else if (!hasAnyStaffRole && targetMember.roles.cache.has(simpleRole.id)) {
       await targetMember.roles.remove(simpleRole, 'Kotbo StaffServer: Retrait rôle staff simple').catch(() => null);
@@ -820,7 +819,7 @@ export async function syncMemberOnJoin(
 
         if (otherMember.roles.cache.has(sourceRoleId)) {
           const role = member.guild.roles.cache.get(targetRoleId);
-          if (role && isAutoGrantableRole(role) && !member.roles.cache.has(targetRoleId)) {
+          if (role && !member.roles.cache.has(targetRoleId)) {
             await member.roles.add(role, 'Kotbo StaffServer: Sync à l\'arrivée').catch((err) =>
               logger.warn(TAG, `Impossible d'ajouter le rôle ${targetRoleId} à ${member.user.tag} à l'arrivée`, err),
             );
@@ -837,7 +836,7 @@ export async function syncMemberOnJoin(
 
         if (hasAnyStaffRole) {
           const simpleRole = member.guild.roles.cache.get(link.simpleStaffRoleId);
-          if (simpleRole && isAutoGrantableRole(simpleRole) && !member.roles.cache.has(simpleRole.id)) {
+          if (simpleRole && !member.roles.cache.has(simpleRole.id)) {
             await member.roles.add(simpleRole, 'Kotbo StaffServer: Rôle staff simple à l\'arrivée').catch(() => null);
           }
         }
@@ -908,7 +907,7 @@ export async function fullSyncStaffRoles(linkId: string, client: Client): Promis
 
         if (hasSourceRole && !hasTargetRole) {
           const role = targetGuild.roles.cache.get(targetRoleId);
-          if (role && isAutoGrantableRole(role)) {
+          if (role) {
             await targetMember.roles.add(role, 'Kotbo StaffServer: Sync complète');
             synced++;
           }
@@ -927,7 +926,7 @@ export async function fullSyncStaffRoles(linkId: string, client: Client): Promis
         const simpleRole = targetGuild.roles.cache.get(link.simpleStaffRoleId);
 
         if (simpleRole) {
-          if (hasAnyStaffRole && isAutoGrantableRole(simpleRole) && !targetMember.roles.cache.has(simpleRole.id)) {
+          if (hasAnyStaffRole && !targetMember.roles.cache.has(simpleRole.id)) {
             await targetMember.roles.add(simpleRole, 'Kotbo StaffServer: Sync complète');
             synced++;
           } else if (!hasAnyStaffRole && targetMember.roles.cache.has(simpleRole.id)) {

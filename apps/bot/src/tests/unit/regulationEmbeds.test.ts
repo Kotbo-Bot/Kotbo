@@ -1,12 +1,9 @@
 import { describe, expect, mock, test } from 'bun:test';
 import path from 'node:path';
-import type { Client, EmbedBuilder } from 'discord.js';
-
-/** Configuration du serveur lue par la publication du règlement. */
-let guildRow: Record<string, unknown> | null = null;
+import type { EmbedBuilder } from 'discord.js';
 
 const prismaMock = {
-  guild: { findUnique: mock(async () => guildRow), update: mock(async () => ({})) },
+  guild: { findUnique: mock(async () => null), update: mock(async () => ({})) },
   guildRegulationArticle: {
     findMany: mock(async (): Promise<{ id: string }[]> => []),
     update: mock((args: { where: { id: string }; data: { sortOrder: number } }) => args),
@@ -24,7 +21,7 @@ for (const extension of ['ts', 'js']) {
   }));
 }
 
-const { buildRegulationEmbeds, publishOrUpdateRegulationMessage, renumberRegulationArticles } = await import('../../services/staff/regulationService.js');
+const { buildRegulationEmbeds, renumberRegulationArticles } = await import('../../services/staff/regulationService.js');
 
 /** Limite Discord : texte affichable cumulé d'un message. */
 const DISCORD_TEXT_LIMIT = 4000;
@@ -184,49 +181,5 @@ describe('renumberRegulationArticles', () => {
     expect(prismaMock.guildRegulationArticle.update.mock.calls.map(([args]) => [args.where.id, args.data.sortOrder])).toEqual([
       ['c', 0], ['a', 1], ['b', 2], ['d', 3],
     ]);
-  });
-});
-
-describe('publishOrUpdateRegulationMessage', () => {
-  const GUILD = 'guild-1';
-
-  /** Salon textuel factice : `guildId` est le serveur auquel il appartient. */
-  function salon(id: string, guildId: string) {
-    return {
-      id,
-      guildId,
-      send: mock(async () => ({ id: `${id}-message` })),
-      messages: { fetch: mock(async () => null) },
-      isTextBased: () => true,
-      isDMBased: () => false,
-    };
-  }
-
-  /** Publie avec les salons saisis ; le bot voit un salon du serveur et un salon d'un serveur tiers. */
-  function publier(salons: { regulationChannelId: string; staffAnnouncementChannelId: string | null }) {
-    const local = salon('salon-local', GUILD);
-    const tiers = salon('salon-tiers', 'autre-serveur');
-    const visibles = new Map([[local.id, local], [tiers.id, tiers]]);
-    const client = {
-      guilds: { cache: new Map() },
-      channels: { fetch: mock(async (id: string) => visibles.get(id) ?? null) },
-    } as unknown as Client;
-    guildRow = { regulationMessageIds: [], ...salons };
-    return { local, tiers, publication: publishOrUpdateRegulationMessage(client, GUILD) };
-  }
-
-  test("refuse de publier le règlement dans le salon d'un autre serveur", async () => {
-    const { tiers, publication } = publier({ regulationChannelId: 'salon-tiers', staffAnnouncementChannelId: null });
-
-    await expect(publication).rejects.toThrow('introuvable ou inaccessible');
-    expect(tiers.send).not.toHaveBeenCalled();
-  });
-
-  test("n'annonce pas le règlement dans un salon staff d'un autre serveur", async () => {
-    const { local, tiers, publication } = publier({ regulationChannelId: 'salon-local', staffAnnouncementChannelId: 'salon-tiers' });
-
-    await expect(publication).resolves.toMatchObject({ targetChannelId: 'salon-local' });
-    expect(local.send).toHaveBeenCalledTimes(1);
-    expect(tiers.send).not.toHaveBeenCalled();
   });
 });

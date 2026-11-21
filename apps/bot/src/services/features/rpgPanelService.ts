@@ -180,12 +180,10 @@ import {
 import { trackRpgObjective } from './rpg/rpgObjectiveTracker.js';
 import { isShopItemUnlocked, rpgGuildXpNeeded, type ShopModuleState } from './economyPolicy.js';
 import { lockRpgProfile, takeInventoryQuantity } from './rpg/rpgInventoryWrites.js';
-import { checkPlayerStats } from './rpg/rpgPlayerAdminService.js';
 import { attackRaid, checkRaidAssaultGrant, getRaidPanelState, getRaidState, grantRaidAssaults, RaidError, RaidRefused } from './rpg/rpgRaidService.js';
 import { buildAssaultEmbed, buildRaidEmbed, healthBar, raidRefusalText } from './rpg/rpgRaidPanel.js';
 import { computeAttack } from './rpg/rpgCombatMath.js';
 import {
-  advanceSkillCooldowns,
   bossCooldownMs,
   fightCooldownMs,
   formatCooldown,
@@ -5256,7 +5254,6 @@ async function startFightSession(
       // Les postures ne durent qu'un tour : elles se réinitialisent à chaque action.
       defenseMultiplier = 1;
       let actionTaken = '';
-      let usedSkillId: string | null = null;
       const action = btnInt.customId.split(':')[1];
 
       if (action === 'combat_attack') {
@@ -5276,7 +5273,6 @@ async function startFightSession(
         }
 
         skillCooldowns.set(skill.id, skill.cooldownTurns);
-        usedSkillId = skill.id;
         if (skill.effect.defenseMultiplier) defenseMultiplier = skill.effect.defenseMultiplier;
         if (skill.effect.evadeNextAttack) evadeNextAttack = true;
         if (skill.effect.healPercent) {
@@ -5314,7 +5310,10 @@ async function startFightSession(
 
       turnsLog.push(actionTaken);
 
-      advanceSkillCooldowns(skillCooldowns, usedSkillId);
+      // Une compétence consommée fait progresser toutes les recharges d'un tour.
+      for (const [id, remaining] of skillCooldowns) {
+        if (remaining > 0) skillCooldowns.set(id, remaining - 1);
+      }
 
       if (monsterHp <= 0) {
         collector.stop('victory');
@@ -6712,8 +6711,7 @@ async function handleAdminSetSubmit(interaction: ModalSubmitInteraction, guildId
     return;
   }
 
-  // Mêmes bornes que le dashboard et les outils MCP : un refus remonte à replyPanelError.
-  await adminSetStats(guildId, targetId, checkPlayerStats({ [stat]: value }));
+  await adminSetStats(guildId, targetId, { [stat]: value });
   await interaction.reply({ embeds: [successEmbed(m.rpg_admin_stats_updated_title({}, { locale }), m.rpg_admin_balance_set_desc({ id: targetId, value }, { locale }))], flags: [MessageFlags.Ephemeral] });
 }
 

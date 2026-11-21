@@ -3,7 +3,6 @@ import type { Client } from 'discord.js';
 import prisma from '../../../../utils/db.js';
 import { logger } from '../../../../utils/logger.js';
 import { registerBotInstanceStats, cleanUpStaleStats } from '../../../../services/system/statsService.js';
-import { isInstanceAuthEnforced, isLicenseIssuer, signLease } from '../../../../services/system/instanceLicense.js';
 import { isKotboPublicOrigin } from '../../../shared.js';
 
 // Rate limiter for stats pings (memory-based)
@@ -124,7 +123,6 @@ const pingStatsRoute = createRoute({
             banned: z.boolean().optional(),
             mode: z.enum(['SHUTDOWN', 'DISABLE_FEATURES']).optional(),
             reason: z.string().nullable().optional(),
-            lease: z.string().optional().openapi({ description: 'Signed license lease, delivered to authorized instances' }),
           }),
         },
       },
@@ -345,33 +343,7 @@ export function createPublicStatsRouter(client: Client) {
       });
 
       if (!ban) {
-        // Sans clé d'émission ce process n'est pas le master : aucun bail à délivrer.
-        if (!isLicenseIssuer()) return c.json({ ok: true, banned: false }, 200);
-
-        // Le bot du master pingue sa propre API : il n'a pas à se faire autoriser.
-        const isOwnBot = payload.botClientId === client.user?.id;
-        const authorized = isOwnBot || !!(await prisma.authorizedInstance.findFirst({
-          where: { botClientId: payload.botClientId, revokedAt: null },
-          select: { botClientId: true },
-        }));
-
-        if (!authorized && isInstanceAuthEnforced()) {
-          logger.warn('StatsAPI', `Instance non autorisée refusée : ${payload.botName} (${payload.botClientId})`);
-          return c.json({
-            ok: true,
-            banned: true,
-            mode: 'SHUTDOWN' as const,
-            reason: "Instance non autorisée : demande une autorisation à l'administration Kotbo.",
-          }, 200);
-        }
-
-        // Hors enforcement, on délivre quand même un bail : les instances en place
-        // en reçoivent un avant que la liste blanche ne devienne obligatoire.
-        return c.json({
-          ok: true,
-          banned: false,
-          lease: signLease(payload.botClientId, payload.machineFingerprint ?? null),
-        }, 200);
+        return c.json({ ok: true, banned: false }, 200);
       }
 
       return c.json({

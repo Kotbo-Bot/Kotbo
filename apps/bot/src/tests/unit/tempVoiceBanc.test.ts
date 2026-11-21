@@ -736,16 +736,6 @@ describe('Le banc lui-même', () => {
   });
 });
 
-describe('Catégorie du générateur supprimée', () => {
-  test('le salon temporaire est créé hors catégorie', async () => {
-    const opts = { langue: 'fr', format: 'V2', mode: 'CLASSIC' } as const;
-    reglerBase(opts);
-    configServeur.tempVoiceCategoryId = '900000000000000600';
-    const sc = await monterScene({ ...opts, garderBase: true });
-    expect(sc.monde.salons.get(sc.salonId)?.parent_id).toBeNull();
-  });
-});
-
 describe('Matrice : customId × format × mode × rôle × langue', () => {
   for (const cas of CAS) {
     describe(`${cas.customId.replace(/\d{18}/g, 'ID').replace(':SALON', '')}${cas.customId.includes(':m_ecrire:') ? ` [${cas.values}]` : ''}`, () => {

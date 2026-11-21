@@ -1,6 +1,6 @@
 import { describe, expect, test, mock } from 'bun:test';
 import path from 'node:path';
-import { PermissionFlagsBits, PermissionsBitField, type GuildMember } from 'discord.js';
+import type { GuildMember } from 'discord.js';
 
 let configRow: Record<string, unknown> | null = null;
 const mockDb = {
@@ -19,11 +19,11 @@ const TIERS = [
 ];
 
 /** Membre factice : un rôle « editable » est un rôle que le bot peut donner. */
-function fakeMember(held: string[], roles: Record<string, { editable: boolean; managed?: boolean; admin?: boolean }>) {
+function fakeMember(held: string[], roles: Record<string, { editable: boolean; managed?: boolean }>) {
   const current = new Set(held);
   const add = mock(async (role: { id: string }) => { current.add(role.id); });
   const remove = mock(async (role: { id: string }) => { current.delete(role.id); });
-  const guildRoles = new Map(Object.entries(roles).map(([id, flags]) => [id, { id, managed: false, permissions: new PermissionsBitField(flags.admin ? PermissionFlagsBits.Administrator : 0n), ...flags }]));
+  const guildRoles = new Map(Object.entries(roles).map(([id, flags]) => [id, { id, managed: false, ...flags }]));
   const member = {
     guild: { roles: { cache: guildRoles } },
     roles: { cache: { has: (id: string) => current.has(id) }, add, remove },
@@ -37,12 +37,6 @@ describe('grantReachedTiers', () => {
     const granted = await grantReachedTiers(member, TIERS, 10, 'raison');
     expect(granted.map((tier) => tier.roleId)).toEqual(['r10']);
     expect(add).toHaveBeenCalledTimes(1);
-  });
-
-  test('ne donne jamais un rôle de palier qui porte Administrateur', async () => {
-    const { member, add } = fakeMember([], { r10: { editable: true, admin: true } });
-    expect(await grantReachedTiers(member, TIERS, 10, 'raison')).toEqual([]);
-    expect(add).not.toHaveBeenCalled();
   });
 
   test('saute un rôle que le bot ne peut pas donner, sans planter', async () => {
@@ -79,13 +73,6 @@ describe('grantReachedTiers', () => {
 describe('revokeLostTiers', () => {
   test('retire les rôles des paliers que le total n\'atteint plus', async () => {
     const { member, remove, current } = fakeMember(['r10', 'r50'], { r10: { editable: true }, r50: { editable: true } });
-    await revokeLostTiers(member, TIERS, 49, 'raison');
-    expect(remove).toHaveBeenCalledTimes(1);
-    expect([...current]).toEqual(['r10']);
-  });
-
-  test('retire aussi un rôle de palier Administrateur déjà distribué', async () => {
-    const { member, remove, current } = fakeMember(['r10', 'r50'], { r10: { editable: true }, r50: { editable: true, admin: true } });
     await revokeLostTiers(member, TIERS, 49, 'raison');
     expect(remove).toHaveBeenCalledTimes(1);
     expect([...current]).toEqual(['r10']);

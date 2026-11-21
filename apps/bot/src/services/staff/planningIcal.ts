@@ -3,8 +3,10 @@
  * le telephone relisent eux-memes.
  *
  * Le lien porte le serveur et le membre, signes avec le secret du dashboard :
- * seule la version de revocation est lue en base. Il ne donne acces qu'au planning de ce membre, et seulement
+ * rien a stocker. Il ne donne acces qu'au planning de ce membre, et seulement
  * tant qu'il fait partie du staff (verifie a chaque lecture).
+ * shortcut: un lien partage ne se revoque pas sans changer JWT_SECRET ; ajouter
+ * une version par membre en base si le besoin de revocation apparait.
  */
 import crypto from 'node:crypto';
 
@@ -14,25 +16,18 @@ function signature(payload: string, secret: string): string {
   return crypto.createHmac('sha256', secret).update(`${TOKEN_PURPOSE}:${payload}`).digest('base64url').slice(0, 32);
 }
 
-/**
- * `version` suit `StaffMember.icalTokenVersion` : la relire à chaque lecture et
- * l'incrémenter côté serveur révoque tous les liens déjà distribués. Un lien
- * sans version (émis avant ce champ) vaut 0.
- */
-export function signIcalToken(guildId: string, userId: string, secret: string, version = 0): string {
-  const payload = Buffer.from(version > 0 ? `${guildId}.${userId}.${version}` : `${guildId}.${userId}`).toString('base64url');
+export function signIcalToken(guildId: string, userId: string, secret: string): string {
+  const payload = Buffer.from(`${guildId}.${userId}`).toString('base64url');
   return `${payload}.${signature(payload, secret)}`;
 }
 
-export function verifyIcalToken(token: string, secret: string): { guildId: string; userId: string; version: number } | null {
+export function verifyIcalToken(token: string, secret: string): { guildId: string; userId: string } | null {
   const [payload, sig] = token.split('.');
   if (!payload || !sig) return null;
   const expected = signature(payload, secret);
   if (sig.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return null;
-  const [guildId, userId, rawVersion] = Buffer.from(payload, 'base64url').toString().split('.');
-  const version = rawVersion === undefined ? 0 : Number(rawVersion);
-  if (!Number.isInteger(version) || version < 0) return null;
-  return /^\d{5,25}$/.test(guildId ?? '') && /^\d{5,25}$/.test(userId ?? '') ? { guildId, userId, version } : null;
+  const [guildId, userId] = Buffer.from(payload, 'base64url').toString().split('.');
+  return /^\d{5,25}$/.test(guildId ?? '') && /^\d{5,25}$/.test(userId ?? '') ? { guildId, userId } : null;
 }
 
 export interface IcsEvent {

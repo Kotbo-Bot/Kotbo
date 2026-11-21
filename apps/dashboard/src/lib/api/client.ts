@@ -158,10 +158,8 @@ export async function authorizedFetch(
         : AbortSignal.timeout(timeoutMs ?? DEFAULT_TIMEOUT_MS),
     });
   } catch (err) {
-    // Une annulation de l'appelant n'est pas une panne reseau a rejouer. Le delai
-    // borne, lui, abort un autre signal et laisse `init.signal` intact.
     throw new DashboardApiError({
-      kind: init.signal?.aborted ? 'aborted' : kindFromNetworkError(err),
+      kind: kindFromNetworkError(err),
       path: url,
       method: init.method ?? 'GET',
       cause: err,

@@ -16,7 +16,6 @@
   import { serverSwitcherStore } from '../stores/serverSwitcher.svelte';
   import { brandingStore } from '../stores/branding.svelte';
   import { dashboardStore } from '../stores/dashboard.svelte';
-  import { guardedLinkClick } from '../navigationGuard';
   import { userPrefs } from '../stores/userPreferences.svelte';
 
   let isDesktop = $state(
@@ -292,7 +291,6 @@
     {/if}
     <a
       href={item.href}
-      onclick={(e) => guardedLinkClick(e, item.href)}
       onmouseenter={() => prefetchRoute(item.href)}
       onfocus={() => prefetchRoute(item.href)}
       aria-current={active ? 'page' : undefined}
@@ -327,7 +325,6 @@
 {#snippet railLink(href: string, icon: string, label: string, active: boolean)}
   <a
     {href}
-    onclick={(e) => guardedLinkClick(e, href)}
     onmouseenter={(e) => { showTooltip(e, label); prefetchRoute(href); }}
     onfocus={() => prefetchRoute(href)}
     onmouseleave={hideTooltip}
@@ -407,12 +404,12 @@
   <div class="flex items-center gap-2.5 px-4 h-14 shrink-0 {isCollapsed ? 'lg:justify-center lg:px-0' : ''}">
     <!-- Le logo ramene a l'accueil du dashboard : c'est la convention que
          chacun attend (loi de Jakob), et jamais vers le site vitrine. -->
-    <a href="/" onclick={(e) => guardedLinkClick(e, '/')} class="shrink-0 rounded-lg" aria-label={`${brandingStore.brandName} · ${m.nav_home()}`}>
+    <a href="/" class="shrink-0 rounded-lg" aria-label={`${brandingStore.brandName} · ${m.nav_home()}`}>
       <img alt="" src={LOGO_URL} class="w-7 h-7 shrink-0 object-cover rounded-lg" />
     </a>
 
     {#if !isCollapsed}
-      <a href="/" onclick={(e) => guardedLinkClick(e, '/')} class="flex-1 min-w-0 text-sm font-semibold text-on-surface truncate font-headline hover:text-primary transition-colors">{brandingStore.brandName}</a>
+      <a href="/" class="flex-1 min-w-0 text-sm font-semibold text-on-surface truncate font-headline hover:text-primary transition-colors">{brandingStore.brandName}</a>
       {#if isStaffServerGuild}
         <span class="shrink-0 px-1.5 py-0.5 rounded-md text-2xs font-medium bg-primary/10 text-primary">Staff</span>
       {/if}
@@ -569,7 +566,7 @@
       {#if navigationStore.canViewBilling && trialDaysLeft !== null && !isCollapsed}
         <!-- Le temps d'essai se voit des le premier jour : un essai dont on ne
              voit pas la fin se repousse au dernier jour (loi de Parkinson). -->
-        <a href="/billing" onclick={(e) => guardedLinkClick(e, '/billing')} class="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-body-sm text-primary hover:bg-primary/10 transition-colors">
+        <a href="/billing" class="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-body-sm text-primary hover:bg-primary/10 transition-colors">
           <Papicon icon="clock" size={14} class="shrink-0" />
           <span class="truncate">
             {trialDaysLeft <= 1 ? m.nav_trial_last_day() : m.nav_trial_days_left({ n: trialDaysLeft })}

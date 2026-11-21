@@ -33,7 +33,6 @@ import {
   planForMemberCount,
   type PlanKey,
 } from '@kotbo/contracts';
-import { Prisma } from '@prisma/client';
 import prisma from '../../../utils/db.js';
 import { logger } from '../../../utils/logger.js';
 import { requireAuth } from '../middleware/auth.js';
@@ -50,7 +49,6 @@ import {
   type Stripe,
 } from '../../../services/billing/stripeService.js';
 import { syncSubscription, guildIdForSubscription, transferSubscription, TransferError } from '../../../services/billing/subscriptionSync.js';
-import { LIVE_STATUSES } from '../../../services/billing/entitlingStatuses.js';
 import { recordBillingConsent } from '../../../services/billing/consentService.js';
 import {
   recordFailedInvoice,
@@ -143,15 +141,9 @@ export function createBillingRouter(client: Client): OpenAPIHono {
       await prisma.billingEvent.create({
         data: { id: event.id, type: event.type, payload: event as unknown as object },
       });
-    } catch (err) {
-      // Seule une clé primaire en double (P2002) prouve un doublon : toute autre
-      // erreur renvoie 500 pour que Stripe rejoue l'événement au lieu de le perdre.
-      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-        logger.debug('Billing', `Événement ${event.id} déjà traité, ignoré.`);
-        return c.json({ received: true, duplicate: true }, 200);
-      }
-      logger.error('Billing', `Enregistrement de l'idempotence de ${event.id} impossible :`, err);
-      return c.json({ error: 'Enregistrement en échec' }, 500);
+    } catch {
+      logger.debug('Billing', `Événement ${event.id} déjà traité, ignoré.`);
+      return c.json({ received: true, duplicate: true }, 200);
     }
 
     try {
@@ -193,9 +185,6 @@ export function createBillingRouter(client: Client): OpenAPIHono {
           // Avant d'appliquer quoi que ce soit : la preuve de ce qui a ete
           // accepte doit survivre meme si l'application echoue ensuite.
           await recordBillingConsent(session, 'GIFT');
-          // Un paiement différé (prélèvement SEPA...) termine la session avant
-          // l'encaissement : le cadeau attend alors async_payment_succeeded.
-          if (session.payment_status !== 'paid' && session.payment_status !== 'no_payment_required') return null;
           return applyGiftPayment(session);
         }
 
@@ -215,21 +204,6 @@ export function createBillingRouter(client: Client): OpenAPIHono {
         const subscription = await stripe!.subscriptions.retrieve(subscriptionId);
         await syncSubscription(subscription);
         return guildId ?? (await guildIdForSubscription(subscription));
-      }
-
-      case 'checkout.session.async_payment_succeeded': {
-        // Second temps d'un paiement différé : c'est maintenant qu'un cadeau
-        // est réellement payé. Un abonnement, lui, suit customer.subscription.*.
-        const session = event.data.object as Stripe.Checkout.Session;
-        return session.metadata?.kind === GIFT_METADATA_KIND ? applyGiftPayment(session) : null;
-      }
-
-      case 'checkout.session.async_payment_failed': {
-        // Prélèvement refusé : la session est close sans paiement et n'expirera
-        // jamais, c'est donc ici que le cadeau en attente disparaît.
-        const session = event.data.object as Stripe.Checkout.Session;
-        await releaseGiftSession(session.id);
-        return null;
       }
 
       case 'checkout.session.expired': {
@@ -346,10 +320,7 @@ export function createBillingRouter(client: Client): OpenAPIHono {
     status: z.string().nullable(),
     currentPeriodEnd: z.string().nullable(),
     cancelAtPeriodEnd: z.boolean(),
-    /** Un abonnement Stripe est rattaché, même clos : portail et factures. */
     hasSubscription: z.boolean(),
-    /** Il vit encore chez Stripe, même impayé : ni second paiement ni code cadeau. */
-    hasLiveSubscription: z.boolean(),
     /** Taille du serveur, `null` si le bot ne la connaît pas encore. */
     memberCount: z.number().nullable(),
     /** Offre imposée par cette taille : la seule souscriptible en ligne. */
@@ -482,7 +453,6 @@ export function createBillingRouter(client: Client): OpenAPIHono {
       currentPeriodEnd: guild?.stripeCurrentPeriodEnd?.toISOString() ?? null,
       cancelAtPeriodEnd: guild?.stripeCancelAtPeriodEnd ?? false,
       hasSubscription: Boolean(guild?.stripeSubscriptionId),
-      hasLiveSubscription: LIVE_STATUSES.has(guild?.stripeSubscriptionStatus ?? ''),
       memberCount,
       eligiblePlan,
       canManage: c.var.billingAccess.canManage,
@@ -557,14 +527,8 @@ export function createBillingRouter(client: Client): OpenAPIHono {
 
     const guild = await prisma.guild.findUnique({
       where: { id: guildId },
-      select: { stripeCustomerId: true, stripeSubscriptionStatus: true },
+      select: { stripeCustomerId: true },
     });
-
-    // Un abonnement encore vivant, même impayé, se gère dans le portail Stripe
-    // (offre, prorata, régularisation) : un second serait payé en double.
-    if (LIVE_STATUSES.has(guild?.stripeSubscriptionStatus ?? '')) {
-      return c.json({ error: 'Ce serveur a déjà un abonnement en cours : gère-le depuis le portail de facturation.' }, 409);
-    }
 
     const discordGuild = client.guilds.cache.get(guildId) ?? null;
 

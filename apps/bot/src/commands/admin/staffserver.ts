@@ -17,21 +17,7 @@ import {
   autoSetupRoleMappings,
 } from '../../services/staff/staffServerService.js';
 import { getEffectiveLocale, localized, localizedChoice } from '../../utils/i18n.js';
-import prisma from '../../utils/db.js';
 import * as m from '../../lib/paraglide/messages.js';
-
-/**
- * Le lien visé doit relier le serveur où la commande est tapée, comme sur le
- * dashboard : son identifiant n'est pas un secret, il passe dans les boutons d'offboarding.
- */
-async function isLinkOfGuild(linkId: string, guildId: string | null): Promise<boolean> {
-  if (!guildId) return false;
-  const link = await prisma.staffServerLink.findUnique({
-    where: { id: linkId },
-    select: { mainGuildId: true, staffGuildId: true },
-  });
-  return Boolean(link && (link.mainGuildId === guildId || link.staffGuildId === guildId));
-}
 
 function syncModeLabel(mode: string, locale: 'fr' | 'en'): string {
   switch (mode) {
@@ -183,11 +169,6 @@ async function handleMapping(interaction: ChatInputCommandInteraction) {
     return;
   }
 
-  if (!(await isLinkOfGuild(linkId, interaction.guildId))) {
-    await interaction.editReply({ embeds: [errorEmbed(m.b4_error({}, { locale }), m.b4_staffserver_link_not_found({}, { locale }))] });
-    return;
-  }
-
   const mapping = await addRoleMapping({
     staffServerLinkId: linkId,
     staffRoleId: staffRoleDbId ?? undefined,
@@ -210,14 +191,6 @@ async function handleMapping(interaction: ChatInputCommandInteraction) {
 async function handleUnmap(interaction: ChatInputCommandInteraction) {
   const locale = await getEffectiveLocale(interaction);
   const mappingId = interaction.options.getString('mapping-id', true);
-  const mapping = await prisma.staffServerRoleMapping.findUnique({
-    where: { id: mappingId },
-    select: { staffServerLinkId: true },
-  });
-  if (!mapping || !(await isLinkOfGuild(mapping.staffServerLinkId, interaction.guildId))) {
-    await interaction.editReply({ embeds: [errorEmbed(m.b4_error({}, { locale }), m.b4_staffserver_link_not_found({}, { locale }))] });
-    return;
-  }
   await removeRoleMapping(mappingId);
 
   await interaction.editReply({
@@ -264,11 +237,6 @@ async function handleSync(interaction: ChatInputCommandInteraction) {
   const locale = await getEffectiveLocale(interaction);
   const linkId = interaction.options.getString('link-id', true);
 
-  if (!(await isLinkOfGuild(linkId, interaction.guildId))) {
-    await interaction.editReply({ embeds: [errorEmbed(m.b4_error({}, { locale }), m.b4_staffserver_link_not_found({}, { locale }))] });
-    return;
-  }
-
   await interaction.editReply({
     embeds: [new EmbedBuilder().setColor(COLORS.warning).setDescription(m.b4_staffserver_sync_progress({}, { locale }))],
   });
@@ -286,7 +254,7 @@ async function handleSync(interaction: ChatInputCommandInteraction) {
 async function handleRemove(interaction: ChatInputCommandInteraction) {
   const locale = await getEffectiveLocale(interaction);
   const linkId = interaction.options.getString('link-id', true);
-  const deleted = (await isLinkOfGuild(linkId, interaction.guildId)) ? await removeStaffServerLink(linkId) : null;
+  const deleted = await removeStaffServerLink(linkId);
 
   if (!deleted) {
     await interaction.editReply({ embeds: [errorEmbed(m.b4_error({}, { locale }), m.b4_staffserver_link_not_found({}, { locale }))] });

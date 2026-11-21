@@ -3,7 +3,6 @@ import { createCustomForm, deleteCustomForm } from '../../../services/features/c
 import { createCustomEvent } from '../../../services/features/eventService.js';
 import { invalidateActiveQuests } from '../../../services/community/questService.js';
 import { createGiveaway, deleteGiveaway, endGiveaway, refreshActiveGiveaways, rerollGiveaway } from '../../../services/features/giveawayService.js';
-import { invalidateAutoResponseCacheAcrossShards } from '../../../services/features/autoResponseService.js';
 import prisma from '../../../utils/db.js';
 import { sanitizeCustomCss, sanitizeFormTheme } from '../../../utils/formCustomization.js';
 import { Prisma } from '@prisma/client';
@@ -13,8 +12,6 @@ import { type McpToolContext, err, ok, resolveChannel, toolError } from '../tool
 
 import { assertFirstKillRole } from '../../../services/features/rpg/rpgFirstKillService.js';
 import { regexProblem } from '../../../utils/safeRegex.js';
-import { reloadScheduleAcrossShards } from '../../../services/system/scheduleService.js';
-import nodeCron from 'node-cron';
 export function registerWriteCommunityNewTools(ctx: McpToolContext) {
   const { server, guildId, client, shouldRegister, guard, audit, toolMeta, ownerId } = ctx;
 
@@ -425,7 +422,6 @@ export function registerWriteCommunityNewTools(ctx: McpToolContext) {
             }
           });
 
-          await invalidateAutoResponseCacheAcrossShards(client, guildId);
           await audit(key_name, 'Création AutoResponse MCP', trigger, `Type: ${trigger_type}`);
           return ok({ ok: true, autoResponseId: autoRes.id });
         } catch (e) {
@@ -450,8 +446,6 @@ export function registerWriteCommunityNewTools(ctx: McpToolContext) {
       },
       guard('WRITE_COMMUNITY', async ({ name, type, cron, target_id, key_name }) => {
         try {
-          if (!nodeCron.validate(cron)) return err('Expression Cron invalide');
-
           const task = await prisma.scheduledTask.create({
             data: {
               guildId,
@@ -462,8 +456,6 @@ export function registerWriteCommunityNewTools(ctx: McpToolContext) {
               enabled: true,
             }
           });
-
-          await reloadScheduleAcrossShards(client, task.id);
 
           await audit(key_name, 'Création tâche planifiée MCP', name, `Cron: ${cron}`);
           return ok({ ok: true, taskId: task.id, name });
@@ -891,7 +883,6 @@ export function registerWriteCommunityNewTools(ctx: McpToolContext) {
             data: updateData,
           });
 
-          await invalidateAutoResponseCacheAcrossShards(client, guildId);
           await audit(key_name, 'Mise à jour AutoResponse MCP', trigger || existing.trigger, `ID: ${auto_response_id}`);
           return ok({ ok: true, autoResponseId: auto_response_id });
         } catch (e) {
@@ -916,7 +907,6 @@ export function registerWriteCommunityNewTools(ctx: McpToolContext) {
           if (!existing) return err('Réponse automatique introuvable');
 
           await prisma.autoResponse.delete({ where: { id: auto_response_id } });
-          await invalidateAutoResponseCacheAcrossShards(client, guildId);
           await audit(key_name, 'Suppression AutoResponse MCP', existing.trigger, `ID: ${auto_response_id}`);
           return ok({ ok: true });
         } catch (e) {
@@ -945,8 +935,6 @@ export function registerWriteCommunityNewTools(ctx: McpToolContext) {
           const existing = await prisma.scheduledTask.findFirst({ where: { id: task_id, guildId } });
           if (!existing) return err('Tâche planifiée introuvable');
 
-          if (cron !== undefined && !nodeCron.validate(cron)) return err('Expression Cron invalide');
-
           const updateData: any = {};
           if (name !== undefined) updateData.name = name;
           if (type !== undefined) updateData.type = type;
@@ -958,8 +946,6 @@ export function registerWriteCommunityNewTools(ctx: McpToolContext) {
             where: { id: task_id },
             data: updateData,
           });
-
-          await reloadScheduleAcrossShards(client, task_id);
 
           await audit(key_name, 'Mise à jour tâche planifiée MCP', name || existing.name, `ID: ${task_id}`);
           return ok({ ok: true, taskId: task_id });
@@ -985,8 +971,6 @@ export function registerWriteCommunityNewTools(ctx: McpToolContext) {
           if (!existing) return err('Tâche planifiée introuvable');
 
           await prisma.scheduledTask.delete({ where: { id: task_id } });
-          // Sans ligne en base, le rechargement arrête la tâche dans chaque shard.
-          await reloadScheduleAcrossShards(client, task_id);
           await audit(key_name, 'Suppression tâche planifiée MCP', existing.name, `ID: ${task_id}`);
           return ok({ ok: true });
         } catch (e) {

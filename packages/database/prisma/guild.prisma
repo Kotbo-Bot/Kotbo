@@ -1075,7 +1075,6 @@ model WelcomeThreadConfig {
 
   steps WelcomeThreadStep[]
   pages WelcomeMenuPage[]
-  threads WelcomeThreadCreated[]
 
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
 
@@ -1126,19 +1125,6 @@ model WelcomeMenuPage {
 
   @@index([guildId, order])
   @@map("welcome_menu_pages")
-}
-
-// Thread d'accueil ouvert par le bot à l'arrivée d'un membre : la purge des threads
-// inactifs ne supprime que ceux-là, pas ses autres threads du salon (tickets...).
-model WelcomeThreadCreated {
-  threadId  String   @id
-  guildId   String
-  createdAt DateTime @default(now())
-
-  config WelcomeThreadConfig @relation(fields: [guildId], references: [guildId], onDelete: Cascade)
-
-  @@index([guildId])
-  @@map("welcome_threads_created")
 }
 
 model GuildLogEventConfig {

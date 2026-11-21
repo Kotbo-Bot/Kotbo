@@ -252,10 +252,9 @@ function createMyMemoryProvider(): TranslationProvider {
   const timeoutMs = Number.isFinite(timeoutMsRaw) && timeoutMsRaw > 0 ? timeoutMsRaw : 7000;
   const baseUrl = 'https://api.mymemory.translated.net/get';
 
-  // Seule la source peut valoir `auto` (la cible retombe sur `fr`) : MyMemory ne
-  // connaît pas ce code mais détecte lui-même la langue avec `autodetect`.
   function langForPair(lang: string): string {
-    if (!lang || lang === 'auto') return 'autodetect';
+    if (!lang) return 'en';
+    if (lang === 'auto') return 'en';
     return lang.split('-')[0];
   }
 
@@ -264,8 +263,6 @@ function createMyMemoryProvider(): TranslationProvider {
     async translate(text: string, targetLang: string, sourceLang?: string): Promise<string | null> {
       const source = langForPair(normalizeLangCode(sourceLang, 'source'));
       const target = langForPair(normalizeLangCode(targetLang, 'target'));
-      // Rien à traduire, et MyMemory refuserait la paire.
-      if (source === target) return text;
       const chunks = splitIntoChunks(text, 700);
       const translatedChunks: string[] = [];
 
@@ -290,13 +287,6 @@ function createMyMemoryProvider(): TranslationProvider {
           responseStatus?: number;
           responseDetails?: string;
         };
-
-        // La langue détectée est déjà la langue cible : MyMemory répond alors 403
-        // « PLEASE SELECT TWO DISTINCT LANGUAGES » au lieu de rendre le texte.
-        if (Number(payload.responseStatus) === 403 && /DISTINCT LANGUAGES/i.test(payload.responseDetails ?? '')) {
-          translatedChunks.push(chunk);
-          continue;
-        }
 
         if (payload.responseStatus && payload.responseStatus >= 400) {
           throw new Error(payload.responseDetails || `Status ${payload.responseStatus}`);

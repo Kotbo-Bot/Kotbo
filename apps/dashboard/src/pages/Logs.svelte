@@ -19,7 +19,6 @@
   import { dashboardStore } from "../lib/stores/dashboard.svelte";
   import { parseDetailsMetadata } from "../lib/logDetails";
   import { logEntryUser } from "../lib/logEntryUser";
-  import { resyncDraft } from "../lib/draftSync";
   import RefreshButton from "../lib/components/RefreshButton.svelte";
   import Papicon from "../lib/components/Papicon.svelte";
   import MemberCaseModal from "../lib/components/MemberCaseModal.svelte";
@@ -72,14 +71,8 @@
     selectedLogChannelId = dashboardStore.state.logChannelId || "";
   });
 
-  let syncedIgnoredChannelIds: string[] = [];
-
   $effect(() => {
-    const stored = [...(dashboardStore.state.logIgnoredChannelIds || [])];
-    untrack(() => {
-      ignoredChannelIds = resyncDraft(ignoredChannelIds, syncedIgnoredChannelIds, stored);
-      syncedIgnoredChannelIds = stored;
-    });
+    ignoredChannelIds = [...(dashboardStore.state.logIgnoredChannelIds || [])];
   });
 
   const ignoredChannelsDirty = $derived(

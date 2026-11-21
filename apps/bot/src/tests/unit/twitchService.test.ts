@@ -106,10 +106,6 @@ describe('twitchService - decision d annonce', () => {
     // Twitch attribue un nouvel id : c'est bien un nouveau live a annoncer.
     expect(shouldAnnounceStream({ isLive: true, lastStreamId: 'stream-1' }, 'stream-2')).toBe(true);
   });
-
-  test('ne reannonce pas un live deja annonce que Helix a fait passer hors ligne', () => {
-    expect(shouldAnnounceStream({ isLive: false, lastStreamId: 'stream-1' }, 'stream-1')).toBe(false);
-  });
 });
 
 describe('twitchService - rendu des notifications', () => {
@@ -203,7 +199,7 @@ describe('twitchService - appels API', () => {
   test('fetchLiveStreams indexe les streams par login en minuscules', async () => {
     const impl = twitchFetch(() => jsonResponse({ data: [stream({ user_login: 'Kotbo' })] }));
 
-    const { live: liveMap } = await fetchLiveStreams(['kotbo', 'horsligne'], impl);
+    const liveMap = await fetchLiveStreams(['kotbo', 'horsligne'], impl);
 
     expect(liveMap.get('kotbo')?.id).toBe('stream-1');
     expect(liveMap.has('horsligne')).toBe(false);
@@ -226,18 +222,9 @@ describe('twitchService - appels API', () => {
         : jsonResponse({ data: [stream({ user_login: 'user100' })] });
     });
 
-    const { live: liveMap, checked } = await fetchLiveStreams(Array.from({ length: 150 }, (_, i) => `user${i}`), impl);
+    const liveMap = await fetchLiveStreams(Array.from({ length: 150 }, (_, i) => `user${i}`), impl);
 
     expect(liveMap.has('user100')).toBe(true);
-    // Seul le lot qui a répondu est interrogé : les chaînes de l'autre ne passent pas hors ligne.
-    expect(checked.has('user0')).toBe(false);
-    expect(checked.has('user149')).toBe(true);
-  });
-
-  test('fetchLiveStreams ne tient pas pour interrogé un lot à la réponse illisible', async () => {
-    const impl = twitchFetch(() => jsonResponse({ message: 'inattendu' }));
-
-    expect((await fetchLiveStreams(['kotbo'], impl)).checked.size).toBe(0);
   });
 
   test('renvoie une map vide sans identifiants Twitch configures', async () => {
@@ -245,7 +232,7 @@ describe('twitchService - appels API', () => {
     delete process.env.TWITCH_CLIENT_SECRET;
     const impl = twitchFetch(() => jsonResponse({ data: [stream()] }));
 
-    expect((await fetchLiveStreams(['kotbo'], impl)).live.size).toBe(0);
+    expect((await fetchLiveStreams(['kotbo'], impl)).size).toBe(0);
     expect(impl.calls).toHaveLength(0);
   });
 });

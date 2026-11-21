@@ -60,7 +60,6 @@ for (const suffix of ['../../infra/redis.ts', '../../infra/redis.js']) {
   mock.module(path.resolve(import.meta.dir, suffix), () => ({
     getRedis: () => mockRedis,
     initRedis: async () => mockRedis,
-    getSessionRedis: () => mockRedis,
     createRedisForWorker: () => null,
     assertRedisConnection: async () => undefined,
   }));

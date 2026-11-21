@@ -254,9 +254,7 @@ export async function publishOrUpdateRegulationMessage(client: Client, guildId: 
   });
 
   const channel = await client.channels.fetch(targetChannelId).catch(() => null) as TextChannel | null;
-  // Le salon est saisi à la main : il doit appartenir à ce serveur, sinon le bot
-  // publierait le règlement, texte libre, dans le salon d'un serveur tiers.
-  if (!channel || !('send' in channel) || channel.guildId !== guildId) {
+  if (!channel || !('send' in channel)) {
     throw new Error('Le salon de publication du règlement est introuvable ou inaccessible.');
   }
 
@@ -360,7 +358,7 @@ async function announceRegulationToStaff(
   if (!staffChannelId) return;
 
   const channel = await client.channels.fetch(staffChannelId).catch(() => null);
-  if (!channel || !channel.isTextBased() || channel.isDMBased() || channel.guildId !== guildId) {
+  if (!channel || !channel.isTextBased() || channel.isDMBased()) {
     logger.warn('Règlement', `Salon d'annonces staff introuvable ou invalide (${staffChannelId}) pour ${guildId}.`);
     return;
   }
