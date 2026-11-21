@@ -428,18 +428,37 @@ export async function completeVerification(params: {
       },
     });
 
-    // Jamais de liaison automatique sur une discordance de compte. Le lien de
-    // vérification a pu être transmis à un tiers (hameçonnage, « clique pour
-    // vérifier ») : le compte connecté n'est alors pas un double compte de
-    // l'expéditeur. Le staff tranche, avec la preuve en main.
-    await notifyStaffOfDuplicate(client, verification.guildId, verification.userId, verifiedDiscordId, evidence, guildConfig?.verificationLogChannelId || guildConfig?.logChannelId, false);
+    const action = guildConfig?.verificationAction || 'NOTIFY_STAFF';
 
-    return {
-      success: true,
-      message: 'Compte différent de celui attendu. Les modérateurs ont été notifiés.',
-      duplicateDetected: true,
-      duplicateUserId: verifiedDiscordId,
-    };
+    if (action === 'AUTO_LINK') {
+      await altAccountService.linkAccounts({
+        guildId: verification.guildId,
+        user1Id: verification.userId,
+        user2Id: verifiedDiscordId,
+        type: LinkedAccountType.AUTOMATIC,
+        status: LinkedAccountStatus.VALIDATED,
+        reason: 'Détecté automatiquement via vérification de sécurité (OAuth mismatch).',
+        metadata: evidence,
+      });
+
+      await notifyStaffOfDuplicate(client, verification.guildId, verification.userId, verifiedDiscordId, evidence, guildConfig?.verificationLogChannelId || guildConfig?.logChannelId, true);
+
+      return {
+        success: true,
+        message: 'Double compte détecté et lié automatiquement.',
+        duplicateDetected: true,
+        duplicateUserId: verifiedDiscordId,
+      };
+    } else {
+      await notifyStaffOfDuplicate(client, verification.guildId, verification.userId, verifiedDiscordId, evidence, guildConfig?.verificationLogChannelId || guildConfig?.logChannelId, false);
+
+      return {
+        success: true,
+        message: 'Double compte détecté. Les modérateurs ont été notifiés.',
+        duplicateDetected: true,
+        duplicateUserId: verifiedDiscordId,
+      };
+    }
   }
 
   // Same user - check IP for other verifications on the same guild (only if IP saving is enabled)
