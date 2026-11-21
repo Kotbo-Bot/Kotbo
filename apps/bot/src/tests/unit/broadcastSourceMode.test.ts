@@ -1,20 +1,15 @@
 import { describe, expect, test } from 'bun:test';
 import { sourceModeConflict } from '../../services/system/broadcastService.js';
 
-const ok = { target: 'ALL' as const, pollOptions: [], feedbackLabel: null };
-
 describe('sourceModeConflict', () => {
-  test('accepte une annonce simple pour tous les serveurs', () => {
-    expect(sourceModeConflict(ok)).toBeNull();
+  test('autorise ALL avec ou sans sondage / avis (portes par le dashboard)', () => {
+    expect(sourceModeConflict({ target: 'ALL', pollOptions: [], feedbackLabel: null })).toBeNull();
+    expect(sourceModeConflict({ target: 'ALL', pollOptions: ['Oui', 'Non'], feedbackLabel: null })).toBeNull();
+    expect(sourceModeConflict({ target: 'ALL', pollOptions: [], feedbackLabel: 'Donner mon avis' })).toBeNull();
   });
 
-  test('refuse un ciblage restreint', () => {
-    expect(sourceModeConflict({ ...ok, target: 'CUSTOM' })).toContain('ciblage');
-    expect(sourceModeConflict({ ...ok, target: 'ACTIVATED' })).toContain('ciblage');
-  });
-
-  test('refuse un sondage ou une demande d’avis', () => {
-    expect(sourceModeConflict({ ...ok, pollOptions: ['a', 'b'] })).toContain('sondage');
-    expect(sourceModeConflict({ ...ok, feedbackLabel: 'Ton avis' })).toContain('sondage');
+  test('refuse le ciblage restreint en mode salon source', () => {
+    expect(sourceModeConflict({ target: 'ACTIVATED', pollOptions: [], feedbackLabel: null })).not.toBeNull();
+    expect(sourceModeConflict({ target: 'CUSTOM', pollOptions: [], feedbackLabel: null })).not.toBeNull();
   });
 });

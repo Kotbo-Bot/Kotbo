@@ -70,6 +70,7 @@ import { createSimulationRouter } from '../../routes/dashboard/simulation.js';
 import { createSeasonsRouter } from '../../routes/dashboard/seasons.js';
 import { createTelemetryRouter } from '../../routes/dashboard/telemetry.js';
 import { createNotificationInboxRouter } from '../../routes/dashboard/notificationInbox.js';
+import { createUpdatesRouter } from '../../routes/dashboard/updates.js';
 import { createMemberProfileRouter } from '../../routes/dashboard/memberProfile.js';
 import { createAutomodSimulationRouter } from '../../routes/dashboard/automodSimulation.js';
 import { createSetupRouter } from '../../routes/dashboard/setup.js';
@@ -130,6 +131,7 @@ export function createDashboardRouter(client: Client) {
   // Hors serveur : session seule, sans garde de guilde.
   router.route('/', createTelemetryRouter(client));
   router.route('/', createNotificationInboxRouter(client));
+  router.route('/', createUpdatesRouter());
   router.route('/', createSeasonsRouter(client));
   router.route('/', createSimulationRouter(client));
   router.route('/', createWelcomeExperimentsRouter(client));

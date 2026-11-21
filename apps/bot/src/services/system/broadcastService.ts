@@ -17,6 +17,7 @@ import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { resolveEmojiShortcodes, resolveEmojiShortcodesToUnicode } from '../../utils/emojis.js';
 import { checkEmbedImageUrl, markBroadcastMediaUsed } from './broadcastMediaService.js';
+import { dashboardOrigin, notify } from '../notifications/notifyService.js';
 import { UserFacingError } from '../../utils/userFacingError.js';
 
 export type BroadcastTarget = 'ALL' | 'ACTIVATED' | 'CUSTOM';
@@ -220,16 +221,15 @@ export function normalizeBroadcastContent(content: BroadcastContent): {
 }
 
 /**
- * Une annonce suivie par les salons abonnes est un message unique : pas de boutons,
- * pas de ciblage serveur par serveur. On refuse plutot que d'envoyer autre chose que prevu.
+ * Une annonce suivie par les salons abonnes est un message unique : pas de ciblage
+ * serveur par serveur (les sondages et avis passent par le dashboard `/updates`).
  */
 export function sourceModeConflict(content: {
   target: BroadcastTarget;
-  pollOptions: string[];
-  feedbackLabel: string | null;
+  pollOptions?: string[];
+  feedbackLabel?: string | null;
 }): string | null {
   if (content.target !== 'ALL') return 'Les annonces passent par le salon source : elles vont à tous les serveurs abonnés, le ciblage n’est plus possible.';
-  if (content.pollOptions.length > 0 || content.feedbackLabel) return 'Un sondage ou une demande d’avis ne peut pas passer par le salon source (Discord ne transmet pas les boutons aux abonnés).';
   return null;
 }
 
@@ -510,27 +510,45 @@ export async function validateBroadcastSourceChannel(
   return result ?? { ok: false, error: 'Serveur introuvable dans le cache du bot.' };
 }
 
+/** Construit l'URL publique de la page Mises a jour pour un broadcast donne. */
+export function buildUpdatesPageUrl(broadcastId?: string): string {
+  const origin = dashboardOrigin().replace(/\/$/, '');
+  return broadcastId ? `${origin}/updates?id=${encodeURIComponent(broadcastId)}` : `${origin}/updates`;
+}
+
 /**
- * Publie l'annonce une seule fois dans le salon d'annonces source puis la
- * crossposte : Discord se charge ensuite de la diffuser a tous les serveurs abonnes.
+ * Publie l'annonce en Components V2 (avec repli sur Embed classique si refuse)
+ * dans le salon d'annonces source puis la crossposte vers tous les abonnes.
  */
 export async function deliverBroadcastViaSource(
   client: Client,
   source: BroadcastSourceConfig,
   params: {
+    broadcastId?: string;
     title: string;
     message: string;
     color: string;
     thumbnailUrl: string | null;
     imageUrl: string | null;
     footerText: string;
+    hasPoll?: boolean;
+    feedbackLabel?: string | null;
   },
 ): Promise<DeliveryResult[]> {
+  const updatesUrl = buildUpdatesPageUrl(params.broadcastId);
+  const linkLabel = params.hasPoll
+    ? '📊 Voter sur le dashboard'
+    : params.feedbackLabel
+      ? `💬 ${params.feedbackLabel}`.slice(0, 80)
+      : '📋 Voir sur le dashboard';
+
   if (client.shard) {
     const results = await client.shard.broadcastEval<DeliveryResult | null, {
       guildId: string;
       channelId: string;
       embed: typeof params;
+      updatesUrl: string;
+      linkLabel: string;
     }>(
       async (shardClient, ctx) => {
         const guild = shardClient.guilds.cache.get(ctx.guildId);
@@ -549,17 +567,74 @@ export async function deliverBroadcastViaSource(
         }
 
         try {
-          const { EmbedBuilder: ShardEmbed } = await import('discord.js');
-          const embed = new ShardEmbed()
-            .setTitle(ctx.embed.title)
-            .setDescription(ctx.embed.message)
-            .setColor(parseInt(ctx.embed.color.replace('#', ''), 16))
-            .setFooter({ text: ctx.embed.footerText })
-            .setTimestamp();
-          if (ctx.embed.thumbnailUrl) embed.setThumbnail(ctx.embed.thumbnailUrl);
-          if (ctx.embed.imageUrl) embed.setImage(ctx.embed.imageUrl);
+          const {
+            ActionRowBuilder: ShardRow,
+            ButtonBuilder: ShardButton,
+            ButtonStyle: ShardButtonStyle,
+            ContainerBuilder: ShardContainer,
+            EmbedBuilder: ShardEmbed,
+            MediaGalleryBuilder: ShardGallery,
+            MediaGalleryItemBuilder: ShardGalleryItem,
+            MessageFlags: ShardFlags,
+            SectionBuilder: ShardSection,
+            SeparatorBuilder: ShardSeparator,
+            SeparatorSpacingSize: ShardSpacing,
+            TextDisplayBuilder: ShardText,
+            ThumbnailBuilder: ShardThumb,
+          } = await import('discord.js');
 
-          const sent = await (ch as import('discord.js').NewsChannel).send({ embeds: [embed] });
+          const newsCh = ch as import('discord.js').NewsChannel;
+          const colorInt = parseInt(ctx.embed.color.replace('#', ''), 16) || 0x5865f2;
+
+          let sent: import('discord.js').Message;
+          try {
+            const container = new ShardContainer().setAccentColor(colorInt);
+            if (ctx.embed.thumbnailUrl) {
+              container.addSectionComponents(
+                new ShardSection()
+                  .addTextDisplayComponents(new ShardText().setContent(`## ${ctx.embed.title}`))
+                  .setThumbnailAccessory(new ShardThumb({ media: { url: ctx.embed.thumbnailUrl } })),
+              );
+            } else {
+              container.addTextDisplayComponents(new ShardText().setContent(`## ${ctx.embed.title}`));
+            }
+            container.addSeparatorComponents(new ShardSeparator().setDivider(true).setSpacing(ShardSpacing.Small));
+            container.addTextDisplayComponents(new ShardText().setContent(ctx.embed.message));
+            if (ctx.embed.imageUrl) {
+              container.addMediaGalleryComponents(
+                new ShardGallery().addItems(new ShardGalleryItem({ media: { url: ctx.embed.imageUrl } })),
+              );
+            }
+            container.addActionRowComponents(
+              new ShardRow<import('discord.js').ButtonBuilder>().addComponents(
+                new ShardButton()
+                  .setStyle(ShardButtonStyle.Link)
+                  .setLabel(ctx.linkLabel)
+                  .setURL(ctx.updatesUrl),
+              ),
+            );
+            container.addSeparatorComponents(new ShardSeparator().setDivider(false).setSpacing(ShardSpacing.Small));
+            container.addTextDisplayComponents(
+              new ShardText().setContent(`-# ${ctx.embed.footerText} • <t:${Math.floor(Date.now() / 1000)}:d>`),
+            );
+
+            sent = await newsCh.send({ components: [container], flags: ShardFlags.IsComponentsV2 });
+          } catch {
+            // Repli sur l'embed classique si le salon ou Discord refuse Components V2.
+            const embed = new ShardEmbed()
+              .setTitle(ctx.embed.title)
+              .setDescription(ctx.embed.message)
+              .setColor(colorInt)
+              .setFooter({ text: ctx.embed.footerText })
+              .setTimestamp();
+            if (ctx.embed.thumbnailUrl) embed.setThumbnail(ctx.embed.thumbnailUrl);
+            if (ctx.embed.imageUrl) embed.setImage(ctx.embed.imageUrl);
+            const row = new ShardRow<import('discord.js').ButtonBuilder>().addComponents(
+              new ShardButton().setStyle(ShardButtonStyle.Link).setLabel(ctx.linkLabel).setURL(ctx.updatesUrl),
+            );
+            sent = await newsCh.send({ embeds: [embed], components: [row] });
+          }
+
           await sent.crosspost().catch((err: unknown) => {
             throw new Error(`Message envoyé mais publication (crosspost) refusée : ${(err as Error).message}`);
           });
@@ -584,7 +659,7 @@ export async function deliverBroadcastViaSource(
           };
         }
       },
-      { context: { guildId: source.guildId, channelId: source.channelId, embed: params } },
+      { context: { guildId: source.guildId, channelId: source.channelId, embed: params, updatesUrl, linkLabel } },
     );
 
     const found = results.find((r) => r !== null);
@@ -626,16 +701,66 @@ export async function deliverBroadcastViaSource(
   }
 
   try {
-    const embed = new EmbedBuilder()
-      .setTitle(params.title)
-      .setDescription(params.message)
-      .setColor(params.color as ColorResolvable)
-      .setFooter({ text: params.footerText })
-      .setTimestamp();
-    if (params.thumbnailUrl) embed.setThumbnail(params.thumbnailUrl);
-    if (params.imageUrl) embed.setImage(params.imageUrl);
+    const {
+      ButtonBuilder,
+      ButtonStyle,
+      ContainerBuilder,
+      MediaGalleryBuilder,
+      MediaGalleryItemBuilder,
+      SectionBuilder,
+      SeparatorBuilder,
+      SeparatorSpacingSize,
+      TextDisplayBuilder,
+      ThumbnailBuilder,
+    } = await import('discord.js');
 
-    const sent = await ch.send({ embeds: [embed] });
+    const colorInt = parseInt(params.color.replace('#', ''), 16) || 0x5865f2;
+    let sent;
+    try {
+      const container = new ContainerBuilder().setAccentColor(colorInt);
+      if (params.thumbnailUrl) {
+        container.addSectionComponents(
+          new SectionBuilder()
+            .addTextDisplayComponents(new TextDisplayBuilder().setContent(`## ${params.title}`))
+            .setThumbnailAccessory(new ThumbnailBuilder({ media: { url: params.thumbnailUrl } })),
+        );
+      } else {
+        container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`## ${params.title}`));
+      }
+      container.addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small));
+      container.addTextDisplayComponents(new TextDisplayBuilder().setContent(params.message));
+      if (params.imageUrl) {
+        container.addMediaGalleryComponents(
+          new MediaGalleryBuilder().addItems(new MediaGalleryItemBuilder({ media: { url: params.imageUrl } })),
+        );
+      }
+      container.addActionRowComponents(
+        new ActionRowBuilder<InstanceType<typeof ButtonBuilder>>().addComponents(
+          new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel(linkLabel).setURL(updatesUrl),
+        ),
+      );
+      container.addSeparatorComponents(new SeparatorBuilder().setDivider(false).setSpacing(SeparatorSpacingSize.Small));
+      container.addTextDisplayComponents(
+        new TextDisplayBuilder().setContent(`-# ${params.footerText} • <t:${Math.floor(Date.now() / 1000)}:d>`),
+      );
+
+      sent = await ch.send({ components: [container], flags: MessageFlags.IsComponentsV2 });
+    } catch (v2Err) {
+      logger.warn('Broadcast', `Envoi Components V2 refuse sur ${ch.id}, repli sur embed classique: ${(v2Err as Error).message}`);
+      const embed = new EmbedBuilder()
+        .setTitle(params.title)
+        .setDescription(params.message)
+        .setColor(params.color as ColorResolvable)
+        .setFooter({ text: params.footerText })
+        .setTimestamp();
+      if (params.thumbnailUrl) embed.setThumbnail(params.thumbnailUrl);
+      if (params.imageUrl) embed.setImage(params.imageUrl);
+      const row = new ActionRowBuilder<InstanceType<typeof ButtonBuilder>>().addComponents(
+        new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel(linkLabel).setURL(updatesUrl),
+      );
+      sent = await ch.send({ embeds: [embed], components: [row] });
+    }
+
     await sent.crosspost();
     return [{
       guildId: guild.id,
@@ -657,6 +782,64 @@ export async function deliverBroadcastViaSource(
       messageId: null,
     }];
   }
+}
+
+/**
+ * Envoie une notification dans la boite du dashboard (sans MP) a chaque
+ * membre du staff distinct connu de Kotbo pour l'informer d'une MAJ ou d'un sondage.
+ */
+export async function notifyBroadcastToDashboardUsers(broadcast: {
+  id: string;
+  title: string;
+  message: string;
+  pollOptions: string[];
+  feedbackLabel: string | null;
+}): Promise<{ notified: number }> {
+  const staffRows = await prisma.staffMember.findMany({
+    distinct: ['userId'],
+    select: { userId: true, guildId: true },
+  });
+  if (staffRows.length === 0) return { notified: 0 };
+
+  const hasPoll = broadcast.pollOptions.length > 0;
+  const hasFeedback = Boolean(broadcast.feedbackLabel);
+  const plainPreview = broadcast.message
+    .replace(/<a?:(\w+):\d+>/g, ':$1:')
+    .replace(/[#*_`~>|]/g, '')
+    .trim()
+    .slice(0, 180);
+  const suffix = hasPoll
+    ? ' — Sondage ouvert sur la page Mises à jour.'
+    : hasFeedback
+      ? ' — Donnez votre avis sur la page Mises à jour.'
+      : '';
+  const notifMessage = `${plainPreview}${broadcast.message.length > 180 ? '…' : ''}${suffix}`;
+  const link = `/updates?id=${broadcast.id}`;
+
+  let notified = 0;
+  for (let i = 0; i < staffRows.length; i += 25) {
+    const batch = staffRows.slice(i, i + 25);
+    const settled = await Promise.allSettled(
+      batch.map((row) =>
+        notify({
+          guildId: row.guildId,
+          userId: row.userId,
+          kind: 'system.announcement',
+          title: broadcast.title,
+          message: notifMessage,
+          severity: 'INFO',
+          link,
+          data: { broadcastId: broadcast.id, hasPoll, hasFeedback },
+          // Jamais de MP pour les annonces globales.
+          dm: false,
+        }),
+      ),
+    );
+    notified += settled.filter((r) => r.status === 'fulfilled' && r.value.notification !== null).length;
+  }
+
+  logger.info('Broadcast', `Notifications dashboard envoyées pour ${broadcast.id} : ${notified}/${staffRows.length} utilisateur(s).`);
+  return { notified };
 }
 
 interface TargetChannelResolution {
@@ -997,15 +1180,27 @@ export function startBroadcastScheduler(client: Client): () => void {
           if (conflict) throw new Error(conflict);
 
           const deliveries = await deliverBroadcastViaSource(client, sourceConfig, {
+            broadcastId: broadcast.id,
             title: broadcast.title,
             message: resolveEmojiShortcodes(broadcast.message),
             color: broadcast.color,
             thumbnailUrl: broadcast.thumbnailUrl,
             imageUrl: broadcast.imageUrl,
             footerText: broadcast.footerText ?? DEFAULT_BROADCAST_FOOTER,
+            hasPoll: broadcast.pollOptions.length > 0,
+            feedbackLabel: broadcast.feedbackLabel,
           });
-          await finalizeBroadcast(broadcast.id, deliveries, deliveries.length);
+          const { successCount } = await finalizeBroadcast(broadcast.id, deliveries, deliveries.length);
           await markBroadcastMediaUsed([broadcast.imageUrl, broadcast.thumbnailUrl]);
+          if (successCount > 0) {
+            void notifyBroadcastToDashboardUsers({
+              id: broadcast.id,
+              title: broadcast.title,
+              message: resolveEmojiShortcodes(broadcast.message),
+              pollOptions: broadcast.pollOptions,
+              feedbackLabel: broadcast.feedbackLabel,
+            }).catch((err) => logger.warn('Broadcast', `Notifications dashboard en échec pour ${broadcast.id}: ${(err as Error).message}`));
+          }
           logger.info('Broadcast', `Annonce programmee ${broadcast.id} publiee sur le salon source ${sourceConfig.channelId}`);
         } catch (err) {
           await prisma.broadcastLog.update({

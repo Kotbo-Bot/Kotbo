@@ -56,6 +56,7 @@ import {
   getBroadcastSourceConfig,
   getPollResults,
   normalizeBroadcastContent,
+  notifyBroadcastToDashboardUsers,
   setBroadcastSourceConfig,
   sourceModeConflict,
   subscribeAllGuildsToBroadcastSource,
@@ -1260,7 +1261,10 @@ export async function handleAdminRoutes(
         const nameById = new Map(names.map((row) => [row.guildId, row.guildName]));
         return reply(c, 200, {
           ...results,
-          byGuild: results.byGuild.map((row) => ({ ...row, guildName: nameById.get(row.guildId) ?? row.guildId })),
+          byGuild: results.byGuild.map((row) => ({
+            ...row,
+            guildName: nameById.get(row.guildId) ?? client.guilds.cache.get(row.guildId)?.name ?? row.guildId,
+          })),
         });
       } catch (err) {
         logger.error('AdminAPI', 'GET broadcast poll error:', err);
@@ -1287,7 +1291,7 @@ export async function handleAdminRoutes(
             id: row.id,
             userId: row.userId,
             guildId: row.guildId,
-            guildName: nameById.get(row.guildId) ?? row.guildId,
+            guildName: nameById.get(row.guildId) ?? client.guilds.cache.get(row.guildId)?.name ?? row.guildId,
             content: row.content,
             createdAt: row.createdAt.toISOString(),
           })),
@@ -1683,16 +1687,29 @@ export async function handleAdminRoutes(
         }
 
         const deliveries = await deliverBroadcastViaSource(client, sourceConfig, {
+          broadcastId: record.id,
           title: normalized.title,
           message: normalized.message,
           color: normalized.color,
           thumbnailUrl: normalized.thumbnailUrl,
           imageUrl: normalized.imageUrl,
           footerText: normalized.footerText,
+          hasPoll: normalized.pollOptions.length > 0,
+          feedbackLabel: normalized.feedbackLabel,
         });
 
         const { successCount, failCount } = await finalizeBroadcast(record.id, deliveries, totalTargeted);
         await markBroadcastMediaUsed([normalized.imageUrl, normalized.thumbnailUrl]);
+
+        if (successCount > 0) {
+          void notifyBroadcastToDashboardUsers({
+            id: record.id,
+            title: normalized.title,
+            message: normalized.message,
+            pollOptions: normalized.pollOptions,
+            feedbackLabel: normalized.feedbackLabel,
+          }).catch((err) => logger.warn('AdminAPI', `Notifications dashboard en échec pour ${record.id}: ${(err as Error).message}`));
+        }
 
         await audit({
           action: 'broadcast.send',
