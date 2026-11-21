@@ -41,6 +41,17 @@ export function registerSessionRoutes(): void {
   route('POST', '/api/auth/logout', () => ({ ok: true }));
   route('GET', '/api/user/me', () => sessionUser());
   route('GET', '/api/user/guilds', () => ({ guilds: sessionGuilds() }));
+  // Page « Mes serveurs » : le serveur de démo, plus deux autres où l'on est admin mais sans Kotbo.
+  route('GET', '/api/user/servers', () => ({
+    guilds: [
+      ...sessionGuilds().map((g) => ({ id: g.id, name: g.name, icon: g.icon, owner: true, botPresent: true, activated: true })),
+      { id: '930000000000000031', name: 'Les Veilleurs', icon: null, owner: true, botPresent: false, activated: false },
+      { id: '930000000000000032', name: 'Labo de Zenox', icon: null, owner: false, botPresent: true, activated: false },
+    ],
+    clientId: '1100000000000000001',
+    invitePermissions: '8',
+    oauthUnavailable: false,
+  }));
   // L'instance publique de Kotbo, sans marque blanche.
   route('GET', '/api/branding', () => ({
     instanceId: 'public',
