@@ -36,6 +36,8 @@ import { registerWelcomeRoutes } from './welcome';
 import { registerSiteRoutes } from './site';
 import { registerLinksRoutes } from './links';
 import { registerDoingListRoutes } from './doingLists';
+import { registerEventRoutes } from './events';
+import { registerFormRoutes } from './forms';
 
 export function registerDemoRoutes(): void {
   // Avant les routes Analytics historiques : la première route qui correspond gagne.
@@ -57,6 +59,8 @@ export function registerDemoRoutes(): void {
   registerSiteRoutes();
   registerLinksRoutes();
   registerDoingListRoutes();
+  registerEventRoutes();
+  registerFormRoutes();
   registerSessionRoutes();
   registerHomeRoutes();
   registerTelemetryRoutes();
