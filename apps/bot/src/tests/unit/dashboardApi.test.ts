@@ -615,6 +615,25 @@ describe('Modular Routers Unit Tests', () => {
       expect(JSON.parse(res.body).error).toBe('plan_required');
     });
 
+    async function registerOAuthClient(redirectUri: string): Promise<string> {
+      const regReq = createMockRequest({
+        method: 'POST',
+        url: '/api/mcp/112233445566778899/oauth/register',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ client_name: 'Test client', redirect_uris: [redirectUri] }),
+      });
+      const regRes = createMockResponse();
+      await handleMCPRoutes(
+        regReq as IncomingMessage & { bodyText?: string },
+        regRes,
+        splitPath(new URL(regReq.url!, 'http://localhost').pathname),
+        new URL(regReq.url!, 'http://localhost'),
+        mockClient,
+      );
+      expect(regRes.statusCode).toBe(201);
+      return JSON.parse(regRes.body).client_id as string;
+    }
+
     test('rejects encoded guildId template from OAuth discovery', async () => {
       const req = createMockRequest({
         method: 'GET',
@@ -632,9 +651,10 @@ describe('Modular Routers Unit Tests', () => {
     });
 
     test('OAuth authorize page overrides global CSP so inline CSS can render', async () => {
+      const registeredId = await registerOAuthClient('https://claude.ai/api/mcp/auth_callback');
       const req = createMockRequest({
         method: 'GET',
-        url: '/api/mcp/112233445566778899/oauth/authorize?client_id=test&redirect_uri=https%3A%2F%2Fclaude.ai%2Fapi%2Fmcp%2Fauth_callback&code_challenge=abc',
+        url: `/api/mcp/112233445566778899/oauth/authorize?client_id=${registeredId}&redirect_uri=https%3A%2F%2Fclaude.ai%2Fapi%2Fmcp%2Fauth_callback&code_challenge=abc`,
       });
       const res = createMockResponse();
       const parts = splitPath(new URL(req.url!, 'http://localhost').pathname);
@@ -648,10 +668,32 @@ describe('Modular Routers Unit Tests', () => {
       expect(res.body).toContain('<style>');
     });
 
-    test('OAuth authorize page lets the form redirect back to the client callback', async () => {
+    test('OAuth authorize refuses a redirect_uri the client never registered', async () => {
+      const registeredId = await registerOAuthClient('https://claude.ai/api/mcp/auth_callback');
       const req = createMockRequest({
         method: 'GET',
-        url: '/api/mcp/112233445566778899/oauth/authorize?client_id=test&redirect_uri=http%3A%2F%2Flocalhost%3A33418%2Fcallback&code_challenge=abc',
+        url: `/api/mcp/112233445566778899/oauth/authorize?client_id=${registeredId}&redirect_uri=https%3A%2F%2Fevil.example%2Fcb&code_challenge=abc`,
+      });
+      const res = createMockResponse();
+      const url = new URL(req.url!, 'http://localhost');
+      await handleMCPRoutes(req as IncomingMessage & { bodyText?: string }, res, splitPath(url.pathname), url, mockClient);
+      expect(res.statusCode).toBe(400);
+
+      const unknownReq = createMockRequest({
+        method: 'GET',
+        url: '/api/mcp/112233445566778899/oauth/authorize?client_id=never-registered&redirect_uri=https%3A%2F%2Fclaude.ai%2Fapi%2Fmcp%2Fauth_callback&code_challenge=abc',
+      });
+      const unknownRes = createMockResponse();
+      const unknownUrl = new URL(unknownReq.url!, 'http://localhost');
+      await handleMCPRoutes(unknownReq as IncomingMessage & { bodyText?: string }, unknownRes, splitPath(unknownUrl.pathname), unknownUrl, mockClient);
+      expect(unknownRes.statusCode).toBe(400);
+    });
+
+    test('OAuth authorize page lets the form redirect back to the client callback', async () => {
+      const registeredId = await registerOAuthClient('http://localhost:33418/callback');
+      const req = createMockRequest({
+        method: 'GET',
+        url: `/api/mcp/112233445566778899/oauth/authorize?client_id=${registeredId}&redirect_uri=http%3A%2F%2Flocalhost%3A33418%2Fcallback&code_challenge=abc`,
       });
       const res = createMockResponse();
       const parts = splitPath(new URL(req.url!, 'http://localhost').pathname);
@@ -839,8 +881,8 @@ describe('Modular Routers Unit Tests', () => {
     test('OAuth authorization_code returns JWT access token and refresh token accepted by MCP endpoint', async () => {
       const keyId = 'mcp-key-id';
       const rawKey = 'mcp_test_secret';
-      const clientId = 'oauth-client-id';
       const redirectUri = 'https://claude.ai/api/mcp/auth_callback';
+      const clientId = await registerOAuthClient(redirectUri);
       const codeVerifier = 'test-verifier';
       const codeChallenge = nodeCrypto.createHash('sha256').update(codeVerifier).digest('base64url');
       const resource = 'https://api-kotbo.example/api/mcp/112233445566778899';
