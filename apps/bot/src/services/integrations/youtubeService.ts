@@ -48,6 +48,8 @@ export interface YoutubeFollowState {
   lastLiveId: string | null;
   lastVideoId: string | null;
   lastShortId: string | null;
+  /** Derniers identifiants vus, tous types confondus, du plus recent au plus ancien. */
+  recentVideoIds?: string[];
 }
 
 /**
@@ -375,6 +377,9 @@ export function extractFromQuery(query: string): { handle: string | null; channe
  * - un direct est annonce des qu'il change d'identifiant ;
  * - la video du direct, qui apparait aussi dans le flux RSS, n'est jamais
  *   annoncee une deuxieme fois comme upload ;
+ * - une video deja vue, quel qu'ait ete son type, n'est jamais reannoncee :
+ *   un flux servi en retard ou une video supprimee remet en tete une video
+ *   plus ancienne ;
  * - au premier passage (aucun identifiant memorise) ou pour une video trop
  *   ancienne, on memorise sans annoncer.
  */
@@ -401,9 +406,11 @@ export function planYoutubeActions(
   const video = input.latestVideo;
   if (video) {
     const kind = video.isShort ? 'short' : 'video';
-    const alreadySeen = video.isShort
-      ? state.lastShortId === video.videoId
-      : state.lastVideoId === video.videoId;
+    // Tous types confondus : un Short d'abord pris pour une video (detection
+    // en echec), puis reconnu, reste la meme video.
+    const alreadySeen = video.videoId === state.lastVideoId
+      || video.videoId === state.lastShortId
+      || (state.recentVideoIds ?? []).includes(video.videoId);
     const isLiveBroadcast = video.videoId === live?.videoId || video.videoId === state.lastLiveId;
     const isFirstRun = video.isShort ? state.lastShortId === null : state.lastVideoId === null;
     const isStale = now.getTime() - video.publishedAt.getTime() > YOUTUBE_CONFIG.VIDEO_MAX_AGE_MS;
@@ -637,6 +644,15 @@ const STATE_FIELD: Record<YoutubeAction['kind'], 'lastLiveId' | 'lastVideoId' | 
   short: 'lastShortId',
 };
 
+/** Identifiants vus retenus par abonnement : plus que les 15 entrees du flux RSS. */
+const RECENT_VIDEO_IDS_LIMIT = 30;
+
+/** Historique borne, du plus recent au plus ancien, sans doublon. */
+function rememberVideoIds(recent: readonly string[], ...ids: Array<string | null>): string[] {
+  const added = ids.filter((id): id is string => Boolean(id));
+  return [...new Set([...added, ...recent])].slice(0, RECENT_VIDEO_IDS_LIMIT);
+}
+
 /** Modele personnalise associe a un type d'action. */
 export function templateForAction(
   follow: Pick<YoutubeChannelFollow, 'liveMessage' | 'videoMessage' | 'shortMessage'>,
@@ -742,6 +758,7 @@ async function processFollow(client: Client, follow: YoutubeFollowWithGuild, fet
     if (actions.length === 0) return;
 
     const targetChannelId = follow.discordChannelId || follow.guild.publicChannelId;
+    let recentVideoIds = follow.recentVideoIds ?? [];
 
     for (const action of actions) {
       if (action.notify && targetChannelId) {
@@ -767,9 +784,13 @@ async function processFollow(client: Client, follow: YoutubeFollowWithGuild, fet
         await sendNotification(client, follow.guildId, targetChannelId, content, embed, components, follow.mention);
       }
 
+      // L'ancien identifiant du champ reste dans l'historique : sans lui, une
+      // video deja vue redeviendrait nouvelle en repassant en tete du flux.
+      const field = STATE_FIELD[action.kind];
+      recentVideoIds = rememberVideoIds(recentVideoIds, action.videoId, follow[field]);
       await prisma.youtubeChannelFollow.update({
         where: { id: follow.id },
-        data: { [STATE_FIELD[action.kind]]: action.videoId },
+        data: { [field]: action.videoId, recentVideoIds },
       }).catch((e: Error) => logger.error('YouTubeService', "Mise a jour de l'abonnement impossible:", e));
     }
   } catch (error) {

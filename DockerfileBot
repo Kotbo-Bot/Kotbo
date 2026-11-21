@@ -83,4 +83,4 @@ EXPOSE 8787
 # apps/bot car ils chargent le .env via un chemin relatif au cwd. `exec` fait
 # du launcher le PID 1, pour qu'il recoive lui-meme le SIGTERM de `docker stop`
 # et arrete ses shards proprement (cf. shutdown() dans launcher.ts).
-CMD ["sh", "-c", "bun run db:migrate:repair-production && bun run db:migrate:deploy && cd apps/bot && bun run src/deploy-commands.ts && exec bun run src/launcher.ts"]
+CMD ["sh", "-c", "bun run db:migrate:repair-production && bun run db:migrate:deploy && cd apps/bot && (bun run src/deploy-commands.ts || echo '[Déploiement] Échec ou rate-limit au démarrage, lancement du bot malgré tout...') && exec bun run src/launcher.ts"]

@@ -70,9 +70,10 @@ export async function activateRaidMode(guild: Guild, config: RaidProtectionConfi
     raidModeManual: manual,
   });
 
-  // Action automatique selon la config
+  // Action automatique selon la config, sans poser joinLockEnabled (réservé au
+  // lock manuel) : le blocage se dérive du raid mode actif et tombe avec lui.
   if (config.antiRaidAction === 'LOCK') {
-    await enableJoinLock(guild, null).catch((err) =>
+    await syncIncidentActions(guild).catch((err) =>
       logger.error('RaidProtection', `Impossible d'activer le join lock pour ${guild.id}`, err)
     );
   }
@@ -213,7 +214,9 @@ export async function disableDmLock(guild: Guild): Promise<void> {
  */
 export async function renewActiveLocks(client: Client): Promise<void> {
   const configs = await prisma.raidProtectionConfig.findMany({
-    where: { OR: [{ joinLockEnabled: true }, { dmLockEnabled: true }] },
+    // Un raid mode LOCK pause les invitations sans poser joinLockEnabled : la
+    // pause se renouvelle aussi tant qu'il dure (plafond Discord de 24h).
+    where: { OR: [{ joinLockEnabled: true }, { dmLockEnabled: true }, { raidModeActive: true }] },
   });
 
   const now = Date.now();

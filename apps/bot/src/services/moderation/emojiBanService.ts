@@ -13,8 +13,8 @@
  * Les réactions ne sont pas analysées, seulement le contenu des messages.
  */
 
-import type { Client, Guild, Message } from 'discord.js';
-import type { EmojiBanRule } from '@prisma/client';
+import { GuildFeature, type Client, type Guild, type Message } from 'discord.js';
+import type { EmojiBanRule, Prisma } from '@prisma/client';
 import { kotboEventBus } from '@kotbo/core';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
@@ -142,6 +142,19 @@ export function extractUnicodeEmojis(content: string): string[] {
     if (isUnicodeEmoji(segment)) found.add(normalizeUnicodeEmoji(segment));
   }
   return [...found];
+}
+
+// Fiches que Kotbo tient de sa propre présence : comme Discord, un serveur privé ne se révèle pas à un autre.
+const PRIVATE_SOURCES = new Set(['bot', 'cache']);
+
+export function isPublicGuildRecord(client: Client, row: { guildId: string; source: string }): boolean {
+  return !PRIVATE_SOURCES.has(row.source) || Boolean(client.guilds.cache.get(row.guildId)?.features.includes(GuildFeature.Discoverable));
+}
+
+/** La même règle en filtre de requête, pour l'appliquer avant toute limite de résultats. */
+export function publicGuildRecordWhere(client: Client): Prisma.DiscordExternalGuildWhereInput {
+  const discoverable = client.guilds.cache.filter((guild) => guild.features.includes(GuildFeature.Discoverable)).map((guild) => guild.id);
+  return { OR: [{ source: { notIn: [...PRIVATE_SOURCES] } }, { guildId: { in: discoverable } }] };
 }
 
 export function customEmojiUrl(id: string, animated: boolean): string {

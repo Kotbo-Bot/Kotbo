@@ -10,6 +10,7 @@ import { EmbedBuilder, type Client, type Guild, type GuildMember, type Role } fr
 import { reachedTiers, tiersAbove, type ReputationTier } from '@kotbo/shared';
 import { COLORS } from '../../utils/embeds.js';
 import { logger } from '../../utils/logger.js';
+import { isAutoGrantableRole } from '../../utils/adminLockPermissions.js';
 import { resolveGuildLocale, type BotLocale } from '../../utils/i18n.js';
 import * as m from '../../lib/paraglide/messages.js';
 import { getReputationConfig } from './reputationService.js';
@@ -23,10 +24,13 @@ export function tierAnnouncementLabels(locale: BotLocale) {
   };
 }
 
-/** Rôle que le bot peut réellement donner ou retirer, sinon `null`. */
+/** Rôle que le bot peut réellement donner, sinon `null`. */
 export function manageableRole(guild: Pick<Guild, 'roles'>, roleId: string): Role | null {
   const role = guild.roles.cache.get(roleId);
   if (!role || role.managed || !role.editable) return null;
+  // Un rôle Administrateur ne passe jamais par un palier : le bot ne distribue
+  // pas l'admin sans l'Admin Lock, ici comme pour toute autre attribution.
+  if (!isAutoGrantableRole(role)) return null;
   return role;
 }
 
@@ -72,8 +76,9 @@ export async function revokeLostTiers(
 ): Promise<void> {
   for (const tier of tiersAbove(total, tiers)) {
     if (!member.roles.cache.has(tier.roleId)) continue;
-    const role = manageableRole(member.guild, tier.roleId);
-    if (!role) continue;
+    // Le filtre Administrateur ne vaut que pour l'octroi : un palier admin déjà distribué doit pouvoir partir.
+    const role = member.guild.roles.cache.get(tier.roleId);
+    if (!role || role.managed || !role.editable) continue;
     await member.roles.remove(role, reason).catch((err) => {
       logger.warn(scope, `Palier ${tier.threshold} : retrait du rôle ${role.id} refusé`, err);
     });

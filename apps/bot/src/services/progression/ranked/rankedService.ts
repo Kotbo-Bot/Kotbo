@@ -131,9 +131,11 @@ export type RpDeltaResult = {
  * Applique un mouvement de RP et en tire toutes les conséquences : palier,
  * pic de saison, rôles, annonce, journal.
  *
- * Point de passage unique de toute écriture de RP (activité, événement, decay,
+ * Point de passage de tout mouvement de RP d'un membre (activité, événement,
  * ajustement staff), pour qu'aucune source ne puisse contourner le plancher à
- * zéro ni oublier de synchroniser les rôles de palier.
+ * zéro ni oublier de synchroniser les rôles de palier. Le decay et la clôture de
+ * saison écrivent par lots hors de ce chemin, sans jamais écraser un RP qui a
+ * bougé depuis leur lecture.
  */
 export async function applyRpDelta(
   guildId: string,
@@ -145,34 +147,48 @@ export async function applyRpDelta(
   if (!Number.isFinite(delta) || delta === 0) return null;
 
   const ladder = await getGuildLadder(guildId);
-  const before = await getOrCreateRankedMember(guildId, userId);
+  // Garantit l'existence de la ligne avant de la verrouiller.
+  await getOrCreateRankedMember(guildId, userId);
 
-  const rpBefore = Math.max(0, before.rp);
-  const rpAfter = Math.max(0, rpBefore + Math.floor(delta));
-  const granted = rpAfter - rpBefore;
-  if (granted === 0) return null;
+  // Ligne verrouillée puis relue sur la primaire, comme lockRpgProfile : deux
+  // mouvements concurrents se succèdent au lieu de partir du même RP.
+  const outcome = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT 1 FROM "ranked_members" WHERE "guildId" = ${guildId} AND "userId" = ${userId} FOR UPDATE`;
+    const before = await tx.rankedMember.findUnique({ where: { guildId_userId: { guildId, userId } } });
+    if (!before) return null;
 
-  const tierBefore = resolveRankedTier(rpBefore, ladder);
-  const tierAfter = resolveRankedTier(rpAfter, ladder);
-  const tierShift = compareRankedTiers(tierBefore.key, tierAfter.key, ladder);
+    const rpBefore = Math.max(0, before.rp);
+    const rpAfter = Math.max(0, rpBefore + Math.floor(delta));
+    const granted = rpAfter - rpBefore;
+    if (granted === 0) return null;
 
-  const peakRp = Math.max(before.peakRp, rpAfter);
-  const peakTierKey = peakRp === rpAfter && tierShift > 0 ? tierAfter.key : (before.peakTierKey ?? tierBefore.key);
+    const tierBefore = resolveRankedTier(rpBefore, ladder);
+    const tierAfter = resolveRankedTier(rpAfter, ladder);
+    const tierShift = compareRankedTiers(tierBefore.key, tierAfter.key, ladder);
 
-  const updated = await prisma.rankedMember.update({
-    where: { guildId_userId: { guildId, userId } },
-    data: {
-      rp: rpAfter,
-      peakRp,
-      peakTierKey,
-      tierKey: tierAfter.key,
-      // Le « précédent » ne bouge qu'au changement de palier : sinon il
-      // afficherait le palier courant dès le premier RP gagné après une
-      // promotion, et la carte perdrait sa valeur de repère.
-      previousTierKey: tierShift !== 0 ? tierBefore.key : before.previousTierKey,
-      totalRpEarned: granted > 0 ? { increment: granted } : undefined,
-    },
+    const peakRp = Math.max(before.peakRp, rpAfter);
+    const peakTierKey = peakRp === rpAfter && tierShift > 0 ? tierAfter.key : (before.peakTierKey ?? tierBefore.key);
+
+    const updated = await tx.rankedMember.update({
+      where: { guildId_userId: { guildId, userId } },
+      data: {
+        rp: rpAfter,
+        peakRp,
+        peakTierKey,
+        tierKey: tierAfter.key,
+        // Le « précédent » ne bouge qu'au changement de palier : sinon il
+        // afficherait le palier courant dès le premier RP gagné après une
+        // promotion, et la carte perdrait sa valeur de repère.
+        previousTierKey: tierShift !== 0 ? tierBefore.key : before.previousTierKey,
+        totalRpEarned: granted > 0 ? { increment: granted } : undefined,
+      },
+    });
+
+    return { rpBefore, rpAfter, granted, tierBefore, tierAfter, tierShift, streakDays: updated.streakDays };
   });
+
+  if (!outcome) return null;
+  const { rpBefore, rpAfter, granted, tierBefore, tierAfter, tierShift, streakDays } = outcome;
 
   if (options.log !== false) {
     await prisma.rankedRpLog.create({
@@ -194,7 +210,7 @@ export async function applyRpDelta(
     tierBefore,
     tierAfter,
     tierShift,
-    streakDays: updated.streakDays,
+    streakDays,
   };
 }
 

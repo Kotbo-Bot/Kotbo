@@ -55,21 +55,22 @@ function fakeGuild(roles: Record<string, string[]> | null): Guild {
 const noBonus = { entries: [] };
 const vipBonus = { entries: [{ roleId: 'vip', weight: 4 }] };
 
-const realRandom = Math.random;
+// Le tirage reçoit son générateur : sans stub, c'est le générateur du système.
+let currentRandom: (() => number) | undefined;
 function stubRandom(...values: number[]) {
   let index = 0;
-  Math.random = () => values[Math.min(index++, values.length - 1)];
+  currentRandom = () => values[Math.min(index++, values.length - 1)];
 }
 
 afterEach(() => {
-  Math.random = realRandom;
+  currentRandom = undefined;
 });
 
 describe('drawWinnersWeighted', () => {
   test('écarte les participants qui ont quitté le serveur', async () => {
     const guild = fakeGuild({ a: [], c: [] });
 
-    const winners = await drawWinnersWeighted(['a', 'b', 'c'], 3, guild, noBonus);
+    const winners = await drawWinnersWeighted(['a', 'b', 'c'], 3, guild, noBonus, currentRandom);
 
     expect([...winners].sort()).toEqual(['a', 'c']);
   });
@@ -77,7 +78,7 @@ describe('drawWinnersWeighted', () => {
   test('tire quand même quand Discord ne répond pas', async () => {
     stubRandom(0);
 
-    const winners = await drawWinnersWeighted(['a', 'b'], 1, fakeGuild(null), noBonus);
+    const winners = await drawWinnersWeighted(['a', 'b'], 1, fakeGuild(null), noBonus, currentRandom);
 
     // Mieux vaut un tirage parmi des candidats non vérifiés qu'un concours sans
     // gagnant parce qu'une requête a échoué.
@@ -90,10 +91,10 @@ describe('drawWinnersWeighted', () => {
     // Poids 4 pour « a », 1 pour « b », soit 5 au total. Un tirage à 0,5 tombe
     // dans la part de « a », un tirage à 0,9 dans celle de « b ».
     stubRandom(0.5);
-    expect(await drawWinnersWeighted(['a', 'b'], 1, guild, vipBonus)).toEqual(['a']);
+    expect(await drawWinnersWeighted(['a', 'b'], 1, guild, vipBonus, currentRandom)).toEqual(['a']);
 
     stubRandom(0.9);
-    expect(await drawWinnersWeighted(['a', 'b'], 1, guild, vipBonus)).toEqual(['b']);
+    expect(await drawWinnersWeighted(['a', 'b'], 1, guild, vipBonus, currentRandom)).toEqual(['b']);
   });
 
   test('retombe en tirage égalitaire quand aucun rôle n\'est lisible', async () => {
@@ -102,7 +103,7 @@ describe('drawWinnersWeighted', () => {
     // deux candidats, c'est le second.
     stubRandom(0.9);
 
-    const winners = await drawWinnersWeighted(['a', 'b'], 1, fakeGuild(null), vipBonus);
+    const winners = await drawWinnersWeighted(['a', 'b'], 1, fakeGuild(null), vipBonus, currentRandom);
 
     expect(winners).toEqual(['b']);
   });
@@ -110,7 +111,7 @@ describe('drawWinnersWeighted', () => {
   test('ne sert jamais deux fois le même gagnant', async () => {
     const guild = fakeGuild({ a: [], b: [], c: [] });
 
-    const winners = await drawWinnersWeighted(['a', 'b', 'c'], 2, guild, noBonus);
+    const winners = await drawWinnersWeighted(['a', 'b', 'c'], 2, guild, noBonus, currentRandom);
 
     expect(winners).toHaveLength(2);
     expect(new Set(winners).size).toBe(2);
@@ -119,13 +120,13 @@ describe('drawWinnersWeighted', () => {
   test('ne promet pas plus de gagnants qu\'il n\'y a de participants', async () => {
     const guild = fakeGuild({ a: [] });
 
-    expect(await drawWinnersWeighted(['a'], 5, guild, noBonus)).toEqual(['a']);
+    expect(await drawWinnersWeighted(['a'], 5, guild, noBonus, currentRandom)).toEqual(['a']);
   });
 
   test('ne tire rien sans participant ni sans gagnant à désigner', async () => {
     const guild = fakeGuild({ a: [] });
 
-    expect(await drawWinnersWeighted([], 1, guild, noBonus)).toEqual([]);
-    expect(await drawWinnersWeighted(['a'], 0, guild, noBonus)).toEqual([]);
+    expect(await drawWinnersWeighted([], 1, guild, noBonus, currentRandom)).toEqual([]);
+    expect(await drawWinnersWeighted(['a'], 0, guild, noBonus, currentRandom)).toEqual([]);
   });
 });

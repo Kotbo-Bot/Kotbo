@@ -2,6 +2,7 @@ import type { Prisma } from '@prisma/client';
 import { Client, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, MessageFlags, GuildMember, RESTJSONErrorCodes, type ButtonInteraction, type HexColorString, type Guild, type Role } from 'discord.js';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
+import { isAutoGrantableRole } from '../../utils/adminLockPermissions.js';
 import { resolveEmojiShortcodes } from '../../utils/emojis.js';
 import { FALLBACK_LOCALE, getEffectiveLocale, resolveGuildLocale, type BotLocale } from '../../utils/i18n.js';
 import * as m from '../../lib/paraglide/messages.js';
@@ -624,6 +625,10 @@ export async function handleRoleToggleInteraction(interaction: ButtonInteraction
       ? rolesToSwapOut(configuredRoles.map((option) => option.roleId), member.roles.cache.keys(), roleId)
         .filter((id) => !roleBlockerOf(guild.roles.cache.get(id), me))
       : [];
+
+    if (!isAutoGrantableRole(clickedRole)) {
+      return answer(m.reactionroles_role_unavailable({}, { locale }));
+    }
 
     // Ajout d'abord : si le retrait échoue ensuite, le membre a deux rôles
     // plutôt qu'aucun.

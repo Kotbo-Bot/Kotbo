@@ -7,6 +7,7 @@ import { cache } from '../../utils/cache.js';
 import { randomBytes } from 'node:crypto';
 import type { ChannelLinkGroup, ChannelLinkGroupMember, ChannelLinkInvite } from '@prisma/client';
 import { isGuildActivated } from '../../utils/activation.js';
+import { neutralizeMassMentions } from '../../utils/mentions.js';
 import { refreshLinkGuestGuilds } from './channelLinkGuestService.js';
 import { creerIssueCopie, recordLinkTraffic } from './channelLinkStatsService.js';
 import { INVITE_SOURCE, recordBotInvite } from '../analytics/inviteService.js';
@@ -894,25 +895,6 @@ export function inspectRelayPermissions(client: Client, group: LinkGroup): Membe
   }
 
   return issues;
-}
-
-// ── Mentions de masse ───────────────────────────────────────
-
-const MASS_MENTION = /@(everyone|here)/g;
-
-/**
- * Rend inoffensive une mention de masse qui traverse le pont.
- *
- * `allowedMentions: { parse: [] }` suffit à empêcher la notification, mais il
- * faut le repasser à chaque envoi : un seul oubli, aujourd'hui ou dans une
- * modification future, et un serveur relié notifierait toute une communauté qui
- * ne lui a rien demandé - un serveur en liaison seule y compris, alors qu'il
- * n'est là que pour faire circuler des messages. L'espace de largeur nulle
- * neutralise la mention dans la chaîne elle-même : le texte se lit à
- * l'identique, et plus rien en aval ne peut la transformer en notification.
- */
-export function neutralizeMassMentions(text: string): string {
-  return text.replace(MASS_MENTION, '@\u200b$1');
 }
 
 // ── Emoji et stickers ───────────────────────────────────────

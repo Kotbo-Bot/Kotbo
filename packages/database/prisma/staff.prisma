@@ -39,6 +39,9 @@ model StaffMember {
 
   isTutor Boolean @default(false)
 
+  // Version du lien d'abonnement iCal : l'incrémenter révoque les liens déjà distribués.
+  icalTokenVersion Int @default(0)
+
   // Suspension : le membre reste dans l'annuaire avec son grade et son historique,
   // mais perd ses rôles Discord staff jusqu'à sa réintégration.
   suspendedAt DateTime?

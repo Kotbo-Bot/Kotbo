@@ -155,7 +155,7 @@ describe('checkYoutubeFollows', () => {
     expect(sent[0].channelId).toBe(PUBLIC_CHANNEL);
     expect(sent[0].content).toBe('🎥 Nouvelle vidéo de **Kotbo** !');
     expect(sent[0].embedTitle).toBe('Refonte du bot');
-    expect(updates).toEqual([{ id: 'yt-1', data: { lastVideoId: 'nouvelle001' } }]);
+    expect(updates).toEqual([{ id: 'yt-1', data: { lastVideoId: 'nouvelle001', recentVideoIds: ['nouvelle001', 'deja-vu-001'] } }]);
   });
 
   test('applique le message personnalise et la mention', async () => {
@@ -189,7 +189,7 @@ describe('checkYoutubeFollows', () => {
     await checkYoutubeFollows(fakeClient(GUILD_ID, [PUBLIC_CHANNEL]), youtubeRoutes(rssFeed('premiere001', 'Ancienne video')));
 
     expect(sent).toHaveLength(0);
-    expect(updates).toEqual([{ id: 'yt-1', data: { lastVideoId: 'premiere001' } }]);
+    expect(updates).toEqual([{ id: 'yt-1', data: { lastVideoId: 'premiere001', recentVideoIds: ['premiere001'] } }]);
   });
 
   test('annonce un direct detecte sur la page /live', async () => {
@@ -204,7 +204,7 @@ describe('checkYoutubeFollows', () => {
     // Le direct figure aussi dans le flux RSS : une seule annonce doit sortir.
     expect(sent).toHaveLength(1);
     expect(sent[0].content).toBe('🔴 **Kotbo** est en direct sur YouTube !');
-    expect(updates).toEqual([{ id: 'yt-1', data: { lastLiveId: 'direct00001' } }]);
+    expect(updates).toEqual([{ id: 'yt-1', data: { lastLiveId: 'direct00001', recentVideoIds: ['direct00001'] } }]);
   });
 
   test('respecte la desactivation du module par la guilde', async () => {

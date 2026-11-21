@@ -52,7 +52,11 @@ function parseClusterNodes(): ClusterNode[] | null {
 
 function buildRedisOptions(extra?: RedisOptions): RedisOptions {
   return {
-    maxRetriesPerRequest: null,
+    // Client de cache : une coupure Redis doit faire echouer vite la commande (on
+    // retombe sur la base), pas figer l'interaction. Le worker BullMQ et les
+    // sessions du dashboard ont leur propre connexion, qui attend.
+    maxRetriesPerRequest: 2,
+    enableOfflineQueue: false,
     lazyConnect: true,
     enableReadyCheck: true,
     ...extra,
@@ -85,15 +89,18 @@ function createCluster(extra?: Partial<ClusterOptions>): Cluster | null {
   const password = process.env.REDIS_PASSWORD;
 
   return new Cluster(nodes, {
-    redisOptions: {
-      password: password || undefined,
-      maxRetriesPerRequest: null,
-      ...extra?.redisOptions,
-    },
+    // Option de niveau Cluster, exclue de `redisOptions`.
+    enableOfflineQueue: false,
     lazyConnect: true,
     enableReadyCheck: true,
     scaleReads: 'slave',
     ...extra,
+    redisOptions: {
+      password: password || undefined,
+      // Meme politique par defaut que le client single node.
+      maxRetriesPerRequest: 2,
+      ...extra?.redisOptions,
+    },
   });
 }
 
@@ -172,10 +179,29 @@ export async function initRedis(): Promise<RedisLike | null> {
 
 export function createRedisForWorker(): Redis | null {
   if (redisUnconfigured) return null;
+  // BullMQ impose `maxRetriesPerRequest: null` et s'appuie sur la file hors
+  // ligne pour encaisser les breves reconnexions.
   return createClient({
     maxRetriesPerRequest: null,
+    enableOfflineQueue: true,
     enableReadyCheck: false,
   });
+}
+
+let sessionRedis: RedisLike | null = null;
+
+/**
+ * Connexion des sessions du dashboard, qui attend Redis pendant une coupure :
+ * echouer vite perdrait le refresh token que Discord vient de faire tourner, ou
+ * supprimerait la session sur une erreur passagere.
+ */
+export function getSessionRedis(): RedisLike | null {
+  if (!sessionRedis) {
+    sessionRedis = createCluster({ enableOfflineQueue: true, redisOptions: { maxRetriesPerRequest: null } })
+      ?? createClient({ maxRetriesPerRequest: null, enableOfflineQueue: true });
+    if (sessionRedis) attachLifecycleLogging(sessionRedis, 'Sessions');
+  }
+  return sessionRedis;
 }
 
 export function getRedis(): RedisLike | null {

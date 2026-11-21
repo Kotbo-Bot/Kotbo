@@ -22,6 +22,9 @@
     fetchBroadcastEmojis,
     fetchBroadcastChannels,
     setBroadcastChannel,
+    setBroadcastSource,
+    subscribeAllBroadcastGuilds,
+    subscribeBroadcastGuild,
     fetchBroadcastMedia,
     deleteBroadcastMedia,
     fetchBroadcastTemplates,
@@ -37,6 +40,8 @@
     type BroadcastLogEntry,
     type BroadcastEmoji,
     type BroadcastGuildConfig,
+    type BroadcastSourceConfig,
+    type BroadcastSubscribeAllSummary,
     type BroadcastMedia,
     type BroadcastTemplate,
     type BroadcastDelivery,
@@ -101,6 +106,13 @@
   let channelSearch = $state('');
   let channelFilter = $state('TODO');
   let savingChannel = $state<string | null>(null);
+  let sourceChannel = $state<BroadcastSourceConfig | null>(null);
+  let sourceGuildId = $state('');
+  let sourceChannelId = $state('');
+  let savingSource = $state(false);
+  let subscribingAll = $state(false);
+  let subscribingGuildId = $state<string | null>(null);
+  let subscribeSummary = $state<BroadcastSubscribeAllSummary | null>(null);
   let historySort = $state('createdAt');
   let historyDir = $state<'asc' | 'desc'>('desc');
 
@@ -316,6 +328,9 @@
       history = hist?.logs ?? [];
       emojis = emojiData?.emojis ?? [];
       guilds = channelData?.guilds ?? [];
+      sourceChannel = channelData?.sourceChannel ?? null;
+      sourceGuildId = sourceChannel?.guildId ?? '';
+      sourceChannelId = sourceChannel?.channelId ?? '';
       mediaLibrary = media ?? { media: [], usedBytes: 0, quotaBytes: 0 };
       templates = tpl?.templates ?? [];
     } catch (err) {
@@ -693,10 +708,79 @@
   }
 
   // ── Salons ────────────────────────────────────────────────────────────────
+  const sourceGuild = $derived(guilds.find((g) => g.id === sourceGuildId) ?? null);
+  const sourceAnnouncementChannels = $derived(
+    (sourceGuild?.channels ?? []).filter((ch) => ch.type === 5),
+  );
+
+  async function saveSourceChannel() {
+    savingSource = true;
+    try {
+      const clear = !sourceGuildId || !sourceChannelId;
+      const res = await setBroadcastSource(clear ? null : sourceGuildId, clear ? null : sourceChannelId);
+      sourceChannel = res.sourceChannel;
+      if (!res.sourceChannel) {
+        sourceGuildId = '';
+        sourceChannelId = '';
+        subscribeSummary = null;
+        toast.success("Salon d'annonces source retiré.");
+      } else {
+        toast.success("Salon d'annonces source enregistré.");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : m.abc_config_error());
+    } finally {
+      savingSource = false;
+    }
+  }
+
+  async function clearSourceChannel() {
+    sourceGuildId = '';
+    sourceChannelId = '';
+    await saveSourceChannel();
+  }
+
+  async function handleSubscribeAll() {
+    subscribingAll = true;
+    try {
+      const summary = await subscribeAllBroadcastGuilds();
+      subscribeSummary = summary;
+      await reloadAll();
+      toast.success(
+        `Abonnement terminé : ${summary.subscribed} abonné(s), ${summary.alreadySubscribed} déjà abonné(s), ${summary.skipped} ignoré(s), ${summary.failed} échec(s).`,
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : m.abc_config_error());
+    } finally {
+      subscribingAll = false;
+    }
+  }
+
+  async function handleSubscribeGuild(guild: BroadcastGuildConfig) {
+    subscribingGuildId = guild.id;
+    try {
+      const res = await subscribeBroadcastGuild(guild.id);
+      if (res.status === 'SUBSCRIBED') {
+        toast.success(`${guild.name} abonné dans #${res.channelName ?? res.channelId}.`);
+        await reloadAll();
+      } else if (res.status === 'ALREADY_SUBSCRIBED') {
+        toast.info(`${guild.name} est déjà abonné (#${res.channelName ?? res.channelId}).`);
+      } else if (res.status === 'SKIPPED') {
+        toast.warning(`${guild.name} ignoré : ${res.reason ?? 'aucun salon compatible'}`);
+      } else {
+        toast.error(`${guild.name} : ${res.reason ?? "échec de l'abonnement"}`);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : m.abc_config_error());
+    } finally {
+      subscribingGuildId = null;
+    }
+  }
+
   async function saveChannelFor(guild: BroadcastGuildConfig, channelId: string | null) {
     savingChannel = guild.id;
     try {
-      await setBroadcastChannel(guild.id, channelId);
+      const res = await setBroadcastChannel(guild.id, channelId);
       const channel = channelId ? guild.channels.find((c) => c.id === channelId) ?? null : null;
       guilds = guilds.map((g) => g.id === guild.id
         ? {
@@ -706,7 +790,13 @@
           channelStatus: channelId ? ('OK' as const) : ('UNSET' as const),
         }
         : g);
-      toast.success(channelId ? m.abc_channel_set({ channel: channel?.name ?? '', guild: guild.name }) : m.abc_channel_removed({ guild: guild.name }));
+      if (res.subscription?.status === 'SUBSCRIBED') {
+        toast.success(`${m.abc_channel_set({ channel: channel?.name ?? '', guild: guild.name })} (abonné au salon source)`);
+      } else if (res.subscription?.status === 'FAILED') {
+        toast.warning(`${m.abc_channel_set({ channel: channel?.name ?? '', guild: guild.name })} — abonnement impossible : ${res.subscription.reason}`);
+      } else {
+        toast.success(channelId ? m.abc_channel_set({ channel: channel?.name ?? '', guild: guild.name }) : m.abc_channel_removed({ guild: guild.name }));
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : m.abc_config_error());
     } finally {
@@ -1692,6 +1782,83 @@
 
   {:else if activeTab === 'channels'}
     <div class="space-y-4">
+      <AdminCard
+        title="Salon d'annonces source (Diffusion Discord)"
+        description="Configurez le salon d'annonces Discord depuis lequel Discord diffusera automatiquement les annonces aux serveurs abonnés."
+      >
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label for="source-guild-select" class="block text-xs font-semibold text-on-surface-variant mb-1">Serveur source</label>
+            <select
+              id="source-guild-select"
+              bind:value={sourceGuildId}
+              onchange={() => { sourceChannelId = ''; }}
+              disabled={savingSource}
+              class="w-full h-9 px-2.5 rounded-lg bg-surface-container-low/70 border border-field-border text-xs text-on-surface focus:outline-none focus:border-primary/60 disabled:opacity-50"
+            >
+              <option value="">— Sélectionner un serveur —</option>
+              {#each guilds as g (g.id)}
+                <option value={g.id}>{g.name}</option>
+              {/each}
+            </select>
+          </div>
+
+          <div>
+            <label for="source-channel-select" class="block text-xs font-semibold text-on-surface-variant mb-1">Salon d'annonces</label>
+            <select
+              id="source-channel-select"
+              bind:value={sourceChannelId}
+              disabled={savingSource || !sourceGuildId}
+              class="w-full h-9 px-2.5 rounded-lg bg-surface-container-low/70 border border-field-border text-xs text-on-surface focus:outline-none focus:border-primary/60 disabled:opacity-50"
+            >
+              <option value="">— Sélectionner un salon d'annonces —</option>
+              {#each sourceAnnouncementChannels as ch (ch.id)}
+                <option value={ch.id}>#{ch.name}{ch.category ? ` · ${ch.category}` : ''}</option>
+              {/each}
+            </select>
+          </div>
+        </div>
+
+        <div class="mt-3 flex flex-wrap items-center gap-2">
+          <Button
+            variant="primary"
+            size="sm"
+            disabled={savingSource || !sourceGuildId || !sourceChannelId}
+            onclick={saveSourceChannel}
+          >
+            {savingSource ? 'Enregistrement…' : 'Enregistrer le salon source'}
+          </Button>
+          {#if sourceChannel}
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={subscribingAll || savingSource}
+              onclick={handleSubscribeAll}
+            >
+              {subscribingAll ? 'Abonnement en cours…' : 'Abonner tous les serveurs'}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={savingSource || subscribingAll}
+              onclick={clearSourceChannel}
+            >
+              Retirer
+            </Button>
+          {/if}
+        </div>
+
+        {#if subscribeSummary}
+          <div class="mt-3 rounded-lg border border-outline-variant/25 bg-surface-container-low/50 p-3 text-xs text-on-surface-variant">
+            <span class="font-semibold text-on-surface">Résultat de l'abonnement ({subscribeSummary.total} serveurs) :</span>
+            {subscribeSummary.subscribed} nouvellement abonné(s),
+            {subscribeSummary.alreadySubscribed} déjà abonné(s),
+            {subscribeSummary.skipped} ignoré(s),
+            {subscribeSummary.failed} échec(s).
+          </div>
+        {/if}
+      </AdminCard>
+
       <AdminToolbar
         bind:search={channelSearch}
         bind:activeFilter={channelFilter}
@@ -1716,13 +1883,25 @@
             </div>
 
             <div class="min-w-0 flex-1">
-              <div class="flex items-center gap-2">
-                <p class="text-body-sm font-semibold text-on-surface truncate">{guild.name}</p>
-                <AdminBadge
-                  size="sm"
-                  label={guild.channelStatus === 'OK' ? 'Configuré' : guild.channelStatus === 'MISSING' ? 'Salon supprimé' : 'Non configuré'}
-                  tone={guild.channelStatus === 'OK' ? 'success' : guild.channelStatus === 'MISSING' ? 'danger' : 'warning'}
-                />
+              <div class="flex items-center justify-between gap-2">
+                <div class="flex items-center gap-2 min-w-0">
+                  <p class="text-body-sm font-semibold text-on-surface truncate">{guild.name}</p>
+                  <AdminBadge
+                    size="sm"
+                    label={guild.channelStatus === 'OK' ? 'Configuré' : guild.channelStatus === 'MISSING' ? 'Salon supprimé' : 'Non configuré'}
+                    tone={guild.channelStatus === 'OK' ? 'success' : guild.channelStatus === 'MISSING' ? 'danger' : 'warning'}
+                  />
+                </div>
+                {#if sourceChannel && guild.id !== sourceChannel.guildId}
+                  <button
+                    type="button"
+                    disabled={subscribingGuildId === guild.id}
+                    onclick={() => handleSubscribeGuild(guild)}
+                    class="shrink-0 px-2 py-1 rounded-md bg-primary/12 text-primary text-2xs font-semibold hover:bg-primary/20 transition disabled:opacity-50"
+                  >
+                    {subscribingGuildId === guild.id ? '…' : 'Abonner'}
+                  </button>
+                {/if}
               </div>
               <select aria-label={`Salon de diffusion pour ${guild.name}`}
                 value={guild.broadcastChannelId ?? ''}

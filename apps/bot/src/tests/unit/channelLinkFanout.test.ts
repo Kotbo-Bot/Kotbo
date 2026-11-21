@@ -1,6 +1,7 @@
 import { describe, expect, test, mock, beforeEach } from 'bun:test';
 import path from 'node:path';
 import { PermissionFlagsBits } from 'discord.js';
+import { neutralizeMassMentions } from '../../utils/mentions.js';
 
 /**
  * Diffusion d'un pont à plus de deux salons.
@@ -65,7 +66,7 @@ const dbJsPath = path.resolve(import.meta.dir, '../../utils/db.js');
 mock.module(dbPath, () => ({ default: mockDb, prisma: mockDb, prismaRead: mockDb, upsertRetryingRace: (upsert: () => Promise<unknown>) => upsert() }));
 mock.module(dbJsPath, () => ({ default: mockDb, prisma: mockDb, prismaRead: mockDb, upsertRetryingRace: (upsert: () => Promise<unknown>) => upsert() }));
 
-const { relayMessageEdit, relayMessageDelete, relayReactionAdd, neutralizeMassMentions, permissionsSalonDePont } = await import(
+const { relayMessageEdit, relayMessageDelete, relayReactionAdd, permissionsSalonDePont } = await import(
   '../../services/features/channelLinkService'
 );
 
@@ -322,8 +323,6 @@ describe('relayReactionAdd', () => {
 });
 
 /**
- * Ces tests vivent ici pour profiter des mocks du service, déjà posés plus haut.
- *
  * La propriété est de sûreté, pas de confort : un pont relie des communautés qui
  * ne se connaissent pas, et rien de ce qui y transite ne doit pouvoir notifier
  * l'autre serveur en entier.

@@ -24,6 +24,7 @@ import {
 import type { WelcomeMenuPage, WelcomeThreadConfig, WelcomeThreadStep } from '@prisma/client';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
+import { isAutoGrantableRole } from '../../utils/adminLockPermissions.js';
 import { resolvePlaceholders, type PlaceholderContext } from '../../utils/placeholders.js';
 
 const TAG = 'WelcomeThreadService';
@@ -559,6 +560,13 @@ async function handleMenuRoleAction(
   if (role.managed || role.position >= botMember.roles.highest.position) {
     await interaction.editReply({
       content: '❌ Le bot ne peut pas gérer ce rôle (rôle intégré ou supérieur à son propre rôle le plus élevé).',
+    }).catch(() => null);
+    return;
+  }
+
+  if (!isAutoGrantableRole(role)) {
+    await interaction.editReply({
+      content: "❌ Ce rôle donne la permission Administrateur : un menu ne peut pas l'attribuer.",
     }).catch(() => null);
     return;
   }

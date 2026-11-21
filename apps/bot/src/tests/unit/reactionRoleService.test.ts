@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import path from 'node:path';
-import { GuildMember, MessageFlags, RESTJSONErrorCodes, type ButtonInteraction, type Client } from 'discord.js';
+import { GuildMember, MessageFlags, PermissionFlagsBits, RESTJSONErrorCodes, type ButtonInteraction, type Client } from 'discord.js';
 import { completeModuleMock } from '../helpers/moduleMock.js';
 
 const prismaMock = {
@@ -103,13 +103,16 @@ const BOT_TOP_POSITION = 10;
  * Serveur où le bot a « Gérer les rôles ». `positions` place un rôle ; un rôle
  * absent de la liste est sous le bot.
  */
-function fakeGuild(positions: Record<string, number> = {}) {
+function fakeGuild(positions: Record<string, number> = {}, adminRoleIds: string[] = []) {
   return {
     id: 'guild-1',
     ownerId: 'owner-1',
     roles: {
       cache: {
-        get: (id: string) => ({ id, name: id, managed: false, position: positions[id] ?? 1 }),
+        get: (id: string) => ({
+          id, name: id, managed: false, position: positions[id] ?? 1,
+          permissions: { bitfield: adminRoleIds.includes(id) ? PermissionFlagsBits.Administrator : 0n },
+        }),
       },
       fetch: mock(async () => null),
     },
@@ -282,6 +285,21 @@ describe('reactionRoleService', () => {
     expect(reply).toHaveBeenCalledWith(expect.objectContaining({
       content: expect.stringContaining('attribué'),
     }));
+  });
+
+  test('un rôle qui donne Administrateur n’est jamais attribué par un menu', async () => {
+    const reply = mock(async () => undefined);
+    prismaMock.reactionRoleMenu.findFirst.mockResolvedValueOnce({
+      id: 'menu-1',
+      buttonMode: 'add_only',
+      options: [{ label: 'Admin', roleId: 'role-admin' }],
+    });
+
+    const { member, add } = fakeMember([], fakeGuild({}, ['role-admin']));
+    await handleRoleToggleInteraction(fakeInteraction('role_toggle:role-admin:0', member, reply));
+
+    expect(add).not.toHaveBeenCalled();
+    expect(reply).toHaveBeenCalled();
   });
 
   test('le mode du bouton l’emporte sur celui du panneau', async () => {

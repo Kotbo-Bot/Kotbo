@@ -56,6 +56,30 @@ describe('news RSS generator', () => {
     expect(items[2]).not.toContain('media:content');
   });
 
+  test('neutralise une séquence ]]> et les attributs hostiles', () => {
+    const xml = generateRssXml('Serveur ]]><evil/>', '123', 'https://dash.example', 'https://api.example', [
+      {
+        id: 'a"1',
+        title: 'Titre ]]><injected>x</injected>',
+        content: 'Texte',
+        summary: null,
+        imageUrl: 'https://img.example/a.png" onload="x',
+        authorName: null,
+        category: null,
+        publishedAt: new Date('2026-05-25T12:00:00Z'),
+      },
+    ]);
+
+    // Hors des blocs CDATA, aucun élément injecté ne subsiste.
+    const outsideCdata = xml.replace(/<!\[CDATA\[[\s\S]*?\]\]>/g, '');
+    expect(outsideCdata).not.toContain('<injected');
+    expect(outsideCdata).not.toContain('<evil');
+    // L'attribut n'est plus refermable.
+    expect(xml).toContain('url="https://img.example/a.png&quot; onload=&quot;x"');
+    // Un auteur absent ne devient pas « null ».
+    expect(xml).not.toContain('<![CDATA[null]]>');
+  });
+
   test("génère un canal vide si aucun article n'est passé", () => {
     const xml = generateRssXml('Serveur Vide', '000', 'https://dash.com', 'https://api.com', []);
     expect(xml).toContain('<channel>');

@@ -22,6 +22,7 @@ import {
 import prisma from '../../utils/db.js';
 import { notify } from '../notifications/notifyService.js';
 import { logger } from '../../utils/logger.js';
+import { isAutoGrantableRoleId } from '../../utils/adminLockPermissions.js';
 import { resolveGuildLocale } from '../../utils/i18n.js';
 import * as m from '../../lib/paraglide/messages.js';
 import { getModuleStates } from '../core/moduleGate.js';
@@ -29,6 +30,7 @@ import { adminSpawnItem, creditBalance, getOrCreateRpgProfile } from '../feature
 import { addXp, getGuildLevelCurve, getLevelFromXp } from '../progression/levelingService.js';
 import { publishGuildSignal } from '../site/siteLive.js';
 import { UserFacingError } from '../../utils/userFacingError.js';
+import { classifyFailure } from '../../utils/failureKind.js';
 
 export type ShopErrorCode =
   | ShopOfferError
@@ -226,6 +228,8 @@ async function memberLevel(guildId: string, userId: string): Promise<number> {
 }
 
 const OPEN_STATUSES = ['PENDING', 'COMPLETED'] as const;
+/** Au-delà, une commande terminée est livrée ou remboursée : Discord a répondu, relances comprises. */
+const DELIVERY_MS = 5 * 60_000;
 
 /**
  * Ce qui empêche ce bénéficiaire d'obtenir l'offre, ou `null`. Le stock et le
@@ -324,6 +328,32 @@ export async function purchaseShopOffer(client: Client, guildId: string, buyerId
       const count = await tx.shopOrder.count({ where: { offerId: offer.id, recipientId, status: { in: [...OPEN_STATUSES] }, source: { not: 'renewal' } } });
       if (count >= offer.perMemberLimit) throw new ShopError('limit_reached');
     }
+    // Un abonnement ou un rôle permanent ne se paie qu'une fois : ni une commande en
+    // attente ni un double clic ne doivent débiter le membre une seconde fois.
+    if (offer.kind === 'SUBSCRIPTION') {
+      const sub = await tx.shopSubscription.findUnique({ where: { offerId_userId: { offerId: offer.id, userId: recipientId } }, select: { status: true, endedAt: true } });
+      if (sub && sub.status !== 'ENDED') throw new ShopError('already_subscribed');
+      // Une commande passée depuis la fin du dernier abonnement est en attente ou en
+      // cours de livraison (l'abonnement n'est écrit qu'à la livraison) : un abonnement
+      // terminé reste rachetable.
+      const inFlight = await tx.shopOrder.count({
+        where: { offerId: offer.id, recipientId, status: { in: [...OPEN_STATUSES] }, source: { not: 'renewal' }, createdAt: { gt: sub?.endedAt ?? new Date(0) } },
+      });
+      if (inFlight > 0) throw new ShopError('already_subscribed');
+    } else if (offer.kind === 'ROLE' && offer.durationDays === null) {
+      // Le rôle n'est posé qu'après la commande, qui peut donc être en cours de livraison.
+      // Livrée, elle ne bloque que si le rôle est encore porté (offerBlocker) : un rôle perdu se rachète.
+      const since = new Date(Date.now() - DELIVERY_MS);
+      const owned = await tx.shopOrder.count({
+        where: {
+          offerId: offer.id,
+          recipientId,
+          source: { not: 'renewal' },
+          OR: [{ status: 'PENDING' }, { status: 'COMPLETED', OR: [{ createdAt: { gt: since } }, { decidedAt: { gt: since } }] }],
+        },
+      });
+      if (owned > 0) throw new ShopError('already_owned');
+    }
     if (offer.stock !== null) {
       const taken = await tx.shopOffer.updateMany({ where: { id: offer.id, stock: { gt: 0 } }, data: { stock: { decrement: 1 } } });
       if (taken.count === 0) throw new ShopError('out_of_stock');
@@ -384,6 +414,10 @@ const PERIOD_MS = 86_400_000;
 
 async function deliverOrder(client: Client, offer: ShopOffer, order: ShopOrder, member: GuildMember): Promise<void> {
   const reason = `Boutique : ${offer.name}`.slice(0, 512);
+  // Un rôle Administrateur ne s'achète pas : la livraison échoue et la commande est remboursée.
+  if ((offer.kind === 'ROLE' || offer.kind === 'SUBSCRIPTION') && !isAutoGrantableRoleId(member.guild, offer.roleId!)) {
+    throw new Error(`Rôle ${offer.roleId} non livrable : il donne la permission Administrateur`);
+  }
   switch (offer.kind) {
     case 'ROLE': {
       await member.roles.add(offer.roleId!, reason);
@@ -585,6 +619,27 @@ async function renewSubscription(client: Client, sub: ShopSubscriptionRow, now: 
       body: m.shop_notify_sub_ended_body({ name }, { locale }),
     });
     return 'ended';
+  }
+
+  // Un membre parti ne porte plus le rôle : on clôt sans débiter. Une panne
+  // passagère (quota, réseau) n'est pas un départ, on réessaiera au passage suivant.
+  const guild = client.guilds.cache.get(sub.guildId);
+  if (!guild) return 'waiting';
+  if (!guild.members.cache.has(sub.userId)) {
+    try {
+      await guild.members.fetch(sub.userId);
+    } catch (err) {
+      if (classifyFailure(err).code !== 'discord_unknown_resource') {
+        logger.warn('Shop', `Membre introuvable (passager) pour le prélèvement (${sub.id}) :`, err);
+        return 'waiting';
+      }
+      await endSubscription(client, sub, now);
+      await notifyShopMember(sub.guildId, sub.userId, {
+        title: m.shop_notify_sub_ended_title({}, { locale }),
+        body: m.shop_notify_sub_ended_body({ name }, { locale }),
+      });
+      return 'ended';
+    }
   }
 
   const profile = await getOrCreateRpgProfile(sub.guildId, sub.userId);
