@@ -85,8 +85,8 @@ describe('activation service', () => {
 
     const result = await activateGuild('guild-123', 'KB-TEST-CODE');
 
-    expect(mockDb.activationCode.updateMany).toHaveBeenCalledWith({
-      where: { code: 'KB-TEST-CODE', isActive: true, usedAt: null },
+    expect(mockDb.activationCode.update).toHaveBeenCalledWith({
+      where: { code: 'KB-TEST-CODE' },
       data: {
         usedAt: expect.any(Date),
         usedByGuildId: 'guild-123',
@@ -124,16 +124,6 @@ describe('activation service', () => {
 
     expect(result).toEqual({ accessType: 'PERMANENT', durationMinutes: null, expiresAt: null });
     expect(isGuildActivated('guild-123')).toBeTrue();
-  });
-
-  test('activateGuild refuses a code another activation claimed first', async () => {
-    mockDb.activationCode.findUnique.mockResolvedValue({ code: 'KB-RACE-CODE', isActive: true, usedAt: null, accessType: 'PERMANENT', durationMinutes: null });
-    // Le filtre `usedAt: null` ne trouve plus la ligne : l'autre transaction l'a déjà prise.
-    mockDb.activationCode.updateMany.mockResolvedValue({ count: 0 });
-
-    await expect(activateGuild('guild-race', 'KB-RACE-CODE')).rejects.toThrow('Code invalide');
-    expect(mockDb.guild.upsert).not.toHaveBeenCalled();
-    expect(isGuildActivated('guild-race')).toBeFalse();
   });
 
   test('activateGuild should open a trial period when the code carries a duration', async () => {

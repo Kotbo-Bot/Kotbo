@@ -264,20 +264,6 @@ function redirectFormActionSource(redirectUri: string): string | null {
   return dest.protocol;
 }
 
-/** Plafond du registre en mémoire : l'enregistrement est ouvert à tous. */
-const MAX_OAUTH_CLIENTS = 1_000;
-const MAX_REDIRECT_URIS_PER_CLIENT = 10;
-
-/**
- * `redirect_uri` reçu à l'autorisation : il doit être l'une des URI déclarées
- * à l'enregistrement du client, à l'identique. Sans cela, n'importe qui
- * pourrait envoyer le code d'un administrateur vers son propre serveur.
- */
-function redirectUriRegisteredFor(clientId: string, redirectUri: string): boolean {
-  const registered = oauthClients.get(clientId);
-  return Boolean(registered && registered.redirectUris.includes(redirectUri));
-}
-
 function authPageCsp(redirectSource: string): string {
   return `default-src 'none'; style-src 'unsafe-inline'; form-action 'self' ${redirectSource}; base-uri 'none'; frame-ancestors 'none'`;
 }
@@ -729,16 +715,6 @@ function openAuthCode(code: string): AuthCode | null {
 
 // ── Authorization HTML page ───────────────────────────────────────────────
 
-/** Destination du retour, telle que l'utilisateur doit la voir avant de coller sa clé. */
-function redirectDisplay(redirectUri: string): string {
-  try {
-    const dest = new URL(redirectUri);
-    return dest.protocol === 'http:' || dest.protocol === 'https:' ? dest.host : dest.protocol;
-  } catch {
-    return 'adresse invalide';
-  }
-}
-
 function authPage(opts: {
   guildId: string; clientName: string; clientId: string;
   redirectUri: string; state: string; codeChallenge: string;
@@ -782,7 +758,6 @@ button:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
   <div class="app">
     <div class="app-name">${e(opts.clientName)}</div>
     <div class="app-desc">Cet agent IA souhaite accéder aux données de ton serveur Discord via Kotbo.</div>
-    <div class="app-desc">Retour après autorisation vers : <strong>${e(redirectDisplay(opts.redirectUri))}</strong></div>
   </div>
   ${opts.error ? `<div class="err">${e(opts.error)}</div>` : ''}
   <form method="POST">
@@ -871,22 +846,9 @@ export async function handleMCPRoutes(
     try { body = JSON.parse(req.bodyText ?? '{}') as Record<string, unknown>; } catch { /* ok */ }
 
     const clientId    = crypto.randomUUID();
-    const rawUris = Array.isArray(body.redirect_uris) ? body.redirect_uris : [];
-    const redirectUris = rawUris.filter(
-      (uri): uri is string => typeof uri === 'string' && uri.length <= 2_048 && redirectFormActionSource(uri) !== null,
-    );
-    const rawName = typeof body.client_name === 'string' ? body.client_name.trim() : '';
-    const clientName  = rawName.slice(0, 100) || 'Unknown Client';
+    const redirectUris = (body.redirect_uris as string[] | undefined) ?? [];
+    const clientName  = (body.client_name as string | undefined) ?? 'Unknown Client';
 
-    if (redirectUris.length === 0 || redirectUris.length > MAX_REDIRECT_URIS_PER_CLIENT || redirectUris.length !== rawUris.length) {
-      oauthError(req, res, 400, 'invalid_redirect_uri', 'redirect_uris requis (HTTPS, boucle locale ou schéma applicatif)');
-      return true;
-    }
-    if (oauthClients.size >= MAX_OAUTH_CLIENTS) {
-      // Le plus ancien d'abord : la Map garde l'ordre d'insertion.
-      const oldest = oauthClients.keys().next().value;
-      if (oldest !== undefined) oauthClients.delete(oldest);
-    }
     oauthClients.set(clientId, { clientId, redirectUris, clientName, guildId });
     mcpLog(req, 'dcr_registered', { guildId, clientId, redirectUris, clientName });
 
@@ -960,12 +922,6 @@ export async function handleMCPRoutes(
       return true;
     }
 
-    if (!redirectUriRegisteredFor(clientId, redirectUri)) {
-      mcpLog(req, 'authorize_get_unregistered_redirect', { guildId, clientId, redirectUri }, 'warn');
-      json(res, 400, { error: 'invalid_request', error_description: 'client_id inconnu ou redirect_uri non enregistrée : enregistre le client via /oauth/register' });
-      return true;
-    }
-
     mcpLog(req, 'authorize_get_page', { guildId, clientId, redirectUri, resource: resource ?? null });
     const clientName = oauthClients.get(clientId)?.clientName ?? 'Agent IA';
     res.setHeader('Content-Security-Policy', authPageCsp(redirectSource));
@@ -990,12 +946,6 @@ export async function handleMCPRoutes(
     if (!redirectSource) {
       mcpLog(req, 'authorize_post_bad_redirect', { guildId, clientId: client_id, redirectUri: redirect_uri }, 'warn');
       json(res, 400, { error: 'invalid_request', error_description: 'redirect_uri invalide' });
-      return true;
-    }
-
-    if (!redirectUriRegisteredFor(client_id, redirect_uri)) {
-      mcpLog(req, 'authorize_post_unregistered_redirect', { guildId, clientId: client_id, redirectUri: redirect_uri }, 'warn');
-      json(res, 400, { error: 'invalid_request', error_description: 'client_id inconnu ou redirect_uri non enregistrée' });
       return true;
     }
 

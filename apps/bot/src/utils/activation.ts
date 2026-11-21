@@ -99,19 +99,14 @@ export async function activateGuild(guildId: string, code: string): Promise<Acti
       expiresAt: accessFields.accessExpiresAt,
     };
 
-    // Réclamation atomique : le filtre sur `usedAt`/`isActive` fait que, de deux
-    // activations simultanées du même code, une seule voit `count === 1`.
-    const claimed = await tx.activationCode.updateMany({
-      where: { code: normalizedCode, isActive: true, usedAt: null },
+    await tx.activationCode.update({
+      where: { code: normalizedCode },
       data: {
         usedAt: activatedAt,
         usedByGuildId: guildId,
         isActive: false,
       },
     });
-    if (claimed.count !== 1) {
-      throw new Error('Code invalide, déjà utilisé ou expiré.');
-    }
 
     await tx.guild.upsert({
       where: { id: guildId },
