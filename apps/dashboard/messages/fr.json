@@ -19486,5 +19486,16 @@
   "eb_rules_title": "Éléments interdits ({count} / {max})",
   "eb_rules_empty": "Aucun emoji ni sticker interdit pour l'instant.",
   "eb_saved": "Règle enregistrée",
-  "eb_err_save": "Impossible d'enregistrer la règle."
+  "eb_err_save": "Impossible d'enregistrer la règle.",
+  "abc_source_removed": "Salon d'annonces source retiré.",
+  "abc_source_saved": "Salon d'annonces source enregistré.",
+  "abc_subscribe_all_done": "Abonnement terminé : {subscribed} abonné(s), {already} déjà abonné(s), {skipped} ignoré(s), {failed} échec(s).",
+  "abc_subscribed": "{guild} abonné dans #{channel}.",
+  "abc_already_subscribed": "{guild} est déjà abonné (#{channel}).",
+  "abc_subscribe_skipped": "{guild} ignoré : {reason}",
+  "abc_subscribe_failed": "{guild} : {reason}",
+  "abc_no_compatible_channel": "aucun salon compatible",
+  "abc_subscribe_failed_default": "échec de l'abonnement",
+  "abc_channel_set_subscribed": "{label} (abonné au salon source)",
+  "abc_channel_set_not_subscribed": "{label} — abonnement impossible : {reason}"
 }
