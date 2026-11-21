@@ -127,6 +127,7 @@ function escapeXml(value: string): string {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&apos;')
     // Les caractères de contrôle (hors tabulation et retours) sont interdits en XML 1.0.
+    // eslint-disable-next-line no-control-regex
     .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '');
 }
 
@@ -135,6 +136,7 @@ function escapeXml(value: string): string {
  * On la coupe en deux blocs. Le contenu vient du staff et du nom du serveur, pas de nous.
  */
 function cdata(value: string | null | undefined): string {
+  // eslint-disable-next-line no-control-regex
   const text = (value ?? '').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '');
   return `<![CDATA[${text.replace(/]]>/g, ']]]]><![CDATA[>')}]]>`;
 }
