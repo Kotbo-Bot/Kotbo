@@ -256,7 +256,7 @@ export const startDashboardApi = async (client: Client) => {
     // Routeur Hono (toutes les routes API passent désormais par Hono)
     // -----------------------------------------------------------------------
     try {
-      return await honoApp.fetch(request);
+      return await honoApp.fetch(request, { ip: serverInstance.requestIP(request)?.address });
     } catch (honoErr) {
       logger.error('DashboardAPI', 'Erreur Hono non gérée:', honoErr);
       return new Response(JSON.stringify({ error: 'Erreur interne API' }), {
