@@ -29,9 +29,10 @@ import { ensureDashboardSchemaPatches } from './utils/schemaPatches.js';
 import { parseInstanceIdFromArgs, setCurrentInstance, getCurrentInstance, isWhiteLabelInstance } from './utils/instanceContext.js';
 import { loadAllInstances, getInstanceById, getDefaultInstance } from './utils/instanceResolver.js';
 import { customBotOnlyGuild, servesGuild, startGuildOwnershipSync } from './utils/guildOwnership.js';
+import { startGlobalFlagsSync } from './utils/globalFlags.js';
 import { presenceFrom } from './services/system/customBotProfile.js';
 import { queueAuditLog } from './utils/auditLogger.js';
-import { replyOrFollowUp } from './utils/interactionResponses.js';
+import { notifyInteractionFailure, replyOrFollowUp } from './utils/interactionResponses.js';
 import { interactionFailureMessage } from './utils/failureKind.js';
 import { registerCrons } from './events/crons.js';
 import {
@@ -495,22 +496,11 @@ client.once(Events.ClientReady, async (c) => {
   void checkTranslationProviderHealth();
 
   // Load global config & blacklist into memory
-  try {
-    const config = await prisma.botGlobalConfig.findUnique({ where: { key: 'MAINTENANCE_MODE' } });
-    global.KOTBO_MAINTENANCE_MODE = config?.value === 'true';
+  await startGlobalFlagsSync();
 
-    const blacklist = await prisma.globalBlacklist.findMany({ select: { userId: true } });
-    global.KOTBO_BLACKLIST = new Set(blacklist.map(b => b.userId));
-
-    // Refreshed by chaque reponse de ping (voir statsService.ts) : null tant
-    // que le premier ping de demarrage n'a pas repondu.
-    global.KOTBO_INSTANCE_BANNED = null;
-  } catch (err) {
-    logger.error('System', 'Erreur lors du chargement de la config globale', err);
-    global.KOTBO_MAINTENANCE_MODE = false;
-    global.KOTBO_BLACKLIST = new Set();
-    global.KOTBO_INSTANCE_BANNED = null;
-  }
+  // Refreshed by chaque reponse de ping (voir statsService.ts) : null tant
+  // que le premier ping de demarrage n'a pas repondu.
+  global.KOTBO_INSTANCE_BANNED = null;
 
   // ── Event Bus Bridge (Phase 1: in-process) ──────────────────
   // The bridge captures raw Discord events and publishes normalized
@@ -1054,16 +1044,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
     captureException(err, 'interaction-create');
     logger.error('Event', 'InteractionCreate error:', err);
     try {
-      if (interaction.isRepliable() && !interaction.deferred && !interaction.replied) {
-        // « Une erreur est survenue » ne disait ni quoi faire, ni si cela
-        // valait la peine de reessayer. Une base injoignable, une permission
-        // Discord manquante et un bug de commande appellent trois reactions
-        // differentes : on nomme la panne quand on sait la reconnaitre.
-        await replyOrFollowUp(interaction, {
-          content: `❌ ${interactionFailureMessage(err)}`,
-          flags: [MessageFlags.Ephemeral],
-        });
-      } else {
+      // « Une erreur est survenue » ne disait ni quoi faire, ni si cela
+      // valait la peine de reessayer. Une base injoignable, une permission
+      // Discord manquante et un bug de commande appellent trois reactions
+      // differentes : on nomme la panne quand on sait la reconnaitre.
+      if (!(await notifyInteractionFailure(interaction, `❌ ${interactionFailureMessage(err)}`))) {
         logger.warn('Event', "Interaction déjà acquittée au moment de la gestion d'erreur; aucun message supplémentaire envoyé.");
       }
     } catch (e) {

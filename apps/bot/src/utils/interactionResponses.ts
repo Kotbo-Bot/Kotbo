@@ -69,6 +69,17 @@ export async function replyOrFollowUp(
   await interaction.reply(payload);
 }
 
+/**
+ * Prévient le membre qu'une interaction a échoué ; `false` si elle a déjà sa
+ * réponse. Différée, elle l'attend encore : le followUp remplace « Kotbo
+ * réfléchit… » après un deferReply et s'ajoute en éphémère après un deferUpdate.
+ */
+export async function notifyInteractionFailure(interaction: BaseInteraction, content: string): Promise<boolean> {
+  if (!interaction.isRepliable() || interaction.replied) return false;
+  await replyOrFollowUp(interaction, { content, flags: [MessageFlags.Ephemeral] });
+  return true;
+}
+
 export async function acknowledgeInteraction(
   interaction: BaseInteraction,
   flags: InteractionReplyOptions['flags'] = [MessageFlags.Ephemeral],

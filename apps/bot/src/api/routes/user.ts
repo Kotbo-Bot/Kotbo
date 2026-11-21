@@ -496,17 +496,21 @@ export function createUserRouter(client: Client) {
       const mainGuildToStaff = new Map(staffLinks.map((l) => [l.mainGuildId, l.staffGuildId]));
 
       const oauthById = new Map((oauthGuilds ?? []).map((guild) => [guild.id, guild]));
-      const candidates = Array.from(client.guilds.cache.values()).filter((botGuild) => {
-        if (instanceGuildIds && !instanceGuildIds.has(botGuild.id)) return false;
-        if (!isGuildActivated(botGuild.id) && !isGlobalAdmin) return false;
+      // Tous les fragments : `client.guilds.cache` ne connaît que celui qui sert l'API.
+      const presentGuildIds = await resolvePresentGuildIds(client);
+      const candidates = [...presentGuildIds].filter((guildId) => {
+        if (instanceGuildIds && !instanceGuildIds.has(guildId)) return false;
+        if (!isGuildActivated(guildId) && !isGlobalAdmin) return false;
         // Un administrateur global conserve la vue de toutes les guildes. Pour
         // les autres, l'intersection OAuth élimine immédiatement les serveurs
         // dont ils ne sont pas membres, sans un appel REST par guilde.
-        return isGlobalAdmin || oauthGuilds === null || oauthById.has(botGuild.id);
+        return isGlobalAdmin || oauthGuilds === null || oauthById.has(guildId);
       });
 
-      const resolved = await mapWithConcurrency(candidates, 8, async (botGuild) => {
-        const oauthGuild = oauthById.get(botGuild.id);
+      const resolved = await mapWithConcurrency(candidates, 8, async (guildId) => {
+        const oauthGuild = oauthById.get(guildId);
+        // Absent hors du fragment courant, où OAuth et resolveDashboardAccess suffisent.
+        const localGuild = client.guilds.cache.get(guildId);
         let permissions = BigInt(0);
         try {
           permissions = oauthGuild?.permissions ? BigInt(oauthGuild.permissions) : BigInt(0);
@@ -515,30 +519,30 @@ export function createUserRouter(client: Client) {
         }
 
         if (isGlobalAdmin || hasDashboardAdminPermission(permissions)) {
-          return { botGuild, accessLevel: 'admin' as const, owner: oauthGuild?.owner ?? botGuild.ownerId === user.userId };
+          return { guildId, accessLevel: 'admin' as const, owner: oauthGuild?.owner ?? localGuild?.ownerId === user.userId };
         }
 
         // Repli lorsque Discord OAuth est momentanément indisponible : la
         // concurrence est bornée, contrairement à l'ancienne waterfall.
         if (!oauthGuilds) {
-          const member = await botGuild.members.fetch(user.userId).catch(() => null);
+          const member = await localGuild?.members.fetch(user.userId).catch(() => null);
           if (!member) return null;
           permissions = member.permissions.bitfield;
           if (hasDashboardAdminPermission(permissions)) {
-            return { botGuild, accessLevel: 'admin' as const, owner: botGuild.ownerId === user.userId };
+            return { guildId, accessLevel: 'admin' as const, owner: localGuild?.ownerId === user.userId };
           }
         }
 
         try {
-          const access = await resolveDashboardAccess(client, botGuild.id, user.userId, permissions);
+          const access = await resolveDashboardAccess(client, guildId, user.userId, permissions);
           if (!access.canViewDashboard) return null;
           return {
-            botGuild,
+            guildId,
             accessLevel: access.level === 'admin' ? 'admin' as const : 'moderator' as const,
-            owner: oauthGuild?.owner ?? botGuild.ownerId === user.userId,
+            owner: oauthGuild?.owner ?? localGuild?.ownerId === user.userId,
           };
         } catch (err) {
-          logger.warn('DashboardAPI', `Failed to resolve access for guild ${botGuild.id}:`, err);
+          logger.warn('DashboardAPI', `Failed to resolve access for guild ${guildId}:`, err);
           return null;
         }
       });
@@ -548,7 +552,7 @@ export function createUserRouter(client: Client) {
       // montant débité et une adresse. Elle est ouverte aux administrateurs, à
       // celui qui paie (`billingOwnerId`, même s'il a perdu ses droits Discord)
       // et au reste du staff seulement si le serveur l'a décidé.
-      const resolvedIds = resolved.filter((entry) => entry !== null).map((entry) => entry!.botGuild.id);
+      const resolvedIds = resolved.filter((entry) => entry !== null).map((entry) => entry!.guildId);
       const billingRows = resolvedIds.length
         ? await prisma.guild.findMany({
             where: { id: { in: resolvedIds } },
@@ -557,19 +561,41 @@ export function createUserRouter(client: Client) {
         : [];
       const billingById = new Map(billingRows.map((row) => [row.id, row]));
 
+      // Serveur d'un autre fragment absent de la liste OAuth (vue administrateur
+      // global) : nom et icône lus par diffusion plutôt qu'un identifiant brut.
+      const missingMetaIds = resolvedIds.filter((id) => !client.guilds.cache.has(id) && !oauthById.has(id));
+      const shardMetaById = new Map<string, { name: string; icon: string | null }>();
+      if (missingMetaIds.length && client.shard) {
+        try {
+          const perShard = await client.shard.broadcastEval(
+            (shardClient, ids) => ids.flatMap((id) => {
+              const guild = shardClient.guilds.cache.get(id);
+              return guild ? [{ id, name: guild.name, icon: guild.icon }] : [];
+            }),
+            { context: missingMetaIds },
+          );
+          for (const { id, ...meta } of perShard.flat()) shardMetaById.set(id, meta);
+        } catch (err) {
+          logger.warn('DashboardAPI', 'Noms des serveurs multi-fragments indisponibles :', err);
+        }
+      }
+
       for (const entry of resolved) {
         if (!entry) continue;
-        const { botGuild, accessLevel, owner } = entry;
-        const billing = billingById.get(botGuild.id);
+        const { guildId, accessLevel, owner } = entry;
+        const localGuild = client.guilds.cache.get(guildId);
+        const oauthGuild = oauthById.get(guildId);
+        const meta = shardMetaById.get(guildId);
+        const billing = billingById.get(guildId);
         accessibleGuildsList.push({
-          id: botGuild.id,
-          name: botGuild.name ?? botGuild.id,
-          icon: botGuild.icon ?? null,
+          id: guildId,
+          name: localGuild?.name ?? oauthGuild?.name ?? meta?.name ?? guildId,
+          icon: localGuild?.icon ?? oauthGuild?.icon ?? meta?.icon ?? null,
           owner,
           botPresent: true,
           accessLevel,
-          isStaffServer: staffGuildToMain.has(botGuild.id),
-          pairedGuildId: staffGuildToMain.get(botGuild.id) ?? mainGuildToStaff.get(botGuild.id) ?? null,
+          isStaffServer: staffGuildToMain.has(guildId),
+          pairedGuildId: staffGuildToMain.get(guildId) ?? mainGuildToStaff.get(guildId) ?? null,
           billingAccess:
             accessLevel === 'admin' ||
             billing?.billingOwnerId === user.userId ||

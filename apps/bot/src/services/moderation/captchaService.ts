@@ -591,7 +591,8 @@ export async function expireOverdueCaptchaSessions(client: Client): Promise<void
   // entendu son code. L'expulser pour un délai qu'il ne maîtrise pas ferait de
   // la file d'attente une machine à sanctionner les membres légitimes.
   const overdue = await prisma.captchaSession.findMany({
-    where: { status: 'PENDING', awaitingTurn: false, expiresAt: { lte: new Date() } },
+    // Ce shard seul : expirée par un autre, sans expulsion ni retrait de rôle, la session bloquerait le membre.
+    where: { status: 'PENDING', awaitingTurn: false, expiresAt: { lte: new Date() }, guildId: { in: [...client.guilds.cache.keys()] } },
     take: 100,
   });
 
