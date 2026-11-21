@@ -2,19 +2,54 @@
  * Boutique : offres relues, remises, et règles d'accès d'une offre.
  */
 import { describe, expect, mock, test } from 'bun:test';
+import path from 'node:path';
+import { DiscordAPIError } from 'discord.js';
 import { discountedShopPrice, normalizeShopCode, normalizeShopOffer } from '@kotbo/shared';
+import { completeModuleMock } from '../helpers/moduleMock.js';
 
-const counts = { orders: 0, subscription: null as null | { status: string } };
+const counts = { orders: 0, debits: 0, subscription: null as null | { status: string; endedAt?: Date } };
+type OrderRow = { status: string; source: string; createdAt: Date; decidedAt?: Date | null };
+let orderRows: OrderRow[] = [];
+type OrderWhere = { status?: string | { in: string[] }; source?: { not: string }; createdAt?: { gt: Date }; decidedAt?: { gt: Date }; OR?: OrderWhere[] };
+const matches = (o: OrderRow, w: OrderWhere = {}): boolean =>
+  (w.status === undefined || (typeof w.status === 'string' ? o.status === w.status : w.status.in.includes(o.status)))
+  && (w.source === undefined || o.source !== w.source.not)
+  && (w.createdAt === undefined || o.createdAt > w.createdAt.gt)
+  && (w.decidedAt === undefined || (!!o.decidedAt && o.decidedAt > w.decidedAt.gt))
+  && (w.OR === undefined || w.OR.some((branch) => matches(o, branch)));
+let offerRow: unknown = null;
 mock.module('../../utils/db.js', () => {
   const db = {
-    shopOrder: { count: async () => counts.orders },
-    shopSubscription: { findUnique: async () => counts.subscription },
+    guild: { findUnique: async () => null },
+    shopOrder: {
+      count: async ({ where }: { where?: OrderWhere } = {}) => counts.orders + orderRows.filter((o) => matches(o, where)).length,
+      create: async ({ data }: { data: OrderRow }) => { orderRows.push({ ...data, createdAt: new Date() }); return data; },
+    },
+    shopSubscription: {
+      findUnique: async () => counts.subscription,
+      findMany: async () => [{ id: 'sub1', guildId: 'g', userId: 'parti', offerId: 'offer1', roleId: 'role', price: 100, status: 'ACTIVE', cancelAtPeriodEnd: false, nextChargeAt: new Date(0), periodDays: 30 }],
+      update: async () => ({}),
+      upsert: async () => ({}),
+      create: async () => ({}),
+    },
+    shopRoleGrant: { count: async () => 0, findMany: async () => [] },
     memberLevel: { findUnique: async () => null },
+    shopSettings: { findUnique: async () => null },
+    shopOffer: { findFirst: async () => offerRow, findUnique: async () => ({ id: 'offer1', name: 'VIP' }) },
+    rpgProfile: { updateMany: async () => { counts.debits += 1; return { count: 1 }; } },
+    $executeRaw: async () => 0,
+    $transaction: (fn: (tx: unknown) => unknown) => fn(db),
   };
   return { default: db, prisma: db, prismaRead: db };
 });
+for (const [module, overrides] of [
+  ['features/economyService', { getOrCreateRpgProfile: async () => ({ id: 'profil' }) }],
+  ['core/moduleGate', { getModuleStates: async () => ({}) }],
+] as const) {
+  mock.module(`../../services/${module}.js`, () => completeModuleMock(path.resolve(import.meta.dir, `../../services/${module}.ts`), overrides));
+}
 
-const { offerBlocker } = await import('../../services/shop/shopService.js');
+const { offerBlocker, processShopRenewals, purchaseShopOffer } = await import('../../services/shop/shopService.js');
 
 const ROLE = '111111111111111111';
 const OTHER_ROLE = '222222222222222222';
@@ -98,5 +133,63 @@ describe('accès à une offre', () => {
   test('modules éteints', async () => {
     expect(await offerBlocker(offer(), member([]), { modules: { economy: false } })).toBe('economy_disabled');
     expect(await offerBlocker(offer({ kind: 'XP' }), member([]), { modules: { economy: true, leveling: false } })).toBe('leveling_disabled');
+  });
+
+  const buyer = {
+    id: '333333333333333333',
+    roles: { cache: { has: () => false }, add: async () => {} },
+    guild: { id: 'g', roles: { cache: { get: (id: string) => ({ id, editable: true, permissions: { bitfield: 0n } }) } } },
+  };
+  const client = { guilds: { cache: { get: () => ({ members: { fetch: async () => buyer } }) } } } as never;
+
+  test('abonnement ou rôle permanent en attente ou en cours de livraison : pas de second paiement', async () => {
+    counts.subscription = null;
+    for (const [kind, refus, requiresApproval] of [
+      ['SUBSCRIPTION', 'already_subscribed', true],
+      ['SUBSCRIPTION', 'already_subscribed', false],
+      ['ROLE', 'already_owned', true],
+      // Le rôle part après la commande : le second clic arrive avant qu'il soit porté.
+      ['ROLE', 'already_owned', false],
+    ] as const) {
+      Object.assign(counts, { orders: 0, debits: 0 });
+      orderRows = [];
+      offerRow = offer({ kind, price: 100, requiresApproval });
+      // Livraison pas encore faite : l'abonnement n'existe pas encore en base.
+      counts.subscription = null;
+      await purchaseShopOffer(client, 'g', buyer.id, 'offer1', { source: 'discord' });
+      await expect(purchaseShopOffer(client, 'g', buyer.id, 'offer1', { source: 'discord' })).rejects.toMatchObject({ code: refus });
+      expect(counts.debits).toBe(1);
+    }
+  });
+
+  test('un abonnement terminé se rachète', async () => {
+    Object.assign(counts, { orders: 0, debits: 0 });
+    orderRows = [{ status: 'COMPLETED', source: 'discord', createdAt: new Date(Date.now() - 60_000) }];
+    counts.subscription = { status: 'ENDED', endedAt: new Date(Date.now() - 1_000) };
+    offerRow = offer({ kind: 'SUBSCRIPTION', price: 100, requiresApproval: true });
+    await purchaseShopOffer(client, 'g', buyer.id, 'offer1', { source: 'discord' });
+    expect(counts.debits).toBe(1);
+  });
+
+  test('un rôle permanent perdu se rachète, mais pas pendant sa livraison après validation', async () => {
+    Object.assign(counts, { orders: 0, debits: 0 });
+    const hier = new Date(Date.now() - 86_400_000);
+    offerRow = offer({ kind: 'ROLE', price: 100 });
+    // Validée à l'instant par le staff : le rôle est en route, le membre ne le porte pas encore.
+    orderRows = [{ status: 'COMPLETED', source: 'discord', createdAt: hier, decidedAt: new Date() }];
+    await expect(purchaseShopOffer(client, 'g', buyer.id, 'offer1', { source: 'discord' })).rejects.toMatchObject({ code: 'already_owned' });
+    // Livré hier puis perdu (départ, retrait par le staff) : le membre ne le porte plus.
+    orderRows = [{ status: 'COMPLETED', source: 'discord', createdAt: hier, decidedAt: null }];
+    await purchaseShopOffer(client, 'g', buyer.id, 'offer1', { source: 'discord' });
+    expect(counts.debits).toBe(1);
+  });
+});
+
+describe('prélèvement des abonnements', () => {
+  test("un membre parti n'est plus prélevé : son abonnement est clos", async () => {
+    const parti = new DiscordAPIError({ code: 10007, message: 'Unknown Member' }, 10007, 404, 'GET', '/guilds/g/members/parti', { body: undefined, files: undefined });
+    const guild = { members: { cache: new Map(), fetch: async () => { throw parti; } } };
+    const client = { guilds: { cache: new Map([['g', guild]]) } };
+    expect(await processShopRenewals(client as never)).toEqual({ charged: 0, ended: 1, expired: 0 });
   });
 });
