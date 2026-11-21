@@ -67,3 +67,13 @@ export function formatCooldown(ms: number): string {
   if (minutes > 0) return seconds > 0 ? `${minutes}min ${String(seconds).padStart(2, '0')}s` : `${minutes}min`;
   return `${seconds}s`;
 }
+
+/**
+ * Un tour joué fait progresser toutes les recharges d'un tour, sauf celle posée
+ * à l'instant : une recharge de N tours en bloque N, comme en duel et en arène.
+ */
+export function advanceSkillCooldowns(cooldowns: Map<string, number>, usedSkillId: string | null): void {
+  for (const [id, remaining] of cooldowns) {
+    if (id !== usedSkillId && remaining > 0) cooldowns.set(id, remaining - 1);
+  }
+}

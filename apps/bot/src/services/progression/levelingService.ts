@@ -849,11 +849,14 @@ export async function addXp(
       // échec du crédit (module économie momentanément indisponible, etc.) laisserait le
       // niveau monté sans aucune compensation.
       const coinReward = await getLevelUpCoinReward(guildId, newLevel);
-      await prisma.$transaction(async (tx) => {
-        await tx.memberLevel.update({
-          where: { guildId_userId: { guildId, userId } },
+      const reserved = await prisma.$transaction(async (tx) => {
+        // Écriture conditionnelle en guise de verrou : de deux gains simultanés, seul
+        // celui qui trouve encore l'ancien niveau fait monter, crédite et annonce.
+        const moved = await tx.memberLevel.updateMany({
+          where: { guildId, userId, level: previousLevel },
           data: { level: newLevel },
         });
+        if (moved.count === 0) return false;
         if (coinReward) {
           await tx.rpgProfile.upsert({
             where: { guildId_userId: { guildId, userId } },
@@ -873,7 +876,9 @@ export async function addXp(
             },
           });
         }
+        return true;
       });
+      if (!reserved) return;
 
       // Notification + récompenses annexes (rôles, points de clan) : best-effort, le
       // niveau et les pièces sont déjà garantis commis à ce stade.
