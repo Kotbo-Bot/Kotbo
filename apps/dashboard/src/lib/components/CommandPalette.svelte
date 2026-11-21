@@ -13,7 +13,8 @@
   import { navigationStore } from '../stores/navigation.svelte';
   import { tabsForPage } from '../config/pageTabs';
   import { markNavigationSource, trackEvent } from '../telemetry/telemetry';
-  import { fuzzyScore, moduleKeywords, normalize, score } from '../utils/paletteSearch';
+  import { contentScore, fuzzyScore, moduleKeywords, normalize, pageWords, score, type SearchIndex } from '../utils/paletteSearch';
+import { getLocale } from '../i18n';
 
   const GROUP_ICONS: Record<string, string> = {
     general: 'home',
@@ -44,6 +45,8 @@
     icon: string;
     group: string;
     keywords?: string;
+    /** Chemin dont le texte est cherché (page ou onglet). */
+    contentPath?: string;
     href?: string;
     action: () => void;
   }
@@ -82,6 +85,7 @@
       icon: item.icon || fallbackIcon,
       group,
       keywords: moduleKeywords(item.href),
+      contentPath: item.href,
       href: item.href,
       action: () => router.goto(item.href)
     });
@@ -94,6 +98,7 @@
         icon: tab.icon || item.icon || fallbackIcon,
         group,
         keywords: moduleKeywords(tab.href),
+        contentPath: tab.href,
         action: () => router.goto(tab.href)
       });
     }
@@ -233,6 +238,15 @@
     return groups;
   });
 
+  // Texte des pages : un gros fichier, charge a la premiere saisie plutot qu'au demarrage.
+  let searchIndex = $state<SearchIndex | null>(null);
+  let indexRequested = false;
+  $effect(() => {
+    if (indexRequested || !normalize(query)) return;
+    indexRequested = true;
+    import('../generated/searchIndex.json').then((module) => (searchIndex = module.default as SearchIndex)).catch(() => (indexRequested = false));
+  });
+
   /** Resultats classes pour la saisie : exacts d'abord, sinon avec une faute toleree. */
   const ranked = $derived.by(() => {
     const q = normalize(query);
@@ -240,7 +254,11 @@
 
     const exact = allPaletteItems
       .map((item) => {
-        const value = score(item, q);
+        let value = score(item, q);
+        // Ni le nom ni les mots-cles : on cherche alors dans le texte de la page.
+        if (value === 0 && searchIndex && item.contentPath && !item.label.includes('›')) {
+          value = contentScore(pageWords(searchIndex, item.contentPath, getLocale() === 'fr' ? 'fr' : 'en'), q);
+        }
         return { item, value: value > 0 ? value + (habitBonus.get(item.href ?? '') ?? 0) : 0 };
       })
       .filter((entry) => entry.value > 0)
