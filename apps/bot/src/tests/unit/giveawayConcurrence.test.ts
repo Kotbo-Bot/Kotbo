@@ -1,6 +1,7 @@
 // Base simulée avec les garanties de Postgres : `updateMany` conditionnel
 // atomique, verrou `FOR UPDATE` tenu jusqu'au commit, lectures par copie.
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import nodeCrypto from 'node:crypto';
 import path from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import type { Client } from 'discord.js';
@@ -168,10 +169,11 @@ function concoursDeBase(etat: Partial<Giveaway>): Giveaway {
   };
 }
 
-const vraiAleatoire = Math.random;
+// Le tirage passe par `crypto.randomInt` (voir `secureRandom`) : c'est lui qu'on pilote.
+const vraiRandomInt = nodeCrypto.randomInt;
 function tirages(...valeurs: number[]) {
   let i = 0;
-  Math.random = () => valeurs[Math.min(i++, valeurs.length - 1)];
+  (nodeCrypto as { randomInt: unknown }).randomInt = (_min: number, max: number) => Math.floor(valeurs[Math.min(i++, valeurs.length - 1)] * max);
 }
 
 beforeEach(() => {
@@ -182,7 +184,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  Math.random = vraiAleatoire;
+  (nodeCrypto as { randomInt: unknown }).randomInt = vraiRandomInt;
 });
 
 describe('clôture simultanée', () => {
