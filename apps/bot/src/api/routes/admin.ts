@@ -50,15 +50,14 @@ import {
 } from '../../services/system/broadcastMediaService.js';
 import {
   BroadcastValidationError,
-  deliverBroadcast,
+  NO_BROADCAST_SOURCE_MESSAGE,
   deliverBroadcastViaSource,
   finalizeBroadcast,
   getBroadcastSourceConfig,
   getPollResults,
-  loadGuildChannelMap,
   normalizeBroadcastContent,
-  resolveTargetGuildIds,
   setBroadcastSourceConfig,
+  sourceModeConflict,
   subscribeAllGuildsToBroadcastSource,
   subscribeGuildToBroadcastSource,
   validateBroadcastSourceChannel,
@@ -1604,49 +1603,30 @@ export async function handleAdminRoutes(
           throw err;
         }
 
+        // Une seule voie d'envoi : le salon source, que Discord diffuse aux salons abonnes.
+        // Plus d'envoi serveur par serveur, c'est lui qui declenchait les 429.
         const sourceConfig = await getBroadcastSourceConfig();
-        const useSourceChannel = Boolean(
-          sourceConfig
-          && normalized.target === 'ALL'
-          && normalized.pollOptions.length === 0
-          && !normalized.feedbackLabel,
-        );
-
-        const allowedGuildIds = useSourceChannel
-          ? new Set<string>([sourceConfig!.guildId])
-          : await resolveTargetGuildIds(
-              client,
-              normalized.target,
-              normalized.targetGuilds,
-              collectShardGuilds,
-            );
-        const totalTargeted = allowedGuildIds.size;
+        if (!sourceConfig) {
+          return reply(c, 400, { error: NO_BROADCAST_SOURCE_MESSAGE });
+        }
+        const conflict = sourceModeConflict(normalized);
+        if (conflict) {
+          return reply(c, 400, { error: conflict });
+        }
+        const totalTargeted = 1;
 
         // Simulation : on renvoie la cible et les avertissements sans rien envoyer.
         if (body.dryRun === true) {
-          if (useSourceChannel) {
-            return reply(c, 200, {
-              dryRun: true,
-              viaSourceChannel: true,
-              sourceChannel: sourceConfig,
-              totalTargeted,
-              target: normalized.target,
-              channelPref: normalized.channelPref,
-              warnings: normalized.warnings,
-              unconfiguredCount: 0,
-            });
-          }
-          const channelMap = await loadGuildChannelMap();
-          const unconfigured = [...allowedGuildIds].filter((id) => !channelMap[id]?.broadcastChannelId);
           return reply(c, 200, {
             dryRun: true,
+            viaSourceChannel: true,
+            sourceChannel: sourceConfig,
             totalTargeted,
             target: normalized.target,
             channelPref: normalized.channelPref,
             warnings: normalized.warnings,
-            unconfiguredCount: unconfigured.length,
+            unconfiguredCount: 0,
           });
-
         }
 
         // Programmation : on persiste sans envoyer, le planificateur reprend la main.
@@ -1702,29 +1682,14 @@ export async function handleAdminRoutes(
 
         }
 
-        const deliveries = useSourceChannel && sourceConfig
-          ? await deliverBroadcastViaSource(client, sourceConfig, {
-              title: normalized.title,
-              message: normalized.message,
-              color: normalized.color,
-              thumbnailUrl: normalized.thumbnailUrl,
-              imageUrl: normalized.imageUrl,
-              footerText: normalized.footerText,
-            })
-          : await deliverBroadcast(client, {
-              title: normalized.title,
-              message: normalized.message,
-              color: normalized.color,
-              thumbnailUrl: normalized.thumbnailUrl,
-              imageUrl: normalized.imageUrl,
-              footerText: normalized.footerText,
-              channelPref: normalized.channelPref,
-              allowedIds: [...allowedGuildIds],
-              channelMap: await loadGuildChannelMap(),
-              translations: normalized.translations,
-              poll: { broadcastId: record.id, options: normalized.pollOptions },
-              feedback: normalized.feedbackLabel ? { broadcastId: record.id, label: normalized.feedbackLabel } : undefined,
-            });
+        const deliveries = await deliverBroadcastViaSource(client, sourceConfig, {
+          title: normalized.title,
+          message: normalized.message,
+          color: normalized.color,
+          thumbnailUrl: normalized.thumbnailUrl,
+          imageUrl: normalized.imageUrl,
+          footerText: normalized.footerText,
+        });
 
         const { successCount, failCount } = await finalizeBroadcast(record.id, deliveries, totalTargeted);
         await markBroadcastMediaUsed([normalized.imageUrl, normalized.thumbnailUrl]);
@@ -1735,7 +1700,7 @@ export async function handleAdminRoutes(
           targetId: record.id,
           summary: `Annonce envoyée : ${successCount} succès, ${failCount} échec(s) sur ${totalTargeted} serveur(s)`,
           metadata: { target: normalized.target, channelPref: normalized.channelPref, hasImage: Boolean(normalized.imageUrl) },
-          outcome: successCount > 0 || totalTargeted === 0 ? 'OK' : 'FAILED',
+          outcome: successCount > 0 ? 'OK' : 'FAILED',
         });
 
         return reply(c, 200, {

@@ -26,7 +26,6 @@ import {
   rankCardPreviewRateLimiter,
   setDashboardStateBroadcaster,
   setDashboardEventBroadcaster,
-  collectShardGuilds,
   resolveDashboardAccess,
   type DashboardEvent,
   type DashboardSanctionType,
@@ -180,7 +179,7 @@ export const startDashboardApi = async (client: Client) => {
   // Annonces globales programmees : le planificateur vit dans le processus qui
   // porte l'API, seul endroit qui dispose a la fois du client Discord et de la
   // base. L'etat etant persiste, un redemarrage ne perd aucune annonce.
-  startBroadcastScheduler(client, collectShardGuilds);
+  startBroadcastScheduler(client);
 
   const handleRequest = async (request: Request, serverInstance: Server<WebSocketData>): Promise<Response | undefined> => {
     const url = new URL(request.url);

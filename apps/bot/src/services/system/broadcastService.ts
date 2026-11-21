@@ -81,14 +81,6 @@ export function pickBroadcastText(
     : base;
 }
 
-interface GuildChannelConfig {
-  language: string | null;
-  broadcastChannelId: string | null;
-  newsChannelId: string | null;
-  publicChannelId: string | null;
-  staffAnnouncementChannelId: string | null;
-}
-
 export interface DeliveryResult {
   guildId: string;
   guildName: string;
@@ -227,317 +219,21 @@ export function normalizeBroadcastContent(content: BroadcastContent): {
   };
 }
 
-/** Rangee de boutons du sondage, en JSON brut : `broadcastEval` ne transporte pas de builders. */
-function buildPollComponents(broadcastId: string, options: string[]) {
-  return [{
-    type: 1,
-    components: options.map((label, index) => ({
-      type: 2,
-      style: 2,
-      label,
-      custom_id: `${POLL_BUTTON_PREFIX}${broadcastId}:${index}`,
-    })),
-  }];
-}
-
-/** Bouton unique qui ouvre le formulaire d'avis. */
-function buildFeedbackComponents(broadcastId: string, label: string) {
-  return [{
-    type: 1,
-    components: [{ type: 2, style: 1, label, custom_id: `${FEEDBACK_BUTTON_PREFIX}${broadcastId}` }],
-  }];
-}
-
-/** Ordre de repli des salons, identique dans le processus principal et dans les shards. */
-function buildChannelPreference(config: GuildChannelConfig | undefined, pref: BroadcastChannelPref): string[] {
-  const order: (string | null | undefined)[] = [config?.broadcastChannelId];
-  if (pref === 'NEWS') order.push(config?.newsChannelId, config?.publicChannelId);
-  else if (pref === 'PUBLIC') order.push(config?.publicChannelId, config?.newsChannelId);
-  else if (pref === 'STAFF') order.push(config?.staffAnnouncementChannelId, config?.newsChannelId);
-  else if (pref === 'FALLBACK') order.push(config?.newsChannelId, config?.publicChannelId, config?.staffAnnouncementChannelId);
-  else order.push(config?.newsChannelId, config?.publicChannelId, config?.staffAnnouncementChannelId);
-  return order.filter((id): id is string => Boolean(id));
-}
-
-export async function loadGuildChannelMap(): Promise<Record<string, GuildChannelConfig>> {
-  const rows = await prisma.guild.findMany({
-    select: {
-      id: true,
-      language: true,
-      broadcastChannelId: true,
-      newsChannelId: true,
-      publicChannelId: true,
-      staffAnnouncementChannelId: true,
-    },
-  });
-  const map: Record<string, GuildChannelConfig> = Object.create(null);
-  for (const row of rows) {
-    map[row.id] = {
-      language: row.language,
-      broadcastChannelId: row.broadcastChannelId,
-      newsChannelId: row.newsChannelId,
-      publicChannelId: row.publicChannelId,
-      staffAnnouncementChannelId: row.staffAnnouncementChannelId,
-    };
-  }
-  return map;
-}
-
 /**
- * Resout la liste des serveurs cibles.
- *
- * `ALL` inclut les serveurs presents en cache Discord meme s'ils n'ont pas
- * encore de ligne en base : sinon un serveur fraichement rejoint ne recevrait
- * aucune annonce globale.
+ * Une annonce suivie par les salons abonnes est un message unique : pas de boutons,
+ * pas de ciblage serveur par serveur. On refuse plutot que d'envoyer autre chose que prevu.
  */
-export async function resolveTargetGuildIds(
-  client: Client,
-  target: BroadcastTarget,
-  targetGuilds: string[],
-  collectShardGuilds: (client: Client) => Promise<{ id: string }[]>,
-): Promise<Set<string>> {
-  const dbGuilds = await prisma.guild.findMany({ select: { id: true, activated: true } });
-  const allowed = new Set<string>();
-
-  for (const guild of dbGuilds) {
-    if (target === 'ALL') allowed.add(guild.id);
-    else if (target === 'ACTIVATED' && guild.activated) allowed.add(guild.id);
-    else if (target === 'CUSTOM' && targetGuilds.includes(guild.id)) allowed.add(guild.id);
-  }
-
-  if (target === 'ALL') {
-    for (const guild of await collectShardGuilds(client)) allowed.add(guild.id);
-  }
-
-  return allowed;
+export function sourceModeConflict(content: {
+  target: BroadcastTarget;
+  pollOptions: string[];
+  feedbackLabel: string | null;
+}): string | null {
+  if (content.target !== 'ALL') return 'Les annonces passent par le salon source : elles vont à tous les serveurs abonnés, le ciblage n’est plus possible.';
+  if (content.pollOptions.length > 0 || content.feedbackLabel) return 'Un sondage ou une demande d’avis ne peut pas passer par le salon source (Discord ne transmet pas les boutons aux abonnés).';
+  return null;
 }
 
-interface ShardBroadcastContext {
-  embed: {
-    title: string;
-    message: string;
-    color: string;
-    thumbnailUrl: string | null;
-    imageUrl: string | null;
-    footerText: string;
-  };
-  channelMap: Record<string, GuildChannelConfig>;
-  allowedIds: string[];
-  channelPref: BroadcastChannelPref;
-  translations: BroadcastTranslations | null;
-  components: ReturnType<typeof buildPollComponents> | ReturnType<typeof buildFeedbackComponents> | undefined;
-}
-
-/**
- * Diffuse l'annonce et renvoie le detail par serveur.
- *
- * Le corps de `broadcastEval` est serialise puis execute dans chaque shard :
- * il ne peut donc rien capturer du scope courant, d'ou la duplication de la
- * logique de choix de salon dans la fonction inline.
- */
-export async function deliverBroadcast(
-  client: Client,
-  params: {
-    title: string;
-    message: string;
-    color: string;
-    thumbnailUrl: string | null;
-    imageUrl: string | null;
-    footerText: string;
-    channelPref: BroadcastChannelPref;
-    allowedIds: string[];
-    channelMap: Record<string, GuildChannelConfig>;
-    /** Variante par langue, choisie serveur par serveur d'apres sa configuration. */
-    translations?: BroadcastTranslations | null;
-    /** Present = l'annonce porte un sondage ; `broadcastId` sert d'ancre aux boutons. */
-    poll?: { broadcastId: string; options: string[] };
-    /** Present = demande d'avis : un bouton ouvre un formulaire. */
-    feedback?: { broadcastId: string; label: string };
-  },
-): Promise<DeliveryResult[]> {
-  const components = params.feedback
-    ? buildFeedbackComponents(params.feedback.broadcastId, params.feedback.label)
-    : params.poll && params.poll.options.length > 0
-      ? buildPollComponents(params.poll.broadcastId, params.poll.options)
-      : undefined;
-  const context: ShardBroadcastContext = {
-    components,
-    embed: {
-      title: params.title,
-      message: params.message,
-      color: params.color,
-      thumbnailUrl: params.thumbnailUrl,
-      imageUrl: params.imageUrl,
-      footerText: params.footerText,
-    },
-    channelMap: params.channelMap,
-    allowedIds: params.allowedIds,
-    channelPref: params.channelPref,
-    translations: params.translations ?? null,
-  };
-
-  if (client.shard) {
-    const results = await client.shard.broadcastEval<DeliveryResult[], ShardBroadcastContext>(
-      async (shardClient, ctx) => {
-        const { EmbedBuilder: ShardEmbed } = await import('discord.js');
-        const out: DeliveryResult[] = [];
-
-        for (const [id, guild] of shardClient.guilds.cache) {
-          if (!ctx.allowedIds.includes(id)) continue;
-
-          const config = ctx.channelMap[id];
-          const order: (string | null | undefined)[] = [config?.broadcastChannelId];
-          if (ctx.channelPref === 'NEWS') order.push(config?.newsChannelId, config?.publicChannelId);
-          else if (ctx.channelPref === 'PUBLIC') order.push(config?.publicChannelId, config?.newsChannelId);
-          else if (ctx.channelPref === 'STAFF') order.push(config?.staffAnnouncementChannelId, config?.newsChannelId);
-          else order.push(config?.newsChannelId, config?.publicChannelId, config?.staffAnnouncementChannelId);
-
-          let channel = null as null | { id: string; name: string; isTextBased: () => boolean; send: (payload: unknown) => Promise<{ id: string }> };
-
-          for (const channelId of order) {
-            if (!channelId) continue;
-            const found = guild.channels.cache.get(channelId);
-            if (found && (found.type === 0 || found.type === 5)) {
-              channel = found as unknown as typeof channel;
-              break;
-            }
-          }
-
-          if (!channel) {
-            const fallback = guild.channels.cache.find(
-              (c) => c.type === 0 && c.permissionsFor(shardClient.user!)?.has('SendMessages'),
-            );
-            channel = (fallback ?? null) as unknown as typeof channel;
-          }
-
-          if (!channel) {
-            out.push({
-              guildId: id,
-              guildName: guild.name,
-              channelId: null,
-              channelName: null,
-              status: 'SKIPPED',
-              reason: "Aucun salon textuel accessible : configurez un salon de broadcast pour ce serveur.",
-              messageId: null,
-            });
-            continue;
-          }
-
-          try {
-            // Meme cascade que pickBroadcastLocale/pickBroadcastText (non capturables ici).
-            const lang = config?.language === 'fr' || config?.language === 'en'
-              ? config.language
-              : String(guild.preferredLocale ?? '').toLowerCase().startsWith('fr') ? 'fr' : 'en';
-            const en = ctx.translations?.en;
-            const useEn = lang === 'en' && Boolean(en?.message);
-            const embed = new ShardEmbed()
-              .setTitle(useEn ? (en!.title || ctx.embed.title) : ctx.embed.title)
-              .setDescription(useEn ? en!.message! : ctx.embed.message)
-              .setColor(parseInt(ctx.embed.color.replace('#', ''), 16))
-              .setFooter({ text: useEn ? (en!.footerText || ctx.embed.footerText) : ctx.embed.footerText })
-              .setTimestamp();
-            if (ctx.embed.thumbnailUrl) embed.setThumbnail(ctx.embed.thumbnailUrl);
-            if (ctx.embed.imageUrl) embed.setImage(ctx.embed.imageUrl);
-
-            const sent = await channel.send({ embeds: [embed], ...(ctx.components ? { components: ctx.components } : {}) });
-            out.push({
-              guildId: id,
-              guildName: guild.name,
-              channelId: channel.id,
-              channelName: channel.name,
-              status: 'SENT',
-              reason: null,
-              messageId: sent.id,
-            });
-          } catch (err) {
-            out.push({
-              guildId: id,
-              guildName: guild.name,
-              channelId: channel.id,
-              channelName: channel.name,
-              status: 'FAILED',
-              reason: (err as Error).message?.slice(0, 300) ?? 'Erreur inconnue',
-              messageId: null,
-            });
-          }
-        }
-
-        return out;
-      },
-      { context },
-    );
-
-    return results.flat();
-  }
-
-  // Processus unique (developpement, ou bot non sharde).
-  const out: DeliveryResult[] = [];
-  for (const [id, guild] of client.guilds.cache) {
-    if (!params.allowedIds.includes(id)) continue;
-
-    const order = buildChannelPreference(params.channelMap[id], params.channelPref);
-    let channel = order
-      .map((channelId) => guild.channels.cache.get(channelId))
-      .find((found) => found && (found.type === 0 || found.type === 5));
-
-    if (!channel) {
-      channel = guild.channels.cache.find(
-        (c) => c.type === 0 && c.permissionsFor(client.user!)?.has('SendMessages'),
-      );
-    }
-
-    if (!channel || !channel.isTextBased()) {
-      out.push({
-        guildId: id,
-        guildName: guild.name,
-        channelId: null,
-        channelName: null,
-        status: 'SKIPPED',
-        reason: "Aucun salon textuel accessible : configurez un salon de broadcast pour ce serveur.",
-        messageId: null,
-      });
-      continue;
-    }
-
-    try {
-      const text = pickBroadcastText(
-        { title: params.title, message: params.message, footerText: params.footerText },
-        params.translations,
-        pickBroadcastLocale(params.channelMap[id]?.language, guild.preferredLocale),
-      );
-      const embed = new EmbedBuilder()
-        .setTitle(text.title)
-        .setDescription(text.message)
-        .setColor(params.color as ColorResolvable)
-        .setFooter({ text: text.footerText })
-        .setTimestamp();
-      if (params.thumbnailUrl) embed.setThumbnail(params.thumbnailUrl);
-      if (params.imageUrl) embed.setImage(params.imageUrl);
-
-      const sent = await channel.send({ embeds: [embed], ...(components ? { components } : {}) });
-      out.push({
-        guildId: id,
-        guildName: guild.name,
-        channelId: channel.id,
-        channelName: 'name' in channel ? String(channel.name) : null,
-        status: 'SENT',
-        reason: null,
-        messageId: sent.id,
-      });
-    } catch (err) {
-      out.push({
-        guildId: id,
-        guildName: guild.name,
-        channelId: channel.id,
-        channelName: 'name' in channel ? String(channel.name) : null,
-        status: 'FAILED',
-        reason: (err as Error).message?.slice(0, 300) ?? 'Erreur inconnue',
-        messageId: null,
-      });
-    }
-  }
-  return out;
-}
+export const NO_BROADCAST_SOURCE_MESSAGE = 'Aucun salon source configuré : choisis le serveur principal et son salon d’annonces avant d’envoyer.';
 
 export interface PollResults {
   options: { label: string; votes: number }[];
@@ -1271,10 +967,7 @@ export async function subscribeGuildIfBroadcastSourceConfigured(client: Client, 
  * perd rien puisque l'etat vit en base, l'envoi est simplement repris au tick
  * suivant.
  */
-export function startBroadcastScheduler(
-  client: Client,
-  collectShardGuilds: (client: Client) => Promise<{ id: string }[]>,
-): () => void {
+export function startBroadcastScheduler(client: Client): () => void {
   const TICK_MS = 60_000;
 
   const tick = async () => {
@@ -1295,52 +988,25 @@ export function startBroadcastScheduler(
 
         try {
           const sourceConfig = await getBroadcastSourceConfig();
-          const useSourceChannel = Boolean(
-            sourceConfig
-            && broadcast.target === 'ALL'
-            && broadcast.pollOptions.length === 0
-            && !broadcast.feedbackLabel,
-          );
+          if (!sourceConfig) throw new Error(NO_BROADCAST_SOURCE_MESSAGE);
+          const conflict = sourceModeConflict({
+            target: broadcast.target as BroadcastTarget,
+            pollOptions: broadcast.pollOptions,
+            feedbackLabel: broadcast.feedbackLabel,
+          });
+          if (conflict) throw new Error(conflict);
 
-          if (useSourceChannel && sourceConfig) {
-            const deliveries = await deliverBroadcastViaSource(client, sourceConfig, {
-              title: broadcast.title,
-              message: resolveEmojiShortcodes(broadcast.message),
-              color: broadcast.color,
-              thumbnailUrl: broadcast.thumbnailUrl,
-              imageUrl: broadcast.imageUrl,
-              footerText: broadcast.footerText ?? DEFAULT_BROADCAST_FOOTER,
-            });
-            await finalizeBroadcast(broadcast.id, deliveries, deliveries.length);
-            await markBroadcastMediaUsed([broadcast.imageUrl, broadcast.thumbnailUrl]);
-            logger.info('Broadcast', `Annonce programmee ${broadcast.id} publiee sur le salon source ${sourceConfig.channelId}`);
-          } else {
-            const allowed = await resolveTargetGuildIds(
-              client,
-              broadcast.target as BroadcastTarget,
-              broadcast.targetGuilds,
-              collectShardGuilds,
-            );
-            const channelMap = await loadGuildChannelMap();
-            const deliveries = await deliverBroadcast(client, {
-              title: broadcast.title,
-              message: resolveEmojiShortcodes(broadcast.message),
-              color: broadcast.color,
-              thumbnailUrl: broadcast.thumbnailUrl,
-              imageUrl: broadcast.imageUrl,
-              footerText: broadcast.footerText ?? DEFAULT_BROADCAST_FOOTER,
-              channelPref: broadcast.channelPref as BroadcastChannelPref,
-              allowedIds: [...allowed],
-              channelMap,
-              translations: broadcast.translations as BroadcastTranslations | null,
-              poll: { broadcastId: broadcast.id, options: broadcast.pollOptions },
-              feedback: broadcast.feedbackLabel ? { broadcastId: broadcast.id, label: broadcast.feedbackLabel } : undefined,
-            });
-
-            await finalizeBroadcast(broadcast.id, deliveries, allowed.size);
-            await markBroadcastMediaUsed([broadcast.imageUrl, broadcast.thumbnailUrl]);
-            logger.info('Broadcast', `Annonce programmee ${broadcast.id} envoyee (${deliveries.length} serveurs)`);
-          }
+          const deliveries = await deliverBroadcastViaSource(client, sourceConfig, {
+            title: broadcast.title,
+            message: resolveEmojiShortcodes(broadcast.message),
+            color: broadcast.color,
+            thumbnailUrl: broadcast.thumbnailUrl,
+            imageUrl: broadcast.imageUrl,
+            footerText: broadcast.footerText ?? DEFAULT_BROADCAST_FOOTER,
+          });
+          await finalizeBroadcast(broadcast.id, deliveries, deliveries.length);
+          await markBroadcastMediaUsed([broadcast.imageUrl, broadcast.thumbnailUrl]);
+          logger.info('Broadcast', `Annonce programmee ${broadcast.id} publiee sur le salon source ${sourceConfig.channelId}`);
         } catch (err) {
           await prisma.broadcastLog.update({
             where: { id: broadcast.id },
