@@ -1593,7 +1593,7 @@ export async function transferCoins(guildId: string, senderId: string, receiverI
     if ((current?.balance ?? 0) < amount) {
       throw new Error(`Solde insuffisant. Vous possédez actuellement **${current?.balance ?? 0}** pièces.`);
     }
-    throw new Error('Un transfert est déjà en cours ou le délai entre deux transferts n'est pas écoulé. Réessayez dans un instant.');
+    throw new Error("Un transfert est déjà en cours ou le délai entre deux transferts n'est pas écoulé. Réessayez dans un instant.");
   }
 
   return {
