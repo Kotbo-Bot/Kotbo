@@ -97,7 +97,7 @@
     return Math.max(0, clan.totalDebt - clan.totalEngaged);
   }
 
-  const currentLocale = getLocale();
+  const currentLocale = $derived(getLocale());
   function switchLocale(loc: Locale) {
     if (loc === currentLocale) return;
     userPrefs.set('language', loc);
