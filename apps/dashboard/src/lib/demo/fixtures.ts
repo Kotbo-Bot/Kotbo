@@ -252,3 +252,36 @@ export function featureAccessFor(keys: string[]) {
 }
 
 export { DAY, HOUR, NOW };
+
+// ── Commandes ──────────────────────────────────────────────────────────
+
+const sub = (name: string, description: string, options: unknown[] = []) => ({ type: 1, name, description, options });
+const opt = (type: number, name: string, description: string, required = false) => ({ type, name, description, required });
+
+/** Extrait du catalogue du bot (`utils/commandAccess.ts`), avec les sous-commandes que la page affiche. */
+export const COMMAND_CATALOG = [
+  { name: 'help', label: 'Aide', description: 'Aide générale et documentation des commandes.', defaultAccess: 'tout_le_monde', category: 'Général' },
+  { name: 'ping', label: 'Ping', description: 'Vérification de la latence du bot.', defaultAccess: 'tout_le_monde', category: 'Général' },
+  { name: 'info', label: 'Infos serveur', description: "Résumé de l'état et des métriques du serveur.", defaultAccess: 'tout_le_monde', category: 'Général' },
+  { name: 'profile', label: 'Profil', description: 'Affiche le profil utilisateur et sa progression.', defaultAccess: 'tout_le_monde', category: 'Communauté', options: [opt(6, 'membre', 'Le membre à afficher')] },
+  { name: 'rank', label: 'Rang', description: 'Carte de niveau et position au classement.', defaultAccess: 'tout_le_monde', category: 'Niveaux', options: [opt(6, 'membre', 'Le membre à afficher')] },
+  { name: 'leaderboard', label: 'Classement', description: 'Classement XP du serveur.', defaultAccess: 'tout_le_monde', category: 'Niveaux' },
+  { name: 'daily', label: 'Récompense du jour', description: 'Récupère tes pièces quotidiennes.', defaultAccess: 'tout_le_monde', category: 'Économie' },
+  { name: 'boutique', label: 'Boutique', description: 'Articles en vente sur le serveur.', defaultAccess: 'tout_le_monde', category: 'Économie' },
+  { name: 'rpg', label: 'RPG', description: 'Aventure, combats et inventaire.', defaultAccess: 'tout_le_monde', category: 'Jeux', options: [sub('aventure', 'Part à l’aventure'), sub('combat', 'Affronte un monstre'), sub('inventaire', 'Ouvre ton sac')] },
+  { name: 'giveaway', label: 'Giveaways', description: 'Créer et gérer les concours.', defaultAccess: 'modération', category: 'Événements', options: [sub('start', 'Lance un giveaway', [opt(3, 'lot', 'Ce qu’on gagne', true), opt(3, 'durée', 'Durée, ex. 2j', true)]), sub('reroll', 'Retire un gagnant')] },
+  { name: 'ticket', label: 'Tickets', description: 'Ouvrir, fermer et gérer les tickets.', defaultAccess: 'tout_le_monde', category: 'Support', options: [sub('open', 'Ouvre un ticket'), sub('close', 'Ferme le ticket')] },
+  { name: 'sanction', label: 'Sanctions', description: 'Gestion des sanctions et des rapports.', defaultAccess: 'modération', category: 'Modération', options: [sub('warn', 'Avertit un membre', [opt(6, 'membre', 'Le membre', true), opt(3, 'raison', 'La raison')]), sub('timeout', 'Exclut temporairement'), sub('ban', 'Bannit un membre')] },
+  { name: 'clear', label: 'Nettoyage', description: 'Supprime des messages en masse.', defaultAccess: 'modération', category: 'Modération', options: [opt(4, 'nombre', 'Nombre de messages', true)] },
+  { name: 'lock', label: 'Verrouillage', description: 'Verrouille ou rouvre un salon.', defaultAccess: 'modération', category: 'Modération' },
+  { name: 'setup', label: 'Installation', description: 'Assistant de mise en route du serveur.', defaultAccess: 'administration', category: 'Administration' },
+  { name: 'config', label: 'Configuration', description: 'Panneau de configuration principal du bot.', defaultAccess: 'administration', category: 'Administration' },
+  { name: 'admin', label: 'Admin', description: 'Commandes administrateur du serveur.', defaultAccess: 'administration', category: 'Administration' },
+];
+
+/** Règles déjà posées : de quoi voir à quoi ressemble une commande restreinte. */
+export const COMMAND_RESTRICTIONS = [
+  { commandName: 'rpg', enabled: true, allowedChannelIds: ['900000000000000316'], blockedChannelIds: [], allowedRoleIds: [], blockedRoleIds: [], allowedUserIds: [], blockedUserIds: [] },
+  { commandName: 'clear', enabled: true, allowedChannelIds: [], blockedChannelIds: [], allowedRoleIds: ['900000000000000203'], blockedRoleIds: [], allowedUserIds: [], blockedUserIds: [] },
+  { commandName: 'excuse', enabled: false, allowedChannelIds: [], blockedChannelIds: [], allowedRoleIds: [], blockedRoleIds: [], allowedUserIds: [], blockedUserIds: [] },
+];

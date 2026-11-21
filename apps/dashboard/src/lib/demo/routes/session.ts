@@ -12,6 +12,8 @@ import { demoDb } from '../db';
 import { DEMO_GUILD_NAME } from '../mode';
 import {
   CATEGORIES,
+  COMMAND_CATALOG,
+  COMMAND_RESTRICTIONS,
   CHANNELS,
   ROLES,
   VOICE_CHANNELS,
@@ -86,9 +88,9 @@ export function registerSessionRoutes(): void {
       discordVoiceChannels: VOICE_CHANNELS,
       discordCategories: CATEGORIES,
       discordRoles: ROLES,
-      commandRestrictions: [],
+      commandRestrictions: demoDb.get('command-access', () => COMMAND_RESTRICTIONS),
       sidebarFavorites: [],
-      commandCatalog: [],
+      commandCatalog: COMMAND_CATALOG,
       access: { level: 'admin', canModerateContent: true, canManageSettings: true },
       featureAccess: featureAccessFor(featureKeys),
       auditTrail: demoDb.get(AUDIT, auditSeed),

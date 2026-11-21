@@ -8,7 +8,7 @@
 import { PRISMA_DEFAULTS } from './generated/prismaDefaults';
 import { DEMO_GUILD_ID } from './mode';
 
-export function row<T extends Record<string, unknown> = Record<string, any>>(model: string, overrides: Record<string, unknown> = {}): T {
+export function row<T extends Record<string, unknown> = { id: string } & Record<string, any>>(model: string, overrides: Record<string, unknown> = {}): T {
   const defaults = PRISMA_DEFAULTS[model];
   if (!defaults) throw new Error(`[démo] modèle Prisma inconnu : ${model}`);
   const now = new Date().toISOString();

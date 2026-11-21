@@ -25,6 +25,7 @@ import { registerServerRoutes } from './server';
 import { registerCommunityRoutes } from './community';
 import { registerPlanningRoutes } from './planning';
 import { registerToolsRoutes } from './tools';
+import { registerChannelsRoutes } from './channels';
 
 export function registerDemoRoutes(): void {
   // Avant les routes Analytics historiques : la première route qui correspond gagne.
@@ -35,6 +36,7 @@ export function registerDemoRoutes(): void {
   registerCommunityRoutes();
   registerPlanningRoutes();
   registerToolsRoutes();
+  registerChannelsRoutes();
   registerSessionRoutes();
   registerHomeRoutes();
   registerTelemetryRoutes();
