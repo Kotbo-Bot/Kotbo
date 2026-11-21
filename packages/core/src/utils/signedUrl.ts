@@ -8,6 +8,17 @@ export function getSigningSecret(): string {
   return secret;
 }
 
+/**
+ * Comparaison en temps constant. La longueur se compare en octets : deux chaînes
+ * de même nombre de caractères peuvent différer en octets (caractères multi-octets)
+ * et `timingSafeEqual` lèverait alors une exception au lieu de refuser.
+ */
+function safeEqual(given: string, expected: string): boolean {
+  const a = Buffer.from(given);
+  const b = Buffer.from(expected);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
 export function generateTranscriptSignature(
   transcriptId: string,
   expiresInSeconds = 3600,
@@ -35,10 +46,7 @@ export function verifyTranscriptSignature(
     .createHmac('sha256', getSigningSecret())
     .update(payload)
     .digest('hex');
-  if (expected.length !== signature.length) {
-    return false;
-  }
-  return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+  return safeEqual(signature, expected);
 }
 
 // Signatures pour les fichiers de preuve uploadés (sanction evidence).
@@ -72,8 +80,5 @@ export function verifyEvidenceFileSignature(
     .createHmac('sha256', getSigningSecret())
     .update(payload)
     .digest('hex');
-  if (expected.length !== signature.length) {
-    return false;
-  }
-  return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+  return safeEqual(signature, expected);
 }
