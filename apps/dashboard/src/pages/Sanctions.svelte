@@ -1931,7 +1931,7 @@
           onClick={confirmDeleteSanction}
           variant="danger"
           label={deletingSanctionId ? m.sc_deleting() : m.sc_delete_permanently()}
-          disabled={Boolean(deletingSanctionId)}
+          disabled={Boolean(deletingSanctionId) || deleteConfirmationText.trim().toUpperCase() !== m.sc_delete_keyword()}
         />
       </div>
     </div>
