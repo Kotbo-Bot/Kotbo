@@ -32,6 +32,8 @@ import { registerShopRoutes } from './shop';
 import { registerTagAutomodRoutes } from './tagAutomod';
 import { registerRaidRoutes } from './raid';
 import { registerSecurityRoutes } from './security';
+import { registerWelcomeRoutes } from './welcome';
+import { registerSiteRoutes } from './site';
 
 export function registerDemoRoutes(): void {
   // Avant les routes Analytics historiques : la première route qui correspond gagne.
@@ -49,6 +51,8 @@ export function registerDemoRoutes(): void {
   registerTagAutomodRoutes();
   registerRaidRoutes();
   registerSecurityRoutes();
+  registerWelcomeRoutes();
+  registerSiteRoutes();
   registerSessionRoutes();
   registerHomeRoutes();
   registerTelemetryRoutes();
