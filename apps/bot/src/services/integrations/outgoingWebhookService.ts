@@ -31,7 +31,7 @@ import {
   subscribesTo,
   type OutgoingEnvelope,
 } from './outgoingWebhookEvents.js';
-import { WebhookUrlError, assertWebhookUrlReachable, signWebhookPayload } from './outgoingWebhookSecurity.js';
+import { WebhookUrlError, assertWebhookUrlReachable, pinnedWebhookFetch, signWebhookPayload } from './outgoingWebhookSecurity.js';
 
 const LOG = 'OutgoingWebhooks';
 
@@ -133,7 +133,7 @@ export interface DeliveryAttemptResult {
  * Une tentative d'envoi. Met à jour la ligne d'envoi et les compteurs du
  * webhook, et planifie la relance suivante si l'envoi échoue.
  */
-export async function attemptDelivery(deliveryId: string, fetcher: typeof fetchExternal = fetchExternal): Promise<DeliveryAttemptResult | null> {
+export async function attemptDelivery(deliveryId: string, fetcher: typeof fetchExternal = pinnedWebhookFetch): Promise<DeliveryAttemptResult | null> {
   const delivery = await prisma.outgoingWebhookDelivery.findUnique({
     where: { id: deliveryId },
     include: { webhook: { select: { id: true, guildId: true, url: true, secret: true, enabled: true, consecutiveFailures: true } } },
