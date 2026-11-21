@@ -1,7 +1,7 @@
 import type { SlashCommandDefinition } from '../../commands.js';
 import { ActionRowBuilder, SlashCommandBuilder, type ChatInputCommandInteraction, PermissionFlagsBits, MessageFlags, TextChannel, Role, User, type GuildMember, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder } from 'discord.js';
 import prisma from '../../utils/db.js';
-import { canManageTicket, findActiveTicketBlacklist, renameTicketChannel, renameChannelToOpen, closeTicket, logTicketEvent, ticketBlacklistMessage } from '../../services/features/ticketService.js';
+import { canManageTicket, findActiveTicketBlacklist, renameTicketChannel, renameChannelToOpen, closeTicket, logTicketEvent, ticketBlacklistMessage, applyTicketLockState } from '../../services/features/ticketService.js';
 import {
   archiveTicket,
   DELETION_LOCK_DURATIONS,
@@ -419,6 +419,8 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
       return;
     }
 
+    await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
+
     await prisma.ticket.update({
       where: { id: ticket.id },
       data: {
@@ -431,19 +433,25 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
 
     await channel.permissionOverwrites.edit(ticket.userId, {
       ViewChannel: true,
-      SendMessages: true,
+      // Un ticket clos sans avoir jamais été pris en charge repart verrouillé :
+      // la réouverture ne doit pas contourner l'attente de prise en charge.
+      SendMessages: !ticket.lockUntilClaim,
       ReadMessageHistory: true,
     }).catch(() => null);
 
-    await renameChannelToOpen(interaction.client, channel.id).catch(() => null);
+    // En arrière-plan comme le bouton : le renommage, plafonné à 2 par 10 min, peut attendre des minutes.
+    void renameChannelToOpen(interaction.client, channel.id).catch(() => null);
+
+    if (ticket.lockUntilClaim) {
+      await applyTicketLockState(interaction.client, ticket, guildConfig, true);
+    }
 
     await channel.send({
       embeds: [successEmbed(m.c7_ticket_reopen_embed_title({}, { locale }), m.c7_ticket_reopen_embed_desc({ userId: interaction.user.id }, { locale }))],
     }).catch(() => null);
 
-    await interaction.reply({
+    await interaction.editReply({
       content: m.c7_ticket_reopen_success({}, { locale }),
-      flags: [MessageFlags.Ephemeral],
     });
     return;
   }

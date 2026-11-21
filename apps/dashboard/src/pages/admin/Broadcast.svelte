@@ -746,9 +746,9 @@
       const summary = await subscribeAllBroadcastGuilds();
       subscribeSummary = summary;
       await reloadAll();
-      toast.success(m.abc_subscribe_all_done({
-        subscribed: summary.subscribed, already: summary.alreadySubscribed, skipped: summary.skipped, failed: summary.failed,
-      }));
+      toast.success(
+        m.abc_subscribe_all_done({ subscribed: summary.subscribed, already: summary.alreadySubscribed, skipped: summary.skipped, failed: summary.failed }),
+      );
     } catch (err) {
       toast.error(err instanceof Error ? err.message : m.abc_config_error());
     } finally {
@@ -761,14 +761,14 @@
     try {
       const res = await subscribeBroadcastGuild(guild.id);
       if (res.status === 'SUBSCRIBED') {
-        toast.success(m.abc_sub_ok({ guild: guild.name, channel: res.channelName ?? res.channelId }));
+        toast.success(m.abc_subscribed({ guild: guild.name, channel: res.channelName ?? res.channelId }));
         await reloadAll();
       } else if (res.status === 'ALREADY_SUBSCRIBED') {
-        toast.info(m.abc_sub_already({ guild: guild.name, channel: res.channelName ?? res.channelId }));
+        toast.info(m.abc_already_subscribed({ guild: guild.name, channel: res.channelName ?? res.channelId }));
       } else if (res.status === 'SKIPPED') {
-        toast.warning(m.abc_sub_skipped({ guild: guild.name, reason: res.reason ?? m.abc_sub_no_channel() }));
+        toast.warning(m.abc_subscribe_skipped({ guild: guild.name, reason: res.reason ?? m.abc_no_compatible_channel() }));
       } else {
-        toast.error(m.abc_sub_failed({ guild: guild.name, reason: res.reason ?? m.abc_sub_failed_default() }));
+        toast.error(m.abc_subscribe_failed({ guild: guild.name, reason: res.reason ?? m.abc_subscribe_failed_default() }));
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : m.abc_config_error());
@@ -791,9 +791,9 @@
         }
         : g);
       if (res.subscription?.status === 'SUBSCRIBED') {
-        toast.success(m.abc_channel_set_subscribed({ base: m.abc_channel_set({ channel: channel?.name ?? '', guild: guild.name }) }));
+        toast.success(m.abc_channel_set_subscribed({ label: m.abc_channel_set({ channel: channel?.name ?? '', guild: guild.name }) }));
       } else if (res.subscription?.status === 'FAILED') {
-        toast.warning(m.abc_channel_set_sub_failed({ base: m.abc_channel_set({ channel: channel?.name ?? '', guild: guild.name }), reason: res.subscription.reason }));
+        toast.warning(m.abc_channel_set_not_subscribed({ label: m.abc_channel_set({ channel: channel?.name ?? '', guild: guild.name }), reason: res.subscription.reason ?? '' }));
       } else {
         toast.success(channelId ? m.abc_channel_set({ channel: channel?.name ?? '', guild: guild.name }) : m.abc_channel_removed({ guild: guild.name }));
       }

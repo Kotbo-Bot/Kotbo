@@ -3,6 +3,7 @@ import { createCanvas, loadImage } from '@napi-rs/canvas';
 import prisma from '../../utils/db.js';
 import { canvasFont, ensureCanvasFonts } from '../../utils/canvasFonts.js';
 import { logger } from '../../utils/logger.js';
+import { isAutoGrantableRole } from '../../utils/adminLockPermissions.js';
 import { resolvePlaceholders, type PlaceholderMember } from '../../utils/placeholders.js';
 import type { ExperimentVariant } from './welcomeExperimentMath.js';
 
@@ -158,6 +159,10 @@ export async function applyJoinAutoRole(member: GuildMember) {
       ?? await member.guild.roles.fetch(config.joinRoleId).catch(() => null);
     if (!role) {
       logger.warn('WelcomeGoodbyeService', `Auto-rôle introuvable sur ${member.guild.id} : ${config.joinRoleId}`);
+      return;
+    }
+    if (!isAutoGrantableRole(role)) {
+      logger.warn('WelcomeGoodbyeService', `Auto-rôle ${role.id} ignoré sur ${member.guild.id} : il donne la permission Administrateur`);
       return;
     }
 

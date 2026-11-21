@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { kotboEventBus } from '@kotbo/core';
 import { errorMessage } from '../../utils/errors.js';
 import type { Prisma } from '@prisma/client';
@@ -841,6 +842,17 @@ export async function endGiveaway(client: Client, giveawayId: string, expectedGu
   const candidates = await foldLinkedCandidates(giveaway.guildId, giveaway.participants, config);
   const winners = await drawWinnersWeighted(candidates, giveaway.winnerCount, discordGuild, bonus);
 
+  // Clôture et résultat en une écriture conditionnelle : seul l'appel qui bascule
+  // `ended` poursuit (bouton + cron, double clic), et une erreur avant elle
+  // laisse le concours ouvert au cron au lieu de le clore sans gagnant.
+  const closed = await prisma.giveaway.updateMany({
+    where: { id: giveawayId, ended: false },
+    data: giveaway.needValidation
+      ? { ended: true, validationStatus: 'PENDING', pendingWinners: winners }
+      : { ended: true, validationStatus: 'APPROVED', winners },
+  });
+  if (closed.count === 0) return;
+
   const winnersMentions = winners.length > 0
     ? winners.map(w => `<@${w}>`).join(', ')
     : m.gvw_no_entrant({}, { locale: config.locale });
@@ -856,18 +868,6 @@ export async function endGiveaway(client: Client, giveawayId: string, expectedGu
   });
 
   if (giveaway.needValidation) {
-    // On marque le giveaway comme terminé AVANT toute opération Discord : la
-    // transition d'état doit avoir lieu même si le message n'est plus
-    // récupérable, sinon le cron le reclôturerait en boucle chaque minute.
-    await prisma.giveaway.update({
-      where: { id: giveawayId },
-      data: {
-        ended: true,
-        validationStatus: 'PENDING',
-        pendingWinners: winners,
-      },
-    });
-
     // Mise à jour du message d'origine (best-effort)
     if (channel && giveaway.messageId) {
       const message = await channel.messages.fetch(giveaway.messageId).catch(() => null);
@@ -914,17 +914,8 @@ export async function endGiveaway(client: Client, giveawayId: string, expectedGu
     return;
   }
 
-  // Pas de validation requise, gain direct : on fige l'état et on distribue
-  // exactement une fois, indépendamment de la disponibilité du message.
-  await prisma.giveaway.update({
-    where: { id: giveawayId },
-    data: {
-      ended: true,
-      validationStatus: 'APPROVED',
-      winners,
-    },
-  });
-
+  // Pas de validation requise, gain direct : distribué exactement une fois,
+  // indépendamment de la disponibilité du message.
   await distributeGiveawayPrizes(giveaway, winners).catch((err) => {
     logger.error('GiveawayService', 'Error distributing prizes in endGiveaway:', err);
   });
@@ -1032,8 +1023,8 @@ export async function rerollGiveaway(
 
   const { config, appearance, bonus, itemLabel } = await loadStyle(giveaway.guildId, giveaway);
 
-  // Filtrer les participants qui ne sont pas déjà gagnants validés
-  const remaining = giveaway.participants.filter(id => !giveaway.winners.includes(id));
+  // Filtrer les participants qui ne sont ni gagnants validés ni en attente de validation
+  const remaining = giveaway.participants.filter(id => !giveaway.winners.includes(id) && !giveaway.pendingWinners.includes(id));
   const candidates = await foldLinkedCandidates(giveaway.guildId, remaining, config);
   if (candidates.length === 0) {
     await channel.send({ content: m.gvw_reroll_no_candidate({ prize: giveaway.prize }, { locale: config.locale }), allowedMentions: GIVEAWAY_MENTIONS }).catch(() => null);
@@ -1050,16 +1041,38 @@ export async function rerollGiveaway(
     return false;
   }
 
-  if (giveaway.needValidation) {
-    // Si validation requise, on met à jour en tant que gagnant en attente
-    await prisma.giveaway.update({
-      where: { id: giveawayId },
-      data: {
-        validationStatus: 'PENDING',
-        pendingWinners: [newWinner],
-      },
-    });
+  // Verrou de ligne tenu le temps d'une écriture courte, le tirage (qui peut
+  // fetch les membres) ayant eu lieu avant : deux relances concurrentes relisent
+  // l'état frais l'une après l'autre, sans distribuer deux fois ni perdre un ajout.
+  const committed = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT 1 FROM giveaways WHERE id = ${giveawayId} FOR UPDATE`;
+    const fresh = await tx.giveaway.findUnique({ where: { id: giveawayId } });
+    if (!fresh || !fresh.ended) return null;
 
+    if (fresh.needValidation) {
+      // Ajouté à la liste en attente relue sous verrou, sans écraser les autres gagnants proposés.
+      if (fresh.pendingWinners.includes(newWinner)) return null;
+      const updatedPending = [...fresh.pendingWinners, newWinner];
+      await tx.giveaway.update({
+        where: { id: giveawayId },
+        data: { validationStatus: 'PENDING', pendingWinners: updatedPending },
+      });
+      return { updatedWinners: fresh.winners, updatedPending };
+    }
+
+    if (fresh.winners.includes(newWinner)) return null;
+    const updatedWinners = [...fresh.winners, newWinner];
+    await tx.giveaway.update({
+      where: { id: giveawayId },
+      data: { winners: updatedWinners, validationStatus: 'APPROVED' },
+    });
+    return { updatedWinners, updatedPending: fresh.pendingWinners };
+  });
+
+  if (!committed) return false;
+  const pendingMentions = committed.updatedPending.map(w => `<@${w}>`).join(', ');
+
+  if (giveaway.needValidation) {
     if (giveaway.messageId) {
       const message = await channel.messages.fetch(giveaway.messageId).catch(() => null);
       if (message) {
@@ -1068,7 +1081,7 @@ export async function rerollGiveaway(
           buildClosedDescription(
             giveaway,
             m.gvw_label_winner_reroll_pending({}, { locale: config.locale }),
-            `<@${newWinner}>`,
+            pendingMentions,
             giveaway.participants.length,
             config.locale,
           ),
@@ -1076,7 +1089,7 @@ export async function rerollGiveaway(
           appearance,
           giveaway.participants.length,
           config.locale,
-          { winners: `<@${newWinner}>`, itemLabel },
+          { winners: pendingMentions, itemLabel },
         );
 
         const approveBtn = new ButtonBuilder()
@@ -1097,15 +1110,7 @@ export async function rerollGiveaway(
     await channel.send({ content: m.gvw_reroll_pending({ winner: `<@${newWinner}>` }, { locale: config.locale }), allowedMentions: GIVEAWAY_MENTIONS }).catch(() => null);
   } else {
     // Pas de validation requise, gain immédiat
-    const updatedWinners = [...giveaway.winners, newWinner];
-
-    await prisma.giveaway.update({
-      where: { id: giveawayId },
-      data: {
-        winners: updatedWinners,
-        validationStatus: 'APPROVED'
-      },
-    });
+    const { updatedWinners } = committed;
 
     await distributeGiveawayPrizes(giveaway, [newWinner]).catch((err) => {
       logger.error('GiveawayService', 'Error distributing reroll prizes:', err);
@@ -1154,20 +1159,29 @@ export async function approveGiveawayWinners(client: Client, giveawayId: string)
 
   if (!giveaway || !giveaway.ended || giveaway.validationStatus !== 'PENDING') return;
 
-  const winners = giveaway.pendingWinners;
+  // Après un reroll, `winners` porte déjà les gagnants d'une première approbation.
+  const winners = [...new Set([...giveaway.winners, ...giveaway.pendingWinners])];
 
-  // Mettre à jour en BDD
-  await prisma.giveaway.update({
-    where: { id: giveawayId },
+  // Seule l'approbation qui bascule PENDING -> APPROVED distribue : un double
+  // clic, ou le bouton et le dashboard ensemble, verseraient sinon deux fois.
+  const approved = await prisma.giveaway.updateMany({
+    // Conditionnée à l'état lu : une relance commise entre-temps n'est pas écrasée.
+    where: {
+      id: giveawayId,
+      validationStatus: 'PENDING',
+      winners: { equals: giveaway.winners },
+      pendingWinners: { equals: giveaway.pendingWinners },
+    },
     data: {
       validationStatus: 'APPROVED',
       winners,
       pendingWinners: [],
     },
   });
+  if (approved.count === 0) return;
 
-  // Distribuer les prix
-  await distributeGiveawayPrizes(giveaway, winners).catch((err) => {
+  // Distribuer les prix aux seuls gagnants fraîchement validés : les autres ont déjà eu le leur
+  await distributeGiveawayPrizes(giveaway, giveaway.pendingWinners).catch((err) => {
     logger.error('GiveawayService', 'Error distributing prizes on approval:', err);
   });
 
@@ -1480,11 +1494,21 @@ async function foldLinkedCandidates(
  * tirage, et l'atteindre par `endGiveaway` demanderait un serveur, un salon et
  * une remise de lots pour n'observer qu'un nom.
  */
+/**
+ * Réel dans [0, 1) tiré du générateur du système. Des lots se gagnent à ce tirage :
+ * `Math.random` n'est pas fait pour cela, et son état se déduit d'un nombre suffisant
+ * de sorties observées.
+ */
+export function secureRandom(): number {
+  return crypto.randomInt(0, 2 ** 40) / 2 ** 40;
+}
+
 export async function drawWinnersWeighted(
   candidates: string[],
   count: number,
   discordGuild: Guild | null,
-  bonus: ResolvedBonus
+  bonus: ResolvedBonus,
+  random: () => number = secureRandom,
 ): Promise<string[]> {
   if (candidates.length === 0 || count <= 0) return [];
 
@@ -1512,7 +1536,7 @@ export async function drawWinnersWeighted(
   if (bonus.entries.length === 0 || rolesByUser.size === 0) {
     const actualCount = Math.min(count, pool.length);
     for (let i = 0; i < actualCount; i++) {
-      const randIndex = Math.floor(Math.random() * pool.length);
+      const randIndex = Math.floor(random() * pool.length);
       winners.push(pool[randIndex]);
       pool.splice(randIndex, 1);
     }
@@ -1533,7 +1557,7 @@ export async function drawWinnersWeighted(
     }
 
     // Sélection aléatoire pondérée
-    let randomVal = Math.random() * totalWeight;
+    let randomVal = random() * totalWeight;
     let selectedIndex = 0;
 
     for (let j = 0; j < pool.length; j++) {

@@ -19,20 +19,11 @@ import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { getClient } from '../../utils/client.js';
 import { invalidatePlan } from '../system/planService.js';
-import { grantAccess, minutesUntil } from '../system/accessService.js';
+import { announceAccessEnded, grantAccess, markAccessExpired, minutesUntil, type AccessType } from '../system/accessService.js';
+import { ENTITLING_STATUSES, LIVE_STATUSES } from './entitlingStatuses.js';
 import { planForPriceId, type Stripe } from './stripeService.js';
 import { confirmTrialStarted } from './trialService.js';
 
-/**
- * Statuts Stripe qui ouvrent le service.
- *
- * `past_due` en fait partie volontairement : le premier prélèvement a échoué
- * mais Stripe va réessayer plusieurs jours. Couper immédiatement un serveur
- * pour une carte expirée serait une brutalité commerciale, et l'accès s'arrête
- * de toute façon à `accessExpiresAt` si les relances échouent toutes. Passé ce
- * délai Stripe bascule l'abonnement en `canceled` ou `unpaid`, qui ferment.
- */
-const ENTITLING_STATUSES = new Set<Stripe.Subscription.Status>(['active', 'trialing', 'past_due']);
 
 /**
  * Fin de la période payée.
@@ -131,10 +122,38 @@ export async function syncSubscription(subscription: Stripe.Subscription): Promi
       : subscription.items.data[0].price.id
     : null;
 
+  // Lu avant l'upsert qui l'écrase : la fin d'abonnement ne s'annonce qu'au
+  // passage « couvert -> non couvert » de l'abonnement courant.
+  const previous = await prisma.guild.findUnique({
+    where: { id: guildId },
+    select: { stripeSubscriptionId: true, stripeSubscriptionStatus: true },
+  });
+  const wasEntitled = !!previous
+    && previous.stripeSubscriptionId === subscription.id
+    && !!previous.stripeSubscriptionStatus
+    && ENTITLING_STATUSES.has(previous.stripeSubscriptionStatus as Stripe.Subscription.Status);
+
+  // Un abonnement qui n'ouvre pas le service (doublon fermé par Stripe) n'écrase
+  // pas un AUTRE abonnement qui couvre encore le serveur : son deleted fermera l'accès.
+  if (
+    !entitled &&
+    previous?.stripeSubscriptionId &&
+    previous.stripeSubscriptionId !== subscription.id &&
+    ENTITLING_STATUSES.has(previous.stripeSubscriptionStatus ?? '')
+  ) {
+    logger.warn(
+      'Billing',
+      `Abonnement ${subscription.id} (${subscription.status}) ignoré pour ${guildId} : ` +
+        `le serveur reste couvert par l'abonnement ${previous.stripeSubscriptionId}.`,
+    );
+    return;
+  }
+
   await prisma.guild.upsert({
     where: { id: guildId },
     update: {
-      plan,
+      // Seul un abonnement qui couvre ou couvrait le serveur écrit l'offre : après un abonnement clos, un cadeau a pu la poser.
+      plan: entitled || wasEntitled ? plan : undefined,
       stripeCustomerId: customerId ?? undefined,
       stripeSubscriptionId: subscription.id,
       stripeSubscriptionStatus: subscription.status,
@@ -218,7 +237,12 @@ export async function syncSubscription(subscription: Stripe.Subscription): Promi
       (expiresAt ? `, période jusqu'au ${expiresAt.toISOString()}.` : '.'),
   );
 
-  if (!entitled) await announceSubscriptionLost(guildId, subscription.status);
+  // Une seule annonce : l'accès marqué expiré sort aussi le serveur du cron
+  // `access-lifecycle`, qui enverrait sinon un second avis et des rappels.
+  if (!entitled && wasEntitled && (await markAccessExpired(guildId))) {
+    const type = previous.stripeSubscriptionStatus === 'trialing' ? 'TRIAL' : 'SUBSCRIPTION';
+    await announceSubscriptionLost(guildId, type, subscription.status);
+  }
 }
 
 /** Erreur dont le message peut être montré tel quel à l'administrateur. */
@@ -252,7 +276,8 @@ export async function transferSubscription(sourceId: string, targetId: string, u
     prisma.guild.findUnique({ where: { id: sourceId } }),
     prisma.guild.findUnique({ where: { id: targetId }, select: { stripeCustomerId: true, stripeSubscriptionId: true } }),
   ]);
-  if (!source?.stripeSubscriptionId || !source.stripeCustomerId) {
+  // Un abonnement clos ne se transfère pas : la source a pu recevoir un cadeau, que son passage en FREE effacerait.
+  if (!source?.stripeSubscriptionId || !source.stripeCustomerId || !LIVE_STATUSES.has(source.stripeSubscriptionStatus ?? '')) {
     throw new TransferError("Ce serveur n'a pas d'abonnement à transférer.", 404);
   }
   if (target?.stripeSubscriptionId || target?.stripeCustomerId) {
@@ -332,10 +357,9 @@ async function recordPayerCoverage(guildId: string, coveredUntil: Date): Promise
  * immédiate, impayé définitif). Sans ce message, le serveur constaterait la
  * fermeture de ses modules sans la moindre explication.
  */
-async function announceSubscriptionLost(guildId: string, status: string): Promise<void> {
+async function announceSubscriptionLost(guildId: string, type: AccessType, status: string): Promise<void> {
   try {
-    const { announceAccessRevoked } = await import('../system/accessService.js');
-    await announceAccessRevoked(getClient(), guildId);
+    await announceAccessEnded(getClient(), guildId, type);
     logger.info('Billing', `Perte d'abonnement annoncée à ${guildId} (statut ${status}).`);
   } catch (err) {
     // Le client Discord n'est pas toujours disponible (worker, démarrage) ;

@@ -12,6 +12,7 @@ import {
 } from 'discord.js';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
+import { joinFieldEntries, truncate } from '../../utils/embeds.js';
 import { broadcastDashboardStateChange } from '../../api/shared/sharding.js';
 import { notify, notifyMany } from '../notifications/notifyService.js';
 
@@ -646,7 +647,10 @@ export const createMeeting = async (
     });
 
     // On met à jour l'annonce immédiatement pour afficher les stats initiales (ex: ceux déjà en congé)
-    await updateMeetingAnnouncement(client, meeting.id);
+    // Son échec ne doit pas faire échouer une réunion déjà créée et annoncée.
+    await updateMeetingAnnouncement(client, meeting.id).catch(err =>
+      logger.error('Meeting', `Échec de la mise à jour de l'annonce pour ${meeting.id}:`, err),
+    );
 
     broadcastDashboardStateChange(guildId, 'meetings_updated');
     return { ...meeting, discordMessageId: announcementMessage.id };
@@ -838,16 +842,21 @@ export const checkInMeeting = async (
 
   // Gérer la création d'une absence automatique si marqué comme ABSENT
   if (status === 'ABSENT') {
-    await prisma.staffAbsence.create({
-      data: {
-        guildId: result.meeting.guildId,
-        staffUserId: staffUserId,
-        startDate: result.meeting.scheduledAt,
-        endDate: new Date(result.meeting.scheduledAt.getTime() + 60 * 60 * 1000), // 1h par défaut
-        reason: `Absent à la réunion : ${result.meeting.title}`,
-        type: 'Réunion (Absent)',
-        status: 'ACKNOWLEDGED'
-      }
+    // Une absence automatique par membre et par réunion, reconnue à son type et à son
+    // début (l'heure de la réunion) ; le verrou sérialise deux clics simultanés.
+    const absence = { guildId: result.meeting.guildId, staffUserId, type: 'Réunion (Absent)', startDate: result.meeting.scheduledAt };
+    await prisma.$transaction(async (tx) => {
+      // `$executeRaw` et non `$queryRaw` : l'adaptateur pg refuse de lire une colonne `void`.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`meeting-absence:${meetingId}:${staffUserId}`}))`;
+      if (await tx.staffAbsence.findFirst({ where: absence, select: { id: true } })) return;
+      await tx.staffAbsence.create({
+        data: {
+          ...absence,
+          endDate: new Date(result.meeting.scheduledAt.getTime() + 60 * 60 * 1000), // 1h par défaut
+          reason: `Absent à la réunion : ${result.meeting.title}`,
+          status: 'ACKNOWLEDGED'
+        }
+      });
     });
   } else {
     // Si l'utilisateur re-change de statut, on pourrait supprimer l'absence automatique ?
@@ -909,11 +918,14 @@ function buildMeetingAnnouncementEmbed(meeting: {
 
     const excuses = meeting.presences
       .filter(p => p.status === 'EXCUSED' && p.note)
-      .map(p => `- <@${p.staffMember.userId}> : *${p.note}*`)
-      .join('\n');
+      .map(p => `- <@${p.staffMember.userId}> : *${truncate(p.note ?? '', 150)}*`);
 
-    if (excuses) {
-      embed.addFields({ name: '📝 Justifications', value: excuses, inline: false });
+    if (excuses.length > 0) {
+      embed.addFields({
+        name: '📝 Justifications',
+        value: joinFieldEntries(excuses, { more: (count) => `… et ${count} autre${count > 1 ? 's' : ''}` }),
+        inline: false,
+      });
     }
   }
 

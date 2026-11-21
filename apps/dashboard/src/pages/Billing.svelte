@@ -44,7 +44,7 @@
    * franchie, on dit ce que l'offre adaptee lui apporte au lieu de bloquer.
    */
   const outgrown = $derived.by(() => {
-    if (!status?.hasSubscription || !status.eligiblePlan) return null;
+    if (!status?.hasLiveSubscription || !status.eligiblePlan) return null;
     if (rank(status.eligiblePlan) <= rank(currentPlan)) return null;
     const current = (status.plans ?? []).find((plan) => plan.key === currentPlan);
     const next = (status.plans ?? []).find((plan) => plan.key === status?.eligiblePlan);
@@ -334,7 +334,7 @@
         {/if}
       </div>
 
-      {#if status.hasSubscription && status.canManage !== false && transferTargets.length > 0}
+      {#if status.hasLiveSubscription && status.canManage !== false && transferTargets.length > 0}
         <div class="pt-3 border-t border-outline-variant/40 space-y-3">
           <button
             type="button"
@@ -493,6 +493,17 @@
             >
               {m.bill_contact()}
             </a>
+          {:else if status.hasLiveSubscription}
+            <!-- Changer d'offre en cours d'abonnement, montée comme descente, se
+                 fait dans le portail Stripe, qui gère seul le prorata. Un
+                 abonnement clos laisse place au paiement d'un nouveau. -->
+            <button
+              onclick={manage}
+              disabled={pending !== null}
+              class="h-9 rounded-lg text-sm font-medium border border-outline-variant/40 text-on-surface-variant hover:bg-surface-container transition-colors disabled:opacity-50"
+            >
+              {m.bill_change_plan()}
+            </button>
           {:else if plan.purchasable && isUpgrade}
             <button
               onclick={() => subscribe(plan.key)}
@@ -504,16 +515,6 @@
                 : referralEntered
                   ? m.bill_try_plan({ plan: plan.name, days: trial?.days ?? 0 })
                   : m.bill_switch_to({ plan: plan.name })}
-            </button>
-          {:else if status.hasSubscription}
-            <!-- Rétrograder ou changer d'offre en cours d'abonnement se fait
-                 dans le portail Stripe, qui gère seul le prorata. -->
-            <button
-              onclick={manage}
-              disabled={pending !== null}
-              class="h-9 rounded-lg text-sm font-medium border border-outline-variant/40 text-on-surface-variant hover:bg-surface-container transition-colors disabled:opacity-50"
-            >
-              {m.bill_change_plan()}
             </button>
           {:else}
             <!-- Aucun geste possible sur cette carte. Trois raisons très

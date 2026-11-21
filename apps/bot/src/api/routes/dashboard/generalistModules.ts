@@ -53,10 +53,11 @@ import {
   updateGiveawayTemplate,
   type GiveawayTemplateInput,
 } from '../../../services/features/giveawayTemplateService.js';
+import { roleGrantRefusal } from '../../shared/roleGrantGuard.js';
 import { createReactionRoleMenu, deleteReactionRoleMenu, updateReactionRoleMenu, getBotRoleAccess, menuMessageStatus, roleMemberCounts, normalizeEmbedColor, normalizeMenuDescription, normalizeMenuMode, MAX_REACTION_ROLE_BUTTONS, type ReactionRoleOption } from '../../../services/features/reactionRoleService.js';
 import { hasNewRoles, materializeNewRoles, previewReactionRolePreset, type ReactionRoleOptionInput } from '../../../services/features/reactionRolePresets.js';
 import { REACTION_ROLE_PRESET_KEYS, type ReactionRolePresetKey } from '@kotbo/contracts';
-import { invalidateAutoResponseCache } from '../../../services/features/autoResponseService.js';
+import { invalidateAutoResponseCacheAcrossShards } from '../../../services/features/autoResponseService.js';
 import { normalizeAnswer } from '../../../services/features/funService.js';
 import { normalizeConfessionCooldown } from '../../../services/features/confessionPolicy.js';
 import { checkRateLimit, getGuildName, pushAudit, resolveMemberFeatureAccess } from '../../shared.js';
@@ -1979,6 +1980,10 @@ export function createGeneralistModulesRouter(client: Client) {
         return send(c, { error: `Un panneau ne peut pas dépasser ${MAX_REACTION_ROLE_BUTTONS} boutons` }, 400);
       }
 
+      // Le bot donnera ces rôles : ils ne doivent pas dépasser ceux de qui configure.
+      const grantRefusal = await roleGrantRefusal(client, guildId, user.userId, body.options.map((option) => option.roleId));
+      if (grantRefusal) return send(c, { error: grantRefusal }, 403);
+
       const options = await withNewRolesCreated(client, guildId, body.options, auditUser);
       if ('refused' in options) return send(c, { error: options.refused.error }, options.refused.status);
 
@@ -2065,6 +2070,11 @@ export function createGeneralistModulesRouter(client: Client) {
 
       if (body.options !== undefined && body.options.length > MAX_REACTION_ROLE_BUTTONS) {
         return send(c, { error: `Un panneau ne peut pas dépasser ${MAX_REACTION_ROLE_BUTTONS} boutons` }, 400);
+      }
+
+      if (body.options !== undefined) {
+        const grantRefusal = await roleGrantRefusal(client, guildId, user.userId, body.options.map((option) => option.roleId));
+        if (grantRefusal) return send(c, { error: grantRefusal }, 403);
       }
 
       const options = body.options === undefined
@@ -2166,6 +2176,9 @@ export function createGeneralistModulesRouter(client: Client) {
         return send(c, { error: 'Au moins une action doit être configurée (réponse, ajout/retrait de rôle, suppression du message, fermeture de ticket, rejet de formulaire, réaction ou action avancée)' }, 400);
       }
 
+      const triggerGrantRefusal = await roleGrantRefusal(client, guildId, c.var.dashboardUser.userId, [body.roleIdToAdd]);
+      if (triggerGrantRefusal) return send(c, { error: triggerGrantRefusal }, 403);
+
       const autoResponse = await prisma.autoResponse.create({
         data: {
           guildId,
@@ -2195,7 +2208,7 @@ export function createGeneralistModulesRouter(client: Client) {
         },
       });
 
-      invalidateAutoResponseCache(guildId);
+      await invalidateAutoResponseCacheAcrossShards(client, guildId);
       return send(c, { autoResponse });
     } catch (err) {
       logger.error('AutoResponsesAPI', 'Error creating trigger:', err);
@@ -2273,6 +2286,11 @@ export function createGeneralistModulesRouter(client: Client) {
         return send(c, { error: 'Au moins une action doit être configurée (réponse, ajout/retrait de rôle, suppression du message, fermeture de ticket, rejet de formulaire, réaction ou action avancée)' }, 400);
       }
 
+      if (body.roleIdToAdd) {
+        const triggerGrantRefusal = await roleGrantRefusal(client, guildId, c.var.dashboardUser.userId, [body.roleIdToAdd]);
+        if (triggerGrantRefusal) return send(c, { error: triggerGrantRefusal }, 403);
+      }
+
       const autoResponse = await prisma.autoResponse.update({
         where: { id },
         data: {
@@ -2302,7 +2320,7 @@ export function createGeneralistModulesRouter(client: Client) {
         },
       });
 
-      invalidateAutoResponseCache(guildId);
+      await invalidateAutoResponseCacheAcrossShards(client, guildId);
       return send(c, { autoResponse });
     } catch (err) {
       logger.error('AutoResponsesAPI', 'Error updating trigger:', err);
@@ -2320,7 +2338,7 @@ export function createGeneralistModulesRouter(client: Client) {
       if (removed.count === 0) {
         return send(c, { error: 'Déclencheur introuvable' }, 404);
       }
-      invalidateAutoResponseCache(guildId);
+      await invalidateAutoResponseCacheAcrossShards(client, guildId);
       return send(c, { success: true });
     } catch (err) {
       logger.error('AutoResponsesAPI', 'Error deleting trigger:', err);
@@ -2750,9 +2768,16 @@ export function createGeneralistModulesRouter(client: Client) {
         return send(c, { error: "Vous devez fournir du texte de message ou au moins un champ d'embed." }, 400);
       }
 
+      // Hors du cache des membres, `permissionsFor(id)` rend null : on récupère l'auteur.
+      const author = await discordGuild.members.fetch(user.userId).catch(() => null);
       const messageOptions = {
         content: body.content || undefined,
-        embeds: hasEmbedData ? [embed] : undefined
+        embeds: hasEmbedData ? [embed] : undefined,
+        // Comme /say : le bot écrit à la place de l'auteur, il ne notifie donc
+        // @everyone et les rôles que si l'auteur en a lui-même le droit ici.
+        allowedMentions: author && channel.permissionsFor(author).has(PermissionFlagsBits.MentionEveryone)
+          ? undefined
+          : { parse: ['users' as const] },
       };
 
       let messageSent;

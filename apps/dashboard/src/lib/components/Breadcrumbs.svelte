@@ -3,6 +3,7 @@
   import Papicon from './Papicon.svelte';
   import { buildCrumbs } from '../breadcrumbs';
   import { m } from '../i18n';
+  import { guardedLinkClick } from '../navigationGuard';
 
   // On phones the top bar already states where you are and how to go back, so
   // this strip is desktop and tablet only (hidden via app.css).
@@ -18,9 +19,11 @@
 </script>
 
 {#if parent}
+  {@const parentHref = parent.href}
   <nav class="breadcrumbs mb-4 select-none" aria-label={m.a11y_breadcrumbs()}>
     <a
-      href={parent.href}
+      href={parentHref}
+      onclick={(e) => guardedLinkClick(e, parentHref)}
       class="inline-flex items-center gap-1 -ml-1 px-1 py-0.5 rounded-md text-body-sm text-on-surface-variant hover:text-on-surface transition-colors"
     >
       <Papicon icon="chevron-left" size={14} />

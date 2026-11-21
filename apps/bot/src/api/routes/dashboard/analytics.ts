@@ -144,13 +144,15 @@ export function createAnalyticsRouter(client: Client) {
     const id = c.req.param('id');
     const insights = await import('../../../services/analytics/activityInsightsService.js');
     try {
+      // Lire les notes demande le même droit que les écrire : sans ce contrôle, un rôle à
+      // qui la page Analytics est interdite les lisait quand même.
+      if (!access.canViewDashboard || !(await canViewFeatureSection(client, guildId, access, user.userId, 'analytics'))) {
+        return send(c, { error: 'Accès à Analytics requis.' }, 403);
+      }
       if (method === 'GET') {
         const { parseRange } = await import('../../../services/analytics/contentAnalyticsService.js');
         const range = parseRange(q);
         return send(c, await insights.listAnnotations(client, guildId, range.start, range.end));
-      }
-      if (!access.canViewDashboard || !(await canViewFeatureSection(client, guildId, access, user.userId, 'analytics'))) {
-        return send(c, { error: 'Accès à Analytics requis.' }, 403);
       }
       if (method === 'POST' && !id) {
         const input = insights.validateAnnotation((await readBody<Record<string, unknown>>(c)) ?? {});
@@ -186,6 +188,9 @@ export function createAnalyticsRouter(client: Client) {
     const method = c.req.method;
     const id = c.req.param('id');
     try {
+      if (!access.canViewDashboard || !(await canViewFeatureSection(client, guildId, access, user.userId, 'analytics'))) {
+        return send(c, { error: 'Accès à Analytics requis.' }, 403);
+      }
       if (method === 'GET') {
         const views = await prismaRead.analyticsSavedView.findMany({
           where: { guildId, OR: [{ userId: user.userId }, { shared: true }] },
@@ -193,9 +198,6 @@ export function createAnalyticsRouter(client: Client) {
           take: 100,
         });
         return send(c, views.map((v) => ({ ...v, mine: v.userId === user.userId })));
-      }
-      if (!access.canViewDashboard || !(await canViewFeatureSection(client, guildId, access, user.userId, 'analytics'))) {
-        return send(c, { error: 'Accès à Analytics requis.' }, 403);
       }
       if (method === 'POST' && !id) {
         const body = (await readBody<Record<string, unknown>>(c)) ?? {};
@@ -486,6 +488,14 @@ export function createAnalyticsRouter(client: Client) {
     }
   });
 
+  /**
+   * La fiche d'un serveur n'a de sens que pour un serveur dont des membres d'ici portent le
+   * tag. Sans ce lien, n'importe quel identifiant servait de sonde sur les serveurs des
+   * autres (résolution externe, compteurs transversaux, recoupement de membres).
+   */
+  const isLinkedTargetGuild = async (guildId: string, targetGuildId: string): Promise<boolean> =>
+    (await prisma.memberProfile.count({ where: { guildId, primaryGuildId: targetGuildId }, take: 1 })) > 0;
+
   // GET …/analytics/servers/:targetGuildId/insights : ses porteurs chez nous,
   // le recoupement en nombre et la moderation (onglets Membres et Moderation de la fiche)
   router.get(`${base}/analytics/servers/:targetGuildId/insights`, ...gate, async (c) => {
@@ -495,6 +505,9 @@ export function createAnalyticsRouter(client: Client) {
       return send(c, { error: 'Identifiant de serveur invalide.' }, 400);
     }
     try {
+      if (!(await isLinkedTargetGuild(guildId, targetGuildId))) {
+        return send(c, { error: 'Serveur introuvable pour ce tag.' }, 404);
+      }
       const { getServerMemberInsights } = await import('../../../services/analytics/serverMemberInsightsService.js');
       return send(c, await cache.wrap(`guild:${guildId}:analytics:server-insights:${targetGuildId}`, 120, () =>
         getServerMemberInsights(client, guildId, targetGuildId)));
@@ -512,6 +525,9 @@ export function createAnalyticsRouter(client: Client) {
       return send(c, { error: 'Identifiant de serveur invalide.' }, 400);
     }
     try {
+      if (!(await isLinkedTargetGuild(guildId, targetGuildId))) {
+        return send(c, { error: 'Serveur introuvable pour ce tag.' }, 404);
+      }
       const { getServerDetails } = await import('../../../services/analytics/serverTagAnalyticsService.js');
       return send(c, await cache.wrap(`guild:${guildId}:analytics:server-detail:${targetGuildId}`, 120, () =>
           getServerDetails(client, guildId, targetGuildId),

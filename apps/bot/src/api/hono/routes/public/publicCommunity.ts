@@ -17,7 +17,7 @@ import { isModuleEnabled } from '../../../../services/core/moduleGate.js';
 import { getMemberIdentities, resolveMemberAvatarUrl } from '../../../../services/moderation/memberIdentityService.js';
 import { getGuildLadder } from '../../../../services/progression/ranked/rankedConfigService.js';
 import { getRankedLeaderboard } from '../../../../services/progression/ranked/rankedLeaderboardService.js';
-import { resolveDashboardAccess } from '../../../shared.js';
+import { resolveDashboardAccess, resolveMemberFeatureAccess } from '../../../shared.js';
 import { SNOWFLAKE, authOf, fail, headersOf, readBody, send, underLimit } from './kit.js';
 
 /**
@@ -501,7 +501,14 @@ export function createPublicCommunityRouter(client: Client): Hono {
 
       // Le staff du serveur voit toutes les transcriptions.
       const access = await resolveDashboardAccess(client, transcript.guildId, auth.userId).catch(() => null);
-      let authorized = !!access?.canViewDashboard;
+      // Même règle que les routes Tickets du dashboard : staff, et section ouverte
+      // par son rôle. Sans cela, un rôle à qui la page est interdite obtenait quand
+      // même le lien.
+      let authorized = false;
+      if (access?.canViewDashboard && (access.level === 'admin' || access.level === 'moderator')) {
+        const featureAccess = await resolveMemberFeatureAccess(client, transcript.guildId, access, auth.userId).catch(() => null);
+        authorized = !!featureAccess?.tickets?.canView;
+      }
 
       // Sinon, un participant du ticket associé (ouvreur / staff ayant claim / staff ayant fermé).
       if (!authorized) {

@@ -8,6 +8,7 @@ import crypto from 'node:crypto';
 import { notify, notifyMany } from '../notifications/notifyService.js';
 import { getClient } from '../../utils/client.js';
 import { logger } from '../../utils/logger.js';
+import { isAutoGrantableRoleId } from '../../utils/adminLockPermissions.js';
 import * as altAccountService from '../moderation/altAccountService.js';
 import { fetchAllMembers } from '../../utils/discord.js';
 import type { GuildMember } from 'discord.js';
@@ -389,7 +390,7 @@ export const syncStaffDiscordRoles = async (
     // Filter out roles that member already has / doesn't have to avoid unnecessary Discord API calls
     const currentRoleIds = discordMember.roles.cache.map(r => r.id);
     const finalRolesToRemove = rolesToRemove.filter(id => currentRoleIds.includes(id));
-    const finalRolesToAdd = rolesToAdd.filter(id => !currentRoleIds.includes(id));
+    const finalRolesToAdd = rolesToAdd.filter(id => !currentRoleIds.includes(id) && isAutoGrantableRoleId(discordMember.guild, id));
 
     if (finalRolesToRemove.length > 0) {
       await discordMember.roles.remove(finalRolesToRemove).catch(err => {

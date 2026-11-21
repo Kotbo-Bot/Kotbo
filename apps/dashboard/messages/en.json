@@ -12245,7 +12245,7 @@
   "backend_down_retry": "Retry",
   "api_ok_create_backup": "Backup created",
   "api_ok_import_backup": "Backup imported",
-  "api_ok_restore_backup": "Backup restored",
+  "api_ok_restore_backup": "Restore started: it may take several minutes",
   "api_ok_add_staff_server_role_mapping": "Role mapping added",
   "api_ok_create_channel_link_invite": "Link invitation created",
   "api_ok_create_direct_channel_link": "Channels linked",
@@ -19426,5 +19426,16 @@
   "eb_rules_title": "Banned items ({count} / {max})",
   "eb_rules_empty": "No banned emojis or stickers yet.",
   "eb_saved": "Rule saved",
-  "eb_err_save": "Could not save the rule."
+  "eb_err_save": "Could not save the rule.",
+  "abc_source_removed": "Source announcement channel removed.",
+  "abc_source_saved": "Source announcement channel saved.",
+  "abc_subscribe_all_done": "Subscription complete: {subscribed} subscribed, {already} already subscribed, {skipped} skipped, {failed} failed.",
+  "abc_subscribed": "{guild} subscribed in #{channel}.",
+  "abc_already_subscribed": "{guild} is already subscribed (#{channel}).",
+  "abc_subscribe_skipped": "{guild} skipped: {reason}",
+  "abc_subscribe_failed": "{guild}: {reason}",
+  "abc_no_compatible_channel": "no compatible channel",
+  "abc_subscribe_failed_default": "subscription failed",
+  "abc_channel_set_subscribed": "{label} (subscribed to the source channel)",
+  "abc_channel_set_not_subscribed": "{label} — could not subscribe: {reason}"
 }

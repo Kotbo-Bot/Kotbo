@@ -34,8 +34,9 @@ export function createPublicPlanningCalendarRouter(client: Client) {
     const { guildId, userId } = identity;
     try {
       // Retire du staff, ou plus au staff de ce serveur : le lien ne montre plus rien.
-      const staff = await prisma.staffMember.findFirst({ where: { guildId, userId }, select: { id: true } });
-      if (!staff) return c.text('Lien invalide', 404);
+      const staff = await prisma.staffMember.findFirst({ where: { guildId, userId }, select: { id: true, icalTokenVersion: true } });
+      // Lien révoqué (version régénérée par le membre) : comme un lien inconnu.
+      if (!staff || staff.icalTokenVersion !== identity.version) return c.text('Lien invalide', 404);
 
       const from = new Date(Date.now() - PAST_DAYS * 86400000);
       const to = new Date(Date.now() + FUTURE_DAYS * 86400000);
@@ -64,7 +65,7 @@ export function createPublicPlanningCalendarRouter(client: Client) {
             startDate: { lte: to },
             OR: [{ endDate: { gte: from } }, { isIndefinite: true }],
           },
-          select: { id: true, reason: true, type: true, startDate: true, endDate: true },
+          select: { id: true, type: true, startDate: true, endDate: true },
         }),
       ]);
 
@@ -77,8 +78,9 @@ export function createPublicPlanningCalendarRouter(client: Client) {
           start: x.startDate,
           end: x.endDate ? new Date(x.endDate.getTime() + 86400000) : null,
           allDay: true,
+          // Le motif reste dans le dashboard : un agenda externe n'a pas à le recevoir.
           summary: `Absence${x.type ? ` (${x.type})` : ''}`,
-          description: x.reason,
+          description: null,
         })),
       ];
 
