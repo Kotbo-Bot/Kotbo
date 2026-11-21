@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { DEMO_BASE } from '../lib/demo/mode';
   import { router } from 'tinro';
   import { authStore } from '../lib/stores/auth.svelte';
   import { dashboardFetch } from '../lib/api';
@@ -95,7 +96,7 @@
   const isCustomFormMode = $derived(window.location.pathname.startsWith('/forms'));
   const sectionFields = $derived((sIdx: number) => fields.filter(f => f.sectionIndex === sIdx));
   const publicUrl = $derived(
-    formId && formId !== 'new' ? `${window.location.origin}/form/${formId}` : null,
+    formId && formId !== 'new' ? `${window.location.origin}${DEMO_BASE}/form/${formId}` : null,
   );
 
   // ── Load ───────────────────────────────────────────────────────────────────

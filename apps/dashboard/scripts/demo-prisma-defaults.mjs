@@ -26,7 +26,7 @@ const sources = readdirSync(schemaDir)
   .join('\n');
 
 const enums = new Map();
-for (const match of sources.matchAll(/^enum\s+(\w+)\s*\{([^}]*)\}/gm)) {
+for (const match of sources.matchAll(/^enum\s+(\w+)\s*\{([\s\S]*?)^\}/gm)) {
   const values = match[2]
     .split('\n')
     .map((l) => l.replace(/\/\/.*$/, '').trim())
@@ -35,7 +35,9 @@ for (const match of sources.matchAll(/^enum\s+(\w+)\s*\{([^}]*)\}/gm)) {
 }
 
 const models = new Map();
-for (const match of sources.matchAll(/^model\s+(\w+)\s*\{([^}]*)\}/gm)) models.set(match[1], match[2]);
+// Jusqu'à l'accolade seule en début de ligne : un commentaire `{server}` ou un
+// `@default("{}")` ne doit pas couper le modèle en deux.
+for (const match of sources.matchAll(/^model\s+(\w+)\s*\{([\s\S]*?)^\}/gm)) models.set(match[1], match[2]);
 
 const SCALARS = new Set(['String', 'Int', 'BigInt', 'Float', 'Decimal', 'Boolean', 'DateTime', 'Json', 'Bytes']);
 

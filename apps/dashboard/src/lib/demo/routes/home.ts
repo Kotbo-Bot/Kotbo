@@ -178,7 +178,6 @@ export function registerHomeRoutes(): void {
   // n'affichait qu'un « Parcours indisponible », alors que c'est par elle que
   // l'ecran de bienvenue fait commencer.
   route('GET', '/api/dashboard/guilds/:guildId/setup', () => setupJourney());
-  route('GET', '/api/dashboard/notifications', () => ({ notifications: [], nextCursor: null, unread: 0, unreadByGuild: {} }));
   route('GET', '/api/dashboard/notifications/preferences', () => ({
     categories: NOTIFICATION_CATEGORIES.map((category) => ({ category, dashboard: true, dm: true, digest: false })),
   }));

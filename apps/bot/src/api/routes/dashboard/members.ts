@@ -254,6 +254,7 @@ export function createMembersRouter(client: Client) {
       const suspiciousMembers = suspiciousMembersRaw.filter((member) => {
         if (seenUserIds.has(member.userId)) return false;
         seenUserIds.add(member.userId);
+        return true;
       });
 
       // Confidentialité : un membre ayant coupé le suivi de sa présence

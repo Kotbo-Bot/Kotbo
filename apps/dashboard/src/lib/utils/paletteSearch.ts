@@ -139,3 +139,56 @@ export function fuzzyScore(item: SearchableItem, q: string): number {
   const best = Math.min(...candidates.map((word) => editDistance(compact, word.replace(/[\s-]+/g, ''))));
   return best <= tolerance ? 10 - best : 0;
 }
+
+// ── Recherche dans le texte des pages ───────────────────────────────────────
+
+/** Index généré par `scripts/build-search-index.mjs` : route -> mots de la page, par langue. */
+export type SearchIndex = Record<string, { fr: string; en: string }>;
+
+const wordSets = new Map<string, Set<string>>();
+
+/** Mots d'une page : l'entrée de la route la plus longue qui préfixe le chemin demandé. */
+export function pageWords(index: SearchIndex, href: string, locale: 'fr' | 'en'): Set<string> | undefined {
+  const path = href.split('?')[0].replace(/\/$/, '') || '/';
+  let best: string | null = null;
+  for (const route of Object.keys(index)) {
+    if ((path === route || path.startsWith(`${route}/`)) && (!best || route.length > best.length)) best = route;
+  }
+  if (!best) return undefined;
+  const key = `${locale}:${best}`;
+  let set = wordSets.get(key);
+  if (!set) {
+    set = new Set(index[best][locale].split(' ').filter(Boolean));
+    wordSets.set(key, set);
+  }
+  return set;
+}
+
+/**
+ * Pertinence d'une page pour des mots cherchés dans son texte : tous les mots
+ * saisis doivent y figurer (début de mot accepté), dans n'importe quel ordre,
+ * comme un moteur. Reste sous les correspondances sur le nom et les mots-clés,
+ * qui visent la page elle-même.
+ */
+export function contentScore(words: Set<string> | undefined, q: string): number {
+  if (!words || q.length < 3) return 0;
+  const tokens = q.split(/\s+/).filter((token) => token.length >= 2);
+  if (tokens.length === 0) return 0;
+  let total = 0;
+  for (const token of tokens) {
+    if (words.has(token)) {
+      total += 9;
+      continue;
+    }
+    let prefix = false;
+    for (const word of words) {
+      if (word.startsWith(token)) {
+        prefix = true;
+        break;
+      }
+    }
+    if (!prefix) return 0;
+    total += 6;
+  }
+  return Math.round(total / tokens.length);
+}
