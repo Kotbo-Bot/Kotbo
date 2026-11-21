@@ -57,7 +57,7 @@ import { roleGrantRefusal } from '../../shared/roleGrantGuard.js';
 import { createReactionRoleMenu, deleteReactionRoleMenu, updateReactionRoleMenu, getBotRoleAccess, menuMessageStatus, roleMemberCounts, normalizeEmbedColor, normalizeMenuDescription, normalizeMenuMode, MAX_REACTION_ROLE_BUTTONS, type ReactionRoleOption } from '../../../services/features/reactionRoleService.js';
 import { hasNewRoles, materializeNewRoles, previewReactionRolePreset, type ReactionRoleOptionInput } from '../../../services/features/reactionRolePresets.js';
 import { REACTION_ROLE_PRESET_KEYS, type ReactionRolePresetKey } from '@kotbo/contracts';
-import { invalidateAutoResponseCache } from '../../../services/features/autoResponseService.js';
+import { invalidateAutoResponseCacheAcrossShards } from '../../../services/features/autoResponseService.js';
 import { normalizeAnswer } from '../../../services/features/funService.js';
 import { normalizeConfessionCooldown } from '../../../services/features/confessionPolicy.js';
 import { checkRateLimit, getGuildName, pushAudit, resolveMemberFeatureAccess } from '../../shared.js';
@@ -2208,7 +2208,7 @@ export function createGeneralistModulesRouter(client: Client) {
         },
       });
 
-      invalidateAutoResponseCache(guildId);
+      await invalidateAutoResponseCacheAcrossShards(client, guildId);
       return send(c, { autoResponse });
     } catch (err) {
       logger.error('AutoResponsesAPI', 'Error creating trigger:', err);
@@ -2320,7 +2320,7 @@ export function createGeneralistModulesRouter(client: Client) {
         },
       });
 
-      invalidateAutoResponseCache(guildId);
+      await invalidateAutoResponseCacheAcrossShards(client, guildId);
       return send(c, { autoResponse });
     } catch (err) {
       logger.error('AutoResponsesAPI', 'Error updating trigger:', err);
@@ -2338,7 +2338,7 @@ export function createGeneralistModulesRouter(client: Client) {
       if (removed.count === 0) {
         return send(c, { error: 'Déclencheur introuvable' }, 404);
       }
-      invalidateAutoResponseCache(guildId);
+      await invalidateAutoResponseCacheAcrossShards(client, guildId);
       return send(c, { success: true });
     } catch (err) {
       logger.error('AutoResponsesAPI', 'Error deleting trigger:', err);

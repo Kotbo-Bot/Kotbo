@@ -1290,6 +1290,13 @@ export async function handleMCPRoutes(
       return true;
     }
 
+    // Sans session, le SDK ouvre sur GET un flux SSE qui ne se referme jamais : la requête resterait pendue.
+    if (method === 'GET') {
+      res.setHeader('Allow', 'POST, DELETE');
+      json(res, 405, { error: 'Méthode non supportée, utiliser POST' });
+      return true;
+    }
+
     const server = new McpServer({ name: 'kotbo', version: '1.0.0' });
     registerMcpTools(server, guildId, permissions, client, {
       ownerId,

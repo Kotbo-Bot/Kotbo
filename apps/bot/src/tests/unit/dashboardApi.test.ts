@@ -1170,6 +1170,22 @@ describe('Modular Routers Unit Tests', () => {
       expect(data.jsonrpc).toBe('2.0');
       expect(data.id).toBe(7);
     });
+
+    test("un GET authentifié reçoit 405 au lieu d'un flux SSE jamais refermé", async () => {
+      const token = makeMcpDirectToken('112233445566778899', 'direct-key-id');
+      mockMcpKeyService.getActiveMcpKeyById.mockImplementation(() => Promise.resolve({
+        id: 'direct-key-id',
+        guildId: '112233445566778899',
+        permissions: ['READ_STATS'],
+        isActive: true,
+      } as unknown));
+      const res = await Promise.race([
+        createMcpServerRouter(mockClient).request(`/api/mcp-direct/112233445566778899/${token}`),
+        Bun.sleep(2000).then(() => null),
+      ]);
+      expect(res?.status).toBe(405);
+      expect(res?.headers.get('allow')).toBe('POST, DELETE');
+    });
   });
 
   describe('2. Auth Routes', () => {

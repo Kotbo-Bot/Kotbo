@@ -187,6 +187,18 @@ export function invalidateAutoResponseCache(guildId: string) {
   responsesCache.delete(guildId);
 }
 
+/** Invalide le cache dans chaque shard : l'API (dashboard, MCP) écrit depuis le shard 0, les messages arrivent sur celui du serveur. */
+export async function invalidateAutoResponseCacheAcrossShards(client: Client, guildId: string): Promise<void> {
+  if (!client.shard) return invalidateAutoResponseCache(guildId);
+  // Le corps est sérialisé puis exécuté dans chaque shard : il recharge ce module par son URL.
+  await client.shard.broadcastEval(async (_c, context) => {
+    const { invalidateAutoResponseCache } = await import(context.servicePath);
+    invalidateAutoResponseCache(context.guildId);
+  }, { context: { servicePath: import.meta.url, guildId } }).catch((err: unknown) => {
+    logger.error('AutoResponseService', `Invalidation du cache de ${guildId} non propagée à tous les shards :`, err);
+  });
+}
+
 /**
  * Charge ou récupère depuis le cache les auto-réponses d'une guilde
  */
