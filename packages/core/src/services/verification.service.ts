@@ -59,8 +59,8 @@ export class VerificationService {
         {
           type: 'button',
           label: 'Vérifier mon identité',
-          style: 'link',
-          url: `${input.dashboardUrl}/verify/${input.guildId}`,
+          style: 'primary',
+          customId: `secverif_start_${input.guildId}`,
         },
       ],
     });

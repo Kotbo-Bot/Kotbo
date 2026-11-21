@@ -29,6 +29,16 @@ export const ROLES = [
   { id: '900000000000000205', name: 'Habitué', color: '#eb459e', position: 5, permissions: [] },
   { id: '900000000000000206', name: 'Membre', color: '#949ba4', position: 2, permissions: [] },
   { id: '900000000000000207', name: 'Kotbo', color: '#22d3ee', position: 11, permissions: ['Administrator'], managed: true },
+  { id: '900000000000000221', name: 'Valorant', color: '#ff4655', position: 3, permissions: [] },
+  { id: '900000000000000222', name: 'Minecraft', color: '#62b47a', position: 3, permissions: [] },
+  { id: '900000000000000223', name: 'League of Legends', color: '#c8aa6e', position: 3, permissions: [] },
+  { id: '900000000000000224', name: 'Rocket League', color: '#0082ff', position: 3, permissions: [] },
+  { id: '900000000000000225', name: 'Annonces', color: '#f0b232', position: 1, permissions: [] },
+  { id: '900000000000000226', name: 'Événements', color: '#eb459e', position: 1, permissions: [] },
+  { id: '900000000000000231', name: 'Phénix', color: '#f97316', position: 4, permissions: [] },
+  { id: '900000000000000232', name: 'Kraken', color: '#0ea5e9', position: 4, permissions: [] },
+  { id: '900000000000000233', name: 'Griffon', color: '#eab308', position: 4, permissions: [] },
+  { id: '900000000000000234', name: 'Hydre', color: '#22c55e', position: 4, permissions: [] },
 ].map((role) => ({ ...role, mention: `<@&${role.id}>`, managed: role.managed ?? false }));
 
 export const role = (name: string) => ROLES.find((r) => r.name === name)!;
@@ -222,7 +232,8 @@ export function sessionMember() {
 // ── Modules ────────────────────────────────────────────────────────────
 
 /** Modules éteints au départ : ceux qui demandent un compte externe ou une config qu'une démo n'a pas. */
-const OFF_BY_DEFAULT = new Set(['youtube', 'twitch', 'social_networks', 'codepolice', 'translation', 'staff_server', 'channel_links', 'bump_reminder', 'rich_links']);
+// Tout est allumé : la démo montre chaque module en marche, aucun bandeau « désactivé ».
+const OFF_BY_DEFAULT = new Set<string>();
 
 export function moduleStatesSeed(): Record<string, boolean> {
   return Object.fromEntries(MODULE_REGISTRY.map((m) => [m.key, m.core ? true : !OFF_BY_DEFAULT.has(m.key)]));
@@ -252,3 +263,53 @@ export function featureAccessFor(keys: string[]) {
 }
 
 export { DAY, HOUR, NOW };
+
+// ── Commandes ──────────────────────────────────────────────────────────
+
+const sub = (name: string, description: string, options: unknown[] = []) => ({ type: 1, name, description, options });
+const opt = (type: number, name: string, description: string, required = false) => ({ type, name, description, required });
+
+/** Extrait du catalogue du bot (`utils/commandAccess.ts`), avec les sous-commandes que la page affiche. */
+export const COMMAND_CATALOG = [
+  { name: 'help', label: 'Aide', description: 'Aide générale et documentation des commandes.', defaultAccess: 'tout_le_monde', category: 'Général' },
+  { name: 'ping', label: 'Ping', description: 'Vérification de la latence du bot.', defaultAccess: 'tout_le_monde', category: 'Général' },
+  { name: 'info', label: 'Infos serveur', description: "Résumé de l'état et des métriques du serveur.", defaultAccess: 'tout_le_monde', category: 'Général' },
+  { name: 'profile', label: 'Profil', description: 'Affiche le profil utilisateur et sa progression.', defaultAccess: 'tout_le_monde', category: 'Communauté', options: [opt(6, 'membre', 'Le membre à afficher')] },
+  { name: 'rank', label: 'Rang', description: 'Carte de niveau et position au classement.', defaultAccess: 'tout_le_monde', category: 'Niveaux', options: [opt(6, 'membre', 'Le membre à afficher')] },
+  { name: 'leaderboard', label: 'Classement', description: 'Classement XP du serveur.', defaultAccess: 'tout_le_monde', category: 'Niveaux' },
+  { name: 'daily', label: 'Récompense du jour', description: 'Récupère tes pièces quotidiennes.', defaultAccess: 'tout_le_monde', category: 'Économie' },
+  { name: 'boutique', label: 'Boutique', description: 'Articles en vente sur le serveur.', defaultAccess: 'tout_le_monde', category: 'Économie' },
+  { name: 'rpg', label: 'RPG', description: 'Aventure, combats et inventaire.', defaultAccess: 'tout_le_monde', category: 'Jeux', options: [sub('aventure', 'Part à l’aventure'), sub('combat', 'Affronte un monstre'), sub('inventaire', 'Ouvre ton sac')] },
+  { name: 'giveaway', label: 'Giveaways', description: 'Créer et gérer les concours.', defaultAccess: 'modération', category: 'Événements', options: [sub('start', 'Lance un giveaway', [opt(3, 'lot', 'Ce qu’on gagne', true), opt(3, 'durée', 'Durée, ex. 2j', true)]), sub('reroll', 'Retire un gagnant')] },
+  { name: 'ticket', label: 'Tickets', description: 'Ouvrir, fermer et gérer les tickets.', defaultAccess: 'tout_le_monde', category: 'Support', options: [sub('open', 'Ouvre un ticket'), sub('close', 'Ferme le ticket')] },
+  { name: 'sanction', label: 'Sanctions', description: 'Gestion des sanctions et des rapports.', defaultAccess: 'modération', category: 'Modération', options: [sub('warn', 'Avertit un membre', [opt(6, 'membre', 'Le membre', true), opt(3, 'raison', 'La raison')]), sub('timeout', 'Exclut temporairement'), sub('ban', 'Bannit un membre')] },
+  { name: 'clear', label: 'Nettoyage', description: 'Supprime des messages en masse.', defaultAccess: 'modération', category: 'Modération', options: [opt(4, 'nombre', 'Nombre de messages', true)] },
+  { name: 'lock', label: 'Verrouillage', description: 'Verrouille ou rouvre un salon.', defaultAccess: 'modération', category: 'Modération' },
+  { name: 'setup', label: 'Installation', description: 'Assistant de mise en route du serveur.', defaultAccess: 'administration', category: 'Administration' },
+  { name: 'config', label: 'Configuration', description: 'Panneau de configuration principal du bot.', defaultAccess: 'administration', category: 'Administration' },
+  { name: 'admin', label: 'Admin', description: 'Commandes administrateur du serveur.', defaultAccess: 'administration', category: 'Administration' },
+];
+
+/** Règles déjà posées : de quoi voir à quoi ressemble une commande restreinte. */
+export const COMMAND_RESTRICTIONS = [
+  { commandName: 'rpg', enabled: true, allowedChannelIds: ['900000000000000316'], blockedChannelIds: [], allowedRoleIds: [], blockedRoleIds: [], allowedUserIds: [], blockedUserIds: [] },
+  { commandName: 'clear', enabled: true, allowedChannelIds: [], blockedChannelIds: [], allowedRoleIds: ['900000000000000203'], blockedRoleIds: [], allowedUserIds: [], blockedUserIds: [] },
+  { commandName: 'excuse', enabled: false, allowedChannelIds: [], blockedChannelIds: [], allowedRoleIds: [], blockedRoleIds: [], allowedUserIds: [], blockedUserIds: [] },
+];
+
+// ── Règlement ──────────────────────────────────────────────────────────
+
+/** Articles du règlement de la démo : ce que le sélecteur « Règles enfreintes » des sanctions propose. */
+export function regulationSeed() {
+  const rule = (n: number, emoji: string, title: string, description: string) => ({
+    id: `reg-${n}`, title, description, emoji, sortOrder: n, enabled: true, createdAt: new Date(NOW - 90 * 24 * 3_600_000).toISOString(), updatedAt: new Date(NOW - 20 * 24 * 3_600_000).toISOString(),
+  });
+  return [
+    rule(1, '🤝', 'Respect', 'Pas d’insultes, de moqueries ni de harcèlement. On discute sans s’attaquer aux personnes.'),
+    rule(2, '🚫', 'Pas de publicité', 'Toute promotion (serveur, chaîne, produit) passe d’abord par le staff, en salon comme en MP.'),
+    rule(3, '💬', 'Pas de spam', 'Messages répétés, majuscules abusives et mentions de masse sont interdits.'),
+    rule(4, '🔞', 'Contenus adaptés', 'Aucun contenu choquant, violent ou NSFW, même en blague.'),
+    rule(5, '🪪', 'Pseudos lisibles', 'Ton pseudo doit rester lisible et ne pas usurper quelqu’un d’autre.'),
+    rule(6, '⚖️', 'Décisions du staff', 'Le staff a le dernier mot. Une sanction se conteste via un ticket, jamais en public.'),
+  ];
+}

@@ -298,13 +298,16 @@ export async function handleButton(interaction: Interaction, client: Client): Pr
         if (!drop) throw new Error("Ce drop n'existe plus.");
         if (drop.claimed) throw new Error('Ce drop a déjà été réclamé.');
 
-        await tx.rpgDrop.update({
-          where: { id: dropId },
+        // Réservation atomique : deux clics concurrents lisent tous deux
+        // claimed=false, seule cette écriture conditionnelle tranche.
+        const reserved = await tx.rpgDrop.updateMany({
+          where: { id: dropId, claimed: false },
           data: {
             claimed: true,
             claimedBy: user.id
           }
         });
+        if (reserved.count === 0) throw new Error('Ce drop a déjà été réclamé.');
 
         // Find or create profile:
         let userProfile = await tx.rpgProfile.findUnique({

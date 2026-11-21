@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
+  import { DEMO_BASE } from '../lib/demo/mode';
   import { m, dateLocale } from '../lib/i18n';
   import { authStore } from '../lib/stores/auth.svelte';
   import { dashboardStore } from '../lib/stores/dashboard.svelte';
@@ -494,7 +495,7 @@
   }
 
   function copyFormLink(formId: string) {
-    void navigator.clipboard.writeText(`${window.location.origin}/form/${formId}`);
+    void navigator.clipboard.writeText(`${window.location.origin}${DEMO_BASE}/form/${formId}`);
     toast.success(m.recruit_link_copied());
   }
 
@@ -776,7 +777,7 @@
               {:else}
                 <div class="flex items-center gap-2 min-w-0">
                   <dt class="sr-only">{m.recruit_copy_link_tooltip()}</dt>
-                  <dd class="truncate font-mono text-2xs">{window.location.origin}/form/{form.id}</dd>
+                  <dd class="truncate font-mono text-2xs">{window.location.origin}{DEMO_BASE}/form/{form.id}</dd>
                   <Button variant="ghost" size="sm" icon="content_copy" aria-label={m.recruit_copy_link_tooltip()} onclick={() => copyFormLink(form.id)} />
                 </div>
               {/if}

@@ -118,6 +118,27 @@ export async function publishNewsArticle(client: Client, guildId: string, articl
   });
 }
 
+/** Texte de contenu XML : les cinq caractères réservés. */
+function escapeXml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;')
+    // Les caractères de contrôle (hors tabulation et retours) sont interdits en XML 1.0.
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '');
+}
+
+/**
+ * Bloc CDATA : la séquence « ]]> » le refermerait, et ce qui suit serait lu comme du XML.
+ * On la coupe en deux blocs. Le contenu vient du staff et du nom du serveur, pas de nous.
+ */
+function cdata(value: string | null | undefined): string {
+  const text = (value ?? '').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '');
+  return `<![CDATA[${text.replace(/]]>/g, ']]]]><![CDATA[>')}]]>`;
+}
+
 export function generateRssXml(
   guildName: string,
   guildId: string,
@@ -140,18 +161,18 @@ export function generateRssXml(
 ): string {
   const xmlItems = articles.map(art => {
     const pubDate = new Date(art.publishedAt).toUTCString();
-    const link = `${dashboardUrl}/${guildId}/news`;
-    const contentEncoded = art.content ? `<![CDATA[${art.content}]]>` : '';
-    const summary = art.summary ? `<![CDATA[${art.summary}]]>` : '';
+    const link = escapeXml(`${dashboardUrl}/${guildId}/news`);
+    const contentEncoded = art.content ? cdata(art.content) : '';
+    const summary = art.summary ? cdata(art.summary) : '';
     return `    <item>
-      <title><![CDATA[${art.title}]]></title>
+      <title>${cdata(art.title)}</title>
       <link>${link}</link>
-      <guid isPermaLink="false">${art.id}</guid>
+      <guid isPermaLink="false">${escapeXml(String(art.id ?? ''))}</guid>
       <pubDate>${pubDate}</pubDate>
-      <author><![CDATA[${art.authorName}]]></author>
-      <category><![CDATA[${art.category}]]></category>
+      <author>${cdata(art.authorName)}</author>
+      <category>${cdata(art.category)}</category>
       <description>${summary || contentEncoded}</description>
-      ${art.imageUrl ? `<media:content url="${art.imageUrl}" medium="image" />` : ''}
+      ${art.imageUrl ? `<media:content url="${escapeXml(art.imageUrl)}" medium="image" />` : ''}
     </item>`;
   }).join('\n');
 
@@ -166,12 +187,12 @@ export function generateRssXml(
   return `<?xml version="1.0" encoding="UTF-8" ?>
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:media="http://search.yahoo.com/mrss/">
   <channel>
-    <title><![CDATA[Actualités - ${guildName}]]></title>
-    <link>${dashboardUrl}/${guildId}/news</link>
-    <description><![CDATA[Flux RSS des actualités et patch notes rédigés par le staff de ${guildName}]]></description>
+    <title>${cdata(`Actualités - ${guildName}`)}</title>
+    <link>${escapeXml(`${dashboardUrl}/${guildId}/news`)}</link>
+    <description>${cdata(`Flux RSS des actualités et patch notes rédigés par le staff de ${guildName}`)}</description>
     <language>fr</language>
     <lastBuildDate>${new Date().toUTCString()}</lastBuildDate>
-    <atom:link href="${selfLink}" rel="self" type="application/rss+xml" />
+    <atom:link href="${escapeXml(selfLink)}" rel="self" type="application/rss+xml" />
 ${xmlItems}
   </channel>
 </rss>`;

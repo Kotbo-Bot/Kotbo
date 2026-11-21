@@ -4,7 +4,7 @@ import type { Prisma } from '@prisma/client';
 import prisma from '../../../../utils/db.js';
 import { logger } from '../../../../utils/logger.js';
 import { auditUserOf, fail, guildRoute, readBody, send } from '../../../hono/dashboard/kit.js';
-import { canViewFeatureSection } from '../featureGate.js';
+import { canViewFeatureSection, getCachedFeatureAccess } from '../featureGate.js';
 import { getPlanningExtras } from '../../../../services/staff/planningExtrasService.js';
 import { signIcalToken } from '../../../../services/staff/planningIcal.js';
 import { getJwtSecret } from '../../../shared/core.js';
@@ -152,7 +152,23 @@ export function createAbsencesRouter(client: Client) {
     if (!staffMember) {
       return send(c, { error: "Tu ne fais pas partie de l'équipe staff de ce serveur." }, 403);
     }
-    return send(c, { path: `/api/public/planning/${signIcalToken(guildId, user.userId, getJwtSecret())}.ics` });
+    return send(c, { path: `/api/public/planning/${signIcalToken(guildId, user.userId, getJwtSecret(), staffMember.icalTokenVersion)}.ics` });
+  });
+
+  // Révoque les liens iCal déjà distribués et en renvoie un nouveau.
+  router.post(`${base}/absences/ical-link/regenerate`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const staffMember = await getStaffMember(guildId, user.userId);
+    if (!staffMember) {
+      return send(c, { error: "Tu ne fais pas partie de l'équipe staff de ce serveur." }, 403);
+    }
+    const updated = await prisma.staffMember.update({
+      where: { id: staffMember.id },
+      data: { icalTokenVersion: { increment: 1 } },
+      select: { icalTokenVersion: true },
+    });
+    return send(c, { path: `/api/public/planning/${signIcalToken(guildId, user.userId, getJwtSecret(), updated.icalTokenVersion)}.ics` });
   });
 
   // A qui l'utilisateur connecte peut declarer son absence.
@@ -339,9 +355,19 @@ export function createAbsencesRouter(client: Client) {
   router.patch(`${base}/absences/:absenceId`, ...gate, async (c) => {
     const guildId = c.req.param('guildId');
     const user = c.var.dashboardUser;
+    const access = c.var.effectiveAccess;
     const auditUser = auditUserOf(c);
     const absenceId = c.req.param('absenceId');
     try {
+      // La garde globale laisse passer ce PATCH sans élever les droits : décider
+      // demande « Modérer » ou « Configurer » sur Absences, comme au centre de gestion.
+      if (!access.canManageSettings) {
+        const { absences } = await getCachedFeatureAccess(client, guildId, access, user.userId);
+        if (!absences?.canModerate && !absences?.canConfigure) {
+          return send(c, { error: "Accès refusé. Décision d'absence non autorisée." }, 403);
+        }
+      }
+
       const body = await readBody<{
         status: 'ACKNOWLEDGED' | 'APPROVED' | 'REJECTED' | 'CANCELED' | 'ENDED';
         note?: string;

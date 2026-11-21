@@ -5,6 +5,7 @@ import { logger } from '../../utils/logger.js';
 import { LinkedAccountType, LinkedAccountStatus } from '@prisma/client';
 import * as altAccountService from './altAccountService.js';
 import { computeCrossServerLinkSignals } from './crossServerLinkService.js';
+import { getSharingSiblingGuildIds } from './crossServerSanctionService.js';
 import { notifyMany } from '../notifications/notifyService.js';
 import { fetchAllMembers } from '../../utils/discord.js';
 import { memberProfileIdentity } from './memberIdentityService.js';
@@ -595,20 +596,27 @@ export async function analyzeMemberJoin(member: GuildMember, joinInvite?: JoinIn
 
   // ── Signal N7 : Vérification OAuth croisée (même IP, autre serveur) ───────
   // Cherche dans les vérifications OAuth d'autres guildes si la même IP a été liée à un DC
-  const existingVerif = await prisma.securityVerification.findFirst({
-    where: {
-      userId,
-      status: 'VERIFIED',
-      ipAddress: { not: null }
-    },
-    select: { ipAddress: true },
-    orderBy: { createdAt: 'desc' }
-  });
+  // Mêmes règles de confidentialité que le casier et les liens cross-serveur : seuls les
+  // serveurs de la même instance qui partagent (réciproquement) sont consultés. `null` =
+  // le serveur courant ne partage pas, il ne voit donc rien des autres.
+  const siblingGuildIds = await getSharingSiblingGuildIds(guildId).catch(() => null);
+  const existingVerif = siblingGuildIds && siblingGuildIds.length > 0
+    ? await prisma.securityVerification.findFirst({
+        where: {
+          userId,
+          guildId: { in: [guildId, ...siblingGuildIds] },
+          status: 'VERIFIED',
+          ipAddress: { not: null }
+        },
+        select: { ipAddress: true },
+        orderBy: { createdAt: 'desc' }
+      })
+    : null;
 
-  if (existingVerif?.ipAddress) {
+  if (existingVerif?.ipAddress && siblingGuildIds) {
     const crossServerDuplicate = await prisma.securityVerification.findFirst({
       where: {
-        guildId: { not: guildId },
+        guildId: { in: siblingGuildIds },
         ipAddress: existingVerif.ipAddress,
         userId: { not: userId },
         duplicateDetected: true

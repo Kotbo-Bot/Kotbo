@@ -249,7 +249,8 @@ export async function releaseJail(
 /** Lève les quarantaines arrivées à échéance. Appelé par le planificateur des sanctions. */
 export async function processJailReleases(client: Client): Promise<void> {
   const due = await prisma.memberJail.findMany({
-    where: { releaseAt: { lte: new Date() } },
+    // Ce shard seul : les lignes de serveurs quittés, en tête du tri, bloqueraient le lot.
+    where: { releaseAt: { lte: new Date() }, guildId: { in: [...client.guilds.cache.keys()] } },
     orderBy: { releaseAt: 'asc' },
     take: 50,
   });

@@ -59,10 +59,10 @@ export function toTone(type: string): NotificationTone {
 
 // ── Ouverture d'une notification ─────────────────────────────────────────────
 
-let openedHandler: ((id: string) => void) | null = null;
+let openedHandler: ((id: string) => Promise<void> | undefined) | null = null;
 
 /** Le magasin des notifications s'y branche pour marquer comme lue. */
-export function onNotificationOpened(handler: (id: string) => void): void {
+export function onNotificationOpened(handler: (id: string) => Promise<void> | undefined): void {
   openedHandler = handler;
 }
 
@@ -72,11 +72,18 @@ function internalLink(link: string | null | undefined): string | null {
   return link;
 }
 
-function openNotification(id: string | null, link: string | null | undefined): void {
+async function openNotification(id: string | null, link: string | null | undefined): Promise<void> {
   if (typeof window !== 'undefined') window.focus();
+  const read = id && openedHandler ? openedHandler(id) : undefined;
   const target = internalLink(link);
-  if (target) router.goto(target);
-  if (id && openedHandler) openedHandler(id);
+  if (!target) return;
+  // Un lien qui porte `?guild=` vise un autre serveur, que guildFromUrl ne relit
+  // qu'au chargement : router.goto (SPA) garderait le serveur courant. Le
+  // rechargement couperait la requête de lecture : on attend qu'elle aboutisse.
+  if (/[?&]guild=/.test(target)) {
+    await read;
+    window.location.assign(target);
+  } else router.goto(target);
 }
 
 // ── Permission ───────────────────────────────────────────────────────────────
@@ -180,7 +187,7 @@ async function showSystemNotification(
     const notification = new Notification(item.title, options);
     notification.onclick = () => {
       notification.close();
-      openNotification(item.id, item.link);
+      void openNotification(item.id, item.link);
     };
     return true;
   } catch {
@@ -301,7 +308,7 @@ if (typeof window !== 'undefined') {
     container.addEventListener('message', (event: MessageEvent) => {
       const data = event.data;
       if (!data || data.type !== 'KOTBO_NOTIFICATION_OPEN') return;
-      openNotification(typeof data.id === 'string' ? data.id : null, typeof data.link === 'string' ? data.link : null);
+      void openNotification(typeof data.id === 'string' ? data.id : null, typeof data.link === 'string' ? data.link : null);
     });
     container.startMessages?.();
   }

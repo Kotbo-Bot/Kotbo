@@ -346,17 +346,25 @@ export const startDashboardApi = async (client: Client) => {
           return;
         }
         if (data.type !== 'analytics_live_subscribe' || live.has(guildId) || live.size >= LIVE_SUBSCRIPTIONS_MAX) return;
+        // Réservée et comptée avant l'attente des droits : un doublon est ignoré,
+        // et un désabonnement ou un `close` survenus entre-temps la décomptent.
+        live.add(guildId);
+        addLiveSubscriber(guildId);
+        const release = () => {
+          if (live.delete(guildId)) removeLiveSubscriber(guildId);
+        };
         try {
           const access = await resolveDashboardAccess(client, guildId, ws.data.userId);
           if (!access.canViewDashboard || !(await canViewFeatureSection(client, guildId, access, ws.data.userId, 'analytics'))) {
+            release();
             ws.send(JSON.stringify({ type: 'analytics_live_denied', guildId }));
             return;
           }
-          live.add(guildId);
+          if (!live.has(guildId)) return;
           ws.subscribe(liveTopic(guildId));
-          addLiveSubscriber(guildId);
           ws.send(JSON.stringify(liveSnapshot(client, guildId)));
         } catch (err) {
+          release();
           logger.warn('DashboardWS', `Abonnement live refusé pour ${guildId} :`, err);
         }
       },

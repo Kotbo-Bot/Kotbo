@@ -20,7 +20,7 @@ import { isGuildActivated } from '../../../utils/activation.js';
 import { isModuleEnabled } from '../../../services/core/moduleGate.js';
 import { trackDashboardVisit } from '../../../services/analytics/ghostActivityTracker.js';
 import { recordAdminAudit } from '../../../services/system/adminAuditService.js';
-import { featureKeysForSegment, getCachedFeatureAccess, isModuleUngatedSubroute, sharedModulesForSegment } from './featureGate.js';
+import { featureKeysForSegment, getCachedFeatureAccess, isModuleUngatedSubroute, sharedModulesForSegment, writeFeatureKeysForSegment } from './featureGate.js';
 
 export const READ_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
@@ -200,10 +200,12 @@ export async function evaluateGuildGate(
   }
 
   // Gating check for write actions
-  const isSanctionAction = (parts.length === 6 || parts.length === 7)
-    && parts[4] === 'sanctions'
-    && parts[5] === 'reports'
-    && (method === 'POST' || method === 'PATCH');
+  const isSanctionAction = parts[4] === 'sanctions'
+    && (
+      ((parts.length === 6 || parts.length === 7) && parts[5] === 'reports' && (method === 'POST' || method === 'PATCH'))
+      // Pièces de preuve : téléversement et suppression, revérifiés dans sanctions.ts.
+      || (parts[5] === 'evidence-files' && ((method === 'POST' && parts.length === 6) || (method === 'DELETE' && parts.length === 7)))
+    );
 
   const isStaffAbsenceAction = parts.length === 5
     && parts[4] === 'absences'
@@ -295,6 +297,39 @@ export async function evaluateGuildGate(
     && (parts[5] === 'annotations' || parts[5] === 'views')
     && (method === 'POST' || method === 'DELETE');
 
+  // Trancher un appel de ban, demander des informations ou statuer sur une
+  // sanction contestée revient aussi aux modérateurs : appealsAccess
+  // (banAppeals.ts) revérifie le droit exact juste après cette garde.
+  const isBanAppealModerationAction = parts[4] === 'appeals'
+    && method === 'POST'
+    && (
+      (parts.length === 7 && (parts[6] === 'decide' || parts[6] === 'request-info'))
+      || (parts.length === 8 && parts[6] === 'items')
+    );
+
+  // Décider d'une absence (PATCH) ou supprimer la sienne (DELETE) : gestes du
+  // staff, dont absences.ts revérifie le droit exact.
+  const isStaffAbsenceItemAction = parts.length === 6
+    && parts[4] === 'absences'
+    && (method === 'PATCH' || method === 'DELETE');
+
+  // Planifier un appel est ouvert au staff que la configuration des appels
+  // autorise. canUserCreateCall, revérifié dans calls.ts, tranche le droit exact.
+  const isCallCreationAction = parts.length === 5
+    && parts[4] === 'calls'
+    && method === 'POST';
+
+  // Préférences du lecteur (thème, disposition, préréglages) : chaque route
+  // n'écrit que les lignes de la personne qui la demande.
+  const isPersonalPreferenceAction = parts[4] === 'user-settings' || parts[4] === 'layout-presets';
+
+  // Widget de profil : ces gestes ne touchent que la ligne de l'appelant.
+  // `refresh-all`, qui pousse les widgets de tout le staff, reste aux administrateurs.
+  const isOwnWidgetAction = parts.length === 6
+    && parts[4] === 'widget'
+    && ['activate', 'deactivate', 'refresh', 'rotate-token'].includes(parts[5] ?? '')
+    && method === 'POST';
+
   /**
    * Droits « Configurer » et « Supprimer » du centre de gestion.
    *
@@ -315,7 +350,7 @@ export async function evaluateGuildGate(
    * sans ouvrir l'effacement.
    */
   const writeFeatureKeys = method !== 'GET' && !access.canManageSettings
-    ? featureKeysForSegment(parts[4], parts[5])
+    ? writeFeatureKeysForSegment(method, parts[4], parts[5])
     : undefined;
 
   let hasFeatureWriteRight = false;
@@ -341,7 +376,7 @@ export async function evaluateGuildGate(
     ? { ...access, canManageSettings: true }
     : access;
 
-  if (!access.canManageSettings && method !== 'GET' && !hasFeatureWriteRight && !isSanctionAction && !isStaffAbsenceAction && !isStaffResignationAction && !isNotificationAction && !isMeetingAction && !isNewsAction && !isMemberModerationAction && !isGiveawayManagerAction && !isAnalyticsAnnotationAction && !isAegisReviewAction && !isDoingListAction && !isTutoringAction && !isSuggestionDecisionAction && !isStarboardModerationAction) {
+  if (!access.canManageSettings && method !== 'GET' && !hasFeatureWriteRight && !isSanctionAction && !isStaffAbsenceAction && !isStaffResignationAction && !isNotificationAction && !isMeetingAction && !isNewsAction && !isMemberModerationAction && !isGiveawayManagerAction && !isAnalyticsAnnotationAction && !isAegisReviewAction && !isDoingListAction && !isTutoringAction && !isSuggestionDecisionAction && !isStarboardModerationAction && !isBanAppealModerationAction && !isStaffAbsenceItemAction && !isCallCreationAction && !isPersonalPreferenceAction && !isOwnWidgetAction) {
     return deny(403, { error: 'Action réservée aux administrateurs du dashboard.' });
   }
 

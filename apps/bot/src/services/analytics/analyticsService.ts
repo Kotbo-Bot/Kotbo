@@ -184,18 +184,12 @@ const CHANNEL_DAILY_TARGET: BulkTarget = {
     { name: 'dateKey', type: 'text' },
   ],
   counterColumns: CHANNEL_DAILY_COUNTERS,
-  // `uniqueAuthors` est un décompte du jour, pas un delta : il s'écrase.
+  // `uniqueAuthors` est un décompte du jour, pas un delta : le plus grand l'emporte.
   overwriteColumns: ['uniqueAuthors'],
+  maxOverwriteColumns: ['uniqueAuthors'],
 };
 
 async function flushChannelDailyStats(): Promise<void> {
-  const currentDateKey = getDateKey();
-  for (const key of channelDailyAuthors.keys()) {
-    if (!key.endsWith(currentDateKey)) {
-      channelDailyAuthors.delete(key);
-    }
-  }
-
   const entries = [...channelDailyStatsBuffer.entries()];
   channelDailyStatsBuffer.clear();
 
@@ -215,6 +209,14 @@ async function flushChannelDailyStats(): Promise<void> {
   }
 
   await flushBulk(CHANNEL_DAILY_TARGET, rows);
+
+  // Après le flush : les entrées de la veille encore en tampon lisent leur Set.
+  const todayKey = getDateKey();
+  for (const key of channelDailyAuthors.keys()) {
+    if (!key.endsWith(todayKey)) {
+      channelDailyAuthors.delete(key);
+    }
+  }
 }
 
 const MEMBER_DAILY_COUNTERS = [

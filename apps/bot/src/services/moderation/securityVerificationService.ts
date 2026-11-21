@@ -11,6 +11,7 @@ import {
 import crypto from 'node:crypto';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
+import { isAutoGrantableRoleId } from '../../utils/adminLockPermissions.js';
 import { LinkedAccountType, LinkedAccountStatus, VerificationStatus, VerificationLevel } from '@prisma/client';
 import * as altAccountService from './altAccountService.js';
 import { notifyMany } from '../notifications/notifyService.js';
@@ -428,37 +429,18 @@ export async function completeVerification(params: {
       },
     });
 
-    const action = guildConfig?.verificationAction || 'NOTIFY_STAFF';
+    // Jamais de liaison automatique sur une discordance de compte. Le lien de
+    // vérification a pu être transmis à un tiers (hameçonnage, « clique pour
+    // vérifier ») : le compte connecté n'est alors pas un double compte de
+    // l'expéditeur. Le staff tranche, avec la preuve en main.
+    await notifyStaffOfDuplicate(client, verification.guildId, verification.userId, verifiedDiscordId, evidence, guildConfig?.verificationLogChannelId || guildConfig?.logChannelId, false);
 
-    if (action === 'AUTO_LINK') {
-      await altAccountService.linkAccounts({
-        guildId: verification.guildId,
-        user1Id: verification.userId,
-        user2Id: verifiedDiscordId,
-        type: LinkedAccountType.AUTOMATIC,
-        status: LinkedAccountStatus.VALIDATED,
-        reason: 'Détecté automatiquement via vérification de sécurité (OAuth mismatch).',
-        metadata: evidence,
-      });
-
-      await notifyStaffOfDuplicate(client, verification.guildId, verification.userId, verifiedDiscordId, evidence, guildConfig?.verificationLogChannelId || guildConfig?.logChannelId, true);
-
-      return {
-        success: true,
-        message: 'Double compte détecté et lié automatiquement.',
-        duplicateDetected: true,
-        duplicateUserId: verifiedDiscordId,
-      };
-    } else {
-      await notifyStaffOfDuplicate(client, verification.guildId, verification.userId, verifiedDiscordId, evidence, guildConfig?.verificationLogChannelId || guildConfig?.logChannelId, false);
-
-      return {
-        success: true,
-        message: 'Double compte détecté. Les modérateurs ont été notifiés.',
-        duplicateDetected: true,
-        duplicateUserId: verifiedDiscordId,
-      };
-    }
+    return {
+      success: true,
+      message: 'Compte différent de celui attendu. Les modérateurs ont été notifiés.',
+      duplicateDetected: true,
+      duplicateUserId: verifiedDiscordId,
+    };
   }
 
   // Same user - check IP for other verifications on the same guild (only if IP saving is enabled)
@@ -614,7 +596,7 @@ export async function completeVerification(params: {
         }
 
         // Grant role
-        if (guildConfig?.verificationRoleId && !duplicateDetected) {
+        if (guildConfig?.verificationRoleId && !duplicateDetected && isAutoGrantableRoleId(member.guild, guildConfig.verificationRoleId)) {
           await member.roles.add(guildConfig.verificationRoleId).catch(() => null);
         }
       }
@@ -778,7 +760,7 @@ export async function handleVerificationStaffAction(interaction: Interaction): P
       const guild = interaction.guild;
       if (guild) {
         const member = await guild.members.fetch(userId1).catch(() => null);
-        if (member) {
+        if (member && isAutoGrantableRoleId(guild, guildConfig.verificationRoleId)) {
           await member.roles.add(guildConfig.verificationRoleId).catch(() => null);
         }
       }

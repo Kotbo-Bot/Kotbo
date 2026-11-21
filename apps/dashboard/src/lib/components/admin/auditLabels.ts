@@ -76,6 +76,8 @@ export const AUDIT_ACTIONS: Record<string, string> = {
   'whitelabel.unbind_guild': 'Serveur détaché d’un bot personnalisé',
   'instance.ban': 'Instance bannie',
   'instance.unban': 'Instance débannie',
+  'instance.authorize': 'Instance autorisée',
+  'instance.revoke': 'Autorisation d\'instance révoquée',
   'gdpr.delete_reviews': 'Avis supprimés (RGPD)',
   'gdpr.preview': 'Aperçu d’export RGPD',
   'gdpr.export': 'Export RGPD généré',

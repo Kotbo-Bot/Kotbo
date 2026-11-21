@@ -23,7 +23,7 @@ import { resolveGuildLocale, type BotLocale } from '../../utils/i18n.js';
 import * as m from '../../lib/paraglide/messages.js';
 import { isGuildActivated } from '../../utils/activation.js';
 import { isAnalyticsCollectionEnabled } from './analyticsConsent.js';
-import { liveSnapshot } from './analyticsLiveService.js';
+import { peekChannelCount, isLiveWindowWarm } from './analyticsLiveService.js';
 
 export const ALERT_METRICS = ['messages', 'voiceMinutes', 'activeMembers', 'joins', 'leaves', 'netJoins', 'sanctions', 'channelRate', 'unansweredRate', 'pulseScore'] as const;
 export const ALERT_CONDITIONS = ['drop_pct', 'rise_pct', 'above', 'below'] as const;
@@ -148,7 +148,7 @@ async function pulseScoreReading(guildId: string, window: AlertWindow, now: numb
   return { value: byKey.get(keyOf(now - DAY_MS))!, baseline: mean(2, 8) };
 }
 
-async function readMetric(client: Client, rule: { guildId: string; metric: string; window: string; channelId: string | null }, now: number): Promise<Reading | null | undefined> {
+async function readMetric(_client: Client, rule: { guildId: string; metric: string; window: string; channelId: string | null }, now: number): Promise<Reading | null | undefined> {
   const metric = rule.metric as AlertMetric;
   const window = rule.window as AlertWindow;
 
@@ -156,8 +156,10 @@ async function readMetric(client: Client, rule: { guildId: string; metric: strin
 
   if (metric === 'channelRate') {
     if (!rule.channelId) return null;
-    const snapshot = liveSnapshot(client, rule.guildId, now);
-    const inWindow = snapshot.channels.find((c) => c.channelId === rule.channelId)?.messages ?? 0;
+    // Fenêtre pas encore remplie depuis le démarrage : tout salon lirait 0, la
+    // période reste à évaluer.
+    if (!isLiveWindowWarm(now)) return undefined;
+    const inWindow = peekChannelCount(rule.guildId, rule.channelId, now);
     return { value: inWindow * 2, baseline: null };
   }
 

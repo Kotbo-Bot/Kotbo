@@ -12,6 +12,7 @@ import { setDashboardModuleStatus } from '../../../services/core/moduleActivatio
 import { fail, guildRoute, readBody, send } from '../../hono/dashboard/kit.js';
 import { BET_ACCEPT_WINDOW_HOURS_MAX, BET_ACCEPT_WINDOW_HOURS_MIN, BET_DEBT_CEILING, BET_OPEN_PER_MEMBER_CEILING, BET_PARTICIPANTS_CEILING, BET_PARTICIPANTS_MIN, BET_SEASON_REWARD_CEILING, BET_SIDES_CEILING, BET_SIDES_MIN, BET_STAKE_MODES, CLAN_BET_SETTINGS_SELECT, MAX_CLAN_POINTS_PER_LEVEL_UP, MIN_CLAN_REFERENCE_LEVEL, errorMessage, firmDebtOf, normalizeClanBetSettings, type BetStakeMode } from '@kotbo/shared';
 import { publicErrorMessage } from '../../../utils/publicError.js';
+import { getCachedFeatureAccess } from './featureGate.js';
 
 /** Garde-fou sur les ajustements manuels : au-delà, c'est une faute de frappe. */
 const MAX_MANUAL_POINTS = 1_000_000;
@@ -33,6 +34,8 @@ const RESERVED_SUBACTIONS = new Set([
   'rollback-season',
   'bets',
 ]);
+
+const LEVELING_CLAN_FIELDS = new Set(['clanRewardXpBoost', 'clanRewardXpBoostRate']);
 
 export function createClansRouter(client: Client) {
   const router = new Hono();
@@ -182,6 +185,12 @@ export function createClansRouter(client: Client) {
         betRewardTop2?: number;
         betRewardTop3?: number;
       }>(c);
+      // Sans droit Clans, la page Niveaux ne règle que le bonus d'XP du clan vainqueur.
+      const access = c.var.access;
+      if (!access.canManageSettings && Object.keys(body ?? {}).some((key) => !LEVELING_CLAN_FIELDS.has(key))) {
+        const rights = await getCachedFeatureAccess(client, guildId, access, user.userId);
+        if (rights.clans?.canConfigure !== true) return send(c, { error: 'Accès refusé', code: 'feature_denied', featureKey: 'clans' }, 403);
+      }
 
       const updateData: Record<string, any> = {};
       if (body?.clanAutoAssignOnJoin !== undefined) updateData.clanAutoAssignOnJoin = body.clanAutoAssignOnJoin;

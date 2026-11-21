@@ -95,6 +95,9 @@ const MESSAGE_SNAPSHOT_TTL_MS = 2 * 60 * 60 * 1000;
 const MESSAGE_SNAPSHOT_MAX_SIZE = Number.parseInt(process.env.MESSAGE_SNAPSHOT_MAX_SIZE ?? '30000', 10);
 const AUDIT_LOOKBACK_MS = 12_000;
 const MAX_BULK_AUTHOR_PREVIEW = 8;
+// Un champ d'embed s'arrête à 1024 caractères et une mention de rôle en compte
+// jusqu'à 24 : au-delà de ce nombre, les deux listes ne tiendraient plus.
+const MAX_ROLE_MENTIONS_PREVIEW = 15;
 const advancedLogsRegisteredClients = new WeakSet<Client>();
 
 function getDateKey(date = new Date()): string {
@@ -878,7 +881,8 @@ function buildChannelEventEmbed(title: string, color: number, channel: GuildBase
     .setTitle(title)
     .addFields(
       { name: 'Salon', value: formatChannelName(channel), inline: false },
-      { name: 'Détails', value: details, inline: false },
+      // EmbedBuilder lève une exception au-delà de 1024 caractères.
+      { name: 'Détails', value: truncate(details, 1024), inline: false },
     )
     .setTimestamp();
 }
@@ -922,10 +926,14 @@ function summarizeMemberRoleChanges(oldMember: GuildMember, newMember: GuildMemb
 
   if (added.length === 0 && removed.length === 0) return null;
 
-  const addedText = added.length > 0 ? added.map((role) => `<@&${role.id}>`).join(', ') : 'Aucun';
-  const removedText = removed.length > 0 ? removed.map((role) => `<@&${role.id}>`).join(', ') : 'Aucun';
+  return `Rôles ajoutés: ${formatRoleMentions(added)}\nRôles retirés: ${formatRoleMentions(removed)}`;
+}
 
-  return `Rôles ajoutés: ${addedText}\nRôles retirés: ${removedText}`;
+function formatRoleMentions(roles: Role[]): string {
+  if (roles.length === 0) return 'Aucun';
+  const shown = roles.slice(0, MAX_ROLE_MENTIONS_PREVIEW).map((role) => `<@&${role.id}>`).join(', ');
+  const hidden = roles.length - MAX_ROLE_MENTIONS_PREVIEW;
+  return hidden > 0 ? `${shown}, … et ${hidden} autre${hidden > 1 ? 's' : ''}` : shown;
 }
 
 function buildModerationEmbed(
@@ -1491,7 +1499,9 @@ export function registerAdvancedLogsListener(client: Client): void {
     }
 
     if ('topic' in oldChannel && 'topic' in newChannel && oldChannel.topic !== newChannel.topic) {
-      details.push(`Sujet: ${(oldChannel.topic ?? 'Aucun')} -> ${(newChannel.topic ?? 'Aucun')}`);
+      // Un sujet va jusqu'à 1024 caractères (4096 pour un forum) : on borne
+      // chacun pour que l'ancien et le nouveau tiennent ensemble dans le champ.
+      details.push(`Sujet: ${truncate(oldChannel.topic ?? 'Aucun', 350)} -> ${truncate(newChannel.topic ?? 'Aucun', 350)}`);
     }
 
     if ('nsfw' in oldChannel && 'nsfw' in newChannel && oldChannel.nsfw !== newChannel.nsfw) {

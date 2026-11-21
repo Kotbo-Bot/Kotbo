@@ -38,6 +38,7 @@ import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { getDashboardOrigin } from '../../api/shared/core.js';
 import { checkoutConsent, getStripe } from './stripeService.js';
+import { LIVE_STATUSES } from './entitlingStatuses.js';
 import { getGuildPlan, setGuildPlan } from '../system/planService.js';
 import { extendAccess, getAccessStatus } from '../system/accessService.js';
 import { activateGuild, isGuildActivated } from '../../utils/activation.js';
@@ -481,9 +482,10 @@ export async function redeemGiftCode(
 
   const guild = await prisma.guild.findUnique({
     where: { id: guildId },
-    select: { stripeSubscriptionId: true },
+    select: { stripeSubscriptionStatus: true },
   });
-  if (guild?.stripeSubscriptionId) return { ok: false, reason: 'guild_has_subscription' };
+  // Un abonnement encore vivant, même impayé, réécrit l'offre à chacun de ses webhooks : il effacerait le cadeau.
+  if (LIVE_STATUSES.has(guild?.stripeSubscriptionStatus ?? '')) return { ok: false, reason: 'guild_has_subscription' };
 
   const plan = normalizePlanKey(gift.plan);
   const requiredPlan = planForMemberCount(memberCount);
