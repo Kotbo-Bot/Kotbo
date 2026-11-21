@@ -26,6 +26,8 @@ import { registerCommunityRoutes } from './community';
 import { registerPlanningRoutes } from './planning';
 import { registerToolsRoutes } from './tools';
 import { registerChannelsRoutes } from './channels';
+import { registerWebhookRoutes } from './webhooks';
+import { registerTutoringRoutes } from './tutoring';
 
 export function registerDemoRoutes(): void {
   // Avant les routes Analytics historiques : la première route qui correspond gagne.
@@ -37,6 +39,8 @@ export function registerDemoRoutes(): void {
   registerPlanningRoutes();
   registerToolsRoutes();
   registerChannelsRoutes();
+  registerWebhookRoutes();
+  registerTutoringRoutes();
   registerSessionRoutes();
   registerHomeRoutes();
   registerTelemetryRoutes();
