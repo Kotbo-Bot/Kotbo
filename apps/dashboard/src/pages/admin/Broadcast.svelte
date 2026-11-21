@@ -69,17 +69,10 @@
   let thumbnailUrl = $state('');
   let imageUrl = $state('');
   let footerText = $state("Système d'annonce globale Kotbo");
-  // Variante anglaise : envoyée aux serveurs configurés en anglais (vide = texte français pour tous).
-  let enTitle = $state('');
-  let enMessage = $state('');
-  let enFooter = $state('');
-  let target = $state<'ALL' | 'ACTIVATED' | 'CUSTOM'>('ALL');
-  let channelPref = $state<'AUTO' | 'NEWS' | 'PUBLIC' | 'STAFF' | 'FALLBACK'>('AUTO');
-  let selectedGuilds = $state<string[]>([]);
   let scheduleEnabled = $state(false);
   let scheduledAt = $state('');
   let pollEnabled = $state(false);
-  let pollOptions = $state(['', '']);
+  let pollOptions = $state<string[]>(['', '']);
   let pollClosesAt = $state('');
   let feedbackEnabled = $state(false);
   let feedbackLabel = $state('Donner mon avis');
@@ -102,7 +95,6 @@
   });
   let templates = $state<BroadcastTemplate[]>([]);
 
-  let guildSearch = $state('');
   let channelSearch = $state('');
   let channelFilter = $state('TODO');
   let savingChannel = $state<string | null>(null);
@@ -147,31 +139,14 @@
   ];
 
   // ── Dérivés ───────────────────────────────────────────────────────────────
-  const filteredGuilds = $derived(
-    guilds.filter((g) =>
-      g.name.toLowerCase().includes(guildSearch.toLowerCase()) || g.id.includes(guildSearch),
-    ),
-  );
-
-  const targetedGuilds = $derived(
-    target === 'ALL' ? guilds
-      : target === 'ACTIVATED' ? guilds.filter((g) => g.activated)
-        : guilds.filter((g) => selectedGuilds.includes(g.id)),
-  );
-
-  const targetedUnconfigured = $derived(targetedGuilds.filter((g) => g.channelStatus !== 'OK'));
   const needsConfigCount = $derived(guilds.filter((g) => g.channelStatus !== 'OK').length);
+  /** Serveurs que le dernier abonnement n'a pas pu atteindre : ils ne recevront pas les annonces. */
+  const unsubscribed = $derived((subscribeSummary?.results ?? []).filter((r) => r.status === 'SKIPPED' || r.status === 'FAILED'));
 
   const channelConfigList = $derived(
     guilds
       .filter((g) => channelFilter === 'ALL' || g.channelStatus !== 'OK')
       .filter((g) => g.name.toLowerCase().includes(channelSearch.toLowerCase()) || g.id.includes(channelSearch)),
-  );
-
-  const targetLabel = $derived(
-    target === 'ALL' ? 'tous les serveurs'
-      : target === 'ACTIVATED' ? 'les serveurs activés'
-        : `${selectedGuilds.length} serveur(s) sélectionné(s)`,
   );
 
   /** Limites Discord : dépasser produit un rejet API, pas un message tronqué. */
@@ -183,26 +158,23 @@
     scheduleEnabled && (!scheduledAt || new Date(scheduledAt).getTime() < Date.now() - 60_000),
   );
 
-  const filledPollOptions = $derived(pollOptions.map((option) => option.trim()).filter(Boolean));
-  const pollInvalid = $derived(
-    pollEnabled && (
-      new Set(filledPollOptions).size < 2
-      || new Set(filledPollOptions).size !== filledPollOptions.length
-      || (pollClosesAt !== '' && new Date(pollClosesAt).getTime() <= Date.now())
-    ),
+  const cleanPollOptions = $derived(
+    [...new Set(pollOptions.map((o) => o.trim()).filter(Boolean))],
   );
+
+  const pollInvalid = $derived(
+    pollEnabled && (cleanPollOptions.length < 2 || cleanPollOptions.length > 5 || cleanPollOptions.some((o) => o.length > 80)),
+  );
+
   const feedbackInvalid = $derived(
-    feedbackEnabled && (
-      feedbackLabel.trim() === ''
-      || (pollClosesAt !== '' && new Date(pollClosesAt).getTime() <= Date.now())
-    ),
+    feedbackEnabled && (!feedbackLabel.trim() || feedbackLabel.trim().length > 80),
   );
 
   const canSend = $derived(
     message.trim().length > 0
       && !titleOver && !messageOver && !footerOver
       && !scheduleInvalid && !pollInvalid && !feedbackInvalid
-      && !(target === 'CUSTOM' && selectedGuilds.length === 0),
+      && Boolean(sourceChannel),
   );
 
   const canSendReason = $derived.by(() => {
@@ -210,10 +182,10 @@
     if (titleOver) return 'Le titre dépasse la limite de 256 caractères';
     if (messageOver) return 'Le message dépasse la limite de 4000 caractères';
     if (footerOver) return 'Le pied de page dépasse la limite de 2048 caractères';
+    if (pollInvalid) return 'Un sondage demande entre 2 et 5 options distinctes (max 80 car.)';
+    if (feedbackInvalid) return 'Renseignez un libellé de bouton d’avis (max 80 car.)';
     if (scheduleInvalid) return 'La date de programmation doit être dans le futur';
-    if (pollInvalid) return 'Le sondage requiert au moins 2 options valides distinctes';
-    if (feedbackInvalid) return 'La demande d’avis requiert un libellé de bouton et, si fixée, une clôture future';
-    if (target === 'CUSTOM' && selectedGuilds.length === 0) return 'Sélectionnez au moins un serveur destinataire';
+    if (!sourceChannel) return 'Choisissez d’abord le serveur principal et son salon d’annonces (onglet Salons)';
     return '';
   });
 
@@ -229,19 +201,10 @@
 
   const preflightDetails = $derived([
     {
-      label: 'Audience ciblée',
-      value: targetLabel,
-      subvalue: `${targetedGuilds.length} serveur(s)`,
-      tone: (target === 'CUSTOM' && selectedGuilds.length === 0) ? ('danger' as AdminTone) : ('success' as AdminTone),
-      icon: 'Target',
-    },
-    {
-      label: 'Salons de diffusion',
-      value: targetedUnconfigured.length === 0
-        ? 'Tous configurés'
-        : `${targetedUnconfigured.length} en repli (${channelPref})`,
-      subvalue: `${targetedGuilds.length - targetedUnconfigured.length} salon(s) dédié(s)`,
-      tone: targetedUnconfigured.length > 0 ? ('warning' as AdminTone) : ('success' as AdminTone),
+      label: 'Salon source (V2)',
+      value: sourceChannel ? 'Configuré' : 'Non configuré',
+      subvalue: 'Discord V2 + Notif Dash (sans MP)',
+      tone: sourceChannel ? ('success' as AdminTone) : ('danger' as AdminTone),
       icon: 'Hash',
     },
     {
@@ -266,20 +229,6 @@
       tone: messageOver ? ('danger' as AdminTone) : (message.trim().length > 0 ? ('success' as AdminTone) : ('warning' as AdminTone)),
       icon: 'FileText',
     },
-    ...(pollEnabled ? [{
-      label: 'Sondage interserveur',
-      value: `${filledPollOptions.length} option(s)`,
-      subvalue: pollClosesAt ? `Clôture le ${new Date(pollClosesAt).toLocaleDateString('fr-FR')}` : 'Sans clôture',
-      tone: pollInvalid ? ('danger' as AdminTone) : ('success' as AdminTone),
-      icon: 'ListChecks',
-    }] : []),
-    ...(feedbackEnabled ? [{
-      label: 'Demande d’avis',
-      value: `Bouton « ${feedbackLabel.trim() || '…'} »`,
-      subvalue: pollClosesAt ? `Clôture le ${new Date(pollClosesAt).toLocaleDateString('fr-FR')}` : 'Sans clôture',
-      tone: feedbackInvalid ? ('danger' as AdminTone) : ('success' as AdminTone),
-      icon: 'ListChecks',
-    }] : []),
   ]);
 
   const filteredEmojis = $derived(
@@ -479,12 +428,6 @@
     thumbnailUrl = '';
     imageUrl = '';
     footerText = "Système d'annonce globale Kotbo";
-    enTitle = '';
-    enMessage = '';
-    enFooter = '';
-    target = 'ALL';
-    selectedGuilds = [];
-    channelPref = 'AUTO';
     scheduleEnabled = false;
     scheduledAt = '';
     pollEnabled = false;
@@ -536,15 +479,9 @@
       thumbnailUrl: thumbnailUrl.trim() || undefined,
       imageUrl: imageUrl.trim() || undefined,
       footerText: footerText.trim() || undefined,
-      translations: enTitle.trim() || enMessage.trim() || enFooter.trim()
-        ? { en: { title: enTitle.trim() || undefined, message: enMessage.trim(), footerText: enFooter.trim() || undefined } }
-        : undefined,
-      target,
-      targetGuilds: target === 'CUSTOM' ? selectedGuilds : undefined,
-      channelPref,
-      pollOptions: pollEnabled ? filledPollOptions : undefined,
+      pollOptions: pollEnabled ? cleanPollOptions : undefined,
       pollClosesAt: (pollEnabled || feedbackEnabled) && pollClosesAt ? new Date(pollClosesAt).toISOString() : undefined,
-      feedbackLabel: feedbackEnabled ? feedbackLabel.trim() : undefined,
+      feedbackLabel: feedbackEnabled && feedbackLabel.trim() ? feedbackLabel.trim() : undefined,
       dryRun,
       scheduledAt: !dryRun && scheduleEnabled && scheduledAt ? new Date(scheduledAt).toISOString() : undefined,
     };
@@ -557,9 +494,7 @@
       const result = await sendBroadcast(buildPayload(true));
       lastResult = result;
       for (const warning of result.warnings ?? []) toast.warning(warning);
-      toast.success(result.unconfiguredCount
-        ? m.abc_dry_run_result_unconfigured({ count: result.totalTargeted, unconfigured: result.unconfiguredCount })
-        : m.abc_dry_run_result({ count: result.totalTargeted }));
+      toast.success(m.abc_dry_run_result({ count: guilds.length }));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : m.abc_dry_run_error());
     } finally {
@@ -641,18 +576,18 @@
     thumbnailUrl = log.thumbnailUrl ?? '';
     imageUrl = log.imageUrl ?? '';
     footerText = log.footerText ?? '';
-    enTitle = log.translations?.en?.title ?? '';
-    enMessage = log.translations?.en?.message ?? '';
-    enFooter = log.translations?.en?.footerText ?? '';
-    target = (log.target as typeof target) ?? 'ALL';
-    selectedGuilds = log.targetGuilds ?? [];
-    channelPref = (log.channelPref as typeof channelPref) ?? 'AUTO';
-    // Un modèle ne porte pas de sondage ; une annonce de l'historique, si.
-    pollEnabled = Boolean((log as BroadcastLogEntry).pollOptions?.length);
-    pollOptions = pollEnabled ? [...(log as BroadcastLogEntry).pollOptions] : ['', ''];
-    pollClosesAt = '';
-    feedbackEnabled = Boolean((log as BroadcastLogEntry).feedbackLabel);
-    feedbackLabel = (log as BroadcastLogEntry).feedbackLabel ?? 'Donner mon avis';
+    if ('pollOptions' in log && log.pollOptions?.length) {
+      pollEnabled = true;
+      pollOptions = [...log.pollOptions];
+      feedbackEnabled = false;
+    } else if ('feedbackLabel' in log && log.feedbackLabel) {
+      feedbackEnabled = true;
+      feedbackLabel = log.feedbackLabel;
+      pollEnabled = false;
+    } else {
+      pollEnabled = false;
+      feedbackEnabled = false;
+    }
     scheduleEnabled = false;
     activeTab = 'compose';
     toast.success(m.abc_content_loaded());
@@ -878,7 +813,7 @@
               />
             </div>
             <p class="text-2xs text-on-surface-variant truncate">
-              {targetedGuilds.length} serveur(s) ciblé(s) · {message.length}/4000 car. · {scheduleEnabled ? (scheduledAt ? `Prévu le ${new Date(scheduledAt).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}` : 'Date à définir') : 'Envoi immédiat'}
+              {guilds.length} serveur(s) abonnés via Discord · {message.length}/4000 car. · {scheduleEnabled ? (scheduledAt ? `Prévu le ${new Date(scheduledAt).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}` : 'Date à définir') : 'Envoi immédiat'}
             </p>
           </div>
         </div>
@@ -936,7 +871,7 @@
               <span>Envoi…</span>
             {:else}
               <Papicon icon={scheduleEnabled ? 'Clock' : 'Send'} size={13} />
-              <span>{scheduleEnabled ? 'Programmer' : `Diffuser (${targetedGuilds.length})`}</span>
+              <span>{scheduleEnabled ? 'Programmer' : 'Diffuser'}</span>
             {/if}
           </button>
         </div>
@@ -1121,41 +1056,6 @@
                 />
               </div>
 
-              <!-- Version anglaise -->
-              <details class="rounded-xl border border-field-border bg-surface-container-low/40" open={Boolean(enMessage)}>
-                <summary class="cursor-pointer select-none px-3 py-2.5 text-xs font-semibold text-on-surface-variant">
-                  Version anglaise (serveurs configurés en anglais)
-                </summary>
-                <div class="px-3 pb-3 space-y-3">
-                  <p class="text-2xs text-on-surface-variant">
-                    Chaque serveur reçoit la langue de sa configuration, sinon celle de sa communauté Discord, sinon l’anglais.
-                    Sans message anglais, tous les serveurs reçoivent le texte français ci-dessus.
-                  </p>
-                  <input
-                    aria-label="Titre en anglais"
-                    bind:value={enTitle}
-                    maxlength="256"
-                    placeholder="Titre (vide = titre anglais par défaut)"
-                    class="w-full h-10 px-3 rounded-xl bg-surface-container-low/70 border border-field-border text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/15 focus:border-primary/60 transition"
-                  />
-                  <textarea
-                    aria-label="Message en anglais"
-                    bind:value={enMessage}
-                    rows="6"
-                    maxlength="4000"
-                    placeholder="Announcement text in English"
-                    class="w-full px-3 py-2.5 rounded-xl bg-surface-container-low/70 border border-field-border text-sm text-on-surface leading-relaxed resize-y focus:outline-none focus:ring-2 focus:ring-primary/15 focus:border-primary/60 transition"
-                  ></textarea>
-                  <input
-                    aria-label="Pied de page en anglais"
-                    bind:value={enFooter}
-                    maxlength="2048"
-                    placeholder="Pied de page (vide = pied anglais par défaut)"
-                    class="w-full h-10 px-3 rounded-xl bg-surface-container-low/70 border border-field-border text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/15 focus:border-primary/60 transition"
-                  />
-                </div>
-              </details>
-
               <!-- Couleur de l'embed -->
               <div>
                 <label for="bc-color" class="text-xs font-semibold text-on-surface-variant mb-1.5 block">Couleur de la barre</label>
@@ -1230,214 +1130,113 @@
             </div>
           </AdminCard>
 
-          <!-- 3. Options avancées : Sondage & Ciblage & Programmation -->
           <AdminCard
-            title="Sondage ou demande d’avis"
-            description="Boutons interactifs sous l'annonce pour recueillir les votes ou les retours de tous les serveurs Kotbo."
-            icon="ListChecks"
-            tone="success"
+            title="Sondage & Avis (Dashboard)"
+            description="Notifiés sans MP dans la boîte du dashboard et affichés sur /updates, avec un bouton lien dans l’embed V2."
+            icon="BarChart3"
+            tone="primary"
           >
             <div class="space-y-3">
-              <label class="flex items-center gap-2.5 cursor-pointer">
-                <input
-                  type="checkbox"
-                  bind:checked={pollEnabled}
-                  onchange={() => { if (pollEnabled) feedbackEnabled = false; }}
-                  class="w-4 h-4 rounded accent-(--primary-color)"
-                />
-                <span class="text-body-sm font-semibold text-on-surface">Ajouter un sondage interactif</span>
-              </label>
-              <label class="flex items-center gap-2.5 cursor-pointer">
-                <input
-                  type="checkbox"
-                  bind:checked={feedbackEnabled}
-                  onchange={() => { if (feedbackEnabled) pollEnabled = false; }}
-                  class="w-4 h-4 rounded accent-(--primary-color)"
-                />
-                <span class="text-body-sm font-semibold text-on-surface">Ajouter une demande d’avis (bouton + formulaire)</span>
-              </label>
-
-              {#if feedbackEnabled}
-                <div class="space-y-2 pt-1">
-                  <label for="bc-feedback-label" class="text-xs font-semibold text-on-surface-variant block">
-                    Libellé du bouton
-                  </label>
+              <div class="flex flex-wrap gap-3">
+                <label class="flex items-center gap-2 cursor-pointer">
                   <input
-                    id="bc-feedback-label"
-                    bind:value={feedbackLabel}
-                    maxlength="80"
-                    class="w-full h-10 px-3 rounded-xl bg-surface-container-low/70 border border-field-border text-sm text-on-surface focus:outline-none focus:border-primary/60"
+                    type="checkbox"
+                    checked={pollEnabled}
+                    onchange={(e) => {
+                      pollEnabled = (e.currentTarget as HTMLInputElement).checked;
+                      if (pollEnabled) feedbackEnabled = false;
+                    }}
+                    class="w-4 h-4 rounded accent-(--primary-color)"
                   />
-                  <label for="bc-feedback-close" class="text-xs font-semibold text-on-surface-variant block pt-1">
-                    Clôture automatique (facultatif)
-                  </label>
+                  <span class="text-body-sm font-semibold text-on-surface">Ajouter un sondage</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
                   <input
-                    id="bc-feedback-close"
-                    type="datetime-local"
-                    bind:value={pollClosesAt}
-                    class="w-full h-10 px-3 rounded-xl bg-surface-container-lowest border border-field-border text-sm text-on-surface focus:outline-none focus:border-primary/60"
+                    type="checkbox"
+                    checked={feedbackEnabled}
+                    onchange={(e) => {
+                      feedbackEnabled = (e.currentTarget as HTMLInputElement).checked;
+                      if (feedbackEnabled) pollEnabled = false;
+                    }}
+                    class="w-4 h-4 rounded accent-(--primary-color)"
                   />
-                  {#if feedbackInvalid}
-                    <p class="text-xs text-error font-medium">
-                      Renseignez un libellé et, si vous fixez une clôture, une date future.
-                    </p>
-                  {/if}
-                </div>
-              {/if}
-
-              {#if pollEnabled}
-                <div class="space-y-2 pt-1">
-                  {#each pollOptions as _, index (index)}
-                    <div class="flex gap-2">
-                      <input
-                        bind:value={pollOptions[index]}
-                        maxlength="80"
-                        placeholder="Option {index + 1}"
-                        aria-label="Option {index + 1}"
-                        class="flex-1 h-10 px-3 rounded-xl bg-surface-container-low/70 border border-field-border text-sm text-on-surface focus:outline-none focus:border-primary/60"
-                      />
-                      {#if pollOptions.length > 2}
-                        <button
-                          type="button"
-                          onclick={() => (pollOptions = pollOptions.filter((_, i) => i !== index))}
-                          aria-label="Retirer l’option {index + 1}"
-                          class="shrink-0 w-10 h-10 rounded-xl bg-on-surface/6 text-on-surface-variant hover:bg-error/12 hover:text-error transition flex items-center justify-center"
-                        >
-                          <Papicon icon="Trash" size={13} />
-                        </button>
-                      {/if}
-                    </div>
-                  {/each}
-                  {#if pollOptions.length < 5}
-                    <button
-                      type="button"
-                      onclick={() => (pollOptions = [...pollOptions, ''])}
-                      class="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg bg-on-surface/5 hover:bg-on-surface/10 text-xs font-semibold text-on-surface-variant hover:text-on-surface transition"
-                    >
-                      <Papicon icon="Plus" size={13} />
-                      Ajouter une option
-                    </button>
-                  {/if}
-                </div>
-
-                <div class="pt-2 border-t border-outline-variant/15">
-                  <label for="bc-poll-close" class="text-xs font-semibold text-on-surface-variant mb-1.5 block">
-                    Clôture automatique (facultatif)
-                  </label>
-                  <input
-                    id="bc-poll-close"
-                    type="datetime-local"
-                    bind:value={pollClosesAt}
-                    class="w-full h-10 px-3 rounded-xl bg-surface-container-lowest border border-field-border text-sm text-on-surface focus:outline-none focus:border-primary/60"
-                  />
-                  <p class="text-2xs text-on-surface-variant mt-1">Sans date de clôture, le sondage reste ouvert en continu.</p>
-                </div>
-
-                {#if pollInvalid}
-                  <p class="text-xs text-error font-medium">
-                    Renseignez au moins deux options distinctes et, si vous fixez une clôture, une date future.
-                  </p>
-                {/if}
-              {/if}
-            </div>
-          </AdminCard>
-
-          <AdminCard title="Ciblage & Planification" icon="Target" tone="warning">
-            <div class="space-y-4">
-              <!-- Destinataires -->
-              <div>
-                <span class="text-xs font-semibold text-on-surface-variant mb-2 block">Destinataires</span>
-                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  {#each [
-                    { value: 'ALL' as const, label: 'Tous les serveurs', count: guilds.length, icon: 'Globe' },
-                    { value: 'ACTIVATED' as const, label: 'Serveurs activés', count: guilds.filter((g) => g.activated).length, icon: 'CheckCircle' },
-                    { value: 'CUSTOM' as const, label: 'Sélection manuelle', count: selectedGuilds.length, icon: 'ListChecks' },
-                  ] as option (option.value)}
-                    <button
-                      type="button"
-                      onclick={() => (target = option.value)}
-                      class="flex flex-col items-start gap-1 p-3 rounded-xl border text-left transition
-                        {target === option.value
-                          ? 'border-primary/45 bg-primary/8 shadow-2xs'
-                          : 'border-outline-variant/25 bg-surface-container-low/40 hover:border-outline-variant/45'}"
-                    >
-                      <Papicon icon={option.icon} size={15} class={target === option.value ? 'text-primary' : 'text-on-surface-variant'} />
-                      <span class="text-body-sm font-semibold text-on-surface">{option.label}</span>
-                      <span class="text-2xs text-on-surface-variant tabular-nums">{option.count} serveur(s)</span>
-                    </button>
-                  {/each}
-                </div>
+                  <span class="text-body-sm font-semibold text-on-surface">Demander un avis libre</span>
+                </label>
               </div>
 
-              {#if target === 'CUSTOM'}
-                <div class="rounded-xl border border-outline-variant/25 bg-surface-container-low/40 p-3 space-y-2">
-                  <div class="flex items-center justify-between text-xs pb-1 border-b border-outline-variant/15">
-                    <span class="text-on-surface-variant font-medium">
-                      {selectedGuilds.length} / {guilds.length} serveur(s) sélectionné(s)
-                    </span>
-                    <div class="flex gap-2">
+              {#if pollEnabled}
+                <div class="rounded-xl border border-outline-variant/25 bg-surface-container-low/40 p-3 space-y-2.5">
+                  <div class="flex items-center justify-between">
+                    <span class="text-xs font-semibold text-on-surface">Choix du sondage (2 à 5)</span>
+                    {#if pollOptions.length < 5}
                       <button
                         type="button"
-                        onclick={() => (selectedGuilds = guilds.map((g) => g.id))}
-                        class="text-primary hover:underline font-semibold"
+                        onclick={() => (pollOptions = [...pollOptions, ''])}
+                        class="text-2xs font-semibold text-primary hover:underline"
                       >
-                        Tout cocher
+                        + Ajouter un choix
                       </button>
-                      <span class="text-outline-variant/40">·</span>
-                      <button
-                        type="button"
-                        onclick={() => (selectedGuilds = [])}
-                        class="text-on-surface-variant hover:text-on-surface hover:underline"
-                      >
-                        Tout décocher
-                      </button>
-                    </div>
+                    {/if}
                   </div>
-                  <AdminToolbar bind:search={guildSearch} placeholder="Filtrer les serveurs…" />
-                  <div class="max-h-56 overflow-y-auto space-y-1">
-                    {#each filteredGuilds as guild (guild.id)}
-                      <label class="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-on-surface/5 cursor-pointer">
+                  <div class="space-y-2">
+                    {#each pollOptions as opt, idx}
+                      <div class="flex items-center gap-2">
                         <input
-                          type="checkbox"
-                          checked={selectedGuilds.includes(guild.id)}
-                          onchange={(event) => {
-                            selectedGuilds = (event.currentTarget as HTMLInputElement).checked
-                              ? [...selectedGuilds, guild.id]
-                              : selectedGuilds.filter((id) => id !== guild.id);
+                          type="text"
+                          maxlength={80}
+                          placeholder="Option {idx + 1}"
+                          value={opt}
+                          oninput={(e) => {
+                            const next = [...pollOptions];
+                            next[idx] = (e.currentTarget as HTMLInputElement).value;
+                            pollOptions = next;
                           }}
-                          class="w-4 h-4 rounded accent-(--primary-color)"
+                          class="flex-1 h-9 px-3 rounded-xl bg-surface-container-lowest border border-field-border text-sm text-on-surface focus:outline-none focus:border-primary/60"
                         />
-                        <span class="flex-1 min-w-0 text-body-sm text-on-surface truncate">{guild.name}</span>
-                        {#if guild.channelStatus !== 'OK'}
-                          <AdminBadge size="sm" label="Sans salon" tone="warning" />
+                        {#if pollOptions.length > 2}
+                          <button
+                            type="button"
+                            onclick={() => (pollOptions = pollOptions.filter((_, i) => i !== idx))}
+                            aria-label="Retirer l’option"
+                            class="h-9 w-9 rounded-xl border border-outline-variant/25 text-on-surface-variant hover:text-error flex items-center justify-center"
+                          >
+                            <Papicon icon="Trash2" size={14} />
+                          </button>
                         {/if}
-                      </label>
+                      </div>
                     {/each}
                   </div>
                 </div>
               {/if}
 
-              <!-- Salon de repli -->
-              <div>
-                <label for="bc-pref" class="text-xs font-semibold text-on-surface-variant mb-1.5 block">
-                  Salon de repli (si aucun salon dédié configuré)
-                </label>
-                <select
-                  id="bc-pref"
-                  bind:value={channelPref}
-                  class="w-full h-10 px-3 rounded-xl bg-surface-container-low/70 border border-field-border text-sm text-on-surface focus:outline-none focus:border-primary/60"
-                >
-                  <option value="AUTO">Automatique - Annonces, puis public, puis staff</option>
-                  <option value="NEWS">Priorité salon d’annonces</option>
-                  <option value="PUBLIC">Priorité salon public</option>
-                  <option value="STAFF">Priorité salon staff</option>
-                  <option value="FALLBACK">Premier salon écrivable</option>
-                </select>
-                <p class="text-2xs text-on-surface-variant mt-1">
-                  Les salons configurés dans l’onglet « Salons » prévalent systématiquement.
-                </p>
-              </div>
+              {#if feedbackEnabled}
+                <div class="rounded-xl border border-outline-variant/25 bg-surface-container-low/40 p-3 space-y-1.5">
+                  <span class="text-xs font-semibold text-on-surface">Libellé du bouton d’envoi</span>
+                  <input
+                    type="text"
+                    maxlength={80}
+                    bind:value={feedbackLabel}
+                    placeholder="Donner mon avis"
+                    class="w-full h-9 px-3 rounded-xl bg-surface-container-lowest border border-field-border text-sm text-on-surface focus:outline-none focus:border-primary/60"
+                  />
+                </div>
+              {/if}
 
+              {#if pollEnabled || feedbackEnabled}
+                <div class="space-y-1">
+                  <span class="text-2xs font-medium text-on-surface-variant">Clôture automatique (optionnel)</span>
+                  <input
+                    type="datetime-local"
+                    bind:value={pollClosesAt}
+                    class="w-full h-9 px-3 rounded-xl bg-surface-container-lowest border border-field-border text-sm text-on-surface focus:outline-none focus:border-primary/60"
+                  />
+                </div>
+              {/if}
+            </div>
+          </AdminCard>
+
+          <AdminCard title="Planification" icon="Clock" tone="warning">
+            <div class="space-y-4">
               <!-- Programmation -->
               <div class="rounded-xl border border-outline-variant/25 bg-surface-container-low/40 p-3 space-y-2.5">
                 <label class="flex items-center gap-2.5 cursor-pointer">
@@ -1524,22 +1323,22 @@
                 {/each}
               </div>
 
-              <!-- Alerte serveurs sans salon -->
-              {#if targetedUnconfigured.length > 0}
-                <div class="rounded-xl border border-warning/25 bg-warning/8 p-3 space-y-1.5">
-                  <div class="flex items-center gap-1.5 text-warning text-xs font-semibold">
+              <!-- Alerte salon source manquant -->
+              {#if !sourceChannel}
+                <div class="rounded-xl border border-error/25 bg-error/8 p-3 space-y-1.5">
+                  <div class="flex items-center gap-1.5 text-error text-xs font-semibold">
                     <Papicon icon="AlertTriangle" size={13} />
-                    <span>{targetedUnconfigured.length} serveur(s) sans salon dédié</span>
+                    <span>Aucun salon source configuré</span>
                   </div>
-                  <p class="text-2xs text-warning leading-snug">
-                    Kotbo tentera d'acheminer l'annonce via le salon de repli ({channelPref}).
+                  <p class="text-2xs text-error leading-snug">
+                    Les annonces sont publiées une seule fois dans le salon d’annonces du serveur principal, puis diffusées par Discord.
                   </p>
                   <button
                     type="button"
                     onclick={() => (activeTab = 'channels')}
-                    class="text-2xs font-semibold text-warning underline underline-offset-2"
+                    class="text-2xs font-semibold text-error underline underline-offset-2"
                   >
-                    Configurer les salons dans l’onglet dédié →
+                    Choisir le serveur principal →
                   </button>
                 </div>
               {/if}
@@ -1552,10 +1351,7 @@
                     <span>Simulation validée</span>
                   </div>
                   <p class="text-2xs leading-relaxed">
-                    {lastResult.totalTargeted} serveur(s) ciblés.
-                    {#if lastResult.unconfiguredCount}
-                      {lastResult.unconfiguredCount} serveur(s) utiliseront le salon de repli.
-                    {/if}
+                    Publication dans le salon source, puis diffusion par Discord aux serveurs abonnés.
                   </p>
                   {#if lastResult.warnings?.length}
                     <ul class="text-2xs list-disc list-inside space-y-0.5 pt-1 text-warning">
@@ -1593,7 +1389,7 @@
                   {:else}
                     <span class="inline-flex items-center gap-2">
                       <Papicon icon={scheduleEnabled ? 'Clock' : 'Send'} size={15} />
-                      <span>{scheduleEnabled ? 'Programmer la diffusion' : `Diffuser sur ${targetedGuilds.length} serveur(s)`}</span>
+                      <span>{scheduleEnabled ? 'Programmer la diffusion' : 'Diffuser aux serveurs abonnés'}</span>
                     </span>
                     <span class="text-3xs font-normal opacity-85">
                       {scheduleEnabled ? (scheduledAt ? `Prévu pour le ${new Date(scheduledAt).toLocaleString('fr-FR')}` : 'Date requise') : 'Diffusion immédiate irréversible'}
@@ -1856,6 +1652,21 @@
             {subscribeSummary.skipped} ignoré(s),
             {subscribeSummary.failed} échec(s).
           </div>
+          {#if unsubscribed.length > 0}
+            <div class="mt-2 rounded-lg border border-warning/25 bg-warning/8 p-3 text-xs space-y-1.5">
+              <p class="font-semibold text-warning">
+                {unsubscribed.length} serveur(s) ne recevront pas les annonces tant qu'ils ne sont pas abonnés :
+              </p>
+              <ul class="space-y-0.5 text-on-surface-variant max-h-48 overflow-y-auto">
+                {#each unsubscribed as r (r.guildId)}
+                  <li><span class="font-medium text-on-surface">{r.guildName}</span> — {r.reason ?? 'Abonnement impossible'}</li>
+                {/each}
+              </ul>
+              <p class="text-2xs text-on-surface-variant">
+                Le bot doit avoir « Gérer les webhooks » dans un salon du serveur. Donnez-lui la permission puis cliquez sur « Abonner » ci-dessous.
+              </p>
+            </div>
+          {/if}
         {/if}
       </AdminCard>
 
@@ -2142,17 +1953,8 @@
     <!-- Récapitulatif technique -->
     <div class="space-y-2 text-xs">
       <div class="flex items-center justify-between py-1.5 border-b border-outline-variant/15">
-        <span class="text-on-surface-variant">Destinataires</span>
-        <span class="font-semibold text-on-surface">{targetedGuilds.length} serveur(s) ({targetLabel})</span>
-      </div>
-      <div class="flex items-center justify-between py-1.5 border-b border-outline-variant/15">
         <span class="text-on-surface-variant">Acheminement</span>
-        <span class="font-medium text-on-surface">
-          {targetedGuilds.length - targetedUnconfigured.length} salon(s) dédié(s)
-          {#if targetedUnconfigured.length > 0}
-            · <span class="text-warning font-semibold">{targetedUnconfigured.length} en repli</span>
-          {/if}
-        </span>
+        <span class="font-semibold text-on-surface">Salon source, puis serveurs abonnés</span>
       </div>
       <div class="flex items-center justify-between py-1.5 border-b border-outline-variant/15">
         <span class="text-on-surface-variant">Diffusion</span>
@@ -2165,19 +1967,12 @@
         </span>
       </div>
       <div class="flex items-center justify-between py-1.5 border-b border-outline-variant/15">
-        <span class="text-on-surface-variant">Médias & Options</span>
+        <span class="text-on-surface-variant">Médias</span>
         <span class="text-on-surface">
           {imageUrl && thumbnailUrl ? 'Image + Vignette' : imageUrl ? 'Image' : thumbnailUrl ? 'Vignette' : 'Texte seul'}
-          {pollEnabled ? ' · Avec sondage' : ''}
         </span>
       </div>
     </div>
-
-    {#if targetedUnconfigured.length > 0}
-      <div class="rounded-xl border border-warning/25 bg-warning/8 p-3 text-xs text-on-warning-container leading-snug">
-        <strong>{targetedUnconfigured.length} serveur(s)</strong> recevront l’annonce via leur salon de repli automatique ({channelPref}) car aucun salon de diffusion n’est configuré pour eux.
-      </div>
-    {/if}
 
     <div class="flex gap-2 justify-end pt-2">
       <button

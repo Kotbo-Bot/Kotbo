@@ -1171,6 +1171,10 @@
               load={() => import("./pages/Notifications.svelte")}
             />
             <LazyRoute
+              path="/updates"
+              load={() => import("./pages/Updates.svelte")}
+            />
+            <LazyRoute
               path="/tutoring/*"
               load={() => import("./pages/Tutoring.svelte")}
             />
