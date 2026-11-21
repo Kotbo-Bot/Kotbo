@@ -982,7 +982,7 @@
                   </td>
                   <td>
                     <span
-                      class="badge {entry.eventType === 'Automatique'
+                      class="badge max-w-full break-all {entry.eventType === 'Automatique'
                         ? 'badge-info'
                         : 'badge-warning'}"
                     >

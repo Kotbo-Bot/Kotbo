@@ -408,7 +408,7 @@
               </td>
               <td class="px-6 py-6 text-center">
                 <span
-                  class="inline-flex items-center justify-center w-24 px-3 py-1 rounded-full text-2xs font-bold
+                  class="inline-flex items-center justify-center min-w-24 max-w-full px-3 py-1 rounded-full text-2xs font-bold break-all text-center
  {entry.eventType === 'Automatique'
                     ? 'bg-blue-100 text-blue-700'
                     : 'bg-warning/10 text-on-warning-container'}"
