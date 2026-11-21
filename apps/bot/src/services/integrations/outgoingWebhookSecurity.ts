@@ -10,6 +10,7 @@
  */
 import crypto from 'node:crypto';
 import { lookup } from 'node:dns/promises';
+import https from 'node:https';
 import net from 'node:net';
 import { UserFacingError } from '../../utils/userFacingError.js';
 
@@ -180,5 +181,81 @@ export function verifyWebhookSignature(
   return (fields.get('v1') ?? []).some((candidate) => {
     const received = Buffer.from(candidate, 'hex');
     return received.length === expected.length && crypto.timingSafeEqual(received, expected);
+  });
+}
+
+/**
+ * Résolution utilisée par la connexion elle-même. Le contrôle fait avant
+ * l'envoi (`assertWebhookUrlReachable`) ne suffit pas : un nom de domaine à TTL
+ * nul peut répondre une adresse publique à ce contrôle puis une adresse interne
+ * à la connexion (DNS rebinding). Ici, l'adresse vérifiée est celle à laquelle
+ * on se connecte : une seule résolution, jugée puis utilisée.
+ */
+export function guardedLookup(
+  hostname: string,
+  options: { all?: boolean; family?: number | string } | number | null | undefined,
+  callback: (err: Error | null, address?: string | Array<{ address: string; family: number }>, family?: number) => void,
+  resolve: typeof lookup = lookup,
+): void {
+  const wantsAll = typeof options === 'object' && options !== null && options.all === true;
+  resolve(hostname, { all: true, verbatim: true })
+    .then((addresses) => {
+      if (addresses.length === 0 || addresses.some(({ address }) => isPrivateAddress(address))) {
+        callback(new WebhookUrlError('Ce domaine pointe vers un réseau interne.'));
+        return;
+      }
+      if (wantsAll) {
+        callback(null, addresses.map(({ address, family }) => ({ address, family })));
+        return;
+      }
+      callback(null, addresses[0].address, addresses[0].family);
+    })
+    .catch((err: unknown) => callback(err instanceof Error ? err : new Error(String(err))));
+}
+
+const MAX_PINNED_RESPONSE_BYTES = 64 * 1024;
+
+/**
+ * POST HTTPS vers un webhook, avec résolution gardée, sans suivre de
+ * redirection. Même signature que `fetchExternal`, pour rester injectable.
+ */
+export function pinnedWebhookFetch(input: string | URL | Request, init: RequestInit = {}, timeoutMs = 8_000): Promise<Response> {
+  const target = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
+  if (target.protocol !== 'https:') return Promise.reject(new WebhookUrlError("L'URL doit commencer par https://."));
+
+  return new Promise<Response>((resolveResponse, reject) => {
+    const headers: Record<string, string> = {};
+    new Headers(init.headers).forEach((value, key) => { headers[key] = value; });
+    const body = typeof init.body === 'string' ? init.body : '';
+    headers['content-length'] = String(Buffer.byteLength(body));
+
+    const req = https.request({
+      protocol: 'https:',
+      hostname: target.hostname.replace(/^\[|\]$/g, ''),
+      port: target.port || 443,
+      path: `${target.pathname}${target.search}`,
+      method: init.method ?? 'POST',
+      headers,
+      lookup: guardedLookup as never,
+      servername: net.isIP(target.hostname) ? undefined : target.hostname,
+      timeout: timeoutMs,
+    }, (res) => {
+      const chunks: Buffer[] = [];
+      let size = 0;
+      res.on('data', (chunk: Buffer) => {
+        size += chunk.length;
+        if (size <= MAX_PINNED_RESPONSE_BYTES) chunks.push(chunk);
+      });
+      res.on('end', () => {
+        // Un statut 204/304 interdit un corps dans `Response`.
+        const status = res.statusCode ?? 0;
+        const noBody = status === 204 || status === 205 || status === 304 || (status >= 100 && status < 200);
+        resolveResponse(new Response(noBody ? null : Buffer.concat(chunks), { status: status >= 200 ? status : 502 }));
+      });
+      res.on('error', reject);
+    });
+    req.on('timeout', () => req.destroy(Object.assign(new Error('Pas de réponse.'), { name: 'TimeoutError' })));
+    req.on('error', reject);
+    req.end(body);
   });
 }
