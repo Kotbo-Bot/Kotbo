@@ -51,11 +51,17 @@ import {
 import {
   BroadcastValidationError,
   deliverBroadcast,
+  deliverBroadcastViaSource,
   finalizeBroadcast,
+  getBroadcastSourceConfig,
   getPollResults,
   loadGuildChannelMap,
   normalizeBroadcastContent,
   resolveTargetGuildIds,
+  setBroadcastSourceConfig,
+  subscribeAllGuildsToBroadcastSource,
+  subscribeGuildToBroadcastSource,
+  validateBroadcastSourceChannel,
   type BroadcastChannelPref,
   type BroadcastTarget,
   type BroadcastTranslations,
@@ -1327,7 +1333,7 @@ export async function handleAdminRoutes(
           name: string;
           icon: string | null;
           memberCount: number;
-          channels: { id: string; name: string; category: string | null; position: number }[];
+          channels: { id: string; name: string; type: number; category: string | null; position: number }[];
         }
 
         let shardGuildChannels: ShardGuildChannels[];
@@ -1341,7 +1347,7 @@ export async function handleAdminRoutes(
               channels: guild.channels.cache
                 .filter((ch): ch is import('discord.js').TextChannel | import('discord.js').NewsChannel =>
                   (ch.type === 0 || ch.type === 5) && !!ch.permissionsFor(shardClient.user!)?.has(['ViewChannel', 'SendMessages']))
-                .map((ch) => ({ id: ch.id, name: ch.name, category: ch.parent?.name ?? null, position: ch.rawPosition }))
+                .map((ch) => ({ id: ch.id, name: ch.name, type: ch.type, category: ch.parent?.name ?? null, position: ch.rawPosition }))
                 .sort((a, b) => a.position - b.position),
             }))
           );
@@ -1355,14 +1361,17 @@ export async function handleAdminRoutes(
             channels: guild.channels.cache
               .filter((ch): ch is import('discord.js').TextChannel | import('discord.js').NewsChannel =>
                 (ch.type === 0 || ch.type === 5) && !!ch.permissionsFor(client.user!)?.has(['ViewChannel', 'SendMessages']))
-              .map((ch) => ({ id: ch.id, name: ch.name, category: ch.parent?.name ?? null, position: ch.rawPosition }))
+              .map((ch) => ({ id: ch.id, name: ch.name, type: ch.type, category: ch.parent?.name ?? null, position: ch.rawPosition }))
               .sort((a, b) => a.position - b.position),
           }));
         }
 
-        const dbGuilds = await prisma.guild.findMany({
-          select: { id: true, activated: true, broadcastChannelId: true },
-        });
+        const [dbGuilds, sourceChannel] = await Promise.all([
+          prisma.guild.findMany({
+            select: { id: true, activated: true, broadcastChannelId: true },
+          }),
+          getBroadcastSourceConfig(),
+        ]);
         const dbMap = new Map(dbGuilds.map((g) => [g.id, g] as const));
 
         const guilds = shardGuildChannels.map((g) => {
@@ -1382,12 +1391,102 @@ export async function handleAdminRoutes(
           };
         }).sort((a, b) => a.name.localeCompare(b.name));
 
-        return reply(c, 200, { guilds });
+        return reply(c, 200, { guilds, sourceChannel });
       } catch (err) {
         logger.error('AdminAPI', 'GET broadcast channels error:', err);
         return fail(c, err, 'Erreur lors de la récupération des salons', 'AdminAPI');
       }
 
+    }
+
+    // PUT /api/admin/broadcast/source - Configure le salon d'annonces source (non code en dur)
+    if (method === 'PUT' && parts[3] === 'source' && parts.length === 4) {
+      try {
+        const body = await readBody<{ guildId?: string | null; channelId?: string | null }>(c);
+        const guildId = body?.guildId?.trim() || null;
+        const channelId = body?.channelId?.trim() || null;
+
+        if (!guildId && !channelId) {
+          await setBroadcastSourceConfig(null);
+          await audit({
+            action: 'broadcast.source.clear',
+            targetType: 'broadcast_source',
+            summary: "Salon d'annonces source retiré",
+          });
+          return reply(c, 200, { ok: true, sourceChannel: null });
+        }
+
+        if (!guildId || !channelId) {
+          return reply(c, 400, { error: 'Serveur et salon requis.' });
+        }
+
+        const check = await validateBroadcastSourceChannel(client, guildId, channelId);
+        if (!check.ok) {
+          return reply(c, 400, { error: check.error });
+        }
+
+        const config = { guildId, channelId };
+        await setBroadcastSourceConfig(config);
+        await audit({
+          action: 'broadcast.source.update',
+          targetType: 'broadcast_source',
+          targetId: channelId,
+          summary: `Salon d'annonces source défini : #${check.channelName} (${check.guildName})`,
+          metadata: config,
+        });
+
+        return reply(c, 200, { ok: true, sourceChannel: config, guildName: check.guildName, channelName: check.channelName });
+      } catch (err) {
+        logger.error('AdminAPI', 'PUT broadcast source error:', err);
+        return fail(c, err, "Erreur lors de la configuration du salon d'annonces source", 'AdminAPI');
+      }
+    }
+
+    // POST /api/admin/broadcast/source/subscribe-all - Abonne tous les serveurs au salon d'annonces source
+    if (method === 'POST' && parts[3] === 'source' && parts[4] === 'subscribe-all' && parts.length === 5) {
+      try {
+        const source = await getBroadcastSourceConfig();
+        if (!source) {
+          return reply(c, 400, { error: "Aucun salon d'annonces source n'est configuré." });
+        }
+
+        const summary = await subscribeAllGuildsToBroadcastSource(client, source.channelId);
+        await audit({
+          action: 'broadcast.source.subscribe_all',
+          targetType: 'broadcast_source',
+          targetId: source.channelId,
+          summary: `Abonnement global : ${summary.subscribed} abonné(s), ${summary.alreadySubscribed} déjà abonné(s), ${summary.skipped} ignoré(s), ${summary.failed} échec(s)`,
+          metadata: {
+            total: summary.total,
+            subscribed: summary.subscribed,
+            alreadySubscribed: summary.alreadySubscribed,
+            skipped: summary.skipped,
+            failed: summary.failed,
+          },
+        });
+
+        return reply(c, 200, summary);
+      } catch (err) {
+        logger.error('AdminAPI', 'POST broadcast subscribe-all error:', err);
+        return fail(c, err, "Erreur lors de l'abonnement des serveurs", 'AdminAPI');
+      }
+    }
+
+    // POST /api/admin/broadcast/channels/:guildId/subscribe - Abonne un serveur au salon source
+    if (method === 'POST' && parts[3] === 'channels' && parts[5] === 'subscribe' && parts.length === 6) {
+      const guildId = parts[4];
+      try {
+        const source = await getBroadcastSourceConfig();
+        if (!source) {
+          return reply(c, 400, { error: "Aucun salon d'annonces source n'est configuré." });
+        }
+
+        const result = await subscribeGuildToBroadcastSource(client, guildId, source.channelId);
+        return reply(c, result.status === 'FAILED' ? 400 : 200, result);
+      } catch (err) {
+        logger.error('AdminAPI', 'POST broadcast channel subscribe error:', err);
+        return fail(c, err, "Erreur lors de l'abonnement du serveur", 'AdminAPI');
+      }
     }
 
     // PUT /api/admin/broadcast/channels/:guildId - Set the broadcast channel for a guild
@@ -1434,7 +1533,15 @@ export async function handleAdminRoutes(
           create: { id: guildId, broadcastChannelId: channelId },
         });
 
-        return reply(c, 200, { ok: true, guildId, channelId });
+        let subscription = null;
+        if (channelId) {
+          const source = await getBroadcastSourceConfig();
+          if (source) {
+            subscription = await subscribeGuildToBroadcastSource(client, guildId, source.channelId, channelId);
+          }
+        }
+
+        return reply(c, 200, { ok: true, guildId, channelId, subscription });
       } catch (err) {
         logger.error('AdminAPI', 'PUT broadcast channel error:', err);
         return fail(c, err, 'Erreur lors de la configuration du salon', 'AdminAPI');
@@ -1497,16 +1604,38 @@ export async function handleAdminRoutes(
           throw err;
         }
 
-        const allowedGuildIds = await resolveTargetGuildIds(
-          client,
-          normalized.target,
-          normalized.targetGuilds,
-          collectShardGuilds,
+        const sourceConfig = await getBroadcastSourceConfig();
+        const useSourceChannel = Boolean(
+          sourceConfig
+          && normalized.target === 'ALL'
+          && normalized.pollOptions.length === 0
+          && !normalized.feedbackLabel,
         );
+
+        const allowedGuildIds = useSourceChannel
+          ? new Set<string>([sourceConfig!.guildId])
+          : await resolveTargetGuildIds(
+              client,
+              normalized.target,
+              normalized.targetGuilds,
+              collectShardGuilds,
+            );
         const totalTargeted = allowedGuildIds.size;
 
         // Simulation : on renvoie la cible et les avertissements sans rien envoyer.
         if (body.dryRun === true) {
+          if (useSourceChannel) {
+            return reply(c, 200, {
+              dryRun: true,
+              viaSourceChannel: true,
+              sourceChannel: sourceConfig,
+              totalTargeted,
+              target: normalized.target,
+              channelPref: normalized.channelPref,
+              warnings: normalized.warnings,
+              unconfiguredCount: 0,
+            });
+          }
           const channelMap = await loadGuildChannelMap();
           const unconfigured = [...allowedGuildIds].filter((id) => !channelMap[id]?.broadcastChannelId);
           return reply(c, 200, {
@@ -1573,21 +1702,29 @@ export async function handleAdminRoutes(
 
         }
 
-        const channelMap = await loadGuildChannelMap();
-        const deliveries = await deliverBroadcast(client, {
-          title: normalized.title,
-          message: normalized.message,
-          color: normalized.color,
-          thumbnailUrl: normalized.thumbnailUrl,
-          imageUrl: normalized.imageUrl,
-          footerText: normalized.footerText,
-          channelPref: normalized.channelPref,
-          allowedIds: [...allowedGuildIds],
-          channelMap,
-          translations: normalized.translations,
-          poll: { broadcastId: record.id, options: normalized.pollOptions },
-          feedback: normalized.feedbackLabel ? { broadcastId: record.id, label: normalized.feedbackLabel } : undefined,
-        });
+        const deliveries = useSourceChannel && sourceConfig
+          ? await deliverBroadcastViaSource(client, sourceConfig, {
+              title: normalized.title,
+              message: normalized.message,
+              color: normalized.color,
+              thumbnailUrl: normalized.thumbnailUrl,
+              imageUrl: normalized.imageUrl,
+              footerText: normalized.footerText,
+            })
+          : await deliverBroadcast(client, {
+              title: normalized.title,
+              message: normalized.message,
+              color: normalized.color,
+              thumbnailUrl: normalized.thumbnailUrl,
+              imageUrl: normalized.imageUrl,
+              footerText: normalized.footerText,
+              channelPref: normalized.channelPref,
+              allowedIds: [...allowedGuildIds],
+              channelMap: await loadGuildChannelMap(),
+              translations: normalized.translations,
+              poll: { broadcastId: record.id, options: normalized.pollOptions },
+              feedback: normalized.feedbackLabel ? { broadcastId: record.id, label: normalized.feedbackLabel } : undefined,
+            });
 
         const { successCount, failCount } = await finalizeBroadcast(record.id, deliveries, totalTargeted);
         await markBroadcastMediaUsed([normalized.imageUrl, normalized.thumbnailUrl]);

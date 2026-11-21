@@ -269,6 +269,9 @@ export const startDashboardApi = async (client: Client) => {
   const startServer = (listenPort: number) => Bun.serve<WebSocketData>({
     port: listenPort,
     reusePort: true,
+    // Par défaut Bun coupe toute requête HTTP sans réponse après 10s, ce qui
+    // provoque des 502 côté proxy (sans en-têtes CORS) sur les routes lentes.
+    idleTimeout: 120,
     fetch(request, serverInstance) {
       // Domaine perso d'un serveur : liste blanche de routes, un seul serveur
       // accessible, et la portée suit la requête jusqu'aux contrôles d'accès.

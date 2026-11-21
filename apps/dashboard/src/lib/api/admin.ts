@@ -329,8 +329,32 @@ export interface BroadcastPayload {
 export interface BroadcastGuildChannel {
   id: string;
   name: string;
+  type?: number;
   category: string | null;
   position: number;
+}
+
+export interface BroadcastSourceConfig {
+  guildId: string;
+  channelId: string;
+}
+
+export interface BroadcastSubscribeResult {
+  guildId: string;
+  guildName: string;
+  channelId: string | null;
+  channelName: string | null;
+  status: 'SUBSCRIBED' | 'ALREADY_SUBSCRIBED' | 'SKIPPED' | 'FAILED';
+  reason: string | null;
+}
+
+export interface BroadcastSubscribeAllSummary {
+  total: number;
+  subscribed: number;
+  alreadySubscribed: number;
+  skipped: number;
+  failed: number;
+  results: BroadcastSubscribeResult[];
 }
 
 export interface BroadcastGuildConfig {
@@ -469,13 +493,54 @@ export async function fetchBroadcastEmojis(): Promise<{ emojis: BroadcastEmoji[]
   return response.json();
 }
 
-export async function fetchBroadcastChannels(): Promise<{ guilds: BroadcastGuildConfig[] }> {
+export async function fetchBroadcastChannels(): Promise<{ guilds: BroadcastGuildConfig[]; sourceChannel?: BroadcastSourceConfig | null }> {
   const response = await authorizedFetch(`${API_BASE_URL}/api/admin/broadcast/channels`);
   if (!response.ok) throw new Error('Erreur chargement des salons de diffusion');
   return response.json();
 }
 
-export async function setBroadcastChannel(guildId: string, channelId: string | null): Promise<void> {
+export async function setBroadcastSource(
+  guildId: string | null,
+  channelId: string | null,
+): Promise<{ ok: boolean; sourceChannel: BroadcastSourceConfig | null }> {
+  const response = await authorizedFetch(`${API_BASE_URL}/api/admin/broadcast/source`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ guildId, channelId }),
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.error || "Erreur lors de la configuration du salon d'annonces source");
+  }
+  return response.json();
+}
+
+export async function subscribeAllBroadcastGuilds(): Promise<BroadcastSubscribeAllSummary> {
+  const response = await authorizedFetch(`${API_BASE_URL}/api/admin/broadcast/source/subscribe-all`, {
+    method: 'POST',
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.error || "Erreur lors de l'abonnement des serveurs");
+  }
+  return response.json();
+}
+
+export async function subscribeBroadcastGuild(guildId: string): Promise<BroadcastSubscribeResult> {
+  const response = await authorizedFetch(`${API_BASE_URL}/api/admin/broadcast/channels/${guildId}/subscribe`, {
+    method: 'POST',
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.error || "Erreur lors de l'abonnement du serveur");
+  }
+  return response.json();
+}
+
+export async function setBroadcastChannel(
+  guildId: string,
+  channelId: string | null,
+): Promise<{ ok: boolean; subscription?: BroadcastSubscribeResult | null }> {
   const response = await authorizedFetch(`${API_BASE_URL}/api/admin/broadcast/channels/${guildId}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
@@ -485,6 +550,7 @@ export async function setBroadcastChannel(guildId: string, channelId: string | n
     const error = await response.json().catch(() => ({}));
     throw new Error(error.error || 'Erreur lors de la configuration du salon');
   }
+  return response.json();
 }
 
 export async function updateRecruitmentConfig(payload: Record<string, unknown>, guildId: string = authStore.selectedGuildId) {
