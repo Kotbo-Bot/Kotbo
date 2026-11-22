@@ -6,8 +6,15 @@
    * une pastille dans un selecteur ne dit pas a quoi ressemblera le panneau
    * poste dans le salon, et c'est pourtant la seule question qu'on se pose en
    * choisissant une couleur.
+   *
+   * Rendu par @arcscord/discord-ui, dans un `DiscordPreview` : les noms des
+   * mentions et des emojis sont declares au cadre du message. Seul, l'embed
+   * pose son propre cadre.
    */
-  import EmojiText from '../EmojiText.svelte';
+  import { getContext, onDestroy } from 'svelte';
+  import { ActionRow, Button, Embed, Markdown, type EmbedView } from '@arcscord/discord-ui-svelte';
+  import DiscordScope from '../discord/DiscordScope.svelte';
+  import { mergeEntities, PREVIEW_ENTITIES, type PreviewEntities, toPreviewMarkdown } from '../discord/previewEntities.svelte';
 
   const {
     color,
@@ -22,47 +29,63 @@
     fields?: { emoji?: string | null; name: string; value?: string | null }[];
     buttons?: { emoji?: string | null; label: string }[];
   } = $props();
+
+  const prepared = $derived.by(() => {
+    // Titre et noms de champs : Discord n'y résout pas les mentions.
+    const titleText = title ? toPreviewMarkdown(title, { mentions: false }) : null;
+    const descriptionText = description ? toPreviewMarkdown(description) : null;
+    const fieldTexts = fields.map((field) => ({
+      name: toPreviewMarkdown(field.emoji ? `${field.emoji} ${field.name}` : field.name, { mentions: false }),
+      value: toPreviewMarkdown(field.value ?? ''),
+    }));
+    const buttonEmojis = buttons.map((button) => (button.emoji ? toPreviewMarkdown(button.emoji) : null));
+    const embed: EmbedView = {
+      id: 'preview',
+      color,
+      ...(titleText ? { title: titleText.markdown } : {}),
+      ...(descriptionText ? { description: descriptionText.markdown } : {}),
+      ...(fieldTexts.length
+        ? { fields: fieldTexts.map((field, index) => ({ id: String(index), name: field.name.markdown, value: field.value.markdown })) }
+        : {}),
+    };
+    const entities = mergeEntities([
+      titleText?.entities ?? {},
+      descriptionText?.entities ?? {},
+      ...fieldTexts.flatMap((field) => [field.name.entities, field.value.entities]),
+      ...buttonEmojis.map((emoji) => emoji?.entities ?? {}),
+    ]);
+    return { embed, entities, buttonEmojis: buttonEmojis.map((emoji) => emoji?.markdown ?? null) };
+  });
+
+  // Dans un DiscordPreview, les noms remontent au cadre du message.
+  const registry = getContext<PreviewEntities | undefined>(PREVIEW_ENTITIES);
+  const key = `embed-${Math.random().toString(36).slice(2)}`;
+  $effect(() => {
+    registry?.set(key, prepared.entities);
+  });
+  onDestroy(() => registry?.remove(key));
 </script>
 
-<div class="mt-1.5 flex rounded-[4px] overflow-hidden bg-[#2b2d31] max-w-[440px]">
-  <div class="w-1 shrink-0" style="background-color: {color}"></div>
-  <div class="min-w-0 flex-1 px-3.5 py-3">
-    {#if title}
-      <p class="text-[15px] font-semibold text-[#f2f3f5] leading-snug"><EmojiText value={title} /></p>
-    {/if}
-    {#if description}
-      <p class="mt-1 text-body-sm leading-[1.4] text-[#dbdee1] whitespace-pre-wrap break-words"><EmojiText value={description} /></p>
-    {/if}
+{#snippet content()}
+  <Embed embed={prepared.embed} />
+  {#if buttons.length}
+    <!-- Les boutons vivent sous l'embed, pas dedans : c'est la place que Discord leur donne. -->
+    <ActionRow>
+      {#each buttons as button, index (index)}
+        {@const emoji = prepared.buttonEmojis[index]}
+        {#if emoji}
+          {#snippet buttonEmoji()}<Markdown inline content={emoji} />{/snippet}
+          <Button label={button.label} variant="primary" emoji={buttonEmoji} />
+        {:else}
+          <Button label={button.label} variant="primary" />
+        {/if}
+      {/each}
+    </ActionRow>
+  {/if}
+{/snippet}
 
-    {#if fields.length}
-      <div class="mt-2.5 space-y-2">
-        {#each fields as field, index (index)}
-          <div>
-            <p class="text-body-sm font-semibold text-[#f2f3f5]">
-              {#if field.emoji}<span class="mr-1"><EmojiText value={field.emoji} /></span>{/if}{field.name}
-            </p>
-            {#if field.value}
-              <p class="text-body-sm leading-[1.4] text-[#b5bac1] whitespace-pre-wrap break-words"><EmojiText value={field.value} /></p>
-            {/if}
-          </div>
-        {/each}
-      </div>
-    {/if}
-  </div>
-</div>
-
-{#if buttons.length}
-  <!-- Les boutons vivent sous l'embed, pas dedans : c'est la place que Discord
-       leur donne, et l'apercu perdrait son interet a la deplacer. -->
-  <div class="mt-2 flex flex-wrap gap-2 max-w-[440px]">
-    {#each buttons as button, index (index)}
-      <span
-        class="inline-flex items-center gap-1.5 rounded-[3px] px-3 py-1.5 text-body-sm font-medium text-white"
-        style="background-color: {color}"
-      >
-        {#if button.emoji}<span><EmojiText value={button.emoji} /></span>{/if}
-        {button.label}
-      </span>
-    {/each}
-  </div>
+{#if registry}
+  {@render content()}
+{:else}
+  <DiscordScope entities={prepared.entities}>{@render content()}</DiscordScope>
 {/if}
