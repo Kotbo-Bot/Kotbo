@@ -59,6 +59,8 @@
   let ticketInactivityHours = $state(24);
   let ticketStaffReminderEnabled = $state(false);
   let ticketStaffReminderMinutes = $state(60);
+  let ticketStaffReminderTarget = $state('TICKET');
+  let ticketStaffReminderChannelId = $state('');
   let ticketInactivityMessage = $state('');
   let ticketSatisfactionCommentEnabled = $state(true);
   let ticketSatisfactionCommentQuestion = $state('');
@@ -178,6 +180,8 @@
     ticketInactivityMessage,
     ticketStaffReminderEnabled,
     ticketStaffReminderMinutes,
+    ticketStaffReminderTarget,
+    ticketStaffReminderChannelId,
     ticketSatisfactionCommentEnabled,
     ticketSatisfactionCommentQuestion,
     ticketSatisfactionCommentTimeout,
@@ -257,6 +261,8 @@
     ticketInactivityMessage = savedSettingsConfig.ticketInactivityMessage;
     ticketStaffReminderEnabled = savedSettingsConfig.ticketStaffReminderEnabled;
     ticketStaffReminderMinutes = savedSettingsConfig.ticketStaffReminderMinutes;
+    ticketStaffReminderTarget = savedSettingsConfig.ticketStaffReminderTarget;
+    ticketStaffReminderChannelId = savedSettingsConfig.ticketStaffReminderChannelId;
     ticketSatisfactionCommentEnabled = savedSettingsConfig.ticketSatisfactionCommentEnabled;
     ticketSatisfactionCommentQuestion = savedSettingsConfig.ticketSatisfactionCommentQuestion;
     ticketSatisfactionCommentTimeout = savedSettingsConfig.ticketSatisfactionCommentTimeout;
@@ -598,6 +604,8 @@
     ticketInactivityMessage = config.ticketInactivityMessage || '';
     ticketStaffReminderEnabled = config.ticketStaffReminderEnabled === true;
     ticketStaffReminderMinutes = config.ticketStaffReminderMinutes ?? 60;
+    ticketStaffReminderTarget = config.ticketStaffReminderTarget ?? 'TICKET';
+    ticketStaffReminderChannelId = config.ticketStaffReminderChannelId || '';
     ticketSatisfactionCommentEnabled = config.ticketSatisfactionCommentEnabled !== undefined ? config.ticketSatisfactionCommentEnabled : true;
     // Laisse vide : le bot pose alors sa question par defaut, comme pour les embeds.
     ticketSatisfactionCommentQuestion = config.ticketSatisfactionCommentQuestion || '';
@@ -669,6 +677,8 @@
       ticketInactivityMessage,
       ticketStaffReminderEnabled,
       ticketStaffReminderMinutes,
+      ticketStaffReminderTarget,
+      ticketStaffReminderChannelId,
       ticketSatisfactionCommentEnabled,
       ticketSatisfactionCommentQuestion,
       ticketSatisfactionCommentTimeout,
@@ -796,6 +806,8 @@
           ticketInactivityMessage,
           ticketStaffReminderEnabled,
           ticketStaffReminderMinutes,
+          ticketStaffReminderTarget,
+          ticketStaffReminderChannelId,
           ticketSatisfactionCommentEnabled,
           ticketSatisfactionCommentQuestion,
           ticketSatisfactionCommentTimeout,
@@ -1380,6 +1392,22 @@
             <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">{m.e1_tickets_staff_reminder_minutes()}</span>
             <input type="number" bind:value={ticketStaffReminderMinutes} min={1} max={10080} class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-field-border focus:ring-1 ring-primary/30 transition-all outline-none" />
           </label>
+          <div class="space-y-3">
+            <label class="block sm:max-w-[50%]">
+              <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">{m.e1_tickets_staff_reminder_target()}</span>
+              <select bind:value={ticketStaffReminderTarget} class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-field-border outline-none">
+                <option value="TICKET">{m.e1_tickets_staff_reminder_target_ticket()}</option>
+                <option value="DASHBOARD">{m.e1_tickets_staff_reminder_target_dashboard()}</option>
+                <option value="CHANNEL">{m.e1_tickets_staff_reminder_target_channel()}</option>
+              </select>
+            </label>
+            {#if ticketStaffReminderTarget === 'CHANNEL'}
+              <label class="block sm:max-w-[50%]">
+                <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">{m.e1_tickets_staff_reminder_channel()}</span>
+                <input type="text" bind:value={ticketStaffReminderChannelId} placeholder={m.e1_tickets_staff_reminder_channel_id_ph()} class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-field-border outline-none" />
+              </label>
+            {/if}
+          </div>
         {/if}
       </div>
     {/if}

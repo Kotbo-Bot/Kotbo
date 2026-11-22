@@ -3039,6 +3039,8 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "ticketInactivityMessage": "Bonjour {user}, votre ticket est inactif depuis un moment. N'hésitez pas à y répondre si vous avez toujours besoin d'aide !",
     "ticketStaffReminderEnabled": false,
     "ticketStaffReminderMinutes": 60,
+    "ticketStaffReminderTarget": "TICKET",
+    "ticketStaffReminderChannelId": null,
     "progressionBlacklistUserIds": [],
     "progressionBlacklistRoleIds": [],
     "progressionBlacklistChannelIds": [],
