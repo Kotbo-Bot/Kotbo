@@ -60,6 +60,7 @@ export function createQuestsRouter(client: Client) {
       const body = await readLenientBody<{
         name: string; description: string; type: string;
         frequency: string; target: number; rewardCoins: number; rewardXp: number;
+        conditions?: Record<string, unknown> | null;
       }>(c);
       return send(c, await createQuestDefinition(c.req.param('guildId'), body), 201);
     } catch (err) {

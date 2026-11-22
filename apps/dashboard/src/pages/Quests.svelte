@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { fetchQuestsData, createQuest, updateQuest, deleteQuest } from '../lib/api';
+  import { dashboardStore } from '../lib/stores/dashboard.svelte';
   import { toast } from '../lib/stores/toast.svelte';
   import ModulePage from '../lib/components/ModulePage.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
@@ -13,8 +14,11 @@
   let showTemplates = $state(false);
   let newQuest = $state({
     name: '', description: '', type: 'SEND_MESSAGES', frequency: 'DAILY',
-    target: 10, rewardCoins: 50, rewardXp: 25
+    target: 10, rewardCoins: 50, rewardXp: 25,
+    channelId: '', roleId: '', minLength: 0, keyword: '', customRule: ''
   });
+  const discordChannels = $derived((dashboardStore.state.discordChannels ?? []) as Array<{ id: string; name: string }>);
+  const discordRoles = $derived((dashboardStore.state.discordRoles ?? []) as Array<{ id: string; name: string }>);
 
   const questTypes = $derived<Record<string, string>>({
     SEND_MESSAGES: m.que_type_send_messages(),
@@ -50,13 +54,14 @@
       target: tpl.target,
       rewardCoins: tpl.rewardCoins,
       rewardXp: tpl.rewardXp,
+      channelId: '', roleId: '', minLength: 0, keyword: '', customRule: ''
     };
     showTemplates = false;
     showCreate = true;
   }
 
   function openBlankForm() {
-    newQuest = { name: '', description: '', type: 'SEND_MESSAGES', frequency: 'DAILY', target: 10, rewardCoins: 50, rewardXp: 25 };
+    newQuest = { name: '', description: '', type: 'SEND_MESSAGES', frequency: 'DAILY', target: 10, rewardCoins: 50, rewardXp: 25, channelId: '', roleId: '', minLength: 0, keyword: '', customRule: '' };
     showTemplates = false;
     showCreate = true;
   }
@@ -83,9 +88,25 @@
       return;
     }
     try {
-      await createQuest(newQuest);
+      const conditions: Record<string, unknown> = {};
+      if (newQuest.channelId) conditions.channelIds = [newQuest.channelId];
+      if (newQuest.roleId) conditions.roleIds = [newQuest.roleId];
+      if (newQuest.minLength > 0) conditions.minLength = Number(newQuest.minLength);
+      if (newQuest.keyword.trim()) conditions.keyword = newQuest.keyword.trim();
+      if (newQuest.customRule.trim()) conditions.customRule = newQuest.customRule.trim();
+
+      await createQuest({
+        name: newQuest.name,
+        description: newQuest.description,
+        type: newQuest.type,
+        frequency: newQuest.frequency,
+        target: newQuest.target,
+        rewardCoins: newQuest.rewardCoins,
+        rewardXp: newQuest.rewardXp,
+        ...(Object.keys(conditions).length > 0 ? { conditions } : {}),
+      });
       showCreate = false;
-      newQuest = { name: '', description: '', type: 'SEND_MESSAGES', frequency: 'DAILY', target: 10, rewardCoins: 50, rewardXp: 25 };
+      newQuest = { name: '', description: '', type: 'SEND_MESSAGES', frequency: 'DAILY', target: 10, rewardCoins: 50, rewardXp: 25, channelId: '', roleId: '', minLength: 0, keyword: '', customRule: '' };
       await load();
     } catch {
       toast.error(m.que_create_error());
@@ -221,6 +242,33 @@
       <div class="space-y-1">
         <label for="new-quest-reward-xp" class="field-label">{m.que_field_reward_xp()}</label>
         <input id="new-quest-reward-xp" type="number" bind:value={newQuest.rewardXp} min="0" class="w-full px-3 py-2 bg-surface-container-high/30 border border-field-border rounded-lg text-on-surface text-sm focus:border-primary focus:outline-none transition-colors" />
+      </div>
+    </div>
+    <div class="pt-3 border-t border-outline-variant/10 space-y-3">
+      <p class="text-xs font-semibold text-on-surface-variant">Conditions avancées (optionnel)</p>
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div class="space-y-1">
+          <label for="new-quest-channel" class="field-label">Salon ciblé</label>
+          <select id="new-quest-channel" bind:value={newQuest.channelId} class="w-full px-3 py-2 bg-surface-container-high/30 border border-field-border rounded-lg text-on-surface text-sm">
+            <option value="">Tous les salons</option>
+            {#each discordChannels as ch (ch.id)}<option value={ch.id}>#{ch.name}</option>{/each}
+          </select>
+        </div>
+        <div class="space-y-1">
+          <label for="new-quest-role" class="field-label">Rôle requis</label>
+          <select id="new-quest-role" bind:value={newQuest.roleId} class="w-full px-3 py-2 bg-surface-container-high/30 border border-field-border rounded-lg text-on-surface text-sm">
+            <option value="">Tous les rôles</option>
+            {#each discordRoles as r (r.id)}<option value={r.id}>@{r.name}</option>{/each}
+          </select>
+        </div>
+        <div class="space-y-1">
+          <label for="new-quest-minlen" class="field-label">Longueur min. (car.)</label>
+          <input id="new-quest-minlen" type="number" min="0" bind:value={newQuest.minLength} class="w-full px-3 py-2 bg-surface-container-high/30 border border-field-border rounded-lg text-on-surface text-sm" />
+        </div>
+        <div class="space-y-1">
+          <label for="new-quest-keyword" class="field-label">Mot-clé / règle</label>
+          <input id="new-quest-keyword" type="text" bind:value={newQuest.keyword} placeholder="Ex. #event ou mot-clé" class="w-full px-3 py-2 bg-surface-container-high/30 border border-field-border rounded-lg text-on-surface text-sm" />
+        </div>
       </div>
     </div>
     <div class="flex justify-end gap-2">

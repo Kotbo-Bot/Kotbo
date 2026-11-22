@@ -189,6 +189,7 @@ export async function createQuestDefinition(guildId: string, data: {
   target: number;
   rewardCoins: number;
   rewardXp: number;
+  conditions?: Record<string, unknown> | null;
 }) {
   const quest = await prisma.questDefinition.create({
     data: {
@@ -200,6 +201,7 @@ export async function createQuestDefinition(guildId: string, data: {
       target: data.target,
       rewardCoins: data.rewardCoins,
       rewardXp: data.rewardXp,
+      ...(data.conditions !== undefined ? { conditions: data.conditions as any } : {}),
     },
   });
   await invalidateActiveQuests(guildId);
@@ -209,7 +211,7 @@ export async function createQuestDefinition(guildId: string, data: {
 // Le filtre sur `guildId` empêche d'atteindre, depuis la route d'un serveur, la
 // quête d'un autre serveur dont on connaîtrait l'identifiant.
 export async function updateQuestDefinition(guildId: string, questId: string, data: Record<string, any>) {
-  const allowedFields = ['name', 'description', 'type', 'frequency', 'target', 'rewardCoins', 'rewardXp', 'enabled'];
+  const allowedFields = ['name', 'description', 'type', 'frequency', 'target', 'rewardCoins', 'rewardXp', 'enabled', 'conditions'];
   const sanitized: Record<string, any> = {};
   for (const key of allowedFields) {
     if (data[key] !== undefined) sanitized[key] = data[key];
