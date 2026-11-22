@@ -1381,7 +1381,13 @@ export function createMcpServerRouter(client: Client): Hono {
     try {
       const handled = await handleMCPRoutes(req, res, splitPath(url.pathname), url, client);
       if (!handled) json(res, 404, { error: 'Route introuvable' });
-      return res.toResponse();
+      const response = res.toResponse();
+      // dashboardCors pose `Content-Security-Policy: default-src 'self'` sur `c.res` ;
+      // Hono fusionne ces en-têtes par-dessus la Response retournée, il faut donc
+      // répercuter la CSP propre à la page d'autorisation sur le contexte Hono.
+      const csp = response.headers.get('Content-Security-Policy');
+      if (csp) c.header('Content-Security-Policy', csp);
+      return response;
     } catch (err) {
       logger.error('MCP', err);
       const failed = new McpResponse();
