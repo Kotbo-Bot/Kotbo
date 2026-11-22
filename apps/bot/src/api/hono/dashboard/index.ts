@@ -74,6 +74,7 @@ import { createNotificationInboxRouter } from '../../routes/dashboard/notificati
 import { createUpdatesRouter } from '../../routes/dashboard/updates.js';
 import { createMemberProfileRouter } from '../../routes/dashboard/memberProfile.js';
 import { createAutomodSimulationRouter } from '../../routes/dashboard/automodSimulation.js';
+import { createDiscordAutomodRouter } from '../../routes/dashboard/discordAutomod.js';
 import { createSetupRouter } from '../../routes/dashboard/setup.js';
 import { createLogsRouter } from '../../routes/dashboard/modules/logs.js';
 import { createNotificationsRouter } from '../../routes/dashboard/modules/notifications.js';
@@ -128,6 +129,7 @@ export function createDashboardRouter(client: Client) {
   router.route('/', createLogsRouter(client));
   router.route('/', createSetupRouter(client));
   router.route('/', createAutomodSimulationRouter(client));
+  router.route('/', createDiscordAutomodRouter(client));
   router.route('/', createMemberProfileRouter(client));
   // Hors serveur : session seule, sans garde de guilde.
   router.route('/', createTelemetryRouter(client));
