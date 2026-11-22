@@ -144,6 +144,9 @@ export interface StaffManagerNote {
   targetUserId: string;
   authorId: string;
   content: string;
+  title?: string | null;
+  category?: 'NOTE' | 'PRAISE' | 'WARNING' | 'FOLLOWUP';
+  warningId?: string | null;
   createdAt: Date | string;
   updatedAt: Date | string;
   author?: StaffMember;

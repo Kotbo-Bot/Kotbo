@@ -291,8 +291,8 @@ export async function fetchManagerNotes(staffUserId, guildId = authStore.selecte
   return dashboardRequest(`/staff/${staffUserId}/notes`, { method: 'GET', guildId });
 }
 
-export async function addManagerNote(staffUserId, content, guildId = authStore.selectedGuildId) {
-  return dashboardMutation(`/staff/${staffUserId}/notes`, { method: 'POST', payload: { content }, guildId });
+export async function addManagerNote(staffUserId, content, guildId = authStore.selectedGuildId, report: { title?: string; category?: string } = {}) {
+  return dashboardMutation(`/staff/${staffUserId}/notes`, { method: 'POST', payload: { content, ...report }, guildId });
 }
 
 export async function deleteManagerNote(staffUserId, noteId, guildId = authStore.selectedGuildId) {
