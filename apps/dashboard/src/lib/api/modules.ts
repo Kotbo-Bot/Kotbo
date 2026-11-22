@@ -3,6 +3,7 @@ import { authStore } from '../stores/auth.svelte';
 import { API_BASE_URL, dashboardMutation, dashboardRequest } from './client';
 
 import { m } from '../i18n';
+import type { GiveawayConditionDraft } from '../giveawayConditions';
 import type { ReactionRoleButtonMode, ReactionRoleMenuMode, ReactionRolePresetKey } from '@kotbo/contracts';
 // ==========================================
 // GENERALIST MODULES APIs
@@ -186,6 +187,9 @@ export interface GiveawayTemplatePayload {
   rpgItemId?: string | null;
   needValidation?: boolean;
   ignoreBonuses?: boolean;
+  /** `null` côté lecture : le modèle suit le filtre du serveur. */
+  conditions?: GiveawayConditionDraft[] | null;
+  createDiscordEvent?: boolean;
   styleOverrides?: Partial<GiveawayAppearance>;
   /**
    * Sauvegarde de configuration dont ce modèle est le jumeau. Clef absente :
@@ -214,6 +218,8 @@ export async function createGiveaway(
     channelId: string;
     styleOverrides?: Partial<GiveawayAppearance>;
     ignoreBonuses?: boolean;
+    conditions?: GiveawayConditionDraft[];
+    createDiscordEvent?: boolean;
     rpgXp?: number;
     rpgCoins?: number;
     rpgItemId?: string | null;

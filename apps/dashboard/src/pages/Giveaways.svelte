@@ -26,6 +26,8 @@
   import EmojiPicker from '../lib/components/EmojiPicker.svelte';
   import MacroTextField from '../lib/components/MacroTextField.svelte';
   import GiveawayPreview from '../lib/components/GiveawayPreview.svelte';
+  import GiveawayConditionsEditor from '../lib/components/GiveawayConditionsEditor.svelte';
+  import { conditionsFromServerFilter, conditionsPayload, type GiveawayConditionDraft } from '../lib/giveawayConditions';
   import type { MacroOption } from '../lib/macros';
   import {
     fetchGiveaways,
@@ -343,6 +345,8 @@
     channelId: null as string | null,
     ignoreBonuses: false,
     needValidation: false,
+    conditions: [] as GiveawayConditionDraft[],
+    createDiscordEvent: false,
     appearanceMode: 'plain' as AppearanceMode,
     useRewards: false,
     rpgXp: 0,
@@ -372,6 +376,7 @@
   function hasExtras(fields: typeof EMPTY_FORM): boolean {
     return fields.needValidation
       || fields.ignoreBonuses
+      || fields.createDiscordEvent
       || fields.useRewards
       || fields.appearanceMode !== 'plain';
   }
@@ -1000,6 +1005,11 @@
       channelId: template.channelId ?? null,
       ignoreBonuses: template.ignoreBonuses ?? false,
       needValidation: template.needValidation ?? false,
+      // Un modèle sans conditions propres suit le filtre du serveur, comme au lancement.
+      conditions: template.conditions
+        ? template.conditions.map((c) => ({ ...c, roleIds: c.roleIds ? [...c.roleIds] : undefined }))
+        : conditionsFromServerFilter(config),
+      createDiscordEvent: template.createDiscordEvent ?? false,
       appearanceMode: templateAppearanceMode(template),
       useRewards: (template.rpgXp ?? 0) > 0 || (template.rpgCoins ?? 0) > 0 || !!template.rpgItemId,
       rpgXp: template.rpgXp ?? 0,
@@ -1024,7 +1034,7 @@
     modalMode = 'launch';
     editingTemplateId = '';
     formTemplateId = '';
-    form = { ...EMPTY_FORM, channelId: config.defaultChannelId };
+    form = { ...EMPTY_FORM, channelId: config.defaultChannelId, conditions: conditionsFromServerFilter(config) };
     formStyle = styleFieldsFrom(factoryStyle());
     showExtras = false;
     actionState.clearFeedback();
@@ -1043,7 +1053,7 @@
     modalMode = 'template';
     editingTemplateId = template?.id ?? '';
     formTemplateId = '';
-    const filled = template ? formFromTemplate(template) : EMPTY_FORM;
+    const filled = template ? formFromTemplate(template) : { ...EMPTY_FORM, conditions: conditionsFromServerFilter(config) };
     form = {
       ...EMPTY_FORM,
       ...filled,
@@ -1074,7 +1084,7 @@
    * concours. Un modèle sans salon laisse en place celui déjà choisi.
    */
   function applyTemplateToForm(template: GiveawayTemplate | null) {
-    const filled = template ? formFromTemplate(template) : EMPTY_FORM;
+    const filled = template ? formFromTemplate(template) : { ...EMPTY_FORM, conditions: conditionsFromServerFilter(config) };
     form = { ...form, ...filled, name: form.name, channelId: filled.channelId || form.channelId };
     formStyle = styleFieldsFrom({ ...factoryStyle(), ...(template?.styleOverrides ?? {}) });
     showExtras = hasExtras(form);
@@ -1112,6 +1122,8 @@
       rpgItemId: rewards.rpgItemId || null,
       needValidation: form.needValidation,
       ignoreBonuses: form.ignoreBonuses,
+      conditions: conditionsPayload(form.conditions),
+      createDiscordEvent: form.createDiscordEvent,
       styleOverrides: formStyleOverrides(),
     };
 
@@ -1188,6 +1200,8 @@
         // l'API lit une chaîne et traduit le vide en « aucun objet ».
         ...formRewards(),
         needValidation: form.needValidation,
+        conditions: conditionsPayload(form.conditions),
+        createDiscordEvent: form.createDiscordEvent,
         styleOverrides: formStyleOverrides(),
       });
       if (!res || !res.giveaway) throw new Error(m.e8_giveaways_error_create());
@@ -2314,6 +2328,10 @@
           />
         </div>
 
+        <div class="pt-4 border-t border-outline-variant/10">
+          <GiveawayConditionsEditor bind:value={form.conditions} roles={availableRoles} />
+        </div>
+
         <div class="pt-4 border-t border-outline-variant/10 space-y-4">
           <button
             type="button"
@@ -2330,6 +2348,14 @@
             <label class="flex items-center gap-3 text-sm text-on-surface cursor-pointer">
               <input type="checkbox" bind:checked={form.needValidation} class="w-4 h-4 accent-primary cursor-pointer" />
               {m.giv_tpl_validation_label()}
+            </label>
+
+            <label class="flex items-start gap-3 cursor-pointer">
+              <input type="checkbox" bind:checked={form.createDiscordEvent} class="mt-0.5 w-4 h-4 accent-primary cursor-pointer" />
+              <span>
+                <span class="block text-sm text-on-surface">{m.giv_field_event()}</span>
+                <span class="block field-hint">{m.giv_field_event_help()}</span>
+              </span>
             </label>
 
             <label class="flex items-start gap-3 cursor-pointer">
