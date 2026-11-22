@@ -13,6 +13,10 @@ const mockDb = {
   activationCode: {
     findFirst: mock(() => Promise.resolve(null as unknown)),
   },
+  // `setGuildPlan` relit les serveurs staff liés après chaque changement d'offre.
+  staffServerLink: {
+    findMany: mock(() => Promise.resolve([] as unknown[])),
+  },
 };
 
 for (const dbPath of ['../../utils/db.ts', '../../utils/db.js']) {
