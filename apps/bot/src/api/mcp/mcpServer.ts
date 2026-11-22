@@ -1299,6 +1299,7 @@ export async function handleMCPRoutes(
 
     const server = new McpServer({ name: 'kotbo', version: '1.0.0' });
     registerMcpTools(server, guildId, permissions, client, {
+      keyId,
       ownerId,
       listAllTools: !directToken && !rawKey && !basicCredentials,
       wwwAuthenticate: directToken ? undefined : authChallenge(req, url, guildId, 'insufficient_scope', 'Autorisation MCP Kotbo requise'),

@@ -52,7 +52,8 @@ import { registerRpgClanTowerTools } from './tools/rpg-clan-tower.js';
 import { registerSiteTools } from './tools/site.js';
 import { registerShopTools } from './tools/shop.js';
 import { registerRegulationTools } from './tools/regulation.js';
-import { withModuleGate } from './toolModules.js';
+import { withKeyAccessGate, withModuleGate, type McpKeyRule } from './toolModules.js';
+import { cache } from '../../utils/cache.js';
 import { isModuleEnabled } from '../../services/core/moduleGate.js';
 
 export function registerMcpTools(
@@ -60,8 +61,22 @@ export function registerMcpTools(
   guildId: string,
   permissions: McpKeyPermission[],
   client: Client,
-  options: { ownerId?: string | null; listAllTools?: boolean; wwwAuthenticate?: string; securitySchemes?: ToolSecurityScheme[] } = {}
+  options: { keyId?: string | null; ownerId?: string | null; listAllTools?: boolean; wwwAuthenticate?: string; securitySchemes?: ToolSecurityScheme[] } = {}
 ) {
+  // Relu à chaque appel (une session dure plus longtemps qu'une règle) ; le
+  // cache `guild:` est purgé à l'écriture des règles.
+  const loadKeyRules = async (): Promise<McpKeyRule[]> => {
+    const cacheKey = `guild:${guildId}:mcp-key-access:${options.keyId}`;
+    const cached = await cache.get<McpKeyRule[]>(cacheKey);
+    if (cached) return cached;
+    const rows = await prisma.mcpKeyFeatureAccess.findMany({
+      where: { keyId: options.keyId! },
+      select: { featureKey: true, canView: true, canModerate: true, canConfigure: true, canDelete: true },
+    });
+    await cache.set(cacheKey, rows, 15);
+    return rows;
+  };
+
   // Vue NON GÉNÉRIQUE de `mcpServer.registerTool` - ne pas remplacer par un
   // appel direct au SDK.
   //
@@ -89,7 +104,11 @@ export function registerMcpTools(
       mcpServer.registerTool(
         name,
         config as never,
-        withModuleGate(name, cb, (moduleKey) => isModuleEnabled(guildId, moduleKey)) as never,
+        withModuleGate(
+          name,
+          options.keyId ? withKeyAccessGate(name, cb, loadKeyRules) : cb,
+          (moduleKey) => isModuleEnabled(guildId, moduleKey),
+        ) as never,
       ),
   };
 

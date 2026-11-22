@@ -58,6 +58,44 @@ export function mcpToolModule(toolName: string): string | undefined {
   return RULES.find(([pattern]) => pattern.test(toolName))?.[1];
 }
 
+export type McpKeyRight = 'canView' | 'canModerate' | 'canConfigure' | 'canDelete';
+export type McpKeyRule = { featureKey: string } & Record<McpKeyRight, boolean>;
+
+/**
+ * Droit qu'un outil demande sur son module, lu dans son nom comme la lecture
+ * seule de `restApi.ts`. shortcut: heuristique sur le verbe, sans annotation par
+ * outil ; à remplacer si un outil est mal rangé.
+ */
+export function mcpToolRight(toolName: string): McpKeyRight {
+  if (/^(get|list|search|read)_/.test(toolName)) return 'canView';
+  if (/^(delete|remove|dissolve|void|revoke|cancel)_/.test(toolName)) return 'canDelete';
+  if (/^(update|set|save|reorder)_/.test(toolName)) return 'canConfigure';
+  return 'canModerate';
+}
+
+/**
+ * Droits par module d'une clé : une clé sans règle garde ses permissions
+ * globales (comportement d'avant) ; dès une règle, tout module sans règle lui
+ * est fermé. Un outil sans module reste hors de cette garde.
+ */
+export function withKeyAccessGate(
+  toolName: string,
+  handler: McpToolHandler,
+  loadRules: () => Promise<McpKeyRule[]>,
+): McpToolHandler {
+  const moduleKey = mcpToolModule(toolName);
+  if (!moduleKey) return handler;
+  const right = mcpToolRight(toolName);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return async (args: any) => {
+    const rules = await loadRules();
+    if (rules.length === 0 || rules.find((r) => r.featureKey === moduleKey)?.[right]) return handler(args);
+    const moduleName = getModuleDefinition(moduleKey)?.name ?? moduleKey;
+    return err(`Cette clé n'a pas le droit « ${right} » sur le module « ${moduleName} » (Centre de gestion).`);
+  };
+}
+
 /**
  * Enveloppe le gestionnaire d'un outil : il refuse quand son module est éteint
  * sur le serveur de la clé. L'état est lu à chaque appel, pas à

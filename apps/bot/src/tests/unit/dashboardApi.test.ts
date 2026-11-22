@@ -74,6 +74,9 @@ const mockDb = {
   dashboardAuditLog: {
     create: mock(() => Promise.resolve({})),
   },
+  mcpKeyFeatureAccess: {
+    findMany: mock(() => Promise.resolve([])),
+  },
   dashboardFeatureConfig: {
     findMany: mock(() => Promise.resolve([])),
     create: mock(() => Promise.resolve({})),

@@ -60,5 +60,53 @@ export function createManagementRouter(client: Client) {
     }
   });
 
+  // Droits des cles MCP sur un module : meme matrice, meme endroit que les roles.
+  router.put('/api/dashboard/guilds/:guildId/management/features/:featureKey/key-access', ...guildRoute(client), async (c) => {
+    if (!c.var.effectiveAccess.canManageSettings) {
+      return send(c, { error: 'Accès refusé. Permissions administratives requises.' }, 403);
+    }
+    const guildId = c.req.param('guildId');
+    const featureKey = c.req.param('featureKey');
+    try {
+      const body = await readBody<{
+        keyAccessConfigs: Array<{
+          keyId: string;
+          canView?: boolean;
+          canModerate?: boolean;
+          canConfigure?: boolean;
+          canDelete?: boolean;
+        }>;
+      }>(c);
+      if (!body || !Array.isArray(body.keyAccessConfigs) || body.keyAccessConfigs.some((k) => typeof k?.keyId !== 'string')) {
+        return send(c, { error: "Payload d'accès de clé invalide" }, 400);
+      }
+
+      const featureConfig = await prisma.dashboardFeatureConfig.findUnique({
+        where: { guildId_featureKey: { guildId, featureKey } },
+        select: { id: true },
+      });
+      if (!featureConfig) return send(c, { error: 'Configuration du module introuvable' }, 404);
+
+      const { updateKeyAccess } = await import('../../../../services/core/dashboardManagementService.js');
+      await updateKeyAccess(guildId, featureKey, body.keyAccessConfigs);
+      await cache.invalidateGuild(guildId);
+
+      await pushAudit(guildId, {
+        user: auditUserOf(c),
+        action: 'Mise à jour accès clés MCP',
+        context: getGuildName(client, guildId),
+        module: 'Configuration',
+        eventType: 'Manuel',
+        details: `Accès des clés MCP pour le module "${featureKey}" mis à jour (${body.keyAccessConfigs.length} clés).`,
+        channelId: null
+      });
+
+      return send(c, { ok: true });
+    } catch (err) {
+      logger.error('ManagementAPI', `Error updating key access for ${featureKey}:`, err);
+      return fail(c, err, 'Erreur lors de la mise à jour des droits des clés du module', 'ManagementAPI');
+    }
+  });
+
   return router;
 }

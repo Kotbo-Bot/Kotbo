@@ -28,14 +28,14 @@ export const isReadTool = (name: string) => /^(get|list|search|read)_/.test(name
 
 type Tool = { config: McpToolConfig; handler: McpToolHandler };
 
-function collectTools(guildId: string, permissions: Parameters<typeof registerMcpTools>[2], client: Client, ownerId: string | null) {
+function collectTools(guildId: string, permissions: Parameters<typeof registerMcpTools>[2], client: Client, ownerId: string | null, keyId: string) {
   const tools = new Map<string, Tool>();
   const collector = {
     registerTool: (name: string, config: McpToolConfig, handler: McpToolHandler) => {
       if (isReadTool(name)) tools.set(name, { config, handler });
     },
   };
-  registerMcpTools(collector as unknown as McpServer, guildId, permissions, client, { ownerId });
+  registerMcpTools(collector as unknown as McpServer, guildId, permissions, client, { ownerId, keyId });
   return tools;
 }
 
@@ -114,7 +114,7 @@ export function createRestApiRouter(client: Client) {
       return c.json({ error: 'rate_limited', error_description: 'Trop de requêtes (100 req/min max).' }, 429);
     }
 
-    const tools = collectTools(guildId, key.permissions, client, key.ownerId ?? null);
+    const tools = collectTools(guildId, key.permissions, client, key.ownerId ?? null, key.id);
     const toolName = c.req.param('toolName');
 
     if (!toolName) {
