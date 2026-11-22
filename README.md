@@ -258,7 +258,7 @@ Les images du bot et du dashboard se construisent séparément, via `DockerfileB
   * `report` : Permet à un membre de déclarer de bonne foi son compte principal.
 * `/invites` : Liste les invitations suspectes ou les comptes créés sous un certain seuil.
 * `/rescan` : Relance un scan complet des invitations ou des membres suspects.
-* `/transcript` : Génère un fichier HTML et JSON de transcription complète du salon actuel.
+* `/transcript` : Génère la transcription complète du salon actuel, consultable depuis le dashboard.
 
 ### 👥 RH & Gestion du Personnel (Staff uniquement)
 * `/absent <subcommand>` : Déclare, met à jour ou consulte les demandes d'absences des membres du staff.
