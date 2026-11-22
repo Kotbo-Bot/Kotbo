@@ -1,36 +1,13 @@
 <script lang="ts">
   import Modal from '../Modal.svelte';
   import Papicon from '../Papicon.svelte';
-  import DiscordMarkdownText from './DiscordMarkdownText.svelte';
-  import DiscordEmbedPreview from './DiscordEmbedPreview.svelte';
+  import { Message } from '@arcscord/discord-ui-svelte';
+  import DiscordScope from '../discord/DiscordScope.svelte';
+  import { toEvidenceMessageView, type EvidenceMessage } from '../../evidenceMessageView';
   import { fetchSanctionDiscordMessages, generateSanctionDiscordTranscripts } from '../../api';
   import { m, dateLocale } from '../../i18n';
 
   import { errorMessage } from '@kotbo/shared';
-  interface ParsedEmbed {
-    color: string | null;
-    authorName: string | null;
-    authorIconUrl: string | null;
-    authorUrl: string | null;
-    title: string | null;
-    url: string | null;
-    description: string | null;
-    fields: { name: string; value: string; inline: boolean }[];
-    thumbnailUrl: string | null;
-    imageUrl: string | null;
-    footerText: string | null;
-    footerIconUrl: string | null;
-  }
-
-  interface EvidenceMessage {
-    id: string;
-    content: string;
-    createdAt: string;
-    attachments: { url: string; name: string; contentType: string | null; size: number; kind: 'image' | 'video' | 'file' }[];
-    embeds: ParsedEmbed[];
-    stickers: { id: string; name: string; url: string }[];
-  }
-
   interface EvidenceChannelResult {
     channelId: string;
     channelName: string;
@@ -352,44 +329,14 @@
                   </button>
 
                   <div class="min-w-0">
-                    <div class="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1">
-                      <span class="text-2xs font-semibold text-primary"># {message.channelName}</span>
-                      <span class="text-2xs text-on-surface-variant/45">{formatTimestamp(message.createdAt)}</span>
-                    </div>
-                    <div class="discord-bubble">
-                      {#if message.content}
-                        <p class="discord-bubble-text"><DiscordMarkdownText text={message.content} /></p>
-                      {:else if message.attachments.length === 0 && message.embeds.length === 0 && message.stickers.length === 0}
-                        <p class="discord-bubble-text discord-bubble-empty">{m.sev_no_text()}</p>
-                      {/if}
-
-                      {#if message.attachments.length > 0}
-                        <div class="mt-2 flex flex-wrap gap-2">
-                          {#each message.attachments as attachment}
-                            {#if attachment.kind === 'image'}
-                              <img src={attachment.url} alt={attachment.name} class="discord-attachment-img" loading="lazy" />
-                            {:else if attachment.kind === 'video'}
-                              <!-- svelte-ignore a11y_media_has_caption -->
-                              <video src={attachment.url} controls class="discord-attachment-video"></video>
-                            {:else}
-                              <span class="discord-attachment-file">📎 {attachment.name}</span>
-                            {/if}
-                          {/each}
-                        </div>
-                      {/if}
-
-                      {#each message.embeds as embed, index (index)}
-                        <DiscordEmbedPreview {embed} />
-                      {/each}
-
-                      {#if message.stickers.length > 0}
-                        <div class="mt-2 flex flex-wrap gap-2">
-                          {#each message.stickers as sticker (sticker.id)}
-                            <img src={sticker.url} alt={sticker.name} title={sticker.name} class="discord-sticker" />
-                          {/each}
-                        </div>
-                      {/if}
-                    </div>
+                    <p class="mb-1 text-2xs font-semibold text-primary"># {message.channelName}</p>
+                    <!-- Message tel que Discord l'affichait, rendu par @arcscord/discord-ui. -->
+                    <DiscordScope class="evidence-message">
+                      <Message message={toEvidenceMessageView(message, { id: 'evidence-target', displayName: targetTag || m.sev_target_fallback() })} />
+                    </DiscordScope>
+                    {#if !message.content && message.attachments.length === 0 && message.embeds.length === 0 && message.stickers.length === 0}
+                      <p class="mt-1 text-2xs italic text-on-surface-variant">{m.sev_no_text()}</p>
+                    {/if}
                   </div>
                 </article>
               {/each}
@@ -458,52 +405,8 @@
 </Modal>
 
 <style>
-  .discord-bubble {
-    background-color: #313338;
-    color: #dbdee1;
-    border-radius: 8px;
-    padding: 10px 12px;
-  }
-
-  .discord-bubble-text {
-    font-size: 13px;
-    line-height: 1.4;
-    white-space: pre-wrap;
-    word-break: break-word;
-    margin: 0;
-  }
-
-  .discord-bubble-empty {
-    color: #80848e;
-    font-style: italic;
-  }
-
-  .discord-attachment-img {
-    height: 4rem;
-    width: 4rem;
-    object-fit: cover;
-    border-radius: 8px;
-    border: 1px solid #1e1f22;
-  }
-
-  .discord-attachment-video {
-    max-width: 220px;
-    max-height: 140px;
-    border-radius: 8px;
-  }
-
-  .discord-attachment-file {
-    font-size: 10px;
-    font-weight: 600;
-    padding: 4px 8px;
-    border-radius: 6px;
-    background-color: #2b2d31;
-    color: #949ba4;
-  }
-
-  .discord-sticker {
-    width: 80px;
-    height: 80px;
-    object-fit: contain;
+  :global(.arcscord-discord-ui.evidence-message) {
+    border-radius: 0.5rem;
+    padding: 0.25rem 0;
   }
 </style>
