@@ -1,0 +1,108 @@
+// ============================================================================
+// CELLULE BIEN-ÊTRE (ESPACE CONFIDENTIEL CLOISONNÉ) & MULTI-SERVEURS PUBLICS
+// ============================================================================
+
+model WellbeingConfig {
+  guildId          String   @id
+  enabled          Boolean  @default(false)
+  teamRoleIds      String[] @default([])
+  teamUserIds      String[] @default([])
+  directorRoleIds  String[] @default([])
+  directorUserIds  String[] @default([])
+  requireReason    Boolean  @default(true)
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("wellbeing_configs")
+}
+
+model WellbeingCase {
+  id             String   @id @default(cuid())
+  guildId        String
+  subjectUserId  String?
+  subjectName    String
+  title          String
+  category       String   @default("SOUTIEN") // SOUTIEN | MEDIATION | SIGNALEMENT | SUIVI
+  severity       String   @default("NORMAL")  // LOW | NORMAL | HIGH | CRITICAL
+  status         String   @default("OPEN")    // OPEN | MONITORING | CLOSED
+  summary        String
+  createdById    String
+  createdByName  String
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  notes WellbeingCaseNote[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([guildId, status])
+  @@map("wellbeing_cases")
+}
+
+model WellbeingCaseNote {
+  id         String   @id @default(cuid())
+  caseId     String
+  authorId   String
+  authorName String
+  content    String
+  createdAt  DateTime @default(now())
+
+  wellbeingCase WellbeingCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@index([caseId, createdAt])
+  @@map("wellbeing_case_notes")
+}
+
+model WellbeingBreakGlassLog {
+  id         String   @id @default(cuid())
+  guildId    String
+  actorId    String
+  actorName  String
+  caseId     String?
+  reason     String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@index([guildId, actorId, expiresAt])
+  @@map("wellbeing_break_glass_logs")
+}
+
+model GuildNetwork {
+  id                   String   @id @default(cuid())
+  name                 String
+  ownerUserId          String
+  planKey              String   @default("NETWORK_ASSOC")
+  maxGuilds            Int      @default(5)
+  billingStatus        String   @default("ACTIVE")
+  stripeSubscriptionId String?
+  notes                String?
+
+  members GuildNetworkMember[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([ownerUserId])
+  @@map("guild_networks")
+}
+
+model GuildNetworkMember {
+  id        String   @id @default(cuid())
+  networkId String
+  guildId   String
+  role      String   @default("MEMBER") // PRIMARY | MEMBER
+  addedById String
+  addedAt   DateTime @default(now())
+
+  network GuildNetwork @relation(fields: [networkId], references: [id], onDelete: Cascade)
+  guild   Guild        @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@unique([networkId, guildId])
+  @@index([guildId])
+  @@map("guild_network_members")
+}

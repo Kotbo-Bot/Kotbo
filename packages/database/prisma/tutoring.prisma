@@ -30,6 +30,8 @@ model TutoringItem {
 
   hierarchyId String? // null = item commun à toutes les hiérarchies
   grade String? // null = item commun à tous les grades de la hiérarchie ciblée
+  grantRoleIds String[] @default([]) // Rôles Discord attribués à la validation
+  grantDashboardSection String? // Section dashboard débloquée à la validation
 
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
   hierarchy StaffHierarchy? @relation("HierarchyTutoringItems", fields: [hierarchyId], references: [id], onDelete: Cascade)

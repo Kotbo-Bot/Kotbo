@@ -39,6 +39,10 @@ model StaffMember {
 
   isTutor Boolean @default(false)
 
+  // Habilitations à deux niveaux (général 0..5 + par pôle)
+  generalClearance Int  @default(0)
+  poleClearances   Json @default("{}")
+
   // Version du lien d'abonnement iCal : l'incrémenter révoque les liens déjà distribués.
   icalTokenVersion Int @default(0)
 

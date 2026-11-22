@@ -570,10 +570,18 @@ model Guild {
   ticketSelfReopenEnabled     Boolean  @default(true)
   // Le membre peut-il supprimer définitivement l'un de ses anciens tickets ?
   ticketSelfDeleteEnabled     Boolean  @default(false)
+  ticketWebFormEnabled        Boolean  @default(false)
+  ticketInboundEmailEnabled   Boolean  @default(false)
+  ticketInboundEmailAddress   String?
+  ticketInboundEmailSecret    String?
   tickets                Ticket[]
   ticketBlacklist        TicketBlacklist[]
   ticketMacros           TicketMacro[]
   ticketStaffSignatures  TicketStaffSignature[]
+  wellbeingConfig        WellbeingConfig?
+  wellbeingCases         WellbeingCase[]
+  wellbeingBreakGlassLogs WellbeingBreakGlassLog[]
+  networkMemberships     GuildNetworkMember[]
   campaigns              Campaign[]
 
   autoThreadEnabled  Boolean   @default(false)

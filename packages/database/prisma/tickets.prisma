@@ -111,7 +111,13 @@ model Ticket {
   peakToxicity  Float?
   moodUpdatedAt DateTime?
 
-  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  // ── Support hors Discord (Web / E-mail) ───────────────────────────────────
+  source         String  @default("DISCORD") // DISCORD | WEB | EMAIL
+  requesterEmail String?
+  webAccessToken String? @unique
+
+  guild       Guild              @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  webMessages TicketWebMessage[]
 
   @@index([guildId, createdAt])
   @@index([guildId, status, createdAt])
@@ -239,4 +245,21 @@ model TicketStaffSignature {
 
   @@id([guildId, userId])
   @@map("ticket_staff_signatures")
+}
+
+model TicketWebMessage {
+  id          String   @id @default(cuid())
+  ticketId    String
+  authorId    String?
+  authorName  String
+  authorEmail String?
+  isStaff     Boolean  @default(false)
+  source      String   @default("WEB") // WEB | EMAIL | DASHBOARD
+  content     String
+  createdAt   DateTime @default(now())
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId, createdAt])
+  @@map("ticket_web_messages")
 }
