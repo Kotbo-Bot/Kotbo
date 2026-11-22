@@ -192,7 +192,7 @@
     value={query}
     placeholder={placeholderText}
     oninput={(event) => handleInput((event.currentTarget as HTMLInputElement).value)}
-    class="w-full bg-[#1e1e2e]/60 border border-white/5 rounded-xl px-4 py-3 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#8a2be2]/50 focus:border-transparent transition-all duration-300"
+    class="input"
     {disabled}
   />
 
@@ -205,12 +205,12 @@
   {/if}
 
   {#if suggestions.length > 0}
-    <div class="absolute z-50 w-full mt-2 bg-[#1e1e2e] border border-white/10 rounded-xl shadow-sm overflow-hidden">
+    <div class="absolute z-50 w-full mt-2 bg-surface-container border border-outline-variant rounded-xl shadow-sm overflow-hidden">
       <div class="max-h-60 overflow-y-auto p-2 space-y-1">
         {#each suggestions as suggestion (suggestion.id)}
           <button
             type="button"
-            class="w-full text-left px-3 py-2 rounded-lg hover:bg-white/5 transition-colors flex items-center gap-3 group"
+            class="w-full text-left px-3 py-2 rounded-lg hover:bg-surface-container-high transition-colors flex items-center gap-3 group"
             onclick={() => selectSuggestion(suggestion)}
             {disabled}
           >
@@ -225,7 +225,7 @@
             </div>
             <div class="flex-1 min-w-0">
               <div class="flex items-center justify-between">
-                <span class="text-sm font-medium text-gray-200 group-hover:text-white transition-colors truncate">
+                <span class="text-sm font-medium text-on-surface transition-colors truncate">
                   {suggestion.displayName || suggestion.username}
                 </span>
                 <span class="text-2xs text-on-surface-variant group-hover:text-on-surface-variant transition-colors shrink-0 ml-2">
