@@ -65,12 +65,18 @@ export function isSynced(model: string): boolean {
 
 type Resolve = (guildId: string) => Promise<string>;
 
+function isPlainObject(node: unknown): node is Record<string, unknown> {
+  if (!node || typeof node !== 'object') return false;
+  const proto = Object.getPrototypeOf(node);
+  return proto === Object.prototype || proto === null;
+}
+
 function collect(node: unknown, out: Set<string>): void {
   if (Array.isArray(node)) {
     for (const n of node) collect(n, out);
     return;
   }
-  if (!node || typeof node !== 'object' || node instanceof Date) return;
+  if (!isPlainObject(node)) return;
   for (const [key, value] of Object.entries(node)) {
     if (key === 'guildId' && typeof value === 'string') out.add(value);
     else collect(value, out);
@@ -79,7 +85,7 @@ function collect(node: unknown, out: Set<string>): void {
 
 function apply(node: unknown, map: Map<string, string>): unknown {
   if (Array.isArray(node)) return node.map((n) => apply(n, map));
-  if (!node || typeof node !== 'object' || node instanceof Date) return node;
+  if (!isPlainObject(node)) return node;
   const copy: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(node)) {
     copy[key] = key === 'guildId' && typeof value === 'string'

@@ -27,6 +27,19 @@ describe('redirectGuildIds', () => {
     expect(out).toEqual({ where: { guildId: 'primary', createdAt: { gte: date } }, select: { guildId: true } });
     expect(args.where.guildId).toBe('sub');
   });
+
+  test('préserve les instances de classe (ex. FieldRef Prisma) sans les aplatir', async () => {
+    class FakeFieldRef {
+      constructor(public readonly modelName: string, public readonly name: string) {}
+    }
+    const ref = new FakeFieldRef('Ticket', 'lastStaffMessageAt');
+    const out = await redirectGuildIds({
+      where: { guildId: 'sub', lastMemberMessageAt: { gt: ref } },
+    }, resolve);
+    expect(out.where.guildId).toBe('primary');
+    expect(out.where.lastMemberMessageAt.gt).toBe(ref);
+    expect(out.where.lastMemberMessageAt.gt instanceof FakeFieldRef).toBe(true);
+  });
 });
 
 describe('resolveDataGuild', () => {
