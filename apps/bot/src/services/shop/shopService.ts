@@ -26,7 +26,7 @@ import { isAutoGrantableRoleId } from '../../utils/adminLockPermissions.js';
 import { resolveGuildLocale } from '../../utils/i18n.js';
 import * as m from '../../lib/paraglide/messages.js';
 import { getModuleStates } from '../core/moduleGate.js';
-import { adminSpawnItem, creditBalance, getOrCreateRpgProfile } from '../features/economyService.js';
+import { adminSpawnItem, getOrCreateRpgProfile } from '../features/economyService.js';
 import { addXp, getGuildLevelCurve, getLevelFromXp } from '../progression/levelingService.js';
 import { publishGuildSignal } from '../site/siteLive.js';
 import { UserFacingError } from '../../utils/userFacingError.js';
