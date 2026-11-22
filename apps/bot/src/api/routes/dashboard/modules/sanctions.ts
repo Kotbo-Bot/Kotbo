@@ -5,7 +5,10 @@ import { generateTranscriptFromMessages } from '../../../../services/features/tr
 import { formatSanctionDurationLabel, registerImportedSanction } from '../../../../services/moderation/sanctionService.js';
 import {
   archiveSanctions,
+  DELETION_RETENTION_DAYS,
   deleteSanctions,
+  listDeletedSanctions,
+  restoreDeletedSanction,
   setSanctionAppealLock,
   unarchiveSanctions,
 } from '../../../../services/moderation/sanctionArchiveService.js';
@@ -283,7 +286,7 @@ export function createSanctionsRouter(client: Client) {
         return send(c, { error: 'Infraction introuvable sur ce serveur.' }, 404);
       }
 
-      await prisma.sanction.delete({ where: { id: sanction.id } });
+      await deleteSanctions(guildId, [sanction.id], { userId: c.var.dashboardUser.userId, tag: auditUser });
 
       await pushAudit(guildId, {
         user: auditUser,
@@ -299,6 +302,57 @@ export function createSanctionsRouter(client: Client) {
     } catch (err) {
       logger.error('SanctionsAPI', 'Error deleting sanction:', err);
       return fail(c, err, "Erreur lors de la suppression de l'infraction", 'SanctionsAPI');
+    }
+  });
+
+  // Corbeille : relire une sanction supprimée puis la restaurer (admins seulement,
+  // l'issue #745 vise l'abus de pouvoir : un modérateur n'y a pas accès).
+  router.get(`${base}/sanctions/deleted`, ...gate, async (c) => {
+    if (c.var.effectiveAccess.level !== 'admin') {
+      return send(c, { error: 'Réservé aux administrateurs.' }, 403);
+    }
+    try {
+      const items = await listDeletedSanctions(c.req.param('guildId'));
+      return send(c, { items, retentionDays: DELETION_RETENTION_DAYS });
+    } catch (err) {
+      logger.error('SanctionsAPI', 'Error listing deleted sanctions:', err);
+      return fail(c, err, 'Erreur lors du chargement des infractions supprimées', 'SanctionsAPI');
+    }
+  });
+
+  router.post(`${base}/sanctions/deleted/:deletionId/restore`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const auditUser = auditUserOf(c);
+    if (c.var.effectiveAccess.level !== 'admin') {
+      return send(c, { error: 'Réservé aux administrateurs.' }, 403);
+    }
+    try {
+      const result = await restoreDeletedSanction(guildId, c.req.param('deletionId'), {
+        userId: c.var.dashboardUser.userId,
+        tag: auditUser,
+      });
+      if (!result.ok) {
+        const messages = {
+          not_found: ['Infraction supprimée introuvable.', 404],
+          already_restored: ['Cette infraction a déjà été restaurée.', 409],
+          id_taken: ['Une infraction avec cet identifiant existe déjà.', 409],
+        } as const;
+        const [error, status] = messages[result.reason];
+        return send(c, { error }, status);
+      }
+      await pushAudit(guildId, {
+        user: auditUser,
+        action: 'Restauration infraction',
+        context: getGuildName(client, guildId),
+        module: 'Sanctions',
+        eventType: 'Manuel',
+        details: `Infraction ${result.sanctionId} restaurée depuis les suppressions.`,
+        channelId: null,
+      });
+      return send(c, { ok: true, sanctionId: result.sanctionId });
+    } catch (err) {
+      logger.error('SanctionsAPI', 'Error restoring sanction:', err);
+      return fail(c, err, "Erreur lors de la restauration de l'infraction", 'SanctionsAPI');
     }
   });
 

@@ -16,7 +16,25 @@ const prismaMock = {
     findMany: mock(async (_args?: FindManyArgs): Promise<{ id: string }[]> => []),
     updateMany: mock(async (_args?: UpdateManyArgs): Promise<{ count: number }> => ({ count: 0 })),
     deleteMany: mock(async (_args?: UpdateManyArgs): Promise<{ count: number }> => ({ count: 0 })),
+    findUnique: mock(async (_args?: unknown): Promise<unknown> => null),
+    create: mock(async (_args?: unknown): Promise<unknown> => ({})),
   },
+  sanctionReport: {
+    findMany: mock(async (_args?: unknown): Promise<unknown[]> => []),
+    updateMany: mock(async (_args?: UpdateManyArgs): Promise<unknown> => ({ count: 0 })),
+  },
+  sanctionEvidenceFile: {
+    findMany: mock(async (_args?: unknown): Promise<unknown[]> => []),
+    updateMany: mock(async (_args?: UpdateManyArgs): Promise<unknown> => ({ count: 0 })),
+  },
+  sanctionTable: { findUnique: mock(async (_args?: unknown): Promise<unknown> => null) },
+  sanctionDeletion: {
+    createMany: mock(async (_args?: { data?: Array<Record<string, unknown>> }): Promise<unknown> => ({ count: 0 })),
+    findFirst: mock(async (_args?: unknown): Promise<unknown> => null),
+    update: mock(async (_args?: unknown): Promise<unknown> => ({})),
+  },
+  // Les écritures sont déjà évaluées quand on les passe : on rend leurs résultats.
+  $transaction: mock(async (ops: Promise<unknown>[]) => Promise.all(ops)),
 };
 
 const moduleMocks: Array<[string, () => Record<string, unknown>]> = [
@@ -38,6 +56,7 @@ const {
   archiveScoreFilter,
   archiveSanctions,
   deleteSanctions,
+  restoreDeletedSanction,
   runWarnAutoArchive,
   setSanctionAppealLock,
   unarchiveSanctions,
@@ -150,6 +169,65 @@ describe('deleteSanctions', () => {
     expect(result.count).toBe(2);
     const args = (prismaMock.sanction.deleteMany as unknown as { mock: { calls: UpdateManyArgs[][] } }).mock.calls[0][0];
     expect(args.where).toEqual({ guildId, id: { in: ['a', 'b'] } });
+  });
+
+  test('garde un instantané avec les ids de rapports et de preuves', async () => {
+    guildOwns(['a']);
+    prismaMock.sanctionReport.findMany = mock(async () => [{ id: 'r1', sanctionId: 'a' }]);
+    prismaMock.sanctionEvidenceFile.findMany = mock(async () => [{ id: 'f1', sanctionId: 'a' }]);
+    prismaMock.sanctionDeletion.createMany = mock(async () => ({ count: 1 }));
+    prismaMock.sanction.deleteMany = mock(async () => ({ count: 1 }));
+
+    await deleteSanctions(guildId, ['a'], actor);
+
+    const call = (prismaMock.sanctionDeletion.createMany as unknown as { mock: { calls: Array<[{ data: Array<Record<string, unknown>> }]> } }).mock.calls[0][0];
+    expect(call.data).toHaveLength(1);
+    expect(call.data[0]).toMatchObject({
+      guildId, sanctionId: 'a', reportIds: ['r1'], evidenceFileIds: ['f1'],
+      deletedByUserId: actor.userId, deletedByTag: actor.tag,
+    });
+  });
+});
+
+describe('restoreDeletedSanction', () => {
+  const deletion = {
+    id: 'd1', guildId, sanctionId: 'a', restoredAt: null,
+    snapshot: { id: 'a', guildId, type: 'WARN', sanctionTableId: 'gone' },
+    reportIds: ['r1'], evidenceFileIds: ['f1'],
+  };
+
+  beforeEach(() => {
+    prismaMock.sanctionDeletion.findFirst = mock(async () => ({ ...deletion }));
+    prismaMock.sanction.findUnique = mock(async () => null);
+    prismaMock.sanctionTable.findUnique = mock(async () => null);
+    prismaMock.sanction.create = mock(async () => ({}));
+  });
+
+  test('recrée la sanction avec son id et rattache rapports et preuves', async () => {
+    const result = await restoreDeletedSanction(guildId, 'd1', actor);
+
+    expect(result).toEqual({ ok: true, sanctionId: 'a' });
+    const created = (prismaMock.sanction.create as unknown as { mock: { calls: Array<[{ data: Record<string, unknown> }]> } }).mock.calls[0][0];
+    // La table de sanctions n'existe plus : la FK est retirée plutôt que de faire échouer.
+    expect(created.data).toMatchObject({ id: 'a', sanctionTableId: null });
+    const relink = (prismaMock.sanctionReport.updateMany as unknown as { mock: { calls: UpdateManyArgs[][] } }).mock.calls[0][0];
+    expect(relink.data).toEqual({ sanctionId: 'a' });
+  });
+
+  test('refuse une restauration déjà faite', async () => {
+    prismaMock.sanctionDeletion.findFirst = mock(async () => ({ ...deletion, restoredAt: new Date() }));
+    expect(await restoreDeletedSanction(guildId, 'd1', actor)).toEqual({ ok: false, reason: 'already_restored' });
+  });
+
+  test('refuse si l\'id est déjà pris et ne crée rien', async () => {
+    prismaMock.sanction.findUnique = mock(async () => ({ id: 'a' }));
+    expect(await restoreDeletedSanction(guildId, 'd1', actor)).toEqual({ ok: false, reason: 'id_taken' });
+    expect((prismaMock.sanction.create as unknown as { mock: { calls: unknown[] } }).mock.calls.length).toBe(0);
+  });
+
+  test('renvoie not_found hors du périmètre de la guilde', async () => {
+    prismaMock.sanctionDeletion.findFirst = mock(async () => null);
+    expect(await restoreDeletedSanction(guildId, 'd1', actor)).toEqual({ ok: false, reason: 'not_found' });
   });
 });
 

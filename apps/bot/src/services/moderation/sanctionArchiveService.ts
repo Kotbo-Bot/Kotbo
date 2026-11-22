@@ -6,7 +6,8 @@
 //                  casier actif et (sauf `countArchivedInWarnScore`) cesse de
 //                  peser dans le score de warns et l'escalade automatique.
 //   - verrouiller: la sanction reste au casier mais n'est plus contestable.
-//   - supprimer  : la ligne disparaît. Irréversible.
+//   - supprimer  : la ligne disparaît, mais un instantané reste 90 jours
+//                  (SanctionDeletion) pour la relire et la restaurer.
 //
 // Le module Appels et la page Sanctions du dashboard passent tous les deux par
 // ici : le verdict d'un appel et l'action manuelle du staff doivent produire
@@ -154,9 +155,94 @@ export async function deleteSanctions(
   const ids = await scopeToGuild(guildId, sanctionIds);
   if (ids.length === 0) return { count: 0, ids: [] };
 
-  const result = await prisma.sanction.deleteMany({ where: { guildId, id: { in: ids } } });
+  // Les rapports et preuves ne sont pas effacés (onDelete: SetNull) : on
+  // retient leurs ids avant que le lien saute, pour pouvoir les rattacher.
+  const [rows, reports, files] = await Promise.all([
+    prisma.sanction.findMany({ where: { guildId, id: { in: ids } } }),
+    prisma.sanctionReport.findMany({ where: { guildId, sanctionId: { in: ids } }, select: { id: true, sanctionId: true } }),
+    prisma.sanctionEvidenceFile.findMany({ where: { guildId, sanctionId: { in: ids } }, select: { id: true, sanctionId: true } }),
+  ]);
+
+  const [, result] = await prisma.$transaction([
+    prisma.sanctionDeletion.createMany({
+      data: rows.map(row => ({
+        guildId,
+        sanctionId: row.id,
+        snapshot: row as unknown as Prisma.InputJsonValue,
+        reportIds: reports.filter(r => r.sanctionId === row.id).map(r => r.id),
+        evidenceFileIds: files.filter(f => f.sanctionId === row.id).map(f => f.id),
+        deletedByUserId: actor.userId,
+        deletedByTag: actor.tag ?? null,
+      })),
+    }),
+    prisma.sanction.deleteMany({ where: { guildId, id: { in: ids } } }),
+  ]);
   logger.info('SanctionArchive', `${result.count} sanction(s) supprimée(s) sur ${guildId} par ${actor.tag || actor.userId}`);
   return { count: result.count, ids };
+}
+
+/** Durée de conservation de la corbeille (RGPD : pas d'archive éternelle d'une suppression volontaire). */
+export const DELETION_RETENTION_DAYS = 90;
+
+/** Sanctions supprimées encore restaurables, les plus récentes d'abord. */
+export async function listDeletedSanctions(guildId: string, limit = 100) {
+  return prisma.sanctionDeletion.findMany({
+    where: { guildId, restoredAt: null },
+    orderBy: { deletedAt: 'desc' },
+    take: Math.min(Math.max(limit, 1), 200),
+  });
+}
+
+export type RestoreResult =
+  | { ok: true; sanctionId: string }
+  | { ok: false; reason: 'not_found' | 'already_restored' | 'id_taken' };
+
+/**
+ * Recrée la sanction supprimée avec son id d'origine et rattache ses rapports
+ * et preuves. Ne touche pas à Discord : un ban restauré ne rebannit personne.
+ */
+export async function restoreDeletedSanction(
+  guildId: string,
+  deletionId: string,
+  actor: ArchiveActor
+): Promise<RestoreResult> {
+  const deletion = await prisma.sanctionDeletion.findFirst({ where: { id: deletionId, guildId } });
+  if (!deletion) return { ok: false, reason: 'not_found' };
+  if (deletion.restoredAt) return { ok: false, reason: 'already_restored' };
+
+  const exists = await prisma.sanction.findUnique({ where: { id: deletion.sanctionId }, select: { id: true } });
+  if (exists) return { ok: false, reason: 'id_taken' };
+
+  // Les dates JSON redeviennent des chaînes : Prisma les accepte en ISO.
+  const data = deletion.snapshot as unknown as Prisma.SanctionUncheckedCreateInput;
+  // La table de sanctions a pu être supprimée entre-temps (FK) : on la retire si absente.
+  if (data.sanctionTableId) {
+    const table = await prisma.sanctionTable.findUnique({ where: { id: data.sanctionTableId }, select: { id: true } });
+    if (!table) data.sanctionTableId = null;
+  }
+
+  await prisma.$transaction([
+    prisma.sanction.create({ data }),
+    prisma.sanctionReport.updateMany({
+      where: { guildId, id: { in: deletion.reportIds }, sanctionId: null },
+      data: { sanctionId: deletion.sanctionId },
+    }),
+    prisma.sanctionEvidenceFile.updateMany({
+      where: { guildId, id: { in: deletion.evidenceFileIds }, sanctionId: null },
+      data: { sanctionId: deletion.sanctionId },
+    }),
+    prisma.sanctionDeletion.update({ where: { id: deletion.id }, data: { restoredAt: new Date() } }),
+  ]);
+
+  logger.info('SanctionArchive', `Sanction ${deletion.sanctionId} restaurée sur ${guildId} par ${actor.tag || actor.userId}`);
+  return { ok: true, sanctionId: deletion.sanctionId };
+}
+
+/** Purge la corbeille au-delà de la rétention. */
+export async function purgeOldSanctionDeletions(): Promise<number> {
+  const cutoff = new Date(Date.now() - DELETION_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+  const { count } = await prisma.sanctionDeletion.deleteMany({ where: { deletedAt: { lt: cutoff } } });
+  return count;
 }
 
 // ============================================================================

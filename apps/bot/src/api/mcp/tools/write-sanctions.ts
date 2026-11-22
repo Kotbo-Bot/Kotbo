@@ -370,7 +370,8 @@ export function registerWriteSanctionsTools(ctx: McpToolContext) {
           });
           if (!sanction) return err('Sanction introuvable');
 
-          await prisma.sanction.delete({ where: { id: sanction.id } });
+          const { deleteSanctions } = await import('../../../services/moderation/sanctionArchiveService.js');
+          await deleteSanctions(guildId, [sanction.id], { userId: 'mcp', tag: key_name ?? 'MCP' });
           await audit(
             key_name,
             'Suppression sanction MCP',
