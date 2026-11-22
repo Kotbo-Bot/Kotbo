@@ -16,20 +16,20 @@
  */
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import path from 'node:path';
+import { completeModuleMock } from '../helpers/moduleMock.js';
 
 const GUILD = 'guild-ressources';
 
 let modulesActifs: Record<string, boolean> = {};
 
 const QUETE = {
-  id: 'quete-1', guildId: GUILD, type: 'MESSAGE', frequency: 'DAILY', target: 1, rewardCoins: 100, rewardXp: 0,
+  id: 'quete-1', guildId: GUILD, objective: 'SEND_MESSAGES', scope: 'MEMBER', teamMode: 'CLAN', repeatable: false,
+  windowHours: 24, target: 1, rewardCoins: 100, rewardXp: 0, rewardClanPoints: 0, name: 'Bavard',
+  conditions: null, rewards: null, prerequisiteQuestId: null, activeFrom: null, activeUntil: null,
 };
 
 const rpgProfileUpsert = mock(async () => ({}));
-const tx = {
-  questProgress: { updateMany: mock(async () => ({ count: 1 })) },
-  rpgProfile: { upsert: rpgProfileUpsert },
-};
+const progressUpdateMany = mock(async () => ({ count: 1 }));
 
 const mockDb = {
   guild: { findUnique: mock(async () => ({ id: GUILD, plan: 'CUSTOM' })) },
@@ -40,12 +40,14 @@ const mockDb = {
   levelConfig: { findUnique: mock(async () => null) },
   rankedConfig: { findUnique: mock(async () => null) },
   banAppealConfig: { findUnique: mock(async () => null) },
-  questDefinition: { findMany: mock(async () => [QUETE]) },
-  questProgress: {
+  rpgQuest: { findMany: mock(async () => [QUETE]) },
+  rpgQuestProgress: {
     findUnique: mock(async () => null),
-    create: mock(async () => ({ id: 'progression-1' })),
+    findFirst: mock(async () => null),
+    upsert: mock(async () => ({ id: 'progression-1' })),
+    updateMany: progressUpdateMany,
   },
-  $transaction: mock(async (fn: (client: typeof tx) => Promise<unknown>) => fn(tx)),
+  rpgProfile: { upsert: rpgProfileUpsert },
 };
 
 const silentLogger = {
@@ -76,26 +78,35 @@ for (const suffix of ['../../utils/cache.ts', '../../utils/cache.js']) {
   }));
 }
 
-const { incrementQuestProgress } = await import('../../services/community/questService.js');
+// Les montées de niveau et les points d'équipe n'intéressent pas cette garde.
+const economyPath = path.resolve(import.meta.dir, '../../services/features/economyService.ts');
+for (const suffix of ['../../services/features/economyService.ts', '../../services/features/economyService.js']) {
+  mock.module(path.resolve(import.meta.dir, suffix), () => completeModuleMock(economyPath, {
+    checkLevelUp: async () => undefined,
+    awardRpgGuildXp: async () => undefined,
+  }));
+}
+
+const { trackRpgQuest } = await import('../../services/features/rpg/rpgQuestService.js');
 
 const client = { guilds: { cache: new Map() } } as never;
 
 beforeEach(() => {
   modulesActifs = { economy: true };
   rpgProfileUpsert.mockClear();
-  tx.questProgress.updateMany.mockClear();
+  progressUpdateMany.mockClear();
 });
 
 describe('une quête accomplie ne verse ses pièces que si l\'économie tourne', () => {
   test('économie éteinte : la quête est soldée sans pièces', async () => {
     modulesActifs.economy = false;
-    await incrementQuestProgress(client, GUILD, 'membre-1', 'MESSAGE');
-    expect(tx.questProgress.updateMany).toHaveBeenCalledTimes(1);
+    await trackRpgQuest(client, GUILD, 'membre-1', 'SEND_MESSAGES');
+    expect(progressUpdateMany).toHaveBeenCalledTimes(1);
     expect(rpgProfileUpsert).not.toHaveBeenCalled();
   });
 
   test('économie allumée : les pièces sont créditées', async () => {
-    await incrementQuestProgress(client, GUILD, 'membre-1', 'MESSAGE');
+    await trackRpgQuest(client, GUILD, 'membre-1', 'SEND_MESSAGES');
     expect(rpgProfileUpsert).toHaveBeenCalledTimes(1);
   });
 });
