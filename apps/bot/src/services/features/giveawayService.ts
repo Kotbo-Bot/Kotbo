@@ -905,7 +905,7 @@ export async function endGiveaway(client: Client, giveawayId: string, expectedGu
   const { config, appearance, bonus, itemLabel } = await loadStyle(giveaway.guildId, giveaway);
 
   // Tirer les gagnants en appliquant les chances supplémentaires
-  const candidates = await foldLinkedCandidates(giveaway.guildId, giveaway.participants, config);
+  const candidates = await dropIneligible(client, giveaway, await foldLinkedCandidates(giveaway.guildId, giveaway.participants, config));
   const winners = await drawWinnersWeighted(candidates, giveaway.winnerCount, discordGuild, bonus);
 
   // Clôture et résultat en une écriture conditionnelle : seul l'appel qui bascule
@@ -1098,7 +1098,7 @@ export async function rerollGiveaway(
 
   // Filtrer les participants qui ne sont ni gagnants validés ni en attente de validation
   const remaining = giveaway.participants.filter(id => !giveaway.winners.includes(id) && !giveaway.pendingWinners.includes(id));
-  const candidates = await foldLinkedCandidates(giveaway.guildId, remaining, config);
+  const candidates = await dropIneligible(client, giveaway, await foldLinkedCandidates(giveaway.guildId, remaining, config));
   if (candidates.length === 0) {
     await channel.send({ content: m.gvw_reroll_no_candidate({ prize: giveaway.prize }, { locale: config.locale }), allowedMentions: GIVEAWAY_MENTIONS }).catch(() => null);
     return false;
@@ -1526,6 +1526,47 @@ async function resolveCandidates(
     logger.error('GiveawayService', 'Impossible de verifier la presence des participants :', err);
     return { present: candidates, rolesByUser };
   }
+}
+
+/**
+ * Écarte, avant le tirage, ceux qui ne remplissent plus les conditions : rôle
+ * perdu, boost retiré, seuil jamais atteint pendant l'attente.
+ *
+ * Le vote Top.gg n'est pas revérifié : il expire au bout de douze heures, et
+ * un concours plus long écarterait tous ses participants. Une donnée illisible
+ * laisse passer (voir `evaluateConditions`). Par lots de dix pour ne pas
+ * saturer l'API Discord ni la base.
+ * shortcut: lecture membre par membre, à regrouper si les concours dépassent quelques milliers d'inscrits.
+ */
+async function dropIneligible(
+  client: Client,
+  giveaway: { guildId: string; conditions: unknown; createdAt: Date },
+  candidates: string[],
+): Promise<string[]> {
+  if (giveaway.conditions == null) return candidates;
+  const conditions = normalizeConditions(giveaway.conditions).conditions.filter((c) => c.type !== 'topgg_vote');
+  const guild = client.guilds.cache.get(giveaway.guildId);
+  if (conditions.length === 0 || !guild) return candidates;
+
+  const kept: string[] = [];
+  for (let i = 0; i < candidates.length; i += 10) {
+    const batch = candidates.slice(i, i + 10);
+    const verdicts = await Promise.all(batch.map(async (userId) => {
+      const member = await guild.members.fetch(userId).catch(() => null);
+      // Parti ou illisible : la présence se revérifie déjà au tirage.
+      if (!member) return true;
+      const subject = buildConditionSubject({
+        userId,
+        guildId: giveaway.guildId,
+        roleIds: [...member.roles.cache.keys()],
+        accountCreatedAt: member.user.createdAt,
+        joinedAt: member.joinedAt,
+      }, member, giveaway.createdAt);
+      return (await evaluateConditions(conditions, subject, buildConditionResolvers(client, giveaway.guildId, userId))).allowed;
+    }));
+    batch.forEach((userId, index) => { if (verdicts[index]) kept.push(userId); });
+  }
+  return kept;
 }
 
 /**
