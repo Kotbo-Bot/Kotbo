@@ -411,8 +411,11 @@ export function createBillingRouter(client: Client): OpenAPIHono {
     });
 
     const isOwner = Boolean(guild?.billingOwnerId && guild.billingOwnerId === userId);
-    const canManage = level === 'admin' || isOwner;
-    const canRead = canManage || (level === 'moderator' && Boolean(guild?.billingStaffAccess));
+    // Un payeur connu est seul maître de la facturation ; les administrateurs
+    // ne reprennent la main que tant que personne n'a encore engagé de dépense
+    // (ils doivent pouvoir ouvrir le tout premier paiement).
+    const canManage = guild?.billingOwnerId ? isOwner : level === 'admin';
+    const canRead = canManage || (level !== 'viewer' && Boolean(guild?.billingStaffAccess));
 
     if (!canRead) {
       throw new HTTPException(403, {

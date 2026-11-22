@@ -596,10 +596,11 @@ export function createUserRouter(client: Client) {
           accessLevel,
           isStaffServer: staffGuildToMain.has(guildId),
           pairedGuildId: staffGuildToMain.get(guildId) ?? mainGuildToStaff.get(guildId) ?? null,
-          billingAccess:
-            accessLevel === 'admin' ||
-            billing?.billingOwnerId === user.userId ||
-            Boolean(billing?.billingStaffAccess),
+          // Même règle que `requireBillingAccess` : un payeur connu est seul à
+          // la gérer ; le staff ne la voit que si le serveur l'a ouverte.
+          billingAccess: billing?.billingOwnerId
+            ? billing.billingOwnerId === user.userId || Boolean(billing.billingStaffAccess)
+            : accessLevel === 'admin' || Boolean(billing?.billingStaffAccess),
         });
       }
 
