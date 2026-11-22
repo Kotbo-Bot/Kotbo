@@ -5,9 +5,8 @@ import { decideAppeal, ensureDefaultAppealForm, getAppealConfig, requestAppealIn
 import { recordAppliedSanction, registerBanSanction, registerKickSanction, registerTimeoutSanction, registerWarnSanction, runGuildBan } from '../../../services/moderation/sanctionService.js';
 import prisma from '../../../utils/db.js';
 import { logger } from '../../../utils/logger.js';
-import { MAX_EVIDENCE_MESSAGES, parseEvidenceLinks } from '../../evidence.js';
+import { loadEvidenceMessages, MAX_EVIDENCE_MESSAGES, parseEvidenceLinks } from '../../evidence.js';
 import { type SanctionStatus, type SanctionType } from '@prisma/client';
-import { type Message } from 'discord.js';
 import { z } from 'zod';
 import { type McpToolContext, err, ok, resolveChannel, resolveMember, toolError } from '../toolkit.js';
 
@@ -568,20 +567,19 @@ export function registerWriteSanctionsTools(ctx: McpToolContext) {
             }
 
             try {
-              const fetched = await Promise.all(
-                selection.message_ids.map((id: string) => resolved.channel.messages.fetch(id).catch(() => null)),
-              );
-              const validMessages = fetched.filter(
-                (msg): msg is Message<true> => msg !== null && msg.author.id === sanction.targetUserId,
+              const { messages: validMessages, deleted } = await loadEvidenceMessages(
+                resolved.channel,
+                [...new Set(selection.message_ids)],
+                sanction.targetUserId,
               );
 
-              if (validMessages.length === 0) {
+              if (validMessages.length === 0 && deleted.length === 0) {
                 errors.push({ channel: selection.channel, error: 'Aucun message valide' });
                 continue;
               }
 
               validMessages.sort((a, b) => a.createdTimestamp - b.createdTimestamp);
-              const transcript = await generateTranscriptFromMessages(resolved.channel, validMessages);
+              const transcript = await generateTranscriptFromMessages(resolved.channel, validMessages, deleted);
               results.push({
                 channelId: resolved.channel.id,
                 channelName: resolved.channel.name,

@@ -1,6 +1,6 @@
 /** Outils MCP - read sanctions (permission READ_SANCTIONS). */
 import prisma from '../../../utils/db.js';
-import { EVIDENCE_CHANNEL_CONCURRENCY, fetchUserMessagesInChannel, serializeEvidenceMessage } from '../../evidence.js';
+import { EVIDENCE_CHANNEL_CONCURRENCY, fetchDeletedUserMessages, fetchUserMessagesInChannel, mergeDeletedIntoChannels, serializeEvidenceMessage } from '../../evidence.js';
 import { type SanctionStatus, type SanctionType } from '@prisma/client';
 import { ChannelType, PermissionFlagsBits, TextChannel } from 'discord.js';
 import pLimit from 'p-limit';
@@ -198,25 +198,27 @@ export function registerReadSanctionsTools(ctx: McpToolContext) {
           .slice(0, limit);
 
         const includedMessageIds = new Set(newestMessages.map(({ message }) => message.id));
-        const channels = successfulChannels
+        const liveChannels = successfulChannels
           .map((channel) => ({
             channelId: channel.channelId,
             channelName: channel.channelName,
             messages: channel.rawMessages
               .filter((message) => includedMessageIds.has(message.id))
               .sort((a, b) => b.createdTimestamp - a.createdTimestamp)
-              .map((message) => serializeEvidenceMessage(message, guild)),
+              .map((message) => serializeEvidenceMessage(message, guild)) as Array<Record<string, unknown>>,
             truncated: channel.truncated,
           }))
-          .filter((channel) => channel.messages.length > 0)
-          .sort((a, b) => a.channelName.localeCompare(b.channelName, 'fr'));
+          .filter((channel) => channel.messages.length > 0);
+
+        const deleted = await fetchDeletedUserMessages(guildId, sanction.targetUserId, limit);
+        const channels = mergeDeletedIntoChannels(liveChannels, deleted);
 
         return ok({
           sanctionId: sanction.id,
           targetTag: sanction.targetTag,
           targetUserId: sanction.targetUserId,
           channels,
-          messageCount: newestMessages.length,
+          messageCount: newestMessages.length + deleted.length,
           searchedChannelCount: searchableChannels.length,
           failedChannelCount,
         });

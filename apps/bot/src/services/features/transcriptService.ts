@@ -1,5 +1,6 @@
 import type { NewsChannel } from 'discord.js';
 import { type TextChannel, type Message, type Guild, type Embed, ComponentType } from 'discord.js';
+import type { MessageLog } from '@prisma/client';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 
@@ -545,9 +546,14 @@ export async function generateTranscript(channel: TextChannel): Promise<{ id: st
   return generateTranscriptFromMessages(channel, allMessages);
 }
 
-export async function generateTranscriptFromMessages(channel: TextChannel | NewsChannel, allMessages: Message[]): Promise<{ id: string; url: string; count: number }> {
+export async function generateTranscriptFromMessages(
+  channel: TextChannel | NewsChannel,
+  allMessages: Message[],
+  deletedLogs: MessageLog[] = [],
+): Promise<{ id: string; url: string; count: number }> {
   // 2. Build the HTML content
-  const messagesHtmlChunks: string[] = [];
+  const messagesHtmlChunks: Array<{ t: number; html: string }> = [];
+  const totalCount = allMessages.length + deletedLogs.length;
   const timestampFormatter = new Intl.DateTimeFormat('fr-FR', {
     day: 'numeric',
     month: 'short',
@@ -702,7 +708,7 @@ export async function generateTranscriptFromMessages(channel: TextChannel | News
       bodyHtml += '</div>';
     }
 
-    messagesHtmlChunks.push(`
+    messagesHtmlChunks.push({ t: msg.createdTimestamp, html: `
       <div class="message-group">
         <img class="avatar" src="${avatarUrl}" alt="${escapeHtml(author.username)}" />
         <div class="message-content">
@@ -714,12 +720,36 @@ export async function generateTranscriptFromMessages(channel: TextChannel | News
           ${bodyHtml}
         </div>
       </div>
-    `);
+    ` });
+  }
+
+  for (const log of deletedLogs) {
+    let bodyHtml = log.content ? `<div class="message-text">${parseMarkdown(log.content, channel.guild)}</div>` : '';
+    const attachments = (Array.isArray(log.attachments) ? log.attachments : []) as Array<{ url: string; name: string; contentType: string | null }>;
+    for (const a of attachments) {
+      bodyHtml += a.contentType?.startsWith('image/')
+        ? `<img src="${a.url}" class="discord-img" alt="Image jointe" loading="lazy" />`
+        : `<div class="attachment-card"><span class="attachment-icon">📁</span><div class="attachment-info"><a href="${a.url}" target="_blank" class="attachment-name">${escapeHtml(a.name)}</a></div></div>`;
+    }
+    messagesHtmlChunks.push({ t: log.createdAt.getTime(), html: `
+      <div class="message-group">
+        <img class="avatar" src="${log.authorAvatar ? escapeHtml(log.authorAvatar) : ''}" alt="${escapeHtml(log.authorName)}" />
+        <div class="message-content">
+          <div class="message-header">
+            <span class="username" style="color: #f2f3f5">${escapeHtml(log.authorName)}</span>
+            ${log.isBot ? '<span class="bot-tag">BOT</span>' : ''}
+            <span class="timestamp">${timestampFormatter.format(log.createdAt)}</span>
+            <span class="bot-tag" style="background:#da373c">SUPPRIMÉ</span>
+          </div>
+          ${bodyHtml}
+        </div>
+      </div>
+    ` });
   }
 
   // Un seul assemblage évite les recopies quadratiques sur les salons de
   // plusieurs milliers de messages.
-  const messagesHtml = messagesHtmlChunks.join('');
+  const messagesHtml = messagesHtmlChunks.sort((a, b) => a.t - b.t).map((c) => c.html).join('');
   const generatedAt = new Date();
 
   // Generate full HTML template
@@ -1162,7 +1192,7 @@ export async function generateTranscriptFromMessages(channel: TextChannel | News
         <span>${escapeHtml(channel.name)}</span>
       </div>
       <div class="channel-topic">
-        Transcription de salon générée par Kotbo · ${allMessages.length} messages transcrits.
+        Transcription de salon générée par Kotbo · ${totalCount} messages transcrits.
         ${channel.topic ? `<br/><br/><strong>Sujet :</strong> ${escapeHtml(channel.topic)}` : ''}
       </div>
     </div>
@@ -1181,6 +1211,9 @@ export async function generateTranscriptFromMessages(channel: TextChannel | News
   // 3. Save to database
   const firstMsg = allMessages[0];
   const lastMsg = allMessages[allMessages.length - 1];
+  const times = messagesHtmlChunks.map((c) => c.t); // deja tries
+  const startTime = times.length ? new Date(times[0]) : null;
+  const endTime = times.length ? new Date(times[times.length - 1]) : null;
 
   const transcript = await prisma.transcript.create({
     data: {
@@ -1190,17 +1223,17 @@ export async function generateTranscriptFromMessages(channel: TextChannel | News
       html: fullHtml,
       startMessageId: firstMsg?.id || null,
       endMessageId: lastMsg?.id || null,
-      startTime: firstMsg?.createdAt || null,
-      endTime: lastMsg?.createdAt || null
+      startTime,
+      endTime
     }
   });
 
   const url = `/transcripts/${transcript.id}`;
-  logger.success('Transcript', `Transcription générée avec succès pour #${channel.name} (${allMessages.length} messages) : ID ${transcript.id}`);
+  logger.success('Transcript', `Transcription générée avec succès pour #${channel.name} (${totalCount} messages) : ID ${transcript.id}`);
 
   return {
     id: transcript.id,
     url,
-    count: allMessages.length
+    count: totalCount
   };
 }

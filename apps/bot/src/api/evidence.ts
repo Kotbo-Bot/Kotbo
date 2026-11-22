@@ -13,6 +13,8 @@ import {
   type Message,
   type TextChannel,
 } from 'discord.js';
+import type { MessageLog } from '@prisma/client';
+import prisma from '../utils/db.js';
 import { resolveMentionsToText, embedToApiShape } from '../services/features/transcriptService.js';
 
 /** Nombre maximum de messages retenus comme preuve pour une sanction. */
@@ -108,6 +110,66 @@ export async function fetchUserMessagesInChannel(
     messages: matched.sort((a, b) => a.createdTimestamp - b.createdTimestamp),
     truncated: matched.length < safeLimit && scanned >= MAX_SCAN_MESSAGES,
   };
+}
+
+/**
+ * Messages supprimes d'un auteur, relus dans le journal des messages (Discord ne
+ * les renvoie plus). Vide si la journalisation etait desactivee a l'epoque.
+ */
+export function fetchDeletedUserMessages(guildId: string, authorId: string, limit = MAX_EVIDENCE_MESSAGES) {
+  return prisma.messageLog.findMany({
+    where: { guildId, authorId, deletedAt: { not: null } },
+    orderBy: { createdAt: 'desc' },
+    take: Math.min(Math.max(Math.trunc(limit), 1), MAX_EVIDENCE_MESSAGES),
+  });
+}
+
+/**
+ * Charge les messages selectionnes : ceux encore sur Discord, et pour les autres
+ * (supprimes) leur copie dans le journal. Seuls ceux de `authorId` sont gardes.
+ */
+export async function loadEvidenceMessages(channel: TextChannel, messageIds: string[], authorId: string) {
+  const fetched = await Promise.all(messageIds.map((id) => channel.messages.fetch(id).catch(() => null)));
+  const messages = fetched.filter((m): m is Message<true> => m !== null && m.author.id === authorId);
+  const found = new Set(fetched.filter((m): m is Message<true> => m !== null).map((m) => m.id));
+  const missing = messageIds.filter((id) => !found.has(id));
+  const deleted = missing.length === 0 ? [] : await prisma.messageLog.findMany({
+    where: { guildId: channel.guild.id, channelId: channel.id, authorId, messageId: { in: missing }, deletedAt: { not: null } },
+  });
+  return { messages, deleted };
+}
+
+/** Meme forme que `serializeEvidenceMessage`, avec `deleted: true`. */
+export function serializeDeletedEvidenceMessage(log: MessageLog) {
+  const attachments = (Array.isArray(log.attachments) ? log.attachments : []) as Array<{ url: string; name: string; contentType: string | null }>;
+  return {
+    id: log.messageId,
+    content: log.content,
+    createdAt: log.createdAt.toISOString(),
+    deleted: true,
+    attachments: attachments.map((a) => ({ ...a, kind: attachmentKind(a.contentType), size: 0 })),
+    stickers: [],
+    embeds: [],
+  };
+}
+
+/** Ajoute les messages supprimes aux salons deja listes (cree le salon s'il manque). */
+export function mergeDeletedIntoChannels<C extends { channelId: string; channelName: string; messages: unknown[] }>(
+  channels: C[],
+  deleted: MessageLog[],
+): C[] {
+  const byId = new Map(channels.map((c) => [c.channelId, c]));
+  for (const log of deleted) {
+    let channel = byId.get(log.channelId);
+    if (!channel) {
+      // shortcut: salon supprime ou illisible par le bot, le POST renverra une erreur claire.
+      channel = { channelId: log.channelId, channelName: log.channelName, messages: [] } as unknown as C;
+      byId.set(log.channelId, channel);
+      channels.push(channel);
+    }
+    channel.messages.push(serializeDeletedEvidenceMessage(log));
+  }
+  return channels.sort((a, b) => a.channelName.localeCompare(b.channelName, 'fr'));
 }
 
 function attachmentKind(contentType: string | null): 'image' | 'video' | 'file' {
