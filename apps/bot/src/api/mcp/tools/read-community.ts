@@ -212,6 +212,9 @@ export function registerReadCommunityTools(ctx: McpToolContext) {
             needValidation: g.needValidation,
             validationStatus: g.validationStatus,
             ignoreBonuses: g.ignoreBonuses,
+            /** `null` = concours antérieur, qui suit encore le filtre du serveur. */
+            conditions: g.conditions,
+            discordEventId: g.discordEventId,
             rewards: {
               xp: g.rpgXp,
               coins: g.rpgCoins,
@@ -352,7 +355,7 @@ export function registerReadCommunityTools(ctx: McpToolContext) {
         _meta: toolMeta,
       },
       guard('READ_COMMUNITY', async ({ enabled_only }) => {
-        const quests = await prisma.questDefinition.findMany({
+        const quests = await prisma.rpgQuest.findMany({
           where: { guildId, ...(enabled_only ? { enabled: true } : {}) },
           orderBy: { createdAt: 'desc' },
         });
@@ -361,11 +364,19 @@ export function registerReadCommunityTools(ctx: McpToolContext) {
             id: q.id,
             name: q.name,
             description: q.description,
-            type: q.type,
-            frequency: q.frequency,
+            objective: q.objective,
+            scope: q.scope,
+            windowHours: q.windowHours,
             target: q.target,
             rewardCoins: q.rewardCoins,
             rewardXp: q.rewardXp,
+            rewardClanPoints: q.rewardClanPoints,
+            conditions: q.conditions,
+            rewards: q.rewards,
+            prerequisiteQuestId: q.prerequisiteQuestId,
+            activeFrom: q.activeFrom?.toISOString() ?? null,
+            activeUntil: q.activeUntil?.toISOString() ?? null,
+            repeatable: q.repeatable,
             enabled: q.enabled,
           }))
         );
@@ -385,9 +396,9 @@ export function registerReadCommunityTools(ctx: McpToolContext) {
         const resolved = await resolveMember(guildId, member);
         if (!resolved.ok) return resolved.response;
 
-        const progress = await prisma.questProgress.findMany({
+        const progress = await prisma.rpgQuestProgress.findMany({
           where: { guildId, userId: resolved.userId },
-          include: { quest: { select: { name: true, description: true, type: true, frequency: true, target: true } } },
+          include: { quest: { select: { name: true, objective: true, windowHours: true } } },
           orderBy: { updatedAt: 'desc' },
           take: 20,
         });
@@ -395,12 +406,12 @@ export function registerReadCommunityTools(ctx: McpToolContext) {
         return ok(
           progress.map((p) => ({
             questName: p.quest.name,
-            questType: p.quest.type,
-            frequency: p.quest.frequency,
+            objective: p.quest.objective,
+            windowHours: p.quest.windowHours,
             current: p.current,
             target: p.target,
             status: p.status,
-            dateKey: p.dateKey,
+            completions: p.completions,
             claimedAt: p.claimedAt?.toISOString() ?? null,
           }))
         );
