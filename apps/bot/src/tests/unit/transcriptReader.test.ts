@@ -6,9 +6,8 @@ for (const file of ['db.ts', 'db.js']) {
   mock.module(path.resolve(import.meta.dir, '../../utils', file), () => ({ default: {}, prisma: {}, prismaRead: {}, upsertRetryingRace: (upsert: () => Promise<unknown>) => upsert() }));
 }
 
-const { loadTranscriptMessages, transcriptDataOf } = await import('../../services/features/transcriptReader.js');
+const { loadTranscriptMessages, transcriptConversation, transcriptDataOf } = await import('../../services/features/transcriptReader.js');
 const { parseLegacyTimestamp } = await import('../../services/features/transcriptService.js');
-const { transcriptTicketMessages } = await import('../../api/routes/dashboard/modules/_shared.js');
 
 const apiUser = (id: string, name: string, bot = false) => ({ id, username: name.toLowerCase(), global_name: name, discriminator: '0', avatar: null, ...(bot ? { bot: true } : {}) });
 
@@ -104,6 +103,23 @@ describe('loadTranscriptMessages', () => {
     }]);
   });
 
+  test('HTML historique : texte des conteneurs V2 (blocs v2-text) repris en Markdown', () => {
+    const html = `<div class="message-group"><img class="avatar" src="https://cdn/bot.png"><span class="username" style="color:#fff">Kotbo</span><span class="bot-tag">BOT</span>
+      <span class="timestamp">22 nov. 2026 à 08:42</span>
+      <div class="discord-embed" style="border-left-color: #5865f2"><div class="discord-embed-content"><div class="discord-embed-text">
+      <div class="v2-text"><span class="v2-heading v2-h3">🎫 Ticket d&#039;Assistance</span></div>
+      <div class="v2-text">Bonjour <span class="mention">@Chris</span> !<br/><strong>Description :</strong> aide</div>
+      <div class="v2-separator-space"></div><div class="v2-text"><span class="v2-subtext">Ticket ID: abc</span></div>
+      </div></div></div></div>`;
+    const [message] = loadTranscriptMessages({ format: 'html', html, data: null });
+    expect(message.isBot).toBe(true);
+    expect(message.createdAt).toBe('2026-11-22T08:42:00.000Z');
+    expect(message.embeds[0]).toMatchObject({
+      color: '#5865f2',
+      description: "### 🎫 Ticket d'Assistance\n\nBonjour @Chris !\n**Description :** aide\n\n-# Ticket ID: abc",
+    });
+  });
+
   test('ni JSON lisible ni HTML : aucun message', () => {
     expect(loadTranscriptMessages({ format: 'json', html: null, data: null })).toEqual([]);
   });
@@ -124,24 +140,38 @@ describe('parseLegacyTimestamp', () => {
   });
 });
 
-describe('transcriptTicketMessages', () => {
-  test('ticket fermé au format de la vue live', () => {
-    const [first, second] = transcriptTicketMessages(data, null);
+describe('transcriptConversation', () => {
+  test('JSON : messages bruts, Components V2 intacts, noms et auteurs figés', () => {
+    const conversation = transcriptConversation(json, '2026-11-20T12:00:00.000Z');
+    expect(conversation.messages).toBe(data.messages);
+    expect(conversation.messages[1].components?.[0]).toMatchObject({ type: 17, accent_color: 0x00ff00 });
+    expect(conversation.entities).toBe(data.entities);
+    expect(conversation.authors).toBe(data.authors);
+  });
+
+  test('HTML historique : auteurs synthétiques par pseudo, embeds et images au format API', () => {
+    const html = `<div class="message-group"><img class="avatar" src="https://cdn/bob.png"><span class="username" style="color:#fff">Bob</span>
+      <span class="timestamp">16 juil. 2022, 09:14</span><div class="message-text">Salut</div>
+      <img src="https://cdn/capture.png" class="discord-img" alt="Image jointe" /></div>
+      <div class="message-group"><img class="avatar" src="https://cdn/bot.png"><span class="username" style="color:#fff">Tickets</span><span class="bot-tag">BOT</span>
+      <span class="timestamp">pas une date</span>
+      <div class="discord-embed" style="border-left-color: #5865f2"><div class="discord-embed-title">Ticket fermé</div></div></div>
+      <div class="message-group"><img class="avatar" src="https://cdn/bob.png"><span class="username" style="color:#fff">Bob</span>
+      <span class="timestamp">16 juil. 2022, 09:20</span><div class="message-text">Merci</div></div>`;
+    const conversation = transcriptConversation({ format: 'html', html, data: null }, '2026-11-20T12:00:00.000Z');
+
+    expect(conversation.entities).toEqual({});
+    expect(conversation.authors).toEqual({
+      '1': { displayName: 'Bob', avatarUrl: 'https://cdn/bob.png', bot: false, verified: false },
+      '2': { displayName: 'Tickets', avatarUrl: 'https://cdn/bot.png', bot: true, verified: false },
+    });
+    const [first, second, third] = conversation.messages;
     expect(first).toMatchObject({
-      id: '1', authorId: '11', authorName: 'Alice (modo)', authorAvatar: 'https://cdn/alice.png', isStaff: false,
-      content: 'Bonjour <@22>', createdAt: '2026-11-20T10:00:00.000Z', entities: data.entities,
-      attachments: [{ url: 'https://cdn/photo.png', contentType: 'image/png' }, { url: 'https://cdn/logs.txt', contentType: 'text/plain' }],
-      reactions: [{ emoji: '👍', imageUrl: null, name: '👍', count: 2 }],
+      id: 'transcript-0', author: { id: '1', username: 'Bob' }, content: 'Salut', timestamp: '2022-07-16T09:14:00.000Z',
+      attachments: [{ filename: 'capture.png', url: 'https://cdn/capture.png', content_type: 'image/png' }],
     });
-    expect(second).toMatchObject({
-      authorName: 'Kotbo', isStaff: true, content: 'Texte hors conteneur',
-      stickers: [{ id: 's1', name: 'Coucou', url: 'https://media.discordapp.net/stickers/s1.gif' }],
-    });
-    expect(second).not.toHaveProperty('entities');
-    expect(second.embeds[0]).toMatchObject({ title: 'Ticket', color: '#5865f2', fields: [{ name: 'Motif', value: 'Aide' }] });
-    expect(second.embeds[1]).toMatchObject({
-      color: '#00ff00', thumbnail: { url: 'https://cdn/thumb.png' }, image: { url: 'https://cdn/a.png' }, images: ['https://cdn/b.png'],
-      buttons: [{ label: 'Fermer', emoji: '🔒', url: null, style: 4, disabled: false }],
-    });
+    expect(second).toMatchObject({ author: { id: '2', bot: true }, timestamp: '2026-11-20T12:00:00.000Z' });
+    expect(second.embeds[0]).toMatchObject({ title: 'Ticket fermé', color: 0x5865f2 });
+    expect(third.author.id).toBe('1');
   });
 });

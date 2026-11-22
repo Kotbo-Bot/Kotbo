@@ -4,6 +4,7 @@
 import { route } from '../backend';
 import { demoDb } from '../db';
 import { ago, HOUR, DAY, MEMBERS, ME, role } from '../fixtures';
+import type { DiscordApiMessage, DiscordConversation } from '../../discordConversation';
 
 function ticketsSeed() {
   const lina = MEMBERS.find((m) => m.username === 'lina') || MEMBERS[6];
@@ -144,6 +145,41 @@ type DemoTicket = ReturnType<typeof ticketsSeed>[number];
  * Le centre de support lit des champs que la graine n'a pas (`sla`, `tags`,
  * `waitingOn`…) : ils se déduisent ici des messages, comme le fait l'API.
  */
+type DemoMessage = { id: string; authorId: string; authorName: string; authorAvatar: string | null; isStaff: boolean; content: string; createdAt: string };
+
+/**
+ * Messages de démo au format que renvoie l'API (`DiscordConversation`) :
+ * messages de l'API Discord et auteurs figés.
+ */
+export function demoConversation(messages: DemoMessage[]): DiscordConversation {
+  const authors: DiscordConversation['authors'] = {};
+  const apiMessages = messages.map((msg) => {
+    authors[msg.authorId] ??= {
+      displayName: msg.authorName,
+      avatarUrl: msg.authorAvatar ?? `https://cdn.discordapp.com/embed/avatars/${Number(BigInt(msg.authorId) % 6n)}.png`,
+      bot: false,
+      verified: false,
+    };
+    return {
+      id: msg.id,
+      channel_id: 'demo',
+      type: 0,
+      author: { id: msg.authorId, username: msg.authorName, global_name: msg.authorName, discriminator: '0', avatar: null },
+      content: msg.content,
+      timestamp: msg.createdAt,
+      edited_timestamp: null,
+      tts: false,
+      mention_everyone: false,
+      mentions: [],
+      mention_roles: [],
+      attachments: [],
+      embeds: [],
+      pinned: false,
+    } as DiscordApiMessage;
+  });
+  return { messages: apiMessages, entities: {}, authors };
+}
+
 export function toInboxRow(ticket: DemoTicket, types: Array<{ id: string; label: string }>) {
   const last = (staff: boolean) => ticket.messages.filter((msg) => msg.isStaff === staff).at(-1)?.createdAt ?? null;
   const lastMessage = ticket.messages.at(-1);
@@ -298,7 +334,7 @@ export function registerTicketsRoutes(): void {
     return {
       ticket,
       channelName: ticket.channelName,
-      messages: ticket.messages || [],
+      ...demoConversation(ticket.messages || []),
     };
   });
 

@@ -35,7 +35,7 @@
   import { resolveUserAvatarSrc } from '../lib/discordMedia';
   import { MessageList } from '@arcscord/discord-ui-svelte';
   import DiscordScope from '../lib/components/discord/DiscordScope.svelte';
-  import { mergeTicketEntities, toTicketMessageView, type TicketChatMessage } from '../lib/ticketMessageView';
+  import { conversationOf, conversationViews, EMPTY_CONVERSATION, type DiscordApiMessage, type DiscordConversation } from '../lib/discordConversation';
   // Navigation & Tabs
   const ticketsTabs = ['tickets', 'performance', 'transcripts', 'satisfaction', 'macros', 'blacklist', 'config'] as const;
   const DEFAULT_TICKETS_TAB = 'tickets';
@@ -76,9 +76,10 @@
   let config = $state<any>({});
   let selectedTicketId = $state<string | null>(null);
   let selectedTicketDetail = $state<any>(null);
-  let messages = $state<TicketChatMessage[]>([]);
-  const chatMessages = $derived(messages.map(toTicketMessageView));
-  const chatEntities = $derived(mergeTicketEntities(messages));
+  /** Messages du ticket au format de l'API Discord, rendus par @arcscord/discord-ui. */
+  let conversation = $state<DiscordConversation>(EMPTY_CONVERSATION);
+  const messages = $derived(conversation.messages);
+  const chatMessages = $derived(conversationViews(conversation));
   
   // Loading & Error State
   let loading = $state(true);
@@ -223,7 +224,7 @@
       if (!res.ok) throw new Error(m.e1_tickets_err_load_detail());
       const data = await res.json();
       selectedTicketDetail = data.ticket;
-      messages = data.messages || [];
+      conversation = conversationOf(data);
       ticketRenameName = data.ticket?.channelName || '';
 
       if (autoScroll) {
@@ -248,7 +249,7 @@
       if (!res.ok) return;
       const data = await res.json();
       if (seq !== messagesRefreshSeq || selectedTicketId !== ticketId) return;
-      messages = data.messages || [];
+      conversation = conversationOf(data);
       setTimeout(scrollToBottom, 50);
     } catch {
       // Le prochain message ou un rafraichissement manuel rattrapera
@@ -274,15 +275,34 @@
     chatInput = '';
     
     // Add locally immediately with a temp ID for high responsiveness
+    // Identifiant numérique : la lib en dérive l'avatar par défaut.
+    const authorId = authStore.user?.id ?? '0';
+    const authorName = authStore.user?.username || 'Staff';
     const tempMsg = {
       id: `temp-${Date.now()}`,
+      channel_id: selectedTicketId,
+      type: 0,
+      author: { id: authorId, username: authorName, global_name: authorName, discriminator: '0', avatar: null },
       content: textToSend,
-      authorName: authStore.user?.username || 'Staff',
-      authorAvatar: resolveUserAvatarSrc(authStore.user?.id, authStore.user?.avatar),
-      isStaff: true,
-      createdAt: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      edited_timestamp: null,
+      tts: false,
+      mention_everyone: false,
+      mentions: [],
+      mention_roles: [],
+      attachments: [],
+      embeds: [],
+      pinned: false,
+    } as DiscordApiMessage;
+    conversation = {
+      ...conversation,
+      messages: [...conversation.messages, tempMsg],
+      authors: {
+        ...conversation.authors,
+        [authorId]: conversation.authors[authorId]
+          ?? { displayName: authorName, avatarUrl: resolveUserAvatarSrc(authStore.user?.id, authStore.user?.avatar) ?? '', bot: false, verified: false },
+      },
     };
-    messages = [...messages, tempMsg];
     setTimeout(scrollToBottom, 30);
 
     try {
@@ -535,7 +555,7 @@
       showDeleteConfirmModal = false;
       selectedTicketId = null;
       selectedTicketDetail = null;
-      messages = [];
+      conversation = EMPTY_CONVERSATION;
       await loadTicketsAndConfig();
     } catch (err) {
       toast.error(errorMessage(err));
@@ -661,7 +681,7 @@
           selectedId={selectedTicketId}
           slaConfigured={!!(config.ticketSlaFirstResponseMinutes || config.ticketSlaResolutionHours)}
           statusLabel={getStatusLabel}
-          onview={(view) => { selectedTicketId = null; selectedTicketDetail = null; messages = []; changeInbox({ view }); }}
+          onview={(view) => { selectedTicketId = null; selectedTicketDetail = null; conversation = EMPTY_CONVERSATION; changeInbox({ view }); }}
           onsearch={(query) => changeInbox({ query })}
           onsort={(sort) => changeInbox({ sort })}
           onselect={(id) => { selectTicket(id); showMobileChat = true; }}
@@ -931,7 +951,7 @@
                 <p class="text-xs">{m.e1_tickets_no_message()}</p>
               </div>
             {:else}
-              <DiscordScope class="ticket-chat" entities={chatEntities}>
+              <DiscordScope class="ticket-chat" entities={conversation.entities}>
                 <MessageList messages={chatMessages} />
               </DiscordScope>
             {/if}

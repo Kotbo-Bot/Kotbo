@@ -5,13 +5,8 @@
  */
 import prisma from '../../../../utils/db.js';
 import { logger } from '../../../../utils/logger.js';
-import { type CommandAccessLevel, type DashboardPresetKey, extractMediaUrls, parseDiscordMarkdown, type SeverityLevel } from '../../../shared.js';
+import { type CommandAccessLevel, type DashboardPresetKey, type SeverityLevel } from '../../../shared.js';
 import { SanctionType } from '@prisma/client';
-import { type Embed, type Guild } from 'discord.js';
-import type { APIEmbed, APIStickerItem } from 'discord-api-types/v10';
-import type { TranscriptDataV1 } from '../../../../services/features/transcriptData.js';
-
-export { msgMentionEntities, type MessageEntities } from '../../../../utils/messageEntities.js';
 
 export const PRESET_LABELS: Record<DashboardPresetKey, string> = {
   general: 'Communauté générale',
@@ -161,128 +156,6 @@ export function verifyMagicBytes(buffer: Buffer, mimeType: string): boolean {
   return false;
 }
 
-export function msgEmbedsMap(embeds: Embed[], guild: Guild | null) {
-  return embeds.map(e => ({
-    title: e.title,
-    description: e.description,
-    htmlDescription: e.description ? parseDiscordMarkdown(e.description, guild) : '',
-    color: e.hexColor,
-    fields: e.fields ? e.fields.map((f) => ({
-      name: f.name,
-      value: f.value,
-      htmlValue: f.value ? parseDiscordMarkdown(f.value, guild) : ''
-    })) : [],
-    image: e.image ? { url: e.image.url } : null,
-    thumbnail: e.thumbnail ? { url: e.thumbnail.url } : null,
-    video: e.video ? { url: e.video.url } : null
-  }));
-}
-
-/** Composant Discord brut (`toJSON()`), réduit à ce que la conversion lit. */
-type RawComponent = {
-  type: number;
-  components?: RawComponent[];
-  content?: string;
-  accent_color?: number | null;
-  accessory?: RawComponent;
-  media?: { url?: string };
-  items?: Array<{ media?: { url?: string } }>;
-  label?: string;
-  url?: string;
-  emoji?: { name?: string | null; id?: string | null; animated?: boolean };
-  style?: number;
-  disabled?: boolean;
-};
-
-export type MessageCardButton = { label: string; emoji: string | null; url: string | null; style: number; disabled: boolean };
-
-/** Bouton lisible par le dashboard : libellé, émoji (texte ou image), lien. */
-function cardButton(raw: RawComponent): MessageCardButton {
-  const emoji = raw.emoji?.id
-    ? `https://cdn.discordapp.com/emojis/${raw.emoji.id}.${raw.emoji.animated ? 'gif' : 'png'}?size=32`
-    : raw.emoji?.name ?? null;
-  return { label: raw.label ?? '', emoji, url: raw.url ?? null, style: raw.style ?? 2, disabled: raw.disabled === true };
-}
-
-/**
- * Messages en Components V2 lus comme des embeds.
- *
- * Le bot convertit ses embeds en conteneurs V2 (`utils/patchV2.ts`) : leurs
- * messages arrivent sans `embeds`, et la vue live d'un ticket les montrait
- * vides. Chaque conteneur devient une carte au format d'un embed (texte,
- * couleur, vignette, images), ses boutons en plus. Le texte posé hors de tout
- * conteneur revient séparément, comme le contenu d'un message classique.
- */
-export function msgComponentsV2Map(components: Array<{ toJSON(): unknown }>, guild: Guild | null) {
-  const cards: Array<ReturnType<typeof msgEmbedsMap>[number] & { images: string[]; buttons: MessageCardButton[] }> = [];
-  const looseText: string[] = [];
-  const looseButtons: MessageCardButton[] = [];
-
-  const toCard = (texts: string[], color: number | null | undefined, images: string[], thumbnail: string | null, buttons: MessageCardButton[]) => {
-    const description = texts.filter((text) => text.trim()).join('\n\n');
-    cards.push({
-      title: null,
-      description,
-      htmlDescription: description ? parseDiscordMarkdown(description, guild) : '',
-      color: typeof color === 'number' ? `#${color.toString(16).padStart(6, '0')}` : null,
-      fields: [],
-      image: images[0] ? { url: images[0] } : null,
-      images: images.slice(1),
-      thumbnail: thumbnail ? { url: thumbnail } : null,
-      video: null,
-      buttons,
-    });
-  };
-
-  for (const component of components) {
-    const raw = component.toJSON() as RawComponent;
-    if (raw.type === 17) {
-      const texts: string[] = [];
-      const images: string[] = [];
-      const buttons: MessageCardButton[] = [];
-      let thumbnail: string | null = null;
-      const walk = (node: RawComponent) => {
-        switch (node.type) {
-          case 10: texts.push(node.content ?? ''); break;
-          case 9:
-            node.components?.forEach(walk);
-            if (node.accessory?.type === 11 && node.accessory.media?.url) thumbnail = node.accessory.media.url;
-            if (node.accessory?.type === 2) buttons.push(cardButton(node.accessory));
-            break;
-          case 12: node.items?.forEach((item) => { if (item.media?.url) images.push(item.media.url); }); break;
-          case 1: node.components?.filter((child) => child.type === 2).forEach((child) => buttons.push(cardButton(child))); break;
-          default: break;
-        }
-      };
-      raw.components?.forEach(walk);
-      toCard(texts, raw.accent_color, images, thumbnail, buttons);
-    } else if (raw.type === 10) {
-      looseText.push(raw.content ?? '');
-    } else if (raw.type === 1) {
-      const buttons = raw.components?.filter((child) => child.type === 2).map(cardButton) ?? [];
-      // Une rangée de boutons sous un conteneur lui appartient visuellement.
-      if (cards.length > 0) cards[cards.length - 1].buttons.push(...buttons);
-      else looseButtons.push(...buttons);
-    } else if (raw.type === 12) {
-      toCard([], null, raw.items?.map((item) => item.media?.url).filter((url): url is string => !!url) ?? [], null, []);
-    }
-  }
-
-  return { cards, text: looseText.filter((text) => text.trim()).join('\n'), buttons: looseButtons };
-}
-
-/** Réactions d'un message : émoji (texte ou image) et nombre. */
-export function msgReactionsMap(reactions: Iterable<{ emoji: { id: string | null; name: string | null; animated?: boolean | null }; count: number | null }>) {
-  return [...reactions].map((reaction) => ({
-    emoji: reaction.emoji.id ? null : reaction.emoji.name,
-    imageUrl: reaction.emoji.id
-      ? `https://cdn.discordapp.com/emojis/${reaction.emoji.id}.${reaction.emoji.animated ? 'gif' : 'png'}?size=32`
-      : null,
-    name: reaction.emoji.name ?? '',
-    count: reaction.count ?? 0,
-  }));
-}
-
 /**
  * Bascule des statistiques de mots, ecrite depuis deux pages : le panneau
  * « Analytique avancee » l'allume d'un clic, l'onglet Verification de la page
@@ -315,60 +188,4 @@ export function startWordStatsBackfillIfTurnedOn(
   })().catch((err) =>
     logger.error(source, `Lancement du backfill des stats de mots échoué pour ${guildId}:`, err),
   );
-}
-
-/** Embed brut de l'API au format renvoyé par `msgEmbedsMap`. */
-function apiEmbedMap(embed: APIEmbed, guild: Guild | null) {
-  return {
-    title: embed.title ?? null,
-    description: embed.description ?? null,
-    htmlDescription: embed.description ? parseDiscordMarkdown(embed.description, guild) : '',
-    color: typeof embed.color === 'number' ? `#${embed.color.toString(16).padStart(6, '0')}` : null,
-    fields: (embed.fields ?? []).map((field) => ({
-      name: field.name,
-      value: field.value,
-      htmlValue: field.value ? parseDiscordMarkdown(field.value, guild) : '',
-    })),
-    image: embed.image ? { url: embed.image.url } : null,
-    thumbnail: embed.thumbnail ? { url: embed.thumbnail.url } : null,
-    video: embed.video?.url ? { url: embed.video.url } : null,
-  };
-}
-
-/** Image d'un autocollant d'après son format (1 PNG, 2 APNG, 3 Lottie, 4 GIF). */
-function stickerUrl(sticker: APIStickerItem): string {
-  if (sticker.format_type === 4) return `https://media.discordapp.net/stickers/${sticker.id}.gif`;
-  if (sticker.format_type === 3) return `https://cdn.discordapp.com/stickers/${sticker.id}.json`;
-  return `https://cdn.discordapp.com/stickers/${sticker.id}.png`;
-}
-
-/**
- * Messages d'une transcription JSON au format de la vue live d'un ticket :
- * un ticket fermé s'affiche comme un ouvert (Components V2, boutons,
- * réactions, autocollants), avec les auteurs et les noms figés à la capture.
- */
-export function transcriptTicketMessages(data: TranscriptDataV1, guild: Guild | null) {
-  return data.messages.map((message, index) => {
-    const v2 = msgComponentsV2Map((message.components ?? []).map((component) => ({ toJSON: () => component })), guild);
-    const content = [message.content, v2.text].filter(Boolean).join('\n');
-    const author = data.authors[message.author.id];
-    return {
-      id: message.id,
-      authorId: message.author.id,
-      authorName: author?.displayName ?? message.author.global_name ?? message.author.username,
-      authorAvatar: author?.avatarUrl ?? null,
-      isStaff: message.author.bot === true,
-      content,
-      htmlContent: parseDiscordMarkdown(content, guild),
-      mediaUrls: extractMediaUrls(content),
-      stickers: (message.sticker_items ?? []).map((sticker) => ({ id: sticker.id, name: sticker.name, url: stickerUrl(sticker) })),
-      attachments: message.attachments.map((attachment) => ({ url: attachment.url, contentType: attachment.content_type ?? null })),
-      embeds: [...message.embeds.map((embed) => apiEmbedMap(embed, guild)), ...v2.cards],
-      buttons: v2.buttons,
-      reactions: msgReactionsMap(message.reactions ?? []),
-      // Les noms valent pour toute la conversation : portés une fois, le dashboard les fusionne.
-      ...(index === 0 ? { entities: data.entities } : {}),
-      createdAt: message.timestamp,
-    };
-  });
 }

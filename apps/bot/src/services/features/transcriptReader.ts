@@ -7,7 +7,7 @@
  * (restauration d'un ticket, rattrapage anti-arnaque) passent par ici.
  */
 import type { APIEmbed, APIMessage } from 'discord-api-types/v10';
-import type { TranscriptDataV1 } from './transcriptData.js';
+import type { DiscordConversation, TranscriptAuthor, TranscriptDataV1 } from './transcriptData.js';
 import { parseTranscriptHtml, type ParsedTranscriptEmbed, type ParsedTranscriptMessage } from './transcriptService.js';
 
 /** Ce qu'il faut charger d'une ligne `transcripts` pour la relire. */
@@ -128,4 +128,79 @@ export function loadTranscriptMessages(transcript: StoredTranscript): ParsedTran
   const data = transcriptDataOf(transcript);
   if (data) return data.messages.map((message) => messageOf(message, data));
   return transcript.html ? parseTranscriptHtml(transcript.html) : [];
+}
+
+function colorNumber(hex: string | null): number | undefined {
+  if (!hex) return undefined;
+  const value = Number.parseInt(hex.replace('#', ''), 16);
+  return Number.isNaN(value) ? undefined : value;
+}
+
+function legacyEmbed(embed: ParsedTranscriptEmbed): APIEmbed {
+  return {
+    ...(embed.title ? { title: embed.title } : {}),
+    ...(embed.url ? { url: embed.url } : {}),
+    ...(embed.description ? { description: embed.description } : {}),
+    ...(colorNumber(embed.color) !== undefined ? { color: colorNumber(embed.color) } : {}),
+    ...(embed.authorName
+      ? { author: { name: embed.authorName, ...(embed.authorUrl ? { url: embed.authorUrl } : {}), ...(embed.authorIconUrl ? { icon_url: embed.authorIconUrl } : {}) } }
+      : {}),
+    ...(embed.fields.length ? { fields: embed.fields } : {}),
+    ...(embed.thumbnailUrl ? { thumbnail: { url: embed.thumbnailUrl } } : {}),
+    ...(embed.imageUrl ? { image: { url: embed.imageUrl } } : {}),
+    ...(embed.footerText ? { footer: { text: embed.footerText, ...(embed.footerIconUrl ? { icon_url: embed.footerIconUrl } : {}) } } : {}),
+  };
+}
+
+/**
+ * Transcription historique au format conversation. Le HTML ne garde ni
+ * identifiants ni pièces jointes non-image : chaque pseudo devient un auteur
+ * synthétique (identifiants 1, 2…), les images des pièces jointes PNG.
+ */
+function legacyConversation(messages: ParsedTranscriptMessage[], fallbackDate: string): DiscordConversation {
+  const authorIds = new Map<string, string>();
+  const authors: Record<string, TranscriptAuthor> = {};
+  const apiMessages = messages.map((message, index): APIMessage => {
+    let authorId = authorIds.get(message.username);
+    if (!authorId) {
+      // Identifiant numérique : la lib en dérive l'avatar par défaut (BigInt de l'identifiant).
+      authorId = String(authorIds.size + 1);
+      authorIds.set(message.username, authorId);
+      authors[authorId] = { displayName: message.username, avatarUrl: message.avatarUrl, bot: message.isBot, verified: false };
+    }
+    return {
+      id: `transcript-${index}`,
+      channel_id: 'transcript',
+      type: 0,
+      author: { id: authorId, username: message.username, global_name: message.username, discriminator: '0', avatar: null, ...(message.isBot ? { bot: true } : {}) },
+      content: message.content,
+      timestamp: message.createdAt ?? fallbackDate,
+      edited_timestamp: null,
+      tts: false,
+      mention_everyone: false,
+      mentions: [],
+      mention_roles: [],
+      attachments: message.imageUrls.map((url, imageIndex) => ({
+        id: `transcript-${index}-${imageIndex}`,
+        filename: url.split('?')[0].split('/').pop() || 'image.png',
+        url,
+        proxy_url: url,
+        size: 0,
+        content_type: 'image/png',
+      })),
+      embeds: message.embeds.map(legacyEmbed),
+      pinned: false,
+    } as APIMessage;
+  });
+  return { messages: apiMessages, entities: {}, authors };
+}
+
+/**
+ * Conversation d'une transcription pour l'affichage, quel que soit son
+ * format. `fallbackDate` date les messages historiques illisibles.
+ */
+export function transcriptConversation(transcript: StoredTranscript, fallbackDate: string): DiscordConversation {
+  const data = transcriptDataOf(transcript);
+  if (data) return { messages: data.messages, entities: data.entities, authors: data.authors };
+  return legacyConversation(transcript.html ? parseTranscriptHtml(transcript.html) : [], fallbackDate);
 }

@@ -36,14 +36,18 @@ export type TranscriptAuthor = {
   verified: boolean;
 };
 
-export type TranscriptDataV1 = {
+/** Conversation affichable : messages bruts, noms des mentions, auteurs figés. */
+export type DiscordConversation = {
+  messages: APIMessage[];
+  entities: MessageEntities;
+  authors: Record<string, TranscriptAuthor>;
+};
+
+export type TranscriptDataV1 = DiscordConversation & {
   version: 1;
   guildId: string;
   channel: { id: string; name: string; topic: string | null };
   generatedAt: string;
-  messages: APIMessage[];
-  entities: MessageEntities;
-  authors: Record<string, TranscriptAuthor>;
 };
 
 /** Bit `VerifiedBot` des drapeaux publics d'un utilisateur Discord. */
@@ -222,20 +226,27 @@ function mergeEntities(target: Required<MessageEntities>, source: MessageEntitie
  * Message auquel `msg` répond : d'abord parmi les messages transcrits, puis
  * dans le cache du salon, enfin chez Discord. `null` s'il a été supprimé.
  */
-async function resolveReference(msg: Message, byId: Map<string, Message>): Promise<Message | null | undefined> {
+async function resolveReference(msg: Message, byId: Map<string, Message>, fetchMissing: boolean): Promise<Message | null | undefined> {
   const messageId = msg.reference?.messageId;
   if (!messageId || msg.reference?.channelId !== msg.channelId) return undefined;
   const known = byId.get(messageId) ?? msg.channel.messages.cache.get(messageId);
   if (known) return known;
+  if (!fetchMissing) return undefined;
   return msg.fetchReference().catch(() => null);
 }
 
-/** Construit la transcription JSON d'une suite de messages, dans l'ordre donné. */
-export async function buildTranscriptData(
-  channel: { id: string; name: string; topic?: string | null; guild: Guild },
+/**
+ * Sérialise une suite de messages (dans l'ordre donné) avec les noms et
+ * auteurs nécessaires à leur affichage. `fetchMissingReferences` va chercher
+ * chez Discord les messages cités hors de la suite : à réserver aux
+ * transcriptions, une vue rafraîchie souvent s'en passe (la citation est
+ * alors omise).
+ */
+export async function buildConversation(
+  guild: Guild,
   messages: Message[],
-): Promise<TranscriptDataV1> {
-  const guild = channel.guild;
+  { fetchMissingReferences = true }: { fetchMissingReferences?: boolean } = {},
+): Promise<DiscordConversation> {
   const byId = new Map(messages.map((msg) => [msg.id, msg]));
   const entities: Required<MessageEntities> = { users: {}, roles: {}, channels: {}, emojis: {} };
   const authors: Record<string, TranscriptAuthor> = {};
@@ -245,7 +256,7 @@ export async function buildTranscriptData(
 
   const serialized: APIMessage[] = [];
   for (const msg of messages) {
-    const referenced = await resolveReference(msg, byId);
+    const referenced = await resolveReference(msg, byId, fetchMissingReferences);
     serialized.push(serializeMessage(msg, referenced));
 
     addAuthor(msg.author, msg);
@@ -266,12 +277,22 @@ export async function buildTranscriptData(
   }
 
   return {
-    version: TRANSCRIPT_DATA_VERSION,
-    guildId: guild.id,
-    channel: { id: channel.id, name: channel.name, topic: channel.topic ?? null },
-    generatedAt: new Date().toISOString(),
     messages: serialized,
     entities: Object.fromEntries(Object.entries(entities).filter(([, value]) => Object.keys(value).length > 0)),
     authors,
+  };
+}
+
+/** Construit la transcription JSON d'une suite de messages, dans l'ordre donné. */
+export async function buildTranscriptData(
+  channel: { id: string; name: string; topic?: string | null; guild: Guild },
+  messages: Message[],
+): Promise<TranscriptDataV1> {
+  return {
+    version: TRANSCRIPT_DATA_VERSION,
+    guildId: channel.guild.id,
+    channel: { id: channel.id, name: channel.name, topic: channel.topic ?? null },
+    generatedAt: new Date().toISOString(),
+    ...(await buildConversation(channel.guild, messages)),
   };
 }

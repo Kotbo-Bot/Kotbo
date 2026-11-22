@@ -35,6 +35,7 @@
     "vite": "8.1.5"
   },
   "dependencies": {
+    "@arcscord/discord-ui-core": "0.3.1",
     "@arcscord/discord-ui-svelte": "0.1.1",
     "@fontsource/inter": "^5.2.8",
     "@fontsource/jetbrains-mono": "^5.2.8",

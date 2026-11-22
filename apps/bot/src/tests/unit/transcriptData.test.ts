@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { Guild, Message } from 'discord.js';
 
-const { buildTranscriptData, serializeMessage } = await import('../../services/features/transcriptData.js');
+const { buildConversation, buildTranscriptData, serializeMessage } = await import('../../services/features/transcriptData.js');
 
 /** Collection discord.js réduite à ce que lit le sérialiseur. */
 function collection<V extends { id: string }>(items: V[]) {
@@ -220,5 +220,25 @@ describe('buildTranscriptData', () => {
       channels: { '400000000000000002': { name: 'support' } },
       emojis: { '800000000000000001': { name: 'check', image: 'https://cdn.discordapp.com/emojis/800000000000000001.png?size=48' } },
     });
+  });
+});
+
+describe('buildConversation', () => {
+  test('vue rafraîchie : une citation hors fenêtre n’est pas demandée à Discord', async () => {
+    let fetched = 0;
+    const reply = message('500000000000000020', alice, {
+      type: 19,
+      reference: { type: 0, messageId: '500000000000000001', channelId: '400000000000000001', guildId: guild.id },
+      fetchReference: () => { fetched++; return Promise.reject(new Error('Unknown Message')); },
+    });
+    const live = await buildConversation(guild, [reply], { fetchMissingReferences: false });
+    expect(fetched).toBe(0);
+    expect(live.messages[0].referenced_message).toBeUndefined();
+    expect(live.messages[0].message_reference?.message_id).toBe('500000000000000001');
+    expect(live).not.toHaveProperty('version');
+
+    const archived = await buildConversation(guild, [reply]);
+    expect(fetched).toBe(1);
+    expect(archived.messages[0].referenced_message).toBeNull();
   });
 });

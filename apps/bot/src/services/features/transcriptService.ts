@@ -59,6 +59,22 @@ function stripHtmlTags(html: string): string {
     .trim();
 }
 
+/**
+ * Texte d'un conteneur Components V2 tel que l'écrivait l'ancien générateur :
+ * blocs `v2-text` (titres `v2-heading v2-hN`, sous-texte `v2-subtext`) dans
+ * l'embed, sans `discord-embed-description`. Rendu en Markdown Discord.
+ */
+function parseV2TextFromHtml(embedHtml: string): string | null {
+  const blocks = [...embedHtml.matchAll(/<div class="v2-text">([\s\S]*?)<\/div>/g)].map((match) => {
+    const markdown = match[1]
+      .replace(/<span class="v2-heading v2-h(\d)">([\s\S]*?)<\/span>/g, (_, level: string, text: string) => `${'#'.repeat(Number(level))} ${text}`)
+      .replace(/<span class="v2-subtext">([\s\S]*?)<\/span>/g, '-# $1');
+    return unescapeHtml(stripHtmlTags(markdown));
+  });
+  const text = blocks.filter(Boolean).join('\n\n');
+  return text || null;
+}
+
 function parseEmbedFromHtml(embedHtml: string): ParsedTranscriptEmbed {
   const colorMatch = embedHtml.match(/border-left-color:\s*([^"]+)/);
 
@@ -94,7 +110,7 @@ function parseEmbedFromHtml(embedHtml: string): ParsedTranscriptEmbed {
     authorUrl: authorLinkMatch ? authorLinkMatch[1] : null,
     title: titleLinkMatch ? unescapeHtml(titleLinkMatch[2]) : (titlePlainMatch ? unescapeHtml(titlePlainMatch[1].trim()) : null),
     url: titleLinkMatch ? titleLinkMatch[1] : null,
-    description: descMatch ? unescapeHtml(stripHtmlTags(descMatch[1])) : null,
+    description: descMatch ? unescapeHtml(stripHtmlTags(descMatch[1])) : parseV2TextFromHtml(embedHtml),
     fields,
     thumbnailUrl: thumbnailMatch ? thumbnailMatch[1] : null,
     imageUrl: imageMatch ? imageMatch[1] : null,

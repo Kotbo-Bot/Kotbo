@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { toInboxRow } from './tickets';
+import { demoConversation, toInboxRow } from './tickets';
 
 const message = (isStaff: boolean, createdAt: string) => ({
   id: createdAt, authorId: 'a', authorName: 'a', authorAvatar: null, isStaff, content: '', htmlContent: '', createdAt,
@@ -27,5 +27,16 @@ describe('toInboxRow', () => {
   test('un ticket fermé n’attend personne', () => {
     expect(toInboxRow(ticket('CLOSED', [message(false, '1')]), types).waitingOn).toBeNull();
     expect(toInboxRow(ticket('OPEN', [message(true, '1')]), types).waitingOn).toBe('member');
+  });
+});
+
+describe('demoConversation', () => {
+  test('messages de démo au format renvoyé par l’API', () => {
+    const conversation = demoConversation([
+      { id: 'm1', authorId: '900000000000000402', authorName: 'Lena', authorAvatar: null, isStaff: true, content: 'Bonjour', createdAt: '2026-11-01T10:00:00Z' },
+    ]);
+    expect(conversation.entities).toEqual({});
+    expect(conversation.messages[0]).toMatchObject({ id: 'm1', content: 'Bonjour', timestamp: '2026-11-01T10:00:00Z', author: { id: '900000000000000402' } });
+    expect(conversation.authors['900000000000000402']).toMatchObject({ displayName: 'Lena', bot: false, verified: false });
   });
 });
