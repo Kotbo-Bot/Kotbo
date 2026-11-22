@@ -99,6 +99,15 @@ model Giveaway {
   /// possible sans devoir désactiver les réglages du serveur.
   ignoreBonuses Boolean @default(false)
 
+  /// Conditions de participation propres au concours (`GiveawayCondition[]`,
+  /// voir giveawayConditions.ts). `null` = concours antérieur : il garde le
+  /// filtre du serveur (`GiveawayConfig`). Une liste, même vide, est explicite
+  /// et ignore ce filtre.
+  conditions Json?
+
+  /// Événement planifié Discord miroir du concours, supprimé à la clôture.
+  discordEventId String?
+
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
@@ -265,6 +274,12 @@ model GiveawayTemplate {
 
   /// Voir `Giveaway.ignoreBonuses`.
   ignoreBonuses Boolean @default(false)
+
+  /// Voir `Giveaway.conditions`. `null` = reprendre le filtre du serveur.
+  conditions Json?
+
+  /// Crée un événement planifié Discord à chaque lancement.
+  createDiscordEvent Boolean @default(false)
 
   /// Mêmes clefs que `Giveaway.styleOverrides` : apparence propre au modèle.
   styleOverrides Json?
