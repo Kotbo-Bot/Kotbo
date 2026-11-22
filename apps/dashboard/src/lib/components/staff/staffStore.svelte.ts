@@ -96,6 +96,8 @@ export type HierarchyPayload = {
   color: string;
   icon: string | null;
   discordRoleId: string | null;
+  poleRoleId?: string | null;
+  createPoleRole?: boolean;
   responsableUserId: string | null;
   parentHierarchyId: string | null;
   separatorRoleId?: string | null;

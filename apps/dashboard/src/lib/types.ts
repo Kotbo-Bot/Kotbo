@@ -36,6 +36,7 @@ export interface StaffHierarchy {
   parentHierarchyId?: string | null;
   responsableUserId?: string | null;
   discordRoleId?: string | null;
+  poleRoleId?: string | null;
   separatorRoleId?: string | null;
   separatorStyle?: string | null;
   enabled: boolean;

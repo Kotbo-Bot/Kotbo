@@ -117,6 +117,7 @@
   let hColor = $state('#3b82f6');
   let hIcon = $state('🔵');
   let hRole = $state('');
+  let hPoleRole = $state('');
   let hResp = $state('');
   let hParent = $state('');
   // '' = aucun, 'role' = rôle existant, sinon la clé d'un style créé par Kotbo.
@@ -148,6 +149,7 @@
     hColor = h?.color || '#3b82f6';
     hIcon = h?.icon || '🔵';
     hRole = h?.discordRoleId || '';
+    hPoleRole = h?.poleRoleId || '';
     hResp = h?.responsableUserId || '';
     hParent = h?.parentHierarchyId || '';
     hSepKind = h?.separatorStyle || (h?.separatorRoleId ? 'role' : '');
@@ -164,6 +166,8 @@
         color: hColor,
         icon: hIcon.trim() || null,
         discordRoleId: hRole.trim() || null,
+        poleRoleId: hPoleRole === '__create__' ? null : hPoleRole.trim() || null,
+        createPoleRole: hPoleRole === '__create__',
         responsableUserId: hResp.trim() || null,
         parentHierarchyId: hParent || null,
         separatorStyle: hSepKind && hSepKind !== 'role' ? hSepKind : null,
@@ -374,8 +378,11 @@
               <Menu label={m.sx_hierarchy_menu({ name: h.name })} items={hierarchyMenu(h)} />
             {/if}
           </header>
-          {#if responsable || parent}
+          {#if responsable || parent || h.poleRoleId}
             <div class="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 pt-3 text-xs text-on-surface-variant">
+              {#if h.poleRoleId}
+                <span class="inline-flex items-center gap-1 text-primary"><Papicon icon="shield" size={12} />{m.sx_pole_role_badge({ name: staff.discordRoleName(h.poleRoleId) })}</span>
+              {/if}
               {#if responsable}
                 <span class="inline-flex items-center gap-1.5">
                   <StaffAvatar url={responsable.avatarUrl} name={staffName(responsable)} userId={responsable.userId} size={18} />
@@ -560,6 +567,15 @@
         {/snippet}
       </Field>
     </div>
+    <Field label={m.sx_pole_role_label()} hint={m.sx_pole_role_hint()}>
+      {#snippet children(id, describedBy)}
+        <select {id} aria-describedby={describedBy} class="input" bind:value={hPoleRole}>
+          <option value="">{m.sm_none_option()}</option>
+          <option value="__create__">{m.sx_pole_role_create({ name: hName.trim() || '…' })}</option>
+          {#each staff.discordRoles as dr (dr.id)}<option value={dr.id}>{dr.name}</option>{/each}
+        </select>
+      {/snippet}
+    </Field>
     <Field label={m.sm_field_hierarchy_role()}>
       {#snippet children(id)}
         <select {id} class="input" bind:value={hRole}>
