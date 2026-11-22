@@ -39,6 +39,9 @@ import {
 } from './giveawayAppearance.js';
 import { publicErrorMessage } from '../../utils/publicError.js';
 import { createGiveawayEvent, deleteGiveawayEvent } from './giveawayEvent.js';
+import { evaluateConditions, normalizeConditions, type GiveawayCondition } from './giveawayConditions.js';
+import { conditionsBlock, failuresMessage } from './giveawayConditionLabels.js';
+import { buildConditionResolvers, buildConditionSubject } from './giveawayConditionData.js';
 
 // Cooldown map to prevent spamming/double clicks on the join button
 const joinCooldowns = new Map<string, number>();
@@ -102,6 +105,7 @@ interface GiveawayEmbedData {
   createdById?: string | null;
   styleOverrides?: unknown;
   ignoreBonuses?: boolean | null;
+  conditions?: unknown;
 }
 
 /**
@@ -198,6 +202,10 @@ function buildActiveGiveawayEmbed(
   if (bonusRolesBlock && !template.includes('{bonusRoles}')) {
     description += `\n${bonusRolesBlock}`;
   }
+
+  // Les conditions du concours, pour qu'on sache avant de cliquer ce qu'il faut remplir.
+  const requirements = conditionsBlock(normalizeConditions(giveaway.conditions).conditions, locale);
+  if (requirements) description += `\n\n${requirements}`;
 
   return buildGiveawayEmbed(giveaway, description, resolveEmbedColor(appearance.embedColorActive), appearance, participantCount, locale, { itemLabel });
 }
@@ -314,6 +322,17 @@ function buildGiveawayEmbed(
   return embed;
 }
 
+/** Filtre du serveur traduit en conditions de concours (valeurs par défaut au lancement). */
+export function conditionsFromConfig(config: GiveawayConfig): GiveawayCondition[] {
+  const list: GiveawayCondition[] = [];
+  if (config.requiredRoleIds.length > 0) list.push({ type: 'roles_any', roleIds: config.requiredRoleIds });
+  if (config.blockedRoleIds.length > 0) list.push({ type: 'roles_none', roleIds: config.blockedRoleIds });
+  if (config.minAccountAgeDays > 0) list.push({ type: 'account_age', days: config.minAccountAgeDays });
+  if (config.minMemberAgeDays > 0) list.push({ type: 'member_age', days: config.minMemberAgeDays });
+  if (config.minLevel > 0) list.push({ type: 'level', min: config.minLevel });
+  return list;
+}
+
 /**
  * Crée un nouveau giveaway sur Discord et en BDD
  */
@@ -332,7 +351,8 @@ export async function createGiveaway(
   createdById: string | null = null,
   styleOverrides: Partial<GiveawayAppearance> = {},
   ignoreBonuses = false,
-  createEvent = false
+  createEvent = false,
+  conditions?: GiveawayCondition[]
 ) {
   const locale = await resolveGuildLocale(guildId);
 
@@ -382,6 +402,14 @@ export async function createGiveaway(
   }
 
   const cleanOverrides = normalizeAppearancePatch(styleOverrides);
+  // Sans conditions fournies, le concours reprend celles du serveur : explicites
+  // dès lors, il ne dépend plus de la config qui peut changer ensuite.
+  const finalConditions = (conditions
+    ? normalizeConditions(conditions).conditions
+    : conditionsFromConfig(await getGiveawayConfig(guildId))
+  ).map((c) => (c.type === 'in_guild' && !c.guildName
+    ? { ...c, guildName: client.guilds.cache.get(c.guildId)?.name.slice(0, 64) }
+    : c));
   const endsAt = new Date(Date.now() + durationMinutes * 60 * 1000);
 
   // 1. Sauvegarder dans la BDD pour générer l'ID
@@ -401,6 +429,7 @@ export async function createGiveaway(
       createdById,
       styleOverrides: (Object.keys(cleanOverrides).length > 0 ? cleanOverrides : undefined) as Prisma.InputJsonValue | undefined,
       ignoreBonuses,
+      conditions: finalConditions as unknown as Prisma.InputJsonValue,
     },
   });
 
@@ -494,7 +523,29 @@ export async function toggleGiveawayParticipation(
   // la transaction : un membre exclu ne doit pas apparaître une seconde dans la
   // liste des participants.
   const config = await getGiveawayConfig(guildId);
-  if (hasParticipationRules(config)) {
+  const entry = await prisma.giveaway.findFirst({
+    where: { id: giveawayId, guildId },
+    select: { conditions: true, participants: true, createdAt: true },
+  });
+
+  if (entry && entry.conditions !== null) {
+    // Conditions propres au concours. Se retirer reste toujours possible.
+    if (!entry.participants.includes(userId)) {
+      const conditions = normalizeConditions(entry.conditions).conditions;
+      if (conditions.length > 0) {
+        const member = await client.guilds.cache.get(guildId)?.members.fetch(userId).catch(() => null) ?? null;
+        const result = await evaluateConditions(
+          conditions,
+          buildConditionSubject({ ...participant, guildId }, member, entry.createdAt),
+          buildConditionResolvers(client, guildId, userId),
+        );
+        if (!result.allowed) {
+          return { ok: false, reason: 'denied', message: resolveEmojiShortcodes(failuresMessage(result.failures, config.locale)).slice(0, 2000) };
+        }
+      }
+    }
+  } else if (hasParticipationRules(config)) {
+    // Concours antérieur aux conditions par giveaway : il garde le filtre du serveur.
     const check = await checkParticipation(guildId, {
       userId,
       roleIds: participant.roleIds,

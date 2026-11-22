@@ -38,7 +38,8 @@ export type GiveawayCondition = Base & (
   | { type: 'nickname_contains' | 'status_contains'; text: string }
   | { type: PeriodStat; min: number; period: ConditionPeriod }
   | { type: FlatStat; min: number }
-  | { type: 'in_guild'; guildId: string }
+  /** `guildName` est figé à la création : le bot n'est pas toujours dans l'autre serveur. */
+  | { type: 'in_guild'; guildId: string; guildName?: string }
 );
 
 export type ConditionType = GiveawayCondition['type'];
@@ -204,7 +205,8 @@ function normalizeOne(raw: unknown): GiveawayCondition | null {
     }
     case 'in_guild': {
       const guildId = typeof raw.guildId === 'string' && SNOWFLAKE.test(raw.guildId) ? raw.guildId : null;
-      return make(guildId ? { type: 'in_guild', guildId } : null);
+      const guildName = cleanText(raw.guildName) ?? undefined;
+      return make(guildId ? { type: 'in_guild', guildId, ...(guildName ? { guildName } : {}) } : null);
     }
     default:
       return null;
