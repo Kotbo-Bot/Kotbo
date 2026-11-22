@@ -1,13 +1,15 @@
 <script lang="ts">
   /**
-   * Aperçu fidèle de l'embed tel que Discord l'affichera.
+   * Aperçu fidèle de l'embed tel que Discord l'affichera, rendu par
+   * @arcscord/discord-ui.
    *
    * L'ancien aperçu rendait l'image même quand elle était incompatible, ce qui
    * donnait exactement le faux positif à l'origine du bug signalé : ça marche
    * dans le dashboard, ça casse dans Discord. Ici, une image que Discord ne
    * saura pas charger est rendue comme Discord la rend - en cadre d'échec.
    */
-  import Papicon from '../Papicon.svelte';
+  import { Avatar, Embed, MessageFrame, MessageHeader, type EmbedView, type MessageAuthor, type MessageEntities } from '@arcscord/discord-ui-svelte';
+  import DiscordScope from '../discord/DiscordScope.svelte';
 
   const {
     title = '',
@@ -20,6 +22,7 @@
     botAvatar = '',
     renderEmoji = (text: string) => text,
     renderTitle = (text: string) => text,
+    entities = {},
   }: {
     title?: string;
     message?: string;
@@ -29,16 +32,18 @@
     footerText?: string;
     botName?: string;
     botAvatar?: string;
-    /** Convertit les raccourcis `:nom:` en `<img>` (description). */
+    /** Prépare la description (Markdown) : raccourcis `:nom:` en émojis du serveur. */
     renderEmoji?: (text: string) => string;
-    /** Convertit les raccourcis en équivalent unicode (titre et pied de page). */
+    /** Prépare le titre et le pied (texte) : raccourcis en équivalent unicode. */
     renderTitle?: (text: string) => string;
+    /** Images des émojis du serveur cités. */
+    entities?: MessageEntities;
   } = $props();
 
-  let imageBroken = $state(false);
-  let thumbBroken = $state(false);
-
-  /** Une URL que Discord refusera de charger : inutile d'en tenter le rendu. */
+  /**
+   * Une URL que Discord refusera de charger : lien signé et expirant du CDN
+   * Discord, ou image intégrée. Le navigateur l'afficherait, Discord non.
+   */
   function isUnloadable(url: string): boolean {
     const value = url.trim();
     if (!value) return false;
@@ -53,98 +58,51 @@
     }
   }
 
-  const imageFails = $derived(Boolean(imageUrl.trim()) && (isUnloadable(imageUrl) || imageBroken));
-  const thumbFails = $derived(Boolean(thumbnailUrl.trim()) && (isUnloadable(thumbnailUrl) || thumbBroken));
+  /** Adresse refusée par la lib : elle affiche alors son cadre « média indisponible », comme Discord. */
+  const UNLOADABLE = 'about:blank#discord-ne-chargera-pas';
 
-  $effect(() => { void imageUrl; imageBroken = false; });
-  $effect(() => { void thumbnailUrl; thumbBroken = false; });
+  function media(id: string, url: string) {
+    const value = url.trim();
+    return value ? { id, url: isUnloadable(value) ? UNLOADABLE : value, alt: '' } : undefined;
+  }
 
-  const now = new Date().toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const embed = $derived<EmbedView>({
+    id: 'broadcast',
+    color,
+    ...(title ? { title: renderTitle(title) } : {}),
+    ...(message ? { description: renderEmoji(message) } : {}),
+    ...(media('thumbnail', thumbnailUrl) ? { thumbnail: media('thumbnail', thumbnailUrl) } : {}),
+    ...(media('image', imageUrl) ? { image: media('image', imageUrl) } : {}),
+    // Comme l'envoi : la date accompagne le pied de page.
+    ...(footerText ? { footer: { text: renderTitle(footerText) }, timestamp: new Date().toISOString() } : {}),
+  });
+
+  const author = $derived<MessageAuthor>({ id: 'preview-author', displayName: botName, avatarUrl: botAvatar || '/favicon.svg', bot: true });
+  const timestamp = new Date().toISOString();
 </script>
 
 <!-- Fond Discord : la couleur de l'embed doit être jugée sur le vrai fond -->
-<div class="rounded-xl bg-[#313338] p-4 font-sans">
-  <div class="flex gap-3">
-    <div class="w-10 h-10 shrink-0 rounded-full bg-[#5865F2] overflow-hidden flex items-center justify-center">
-      {#if botAvatar}
-        <img src={botAvatar} alt="" class="w-full h-full object-cover" />
-      {:else}
-        <Papicon icon="Bot" size={18} class="text-white" />
-      {/if}
-    </div>
+<DiscordScope class="broadcast-preview" {entities}>
+  <MessageFrame>
+    {#snippet avatar()}<Avatar {author} />{/snippet}
+    {#snippet header()}<MessageHeader {author} {timestamp} />{/snippet}
+    <Embed {embed} />
+    {#if !message}
+      <p class="broadcast-preview__empty">Le message apparaîtra ici…</p>
+    {/if}
+  </MessageFrame>
+</DiscordScope>
 
-    <div class="min-w-0 flex-1">
-      <div class="flex items-center gap-2 mb-1">
-        <span class="text-[15px] font-medium text-white">{botName}</span>
-        <span class="px-1 py-px rounded bg-[#5865F2] text-2xs font-semibold text-white uppercase leading-tight">APP</span>
-        <span class="text-2xs text-[#949BA4]">{now}</span>
-      </div>
+<style>
+  :global(.arcscord-discord-ui.broadcast-preview) {
+    border-radius: 0.75rem;
+    padding: 0.5rem 0;
+  }
 
-      <!-- Embed -->
-      <div class="max-w-[520px] rounded border-l-4 bg-[#2B2D31] overflow-hidden" style="border-color: {color}">
-        <div class="p-3.5 flex gap-3">
-          <div class="min-w-0 flex-1">
-            {#if title}
-              <p class="text-[16px] font-semibold text-white leading-snug mb-2 break-words">
-                {@html renderTitle(title)}
-              </p>
-            {/if}
-
-            {#if message}
-              <div class="text-sm text-[#DBDEE1] leading-[1.375] whitespace-pre-wrap break-words">
-                {@html renderEmoji(message)}
-              </div>
-            {:else}
-              <p class="text-sm text-[#949BA4] italic">Le message apparaîtra ici…</p>
-            {/if}
-          </div>
-
-          {#if thumbnailUrl.trim()}
-            <div class="shrink-0 w-20 h-20">
-              {#if thumbFails}
-                <div class="w-full h-full rounded bg-[#232428] border border-[#3F4147] flex flex-col items-center justify-center gap-1 px-1 text-center">
-                  <Papicon icon="ImageOff" size={14} class="text-[#949BA4]" />
-                  <span class="text-2xs text-[#949BA4] leading-tight">Échec</span>
-                </div>
-              {:else}
-                <img
-                  src={thumbnailUrl}
-                  alt=""
-                  onerror={() => (thumbBroken = true)}
-                  class="w-full h-full object-cover rounded"
-                />
-              {/if}
-            </div>
-          {/if}
-        </div>
-
-        {#if imageUrl.trim()}
-          <div class="px-3.5 pb-3.5">
-            {#if imageFails}
-              <!-- Reproduit littéralement ce que Discord affiche -->
-              <div class="w-full h-40 rounded bg-[#232428] border border-[#3F4147] flex flex-col items-center justify-center gap-2">
-                <Papicon icon="ImageOff" size={26} class="text-[#949BA4]" />
-                <span class="text-body-sm text-[#949BA4]">Échec du chargement de l’image.</span>
-              </div>
-            {:else}
-              <img
-                src={imageUrl}
-                alt=""
-                onerror={() => (imageBroken = true)}
-                class="w-full max-h-72 object-cover rounded"
-              />
-            {/if}
-          </div>
-        {/if}
-
-        {#if footerText}
-          <div class="px-3.5 pb-3.5 flex items-center gap-2 text-xs text-[#949BA4]">
-            <span class="break-words">{@html renderTitle(footerText)}</span>
-            <span>•</span>
-            <span>{now}</span>
-          </div>
-        {/if}
-      </div>
-    </div>
-  </div>
-</div>
+  .broadcast-preview__empty {
+    margin-top: 0.25rem;
+    font-size: 0.875rem;
+    font-style: italic;
+    opacity: 0.6;
+  }
+</style>

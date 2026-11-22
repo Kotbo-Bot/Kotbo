@@ -39,6 +39,9 @@
   import { toast } from '../../stores/toast.svelte';
   import { confirmDialog } from '../../stores/confirmDialog.svelte';
   import { m, getLocale } from '../../i18n';
+  import { ActionRow, Button as DiscordButton, Embed, Markdown, type EmbedView } from '@arcscord/discord-ui-svelte';
+  import DiscordScope from '../discord/DiscordScope.svelte';
+  import { mergeEntities, toPreviewMarkdown } from '../discord/previewEntities.svelte';
 
   const {
     channels,
@@ -229,6 +232,32 @@
       date: new Date(),
     }, locale)
     : '');
+
+  // ── Aperçu Discord, rendu par @arcscord/discord-ui ─────────────────────
+  const previewEmbed = $derived<EmbedView | null>(draft
+    ? {
+      id: 'thread-panel',
+      color: draft.color,
+      ...(draft.title ? { title: draft.title } : {}),
+      ...(draft.description ? { description: draft.description } : {}),
+      ...(draft.imageUrl ? { image: { id: 'image', url: draft.imageUrl, alt: '' } } : {}),
+    }
+    : null);
+
+  /** Boutons par rangées de cinq, comme Discord. */
+  const previewRows = $derived.by(() => {
+    const buttons = draft?.buttons ?? [];
+    const rows: (typeof buttons)[] = [];
+    for (let index = 0; index < buttons.length; index += 5) rows.push(buttons.slice(index, index + 5));
+    return rows;
+  });
+
+  /** Émojis du serveur cités, pour leur image. */
+  const previewEntities = $derived(mergeEntities(
+    [draft?.title, draft?.description, ...(draft?.buttons ?? []).map((item) => item.emoji)]
+      .filter((text): text is string => Boolean(text))
+      .map((text) => toPreviewMarkdown(text, { mentions: false }).entities),
+  ));
 
   const validation = $derived(draft ? normalizeThreadPanel(draft) : null);
   const validationError = $derived(validation && 'error' in validation ? (ERRORS[validation.error]?.() ?? validation.error) : '');
@@ -720,16 +749,21 @@
       <!-- Aperçu façon Discord -->
       <aside class="tp-discord" aria-label={m.tp_preview_label()}>
         <span class="text-body-sm text-on-surface-variant">{m.tp_preview_label()}</span>
-        <div class="tp-embed" style:border-left-color={draft.color}>
-          <strong class="tp-embed__title">{draft.title}</strong>
-          {#if draft.description}<p class="tp-embed__desc">{draft.description}</p>{/if}
-          {#if draft.imageUrl}<img class="tp-embed__image" src={draft.imageUrl} alt="" />{/if}
-        </div>
-        <div class="tp-embed__buttons">
-          {#each draft.buttons as item (item.id)}
-            <span class="tp-dbutton tp-dbutton--{item.style}">{item.emoji ? `${item.emoji} ` : ''}{item.label}</span>
+        <DiscordScope class="tp-discord-preview" entities={previewEntities}>
+          {#if previewEmbed}<Embed embed={previewEmbed} />{/if}
+          {#each previewRows as row, rowIndex (rowIndex)}
+            <ActionRow>
+              {#each row as item (item.id)}
+                {#if item.emoji}
+                  {#snippet emoji()}<Markdown inline content={item.emoji ?? ''} />{/snippet}
+                  <DiscordButton label={item.label} variant={item.style} {emoji} />
+                {:else}
+                  <DiscordButton label={item.label} variant={item.style} />
+                {/if}
+              {/each}
+            </ActionRow>
           {/each}
-        </div>
+        </DiscordScope>
       </aside>
     </div>
   {/if}
@@ -959,49 +993,8 @@
     min-width: 0;
   }
 
-  .tp-embed {
-    display: grid;
-    gap: 0.375rem;
-    padding: 0.75rem 1rem;
-    border-left: 4px solid;
-    border-radius: 0.375rem;
-    background: var(--color-surface-container);
+  :global(.arcscord-discord-ui.tp-discord-preview) {
+    border-radius: 0.75rem;
+    padding: 0.75rem;
   }
-
-  .tp-embed__title {
-    color: var(--color-on-surface);
-    font-size: 0.9375rem;
-  }
-
-  .tp-embed__desc {
-    white-space: pre-line;
-    overflow-wrap: anywhere;
-    color: var(--color-on-surface-variant);
-    font-size: 0.875rem;
-  }
-
-  .tp-embed__image {
-    max-width: 100%;
-    border-radius: 0.375rem;
-  }
-
-  .tp-embed__buttons {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.375rem;
-  }
-
-  .tp-dbutton {
-    padding: 0.375rem 0.875rem;
-    border-radius: 0.25rem;
-    color: #fff;
-    font-size: 0.875rem;
-    font-weight: 500;
-  }
-
-  /* Couleurs des boutons Discord : ce sont les leurs, pas des jetons du dashboard. */
-  .tp-dbutton--primary { background: #5865f2; }
-  .tp-dbutton--secondary { background: #4e5058; }
-  .tp-dbutton--success { background: #248046; }
-  .tp-dbutton--danger { background: #da373c; }
 </style>
