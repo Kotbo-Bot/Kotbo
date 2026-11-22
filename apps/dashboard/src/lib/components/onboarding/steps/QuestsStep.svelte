@@ -19,7 +19,7 @@
   import { wizard } from '../../../stores/onboardingWizard.svelte';
   import { onboardingData } from '../../../stores/onboardingData.svelte';
   import { QUEST_PRESETS, celebrateStep } from '../../../onboarding';
-  import { createQuest } from '../../../api';
+  import { saveQuest } from '../../../api';
   import ToggleCard from '../ToggleCard.svelte';
   import DiscordPreview from '../DiscordPreview.svelte';
   import DiscordEmbed from '../DiscordEmbed.svelte';
@@ -58,14 +58,14 @@
       // En serie, comme le reglement : la route relit la liste a chaque
       // creation, et deux ecritures concurrentes se disputeraient l'ordre.
       for (const quest of chosen) {
-        await createQuest({
+        await saveQuest({
           name: quest.name,
           description: quest.description,
-          type: quest.type,
-          frequency: quest.frequency,
+          objective: quest.type,
+          windowHours: quest.frequency === 'WEEKLY' ? 168 : 24,
           target: quest.target,
           rewardCoins: quest.rewardCoins,
-          rewardXp: quest.rewardXp,
+          rewards: quest.rewardXp > 0 ? [{ type: 'LEVEL_XP', amount: quest.rewardXp }] : [],
         });
       }
       wizard.answer({ questKeys: selection });

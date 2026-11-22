@@ -17,19 +17,37 @@ type Quest = {
   id: string;
   name: string;
   description: string;
-  type: string;
-  frequency: string;
+  emoji: string;
+  objective: string;
+  windowHours: number;
   target: number;
+  scope: string;
+  teamMode: string;
+  repeatable: boolean;
   rewardCoins: number;
   rewardXp: number;
+  rewardClanPoints: number;
+  conditions: Record<string, unknown> | null;
+  rewards: Array<Record<string, unknown>> | null;
+  prerequisiteQuestId: string | null;
+  activeFrom: string | null;
+  activeUntil: string | null;
+  participants: number;
   enabled: boolean;
 };
 
+const quest = (id: string, name: string, description: string, objective: string, windowHours: number, target: number, rewardCoins: number, levelXp: number, enabled = true, extra: Partial<Quest> = {}): Quest => ({
+  id, name, description, emoji: '📜', objective, windowHours, target, scope: 'MEMBER', teamMode: 'CLAN', repeatable: false,
+  rewardCoins, rewardXp: 0, rewardClanPoints: 0, conditions: null,
+  rewards: levelXp > 0 ? [{ type: 'LEVEL_XP', amount: levelXp }] : null,
+  prerequisiteQuestId: null, activeFrom: null, activeUntil: null, participants: 12, enabled, ...extra,
+});
+
 const questsSeed = (): Quest[] => [
-  { id: 'quest-1', name: 'Bavard du jour', description: 'Envoie 50 messages aujourd’hui.', type: 'SEND_MESSAGES', frequency: 'DAILY', target: 50, rewardCoins: 100, rewardXp: 50, enabled: true },
-  { id: 'quest-2', name: 'Vocaliste', description: 'Passe 30 minutes en vocal.', type: 'VOICE_MINUTES', frequency: 'DAILY', target: 30, rewardCoins: 75, rewardXp: 40, enabled: true },
-  { id: 'quest-3', name: 'Champion de la semaine', description: 'Gagne 3 parties.', type: 'WIN_GAME', frequency: 'WEEKLY', target: 3, rewardCoins: 150, rewardXp: 75, enabled: true },
-  { id: 'quest-4', name: 'Généreux', description: 'Donne 5 points de réputation.', type: 'GIVE_REP', frequency: 'WEEKLY', target: 5, rewardCoins: 100, rewardXp: 50, enabled: false },
+  quest('quest-1', 'Bavard du jour', 'Envoie 50 messages aujourd’hui.', 'SEND_MESSAGES', 24, 50, 100, 50),
+  quest('quest-2', 'Vocaliste', 'Passe 30 minutes en vocal.', 'VOICE_MINUTES', 24, 30, 75, 40),
+  quest('quest-3', 'Fan de concours', 'Participe à 3 concours cette semaine.', 'GIVEAWAYS_JOINED', 168, 3, 150, 75),
+  quest('quest-4', 'Généreux', 'Donne 5 points de réputation.', 'GIVE_REP', 168, 5, 100, 50, false),
 ];
 
 const TIERS = [
@@ -421,13 +439,13 @@ export function registerCommunityRoutes(): void {
 
   route('GET', '/api/dashboard/guilds/:guildId/quests', () => {
     const definitions = demoDb.get<Quest[]>('quests', questsSeed);
-    return { definitions, totalClaimed: 1_284 };
+    return { definitions, totalClaimed: 1_284, objectives: [], giveaways: [], items: [] };
   });
 
   route('POST', '/api/dashboard/guilds/:guildId/quests', ({ body }) => {
-    const quest: Quest = { id: `quest-${Date.now()}`, enabled: true, ...(body ?? {}) };
-    demoDb.update<Quest[]>('quests', questsSeed, (list) => [...list, quest]);
-    return { success: true, quest };
+    const created: Quest = { ...quest(`quest-${Date.now()}`, 'Quête', '', 'SEND_MESSAGES', 24, 10, 0, 0), ...(body ?? {}) };
+    demoDb.update<Quest[]>('quests', questsSeed, (list) => [...list, created]);
+    return { success: true, quest: created };
   });
 
   route('PATCH', '/api/dashboard/guilds/:guildId/quests/:questId', ({ params, body }) => {
