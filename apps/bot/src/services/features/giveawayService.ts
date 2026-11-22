@@ -38,6 +38,7 @@ import {
   type GiveawayTextContext,
 } from './giveawayAppearance.js';
 import { publicErrorMessage } from '../../utils/publicError.js';
+import { createGiveawayEvent, deleteGiveawayEvent } from './giveawayEvent.js';
 
 // Cooldown map to prevent spamming/double clicks on the join button
 const joinCooldowns = new Map<string, number>();
@@ -330,7 +331,8 @@ export async function createGiveaway(
   needValidation = false,
   createdById: string | null = null,
   styleOverrides: Partial<GiveawayAppearance> = {},
-  ignoreBonuses = false
+  ignoreBonuses = false,
+  createEvent = false
 ) {
   const locale = await resolveGuildLocale(guildId);
 
@@ -423,6 +425,19 @@ export async function createGiveaway(
     await publishedMessage?.delete().catch(() => undefined);
     await prisma.giveaway.delete({ where: { id: giveaway.id } }).catch(() => undefined);
     throw new Error(m.gvw_err_publish({ reason: publicErrorMessage(error) }, { locale }));
+  }
+
+  // Après la publication : l'événement renvoie vers le message du concours.
+  if (createEvent) {
+    const discordEventId = await createGiveawayEvent(
+      discordGuild,
+      { ...giveaway, messageId: publishedMessage.id },
+      channel.isDMBased() ? '' : channel.name,
+    );
+    if (discordEventId) {
+      await prisma.giveaway.update({ where: { id: giveaway.id }, data: { discordEventId } }).catch(() => undefined);
+      return { ...giveaway, messageId: publishedMessage.id, discordEventId };
+    }
   }
 
   return giveaway;
@@ -853,6 +868,8 @@ export async function endGiveaway(client: Client, giveawayId: string, expectedGu
   });
   if (closed.count === 0) return;
 
+  await deleteGiveawayEvent(discordGuild, giveaway.discordEventId);
+
   const winnersMentions = winners.length > 0
     ? winners.map(w => `<@${w}>`).join(', ')
     : m.gvw_no_entrant({}, { locale: config.locale });
@@ -979,6 +996,11 @@ export async function deleteGiveaway(
 ): Promise<boolean> {
   const giveaway = await prisma.giveaway.findFirst({ where: { id: giveawayId, guildId } });
   if (!giveaway) return false;
+
+  if (giveaway.discordEventId) {
+    const guild = client.guilds.cache.get(guildId) ?? await client.guilds.fetch(guildId).catch(() => null);
+    if (guild) await deleteGiveawayEvent(guild, giveaway.discordEventId);
+  }
 
   if (giveaway.messageId) {
     const channel = await client.channels.fetch(giveaway.channelId).catch(() => null);
