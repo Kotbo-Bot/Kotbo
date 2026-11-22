@@ -394,6 +394,7 @@ model Guild {
   staffMembers StaffMember[] @relation("GuildStaffMembers")
   staffRoles StaffRole[] @relation("GuildStaffRoles")
   staffHierarchies StaffHierarchy[] @relation("GuildStaffHierarchies")
+  staffOrgCanvas StaffOrgCanvas? @relation("GuildStaffOrgCanvas")
   chiefStaffRoleId String?   // Rôle Discord du Resp Staff global
   chiefStaffUserId String?   // UserId Discord du Resp Staff actuel
   staffAbsences StaffAbsence[]
