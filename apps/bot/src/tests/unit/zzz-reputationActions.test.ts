@@ -57,12 +57,6 @@ for (const suffix of ['../../services/community/reputationRewards.ts', '../../se
   mock.module(path.resolve(__dirname, suffix), () => completeModuleMock(rewardsPath, rewards));
 }
 
-const quests = { incrementQuestProgress: mock(async (..._args: unknown[]) => {}) };
-const questsPath = path.resolve(__dirname, '../../services/community/questService.ts');
-for (const suffix of ['../../services/community/questService.ts', '../../services/community/questService.js']) {
-  mock.module(path.resolve(__dirname, suffix), () => completeModuleMock(questsPath, quests));
-}
-
 const { recordRep, revokeRep, adjustRep, resetMemberRep, resetGuildRep } = await import('../../services/community/reputationActions.js');
 
 const client = {} as Client;
@@ -94,7 +88,7 @@ beforeEach(() => {
   settings = SETTINGS;
   adjustResult = { success: true, before: 4, after: 9 };
   published.length = 0;
-  for (const fn of [...Object.values(service), ...Object.values(tiers), ...Object.values(rewards), quests.incrementQuestProgress]) fn.mockClear();
+  for (const fn of [...Object.values(service), ...Object.values(tiers), ...Object.values(rewards)]) fn.mockClear();
 });
 
 describe('recordRep', () => {
@@ -112,7 +106,6 @@ describe('recordRep', () => {
     await flush();
     expect(tiers.applyReputationGain).not.toHaveBeenCalled();
     expect(rewards.grantRepRewards).not.toHaveBeenCalled();
-    expect(quests.incrementQuestProgress).not.toHaveBeenCalled();
   });
 
   test('verse les gains au receveur avec les réglages du serveur', async () => {
@@ -127,18 +120,11 @@ describe('recordRep', () => {
     expect(service.recordVoteGains.mock.calls[0]).toEqual(['v1', { xp: 20, coins: 0 }]);
   });
 
-  test('fait avancer la quête « remercier » de celui qui donne', async () => {
-    await recordRep(client, { guildId: 'g', giverId: 'a', receiverId: 'b', channelId: 'c' });
-    await flush();
-    expect(quests.incrementQuestProgress.mock.calls[0]).toEqual([client, 'g', 'a', 'GIVE_REP', 1, 'c']);
-  });
-
   test('un échec des gains n\'empêche ni les paliers ni la quête', async () => {
     rewards.grantRepRewards.mockImplementationOnce(async () => { throw new Error('economy'); });
     await recordRep(client, { guildId: 'g', giverId: 'a', receiverId: 'b' });
     await flush();
     expect(tiers.applyReputationGain).toHaveBeenCalledTimes(1);
-    expect(quests.incrementQuestProgress).toHaveBeenCalledTimes(1);
   });
 
   test('un échec des paliers ne fait pas échouer le vote', async () => {

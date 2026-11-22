@@ -338,11 +338,6 @@ export async function registerCrons(client: Client): Promise<void> {
       const { processExpiredListings } = await import('../services/economy/marketplaceService.js');
       await processExpiredListings();
     },
-    'quest-expiration': async () => {
-      logger.debug('Cron', 'Expiration des quêtes anciennes...');
-      const { expireOldProgress } = await import('../services/community/questService.js');
-      await expireOldProgress();
-    },
     'widget-refresh': async () => {
       logger.debug('Cron', 'Rafraîchissement des widgets staff...');
       const { refreshAllStaffWidgets } = await import('../services/integrations/widgetService.js');
@@ -495,7 +490,8 @@ export async function registerCrons(client: Client): Promise<void> {
       await runBoostSnapshots(client);
     },
     'warn-auto-archive': async () => {
-      const { runWarnAutoArchive } = await import('../services/moderation/sanctionArchiveService.js');
+      const { runWarnAutoArchive, purgeOldSanctionDeletions } = await import('../services/moderation/sanctionArchiveService.js');
+      await purgeOldSanctionDeletions();
       const archived = await runWarnAutoArchive();
       if (archived > 0) logger.info('Cron', `${archived} warn(s) archivé(s) automatiquement`);
     },
@@ -948,7 +944,8 @@ export async function registerCrons(client: Client): Promise<void> {
   // 📦 Sanctions: expiration automatique des warns (tous les jours à 05:30)
   cron.schedule('30 5 * * *', async () => {
     await runCronJob('warn-auto-archive', async () => {
-      const { runWarnAutoArchive } = await import('../services/moderation/sanctionArchiveService.js');
+      const { runWarnAutoArchive, purgeOldSanctionDeletions } = await import('../services/moderation/sanctionArchiveService.js');
+      await purgeOldSanctionDeletions();
       const archived = await runWarnAutoArchive();
       if (archived > 0) logger.info('Cron', `${archived} warn(s) archivé(s) automatiquement`);
     }, 3000);
@@ -1227,14 +1224,6 @@ export async function registerCrons(client: Client): Promise<void> {
       await processExpiredListings();
     }, 2000);
   });
-
-  // 📋 Quests: Expiration des quêtes quotidiennes à minuit
-  cron.schedule('0 0 * * *', async () => {
-    await runCronJob('quest-expiration', async () => {
-      const { expireOldProgress } = await import('../services/community/questService.js');
-      await expireOldProgress();
-    }, 2000);
-  }, { timezone: 'Europe/Paris' });
 
   // 🎨 Widget: Refresh des widgets staff toutes les 30 minutes
   cron.schedule('*/30 * * * *', async () => {

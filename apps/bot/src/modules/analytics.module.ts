@@ -19,7 +19,6 @@ import {
 } from '../services/analytics/analyticsService.js';
 import { trackGhostSignal } from '../services/analytics/ghostActivityTracker.js';
 import { logStaffVoiceSession } from '../services/staff/staffLeadershipService.js';
-import { incrementQuestProgress } from '../services/community/questService.js';
 import { recordVoiceJoin, recordVoiceLeave } from '../services/moderation/dc/voiceTracking.js';
 import { logger } from '../utils/logger.js';
 
@@ -31,10 +30,8 @@ export function registerAnalyticsBusSubscribers(client: Client): void {
     if (payload.isBot) return;
 
     await trackMessage(payload.guildId, payload.channelId, payload.authorId);
-    incrementQuestProgress(client, payload.guildId, payload.authorId, 'SEND_MESSAGES', 1, payload.channelId).catch(() => {});
     if (payload.hasReference) {
       await trackReply(payload.guildId, payload.authorId);
-      incrementQuestProgress(client, payload.guildId, payload.authorId, 'REPLY_MESSAGES', 1, payload.channelId).catch(() => {});
     }
   }, MODULE_NAME);
 
@@ -74,7 +71,6 @@ export function registerAnalyticsBusSubscribers(client: Client): void {
       const durationMinutes = Math.floor(payload.durationMs / 60000);
       if (durationMinutes > 0) {
         await trackVoiceSession(payload.guildId, payload.userId, durationMinutes, payload.channelId);
-        incrementQuestProgress(client, payload.guildId, payload.userId, 'VOICE_MINUTES', durationMinutes).catch(() => {});
       }
     }
   }, MODULE_NAME);
@@ -132,14 +128,12 @@ export function registerAnalyticsBusSubscribers(client: Client): void {
     await trackReaction(payload.guildId, payload.userId);
     // Ghost Analyzer : réagir sans écrire est le signal typique du spectateur
     trackGhostSignal(payload.guildId, payload.userId, 'reaction');
-    incrementQuestProgress(client, payload.guildId, payload.userId, 'REACT_MESSAGES').catch(() => {});
   }, MODULE_NAME);
 
   // ── Threads ───────────────────────────────────────────────────
   subscribeForModule('analytics', 'thread:create', async (payload) => {
     if (payload.creatorId) {
       await trackThreadCreation(payload.guildId, payload.creatorId);
-      incrementQuestProgress(client, payload.guildId, payload.creatorId, 'CREATE_THREADS').catch(() => {});
     }
   }, MODULE_NAME);
 

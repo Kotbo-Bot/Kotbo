@@ -102,6 +102,7 @@ import { registerAnalyticsBusSubscribers } from './modules/analytics.module.js';
 import { registerWorkflowBusSubscribers } from './modules/workflow.module.js';
 import { registerOutgoingWebhookSubscribers } from './services/integrations/outgoingWebhookService.js';
 import { registerLevelingBusSubscribers } from './modules/leveling.module.js';
+import { registerQuestsBusSubscribers } from './modules/quests.module.js';
 import { registerRankedBusSubscribers } from './modules/ranked.module.js';
 import { registerAutoModBusSubscribers } from './modules/autoMod.module.js';
 import { registerAegisModule } from './modules/aegis.module.js';
@@ -551,6 +552,7 @@ client.once(Events.ClientReady, async (c) => {
   registerWorkflowBusSubscribers(client);
   registerOutgoingWebhookSubscribers();
   registerLevelingBusSubscribers(client);
+  registerQuestsBusSubscribers(client);
   registerRankedBusSubscribers(client);
   registerAutoModBusSubscribers(scopeClientToModule(client, 'automod'));
   registerAdminLockModule(scopeClientToModule(client, 'automod'));
