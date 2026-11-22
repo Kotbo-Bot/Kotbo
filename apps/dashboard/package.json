@@ -13,7 +13,7 @@
     "build": "vite build",
     "build:demo": "vite build --mode demo --base /demo/ --outDir dist-demo",
     "preview": "vite preview",
-    "test": "bun run build:i18n && bun test"
+    "test": "bun run build:i18n && bun test --isolate"
   },
   "devDependencies": {
     "@inlang/paraglide-js": "^2.29.3",

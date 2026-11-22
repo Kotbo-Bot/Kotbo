@@ -2400,8 +2400,8 @@ export function createGeneralistModulesRouter(client: Client) {
         linksEnabled?: boolean;
         linksAction?: string;
         linksWhitelist?: string[];
-        discordRulesWarn?: boolean;
         linksLevel?: number;
+        discordRulesWarn?: boolean;
         capsEnabled?: boolean;
         capsThresholdPercent?: number;
         capsMinLength?: number;
@@ -2538,8 +2538,8 @@ export function createGeneralistModulesRouter(client: Client) {
         linksEnabled: body.linksEnabled,
         linksAction: body.linksAction,
         linksWhitelist: body.linksWhitelist,
-        discordRulesWarn: body.discordRulesWarn,
         linksLevel: clampInt(body.linksLevel, 0, 2),
+        discordRulesWarn: body.discordRulesWarn,
         capsEnabled: body.capsEnabled,
         capsThresholdPercent: body.capsThresholdPercent,
         capsMinLength: body.capsMinLength,
@@ -2597,8 +2597,8 @@ export function createGeneralistModulesRouter(client: Client) {
           linksEnabled: body.linksEnabled ?? false,
           linksAction: body.linksAction ?? 'DELETE_AND_WARN',
           linksWhitelist: body.linksWhitelist ?? [],
-          discordRulesWarn: body.discordRulesWarn ?? false,
           linksLevel: clampInt(body.linksLevel, 0, 2) ?? 1,
+          discordRulesWarn: body.discordRulesWarn ?? false,
           capsEnabled: body.capsEnabled ?? false,
           capsThresholdPercent: body.capsThresholdPercent ?? 80,
           capsMinLength: body.capsMinLength ?? 10,

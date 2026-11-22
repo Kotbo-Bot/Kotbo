@@ -200,7 +200,7 @@
                       <span class="text-on-surface-variant font-normal">· {m.upd_poll_votes({ count: entry.pollResults.total })}</span>
                     </div>
                     {#if closed}
-                      <span class="text-2xs font-semibold px-2 py-0.5 rounded-full bg-error/12 text-error">
+                      <span class="text-2xs font-semibold px-2 py-0.5 rounded-full bg-error/12 text-on-error-container">
                         {m.upd_poll_closed()}
                       </span>
                     {:else if entry.pollClosesAt}
@@ -262,6 +262,7 @@
                     <textarea
                       rows={3}
                       maxlength={1500}
+                      aria-label={m.upd_feedback_title()}
                       placeholder={m.upd_feedback_placeholder()}
                       value={feedbackDrafts[entry.id] ?? ''}
                       oninput={(e) => (feedbackDrafts = { ...feedbackDrafts, [entry.id]: (e.currentTarget as HTMLTextAreaElement).value })}

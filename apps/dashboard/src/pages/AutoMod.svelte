@@ -70,8 +70,8 @@
     linksEnabled: false,
     linksAction: 'DELETE_AND_WARN',
     linksWhitelist: [] as string[],
-    discordRulesWarn: false,
     linksLevel: 1,
+    discordRulesWarn: false,
 
     capsEnabled: false,
     capsThresholdPercent: 80,
@@ -135,7 +135,7 @@
     spamGroupSlowmodeEnabled: false, spamGroupSlowmodeSeconds: 10, spamGroupSlowmodeMinutes: 5,
     preventiveSlowmodeEnabled: false, preventiveSlowmodeMsgThreshold: 15, preventiveSlowmodeMinUsers: 3,
     preventiveSlowmodeWindowSec: 10, preventiveSlowmodeSeconds: 5, preventiveSlowmodeMinutes: 5,
-    linksEnabled: false, linksAction: 'DELETE_AND_WARN', linksWhitelist: [], discordRulesWarn: false, linksLevel: 1,
+    linksEnabled: false, linksAction: 'DELETE_AND_WARN', linksWhitelist: [], linksLevel: 1, discordRulesWarn: false,
     capsEnabled: false, capsThresholdPercent: 80, capsMinLength: 10,
     emojisEnabled: false, emojisLimit: 10,
     mentionsEnabled: false, mentionsLimit: 5,
@@ -609,7 +609,7 @@
                 </div>
 
                 <div class="space-y-1.5">
-                  <label for="whitelist" class="text-xs font-semibold text-on-surface-variant ml-2">{m.am_links_whitelist_label()}</label>
+                  <label for="whitelist"class="text-xs font-semibold text-on-surface-variant ml-2">{m.am_links_whitelist_label()}</label>
                   <textarea 
                     id="whitelist"
                     bind:value={whitelistInput} 

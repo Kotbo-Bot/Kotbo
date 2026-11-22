@@ -874,6 +874,20 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "burstSuspendSlowLimit": 10,
     "burstSuspendSlowWindowSec": 60
   },
+  "DiscordAutoModEvent": {
+    "id": "",
+    "guildId": "",
+    "ruleId": "",
+    "ruleName": "",
+    "triggerType": 0,
+    "action": "",
+    "userId": "",
+    "channelId": null,
+    "keyword": null,
+    "content": null,
+    "managed": false,
+    "createdAt": "__NOW__"
+  },
   "ServerBackup": {
     "id": "",
     "guildId": "",
@@ -1690,6 +1704,7 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "lastLiveId": null,
     "lastVideoId": null,
     "lastShortId": null,
+    "recentVideoIds": [],
     "createdAt": "__NOW__",
     "updatedAt": "__NOW__"
   },
@@ -3074,6 +3089,10 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "ticketHistoryPanelEnabled": true,
     "ticketSelfReopenEnabled": true,
     "ticketSelfDeleteEnabled": false,
+    "ticketWebFormEnabled": false,
+    "ticketInboundEmailEnabled": false,
+    "ticketInboundEmailAddress": null,
+    "ticketInboundEmailSecret": null,
     "autoThreadEnabled": false,
     "autoThreadChannels": [],
     "autoThreadBotsEnabled": false,
@@ -3281,6 +3300,11 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "embedImageUrl": null,
     "embedThumbnailUrl": null
   },
+  "WelcomeThreadCreated": {
+    "threadId": "",
+    "guildId": "",
+    "createdAt": "__NOW__"
+  },
   "GuildLogEventConfig": {
     "id": "",
     "guildId": "",
@@ -3434,6 +3458,18 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "isActive": true,
     "lastUsedAt": null,
     "ownerId": null,
+    "createdAt": "__NOW__",
+    "updatedAt": "__NOW__"
+  },
+  "McpKeyFeatureAccess": {
+    "id": "",
+    "guildId": "",
+    "keyId": "",
+    "featureKey": "",
+    "canView": false,
+    "canModerate": false,
+    "canConfigure": false,
+    "canDelete": false,
     "createdAt": "__NOW__",
     "updatedAt": "__NOW__"
   },
@@ -3704,6 +3740,7 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "type": "SEND_MESSAGES",
     "frequency": "DAILY",
     "target": 1,
+    "conditions": null,
     "rewardCoins": 0,
     "rewardXp": 0,
     "enabled": true,
@@ -4209,6 +4246,12 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "approvalChannelId": null,
     "logChannelId": null,
     "graceDays": 3,
+    "webShopEnabled": false,
+    "webShopTitle": null,
+    "webShopDescription": null,
+    "webShopAccentColor": null,
+    "webShopBannerUrl": null,
+    "webShopCustomCss": null,
     "createdAt": "__NOW__",
     "updatedAt": "__NOW__"
   },
@@ -4787,6 +4830,7 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "staffLogChannelId": null,
     "modlogMirrorChannelId": null,
     "sanctionReportChannelId": null,
+    "internalReportChannelId": null,
     "recruitmentAlertChannelId": null,
     "recruitmentOnStaffServer": false,
     "staffRecruitmentCategoryId": null,
@@ -4864,6 +4908,9 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "staffUserId": "",
     "authorUserId": "",
     "content": "",
+    "title": null,
+    "category": "NOTE",
+    "warningId": null,
     "createdAt": "__NOW__",
     "updatedAt": "__NOW__"
   },
@@ -4920,6 +4967,9 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "displayName": null,
     "avatarUrl": null,
     "isTutor": false,
+    "generalClearance": 0,
+    "poleClearances": {},
+    "icalTokenVersion": 0,
     "suspendedAt": null,
     "suspendedReason": null,
     "suspendedById": null,
@@ -4951,6 +5001,11 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "createdAt": "__NOW__",
     "updatedAt": "__NOW__"
   },
+  "StaffOrgCanvas": {
+    "guildId": "",
+    "data": {},
+    "updatedAt": "__NOW__"
+  },
   "StaffHierarchy": {
     "id": "",
     "guildId": "",
@@ -4962,6 +5017,8 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "parentHierarchyId": null,
     "responsableUserId": null,
     "discordRoleId": null,
+    "separatorRoleId": null,
+    "separatorStyle": null,
     "enabled": true,
     "createdAt": "__NOW__",
     "updatedAt": "__NOW__"
@@ -5087,7 +5144,16 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
   "LocalInstanceIdentity": {
     "id": "singleton",
     "machineFingerprint": "",
+    "lease": null,
     "createdAt": "__NOW__"
+  },
+  "AuthorizedInstance": {
+    "botClientId": "",
+    "label": null,
+    "authorizedBy": "",
+    "createdAt": "__NOW__",
+    "revokedAt": null,
+    "revokedBy": null
   },
   "StickyMessage": {
     "id": "",
@@ -5329,7 +5395,10 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "moodLabel": null,
     "moodScore": null,
     "peakToxicity": null,
-    "moodUpdatedAt": null
+    "moodUpdatedAt": null,
+    "source": "DISCORD",
+    "requesterEmail": null,
+    "webAccessToken": null
   },
   "TicketBlacklist": {
     "id": "",
@@ -5384,6 +5453,17 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "content": "",
     "sendAsMe": false,
     "updatedAt": "__NOW__"
+  },
+  "TicketWebMessage": {
+    "id": "",
+    "ticketId": "",
+    "authorId": null,
+    "authorName": "",
+    "authorEmail": null,
+    "isStaff": false,
+    "source": "WEB",
+    "content": "",
+    "createdAt": "__NOW__"
   },
   "RpgTowerConfig": {
     "guildId": "",
@@ -5574,6 +5654,8 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "sortOrder": 0,
     "hierarchyId": null,
     "grade": null,
+    "grantRoleIds": [],
+    "grantDashboardSection": null,
     "createdAt": "__NOW__",
     "updatedAt": "__NOW__"
   },
@@ -5617,6 +5699,70 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "userId": "",
     "variantKey": "",
     "assignedAt": "__NOW__"
+  },
+  "WellbeingConfig": {
+    "guildId": "",
+    "enabled": false,
+    "teamRoleIds": [],
+    "teamUserIds": [],
+    "directorRoleIds": [],
+    "directorUserIds": [],
+    "requireReason": true,
+    "createdAt": "__NOW__",
+    "updatedAt": "__NOW__"
+  },
+  "WellbeingCase": {
+    "id": "",
+    "guildId": "",
+    "subjectUserId": null,
+    "subjectName": "",
+    "title": "",
+    "category": "SOUTIEN",
+    "severity": "NORMAL",
+    "status": "OPEN",
+    "summary": "",
+    "createdById": "",
+    "createdByName": "",
+    "createdAt": "__NOW__",
+    "updatedAt": "__NOW__"
+  },
+  "WellbeingCaseNote": {
+    "id": "",
+    "caseId": "",
+    "authorId": "",
+    "authorName": "",
+    "content": "",
+    "createdAt": "__NOW__"
+  },
+  "WellbeingBreakGlassLog": {
+    "id": "",
+    "guildId": "",
+    "actorId": "",
+    "actorName": "",
+    "caseId": null,
+    "reason": "",
+    "expiresAt": "__NOW__",
+    "createdAt": "__NOW__"
+  },
+  "GuildNetwork": {
+    "id": "",
+    "name": "",
+    "ownerUserId": "",
+    "planKey": "NETWORK_ASSOC",
+    "maxGuilds": 5,
+    "billingStatus": "ACTIVE",
+    "stripeSubscriptionId": null,
+    "notes": null,
+    "createdAt": "__NOW__",
+    "updatedAt": "__NOW__"
+  },
+  "GuildNetworkMember": {
+    "id": "",
+    "networkId": "",
+    "guildId": "",
+    "role": "MEMBER",
+    "addedById": "",
+    "addedAt": "__NOW__"
   },
   "WhiteLabelInstance": {
     "id": "",

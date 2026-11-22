@@ -26,6 +26,7 @@
         "@kotbo/shared": "workspace:*",
         "@modelcontextprotocol/sdk": "^1.32.2",
         "@napi-rs/canvas": "^0.1.100",
+        "@opentelemetry/core": "^2.12.0",
         "@prisma/adapter-pg": "^7.10.1",
         "@prisma/client": "^7.10.1",
         "@prisma/client-runtime-utils": "^7.10.1",
