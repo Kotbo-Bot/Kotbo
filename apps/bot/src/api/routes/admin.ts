@@ -346,6 +346,14 @@ export async function handleAdminRoutes(
       });
       const dbGuildsMap = new Map(dbGuilds.map((guild) => [guild.id, guild] as const));
 
+      // Poids par serveur : images du site (fichiers sur disque) et sauvegardes (JSON en base).
+      const [assetSizes, backupSizes] = await Promise.all([
+        prisma.siteAsset.groupBy({ by: ['guildId'], _sum: { sizeBytes: true } }),
+        prisma.serverBackup.groupBy({ by: ['guildId'], _sum: { sizeBytes: true } }),
+      ]);
+      const assetBytesById = new Map(assetSizes.map((r) => [r.guildId, r._sum.sizeBytes ?? 0] as const));
+      const backupBytesById = new Map(backupSizes.map((r) => [r.guildId, r._sum.sizeBytes ?? 0] as const));
+
       const shardGuilds = await collectShardGuilds(client);
       interface ShardGuild {
         id: string;
@@ -371,6 +379,8 @@ export async function handleAdminRoutes(
           serverTemplateAppliedBy: dbGuild?.serverTemplateAppliedBy ?? null,
           onboardingCompletedAt: dbGuild?.onboardingCompletedAt?.toISOString() ?? null,
           shardId: g.shardId ?? 0,
+          assetsBytes: assetBytesById.get(g.id) ?? 0,
+          backupsBytes: backupBytesById.get(g.id) ?? 0,
         };
       });
 
