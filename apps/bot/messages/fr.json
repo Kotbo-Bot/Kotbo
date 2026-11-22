@@ -4610,6 +4610,8 @@
   "log_tempvoice_action_m_redemander": "Redemander pour l'écriture d'un membre",
   "log_tempvoice_state_chat_ask": "Question en MP pour {target}",
   "tkt_staff_reminder": "{target} ⏰ {member} attend une réponse du staff depuis {since}.",
+  "tkt_staff_reminder_title": "Ticket sans réponse du staff",
+  "tkt_staff_reminder_dash": "{member} attend une réponse du staff {since}.",
   "ntf_open": "Ouvrir",
   "ntf_inbox": "Voir mes notifications",
   "ntf_mute": "Ne plus recevoir ce type",

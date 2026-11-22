@@ -75,6 +75,8 @@ const TICKET_CONFIG_SELECT = {
   ticketInactivityMessage: true,
   ticketStaffReminderEnabled: true,
   ticketStaffReminderMinutes: true,
+  ticketStaffReminderTarget: true,
+  ticketStaffReminderChannelId: true,
   ticketSatisfactionCommentEnabled: true,
   ticketSatisfactionCommentQuestion: true,
   ticketSatisfactionCommentTimeout: true,
@@ -312,6 +314,8 @@ export function createTicketsRouter(client: Client) {
       ticketInactivityMessage?: unknown;
       ticketStaffReminderEnabled?: unknown;
       ticketStaffReminderMinutes?: unknown;
+      ticketStaffReminderTarget?: unknown;
+      ticketStaffReminderChannelId?: string | null;
       ticketSatisfactionCommentEnabled?: unknown;
       ticketSatisfactionCommentQuestion?: unknown;
       ticketSatisfactionCommentTimeout?: unknown;
@@ -491,6 +495,13 @@ export function createTicketsRouter(client: Client) {
           ticketInactivityMessage: body.ticketInactivityMessage !== undefined ? String(body.ticketInactivityMessage) : '',
           ...('ticketStaffReminderEnabled' in body ? { ticketStaffReminderEnabled: body.ticketStaffReminderEnabled === true } : {}),
           ...('ticketStaffReminderMinutes' in body ? { ticketStaffReminderMinutes: quotaNumber(body.ticketStaffReminderMinutes, 60, 7 * 24 * 60) } : {}),
+          ...('ticketStaffReminderTarget' in body
+            ? { ticketStaffReminderTarget: ['TICKET', 'DASHBOARD', 'CHANNEL'].includes(String(body.ticketStaffReminderTarget)) ? String(body.ticketStaffReminderTarget) : 'TICKET' }
+            : {}),
+          // Identifiant Discord seulement : le salon peut être sur un autre serveur (celui du staff).
+          ...('ticketStaffReminderChannelId' in body
+            ? { ticketStaffReminderChannelId: /^\d{15,25}$/.test(String(body.ticketStaffReminderChannelId ?? '')) ? String(body.ticketStaffReminderChannelId) : null }
+            : {}),
           ticketSatisfactionCommentEnabled: typeof body.ticketSatisfactionCommentEnabled === 'boolean' ? body.ticketSatisfactionCommentEnabled : true,
           // Vide = le bot pose sa question par defaut, comme pour les textes d'embed.
           ticketSatisfactionCommentQuestion: typeof body.ticketSatisfactionCommentQuestion === 'string' ? body.ticketSatisfactionCommentQuestion.trim().slice(0, 200) : '',
