@@ -7,6 +7,7 @@
  */
 export * from './textDiff.js';
 export * from './regexSafety.js';
+export * from './staffSeparator.js';
 export * from './workflow/types.js';
 export * from './workflow/cron.js';
 export * from './workflow/catalog.js';
