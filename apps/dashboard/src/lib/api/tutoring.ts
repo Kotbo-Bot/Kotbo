@@ -63,6 +63,8 @@ export type TutoringCandidates = {
   members: Array<TutoringMember & { isTutor: boolean; inTutoring: boolean }>;
   hierarchies: Array<{ id: string; name: string }>;
   grades: Array<{ name: string; hierarchyId: string | null }>;
+  /** Modules du dashboard qu'un tutorat validé peut débloquer. */
+  features: Array<{ key: string; label: string }>;
 };
 
 export type TutoringItem = {
@@ -100,7 +102,7 @@ export async function fetchTutoringPeriod(periodId: string, guildId = authStore.
 }
 
 export async function createTutoring(
-  payload: { staffMemberId: string; mentorId?: string | null; plannedDurationDays: number; targetGrade?: string | null; hierarchyId?: string | null; withMissions: boolean },
+  payload: { staffMemberId: string; mentorId?: string | null; plannedDurationDays: number; targetGrade?: string | null; hierarchyId?: string | null; withMissions: boolean; unlockFeatureKeys?: string[] },
   guildId = authStore.selectedGuildId,
 ): Promise<{ period: TutoringDetail }> {
   return dashboardRequest('/tutoring/periods', { method: 'POST', payload, guildId });

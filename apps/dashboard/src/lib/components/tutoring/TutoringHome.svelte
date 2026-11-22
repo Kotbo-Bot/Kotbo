@@ -63,6 +63,7 @@
   let targetGrade = $state('');
   let duration = $state(14);
   let withMissions = $state(true);
+  let unlockFeatureKeys = $state<string[]>([]);
   let creating = $state(false);
   let createError = $state('');
 
@@ -78,6 +79,7 @@
     targetGrade = '';
     duration = overview?.config.minTestDays ?? 14;
     withMissions = true;
+    unlockFeatureKeys = [];
     createError = '';
     createOpen = true;
     if (!candidates) {
@@ -105,6 +107,7 @@
         targetGrade: targetGrade || null,
         hierarchyId: hierarchyId || null,
         withMissions,
+        unlockFeatureKeys,
       });
       createOpen = false;
       candidates = null;
@@ -241,6 +244,20 @@
         <span class="block text-2xs text-on-surface-variant">{m.tu_field_missions_hint()}</span>
       </span>
     </label>
+    {#if candidates?.features?.length}
+      <fieldset class="space-y-1">
+        <legend class="text-body-sm font-medium text-on-surface">{m.tu_field_unlock()}</legend>
+        <p class="text-2xs text-on-surface-variant">{m.tu_field_unlock_hint()}</p>
+        <div class="grid grid-cols-1 gap-1 sm:grid-cols-2">
+          {#each candidates.features as feature (feature.key)}
+            <label class="flex items-center gap-2 text-body-sm">
+              <input type="checkbox" value={feature.key} bind:group={unlockFeatureKeys} />
+              {feature.label}
+            </label>
+          {/each}
+        </div>
+      </fieldset>
+    {/if}
     {#if createError}
       <Callout variant="danger">{createError}</Callout>
     {/if}
