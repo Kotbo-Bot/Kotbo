@@ -1,10 +1,11 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config as loadEnv } from 'dotenv';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import pg from 'pg';
 import { queryMetricsExtension, trackQueryPool } from '../observability/queryMetrics.js';
+import { isSynced, redirectGuildIds, resolveDataGuild } from '../services/network/networkScope.js';
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 
@@ -37,7 +38,46 @@ const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };
  * purement interne : on rétablit donc le type nominal.
  */
 function withInstrumentation(client: PrismaClient): PrismaClient {
-  return client.$extends(queryMetricsExtension) as unknown as PrismaClient;
+  return client
+    .$extends(queryMetricsExtension)
+    .$extends(networkScopeExtension(client)) as unknown as PrismaClient;
+}
+
+/**
+ * Réseau de serveurs : redirige vers le serveur principal tout ce qui est lu ou
+ * écrit au nom d'un sous-serveur, sur les modèles partagés (cf. `networkScope.ts`).
+ * La recherche du principal passe par le client NON étendu : pas de récursion.
+ */
+function networkScopeExtension(base: PrismaClient) {
+  const syncedModels = new Set(
+    Prisma.dmmf.datamodel.models
+      .filter((m) => m.fields.some((f) => f.name === 'guildId' && f.kind === 'scalar'))
+      .map((m) => m.name)
+      .filter(isSynced),
+  );
+  const lookupPrimary = async (guildId: string): Promise<string | null> => {
+    const row = await base.guildNetworkMember.findFirst({
+      where: { guildId },
+      select: {
+        role: true,
+        network: { select: { members: { where: { role: 'PRIMARY' }, select: { guildId: true }, take: 1 } } },
+      },
+    });
+    return row && row.role !== 'PRIMARY' ? (row.network.members[0]?.guildId ?? null) : null;
+  };
+  const resolve = (guildId: string) => resolveDataGuild(guildId, lookupPrimary);
+
+  return Prisma.defineExtension({
+    name: 'networkScope',
+    query: {
+      $allModels: {
+        async $allOperations({ model, args, query }) {
+          if (!syncedModels.has(model)) return query(args);
+          return query(await redirectGuildIds(args, resolve));
+        },
+      },
+    },
+  });
 }
 
 export const prisma: PrismaClient =
