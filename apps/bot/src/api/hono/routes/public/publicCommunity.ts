@@ -495,7 +495,7 @@ export function createPublicCommunityRouter(client: Client): Hono {
     try {
       const transcript = await prisma.transcript.findUnique({
         where: { id: transcriptId },
-        select: { id: true, guildId: true },
+        select: { id: true, guildId: true, format: true },
       });
       if (!transcript) return send(c, { error: 'Transcription introuvable' }, 404);
 
@@ -517,7 +517,8 @@ export function createPublicCommunityRouter(client: Client): Hono {
 
       const { generateTranscriptSignature } = await import('@kotbo/core');
       const { expires, signature } = generateTranscriptSignature(transcriptId, 3600);
-      return send(c, { signedUrl: `/api/public/transcripts/${transcriptId}?expires=${expires}&sig=${signature}` });
+      // `format` : la page affiche le HTML historique en iframe, le JSON en rendu natif.
+      return send(c, { format: transcript.format, signedUrl: `/api/public/transcripts/${transcriptId}?expires=${expires}&sig=${signature}` });
     } catch (err: unknown) {
       logger.error('PublicAPI', `Error issuing transcript access for ${transcriptId}: ${err instanceof Error ? err.message : String(err)}`);
       return send(c, { error: 'Erreur interne du serveur' }, 500);

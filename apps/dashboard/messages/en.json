@@ -19436,5 +19436,7 @@
   "dui_media_exit_fullscreen": "Exit fullscreen",
   "dui_media_playback_speed": "Playback speed",
   "dui_media_loading": "Loading media",
-  "dui_media_unsupported_sticker": "Sticker format not supported"
+  "dui_media_unsupported_sticker": "Sticker format not supported",
+  "d7_ts_summary": "{count} messages · transcribed on {date}",
+  "d7_ts_show_more": "Show the next {count} messages"
 }

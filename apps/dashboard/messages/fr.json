@@ -19440,5 +19440,7 @@
   "dui_media_exit_fullscreen": "Quitter le plein écran",
   "dui_media_playback_speed": "Vitesse de lecture",
   "dui_media_loading": "Chargement du média",
-  "dui_media_unsupported_sticker": "Format d'autocollant non pris en charge"
+  "dui_media_unsupported_sticker": "Format d'autocollant non pris en charge",
+  "d7_ts_summary": "{count} messages · transcrit le {date}",
+  "d7_ts_show_more": "Afficher les {count} messages suivants"
 }
