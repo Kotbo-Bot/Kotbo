@@ -13,6 +13,8 @@ interface TutoringItemInput {
   sortOrder?: number;
   hierarchyId?: string | null;
   grade?: string | null;
+  grantRoleIds?: string[];
+  grantDashboardSection?: string | null;
 }
 
 /**
@@ -85,7 +87,9 @@ export const upsertTutoringItem = async (guildId: string, data: TutoringItemInpu
         description: data.description,
         sortOrder: data.sortOrder,
         hierarchyId: data.hierarchyId ?? null,
-        grade: data.grade ?? null
+        grade: data.grade ?? null,
+        ...(data.grantRoleIds !== undefined ? { grantRoleIds: data.grantRoleIds } : {}),
+        ...(data.grantDashboardSection !== undefined ? { grantDashboardSection: data.grantDashboardSection } : {}),
       }
     });
   }
@@ -98,7 +102,9 @@ export const upsertTutoringItem = async (guildId: string, data: TutoringItemInpu
       description: data.description,
       sortOrder: data.sortOrder,
       hierarchyId: data.hierarchyId ?? null,
-      grade: data.grade ?? null
+      grade: data.grade ?? null,
+      grantRoleIds: data.grantRoleIds ?? [],
+      grantDashboardSection: data.grantDashboardSection ?? null,
     }
   });
 };

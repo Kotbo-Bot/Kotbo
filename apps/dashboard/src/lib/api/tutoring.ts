@@ -73,6 +73,8 @@ export type TutoringItem = {
   sortOrder: number;
   hierarchyId: string | null;
   grade: string | null;
+  grantRoleIds?: string[];
+  grantDashboardSection?: string | null;
 };
 
 export type TutoringConfig = {
