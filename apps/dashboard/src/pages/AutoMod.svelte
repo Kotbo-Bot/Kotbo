@@ -70,6 +70,7 @@
     linksEnabled: false,
     linksAction: 'DELETE_AND_WARN',
     linksWhitelist: [] as string[],
+    discordRulesWarn: false,
     linksLevel: 1,
 
     capsEnabled: false,
@@ -134,7 +135,7 @@
     spamGroupSlowmodeEnabled: false, spamGroupSlowmodeSeconds: 10, spamGroupSlowmodeMinutes: 5,
     preventiveSlowmodeEnabled: false, preventiveSlowmodeMsgThreshold: 15, preventiveSlowmodeMinUsers: 3,
     preventiveSlowmodeWindowSec: 10, preventiveSlowmodeSeconds: 5, preventiveSlowmodeMinutes: 5,
-    linksEnabled: false, linksAction: 'DELETE_AND_WARN', linksWhitelist: [], linksLevel: 1,
+    linksEnabled: false, linksAction: 'DELETE_AND_WARN', linksWhitelist: [], discordRulesWarn: false, linksLevel: 1,
     capsEnabled: false, capsThresholdPercent: 80, capsMinLength: 10,
     emojisEnabled: false, emojisLimit: 10,
     mentionsEnabled: false, mentionsLimit: 5,
@@ -822,6 +823,13 @@
 
     {:else if activeTab === 'discord'}
       <div class="space-y-6 animate-in fade-in duration-300">
+        <label class="flex items-start gap-3 bg-surface-container-low/40 p-4 rounded-xl border border-outline-variant/20 text-body-sm">
+          <input type="checkbox" class="mt-0.5" bind:checked={config.discordRulesWarn} disabled={!canManageSettings} />
+          <span>
+            <span class="font-semibold text-on-surface">{m.dam_warn_label()}</span>
+            <span class="block text-on-surface-variant">{m.dam_warn_hint()}</span>
+          </span>
+        </label>
         <!-- Native Discord AutoMod Header -->
         <div class="bg-surface-container-low/40 p-6 rounded-xl border border-outline-variant/20 flex flex-col md:flex-row md:items-center gap-4">
           <div class="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center text-primary shrink-0">

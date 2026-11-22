@@ -829,6 +829,7 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "linksEnabled": false,
     "linksAction": "DELETE_AND_WARN",
     "linksWhitelist": [],
+    "discordRulesWarn": false,
     "linksLevel": 1,
     "capsEnabled": false,
     "capsThresholdPercent": 80,
