@@ -16,6 +16,7 @@ import { createGeneralRouter, createGuildGeneralRouter } from '../../routes/dash
 import { createLeadershipRouter } from '../../routes/dashboard/leadership.js';
 import { createStaffRouter } from '../../routes/dashboard/leadership/staff.js';
 import { createTutoringRouter } from '../../routes/dashboard/leadership/tutoring.js';
+import { createWellbeingRouter } from '../../routes/dashboard/leadership/wellbeing.js';
 import { createDoingListsRouter } from '../../routes/dashboard/doingLists.js';
 import { createRecruitmentRouter } from '../../routes/dashboard/recruitment.js';
 import { createCustomBotRouter } from '../../routes/dashboard/customBot.js';
@@ -185,6 +186,7 @@ export function createDashboardRouter(client: Client) {
   router.route('/', createRecruitmentRouter(client));
   router.route('/', createDoingListsRouter(client));
   router.route('/', createTutoringRouter(client));
+  router.route('/', createWellbeingRouter(client));
   router.route('/', createStaffRouter(client));
   router.route('/', createLeadershipRouter(client));
   router.route('/', createGeneralRouter(client));
