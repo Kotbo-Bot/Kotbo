@@ -462,6 +462,17 @@ model Guild {
   ticketCategoryId       String?
   ticketLogChannelId     String?
   ticketStaffRoleId      String?
+  // Équipe d'assistance (ticketStaffRoleId en reste le premier rôle, recopié à
+  // l'enregistrement), équipe responsable, rôles mentionnés à l'ouverture et
+  // rôles qui ne peuvent pas ouvrir de ticket.
+  ticketSupportRoleIds   String[] @default([])
+  ticketManagerRoleIds   String[] @default([])
+  ticketMentionRoleIds   String[] @default([])
+  ticketExcludedRoleIds  String[] @default([])
+  // Après la prise en charge : l'équipe d'assistance perd la vue du ticket
+  // (l'équipe responsable la garde) et/ou seul celui qui l'a pris peut écrire.
+  ticketClaimHidesSupport Boolean @default(false)
+  ticketClaimExclusive    Boolean @default(false)
   ticketChannelId        String?
   ticketEmbedTitle       String   @default("Support Technique")
   ticketEmbedDesc        String   @default("Cliquez sur le bouton ci-dessous pour ouvrir un ticket d'assistance.")

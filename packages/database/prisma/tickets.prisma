@@ -67,6 +67,10 @@ model Ticket {
   staffReminderCount  Int      @default(0)
   isAnonymous         Boolean  @default(false)
   staffServerGuildId  String?  // Si relay sur serveur staff, l'ID du serveur staff
+  // Qui a pris le ticket, l'a rendu ou transféré, dans l'ordre (tableau JSON
+  // d'événements, voir ticketHandling.ts). Alimente l'embed de fermeture, le
+  // journal et l'en-tête de la transcription.
+  handlingLog         Json?
 
   // ── Validation prealable (pre-accepte) ────────────────────────────────────
   // Le salon reste verrouille tant qu'aucun staff n'a pris le ticket en charge.
