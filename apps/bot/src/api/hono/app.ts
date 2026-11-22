@@ -40,6 +40,7 @@ import { createPublicCommunityRouter } from './routes/public/publicCommunity.js'
 import { createPublicRpgClansRouter } from './routes/public/publicRpgClans.js';
 import { createPublicFilesRouter } from './routes/public/publicFiles.js';
 import { createPublicFormsRouter } from './routes/public/publicForms.js';
+import { createMailWebhookRouter } from './routes/public/mailWebhook.js';
 import { fail } from './dashboard/kit.js';
 
 /**
@@ -111,6 +112,7 @@ export function createHonoApp(client: Client): OpenAPIHono {
   app.route('/', createPublicRpgClansRouter(client));
   app.route('/', createPublicFilesRouter());
   app.route('/', createPublicFormsRouter(client));
+  app.route('/', createMailWebhookRouter());
   app.route('/', createDashboardRouter(client));
 
   // ---------------------------------------------------------------------------

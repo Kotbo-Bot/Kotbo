@@ -62,6 +62,7 @@ import { createRemindersRouter } from '../../routes/dashboard/leadership/reminde
 import { createEventsRouter } from '../../routes/dashboard/events.js';
 import { createWorkflowsRouter } from '../../routes/dashboard/workflows.js';
 import { createOutgoingWebhooksRouter } from '../../routes/dashboard/outgoingWebhooks.js';
+import { createMailRouter } from '../../routes/dashboard/mail.js';
 import { createBackupsRouter } from '../../routes/dashboard/backups.js';
 import { createCampaignsRouter } from '../../routes/dashboard/campaigns.js';
 import { createSchedulesRouter } from '../../routes/dashboard/schedules.js';
@@ -143,6 +144,7 @@ export function createDashboardRouter(client: Client) {
   router.route('/', createCampaignsRouter(client));
   router.route('/', createBackupsRouter(client));
   router.route('/', createOutgoingWebhooksRouter(client));
+  router.route('/', createMailRouter(client));
   router.route('/', createWorkflowsRouter(client));
   router.route('/', createEventsRouter(client));
   router.route('/', createRemindersRouter(client));
