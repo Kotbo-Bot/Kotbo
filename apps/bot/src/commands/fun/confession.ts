@@ -206,7 +206,10 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
   }
 
   const reasons = {
-    cooldown: t(`Attends ${result.retryInSeconds ?? 0} s avant d'en envoyer une autre.`, `Wait ${result.retryInSeconds ?? 0}s before sending another.`),
+    cooldown: (() => {
+      const when = `<t:${Math.floor(Date.now() / 1000) + (result.retryInSeconds ?? 0)}:R>`;
+      return t(`Tu pourras en envoyer une autre ${when}.`, `You can send another ${when}.`);
+    })(),
     empty: t('Le message est vide.', 'The message is empty.'),
     too_long: t(`Maximum ${CONFESSION_MAX_LENGTH} caractères.`, `Maximum ${CONFESSION_MAX_LENGTH} characters.`),
     blocked: t('Ton message contient un mot interdit sur ce serveur.', 'Your message contains a word banned on this server.'),
