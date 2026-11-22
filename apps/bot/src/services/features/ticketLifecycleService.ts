@@ -453,6 +453,9 @@ export async function restoreTicketFromTranscript(
 
   const transcript = await prisma.transcript.findUnique({ where: { id: ticket.transcriptId! } });
   if (!transcript) throw new Error('Transcription introuvable.');
+  // Vérifié avant de créer le salon : une transcription JSON ne se rejoue pas encore.
+  const transcriptHtml = transcript.html;
+  if (!transcriptHtml) throw new Error('Cette transcription ne peut pas encore être restaurée (format JSON).');
 
   const guildConfig = await prisma.guild.findUnique({ where: { id: ticket.guildId } });
   if (!guildConfig) throw new Error('Serveur introuvable.');
@@ -494,7 +497,7 @@ export async function restoreTicketFromTranscript(
     permissionOverwrites,
   });
 
-  await replayTranscript(ticketChannel, transcript.html, actor);
+  await replayTranscript(ticketChannel, transcriptHtml, actor);
 
   const restoreEmbed = new EmbedBuilder()
     .setTitle('🔄 Ticket Restauré')

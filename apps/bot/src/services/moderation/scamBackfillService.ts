@@ -114,7 +114,8 @@ export async function backfillScamDatasetFromHoneypots(options: BackfillOptions 
 
   for (const [transcriptId, guildId] of transcriptIds) {
     const transcript = await prisma.transcript.findUnique({ where: { id: transcriptId }, select: { html: true } });
-    if (!transcript) continue;
+    // Transcription JSON : relue par le lecteur unifié (étape suivante de la migration).
+    if (!transcript?.html) continue;
     report.transcripts++;
 
     // Un même salon piège apparaît dans plusieurs transcripts (message

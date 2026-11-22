@@ -160,7 +160,16 @@ model Transcript {
   guildId        String
   channelId      String
   channelName    String
-  html           String
+  /// Page HTML complète des transcriptions historiques (`format` = "html").
+  /// Nulle pour les transcriptions JSON.
+  html           String?
+  /// Transcription JSON (`format` = "json") : `TranscriptDataV1`, messages au
+  /// format de l'API Discord et noms figés à la capture.
+  data           Json?
+  /// "html" (historique) ou "json". Permet de choisir le lecteur sans charger le contenu.
+  format         String    @default("html")
+  /// Nombre de messages, renseigné à la création (nul pour les anciennes).
+  messageCount   Int?
   startMessageId String?
   endMessageId   String?
   startTime      DateTime?

@@ -60,6 +60,8 @@ export function createPublicFilesRouter(): Hono {
     try {
       const transcript = await prisma.transcript.findUnique({ where: { id: transcriptId }, select: { html: true } });
       if (!transcript) return send(c, { error: 'Transcription introuvable' }, 404);
+      // Transcription JSON : servie par sa propre route une fois la page de lecture prête.
+      if (!transcript.html) return send(c, { error: 'Format de transcription pas encore pris en charge' }, 409);
       const html = stripLegacyAvatarBackground(transcript.html);
 
       allowDashboardFraming(c);

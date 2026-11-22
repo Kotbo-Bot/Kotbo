@@ -1032,7 +1032,8 @@ export function createTicketsRouter(client: Client) {
             where: { id: ticket.transcriptId, guildId },
             select: { html: true, endTime: true, createdAt: true },
           });
-          if (transcript) {
+          // Transcription JSON : lue par le lecteur unifié (étape suivante de la migration).
+          if (transcript?.html) {
             const fallbackDate = (transcript.endTime ?? transcript.createdAt).toISOString();
             messages = parseTranscriptHtml(transcript.html).map((m, i) => {
               const parsed = new Date(m.timestamp);
