@@ -1444,24 +1444,29 @@ const syncHierarchyPoleRoles = async (
     if (!discordMembers) return;
 
     const activeHierarchyRoleMap = new Map(allHierarchies.map(h => [h.id, h.poleRoleId]));
+    // Anciens et nouveau rôle de pôle : ceux qu'il faut potentiellement retirer.
+    const candidates = [...new Set([previousPoleRoleId, hierarchy.poleRoleId].filter((id): id is string => !!id))];
 
     for (const mg of hierarchy.memberGrades) {
       const discordMember = discordMembers.get(mg.staffMember.userId);
       if (!discordMember) continue;
 
-      if (previousPoleRoleId && previousPoleRoleId !== hierarchy.poleRoleId) {
-        const stillUsedElsewhere = mg.staffMember.hierarchyGrades.some(
-          g => g.hierarchyId !== hierarchyId && activeHierarchyRoleMap.get(g.hierarchyId) === previousPoleRoleId
-        );
-        if (!stillUsedElsewhere && discordMember.roles.cache.has(previousPoleRoleId)) {
-          await discordMember.roles.remove(previousPoleRoleId).catch(() => null);
+      // Rôles de pôle que le membre doit garder : ceux des hiérarchies actives qui le contiennent (aucun s'il est suspendu).
+      const wanted = new Set<string>();
+      if (!mg.staffMember.suspendedAt) {
+        for (const g of mg.staffMember.hierarchyGrades) {
+          const id = activeHierarchyRoleMap.get(g.hierarchyId);
+          if (id) wanted.add(id);
         }
       }
+
+      const toRemove = candidates.filter(id => !wanted.has(id) && discordMember.roles.cache.has(id));
+      if (toRemove.length > 0) await discordMember.roles.remove(toRemove).catch(() => null);
 
       if (
         hierarchy.enabled
         && hierarchy.poleRoleId
-        && !mg.staffMember.suspendedAt
+        && wanted.has(hierarchy.poleRoleId)
         && !discordMember.roles.cache.has(hierarchy.poleRoleId)
         && isAutoGrantableRoleId(discordGuild, hierarchy.poleRoleId)
       ) {
@@ -1626,6 +1631,23 @@ export const updateStaffHierarchy = async (
   return updated;
 };
 
+const releaseDeletedPoleRole = async (guildId: string, poleRoleId: string, userIds: string[]) => {
+  try {
+    const stillHolding = await prisma.staffMemberHierarchyGrade.findMany({
+      where: { hierarchy: { guildId, enabled: true, poleRoleId }, staffMember: { guildId, userId: { in: userIds }, suspendedAt: null } },
+      select: { staffMember: { select: { userId: true } } },
+    });
+    const keep = new Set(stillHolding.map(g => g.staffMember.userId));
+    const discordMembers = await fetchGuildMembersByIds(guildId, userIds.filter(id => !keep.has(id)));
+    if (!discordMembers) return;
+    for (const member of discordMembers.values()) {
+      if (member.roles.cache.has(poleRoleId)) await member.roles.remove(poleRoleId).catch(() => null);
+    }
+  } catch (err) {
+    logger.error('StaffManagement', `Erreur lors du retrait du rôle de pôle supprimé : ${err instanceof Error ? err.message : err}`);
+  }
+};
+
 export const deleteStaffHierarchy = async (guildId: string, hierarchyId: string) => {
   const hierarchy = await prisma.staffHierarchy.findFirst({
     where: { id: hierarchyId, guildId },
@@ -1641,10 +1663,10 @@ export const deleteStaffHierarchy = async (guildId: string, hierarchyId: string)
   // Les StaffMemberHierarchyGrade liés seront supprimés (onDelete: Cascade)
   const deleted = await prisma.staffHierarchy.delete({ where: { id: hierarchyId } });
 
+  // La hiérarchie n'existe plus : syncStaffDiscordRoles ne la verrait pas, on retire le rôle ici
+  // sauf pour les membres qui le tiennent encore d'une autre hiérarchie active.
   if (hierarchy.poleRoleId && hierarchy.memberGrades.length > 0) {
-    for (const mg of hierarchy.memberGrades) {
-      void syncStaffDiscordRoles(guildId, mg.staffMember.userId, mg.staffMember.grade).catch(() => null);
-    }
+    void releaseDeletedPoleRole(guildId, hierarchy.poleRoleId, hierarchy.memberGrades.map(mg => mg.staffMember.userId));
   }
 
   return deleted;
