@@ -5,11 +5,9 @@ import {
 } from 'discord.js';
 import { joinFieldEntries, kotboContainer } from '../../utils/embeds.js';
 import { E, buildProgressBar } from '../../utils/emojis.js';
-import { getAvailableQuests } from '../../services/community/questService.js';
 import { getMemberQuests } from '../../services/features/rpg/rpgQuestService.js';
 import type { SlashCommandDefinition } from '../../commands.js';
 import { ContainerChild, separator, v2Message } from '@arcscord/components';
-import { ExtractArrayValue } from '../../utils/types.js';
 import { getEffectiveLocale, getCommandMetadata } from '../../utils/i18n.js';
 import * as m from '../../lib/paraglide/messages.js';
 
@@ -33,12 +31,9 @@ async function execute(interaction: ChatInputCommandInteraction) {
 
   if (subcommand === 'list') {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    const [quests, rpgQuests] = await Promise.all([
-      getAvailableQuests(guildId, userId),
-      getMemberQuests(interaction.client, guildId, userId),
-    ]);
+    const rpgQuests = await getMemberQuests(interaction.client, guildId, userId);
 
-    if (quests.length === 0 && rpgQuests.length === 0) {
+    if (rpgQuests.length === 0) {
 
       await interaction.editReply(v2Message(
         kotboContainer({
@@ -53,44 +48,26 @@ async function execute(interaction: ChatInputCommandInteraction) {
       return;
     }
 
-    type Quest = ExtractArrayValue<
-      Awaited<
-        ReturnType<
-          typeof getAvailableQuests
-        >
-      >
-    >;
-
-    const daily = quests.filter((q) => q.frequency === 'DAILY');
-    const weekly = quests.filter((q) => q.frequency === 'WEEKLY');
-
-    const formatQuest = (q: Quest) => {
-      const progress = q.progress;
-      const pct = Math.min((progress.current / progress.target) * 100, 100);
-      const bar = buildProgressBar(pct, 8);
-      const statusIcon = progress.status === 'CLAIMED' ? E.success
-        : progress.status === 'COMPLETED' ? E.star
-        : E.dot;
-      const rewards = [];
-      if (q.rewardCoins > 0) rewards.push(`${q.rewardCoins} ${E.coins}`);
-      if (q.rewardXp > 0) rewards.push(`${q.rewardXp} ${E.xp}`);
-      return `${statusIcon} **${q.name}**\n${q.description}\n${bar} \`${progress.current}/${progress.target}\` - ${rewards.join(' + ')}`;
-    };
-
     const formatRpgQuest = (q: Awaited<ReturnType<typeof getMemberQuests>>[number]) => {
       const pct = Math.min((q.current / q.target) * 100, 100);
       const bar = buildProgressBar(pct, 8);
-      const statusIcon = q.status === 'CLAIMED' ? E.success : q.status === 'COMPLETED' ? E.star : E.dot;
+      const statusIcon = q.locked ? '🔒' : q.status === 'CLAIMED' ? E.success : q.status === 'COMPLETED' ? E.star : E.dot;
       const rewards = [];
       if (q.rewardCoins > 0) rewards.push(`${q.rewardCoins} ${E.coins}`);
       if (q.rewardXp > 0) rewards.push(`${q.rewardXp} ${E.xp}`);
-      const team = q.teamName ? ` - ${q.teamName}` : '';
+      const levelXp = q.rewards.filter((r) => r.type === 'LEVEL_XP').reduce((sum, r) => sum + (r.type === 'LEVEL_XP' ? r.amount : 0), 0);
+      if (levelXp > 0) rewards.push(`${levelXp} ${E.xp}`);
+      const extras = q.rewards.filter((r) => r.type !== 'LEVEL_XP').length;
+      if (extras > 0) rewards.push(`+${extras} ${E.star}`);
+      const teamLabel = q.teamName ? ` - ${q.teamName}` : '';
       const ends = `<t:${Math.floor(q.endsAt.getTime() / 1000)}:R>`;
-      return `${statusIcon} ${q.emoji} **${q.name}**${team}\n${q.description}\n${bar} \`${q.current}/${q.target}\` - ${rewards.join(' + ')} - ${ends}`;
+      return `${statusIcon} ${q.emoji} **${q.name}**${teamLabel}\n${q.description}\n${bar} \`${q.current}/${q.target}\` - ${rewards.join(' + ')} - ${ends}`;
     };
 
-    const rpgPersonal = rpgQuests.filter((q) => q.scope === 'MEMBER');
-    const rpgTeam = rpgQuests.filter((q) => q.scope === 'TEAM');
+    const personal = rpgQuests.filter((q) => q.scope === 'MEMBER');
+    const team = rpgQuests.filter((q) => q.scope === 'TEAM');
+    const daily = personal.filter((q) => q.windowHours < 168);
+    const weekly = personal.filter((q) => q.windowHours >= 168);
 
     const fields: ContainerChild[] = [];
 
@@ -101,10 +78,9 @@ async function execute(interaction: ChatInputCommandInteraction) {
     // tout afficher sans limite.
     const QUEST_LIST_TEXT_BUDGET = 3400;
     const sections = [
-      { header: `**${E.calendar} ${m.c4_quests_daily({}, { locale })}**`, entries: daily.map(formatQuest) },
-      { header: `**${E.calendar} ${m.c4_quests_weekly({}, { locale })}**`, entries: weekly.map(formatQuest) },
-      { header: `**${E.crown} ${m.c4_quests_rpg({}, { locale })}**`, entries: rpgPersonal.map(formatRpgQuest) },
-      { header: `**${E.shield} ${m.c4_quests_rpg_team({}, { locale })}**`, entries: rpgTeam.map(formatRpgQuest) },
+      { header: `**${E.calendar} ${m.c4_quests_daily({}, { locale })}**`, entries: daily.map(formatRpgQuest) },
+      { header: `**${E.calendar} ${m.c4_quests_weekly({}, { locale })}**`, entries: weekly.map(formatRpgQuest) },
+      { header: `**${E.shield} ${m.c4_quests_rpg_team({}, { locale })}**`, entries: team.map(formatRpgQuest) },
     ].filter((section) => section.entries.length > 0);
 
     const perSectionBudget = Math.floor(QUEST_LIST_TEXT_BUDGET / Math.max(sections.length, 1));

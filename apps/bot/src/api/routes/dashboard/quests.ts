@@ -3,12 +3,15 @@ import { createMiddleware } from 'hono/factory';
 import type { Client } from 'discord.js';
 import { logger } from '../../../utils/logger.js';
 import { resolveMemberFeatureAccess } from '../../shared.js';
+import { prismaRead } from '../../../utils/db.js';
 import {
-  getQuestsDashboardData,
-  createQuestDefinition,
-  updateQuestDefinition,
-  deleteQuestDefinition,
-} from '../../../services/community/questService.js';
+  QuestError,
+  deleteGuildQuest,
+  listGuildQuests,
+  saveGuildQuest,
+} from '../../../services/features/rpg/rpgQuestService.js';
+import { RPG_QUEST_OBJECTIVES, type RpgQuestInput } from '../../../services/features/rpg/rpgQuestPolicy.js';
+import { listGiveawayRpgItems } from '../../../services/features/giveawayService.js';
 import { fail, guildRoute, readLenientBody, send } from '../../hono/dashboard/kit.js';
 
 export function createQuestsRouter(client: Client) {
@@ -46,46 +49,72 @@ export function createQuestsRouter(client: Client) {
   });
   const gate = [...guildRoute(client), questAccess] as const;
 
+  const handle = (c: Parameters<typeof fail>[0], err: unknown, message: string) => {
+    if (err instanceof QuestError) return send(c, { error: err.message }, err.status as 400);
+    logger.error('QuestsAPI', message, err);
+    return fail(c, err, message, 'QuestsAPI');
+  };
+
   router.get(base, ...gate, async (c) => {
+    const guildId = c.req.param('guildId')!;
     try {
-      return send(c, await getQuestsDashboardData(c.req.param('guildId')));
+      const now = new Date();
+      const [definitions, participations, claimed, giveaways, items] = await Promise.all([
+        listGuildQuests(guildId),
+        prismaRead.rpgQuestProgress.groupBy({ by: ['questId'], where: { guildId }, _count: { _all: true } }),
+        prismaRead.rpgQuestProgress.aggregate({ where: { guildId, teamKey: '' }, _sum: { completions: true } }),
+        prismaRead.giveaway.findMany({
+          where: { guildId, ended: false, endsAt: { gt: now } },
+          select: { id: true, prize: true },
+          orderBy: { endsAt: 'asc' },
+          take: 50,
+        }),
+        listGiveawayRpgItems(guildId),
+      ]);
+      const counts = new Map(participations.map((row) => [row.questId, row._count._all]));
+      return send(c, {
+        definitions: definitions.map((quest) => ({ ...quest, participants: counts.get(quest.id) ?? 0 })),
+        totalClaimed: claimed._sum.completions ?? 0,
+        objectives: RPG_QUEST_OBJECTIVES,
+        giveaways,
+        items,
+      });
     } catch (err) {
-      logger.error('QuestsAPI', 'Error fetching quests:', err);
-      return fail(c, err, 'Erreur lors de la récupération des quêtes', 'QuestsAPI');
+      return handle(c, err, 'Erreur lors de la récupération des quêtes');
     }
   });
 
   router.post(base, ...gate, async (c) => {
     try {
-      const body = await readLenientBody<{
-        name: string; description: string; type: string;
-        frequency: string; target: number; rewardCoins: number; rewardXp: number;
-        conditions?: Record<string, unknown> | null;
-      }>(c);
-      return send(c, await createQuestDefinition(c.req.param('guildId'), body), 201);
+      const body = await readLenientBody<RpgQuestInput & { id?: string }>(c);
+      const { quest, created } = await saveGuildQuest(c.req.param('guildId')!, body, body.id);
+      return send(c, quest, created ? 201 : 200);
     } catch (err) {
-      logger.error('QuestsAPI', 'Error creating quest:', err);
-      return fail(c, err, 'Erreur lors de la création', 'QuestsAPI');
+      return handle(c, err, 'Erreur lors de la sauvegarde');
     }
   });
 
+  // Modification partielle (activer, désactiver) : on complète avec la fiche existante.
   router.patch(`${base}/:questId`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId')!;
+    const questId = c.req.param('questId')!;
     try {
-      const body = await readLenientBody<Record<string, any>>(c);
-      return send(c, await updateQuestDefinition(c.req.param('guildId'), c.req.param('questId'), body));
+      const body = await readLenientBody<RpgQuestInput>(c);
+      const existing = await prismaRead.rpgQuest.findFirst({ where: { id: questId, guildId } });
+      if (!existing) return send(c, { error: 'Quête introuvable.' }, 404);
+      const { quest } = await saveGuildQuest(guildId, { ...existing, ...body }, questId);
+      return send(c, quest);
     } catch (err) {
-      logger.error('QuestsAPI', 'Error updating quest:', err);
-      return fail(c, err, 'Erreur lors de la mise à jour', 'QuestsAPI');
+      return handle(c, err, 'Erreur lors de la mise à jour');
     }
   });
 
   router.delete(`${base}/:questId`, ...gate, async (c) => {
     try {
-      await deleteQuestDefinition(c.req.param('guildId'), c.req.param('questId'));
+      await deleteGuildQuest(c.req.param('guildId')!, c.req.param('questId')!);
       return send(c, { ok: true });
     } catch (err) {
-      logger.error('QuestsAPI', 'Error deleting quest:', err);
-      return fail(c, err, 'Erreur lors de la suppression', 'QuestsAPI');
+      return handle(c, err, 'Erreur lors de la suppression');
     }
   });
 

@@ -909,11 +909,8 @@ export function createGuildGeneralRouter(client: Client) {
       const [levels, rpgProfiles, completedQuests, rpgQuestsCompleted] = await Promise.all([
         prisma.memberLevel.findMany({ where: { guildId }, select: { userId: true, level: true, xp: true, dailyXp: true, lastXpGain: true } }),
         prisma.rpgProfile.findMany({ where: { guildId }, select: { userId: true, balance: true, level: true, xp: true, dailyStreak: true } }),
-        prisma.questProgress.groupBy({
-          by: ['userId'],
-          where: { guildId, status: { in: ['COMPLETED', 'CLAIMED'] } },
-          _count: { _all: true },
-        }),
+        // Les anciennes quêtes communautaires vivent désormais dans le moteur unique (ligne suivante).
+        Promise.resolve([] as Array<{ userId: string; _count: { _all: number } }>),
         prisma.rpgQuestProgress.groupBy({
           by: ['userId'],
           where: { guildId, status: { in: ['COMPLETED', 'CLAIMED'] } },

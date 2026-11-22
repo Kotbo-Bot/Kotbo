@@ -188,7 +188,11 @@ const METRIC_READERS: Record<ComputedMetric, (userId: string) => Promise<number>
     return Math.max(0, result._sum.value ?? 0);
   },
   starboard: (userId) => prismaRead.starboardEntry.count({ where: { authorId: userId, postedAt: { not: null } } }),
-  questsClaimed: (userId) => prismaRead.questProgress.count({ where: { userId, status: 'CLAIMED' } }),
+  questsClaimed: async (userId) => {
+    // Les quêtes répétables se paient plusieurs fois : le compteur de versements est le bon.
+    const total = await prismaRead.rpgQuestProgress.aggregate({ where: { userId, teamKey: '' }, _sum: { completions: true } });
+    return total._sum.completions ?? 0;
+  },
 };
 
 /**
