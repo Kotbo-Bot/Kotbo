@@ -137,6 +137,10 @@ model StaffHierarchy {
   parentHierarchyId String? // Hiérarchie supérieure (null = racine)
   responsableUserId String? // Discord userId du responsable de cette hiérarchie
   discordRoleId String?     // Rôle Discord du responsable (optionnel)
+  /// Rôle Discord « séparateur » posé juste au-dessus des grades de la hiérarchie.
+  /// Avec separatorStyle : rôle créé et nommé par Kotbo. Sans : rôle existant choisi par l'admin (jamais renommé).
+  separatorRoleId String?
+  separatorStyle  String?
   enabled     Boolean @default(true)
 
   guild  Guild       @relation("GuildStaffHierarchies", fields: [guildId], references: [id], onDelete: Cascade)
