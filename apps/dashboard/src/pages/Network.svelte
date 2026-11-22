@@ -78,7 +78,15 @@
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'link');
       linkGuildId = '';
-      toast.success('Serveur rattaché au réseau');
+      const merge = data.merge as { moved: number; combined: number; kept: string[] } | null;
+      toast.success(
+        merge
+          ? `Serveur rattaché : ${merge.moved} éléments fusionnés${merge.combined ? ` (dont ${merge.combined} additionnés avec ceux du principal)` : ''}.`
+          : 'Serveur rattaché au réseau',
+      );
+      if (merge?.kept.length) {
+        toast.info(`${merge.kept.length} réglages en doublon sont restés tels quels sur le serveur rattaché : le principal garde les siens.`);
+      }
       await loadNetwork();
     } catch (err: any) {
       toast.error(err?.message || 'Impossible de rattacher ce serveur.');
