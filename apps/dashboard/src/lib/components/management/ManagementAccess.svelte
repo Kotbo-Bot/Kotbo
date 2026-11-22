@@ -73,11 +73,13 @@
   let {
     features = $bindable([]),
     availableRoles = [],
+    keys = [],
     modules = new Map<string, any>(),
     onApplyPreset = (_preset: string) => {},
   }: {
     features?: any[];
     availableRoles?: any[];
+    keys?: Array<{ id: string; name: string }>;
     modules?: Map<string, any>;
     onApplyPreset?: (preset: string) => void | Promise<void>;
   } = $props();
@@ -93,6 +95,13 @@
   const roleEntries = $derived(
     [...availableRoles].sort((a, b) => (b.position ?? 0) - (a.position ?? 0))
   );
+
+  // Les cles MCP sont des lignes de plus dans la meme matrice : meme droits,
+  // meme liste blanche (par cle, elle : sans regle, la cle garde ses permissions globales).
+  const keyEntries = $derived(keys.map((key) => ({ id: key.id, name: key.name, kind: 'key' })));
+  const entries = $derived<any[]>([...roleEntries, ...keyEntries]);
+  const listProp = (entry: any) => (entry.kind === 'key' ? 'keyAccess' : 'roleAccessByRole');
+  const idProp = (entry: any) => (entry.kind === 'key' ? 'keyId' : 'roleId');
 
   const permissions = $derived([
     { key: 'canView', label: m.ma_perm_view(), icon: 'Eye', desc: m.ma_perm_view_desc() },
@@ -115,23 +124,24 @@
     !query || moduleName(feature.featureKey, feature.featureName).toLowerCase().includes(query.toLowerCase())
       || feature.featureKey?.toLowerCase().includes(query.toLowerCase());
 
-  const ruleOf = (feature: any, roleId: string) =>
-    feature.roleAccessByRole?.find((rule: any) => rule.roleId === roleId) ?? {};
+  const ruleOf = (feature: any, who: any) =>
+    feature[listProp(who)]?.find((rule: any) => rule[idProp(who)] === who.id) ?? {};
 
-  const grantedCount = (feature: any, roleId: string) =>
-    permissions.filter((perm) => ruleOf(feature, roleId)[perm.key]).length;
+  const grantedCount = (feature: any, who: any) =>
+    permissions.filter((perm) => ruleOf(feature, who)[perm.key]).length;
 
-  /** Aucune regle sur la fonctionnalite : tout le staff la voit. */
+  /** Aucune regle de role sur la fonctionnalite : tout le staff la voit. */
   const isOpen = (feature: any) => (feature.roleAccessByRole?.length ?? 0) === 0;
 
-  function togglePermission(featureIdx: number, roleId: string, permKey: string) {
+  function togglePermission(featureIdx: number, who: any, permKey: string) {
     const feature = features[featureIdx];
-    if (!feature.roleAccessByRole) feature.roleAccessByRole = [];
+    const list = listProp(who);
+    if (!feature[list]) feature[list] = [];
 
-    let rule = feature.roleAccessByRole.find((entry: any) => entry.roleId === roleId);
+    let rule = feature[list].find((entry: any) => entry[idProp(who)] === who.id);
     if (!rule) {
-      rule = { roleId, canView: false, canModerate: false, canConfigure: false, canDelete: false };
-      feature.roleAccessByRole.push(rule);
+      rule = { [idProp(who)]: who.id, canView: false, canModerate: false, canConfigure: false, canDelete: false };
+      feature[list].push(rule);
     }
     rule[permKey] = !rule[permKey];
     features = [...features];
@@ -144,18 +154,19 @@
    * administrateurs Discord. C'est en retirant la derniere regle qu'on la rend
    * a tout le staff.
    */
-  function removeRule(featureIdx: number, roleId: string) {
+  function removeRule(featureIdx: number, who: any) {
     const feature = features[featureIdx];
-    if (!feature.roleAccessByRole) return;
-    feature.roleAccessByRole = feature.roleAccessByRole.filter((entry: any) => entry.roleId !== roleId);
+    const list = listProp(who);
+    if (!feature[list]) return;
+    feature[list] = feature[list].filter((entry: any) => entry[idProp(who)] !== who.id);
     features = [...features];
   }
 
-  const hasRule = (feature: any, roleId: string) =>
-    !!feature.roleAccessByRole?.some((rule: any) => rule.roleId === roleId);
+  const hasRule = (feature: any, who: any) =>
+    !!feature[listProp(who)]?.some((rule: any) => rule[idProp(who)] === who.id);
 
-  const ruledFeatureCount = (roleId: string) =>
-    features.filter((feature: any) => hasRule(feature, roleId)).length;
+  const ruledFeatureCount = (who: any) =>
+    features.filter((feature: any) => hasRule(feature, who)).length;
 </script>
 
 <div class="space-y-6">
@@ -177,7 +188,7 @@
       </div>
     {/snippet}
 
-    {#if roleEntries.length === 0}
+    {#if entries.length === 0}
       <p class="text-body-sm text-warning/90 leading-relaxed">{m.ma_roles_empty()}</p>
     {:else}
       <div class="space-y-4">
@@ -278,15 +289,20 @@
                                 </tr>
                               </thead>
                               <tbody class="divide-y divide-outline-variant/5">
-                                {#each roleEntries as role}
-                                  {@const rule = ruleOf(feature, role.id)}
+                                {#each entries as role (`${role.kind ?? 'role'}:${role.id}`)}
+                                  {@const rule = ruleOf(feature, role)}
                                   <tr>
                                     <td class="py-2 pr-4">
                                       <span class="inline-flex items-center gap-2">
-                                        <span class="h-2.5 w-2.5 shrink-0 rounded-full" style="background-color:{roleDotColor(role.color)}"></span>
+                                        {#if role.kind === 'key'}
+                                          <Papicon icon="key" size={12} class="shrink-0 text-on-surface-variant" />
+                                        {:else}
+                                          <span class="h-2.5 w-2.5 shrink-0 rounded-full" style="background-color:{roleDotColor(role.color)}"></span>
+                                        {/if}
                                         <span class="text-body-sm font-medium">{role.name}</span>
+                                        {#if role.kind === 'key'}<span class="text-2xs text-on-surface-variant/60">{m.ma_key_badge()}</span>{/if}
                                       </span>
-                                      <span class="ml-2 text-2xs text-on-surface-variant/40">{grantedCount(feature, role.id)}/{permissions.length}</span>
+                                      <span class="ml-2 text-2xs text-on-surface-variant/40">{grantedCount(feature, role)}/{permissions.length}</span>
                                     </td>
                                     {#each permissions as perm}
                                       <td class="py-2 px-2 text-center">
@@ -294,7 +310,7 @@
                                           type="button"
                                           aria-label="{role.name} - {perm.label}"
                                           aria-pressed={!!rule[perm.key]}
-                                          onclick={() => togglePermission(idx, role.id, perm.key)}
+                                          onclick={() => togglePermission(idx, role, perm.key)}
                                           class="w-7 h-7 rounded-lg inline-flex items-center justify-center transition-all {rule[perm.key] ? 'bg-success/20 text-success hover:bg-success/30' : 'bg-surface-container-high/40 text-on-surface-variant/30 hover:bg-surface-container-high/70'}"
                                         >
                                           <Papicon icon={rule[perm.key] ? 'Check' : 'X'} size={12} />
@@ -302,10 +318,10 @@
                                       </td>
                                     {/each}
                                     <td class="py-2 pl-2 text-right">
-                                      {#if hasRule(feature, role.id)}
+                                      {#if hasRule(feature, role)}
                                         <button
                                           type="button"
-                                          onclick={() => removeRule(idx, role.id)}
+                                          onclick={() => removeRule(idx, role)}
                                           class="text-2xs font-medium text-on-surface-variant hover:text-error transition-colors"
                                         >
                                           {m.ma_remove_rule()}
@@ -327,9 +343,9 @@
           {/each}
         {:else}
           <div class="rounded-xl border border-outline-variant/10 divide-y divide-outline-variant/10 overflow-hidden">
-            {#each roleEntries as role (role.id)}
+            {#each entries as role (`${role.kind ?? 'role'}:${role.id}`)}
               {@const expanded = expandedRole === role.id}
-              {@const ruled = ruledFeatureCount(role.id)}
+              {@const ruled = ruledFeatureCount(role)}
               <div class="bg-surface-container-high/10">
                 <button
                   type="button"
@@ -337,8 +353,13 @@
                   onclick={() => (expandedRole = expanded ? null : role.id)}
                 >
                   <span class="flex items-center gap-3 min-w-0">
-                    <span class="h-2.5 w-2.5 shrink-0 rounded-full" style="background-color:{roleDotColor(role.color)}"></span>
+                    {#if role.kind === 'key'}
+                      <Papicon icon="key" size={12} class="shrink-0 text-on-surface-variant" />
+                    {:else}
+                      <span class="h-2.5 w-2.5 shrink-0 rounded-full" style="background-color:{roleDotColor(role.color)}"></span>
+                    {/if}
                     <span class="text-sm font-medium truncate">{role.name}</span>
+                    {#if role.kind === 'key'}<span class="text-2xs text-on-surface-variant/60">{m.ma_key_badge()}</span>{/if}
                   </span>
                   <span class="flex items-center gap-3 shrink-0">
                     <span class="text-2xs font-medium {ruled > 0 ? 'text-primary' : 'text-on-surface-variant/40'}">
@@ -352,7 +373,7 @@
 
                 {#if expanded}
                   <div class="px-4 pb-4 space-y-3">
-                    <p class="text-xs text-on-surface-variant leading-relaxed">{m.ma_role_hint()}</p>
+                    <p class="text-xs text-on-surface-variant leading-relaxed">{role.kind === 'key' ? m.ma_key_hint() : m.ma_role_hint()}</p>
                     <div class="overflow-x-auto">
                       <table class="w-full text-left border-collapse min-w-[26rem]">
                         <thead>
@@ -381,7 +402,7 @@
                               </tr>
 
                               {#each items as { feature, idx } (feature.featureKey)}
-                                {@const rule = ruleOf(feature, role.id)}
+                                {@const rule = ruleOf(feature, role)}
                                 {@const moduleActive = featureModuleState(modules, feature.featureKey)}
                                 <tr>
                                   <td class="py-2 pr-4">
@@ -389,7 +410,7 @@
                                       <span class="w-1.5 h-1.5 rounded-full shrink-0 {moduleActive === false ? 'bg-on-surface-variant/30' : 'bg-emerald-500'}"></span>
                                       <span class="text-body-sm font-medium">{moduleName(feature.featureKey, feature.featureName)}</span>
                                     </span>
-                                    {#if isOpen(feature)}
+                                    {#if role.kind !== 'key' && isOpen(feature)}
                                       <span class="ml-2 text-2xs text-on-surface-variant/40">{m.ma_state_open()}</span>
                                     {/if}
                                   </td>
@@ -399,7 +420,7 @@
                                         type="button"
                                         aria-label="{moduleName(feature.featureKey, feature.featureName)} - {perm.label}"
                                         aria-pressed={!!rule[perm.key]}
-                                        onclick={() => togglePermission(idx, role.id, perm.key)}
+                                        onclick={() => togglePermission(idx, role, perm.key)}
                                         class="w-7 h-7 rounded-lg inline-flex items-center justify-center transition-all {rule[perm.key] ? 'bg-success/20 text-success hover:bg-success/30' : 'bg-surface-container-high/40 text-on-surface-variant/30 hover:bg-surface-container-high/70'}"
                                       >
                                         <Papicon icon={rule[perm.key] ? 'Check' : 'X'} size={12} />
@@ -407,10 +428,10 @@
                                     </td>
                                   {/each}
                                   <td class="py-2 pl-2 text-right">
-                                    {#if hasRule(feature, role.id)}
+                                    {#if hasRule(feature, role)}
                                       <button
                                         type="button"
-                                        onclick={() => removeRule(idx, role.id)}
+                                        onclick={() => removeRule(idx, role)}
                                         class="text-2xs font-medium text-on-surface-variant hover:text-error transition-colors"
                                       >
                                         {m.ma_remove_rule()}

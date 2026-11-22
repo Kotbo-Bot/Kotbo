@@ -1485,6 +1485,8 @@
   "ma_col_module": "Module",
   "ma_role_ruled_count": "{count} règle(s)",
   "ma_role_no_rule": "Aucune règle",
+  "ma_key_badge": "clé MCP",
+  "ma_key_hint": "Une clé MCP sans aucune règle garde ses permissions globales sur tous les modules. Dès qu'une case est cochée, elle n'accède plus qu'aux modules où elle a une règle, avec les droits cochés : Voir pour les lectures, Modérer pour les actions, Configurer pour les modifications, Supprimer pour les suppressions.",
   "ma_role_hint": "Coche pour poser une règle sur ce rôle. Une fonctionnalité sans aucune règle reste visible par tout le staff ; la première règle la réserve aux rôles qui l'ont.",
   "mgmt_active_modules": "Modules actifs",
   "mgmt_health_score": "Santé config",

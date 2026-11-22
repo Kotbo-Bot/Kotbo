@@ -1485,6 +1485,8 @@
   "ma_col_module": "Module",
   "ma_role_ruled_count": "{count} rule(s)",
   "ma_role_no_rule": "No rule",
+  "ma_key_badge": "MCP key",
+  "ma_key_hint": "An MCP key with no rule keeps its global permissions on every module. As soon as a box is ticked, it only reaches the modules where it has a rule, with the rights ticked: View for reads, Moderate for actions, Configure for edits, Delete for removals.",
   "ma_role_hint": "Tick to set a rule for this role. A feature with no rule at all stays visible to the whole staff; the first rule restricts it to the roles that have it.",
   "mgmt_active_modules": "Active Modules",
   "mgmt_health_score": "Config Health",
