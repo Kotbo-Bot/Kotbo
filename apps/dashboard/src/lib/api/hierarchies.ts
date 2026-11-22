@@ -40,6 +40,15 @@ export async function deleteStaffHierarchy(hierarchyId, guildId = authStore.sele
   });
 }
 
+export async function applyStaffSeparators(guildId = authStore.selectedGuildId) {
+  return dashboardRequest('/staff/hierarchies/separators/apply', {
+    method: 'POST',
+    successMessage: m.sx_sep_applied(),
+    guildId,
+    errorContext: 'API Error (Apply Staff Separators):'
+  });
+}
+
 export async function fetchHierarchySchema(guildId = authStore.selectedGuildId) {
   return dashboardRequest('/staff/hierarchies/schema', {
     method: 'GET',

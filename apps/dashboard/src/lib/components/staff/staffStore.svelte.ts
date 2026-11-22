@@ -98,6 +98,8 @@ export type HierarchyPayload = {
   discordRoleId: string | null;
   responsableUserId: string | null;
   parentHierarchyId: string | null;
+  separatorRoleId?: string | null;
+  separatorStyle?: string | null;
 };
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
