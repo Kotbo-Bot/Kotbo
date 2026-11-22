@@ -2,6 +2,7 @@ import { Hono, type Context } from 'hono';
 import { createMiddleware } from 'hono/factory';
 import { errorMessage } from '../../../../utils/errors.js';
 import prisma from '../../../../utils/db.js';
+import { getOrgCanvas, saveOrgCanvas } from '../../../../services/staff/staffOrgCanvasService.js';
 import { resolveMemberAvatarUrl } from '../../../../services/moderation/memberIdentityService.js';
 import { logger } from '../../../../utils/logger.js';
 import { COLORS } from '../../../../utils/embeds.js';
@@ -1120,6 +1121,25 @@ export function createStaffRouter(client: Client) {
     } catch (err) {
       logger.error('StaffAPI', 'Error getting hierarchy schema:', err);
       return fail(c, err, "Erreur lors de la récupération de l'organigramme", 'StaffAPI');
+    }
+  });
+
+  router.get(`${base}/staff/org-canvas`, ...gate, async (c) => {
+    try {
+      return send(c, { canvas: await getOrgCanvas(c.req.param('guildId')) });
+    } catch (err) {
+      logger.error('StaffAPI', 'Error getting org canvas:', err);
+      return fail(c, err, "Erreur lors de la récupération du canvas de l'organigramme", 'StaffAPI');
+    }
+  });
+
+  router.put(`${base}/staff/org-canvas`, ...gate, async (c) => {
+    try {
+      const body = await readBody<{ canvas?: unknown }>(c);
+      return send(c, { canvas: await saveOrgCanvas(c.req.param('guildId'), body?.canvas) });
+    } catch (err) {
+      logger.error('StaffAPI', 'Error saving org canvas:', err);
+      return fail(c, err, "Erreur lors de l'enregistrement du canvas de l'organigramme", 'StaffAPI');
     }
   });
 
