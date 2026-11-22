@@ -31,15 +31,19 @@
     ),
   );
 
+  let loadFailed = $state(false);
+
   async function loadNetwork() {
     try {
       const res = await dashboardFetch('/billing/network');
-      if (res.ok) {
-        const data = await res.json();
-        network = data.network;
-        if (network?.name) networkName = network.name;
-      }
-    } catch { /* ignored */ }
+      if (!res.ok) throw new Error('network');
+      const data = await res.json();
+      network = data.network;
+      if (network?.name) networkName = network.name;
+      loadFailed = false;
+    } catch {
+      loadFailed = true;
+    }
   }
 
   async function createOrRenameNetwork(event: SubmitEvent) {
@@ -121,7 +125,12 @@
       </div>
     {/if}
 
-    {#if !network}
+    {#if loadFailed}
+      <p class="text-sm text-error">
+        Impossible de charger le réseau. Réessaie dans un instant ; si ça persiste, préviens l'équipe Kotbo.
+      </p>
+      <Button size="sm" variant="secondary" onclick={() => void loadNetwork()}>Réessayer</Button>
+    {:else if !network}
       <form onsubmit={createOrRenameNetwork} class="flex flex-wrap gap-2">
         <input bind:value={networkName} placeholder="Nom de l'association ou du réseau" class="input flex-1 text-sm" required />
         <Button type="submit" size="sm" variant="primary" loading={networkBusy}>Créer le regroupement</Button>
