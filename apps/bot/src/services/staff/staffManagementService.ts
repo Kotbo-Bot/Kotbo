@@ -1159,26 +1159,10 @@ export const deleteStaffRole = async (guildId: string, roleId: string) => {
   });
   if (!roleToDelete) return null;
 
-  const deleted = await prisma.staffRole.delete({
+  // Pas de renumérotation : les trous dans sortOrder sont sans effet sur le tri.
+  return prisma.staffRole.delete({
     where: { id: roleId }
   });
-
-  // Reorder remaining roles to keep sortOrder contiguous
-  const remainingRoles = await prisma.staffRole.findMany({
-    where: { guildId },
-    orderBy: [{ level: 'desc' }, { sortOrder: 'asc' }, { createdAt: 'asc' }]
-  });
-
-  await prisma.$transaction(
-    remainingRoles.map((role, index) =>
-      prisma.staffRole.update({
-        where: { id: role.id },
-        data: { sortOrder: index }
-      })
-    )
-  );
-
-  return deleted;
 };
 
 export const createAPIKey = async (
