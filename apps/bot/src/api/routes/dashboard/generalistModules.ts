@@ -27,6 +27,7 @@ import {
   refreshActiveGiveaways,
   rerollGiveaway,
 } from '../../../services/features/giveawayService.js';
+import { normalizeConditions, type GiveawayCondition } from '../../../services/features/giveawayConditions.js';
 import {
   canManageGiveaways,
   getGiveawayConfig,
@@ -1412,6 +1413,8 @@ export function createGeneralistModulesRouter(client: Client) {
         channelId?: string;
         styleOverrides?: unknown;
         ignoreBonuses?: boolean;
+        conditions?: unknown;
+        createDiscordEvent?: boolean;
         rpgXp?: number;
         rpgCoins?: number;
         rpgItemId?: string;
@@ -1436,6 +1439,18 @@ export function createGeneralistModulesRouter(client: Client) {
 
       const styleOverrides = normalizeAppearancePatch(body.styleOverrides);
 
+      // Absent : le concours reprend le filtre du serveur. Une condition
+      // invalide est refusée plutôt qu'écartée, sinon le concours s'ouvrirait
+      // plus large que ce que l'écran annonce.
+      let conditions: GiveawayCondition[] | undefined;
+      if (body.conditions !== undefined && body.conditions !== null) {
+        const normalized = normalizeConditions(body.conditions);
+        if (normalized.rejected > 0) {
+          return send(c, { error: `${normalized.rejected} condition(s) invalide(s)` }, 400);
+        }
+        conditions = normalized.conditions;
+      }
+
       const giveaway = await createGiveaway(
         client,
         guildId,
@@ -1450,7 +1465,9 @@ export function createGeneralistModulesRouter(client: Client) {
         body.needValidation === true,
         user.userId,
         styleOverrides,
-        body.ignoreBonuses === true
+        body.ignoreBonuses === true,
+        body.createDiscordEvent === true,
+        conditions
       );
 
       // Même forme que le GET : la page insère le concours en tête de liste
