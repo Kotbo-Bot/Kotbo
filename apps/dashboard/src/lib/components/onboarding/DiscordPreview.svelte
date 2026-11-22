@@ -14,7 +14,7 @@
    * mentions. `children` se place dans le message, sous le texte : un embed.
    */
   import { setContext, type Snippet } from 'svelte';
-  import { Avatar, ChannelHeader, Markdown, MessageFrame, MessageHeader, type MessageAuthor } from '@arcscord/discord-ui-svelte';
+  import { Avatar, ChannelHeader, Markdown, MessageFrame, MessageHeader, type MessageAuthor, type MessageEntities } from '@arcscord/discord-ui-svelte';
   import DiscordScope from '../discord/DiscordScope.svelte';
   import { mergeEntities, PREVIEW_ENTITIES, PreviewEntities, toPreviewMarkdown } from '../discord/previewEntities.svelte';
 
@@ -24,6 +24,8 @@
     avatarUrl = '/favicon.svg',
     bot = true,
     content,
+    mentions = true,
+    entities: extraEntities = {},
     children,
   }: {
     channel: string;
@@ -32,14 +34,22 @@
     bot?: boolean;
     /** Texte du message, en Markdown Discord. */
     content?: string;
+    /**
+     * `@pseudo` en clair rendus comme des mentions : vrai pour un gabarit
+     * (« Bienvenue @Lina »), faux pour un vrai message, où Discord laisse
+     * `@pseudo` en texte et ne résout que `<@id>`.
+     */
+    mentions?: boolean;
+    /** Noms des rôles, salons ou émojis cités, en plus de ceux du texte. */
+    entities?: MessageEntities;
     children?: Snippet;
   } = $props();
 
   const registry = new PreviewEntities();
   setContext(PREVIEW_ENTITIES, registry);
 
-  const text = $derived(content ? toPreviewMarkdown(content) : null);
-  const entities = $derived(mergeEntities([text?.entities ?? {}, ...Object.values(registry.sources)]));
+  const text = $derived(content ? toPreviewMarkdown(content, { mentions }) : null);
+  const entities = $derived(mergeEntities([extraEntities, text?.entities ?? {}, ...Object.values(registry.sources)]));
   const messageAuthor = $derived<MessageAuthor>({ id: 'preview-author', displayName: author, avatarUrl, bot });
   const timestamp = new Date().toISOString();
 </script>

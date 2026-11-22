@@ -57,3 +57,14 @@
 <DiscordUI theme="dark" {locale} {timeZone} {entities} {labels} class={className}>
   {@render children()}
 </DiscordUI>
+
+<style>
+  /* Le reset de Tailwind retire les puces ; la lib s'appuie sur celles du navigateur. */
+  :global(.arcscord-discord-ui .dui-markdown ul) {
+    list-style-type: disc;
+  }
+
+  :global(.arcscord-discord-ui .dui-markdown ol) {
+    list-style-type: decimal;
+  }
+</style>

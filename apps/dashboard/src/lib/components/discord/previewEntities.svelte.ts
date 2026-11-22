@@ -60,6 +60,8 @@ export function mergeEntities(list: MessageEntities[]): MessageEntities {
   const merged: MessageEntities = {};
   for (const entities of list) {
     if (entities.users) merged.users = { ...merged.users, ...entities.users };
+    if (entities.roles) merged.roles = { ...merged.roles, ...entities.roles };
+    if (entities.channels) merged.channels = { ...merged.channels, ...entities.channels };
     if (entities.emojis) merged.emojis = { ...merged.emojis, ...entities.emojis };
   }
   return merged;
