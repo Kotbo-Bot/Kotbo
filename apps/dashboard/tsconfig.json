@@ -20,7 +20,9 @@
     "types": ["vite/client"],
     "skipLibCheck": true,
     "checkJs": false,
-    "allowArbitraryExtensions": true
+    "allowArbitraryExtensions": true,
+    "incremental": true,
+    "tsBuildInfoFile": "./node_modules/.cache/tsbuildinfo/dashboard.json"
   },
   /**
    * Use global.d.ts instead of compilerOptions.types
