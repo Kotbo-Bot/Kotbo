@@ -1294,5 +1294,13 @@ export async function registerCrons(client: Client): Promise<void> {
   cron.schedule('17 * * * *', syncFeatured);
   setTimeout(syncFeatured, 15_000);
 
+  // Publication des statistiques vers les annuaires de bots (Botillon, Top.gg, Discordium).
+  // Hors runCronJob pour garantir l'exécution sur le shard 0 qui agrège tous les shards.
+  const syncBotLists = () => import('../services/integrations/botListStatsService.js')
+    .then(({ syncBotListStats }) => syncBotListStats(client))
+    .catch((err) => logger.error('Cron', 'Échec de la publication des stats botlists :', err));
+  cron.schedule('*/30 * * * *', syncBotLists);
+  setTimeout(syncBotLists, 20_000);
+
   logger.success('Cron', "Tous les jobs cron sont enregistrés (Suivi d'activité minute activé)");
 }
