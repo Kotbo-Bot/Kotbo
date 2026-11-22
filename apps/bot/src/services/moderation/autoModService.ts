@@ -10,7 +10,7 @@ import { loadBannedWords, loadGlobalWords, loadCustomWords } from './bannedWords
 import { isReservedByNicknameModeration } from './nicknameModerationService.js';
 import { mirrorModlogToStaffServer } from '../staff/staffServerService.js';
 import { getUppercasePercentage } from './capsDetection.js';
-import { classifyLink, findKeywordRanges, findLiteralRanges, INVITE_KEYWORDS, LINK_KEYWORDS, type CensorKind, type CensorRange } from './censorship.js';
+import { classifyLink, findKeywordRanges, findLiteralRanges, INVITE_KEYWORDS, LINK_KEYWORDS, SAFE_LINK_ALLOW, type CensorKind, type CensorRange } from './censorship.js';
 import { queueCensoredRepost, repostCensored } from './censorService.js';
 import { handleGroupSpam, handlePreventiveSlowmode } from './groupSpamSlowmode.js';
 import { handleEmojiBan } from './emojiBanService.js';
@@ -111,13 +111,19 @@ const NATIVE_RULE_NAMES = {
  */
 const CENSOR_BLOCK_MESSAGE = 'Un passage de ton message est interdit : Kotbo le republie en le masquant.';
 
-/** Mots-clés de la règle « Liens » : toute URL, invitations Discord comprises. */
-function linksRuleKeywords(): string[] {
-  return ['*discord.gg/*', '*discord.com/invite/*', ...LINK_KEYWORDS];
+/** Niveau 0 : invitations seulement ; 1 : liens externes ; 2 : tous les liens. */
+function linksLevel(config: AutoModConfig): number {
+  return config.linksLevel ?? 1;
+}
+
+/** Mots-clés de la règle « Liens » : invitations Discord, plus les URL dès le niveau 1. */
+function linksRuleKeywords(config: AutoModConfig): string[] {
+  return linksLevel(config) === 0 ? ['*discord.gg/*', '*discord.com/invite/*'] : ['*discord.gg/*', '*discord.com/invite/*', ...LINK_KEYWORDS];
 }
 
 function linksAllowList(config: AutoModConfig): string[] {
-  return (config.linksWhitelist || []).map((domain: string) => `*${domain}*`).slice(0, 100);
+  const own = (config.linksWhitelist || []).map((domain: string) => `*${domain}*`);
+  return [...(linksLevel(config) === 1 ? SAFE_LINK_ALLOW : []), ...own].slice(0, 100);
 }
 
 function inviteAllowList(config: AutoModConfig): string[] {
@@ -384,7 +390,7 @@ export async function syncDiscordAutoModRules(client: Client, guildId: string, c
       }
 
       // Préparer les filtres de mots-clés pour les liens et invitations
-      const keywordFilter = linksRuleKeywords();
+      const keywordFilter = linksRuleKeywords(config);
       
       // La whitelist des domaines autorisés
       const allowList = linksAllowList(config);
@@ -939,7 +945,7 @@ function censorRangesForRule(
       const allowList = linksAllowList(config);
       return {
         ranges: [
-          ...findKeywordRanges(content, LINK_KEYWORDS, allowList, 'link'),
+          ...(linksLevel(config) === 0 ? [] : findKeywordRanges(content, LINK_KEYWORDS, allowList, 'link')),
           ...findKeywordRanges(content, INVITE_KEYWORDS, allowList, 'invite'),
         ],
         matchedKind: classifyLink,

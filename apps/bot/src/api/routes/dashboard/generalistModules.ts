@@ -2400,6 +2400,7 @@ export function createGeneralistModulesRouter(client: Client) {
         linksEnabled?: boolean;
         linksAction?: string;
         linksWhitelist?: string[];
+        linksLevel?: number;
         capsEnabled?: boolean;
         capsThresholdPercent?: number;
         capsMinLength?: number;
@@ -2536,6 +2537,7 @@ export function createGeneralistModulesRouter(client: Client) {
         linksEnabled: body.linksEnabled,
         linksAction: body.linksAction,
         linksWhitelist: body.linksWhitelist,
+        linksLevel: clampInt(body.linksLevel, 0, 2),
         capsEnabled: body.capsEnabled,
         capsThresholdPercent: body.capsThresholdPercent,
         capsMinLength: body.capsMinLength,
@@ -2593,6 +2595,7 @@ export function createGeneralistModulesRouter(client: Client) {
           linksEnabled: body.linksEnabled ?? false,
           linksAction: body.linksAction ?? 'DELETE_AND_WARN',
           linksWhitelist: body.linksWhitelist ?? [],
+          linksLevel: clampInt(body.linksLevel, 0, 2) ?? 1,
           capsEnabled: body.capsEnabled ?? false,
           capsThresholdPercent: body.capsThresholdPercent ?? 80,
           capsMinLength: body.capsMinLength ?? 10,

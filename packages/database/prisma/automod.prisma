@@ -61,6 +61,7 @@ model AutoModConfig {
   linksEnabled         Boolean  @default(false)
   linksAction          String   @default("DELETE_AND_WARN")
   linksWhitelist       String[] @default([]) // Whitelisted domains
+  linksLevel           Int      @default(1) // 0 = invitations seulement, 1 = liens externes (hors Discord et GIF), 2 = tous les liens
 
   capsEnabled          Boolean  @default(false)
   capsThresholdPercent Int      @default(80)
