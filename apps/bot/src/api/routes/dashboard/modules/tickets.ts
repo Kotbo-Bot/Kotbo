@@ -13,7 +13,7 @@ import { broadcastDashboardStateChange, extractMediaUrls, getDashboardUrl, getGu
 import { type ProvisionedEntry, acquireProvisionLock, missingProvisionPermissions, provisionCooldown, provisionCooldownMessage, releaseProvisionLock, startProvisionCooldown } from '../../../../services/core/channelProvisioningService.js';
 import { Prisma } from '@prisma/client';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, type ColorResolvable, EmbedBuilder, PermissionFlagsBits, TextChannel } from 'discord.js';
-import { msgComponentsV2Map, msgEmbedsMap, msgReactionsMap } from './_shared.js';
+import { msgComponentsV2Map, msgEmbedsMap, msgMentionEntities, msgReactionsMap } from './_shared.js';
 import { parseTranscriptHtml } from '../../../../services/features/transcriptService.js';
 import { clampCommentTimeout } from '../../../../services/features/ticketSatisfactionService.js';
 import { INBOX_VIEWS, computeSla, normalizeView, viewWhere, waitingOn, type SlaConfig } from '../../../../services/features/ticketHelpdesk.js';
@@ -997,6 +997,7 @@ export function createTicketsRouter(client: Client) {
               // `content` ni `embeds`.
               const v2 = msgComponentsV2Map(m.components, guild);
               const content = [m.content, v2.text].filter(Boolean).join('\n');
+              const embeds = [...msgEmbedsMap(m.embeds, guild), ...v2.cards];
               return {
                 id: m.id,
                 authorId: m.author.id,
@@ -1008,8 +1009,12 @@ export function createTicketsRouter(client: Client) {
                 mediaUrls: extractMediaUrls(content),
                 stickers: m.stickers ? m.stickers.map(s => ({ id: s.id, name: s.name, url: s.url })) : [],
                 attachments: m.attachments.map(a => ({ url: a.url, contentType: a.contentType })),
-                embeds: [...msgEmbedsMap(m.embeds, guild), ...v2.cards],
+                embeds,
                 buttons: v2.buttons,
+                entities: msgMentionEntities(
+                  [content, ...embeds.flatMap((embed) => [embed.title, embed.description, ...embed.fields.flatMap((field) => [field.name, field.value])])],
+                  guild,
+                ),
                 reactions: msgReactionsMap(m.reactions.cache.values()),
                 createdAt: m.createdAt.toISOString()
               };

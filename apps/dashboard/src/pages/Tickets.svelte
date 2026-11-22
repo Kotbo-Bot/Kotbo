@@ -33,6 +33,9 @@
   import TicketMemberPanel from '../lib/components/tickets/TicketMemberPanel.svelte';
   import type { InboxTicket, InboxView } from '../lib/api';
   import { resolveUserAvatarSrc } from '../lib/discordMedia';
+  import { MessageList } from '@arcscord/discord-ui-svelte';
+  import DiscordScope from '../lib/components/discord/DiscordScope.svelte';
+  import { mergeTicketEntities, toTicketMessageView, type TicketChatMessage } from '../lib/ticketMessageView';
   // Navigation & Tabs
   const ticketsTabs = ['tickets', 'performance', 'transcripts', 'satisfaction', 'macros', 'blacklist', 'config'] as const;
   const DEFAULT_TICKETS_TAB = 'tickets';
@@ -73,7 +76,9 @@
   let config = $state<any>({});
   let selectedTicketId = $state<string | null>(null);
   let selectedTicketDetail = $state<any>(null);
-  let messages = $state<any[]>([]);
+  let messages = $state<TicketChatMessage[]>([]);
+  const chatMessages = $derived(messages.map(toTicketMessageView));
+  const chatEntities = $derived(mergeTicketEntities(messages));
   
   // Loading & Error State
   let loading = $state(true);
@@ -915,9 +920,6 @@
           <div
             bind:this={chatScrollContainer}
             class="flex-1 overflow-y-auto bg-[#313338] scrollbar-hide"
-            class:p-4={!selectedTicketDetail?.transcriptId || messages.length > 0}
-            class:lg:p-6={!selectedTicketDetail?.transcriptId || messages.length > 0}
-            class:space-y-3={!selectedTicketDetail?.transcriptId || messages.length > 0}
           >
             {#if loadingDetail && messages.length === 0}
               <div class="flex items-center justify-center h-full">
@@ -929,164 +931,9 @@
                 <p class="text-xs">{m.e1_tickets_no_message()}</p>
               </div>
             {:else}
-              {#each messages as msg (msg.id)}
-                <div class="flex items-start gap-2.5 lg:gap-4 p-2 rounded-xl hover:bg-white/5 transition-colors group">
-                  <div class="shrink-0">
-                    {#if msg.authorAvatar}
-                      <img src={msg.authorAvatar} alt="" class="h-8 w-8 lg:h-10 lg:w-10 rounded-full object-cover border border-white/10" />
-                    {:else}
-                      <div class="h-8 w-8 lg:h-10 lg:w-10 rounded-full bg-white/10 flex items-center justify-center text-xs lg:text-sm font-semibold text-white/80">
-                        {msg.authorName?.slice(0, 1).toUpperCase()}
-                      </div>
-                    {/if}
-                  </div>
-                  <div class="min-w-0 flex-1">
-                    <div class="flex items-baseline gap-1.5 flex-wrap">
-                      <span class="text-xs lg:text-sm font-bold text-white">{msg.authorName || m.e1_tickets_anonymous()}</span>
-                      {#if msg.isStaff}
-                        <span class="bg-[#5865F2] text-white text-xs lg:text-2xs font-semibold px-1 py-0.5 rounded leading-none">{m.e1_tickets_staff_badge()}</span>
-                      {/if}
-                      <span class="text-2xs lg:text-2xs text-white/40">{new Date(msg.createdAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</span>
-                    </div>
-                    {#if msg.htmlContent}
-                      <div class="text-xs lg:text-sm text-white/90 mt-1 whitespace-pre-wrap leading-relaxed select-text flex flex-wrap gap-x-1 items-center message-html-content">
-                        {@html msg.htmlContent}
-                      </div>
-                    {:else if msg.content}
-                      <p class="text-xs lg:text-sm text-white/90 mt-1 whitespace-pre-wrap leading-relaxed select-text">{msg.content}</p>
-                    {/if}
-
-                    {#if msg.mediaUrls && msg.mediaUrls.length > 0}
-                      <div class="mt-2 space-y-2">
-                        {#each msg.mediaUrls.filter((media: any) => {
-                          if (msg.attachments?.some((att: any) => att.url === media.url)) return false;
-                          const getFilename = (url: any) => { if (!url) return ''; const clean = url.split('?')[0]; const parts = clean.split('/'); return parts[parts.length - 1] || ''; };
-                          const mediaFilename = getFilename(media.url);
-                          if (msg.embeds?.some((embed: any) => {
-                            const embedUrl = embed.url || ''; const embedImg = embed.image?.url || ''; const embedThumb = embed.thumbnail?.url || ''; const embedVid = embed.video?.url || '';
-                            if (embedUrl === media.url || embedImg === media.url || embedThumb === media.url || embedVid === media.url) return true;
-                            if (mediaFilename && (getFilename(embedUrl).includes(mediaFilename) || getFilename(embedImg).includes(mediaFilename) || getFilename(embedThumb).includes(mediaFilename) || getFilename(embedVid).includes(mediaFilename))) return true;
-                            if (media.url.includes('giphy.com') && (embedUrl.includes('giphy.com') || embedImg.includes('giphy.com') || embedVid.includes('giphy.com') || embedThumb.includes('giphy.com'))) return true;
-                            if (media.url.includes('tenor.com') && (embedUrl.includes('tenor.com') || embedImg.includes('tenor.com') || embedVid.includes('tenor.com') || embedThumb.includes('tenor.com'))) return true;
-                            return false;
-                          })) return false;
-                          return true;
-                        }) as media}
-                          {#if media.type === 'image'}
-                            <img src={media.url} alt="media-preview" class="max-w-[80%] lg:max-w-md rounded-lg border border-white/10 max-h-60 object-contain bg-[#1e1f22]" />
-                          {:else if media.type === 'video'}
-                            <!-- svelte-ignore a11y_media_has_caption -->
-                            <video src={media.url} controls class="max-w-[80%] lg:max-w-md rounded-lg border border-white/10 max-h-60 bg-[#1e1f22]"></video>
-                          {:else if media.type === 'audio'}
-                            <audio src={media.url} controls class="max-w-[80%] lg:max-w-md"></audio>
-                          {/if}
-                        {/each}
-                      </div>
-                    {/if}
-
-                    {#if msg.stickers && msg.stickers.length > 0}
-                      <div class="mt-2 space-y-2">
-                        {#each msg.stickers as sticker}
-                          <div class="relative group max-w-[50%]">
-                            <img src={sticker.url} alt={sticker.name} class="h-32 w-auto rounded-lg object-contain transition-transform" />
-                          </div>
-                        {/each}
-                      </div>
-                    {/if}
-
-                    {#if msg.embeds && msg.embeds.length > 0}
-                      <div class="mt-2 space-y-2">
-                        {#each msg.embeds as embed}
-                          <div class="bg-[#2b2d31] border-l-4 rounded-r-md p-2.5 max-w-full lg:max-w-lg" style="border-left-color: {embed.color || '#1e1f22'}">
-                            {#if embed.title}
-                              <div class="font-bold text-[#00a8fc] text-xs lg:text-sm mb-1">{embed.title}</div>
-                            {/if}
-                            {#if embed.htmlDescription}
-                              <div class="text-xs lg:text-sm text-white/80 whitespace-pre-wrap leading-relaxed select-text message-html-content">{@html embed.htmlDescription}</div>
-                            {:else if embed.description}
-                              <div class="text-xs lg:text-sm text-white/80 whitespace-pre-wrap leading-relaxed select-text">{embed.description}</div>
-                            {/if}
-                            {#if embed.fields && embed.fields.length > 0}
-                              <div class="mt-2 flex flex-wrap gap-2">
-                                {#each embed.fields as field}
-                                  <div class="flex-1 min-w-[45%]">
-                                    <div class="text-2xs font-bold text-white/60 uppercase">{field.name}</div>
-                                    {#if field.htmlValue}
-                                      <div class="text-xs text-white/80 select-text message-html-content">{@html field.htmlValue}</div>
-                                    {:else}
-                                      <div class="text-xs text-white/80 select-text">{field.value}</div>
-                                    {/if}
-                                  </div>
-                                {/each}
-                              </div>
-                            {/if}
-                            {#if embed.image?.url}
-                              <img src={embed.image.url} alt="embed-img" class="mt-2 max-w-full rounded-lg border border-white/10 max-h-60 object-contain bg-[#1e1f22]" />
-                            {:else if embed.video?.url}
-                              {#if embed.video.url.includes('giphy.com') || embed.video.url.includes('tenor.com') || embed.video.url.includes('gifv')}
-                                <video src={embed.video.url} autoplay loop muted playsinline class="mt-2 max-w-full rounded-lg border border-white/10 max-h-60 bg-[#1e1f22]"></video>
-                              {:else}
-                                <!-- svelte-ignore a11y_media_has_caption -->
-                                <video src={embed.video.url} controls class="mt-2 max-w-full rounded-lg border border-white/10 max-h-60 bg-[#1e1f22]"></video>
-                              {/if}
-                            {:else if embed.thumbnail?.url}
-                              <img src={embed.thumbnail.url} alt="embed-thumbnail" class="mt-2 max-w-full rounded-lg border border-white/10 max-h-32 object-contain bg-[#1e1f22]" />
-                            {/if}
-                            {#if embed.images?.length}
-                              <div class="mt-2 grid grid-cols-2 gap-1.5">
-                                {#each embed.images as url (url)}
-                                  <img src={url} alt="" class="w-full rounded-lg border border-white/10 max-h-40 object-cover bg-[#1e1f22]" />
-                                {/each}
-                              </div>
-                            {/if}
-                            {#if embed.buttons?.length}
-                              {@render messageButtons(embed.buttons)}
-                            {/if}
-                          </div>
-                        {/each}
-                      </div>
-                    {/if}
-
-                    {#if msg.attachments && msg.attachments.length > 0}
-                      <div class="mt-2 space-y-2">
-                        {#each msg.attachments as att}
-                          {#if att.contentType?.startsWith('image/')}
-                            <img src={att.url} alt="discord-att" class="max-w-[80%] lg:max-w-md rounded-lg border border-white/10 max-h-60 object-cover" />
-                          {:else if att.contentType?.startsWith('video/')}
-                            <!-- svelte-ignore a11y_media_has_caption -->
-                            <video src={att.url} controls class="max-w-[80%] lg:max-w-md rounded-lg border border-white/10 max-h-60"></video>
-                          {:else if att.contentType?.startsWith('audio/')}
-                            <audio src={att.url} controls class="max-w-[80%] lg:max-w-md"></audio>
-                          {:else}
-                            <a href={att.url} target="_blank" class="flex items-center gap-2 p-2.5 bg-white/5 border border-white/10 rounded-lg text-xs font-bold text-white hover:bg-white/10 transition-colors w-fit">
-                              <Papicon icon="file" size={14} /> {m.e1_tickets_attachment()}
-                            </a>
-                          {/if}
-                        {/each}
-                      </div>
-                    {/if}
-
-                    {#if msg.buttons?.length}
-                      {@render messageButtons(msg.buttons)}
-                    {/if}
-
-                    {#if msg.reactions?.length}
-                      <div class="mt-1.5 flex flex-wrap gap-1">
-                        {#each msg.reactions as reaction (reaction.imageUrl ?? reaction.emoji ?? reaction.name)}
-                          <span class="chat-reaction" title={`:${reaction.name}:`}>
-                            {#if reaction.imageUrl}
-                              <img src={reaction.imageUrl} alt={`:${reaction.name}:`} class="w-4 h-4 object-contain" />
-                            {:else}
-                              <span class="text-sm leading-none">{reaction.emoji}</span>
-                            {/if}
-                            <span class="tabular-nums">{reaction.count}</span>
-                          </span>
-                        {/each}
-                      </div>
-                    {/if}
-                  </div>
-                </div>
-              {/each}
+              <DiscordScope class="ticket-chat" entities={chatEntities}>
+                <MessageList messages={chatMessages} />
+              </DiscordScope>
             {/if}
           </div>
 
@@ -1149,27 +996,6 @@
 <!-- ============================================== -->
 <!-- MODALS -->
 <!-- ============================================== -->
-
-{#snippet messageButtons(buttons: Array<{ label: string; emoji: string | null; url: string | null; style: number; disabled: boolean }>)}
-  <!-- Les boutons d'un message Discord, en lecture seule : ils agissent dans
-       Discord, pas depuis le dashboard. Les liens restent cliquables. -->
-  <div class="mt-2 flex flex-wrap gap-1.5">
-    {#each buttons as button, index (index)}
-      {#if button.url}
-        <a href={button.url} target="_blank" rel="noopener noreferrer" class="chat-button chat-button--link">
-          {#if button.emoji?.startsWith('https://')}<img src={button.emoji} alt="" class="w-4 h-4" />{:else if button.emoji}<span>{button.emoji}</span>{/if}
-          {button.label}
-          <Papicon icon="external-link" size={11} />
-        </a>
-      {:else}
-        <span class="chat-button chat-button--style-{button.style} {button.disabled ? 'opacity-50' : ''}">
-          {#if button.emoji?.startsWith('https://')}<img src={button.emoji} alt="" class="w-4 h-4" />{:else if button.emoji}<span>{button.emoji}</span>{/if}
-          {button.label}
-        </span>
-      {/if}
-    {/each}
-  </div>
-{/snippet}
 
 <!-- Refus d'une demande en attente -->
 <Modal bind:open={showRejectModal} title={m.tr_reject_title()} subtitle={m.tr_reject_desc()} size="md" closeOnBackdropClick={!reviewBusy}>
@@ -1347,34 +1173,10 @@
 {/if}
 
 <style>
-  .chat-button {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    padding: 0.3rem 0.75rem;
-    border-radius: 0.25rem;
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: #fff;
-    background: #4e5058;
-    cursor: default;
-  }
-  .chat-button--style-1 { background: #5865f2; }
-  .chat-button--style-3 { background: #248046; }
-  .chat-button--style-4 { background: #da373c; }
-  .chat-button--link { cursor: pointer; }
-  .chat-button--link:hover { background: #6d6f78; }
-
-  .chat-reaction {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
-    padding: 0.1rem 0.45rem;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 0.5rem;
-    background: rgba(255, 255, 255, 0.06);
-    font-size: 0.75rem;
-    color: rgba(255, 255, 255, 0.85);
+  /* La conversation occupe tout le panneau ; les messages ont leur propre marge. */
+  :global(.arcscord-discord-ui.ticket-chat) {
+    min-height: 100%;
+    padding: 1rem 0;
   }
   .scrollbar-hide::-webkit-scrollbar { display: none; }
   .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
