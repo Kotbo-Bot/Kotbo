@@ -18,6 +18,7 @@ import { buildConversation, type DiscordConversation } from '../../../../service
 import { clampCommentTimeout } from '../../../../services/features/ticketSatisfactionService.js';
 import { INBOX_VIEWS, computeSla, normalizeView, viewWhere, waitingOn, type SlaConfig } from '../../../../services/features/ticketHelpdesk.js';
 import { noticeSeconds } from '../../../../services/features/ticketRecordingNotice.js';
+import { cleanRoleIds } from '../../../../services/features/ticketRoles.js';
 import { getStaffSignature, parseMacroInput, SIGNATURE_MAX_LENGTH } from '../../../../services/features/ticketMacroService.js';
 
 import { auditUserOf, fail, guildRoute, readBody, send } from '../../../hono/dashboard/kit.js';
@@ -38,6 +39,12 @@ const TICKET_CONFIG_SELECT = {
   ticketCategoryId: true,
   ticketLogChannelId: true,
   ticketStaffRoleId: true,
+  ticketSupportRoleIds: true,
+  ticketManagerRoleIds: true,
+  ticketMentionRoleIds: true,
+  ticketExcludedRoleIds: true,
+  ticketClaimHidesSupport: true,
+  ticketClaimExclusive: true,
   ticketChannelId: true,
   ticketEmbedTitle: true,
   ticketEmbedDesc: true,
@@ -268,6 +275,12 @@ export function createTicketsRouter(client: Client) {
       ticketCategoryId?: string | null;
       ticketLogChannelId?: string | null;
       ticketStaffRoleId?: string | null;
+      ticketSupportRoleIds?: unknown;
+      ticketManagerRoleIds?: unknown;
+      ticketMentionRoleIds?: unknown;
+      ticketExcludedRoleIds?: unknown;
+      ticketClaimHidesSupport?: unknown;
+      ticketClaimExclusive?: unknown;
       ticketChannelId?: string | null;
       ticketEmbedTitle?: string | null;
       ticketEmbedDesc?: string | null;
@@ -404,12 +417,22 @@ export function createTicketsRouter(client: Client) {
 
     try {
       const body = (await readBody<TicketConfigInput>(c)) ?? {};
+      const supportRoleIds = body.ticketSupportRoleIds !== undefined ? cleanRoleIds(body.ticketSupportRoleIds) : null;
       const updated = await prisma.guild.update({
         where: { id: guildId },
         data: {
           ticketCategoryId: body.ticketCategoryId || null,
           ticketLogChannelId: body.ticketLogChannelId || null,
-          ticketStaffRoleId: body.ticketStaffRoleId || null,
+          // Liste fournie : le premier rôle d'assistance est recopié dans le champ
+          // historique que lisent encore les autres modules. Sans liste (ancien
+          // client, outil MCP), on garde l'écriture d'avant.
+          ticketStaffRoleId: supportRoleIds ? (supportRoleIds[0] ?? null) : (body.ticketStaffRoleId || null),
+          ...(supportRoleIds ? { ticketSupportRoleIds: supportRoleIds } : {}),
+          ...(body.ticketManagerRoleIds !== undefined ? { ticketManagerRoleIds: cleanRoleIds(body.ticketManagerRoleIds) } : {}),
+          ...(body.ticketMentionRoleIds !== undefined ? { ticketMentionRoleIds: cleanRoleIds(body.ticketMentionRoleIds) } : {}),
+          ...(body.ticketExcludedRoleIds !== undefined ? { ticketExcludedRoleIds: cleanRoleIds(body.ticketExcludedRoleIds) } : {}),
+          ...(body.ticketClaimHidesSupport !== undefined ? { ticketClaimHidesSupport: body.ticketClaimHidesSupport === true } : {}),
+          ...(body.ticketClaimExclusive !== undefined ? { ticketClaimExclusive: body.ticketClaimExclusive === true } : {}),
           ticketChannelId: body.ticketChannelId || null,
           // Un champ vide est conserve tel quel : c'est ainsi que le bot sait
           // qu'il doit composer le texte par defaut dans la langue du serveur.
