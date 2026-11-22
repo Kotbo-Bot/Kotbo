@@ -3,6 +3,7 @@ import { createMiddleware } from 'hono/factory';
 import { errorMessage } from '../../../../utils/errors.js';
 import prisma from '../../../../utils/db.js';
 import { getOrgCanvas, saveOrgCanvas } from '../../../../services/staff/staffOrgCanvasService.js';
+import { applyStaffSeparators } from '../../../../services/staff/staffSeparatorService.js';
 import { resolveMemberAvatarUrl } from '../../../../services/moderation/memberIdentityService.js';
 import { logger } from '../../../../utils/logger.js';
 import { COLORS } from '../../../../utils/embeds.js';
@@ -136,6 +137,15 @@ export function createStaffRouter(client: Client) {
     await next();
   });
   const gate = [...guildRoute(client), staffAccess] as const;
+
+  // L'échec Discord (permission, hiérarchie des rôles) ne doit pas faire échouer l'enregistrement de la hiérarchie.
+  const runSeparators = async (guildId: string) => {
+    try {
+      return { separators: await applyStaffSeparators(client, guildId), separatorError: undefined };
+    } catch (err) {
+      return { separators: undefined, separatorError: publicErrorMessage(err, 'Séparateurs non appliqués', 'StaffAPI') };
+    }
+  };
 
   /**
    * Le niveau `moderator` couvre tout le staff, jusqu'au plus bas grade, et
@@ -1077,13 +1087,15 @@ export function createStaffRouter(client: Client) {
         discordRoleId?: string;
         responsableUserId?: string;
         parentHierarchyId?: string | null;
+        separatorRoleId?: string | null;
+        separatorStyle?: string | null;
       }>(c);
 
       if (!body?.name) {
         return send(c, { error: 'name est obligatoire' }, 400);
       }
 
-      const hierarchy = await createStaffHierarchy(
+      let hierarchy = await createStaffHierarchy(
         guildId,
         body.name,
         body.description,
@@ -1093,6 +1105,16 @@ export function createStaffRouter(client: Client) {
         body.responsableUserId,
         body.parentHierarchyId
       );
+
+      let separators: Awaited<ReturnType<typeof applyStaffSeparators>> | undefined;
+      let separatorError: string | undefined;
+      if (body.separatorStyle || body.separatorRoleId) {
+        hierarchy = (await updateStaffHierarchy(guildId, hierarchy.id, {
+          separatorStyle: body.separatorStyle ?? null,
+          separatorRoleId: body.separatorRoleId ?? null,
+        })) ?? hierarchy;
+        ({ separators, separatorError } = await runSeparators(guildId));
+      }
 
       void safePushAudit(guildId, {
         user: user.username ?? `User${user.userId}`,
@@ -1104,13 +1126,20 @@ export function createStaffRouter(client: Client) {
         channelId: null
       }, 'staff hierarchy creation');
 
-      return send(c, { hierarchy }, 201);
+      return send(c, { hierarchy, separators, separatorError }, 201);
     } catch (err) {
       logger.error('StaffAPI', 'Error creating staff hierarchy:', err);
       return send(c, { error: publicErrorMessage(err, 'Erreur lors de la création de la hiérarchie staff') }, err instanceof Error && /Hiérarchie/i.test(err.message)
         ? 400
         : 500);
     }
+  });
+
+  router.post(`${base}/staff/hierarchies/separators/apply`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const { separators, separatorError } = await runSeparators(guildId);
+    if (separatorError) return send(c, { error: separatorError }, 400);
+    return send(c, { separators });
   });
 
   router.get(`${base}/staff/hierarchies/schema`, ...gate, async (c) => {
@@ -1155,6 +1184,8 @@ export function createStaffRouter(client: Client) {
         color?: string | null;
         icon?: string | null;
         discordRoleId?: string | null;
+        separatorRoleId?: string | null;
+        separatorStyle?: string | null;
         responsableUserId?: string | null;
         parentHierarchyId?: string | null;
         enabled?: boolean;
@@ -1166,6 +1197,11 @@ export function createStaffRouter(client: Client) {
         return send(c, { error: 'Hiérarchie introuvable' }, 404);
       }
 
+      // Nom, grades ou séparateur changés : le rôle Discord doit suivre.
+      const { separators, separatorError } = body && ('separatorStyle' in body || 'separatorRoleId' in body || 'name' in body)
+        ? await runSeparators(guildId)
+        : { separators: undefined, separatorError: undefined };
+
       void safePushAudit(guildId, {
         user: user.username ?? `User${user.userId}`,
         action: 'Modification hiérarchie staff',
@@ -1176,7 +1212,7 @@ export function createStaffRouter(client: Client) {
         channelId: null
       }, 'staff hierarchy update');
 
-      return send(c, { hierarchy: updated });
+      return send(c, { hierarchy: updated, separators, separatorError });
     } catch (err) {
       logger.error('StaffAPI', 'Error updating staff hierarchy:', err);
       const errorMessage = describeUnknownError(err);

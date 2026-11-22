@@ -13,6 +13,8 @@ import * as altAccountService from '../moderation/altAccountService.js';
 import { fetchAllMembers } from '../../utils/discord.js';
 import type { GuildMember } from 'discord.js';
 import { publicErrorMessage } from '../../utils/publicError.js';
+import { isStaffSeparatorStyle } from '@kotbo/shared';
+import { UserFacingError } from '../../utils/userFacingError.js';
 
 /**
  * Service de gestion du personnel staff
@@ -1368,6 +1370,8 @@ export const updateStaffHierarchy = async (
     color?: string | null;
     icon?: string | null;
     discordRoleId?: string | null;
+    separatorRoleId?: string | null;
+    separatorStyle?: string | null;
     responsableUserId?: string | null;
     parentHierarchyId?: string | null;
     enabled?: boolean;
@@ -1379,6 +1383,13 @@ export const updateStaffHierarchy = async (
     where: { id: hierarchyId, guildId },
   });
   if (!hierarchy) return null;
+
+  if (data.separatorStyle && !isStaffSeparatorStyle(data.separatorStyle)) {
+    throw new UserFacingError('Hiérarchie : style de séparateur inconnu');
+  }
+  if (data.separatorRoleId && !/^\d{17,20}$/.test(data.separatorRoleId)) {
+    throw new UserFacingError('Hiérarchie : rôle séparateur invalide');
+  }
 
   if (data.parentHierarchyId) {
     if (data.parentHierarchyId === hierarchyId) {
