@@ -19624,5 +19624,20 @@
   "quz_tpl_invite_name": "Ambassadeur",
   "quz_tpl_invite_desc": "Invite 3 membres cette semaine",
   "quz_tpl_bonus_name": "Journée parfaite",
-  "quz_tpl_bonus_desc": "Termine 3 quêtes dans la journée"
+  "quz_tpl_bonus_desc": "Termine 3 quêtes dans la journée",
+  "sc_trash_title": "Infractions supprimées",
+  "sc_trash_hint": "Conservées {days} jours après leur suppression : tu peux relire leur contenu puis les restaurer.",
+  "sc_trash_empty": "Aucune infraction supprimée.",
+  "sc_trash_by": "Supprimée par {name} le {date}",
+  "sc_trash_restore": "Restaurer",
+  "sc_trash_restore_q": "Restaurer cette infraction ?",
+  "sc_trash_restore_desc": "Elle revient au casier avec ses rapports et ses preuves. Rien n'est ré-appliqué sur Discord.",
+  "sc_trash_restored": "Infraction restaurée.",
+  "sc_trash_details": "Voir le détail",
+  "sc_trash_reason": "Motif",
+  "sc_trash_moderator": "Modérateur",
+  "sc_trash_duration": "Durée",
+  "sc_trash_created": "Créée le",
+  "sc_trash_attached": "Rattachés",
+  "sc_trash_attached_value": "{reports} rapport(s), {files} fichier(s) de preuve"
 }

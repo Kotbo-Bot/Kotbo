@@ -31,6 +31,7 @@
   import RolePermissionSettings from '../lib/components/RolePermissionSettings.svelte';
   import { buildBrokenRulesPayload, buildReportRuleOptions, getRuleIdsFromBrokenRules, getRulesFromBrokenRules } from '../lib/sanctions/reportRules';
   import EvidenceInputList from '../lib/components/sanctions/EvidenceInputList.svelte';
+  import DeletedSanctions from '../lib/components/sanctions/DeletedSanctions.svelte';
   import ImportSanctionsModal from '../lib/components/sanctions/ImportSanctionsModal.svelte';
   import { normalizeEvidenceLinks, sanitizeEvidenceLinks } from '../lib/sanctions/evidenceLinks';
   import { durationLabel, statusLabel, toDateTimeLocal, typeLabel } from '../lib/sanctions/formatters';
@@ -1350,8 +1351,11 @@ import DiscordAutomodEvents from '../lib/components/automod/DiscordAutomodEvents
     </table>
   </div>
 </section>
+      {#if canDeleteSanctions}
+        <DeletedSanctions />
+      {/if}
     {/if}
-    
+
     {#if activeTab === 'settings'}
       <section class="space-y-8 animate-in fade-in duration-500">
         <div class="premium-card p-10 rounded-xl space-y-8">

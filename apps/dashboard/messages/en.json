@@ -19620,5 +19620,20 @@
   "quz_tpl_invite_name": "Ambassador",
   "quz_tpl_invite_desc": "Invite 3 members this week",
   "quz_tpl_bonus_name": "Perfect day",
-  "quz_tpl_bonus_desc": "Complete 3 quests in a day"
+  "quz_tpl_bonus_desc": "Complete 3 quests in a day",
+  "sc_trash_title": "Deleted infractions",
+  "sc_trash_hint": "Kept for {days} days after deletion: you can read what they were and restore them.",
+  "sc_trash_empty": "No deleted infractions.",
+  "sc_trash_by": "Deleted by {name} on {date}",
+  "sc_trash_restore": "Restore",
+  "sc_trash_restore_q": "Restore this infraction?",
+  "sc_trash_restore_desc": "It returns to the record with its reports and evidence. Nothing is re-applied on Discord.",
+  "sc_trash_restored": "Infraction restored.",
+  "sc_trash_details": "Show details",
+  "sc_trash_reason": "Reason",
+  "sc_trash_moderator": "Moderator",
+  "sc_trash_duration": "Duration",
+  "sc_trash_created": "Created on",
+  "sc_trash_attached": "Attached",
+  "sc_trash_attached_value": "{reports} report(s), {files} evidence file(s)"
 }
