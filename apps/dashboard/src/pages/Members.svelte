@@ -4,13 +4,43 @@
   import { canViewFeature } from '../lib/permissions.svelte';
   import { router } from 'tinro';
   import { authStore } from '../lib/stores/auth.svelte';
-  import { dashboardFetch } from '../lib/api';
+  import { dashboardFetch, fetchMemberProgressionExport } from '../lib/api';
   import MemberProfile from '../lib/components/members/MemberProfile.svelte';
+  import ExportDropdown from '../lib/components/analytics/ExportDropdown.svelte';
+  import { exportRows } from '../lib/exportData';
+  import { toast } from '../lib/stores/toast.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
   import { memberAvatarSrc } from '../lib/discordMedia';
   import { m, dateLocale } from '../lib/i18n';
   import { slide } from 'svelte/transition';
   import { Button, FilterPills } from '../lib/components/ui';
+
+  let exportingProgression = $state(false);
+
+  async function exportProgression(format: 'csv' | 'json') {
+    if (exportingProgression) return;
+    exportingProgression = true;
+    try {
+      const res = await fetchMemberProgressionExport();
+      const rows = res?.members ?? [];
+      exportRows(format, 'kotbo_progression_membres', rows, [
+        { label: 'ID Discord', value: (r) => r.userId },
+        { label: 'Membre', value: (r) => r.username },
+        { label: 'Niveau', value: (r) => r.level },
+        { label: 'XP', value: (r) => r.xp },
+        { label: 'Monnaie', value: (r) => r.coins },
+        { label: 'Niveau RPG', value: (r) => r.rpgLevel },
+        { label: 'XP RPG', value: (r) => r.rpgXp },
+        { label: 'Série Daily', value: (r) => r.dailyStreak },
+        { label: 'Quêtes complétées', value: (r) => r.questsCompleted },
+        { label: 'Quêtes RPG complétées', value: (r) => r.rpgQuestsCompleted },
+      ]);
+    } catch {
+      toast.error(m.common_error());
+    } finally {
+      exportingProgression = false;
+    }
+  }
 
   const userIdFromUrl = $derived.by(() => {
     const parts = $router.path.split('/');
@@ -239,6 +269,10 @@
         <div class="text-lg font-semibold text-on-surface">{onServerCount.toLocaleString(dateLocale())}</div>
         <div class="text-xs font-semibold text-on-surface-variant/40">{m.mb_total_members()}</div>
       </div>
+      <ExportDropdown
+        onExportCSV={() => void exportProgression('csv')}
+        onExportJSON={() => void exportProgression('json')}
+      />
     </div>
     {/if}
   {/snippet}

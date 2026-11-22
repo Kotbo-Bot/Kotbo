@@ -309,3 +309,7 @@ export async function searchDiscordMembers(query: string, limit = 12, guildId = 
 export async function toggleTutorStatus(userId, guildId = authStore.selectedGuildId) {
   return dashboardMutation(`/staff/members/${userId}/tutor`, { method: 'POST', guildId });
 }
+
+export async function fetchStaffNotesAbsencesExport(guildId = authStore.selectedGuildId) {
+  return dashboardRequest<{ absences: any[]; notes: any[] }>('/absences/export', { method: 'GET', guildId });
+}
