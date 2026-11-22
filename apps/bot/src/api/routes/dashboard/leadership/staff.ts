@@ -539,12 +539,16 @@ export function createStaffRouter(client: Client) {
     const user = c.var.dashboardUser;
         const staffUserId = c.req.param('staffUserId');
         try {
-          const body = await readBody<{ content: string }>(c);
+          const body = await readBody<{ content: string; title?: string; category?: string; warningId?: string }>(c);
 
           if (!body?.content) {
             return send(c, { error: 'Le contenu de la note est requis' }, 400);
           }
-          const note = await createManagerNote(guildId, staffUserId, user.userId, body.content);
+          const note = await createManagerNote(guildId, staffUserId, user.userId, body.content.slice(0, 4000), {
+            title: body.title,
+            category: body.category,
+            warningId: body.warningId,
+          });
 
           await pushAudit(guildId, {
             user: user.username ?? `User${user.userId}`,

@@ -1023,6 +1023,8 @@ export const syncMeetingPresencesWithAbsences = async (client: Client, meetingId
   );
 };
 
+export const MANAGER_NOTE_CATEGORIES = ['NOTE', 'PRAISE', 'WARNING', 'FOLLOWUP'];
+
 export const getManagerNotes = async (guildId: string, staffUserId: string) => {
   return prisma.staffManagerNote.findMany({
     where: { guildId, staffUserId },
@@ -1035,21 +1037,45 @@ export const createManagerNote = async (
   guildId: string,
   staffUserId: string,
   authorUserId: string,
-  content: string
+  content: string,
+  report: { title?: string; category?: string; warningId?: string } = {}
 ) => {
+  const category = report.category ?? 'NOTE';
+  if (!MANAGER_NOTE_CATEGORIES.includes(category)) throw new UserFacingError('Catégorie de rapport invalide.');
+  if (report.warningId) {
+    const warning = await prisma.staffWarning.findFirst({ where: { id: report.warningId, guildId, staffUserId }, select: { id: true } });
+    if (!warning) throw new UserFacingError('Avertissement introuvable pour ce membre.');
+  }
+
   const note = await prisma.staffManagerNote.create({
     data: {
       guildId,
       staffUserId,
       authorUserId,
-      content
+      content,
+      category,
+      title: report.title?.trim().slice(0, 120) || null,
+      warningId: report.warningId ?? null,
     }
   });
 
   // Notifier le staff concerné
   const author = await prisma.staffMember.findUnique({ where: { id: authorUserId } });
   const target = await prisma.staffMember.findUnique({ where: { id: staffUserId } });
-  
+
+  // Les rapports structurés sont aussi copiés sur le serveur staff lié ; une simple note reste privée.
+  const client = getClient();
+  if (client && (category !== 'NOTE' || note.title)) {
+    const { mirrorInternalReportToStaffServer } = await import('./staffServerService.js');
+    await mirrorInternalReportToStaffServer(client, guildId, {
+      title: note.title,
+      category,
+      content,
+      targetName: target?.displayName || target?.username || staffUserId,
+      authorName: author?.displayName || author?.username || 'Un manager',
+    }).catch((err) => logger.warn('StaffReport', 'Miroir du rapport interne impossible', err));
+  }
+
   if (target) {
     await notify({
       guildId,

@@ -151,11 +151,12 @@ export async function isStaffServerGuild(guildId: string): Promise<boolean> {
 
 // ── Notifications cross-serveur vers le serveur staff ──────
 
-export type StaffNotifyKind = 'modlog' | 'sanctionReport' | 'recruitment' | 'offboarding' | 'onboardingInvite';
+export type StaffNotifyKind = 'modlog' | 'sanctionReport' | 'internalReport' | 'recruitment' | 'offboarding' | 'onboardingInvite';
 
 const NOTIFY_KIND_TO_FIELD: Record<StaffNotifyKind, keyof StaffServerLink> = {
   modlog: 'modlogMirrorChannelId',
   sanctionReport: 'sanctionReportChannelId',
+  internalReport: 'internalReportChannelId',
   recruitment: 'recruitmentAlertChannelId',
   offboarding: 'offboardingAlertChannelId',
   onboardingInvite: 'onboardingInviteChannelId',
@@ -217,6 +218,27 @@ export async function mirrorModlogToStaffServer(
   const mirrored = EmbedBuilder.from(embed.toJSON()).setFooter({ text: `Depuis ${mainGuildName}` });
 
   await channel.send({ embeds: [mirrored], allowedMentions: { parse: [] } }).catch(() => null);
+}
+
+/** Copie un rapport interne sur le salon dédié du serveur staff lié (rien si pas de lien ou de salon). */
+export async function mirrorInternalReportToStaffServer(
+  client: Client,
+  mainGuildId: string,
+  report: { title?: string | null; category: string; content: string; targetName: string; authorName: string },
+): Promise<void> {
+  const channel = await getStaffServerNotifyChannel(client, mainGuildId, 'internalReport');
+  if (!channel) return;
+
+  const mainGuildName = client.guilds.cache.get(mainGuildId)?.name ?? mainGuildId;
+  const embed = new EmbedBuilder()
+    .setTitle(`🗂️ Rapport interne · ${report.targetName}`)
+    .setDescription(`${report.title ? `**${report.title}**\n` : ''}${report.content}`.slice(0, 4000))
+    .setColor(COLORS.warning)
+    .addFields({ name: 'Catégorie', value: report.category, inline: true }, { name: 'Auteur', value: report.authorName, inline: true })
+    .setFooter({ text: `Depuis ${mainGuildName}` })
+    .setTimestamp();
+
+  await channel.send({ embeds: [embed], allowedMentions: { parse: [] } }).catch(() => null);
 }
 
 export async function listStaffServerLinks(guildId: string): Promise<StaffServerLinkWithMappings[]> {
