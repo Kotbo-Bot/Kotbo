@@ -47,6 +47,7 @@ import {
   ensureCustomer,
   getStripe,
   isBillingEnabled,
+  planForPriceId,
   sellablePlans,
   type Stripe,
 } from '../../../services/billing/stripeService.js';
@@ -1100,6 +1101,77 @@ export function createBillingRouter(client: Client): OpenAPIHono {
     });
     invalidateNetworkScope();
     return c.json({ ok: true });
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Vue d'ensemble : tous les serveurs que l'utilisateur paye
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Hors `GUARDED` : elle ne dépend d'aucun serveur, seulement du payeur
+   * (`billingOwnerId`) ; on ne liste donc que ce que l'appelant a lui-même engagé.
+   * Les montants sont ceux du catalogue : un code de parrainage ou une remise
+   * Stripe n'y apparaît pas (shortcut: lire l'abonnement Stripe si on veut le réel).
+   */
+  router.get('/api/dashboard/billing/overview', requireAuth, async (c) => {
+    const userId = c.var.auth.userId;
+    const rows = await prisma.guild.findMany({
+      where: {
+        billingOwnerId: userId,
+        OR: [{ plan: { not: 'FREE' } }, { stripeSubscriptionId: { not: null } }],
+      },
+      select: {
+        id: true,
+        plan: true,
+        stripePriceId: true,
+        stripeSubscriptionStatus: true,
+        stripeCurrentPeriodEnd: true,
+        stripeCancelAtPeriodEnd: true,
+        accessExpiresAt: true,
+      },
+    });
+
+    // Le réseau est un plus : si ses tables manquent, la liste doit quand même s'afficher.
+    const networkOf = new Map<string, { name: string; role: string }>();
+    try {
+      const memberships = await prisma.guildNetworkMember.findMany({
+        where: { guildId: { in: rows.map((r) => r.id) } },
+        select: { guildId: true, role: true, network: { select: { name: true } } },
+      });
+      for (const m of memberships) networkOf.set(m.guildId, { name: m.network.name, role: m.role });
+    } catch (err) {
+      logger.warn('Billing', 'Réseaux illisibles dans la vue d\'ensemble :', err);
+    }
+
+    let totalMonthlyCents = 0;
+    const guilds = rows.map((row) => {
+      const plan = normalizePlanKey(row.plan);
+      const live = LIVE_STATUSES.has(row.stripeSubscriptionStatus ?? '');
+      const interval = row.stripePriceId ? planForPriceId(row.stripePriceId)?.interval ?? null : null;
+      // Rien n'est débité sans abonnement Stripe en cours (cadeau, accès offert).
+      const amountCents = live && interval ? getPlanDefinition(plan).displayPriceCents?.[interval] ?? 0 : 0;
+      const monthlyCents = interval === 'year' ? Math.round(amountCents / 12) : amountCents;
+      // Une résiliation demandée ne reviendra pas : elle ne compte plus dans le mensuel.
+      if (!row.stripeCancelAtPeriodEnd) totalMonthlyCents += monthlyCents;
+      const cached = client.guilds.cache.get(row.id);
+      return {
+        guildId: row.id,
+        name: cached?.name ?? row.id,
+        iconUrl: cached?.iconURL({ size: 64, extension: 'png' }) ?? null,
+        plan,
+        planName: getPlanDefinition(plan).name,
+        status: row.stripeSubscriptionStatus ?? null,
+        interval,
+        amountCents,
+        currentPeriodEnd: row.stripeCurrentPeriodEnd?.toISOString() ?? null,
+        cancelAtPeriodEnd: row.stripeCancelAtPeriodEnd,
+        accessExpiresAt: row.accessExpiresAt?.toISOString() ?? null,
+        network: networkOf.get(row.id) ?? null,
+      };
+    });
+
+    guilds.sort((a, b) => a.name.localeCompare(b.name));
+    return c.json({ guilds, totalMonthlyCents });
   });
 
   return router;
