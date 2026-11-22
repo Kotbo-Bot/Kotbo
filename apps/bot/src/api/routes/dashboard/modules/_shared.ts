@@ -5,9 +5,11 @@
  */
 import prisma from '../../../../utils/db.js';
 import { logger } from '../../../../utils/logger.js';
-import { type CommandAccessLevel, type DashboardPresetKey, parseDiscordMarkdown, type SeverityLevel } from '../../../shared.js';
+import { type CommandAccessLevel, type DashboardPresetKey, extractMediaUrls, parseDiscordMarkdown, type SeverityLevel } from '../../../shared.js';
 import { SanctionType } from '@prisma/client';
 import { type Embed, type Guild } from 'discord.js';
+import type { APIEmbed, APIStickerItem } from 'discord-api-types/v10';
+import type { TranscriptDataV1 } from '../../../../services/features/transcriptData.js';
 
 export { msgMentionEntities, type MessageEntities } from '../../../../utils/messageEntities.js';
 
@@ -313,4 +315,60 @@ export function startWordStatsBackfillIfTurnedOn(
   })().catch((err) =>
     logger.error(source, `Lancement du backfill des stats de mots échoué pour ${guildId}:`, err),
   );
+}
+
+/** Embed brut de l'API au format renvoyé par `msgEmbedsMap`. */
+function apiEmbedMap(embed: APIEmbed, guild: Guild | null) {
+  return {
+    title: embed.title ?? null,
+    description: embed.description ?? null,
+    htmlDescription: embed.description ? parseDiscordMarkdown(embed.description, guild) : '',
+    color: typeof embed.color === 'number' ? `#${embed.color.toString(16).padStart(6, '0')}` : null,
+    fields: (embed.fields ?? []).map((field) => ({
+      name: field.name,
+      value: field.value,
+      htmlValue: field.value ? parseDiscordMarkdown(field.value, guild) : '',
+    })),
+    image: embed.image ? { url: embed.image.url } : null,
+    thumbnail: embed.thumbnail ? { url: embed.thumbnail.url } : null,
+    video: embed.video?.url ? { url: embed.video.url } : null,
+  };
+}
+
+/** Image d'un autocollant d'après son format (1 PNG, 2 APNG, 3 Lottie, 4 GIF). */
+function stickerUrl(sticker: APIStickerItem): string {
+  if (sticker.format_type === 4) return `https://media.discordapp.net/stickers/${sticker.id}.gif`;
+  if (sticker.format_type === 3) return `https://cdn.discordapp.com/stickers/${sticker.id}.json`;
+  return `https://cdn.discordapp.com/stickers/${sticker.id}.png`;
+}
+
+/**
+ * Messages d'une transcription JSON au format de la vue live d'un ticket :
+ * un ticket fermé s'affiche comme un ouvert (Components V2, boutons,
+ * réactions, autocollants), avec les auteurs et les noms figés à la capture.
+ */
+export function transcriptTicketMessages(data: TranscriptDataV1, guild: Guild | null) {
+  return data.messages.map((message, index) => {
+    const v2 = msgComponentsV2Map((message.components ?? []).map((component) => ({ toJSON: () => component })), guild);
+    const content = [message.content, v2.text].filter(Boolean).join('\n');
+    const author = data.authors[message.author.id];
+    return {
+      id: message.id,
+      authorId: message.author.id,
+      authorName: author?.displayName ?? message.author.global_name ?? message.author.username,
+      authorAvatar: author?.avatarUrl ?? null,
+      isStaff: message.author.bot === true,
+      content,
+      htmlContent: parseDiscordMarkdown(content, guild),
+      mediaUrls: extractMediaUrls(content),
+      stickers: (message.sticker_items ?? []).map((sticker) => ({ id: sticker.id, name: sticker.name, url: stickerUrl(sticker) })),
+      attachments: message.attachments.map((attachment) => ({ url: attachment.url, contentType: attachment.content_type ?? null })),
+      embeds: [...message.embeds.map((embed) => apiEmbedMap(embed, guild)), ...v2.cards],
+      buttons: v2.buttons,
+      reactions: msgReactionsMap(message.reactions ?? []),
+      // Les noms valent pour toute la conversation : portés une fois, le dashboard les fusionne.
+      ...(index === 0 ? { entities: data.entities } : {}),
+      createdAt: message.timestamp,
+    };
+  });
 }

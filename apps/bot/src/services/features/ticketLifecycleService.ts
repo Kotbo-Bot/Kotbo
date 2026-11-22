@@ -14,7 +14,8 @@ import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { COLORS } from '../../utils/embeds.js';
 import { broadcastDashboardStateChange } from '../../api/shared/sharding.js';
-import { generateTranscript, parseTranscriptHtml } from './transcriptService.js';
+import { generateTranscript, type ParsedTranscriptMessage } from './transcriptService.js';
+import { loadTranscriptMessages } from './transcriptReader.js';
 
 /**
  * Cycle de vie d'un ticket au-dela de « ouvert / ferme » : rangement en
@@ -453,9 +454,8 @@ export async function restoreTicketFromTranscript(
 
   const transcript = await prisma.transcript.findUnique({ where: { id: ticket.transcriptId! } });
   if (!transcript) throw new Error('Transcription introuvable.');
-  // Vérifié avant de créer le salon : une transcription JSON ne se rejoue pas encore.
-  const transcriptHtml = transcript.html;
-  if (!transcriptHtml) throw new Error('Cette transcription ne peut pas encore être restaurée (format JSON).');
+  // Lue avant de créer le salon : JSON ou HTML historique, même forme.
+  const transcriptMessages = loadTranscriptMessages(transcript);
 
   const guildConfig = await prisma.guild.findUnique({ where: { id: ticket.guildId } });
   if (!guildConfig) throw new Error('Serveur introuvable.');
@@ -497,7 +497,7 @@ export async function restoreTicketFromTranscript(
     permissionOverwrites,
   });
 
-  await replayTranscript(ticketChannel, transcriptHtml, actor);
+  await replayTranscript(ticketChannel, transcriptMessages, actor);
 
   const restoreEmbed = new EmbedBuilder()
     .setTitle('🔄 Ticket Restauré')
@@ -562,8 +562,7 @@ export async function restoreTicketFromTranscript(
  * Rejoue une transcription dans un salon via un webhook ephemere, chaque message
  * repris sous le nom et l'avatar de son auteur d'origine.
  */
-async function replayTranscript(channel: TextChannel, html: string, actor: TicketActor): Promise<void> {
-  const parsedMessages = parseTranscriptHtml(html);
+async function replayTranscript(channel: TextChannel, parsedMessages: ParsedTranscriptMessage[], actor: TicketActor): Promise<void> {
   if (parsedMessages.length === 0) return;
 
   const headerEmbed = new EmbedBuilder()

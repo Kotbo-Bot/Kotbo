@@ -24,7 +24,10 @@ export interface ParsedTranscriptMessage {
   avatarUrl: string;
   username: string;
   isBot: boolean;
+  /** Horodatage tel qu'affiché à la capture (« 16 juil. 2022, 09:14 » dans l'historique). */
   timestamp: string;
+  /** Date du message en ISO 8601, `null` si illisible. */
+  createdAt: string | null;
   content: string;
   embeds: ParsedTranscriptEmbed[];
   imageUrls: string[];
@@ -109,6 +112,24 @@ export function stripLegacyAvatarBackground(html: string): string {
   return html.replace(/(\.avatar\s*\{[^}]*?)background-color:\s*#5865F2;\s*/i, '$1');
 }
 
+const FRENCH_MONTHS: Record<string, number> = {
+  janv: 0, 'févr': 1, mars: 2, avr: 3, mai: 4, juin: 5, juil: 6, 'août': 7, sept: 8, oct: 9, nov: 10, 'déc': 11,
+};
+
+/**
+ * Date d'une transcription historique, écrite par `Intl.DateTimeFormat('fr-FR')`
+ * (« 16 juil. 2022, 09:14 » ou « 16 juil. 2022 à 09:14 ») : `new Date()` ne la
+ * lit pas. Le serveur tournait en UTC, l'heure est donc lue en UTC.
+ */
+export function parseLegacyTimestamp(value: string): string | null {
+  const match = value.trim().match(/^(\d{1,2})\s+([a-zéû]+)\.?\s+(\d{4})(?:,|\s+à)?\s+(\d{1,2}):(\d{2})$/i);
+  if (!match) return null;
+  const month = FRENCH_MONTHS[match[2].toLowerCase()];
+  if (month === undefined) return null;
+  const date = new Date(Date.UTC(Number(match[3]), month, Number(match[1]), Number(match[4]), Number(match[5])));
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
 export function parseTranscriptHtml(html: string): ParsedTranscriptMessage[] {
   const messages: ParsedTranscriptMessage[] = [];
 
@@ -152,6 +173,7 @@ export function parseTranscriptHtml(html: string): ParsedTranscriptMessage[] {
       username: unescapeHtml(usernameMatch[1]),
       isBot: !!isBotMatch,
       timestamp: timestampMatch ? timestampMatch[1] : '',
+      createdAt: timestampMatch ? parseLegacyTimestamp(timestampMatch[1]) : null,
       content,
       embeds,
       imageUrls

@@ -13,8 +13,8 @@ import { broadcastDashboardStateChange, extractMediaUrls, getDashboardUrl, getGu
 import { type ProvisionedEntry, acquireProvisionLock, missingProvisionPermissions, provisionCooldown, provisionCooldownMessage, releaseProvisionLock, startProvisionCooldown } from '../../../../services/core/channelProvisioningService.js';
 import { Prisma } from '@prisma/client';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, type ColorResolvable, EmbedBuilder, PermissionFlagsBits, TextChannel } from 'discord.js';
-import { msgComponentsV2Map, msgEmbedsMap, msgMentionEntities, msgReactionsMap } from './_shared.js';
-import { parseTranscriptHtml } from '../../../../services/features/transcriptService.js';
+import { msgComponentsV2Map, msgEmbedsMap, msgMentionEntities, msgReactionsMap, transcriptTicketMessages } from './_shared.js';
+import { loadTranscriptMessages, STORED_TRANSCRIPT_SELECT, transcriptDataOf } from '../../../../services/features/transcriptReader.js';
 import { clampCommentTimeout } from '../../../../services/features/ticketSatisfactionService.js';
 import { INBOX_VIEWS, computeSla, normalizeView, viewWhere, waitingOn, type SlaConfig } from '../../../../services/features/ticketHelpdesk.js';
 import { noticeSeconds } from '../../../../services/features/ticketRecordingNotice.js';
@@ -1030,13 +1030,14 @@ export function createTicketsRouter(client: Client) {
         try {
           const transcript = await prisma.transcript.findFirst({
             where: { id: ticket.transcriptId, guildId },
-            select: { html: true, endTime: true, createdAt: true },
+            select: { ...STORED_TRANSCRIPT_SELECT, endTime: true, createdAt: true },
           });
-          // Transcription JSON : lue par le lecteur unifié (étape suivante de la migration).
-          if (transcript?.html) {
+          const data = transcript ? transcriptDataOf(transcript) : null;
+          if (data) {
+            messages = transcriptTicketMessages(data, client.guilds.cache.get(guildId) ?? null);
+          } else if (transcript) {
             const fallbackDate = (transcript.endTime ?? transcript.createdAt).toISOString();
-            messages = parseTranscriptHtml(transcript.html).map((m, i) => {
-              const parsed = new Date(m.timestamp);
+            messages = loadTranscriptMessages(transcript).map((m, i) => {
               return {
                 id: `transcript-${i}`,
                 authorId: '',
@@ -1062,7 +1063,7 @@ export function createTicketsRouter(client: Client) {
                   thumbnail: e.thumbnailUrl ? { url: e.thumbnailUrl } : null,
                   video: null,
                 })),
-                createdAt: Number.isNaN(parsed.getTime()) ? fallbackDate : parsed.toISOString(),
+                createdAt: m.createdAt ?? fallbackDate,
               };
             });
           }
