@@ -5401,5 +5401,19 @@
   "gvw_period_total": "all time",
   "gvw_period_7d": "last 7 days",
   "gvw_period_30d": "last 30 days",
-  "gvw_period_since_start": "since the giveaway started"
+  "gvw_period_since_start": "since the giveaway started",
+  "gvw_opt_event_name": "event",
+  "gvw_opt_event_description": "Also create a Discord scheduled event that starts at the draw",
+  "gvw_opt_role_name": "role",
+  "gvw_opt_role_description": "Role required to enter",
+  "gvw_opt_level_name": "level",
+  "gvw_opt_level_description": "Minimum level to enter",
+  "gvw_opt_min_messages_name": "min_messages",
+  "gvw_opt_min_messages_description": "Minimum number of messages sent (all time) to enter",
+  "gvw_opt_account_age_name": "account_age",
+  "gvw_opt_account_age_description": "Minimum Discord account age, in days",
+  "gvw_opt_member_age_name": "member_age",
+  "gvw_opt_member_age_description": "Minimum time on the server, in days",
+  "gvw_opt_vote_name": "topgg_vote",
+  "gvw_opt_vote_description": "Require a Top.gg vote for Kotbo"
 }
