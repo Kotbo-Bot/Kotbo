@@ -36,6 +36,8 @@ model StaffServerLink {
   modlogMirrorChannelId      String?
   // Rapports de sanction créés sur le serveur principal
   sanctionReportChannelId    String?
+  // Rapports internes sur un membre du staff, copiés ici à leur création
+  internalReportChannelId    String?
   // Alertes de nouvelles candidatures de recrutement
   recruitmentAlertChannelId  String?
   // Si true, les salons d'entretien de recrutement sont créés sur le serveur staff
