@@ -256,7 +256,7 @@ export type StaffGuildReconcileResult = 'activated' | 'deactivated' | 'unchanged
 export async function reconcileStaffGuildActivation(staffGuildId: string): Promise<StaffGuildReconcileResult> {
   const links = await prisma.staffServerLink.findMany({
     where: { staffGuildId, enabled: true },
-    include: { mainGuild: { select: { id: true, activated: true, activationCode: true } } },
+    include: { mainGuild: { select: { id: true, activated: true, activationCode: true, plan: true } } },
   });
 
   const activeMain = links.find((l) => l.mainGuild.activated);
@@ -264,8 +264,16 @@ export async function reconcileStaffGuildActivation(staffGuildId: string): Promi
 
   const current = await prisma.guild.findUnique({
     where: { id: staffGuildId },
-    select: { activated: true, activatedViaStaffLink: true },
+    select: { activated: true, activatedViaStaffLink: true, plan: true },
   });
+
+  // Le serveur staff est sous l'abonnement du principal : il hérite aussi de son offre,
+  // sinon les modules de l'offre resteraient verrouillés sans coût supplémentaire.
+  if (activeMain && current?.activated && current.activatedViaStaffLink && current.plan !== activeMain.mainGuild.plan) {
+    await prisma.guild.update({ where: { id: staffGuildId }, data: { plan: activeMain.mainGuild.plan } });
+    const { invalidatePlan } = await import('../services/system/planService.js');
+    await invalidatePlan(staffGuildId);
+  }
 
   if (shouldBeActive && !current?.activated) {
     await prisma.guild.upsert({
@@ -275,6 +283,7 @@ export async function reconcileStaffGuildActivation(staffGuildId: string): Promi
         activatedAt: new Date(),
         activationCode: activeMain!.mainGuild.activationCode,
         activatedViaStaffLink: true,
+        plan: activeMain!.mainGuild.plan,
       },
       create: {
         id: staffGuildId,
@@ -282,8 +291,11 @@ export async function reconcileStaffGuildActivation(staffGuildId: string): Promi
         activatedAt: new Date(),
         activationCode: activeMain!.mainGuild.activationCode,
         activatedViaStaffLink: true,
+        plan: activeMain!.mainGuild.plan,
       },
     });
+    const { invalidatePlan } = await import('../services/system/planService.js');
+    await invalidatePlan(staffGuildId);
 
     await broadcastActivationChange(staffGuildId, true);
     schedulePostActivationSync(staffGuildId);
@@ -302,8 +314,11 @@ export async function reconcileStaffGuildActivation(staffGuildId: string): Promi
         activatedAt: null,
         activationCode: null,
         activatedViaStaffLink: false,
+        plan: 'FREE',
       },
     });
+    const { invalidatePlan } = await import('../services/system/planService.js');
+    await invalidatePlan(staffGuildId);
 
     await broadcastActivationChange(staffGuildId, false);
     syncGuildCommandsForActivation(staffGuildId, false);

@@ -73,6 +73,15 @@ export async function setGuildPlan(guildId: string, plan: PlanKey, reason: strin
   await invalidatePlan(guildId);
   logger.info('Plan', `Offre de ${guildId} passée à ${plan} (${reason}).`);
 
+  // Les serveurs staff liés vivent sous cet abonnement : ils suivent l'offre.
+  const links = await prisma.staffServerLink.findMany({ where: { mainGuildId: guildId, enabled: true }, select: { staffGuildId: true } });
+  if (links.length) {
+    const { reconcileStaffGuildActivation } = await import('../../utils/activation.js');
+    for (const link of links) {
+      await reconcileStaffGuildActivation(link.staffGuildId).catch((err) => logger.error('Plan', `Offre du serveur staff ${link.staffGuildId} non synchronisée :`, err));
+    }
+  }
+
   // Le bot perso est une fonctionnalité de l'offre Plus : il s'arrête avec elle.
   const { retireCustomBotIfIneligible } = await import('./customBotRetire.js');
   await retireCustomBotIfIneligible(guildId).catch((err) => logger.error('CustomBot', `Coupure du bot perso de ${guildId} impossible :`, err));
