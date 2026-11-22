@@ -32,6 +32,7 @@ export type BackgroundJobName =
   | 'data-retention'
   | 'channel-health-analysis'
   | 'analytics-alerts'
+  | 'staff-night-report'
   | 'analytics-reports'
   | 'pulse-snapshot'
   | 'widget-refresh'
