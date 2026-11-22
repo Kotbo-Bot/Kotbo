@@ -2,10 +2,14 @@
   Message d'un menu de rôles tel que Discord l'affiche : embed (titre, texte,
   barre de couleur) puis boutons par rangées de cinq. Sert à l'aperçu de la
   fenêtre d'édition et, en version compacte, aux cartes des menus publiés.
+  Rendu par @arcscord/discord-ui.
 -->
 <script lang="ts">
+  import { ActionRow, Avatar, Button, Embed, Markdown, MessageFrame, MessageHeader, type EmbedView, type MessageAuthor } from '@arcscord/discord-ui-svelte';
   import { m } from '../i18n';
-  import { parseDiscordEmojisAndMarkdown } from '../emojiParser';
+  import { dashboardStore } from '../stores/dashboard.svelte';
+  import DiscordScope from './discord/DiscordScope.svelte';
+  import { mergeEntities, toPreviewMarkdown } from './discord/previewEntities.svelte';
 
   type PreviewStyle = 'secondary' | 'primary' | 'success' | 'danger';
 
@@ -18,61 +22,84 @@
   }: {
     title: string;
     description: string;
-    /** `text` vide : bouton incomplet, montré en pointillés. */
+    /** `text` vide : bouton incomplet, montré grisé avec un libellé d'attente. */
     buttons: Array<{ emoji?: string; text: string; style: PreviewStyle }>;
     color?: string;
     /** Sans en-tête du bot, plus serré : pour les cartes. */
     compact?: boolean;
   } = $props();
 
-  // Les couleurs Discord des quatre styles de bouton, reprises telles quelles
-  // pour que l'aperçu montre ce que les membres verront.
-  const STYLE_CLASSES: Record<PreviewStyle, string> = {
-    secondary: 'bg-[#4e5058]',
-    primary: 'bg-[#5865f2]',
-    success: 'bg-[#248046]',
-    danger: 'bg-[#da373c]',
-  };
-
   const rows = $derived.by(() => {
     const result: (typeof buttons)[] = [];
     for (let i = 0; i < buttons.length; i += 5) result.push(buttons.slice(i, i + 5));
     return result;
   });
+
+  const embed = $derived<EmbedView>({
+    id: 'reaction-roles',
+    color,
+    ...(title ? { title } : {}),
+    ...(description ? { description } : {}),
+  });
+
+  /** Rôles du serveur pour les `<@&id>` du texte, émojis du serveur en image. */
+  const entities = $derived.by(() => {
+    const roles: Record<string, { name: string; color?: string }> = {};
+    for (const role of dashboardStore.state.discordRoles || []) roles[role.id] = { name: role.name, ...(role.color ? { color: role.color } : {}) };
+    const texts = [title, description, ...buttons.map((button) => button.emoji ?? '')].filter(Boolean);
+    return mergeEntities([{ roles }, ...texts.map((text) => toPreviewMarkdown(text, { mentions: false }).entities)]);
+  });
+
+  const author: MessageAuthor = { id: 'preview-author', displayName: 'Kotbo', avatarUrl: '/favicon.svg', bot: true };
+  const timestamp = new Date().toISOString();
 </script>
 
-<div class="bg-[#313338] text-[#dbdee1] font-sans {compact ? 'rounded-lg p-3' : 'px-4 py-4'}">
-  <div class="flex items-start {compact ? '' : 'gap-3'}">
-    {#if !compact}
-      <div class="w-10 h-10 rounded-full bg-[#5865f2] flex items-center justify-center text-white font-bold shrink-0">K</div>
-    {/if}
-    <div class="flex-1 min-w-0 {compact ? 'space-y-1.5' : 'space-y-2'}">
-      {#if !compact}
-        <div class="flex items-center gap-1.5 select-none">
-          <span class="font-semibold text-white text-sm">Kotbo</span>
-          <span class="bg-[#5865f2] text-white text-[10px] font-semibold px-1 rounded-[3px] leading-4">BOT</span>
-          <span class="text-xs text-[#949ba4]">{m.announcements_today_at({ time: '12:00' })}</span>
-        </div>
-      {/if}
-      <div class="bg-[#2b2d31] border-l-4 rounded-[4px] max-w-[520px] space-y-1 {compact ? 'px-2.5 py-2' : 'px-3 py-2.5'}" style="border-left-color: {color}">
-        <div class="font-semibold text-white wrap-break-word {compact ? 'text-xs' : 'text-sm'}">{@html parseDiscordEmojisAndMarkdown(title)}</div>
-        <div class="leading-snug text-[#dbdee1] whitespace-pre-line wrap-break-word {compact ? 'text-[11px] line-clamp-2' : 'text-[13px]'}">
-          {@html parseDiscordEmojisAndMarkdown(description)}
-        </div>
-      </div>
-      <div class="{compact ? 'space-y-1' : 'space-y-2 pt-0.5'}">
-        {#each rows as row}
-          <div class="flex flex-wrap {compact ? 'gap-1' : 'gap-2'}">
-            {#each row as button}
-              <!-- Pointillés : bouton sans texte ni rôle, il reste à compléter. -->
-              <span class="flex items-center gap-1.5 font-medium rounded-[3px] {compact ? 'h-6 px-2.5 text-[11px]' : 'h-8 px-4 text-sm'} {button.text ? `text-white ${STYLE_CLASSES[button.style]}` : 'border border-dashed border-[#949ba4] text-[#949ba4] italic'}">
-                {#if button.emoji}<span>{@html parseDiscordEmojisAndMarkdown(button.emoji)}</span>{/if}
-                <span>{button.text || m.reaction_roles_preview_button_default()}</span>
-              </span>
-            {/each}
-          </div>
-        {/each}
-      </div>
-    </div>
-  </div>
-</div>
+{#snippet message()}
+  <Embed {embed} />
+  {#each rows as row, rowIndex (rowIndex)}
+    <ActionRow>
+      {#each row as button, index (index)}
+        {@const label = button.text || m.reaction_roles_preview_button_default()}
+        {#if button.emoji}
+          {#snippet emoji()}<Markdown inline content={button.emoji ?? ''} />{/snippet}
+          <Button {label} variant={button.style} disabled={!button.text} {emoji} />
+        {:else}
+          <Button {label} variant={button.style} disabled={!button.text} />
+        {/if}
+      {/each}
+    </ActionRow>
+  {/each}
+{/snippet}
+
+<DiscordScope class={compact ? 'rr-preview rr-preview--compact' : 'rr-preview'} {entities}>
+  {#if compact}
+    {@render message()}
+  {:else}
+    <MessageFrame>
+      {#snippet avatar()}<Avatar {author} />{/snippet}
+      {#snippet header()}<MessageHeader {author} {timestamp} />{/snippet}
+      {@render message()}
+    </MessageFrame>
+  {/if}
+</DiscordScope>
+
+<style>
+  :global(.arcscord-discord-ui.rr-preview) {
+    padding: 1rem 0;
+  }
+
+  /* Carte d'un menu publié : plus serrée, le texte coupé à deux lignes. */
+  :global(.arcscord-discord-ui.rr-preview--compact) {
+    border-radius: 0.5rem;
+    padding: 0.75rem;
+    font-size: 13px;
+  }
+
+  :global(.arcscord-discord-ui.rr-preview--compact .dui-embed .dui-markdown) {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+</style>

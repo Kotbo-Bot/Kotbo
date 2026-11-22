@@ -3,12 +3,14 @@
  *
  * Les gabarits s'écrivaient à l'aveugle : on ne voyait le résultat qu'en
  * lançant un vrai concours dans un vrai salon. Ce module remplace les variables
- * par des valeurs d'exemple et traduit le balisage de Discord en HTML, pour
- * montrer l'annonce telle qu'elle sortira.
+ * par des valeurs d'exemple et rend le Markdown Discord, avec ses mentions,
+ * que @arcscord/discord-ui affiche tel qu'il sortira.
  *
  * Il double volontairement la logique du bot, qui reste seul juge à l'envoi :
  * l'aperçu ne sert qu'à montrer, jamais à décider.
  */
+import type { MessageEntities } from '@arcscord/discord-ui-svelte';
+import { mentionId, mergeEntities, toPreviewMarkdown } from './components/discord/previewEntities.svelte';
 
 export interface PreviewSample {
   prize: string;
@@ -36,19 +38,6 @@ export interface PreviewLabels {
   validation: string;
   bonusRolesTitle: string;
   endsIn: string;
-}
-
-const HTML_ESCAPES: Record<string, string> = {
-  '&': '&amp;',
-  '<': '&lt;',
-  '>': '&gt;',
-  '"': '&quot;',
-  "'": '&#39;',
-};
-
-/** Un gabarit est saisi librement : rien n'en sort sans être neutralisé. */
-function escapeHtml(value: string): string {
-  return value.replace(/[&<>"']/g, (char) => HTML_ESCAPES[char]);
 }
 
 /**
@@ -130,32 +119,35 @@ export function fillTemplate(template: string, sample: PreviewSample, labels: Pr
 }
 
 /**
- * Traduit le balisage de Discord en HTML.
+ * Gabarit rempli, en Markdown Discord pour @arcscord/discord-ui.
  *
- * Seules les marques que le bot peut réellement produire sont gérées. Le texte
- * est neutralisé d'abord : les balises rendues ici sont les nôtres, jamais
- * celles d'un gabarit.
+ * Les mentions posées par le remplissage deviennent de vraies mentions
+ * nommées (`<@id>` et leur entité). Une arobase simplement tapée dans un
+ * gabarit reste du texte : Discord non plus n'en fait rien. `mentions: false`
+ * pour un titre ou un pied d'embed, où Discord ne résout pas les mentions :
+ * le nom y reste écrit en clair.
  */
-export function toDiscordHtml(text: string): string {
-  return escapeHtml(text)
-    .replace(/```([\s\S]*?)```/g, '<code class="block">$1</code>')
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/\*\*\*([^*]+)\*\*\*/g, '<strong><em>$1</em></strong>')
-    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*([^*]+)\*/g, '<em>$1</em>')
-    .replace(/__([^_]+)__/g, '<u>$1</u>')
-    .replace(/~~([^~]+)~~/g, '<s>$1</s>')
-    // Mentions : en pastille comme Discord, et jamais cliquables. Une arobase
-    // simplement tapée dans un gabarit n'en reçoit pas, Discord non plus : seul
-    // un vrai identifiant y donne droit.
-    .replace(
-      new RegExp(`${MENTION_OPEN}([^${MENTION_CLOSE}]*)${MENTION_CLOSE}`, 'g'),
-      '<span class="mention">$1</span>',
-    )
-    .replace(/\n/g, '<br />');
-}
-
-/** Gabarit rempli puis mis en forme, prêt à être inséré dans l'aperçu. */
-export function renderPreview(template: string, sample: PreviewSample, labels: PreviewLabels): string {
-  return toDiscordHtml(fillTemplate(template, sample, labels));
+export function renderMarkdown(
+  template: string,
+  sample: PreviewSample,
+  labels: PreviewLabels,
+  { mentions = true }: { mentions?: boolean } = {},
+): { markdown: string; entities: MessageEntities } {
+  const users: NonNullable<MessageEntities['users']> = {};
+  const markdown = fillTemplate(template, sample, labels).replace(
+    new RegExp(`${MENTION_OPEN}@([^${MENTION_CLOSE}]*)${MENTION_CLOSE}`, 'g'),
+    (_, name: string) => {
+      if (!mentions) return `@${name}`;
+      const id = mentionId(name);
+      users[id] = { name };
+      return `<@${id}>`;
+    },
+  );
+  return {
+    markdown,
+    entities: mergeEntities([
+      Object.keys(users).length ? { users } : {},
+      toPreviewMarkdown(markdown, { mentions: false }).entities,
+    ]),
+  };
 }

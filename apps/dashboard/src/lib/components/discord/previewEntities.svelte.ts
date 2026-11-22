@@ -19,7 +19,7 @@ const KEEP = new Set(['everyone', 'here']);
  * rendu à l'autre. 18 chiffres, la forme d'un identifiant Discord : le
  * parseur Markdown n'accepte que des mentions de 17 à 20 chiffres.
  */
-function mentionId(name: string): string {
+export function mentionId(name: string): string {
   let hash = 2166136261;
   for (const char of name) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619) >>> 0;
   return `9${hash.toString().padStart(17, '0')}`;

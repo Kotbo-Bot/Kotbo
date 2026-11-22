@@ -7,7 +7,7 @@
    * la ligne discrète qui le ferme.
    */
   import type { Snippet } from 'svelte';
-  import { Embed, Markdown, type EmbedView } from '@arcscord/discord-ui-svelte';
+  import { Embed, Markdown, type EmbedView, type MessageEntities } from '@arcscord/discord-ui-svelte';
   import DiscordScope from './discord/DiscordScope.svelte';
 
   /** Couleur de l'embed côté bot (`COLORS.primary`), sauf message qui a la sienne. */
@@ -17,8 +17,18 @@
     color = '#5865f2',
     content,
     footer,
+    entities = {},
     children,
-  }: { title: string; body: string; color?: string; content?: string; footer?: string; children?: Snippet } = $props();
+  }: {
+    title: string;
+    body: string;
+    color?: string;
+    content?: string;
+    footer?: string;
+    /** Noms des mentions et émojis cités (`<@&id>` d'un rôle mentionné, par exemple). */
+    entities?: MessageEntities;
+    children?: Snippet;
+  } = $props();
 
   const embed = $derived<EmbedView>({
     id: 'preview',
@@ -29,7 +39,7 @@
   });
 </script>
 
-<DiscordScope class="discord-preview">
+<DiscordScope class="discord-preview" {entities}>
   {#if content}
     <div class="message-content"><Markdown {content} /></div>
   {/if}

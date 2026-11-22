@@ -7,7 +7,9 @@
    * formulaire, ce qui fait suivre l'aperçu à la saisie, avant même l'enregistrement.
    */
   import { m } from '../i18n';
-  import DiscordMarkdownText from './sanctions/DiscordMarkdownText.svelte';
+  import { ActionRow, Button } from '@arcscord/discord-ui-svelte';
+  import DiscordEmbedPreview from './DiscordEmbedPreview.svelte';
+  import { mentionId } from './discord/previewEntities.svelte';
   import FilterPills from './ui/FilterPills.svelte';
   import { fillDropTemplate } from '../dropPreview';
   import type { DropAnnouncementLabels } from '../api';
@@ -60,6 +62,9 @@
     asJackpot,
   ));
 
+  /** Rôle mentionné au-dessus de l'embed, en vraie mention nommée. */
+  const mentionRole = $derived(shownMention ? { id: mentionId(shownMention), name: shownMention } : null);
+
   const numberFormat = $derived(new Intl.NumberFormat(labels.locale === 'fr' ? 'fr-FR' : 'en-US'));
 
   const description = $derived.by(() => {
@@ -100,70 +105,19 @@
       {/if}
     </div>
 
-    <div class="discord">
-      {#if shownMention}
-        <p class="mention-line"><span class="mention">@{shownMention}</span></p>
-      {/if}
-      <div class="embed" style="border-left-color: {asJackpot ? JACKPOT_COLOR : EMBED_COLOR}">
-        <p class="embed-title">{asJackpot ? labels.jackpotTitle : labels.title}</p>
-        {#each description.split('\n') as line, index (index)}
-          <p class="embed-body"><DiscordMarkdownText text={line} /></p>
-        {/each}
-      </div>
-      <span class="button">{labels.claimButton}</span>
-    </div>
+    <DiscordEmbedPreview
+      title={asJackpot ? labels.jackpotTitle : labels.title}
+      body={description}
+      color={asJackpot ? JACKPOT_COLOR : EMBED_COLOR}
+      content={mentionRole ? `<@&${mentionRole.id}>` : undefined}
+      entities={mentionRole ? { roles: { [mentionRole.id]: { name: mentionRole.name } } } : {}}
+    >
+      <!-- Bouton du bot : ButtonStyle.Success. -->
+      <ActionRow>
+        <Button label={labels.claimButton} variant="success" />
+      </ActionRow>
+    </DiscordEmbedPreview>
 
     <p class="text-2xs text-on-surface-variant">{m.drop_preview_amount_hint()}</p>
   </div>
 {/if}
-
-<style>
-  /* Fond sombre quel que soit le thème : Discord n'a pas celui du dashboard. */
-  .discord {
-    background: #313338;
-    border-radius: 0.75rem;
-    padding: 1rem;
-    color: #dbdee1;
-    font-size: 0.8125rem;
-    line-height: 1.4;
-  }
-
-  .discord .mention-line { margin: 0 0 0.5rem; }
-
-  .mention {
-    background: rgba(88, 101, 242, 0.3);
-    color: #c9cdfb;
-    border-radius: 0.1875rem;
-    padding: 0 0.125rem;
-  }
-
-  .embed {
-    background: #2b2d31;
-    border-left: 4px solid;
-    border-radius: 0.25rem;
-    padding: 0.75rem 1rem;
-    max-width: 32rem;
-  }
-
-  /* `.discord` en préfixe : les styles de paragraphe du dashboard passent devant sans lui. */
-  .discord .embed-title {
-    font-weight: 600;
-    color: #f2f3f5;
-    margin: 0 0 0.5rem;
-  }
-
-  .discord .embed-body { margin: 0; color: #dbdee1; }
-
-  .discord :global(strong) { color: #f2f3f5; }
-
-  .button {
-    display: inline-flex;
-    margin-top: 0.5rem;
-    padding: 0.5rem 1rem;
-    border-radius: 0.25rem;
-    font-size: 0.8125rem;
-    font-weight: 500;
-    background: #248046;
-    color: #fff;
-  }
-</style>
