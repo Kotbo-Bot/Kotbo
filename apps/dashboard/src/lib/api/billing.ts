@@ -1,6 +1,6 @@
 /** Facturation Stripe : offre du serveur, souscription, portail client. */
 import { authStore } from '../stores/auth.svelte';
-import { dashboardRequest } from './client';
+import { apiRequest, dashboardRequest } from './client';
 
 export type PlanKey = 'FREE' | 'PLUS' | 'PRO' | 'ULTIMATE' | 'CUSTOM';
 export type BillingInterval = 'month' | 'year';
@@ -57,6 +57,33 @@ export interface BillingStatus {
 
 export async function fetchBillingStatus(guildId = authStore.selectedGuildId ?? undefined): Promise<BillingStatus | null> {
   return dashboardRequest('/billing', { method: 'GET', guildId, errorContext: 'API Error (Billing):' });
+}
+
+/** Un serveur que l'utilisateur paye, dans la vue d'ensemble de la facturation. */
+export interface BillingOverviewGuild {
+  guildId: string;
+  name: string;
+  iconUrl: string | null;
+  plan: PlanKey;
+  planName: string;
+  status: string | null;
+  interval: BillingInterval | null;
+  /** Montant du catalogue pour la période, 0 sans abonnement Stripe en cours. */
+  amountCents: number;
+  currentPeriodEnd: string | null;
+  cancelAtPeriodEnd: boolean;
+  accessExpiresAt: string | null;
+  network: { name: string; role: string } | null;
+}
+
+export interface BillingOverview {
+  guilds: BillingOverviewGuild[];
+  totalMonthlyCents: number;
+}
+
+/** Tous les serveurs dont l'utilisateur est le payeur, avec le total mensuel. */
+export async function fetchBillingOverview(): Promise<BillingOverview> {
+  return apiRequest('/api/dashboard/billing/overview', { method: 'GET', errorContext: 'API Error (Billing overview):' });
 }
 
 /**

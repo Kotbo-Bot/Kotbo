@@ -16,10 +16,10 @@
    *     jours pour corriger sa carte avant la coupure.
    */
   import { onMount } from 'svelte';
-  import { fetchBillingStatus, openBillingPortal, startCheckout, transferSubscription } from '../lib/api';
+  import { fetchBillingOverview, fetchBillingStatus, openBillingPortal, startCheckout, transferSubscription } from '../lib/api';
   import { authStore } from '../lib/stores/auth.svelte';
   import ConfirmModal from '../lib/components/ConfirmModal.svelte';
-  import type { BillingInterval, BillingStatus, PlanCard, PlanKey } from '../lib/api/billing';
+  import type { BillingInterval, BillingOverview, BillingStatus, PlanCard, PlanKey } from '../lib/api/billing';
   import { toast } from '../lib/stores/toast.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
   import GuildSelect from '../lib/components/GuildSelect.svelte';
@@ -147,6 +147,25 @@
     loading = false;
   }
 
+  // Tous les serveurs que l'utilisateur paye, quel que soit le serveur ouvert.
+  let overview = $state<BillingOverview | null>(null);
+  let overviewFailed = $state(false);
+
+  async function loadOverview() {
+    try {
+      overview = await fetchBillingOverview();
+      overviewFailed = false;
+    } catch {
+      overviewFailed = true;
+    }
+  }
+
+  function openGuildBilling(guildId: string) {
+    if (guildId === authStore.selectedGuildId) return;
+    authStore.setGuild(guildId);
+    void load();
+  }
+
   async function subscribe(plan: PlanKey) {
     if (plan === 'FREE' || plan === 'CUSTOM') return;
     pending = plan;
@@ -226,6 +245,7 @@
 
     if (checkout) window.history.replaceState({}, '', window.location.pathname);
     load();
+    void loadOverview();
   });
 </script>
 
@@ -272,6 +292,68 @@
         <Button href="/modules" variant="primary" size="sm" iconRight="ArrowRight">{m.bill_see_modules()}</Button>
       {/snippet}
     </Callout>
+  {/if}
+
+  <!-- ── Tous les serveurs payés par l'utilisateur ───────────────────────── -->
+  {#if overviewFailed}
+    <p class="text-sm text-error">{m.bill_all_err()}</p>
+  {:else if overview && overview.guilds.length > 0}
+    <section class="rounded-xl border border-outline-variant/40 bg-surface-container-low p-5 space-y-4">
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 class="text-sm font-semibold text-on-surface">{m.bill_all_title()}</h2>
+          <p class="text-body-sm text-on-surface-variant">{m.bill_all_desc({ count: overview.guilds.length })}</p>
+        </div>
+        <div class="text-right">
+          <div class="text-lg font-semibold text-on-surface tabular-nums">{formatPrice(overview.totalMonthlyCents)}</div>
+          <div class="text-2xs text-on-surface-variant">{m.bill_all_per_month()}</div>
+        </div>
+      </div>
+
+      <div class="divide-y divide-outline-variant rounded-lg border border-outline-variant overflow-hidden bg-surface-container-lowest">
+        {#each overview.guilds as g (g.guildId)}
+          {@const info = g.status ? STATUS_LABELS[g.status] ?? null : null}
+          <div class="flex flex-wrap items-center justify-between gap-3 px-3.5 py-2.5 text-sm">
+            <div class="flex items-center gap-2.5 min-w-0">
+              {#if g.iconUrl}
+                <img src={g.iconUrl} alt="" class="w-6 h-6 rounded-md object-cover" />
+              {/if}
+              <div class="min-w-0">
+                <div class="flex flex-wrap items-center gap-1.5">
+                  <span class="font-medium text-on-surface truncate">{g.name}</span>
+                  <span class="text-2xs px-2 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant">{g.planName}</span>
+                  {#if info}
+                    <span class="text-2xs px-2 py-0.5 rounded-full {info.tone === 'ok' ? 'bg-success/10 text-on-success-container' : info.tone === 'warn' ? 'bg-warning/10 text-on-warning-container' : 'bg-error/10 text-on-error-container'}">{info.label()}</span>
+                  {/if}
+                  {#if g.network}
+                    <span class="text-2xs px-2 py-0.5 rounded-full bg-primary/15 text-primary">{g.network.name}</span>
+                  {/if}
+                </div>
+                {#if g.currentPeriodEnd}
+                  <div class="text-2xs text-on-surface-variant">
+                    {g.cancelAtPeriodEnd
+                      ? m.bill_cancel_requested({ date: formatDate(g.currentPeriodEnd) })
+                      : m.bill_next_renewal({ date: formatDate(g.currentPeriodEnd) })}
+                  </div>
+                {:else if g.accessExpiresAt}
+                  <div class="text-2xs text-on-surface-variant">{formatDate(g.accessExpiresAt)}</div>
+                {/if}
+              </div>
+            </div>
+            <div class="flex items-center gap-3 shrink-0">
+              {#if g.amountCents > 0}
+                <span class="tabular-nums text-on-surface">{formatPrice(g.amountCents)}<span class="text-2xs text-on-surface-variant"> {g.interval === 'year' ? m.bill_all_per_year() : m.bill_all_per_month()}</span></span>
+              {/if}
+              {#if g.guildId === authStore.selectedGuildId}
+                <span class="text-2xs text-on-surface-variant">{m.bill_all_current()}</span>
+              {:else}
+                <Button size="sm" variant="secondary" onclick={() => openGuildBilling(g.guildId)}>{m.bill_all_manage()}</Button>
+              {/if}
+            </div>
+          </div>
+        {/each}
+      </div>
+    </section>
   {/if}
 
   {#if loading}
