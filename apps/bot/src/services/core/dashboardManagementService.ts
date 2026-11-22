@@ -71,7 +71,7 @@ export async function getOrCreateFeatureConfigs(guildId: string) {
 
   // La ligne cree ici devient l'etat qui fait foi pour la garde de lecture :
   // l'ecrire a `true` allumait, a la premiere ouverture du Centre de gestion,
-  // tous les modules qui demarrent eteints - niveaux, economie, Daily Algo,
+  // tous les modules qui demarrent eteints - niveaux, economie,
   // auto-thread... On reprend donc l'etat deja declare ailleurs (table propre au
   // module, colonne historique, defaut du registre). L'offre commerciale et la
   // cascade des dependances restent hors de cette valeur : elles s'appliquent a
@@ -258,10 +258,10 @@ export async function applyPresetToFeatureAccess(
   roleIds: { adminRoleIds: string[]; modRoleIds: string[] }
 ) {
   const configs = await getOrCreateFeatureConfigs(guildId);
-  
+
   const updates = configs.map(async (config) => {
     const featureKey = config.featureKey;
-    
+
     // Clear existing per-role access for this feature to avoid conflicts
     await prisma.dashboardFeatureRoleAccess.deleteMany({
       where: { featureConfigId: config.id }
@@ -287,7 +287,7 @@ export async function applyPresetToFeatureAccess(
       if (roleIds.adminRoleIds.includes(modId)) continue;
 
       const isRestricted = ['settings', 'commands', 'discipline'].includes(featureKey);
-      
+
       roleAccessToCreate.push({
         guildId,
         featureConfigId: config.id,

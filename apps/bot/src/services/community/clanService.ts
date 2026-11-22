@@ -22,8 +22,8 @@ export function busyTaskError(guildId: string): Error {
   const task = clanTasks.get(guildId);
   const label = task?.type === 'distribute' ? 'la distribution des clans'
     : task?.type === 'dedupe' ? 'le nettoyage des clans multiples'
-    : task?.type === 'rebalance' ? 'le rééquilibrage des clans'
-    : 'le retrait des rôles de clan';
+      : task?.type === 'rebalance' ? 'le rééquilibrage des clans'
+        : 'le retrait des rôles de clan';
   const progress = task && task.total > 0 ? ` (${task.processed}/${task.total})` : '';
 
   return new Error(
@@ -214,7 +214,7 @@ export async function logClanContribution(
  *
  * Fonction **générique et sans opinion** : elle reçoit des montants déjà calculés
  * et un simple libellé d'origine. C'est volontaire - les clans n'ont pas à
- * connaître le Daily Algo ni aucun autre module. Le sens de la dépendance va
+ * connaître aucun autre module. Le sens de la dépendance va
  * toujours du module appelant vers les clans, jamais l'inverse.
  *
  * Ne fait rien si les clans sont désactivés, si aucun clan n'existe, ou pour un
@@ -975,7 +975,7 @@ export async function syncMemberClanFromDcLink(
       if (xp1 >= xp2) {
         targetClan = clan1;
         logger.info('ClanService', `Synchro DC : Alignement de ${member2.user.tag} vers le clan de ${member1.user.tag} ("${clan1.name}" avec ${xp1} XP vs ${xp2} XP)`);
-        
+
         // Retirer le rôle du clan 2 à member2 puis ajouter celui du clan 1.
         //
         // L'ajout est conditionné à la réussite du retrait : si Discord refuse
@@ -999,7 +999,7 @@ export async function syncMemberClanFromDcLink(
       } else {
         targetClan = clan2;
         logger.info('ClanService', `Synchro DC : Alignement de ${member1.user.tag} vers le clan de ${member2.user.tag} ("${clan2.name}" avec ${xp2} XP vs ${xp1} XP)`);
-        
+
         // Même précaution que ci-dessus : pas d'ajout sans retrait réussi.
         const removed1 = await member1.roles.remove(clan1.roleId, `Double compte aligné sur ${member2.user.tag} (synchro auto)`)
           .then(() => true)
@@ -1407,7 +1407,7 @@ export async function handleEndSeason(
       try {
         const announcementChannel = discordGuild.channels.cache.get(guildSettings.clanAnnouncementChannelId)
           || await discordGuild.channels.fetch(guildSettings.clanAnnouncementChannelId).catch(() => null);
-          
+
         if (announcementChannel && announcementChannel.isTextBased()) {
           const isTie = winningClans.length > 1;
           const title = isTie
@@ -1502,11 +1502,11 @@ export async function handleEndSeason(
       try {
         const qgChannel = discordGuild.channels.cache.get(winningClan.generalChannelId)
           || await discordGuild.channels.fetch(winningClan.generalChannelId).catch(() => null);
-          
+
         if (qgChannel && qgChannel.isTextBased()) {
           const isTie = winningClans.length > 1;
           const otherWinners = winningClans.filter((c) => c.id !== winningClan.id).map((c) => `**${c.name}**`).join(' et ');
-          
+
           const title = isTie
             ? `🤝 Victoire du Clan ${winningClan.name} (Ex Æquo) !`
             : `🏆 Victoire du Clan ${winningClan.name} !`;

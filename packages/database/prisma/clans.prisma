@@ -106,7 +106,7 @@ model ClanContributionEvent {
 /// qui parie au mauvais moment. Elle suit le membre jusqu'à remboursement.
 ///
 /// Concept de la couche clans, pas des paris : c'est ce qui permet aux gains de
-/// toutes origines (progression, boost, Daily Algo) de rembourser sans que les
+/// toutes origines (progression, boost) de rembourser sans que les
 /// clans aient à connaître le module qui a creusé la dette.
 /// État des dettes à la clôture d'une saison, pour que le retour arrière en
 /// restaure l'exact montant.
