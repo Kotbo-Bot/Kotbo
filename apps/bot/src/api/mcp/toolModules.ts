@@ -47,6 +47,7 @@ const RULES: ReadonlyArray<readonly [RegExp, string]> = [
   [/staff_poll/, 'polls'],
   [/staff_role|hierarch/, 'staff_roles'],
   [/staff_evaluation/, 'evaluations'],
+  [/recruitment/, 'recruitment'],
   [/^get_staff_(list|member)$/, 'staff_directory'],
   [/analytics|pulse|hourly_activity|member_daily_stats|prediction/, 'analytics'],
   [/digest/, 'digest'],
