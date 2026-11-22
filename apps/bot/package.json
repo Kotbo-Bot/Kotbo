@@ -24,6 +24,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^1.12.0",
     "@arcscord/components": "^1.0.2",
+    "@aws-sdk/client-ses": "^3.1175.0",
     "@discordjs/voice": "0.19.2",
     "@hono/swagger-ui": "^0.6.2",
     "@hono/zod-openapi": "^0.19.10",
@@ -52,6 +53,7 @@
     "libsodium-wrappers": "0.8.4",
     "lru-cache": "11.5.3",
     "node-cron": "^3.0.3",
+    "nodemailer": "^10.6.1",
     "p-limit": "5.0.0",
     "pg": "^8.23.1",
     "pino": "^10.4.0",
@@ -69,6 +71,7 @@
     "@inlang/paraglide-js": "^2.29.3",
     "@types/node": "^22.20.5",
     "@types/node-cron": "^3.0.11",
+    "@types/nodemailer": "^8.0.2",
     "@typescript-eslint/eslint-plugin": "^7.18.0",
     "@typescript-eslint/parser": "^7.18.0",
     "@typescript/native-preview": "^7.0.0-dev.20260707.2",
