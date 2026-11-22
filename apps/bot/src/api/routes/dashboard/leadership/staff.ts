@@ -1089,6 +1089,8 @@ export function createStaffRouter(client: Client) {
         color?: string;
         icon?: string;
         discordRoleId?: string;
+        poleRoleId?: string | null;
+        createPoleRole?: boolean;
         responsableUserId?: string;
         parentHierarchyId?: string | null;
         separatorRoleId?: string | null;
@@ -1107,7 +1109,9 @@ export function createStaffRouter(client: Client) {
         body.icon,
         body.discordRoleId,
         body.responsableUserId,
-        body.parentHierarchyId
+        body.parentHierarchyId,
+        body.poleRoleId,
+        body.createPoleRole
       );
 
       let separators: Awaited<ReturnType<typeof applyStaffSeparators>> | undefined;
@@ -1188,6 +1192,8 @@ export function createStaffRouter(client: Client) {
         color?: string | null;
         icon?: string | null;
         discordRoleId?: string | null;
+        poleRoleId?: string | null;
+        createPoleRole?: boolean;
         separatorRoleId?: string | null;
         separatorStyle?: string | null;
         responsableUserId?: string | null;
@@ -1201,8 +1207,8 @@ export function createStaffRouter(client: Client) {
         return send(c, { error: 'Hiérarchie introuvable' }, 404);
       }
 
-      // Nom, grades ou séparateur changés : le rôle Discord doit suivre.
-      const { separators, separatorError } = body && ('separatorStyle' in body || 'separatorRoleId' in body || 'name' in body)
+      // Nom, grades, rôle de pôle ou séparateur changés : le rôle Discord doit suivre.
+      const { separators, separatorError } = body && ('separatorStyle' in body || 'separatorRoleId' in body || 'poleRoleId' in body || 'createPoleRole' in body || 'name' in body)
         ? await runSeparators(guildId)
         : { separators: undefined, separatorError: undefined };
 

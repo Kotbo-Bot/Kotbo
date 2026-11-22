@@ -23,7 +23,7 @@ export async function applyStaffSeparators(client: Client, guildId: string): Pro
     where: { guildId, enabled: true, OR: [{ separatorStyle: { not: null } }, { separatorRoleId: { not: null } }] },
     orderBy: { sortOrder: 'asc' },
     select: {
-      id: true, name: true, discordRoleId: true, separatorRoleId: true, separatorStyle: true,
+      id: true, name: true, discordRoleId: true, poleRoleId: true, separatorRoleId: true, separatorStyle: true,
       roles: { where: { enabled: true, discordRoleId: { not: null } }, select: { discordRoleId: true } },
     },
   });
@@ -62,7 +62,7 @@ export async function applyStaffSeparators(client: Client, guildId: string): Pro
         status = 'updated';
       }
 
-      const ids = new Set([h.discordRoleId, ...h.roles.map((r) => r.discordRoleId)].filter((id): id is string => !!id && id !== role!.id));
+      const ids = new Set([h.discordRoleId, h.poleRoleId, ...h.roles.map((r) => r.discordRoleId)].filter((id): id is string => !!id && id !== role!.id));
       const tops = [...ids].map((id) => guild.roles.cache.get(id)).filter((r): r is NonNullable<typeof r> => !!r);
       if (tops.length === 0) { results.push({ ...base, status: status === 'ok' ? 'skipped' : status, reason: status === 'ok' ? 'no_grade_role' : undefined }); continue; }
 
