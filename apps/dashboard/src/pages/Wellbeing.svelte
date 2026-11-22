@@ -4,6 +4,7 @@
   import { dashboardStore } from '../lib/stores/dashboard.svelte';
   import { toast } from '../lib/stores/toast.svelte';
   import ModulePage from '../lib/components/ModulePage.svelte';
+  import MultiSelect from '../lib/components/MultiSelect.svelte';
   import { Button, Callout, EmptyState, Field, Modal, SectionCard } from '../lib/components/ui';
 
   type WellbeingStatus = {
@@ -23,6 +24,8 @@
 
   const selectedCase = $derived(cases.find((c) => c.id === selectedCaseId) ?? null);
   const discordRoles = $derived((dashboardStore.state.discordRoles ?? []) as Array<{ id: string; name: string }>);
+
+  const roleOptions = $derived(discordRoles.map((r) => ({ id: r.id, name: `@${r.name}` })));
 
   // Break-glass modal
   let breakGlassOpen = $state(false);
@@ -387,28 +390,12 @@
     </label>
     <Field label="Rôles membres de la cellule bien-être">
       {#snippet children(id)}
-        <select
-          {id}
-          multiple
-          class="input w-full h-28"
-          value={cfgTeamRoleIds}
-          onchange={(e) => (cfgTeamRoleIds = Array.from(e.currentTarget.selectedOptions).map((o) => o.value))}
-        >
-          {#each discordRoles as r (r.id)}<option value={r.id}>@{r.name}</option>{/each}
-        </select>
+        <MultiSelect {id} bind:values={cfgTeamRoleIds} options={roleOptions} placeholder="Rechercher un rôle…" />
       {/snippet}
     </Field>
     <Field label="Rôles Direction autorisés (break-glass)">
       {#snippet children(id)}
-        <select
-          {id}
-          multiple
-          class="input w-full h-24"
-          value={cfgDirectorRoleIds}
-          onchange={(e) => (cfgDirectorRoleIds = Array.from(e.currentTarget.selectedOptions).map((o) => o.value))}
-        >
-          {#each discordRoles as r (r.id)}<option value={r.id}>@{r.name}</option>{/each}
-        </select>
+        <MultiSelect {id} bind:values={cfgDirectorRoleIds} options={roleOptions} placeholder="Rechercher un rôle…" />
       {/snippet}
     </Field>
   </form>
