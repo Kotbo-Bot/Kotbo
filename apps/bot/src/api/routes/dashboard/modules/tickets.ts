@@ -106,6 +106,9 @@ function slaTarget(value: unknown, max: number): number | null {
  * Garde des routes Tickets, partagée avec le centre de support : réservé au
  * staff, et à qui le rôle ouvre la section.
  */
+/** Discord refuse au-delà de 2 000 caractères ; l'en-tête ajouté en prend une part. */
+const TICKET_DASHBOARD_MESSAGE_MAX = 1800;
+
 export function ticketsGate(client: Client) {
   const ticketAccess = createMiddleware<{ Variables: { ticketFeatureAccess: FeatureAccessMap } }>(async (c, next) => {
     const access = c.var.effectiveAccess;
@@ -1045,8 +1048,11 @@ export function createTicketsRouter(client: Client) {
       }
 
       const body = await readBody<{ content: string }>(c);
-      if (!body?.content) {
+      if (typeof body?.content !== 'string' || !body.content.trim()) {
         return send(c, { error: 'Contenu du message requis' }, 400);
+      }
+      if (body.content.length > TICKET_DASHBOARD_MESSAGE_MAX) {
+        return send(c, { error: `Message trop long (${TICKET_DASHBOARD_MESSAGE_MAX} caractères maximum).` }, 400);
       }
 
       const discordChannel = client.channels.cache.get(ticket.channelId);
@@ -1054,7 +1060,12 @@ export function createTicketsRouter(client: Client) {
         return send(c, { error: 'Salon Discord introuvable' }, 400);
       }
 
-      const sent = await discordChannel.send(`💬 **[Kotbo Dashboard - ${user.username}]** ${body.content}`);
+      // Aucune mention : un message parti sous le nom du bot ne doit pas pouvoir
+      // pinguer @everyone, @here ou un rôle.
+      const sent = await discordChannel.send({
+        content: `💬 **[Kotbo Dashboard - ${user.username}]** ${body.content}`.slice(0, 2000),
+        allowedMentions: { parse: [] },
+      });
       // Envoyé sous le nom du bot : le suivi du tour de parole, qui ignore les
       // bots, ne le compterait pas comme une réponse du staff.
       await prisma.ticket.update({

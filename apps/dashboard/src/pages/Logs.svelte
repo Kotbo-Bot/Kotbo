@@ -19,6 +19,7 @@
   import { dashboardStore } from "../lib/stores/dashboard.svelte";
   import { parseDetailsMetadata } from "../lib/logDetails";
   import { logEntryUser } from "../lib/logEntryUser";
+  import { resyncDraft } from "../lib/draftSync";
   import RefreshButton from "../lib/components/RefreshButton.svelte";
   import Papicon from "../lib/components/Papicon.svelte";
   import MemberCaseModal from "../lib/components/MemberCaseModal.svelte";
@@ -71,8 +72,14 @@
     selectedLogChannelId = dashboardStore.state.logChannelId || "";
   });
 
+  let syncedIgnoredChannelIds: string[] = [];
+
   $effect(() => {
-    ignoredChannelIds = [...(dashboardStore.state.logIgnoredChannelIds || [])];
+    const stored = [...(dashboardStore.state.logIgnoredChannelIds || [])];
+    untrack(() => {
+      ignoredChannelIds = resyncDraft(ignoredChannelIds, syncedIgnoredChannelIds, stored);
+      syncedIgnoredChannelIds = stored;
+    });
   });
 
   const ignoredChannelsDirty = $derived(
@@ -975,7 +982,7 @@
                   </td>
                   <td>
                     <span
-                      class="badge {entry.eventType === 'Automatique'
+                      class="badge max-w-full break-all {entry.eventType === 'Automatique'
                         ? 'badge-info'
                         : 'badge-warning'}"
                     >

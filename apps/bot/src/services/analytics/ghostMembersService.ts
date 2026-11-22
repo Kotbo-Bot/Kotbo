@@ -624,7 +624,7 @@ export async function previewGhostPrune(
   const rows = analyzed.map((profile) =>
     toRow(profile, config, now, members.get(profile.userId) ?? null, context));
 
-  const eligible = rows.filter((row) => row.stillInGuild && row.protections.length === 0);
+  const eligible = rows.filter((row) => row.stillInGuild && row.protections.length === 0 && statuses.includes(row.status));
 
   return {
     candidates: eligible.slice(0, config.maxPruneBatch),

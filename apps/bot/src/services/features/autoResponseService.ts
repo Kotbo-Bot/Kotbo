@@ -1,6 +1,7 @@
 import { Message, EmbedBuilder, Client, ChannelType, PermissionFlagsBits, type TextBasedChannel, type GuildMember, type User } from 'discord.js';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
+import { neutralizeMassMentions } from '../../utils/mentions.js';
 import { firstKillRoleProblem } from './rpg/rpgFirstKillService.js';
 
 import { testSafeRegex } from '../../utils/safeRegex.js';
@@ -49,8 +50,10 @@ function resolveResponsePlaceholders(
 ): string {
   if (!text.includes('{')) return text;
 
-  const username = ctx.member?.displayName || ctx.user?.username || 'Utilisateur';
-  const tag = ctx.user?.username || ctx.member?.user.username || 'inconnu';
+  // Pseudo et tag viennent du membre : neutralisés pour qu'un « @everyone »
+  // glissé dedans ne notifie pas tout le serveur.
+  const username = neutralizeMassMentions(ctx.member?.displayName || ctx.user?.username || 'Utilisateur');
+  const tag = neutralizeMassMentions(ctx.user?.username || ctx.member?.user.username || 'inconnu');
   const channelMention = ctx.channel && 'toString' in ctx.channel ? ctx.channel.toString() : '';
 
   return text
@@ -182,6 +185,18 @@ async function addAutoResponseRole(member: GuildMember, roleId: string): Promise
 
 export function invalidateAutoResponseCache(guildId: string) {
   responsesCache.delete(guildId);
+}
+
+/** Invalide le cache dans chaque shard : l'API (dashboard, MCP) écrit depuis le shard 0, les messages arrivent sur celui du serveur. */
+export async function invalidateAutoResponseCacheAcrossShards(client: Client, guildId: string): Promise<void> {
+  if (!client.shard) return invalidateAutoResponseCache(guildId);
+  // Le corps est sérialisé puis exécuté dans chaque shard : il recharge ce module par son URL.
+  await client.shard.broadcastEval(async (_c, context) => {
+    const { invalidateAutoResponseCache } = await import(context.servicePath);
+    invalidateAutoResponseCache(context.guildId);
+  }, { context: { servicePath: import.meta.url, guildId } }).catch((err: unknown) => {
+    logger.error('AutoResponseService', `Invalidation du cache de ${guildId} non propagée à tous les shards :`, err);
+  });
 }
 
 /**

@@ -529,6 +529,32 @@ describe('runWorkflow - suspension et reprise', () => {
     expect(result.status).toBe('COMPLETED');
     expect(calls.map((c) => (c.inputs.role as RoleValue).id)).toEqual(['r1', 'r2']);
   });
+
+  test('la sortie d\'une action reste lisible après la reprise', async () => {
+    const fil = { kind: 'Channel', id: 'fil-1', name: 'bienvenue', categoryName: null };
+    const { effects } = makeEffects({
+      runAction: async (type) => (type === 'CreateThread' ? { thread: fil } : {}),
+    });
+    const g = graph(
+      [
+        node('t', 'OnMemberJoin'),
+        node('fil', 'CreateThread', { name: 'bienvenue' }),
+        node('wait', 'Delay', { seconds: 60 }),
+        node('msg', 'SendMessage', { text: 'coucou' }),
+      ],
+      [
+        edge('t', 'next', 'fil', 'exec'),
+        edge('fil', 'next', 'wait', 'exec'),
+        edge('wait', 'next', 'msg', 'exec'),
+        edge('fil', 'thread', 'msg', 'channel'),
+      ],
+    );
+
+    const suspended = await runWorkflow({ graph: g, effects, triggerOutputs: { member } });
+    const resumed = await runWorkflow({ graph: g, effects, state: JSON.parse(JSON.stringify(suspended.state)) });
+
+    expect(resumed.steps[0].inputs.channel).toEqual(fil);
+  });
 });
 
 describe('runWorkflow - journal d\'exécution', () => {

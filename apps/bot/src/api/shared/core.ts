@@ -1,4 +1,5 @@
 import { type IncomingMessage, ServerResponse } from 'node:http';
+import { AsyncLocalStorage } from 'node:async_hooks';
 
 
 import { type Client, TextChannel, Collection, GuildMember, Guild } from 'discord.js';
@@ -1263,12 +1264,24 @@ export const getOrCreateRuntime = async (guildId: string): Promise<RuntimeState>
   }
 };
 
+/**
+ * Personne connectée au dashboard pour la requête en cours. Les routes écrivent
+ * le seul pseudo dans le journal : `pushAudit` y joint l'identifiant pour que la
+ * page des actions staff affiche le profil complet, comme pour une action Discord.
+ */
+export const auditActorStore = new AsyncLocalStorage<{ userId: string; username: string | null }>();
+
+const auditUserWithId = (user: string): string => {
+  const actor = auditActorStore.getStore();
+  return actor && user === (actor.username ?? `User${actor.userId}`) ? `${user} (${actor.userId})` : user;
+};
+
 export const pushAudit = async (guildId: string, entry: Omit<AuditEntry, 'id' | 'dateIso' | 'source'>) => {
   await prisma.dashboardAuditLog.create({
     data: {
       guildId,
       channelId: entry.channelId,
-      user: entry.user,
+      user: auditUserWithId(entry.user),
       action: entry.action,
       context: entry.context,
       module: entry.module,

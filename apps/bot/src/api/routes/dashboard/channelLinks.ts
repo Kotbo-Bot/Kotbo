@@ -432,9 +432,21 @@ export function createChannelLinksRouter(client: Client) {
 
   router.patch(`${base}/channel-links/:groupId/members/:memberId`, ...groupGate, async (c) => {
     const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
     const groupId = c.req.param('groupId');
     const memberId = c.req.param('memberId');
     try {
+      // Régler le salon d'un autre serveur (le passer en émission, le couper) suppose d'y
+      // être admin, comme pour le retirer : sans cela, un partenaire du pont décidait de
+      // ce que le salon d'un autre serveur relaie vers tous.
+      const target = c.var.group.members.find((m) => m.id === memberId);
+      if (!target) {
+        return send(c, { error: 'Salon introuvable dans ce pont' }, 404);
+      }
+      if (target.guildId !== guildId && !(await canManageGuild(client, target.guildId, user.userId))) {
+        return send(c, { error: 'Vous devez être admin de ce serveur pour modifier son salon.' }, 403);
+      }
+
       const body = await readBody(c);
       const data: Record<string, any> = {};
       if (body?.mode !== undefined) data.mode = readMode(body.mode);

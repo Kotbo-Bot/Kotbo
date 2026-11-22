@@ -138,14 +138,6 @@ export function registerLevelingRoutes(): void {
     errors: 0,
   }));
 
-  // GET /api/dashboard/guilds/:id/clans
-  route('GET', '/api/dashboard/guilds/:id/clans', () => ({
-    clansEnabled: false,
-    clans: [],
-    currentClanSeason: 1,
-    betsEnabled: false,
-  }));
-
   // POST /api/dashboard/guilds/:id/leveling/role-resync
   route('POST', '/api/dashboard/guilds/:id/leveling/role-resync', () => ({
     started: true,

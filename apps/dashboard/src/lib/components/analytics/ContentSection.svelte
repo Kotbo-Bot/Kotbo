@@ -15,6 +15,8 @@
   import KpiTile from './KpiTile.svelte';
   import AnalyticsSkeleton from './AnalyticsSkeleton.svelte';
   import { fetchContentAnalytics, type ContentAnalytics, type ContentEmoji, type ContentSourceServer, type ContentSticker } from '../../api';
+  import { deleteEmojiBan, fetchEmojiBans, saveEmojiBan, type EmojiBanKind, type EmojiBanRule } from '../../api/emojiBans';
+  import { toast } from '../../stores/toast.svelte';
   import { channelDetailsModal } from '../../stores/channelDetailsModal.svelte';
   import { serverDetailsModal } from '../../stores/serverDetailsModal.svelte';
   import { m } from '../../i18n';
@@ -47,6 +49,34 @@
         if (id === requestId) loading = false;
       });
   });
+
+  // Interdictions en vigueur ; null tant qu'elles sont inconnues ou hors de portée
+  // (accès refusé) : les boutons restent alors cachés.
+  let bans = $state<EmojiBanRule[] | null>(null);
+  let banBusy = $state<string | null>(null);
+  $effect(() => {
+    void fetchEmojiBans().then((res) => (bans = res?.rules ?? null)).catch(() => {});
+  });
+  const banOf = (kind: EmojiBanKind, key: string) => bans?.find((r) => r.kind === kind && r.key === key);
+
+  async function toggleBan(kind: EmojiBanKind, key: string, name: string | null, iconUrl: string | null) {
+    const existing = banOf(kind, key);
+    banBusy = `${kind}:${key}`;
+    try {
+      if (existing) {
+        await deleteEmojiBan(existing.id);
+        bans = (bans ?? []).filter((r) => r.id !== existing.id);
+      } else {
+        const res = await saveEmojiBan({ kind, key, name, iconUrl, action: 'DELETE' });
+        if (res?.rule) bans = [res.rule, ...(bans ?? [])];
+      }
+      toast.success(m.eb_saved());
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : m.eb_err_save());
+    } finally {
+      banBusy = null;
+    }
+  }
 
   const t = $derived(data?.totals ?? {});
   const p = $derived(data?.previous ?? {});
@@ -306,6 +336,12 @@
                 {/snippet}
                 {#snippet trailing(item)}
                   <span class="origin-tag">{originLabel(item.emoji.origin)}</span>
+                  {#if bans}
+                    {@const kind = item.emoji.origin === 'unicode' ? 'UNICODE' : 'EMOJI'}
+                    <button type="button" class="ban-btn" disabled={banBusy === `${kind}:${item.emoji.key}`} onclick={() => toggleBan(kind, item.emoji.key, item.emoji.name ?? item.emoji.key, item.emoji.imageUrl)}>
+                      {banOf(kind, item.emoji.key) ? m.eb_unban() : m.eb_ban()}
+                    </button>
+                  {/if}
                 {/snippet}
               </BarList>
             </div>
@@ -342,6 +378,13 @@
               <BarList items={stickerItems} empty={m.anx_stickers_empty()}>
                 {#snippet leading(item)}
                   <img class="sticker-thumb" src={item.sticker.imageUrl} alt="" loading="lazy" width="36" height="36" />
+                {/snippet}
+                {#snippet trailing(item)}
+                  {#if bans && item.sticker.origin !== 'standard'}
+                    <button type="button" class="ban-btn" disabled={banBusy === `STICKER:${item.sticker.key}`} onclick={() => toggleBan('STICKER', item.sticker.key, item.sticker.name, item.sticker.imageUrl)}>
+                      {banOf('STICKER', item.sticker.key) ? m.eb_unban() : m.eb_ban()}
+                    </button>
+                  {/if}
                 {/snippet}
               </BarList>
               {#if (data.stickerServers ?? []).length > 0}
@@ -452,5 +495,21 @@
     font-size: 0.6875rem;
     color: var(--color-on-surface-variant);
     white-space: nowrap;
+  }
+
+  .ban-btn {
+    flex-shrink: 0;
+    padding: 0.125rem 0.5rem;
+    border-radius: 999px;
+    border: 1px solid var(--color-outline-variant);
+    font-size: 0.6875rem;
+    color: var(--color-error);
+    white-space: nowrap;
+  }
+  .ban-btn:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--color-error) 10%, transparent);
+  }
+  .ban-btn:disabled {
+    opacity: 0.5;
   }
 </style>

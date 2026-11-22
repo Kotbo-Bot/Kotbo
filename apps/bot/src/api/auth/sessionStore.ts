@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import type { IncomingMessage } from 'node:http';
-import { getRedis, initRedis } from '../../infra/redis.js';
+import { getSessionRedis } from '../../infra/redis.js';
 import { getCurrentInstance } from '../../utils/instanceContext.js';
 import { fetchExternal } from '../../utils/http.js';
 
@@ -122,7 +122,7 @@ export async function createDashboardSession(input: {
   discordRefreshToken?: string | null;
   discordExpiresIn: number;
 }): Promise<DashboardSession> {
-  const redis = getRedis() ?? await initRedis();
+  const redis = getSessionRedis();
   if (!redis) throw new Error('Redis est requis pour créer une session dashboard.');
 
   const id = crypto.randomBytes(32).toString('base64url');
@@ -161,7 +161,7 @@ function hydrateSession(id: string, stored: StoredSession): DashboardSession {
 
 export async function getDashboardSession(sessionId: string | null): Promise<DashboardSession | null> {
   if (!sessionId) return null;
-  const redis = getRedis() ?? await initRedis();
+  const redis = getSessionRedis();
   if (!redis) return null;
 
   const raw = await redis.get(sessionKey(sessionId));
@@ -213,6 +213,6 @@ export async function getDashboardSession(sessionId: string | null): Promise<Das
 
 export async function deleteDashboardSession(sessionId: string | null): Promise<void> {
   if (!sessionId) return;
-  const redis = getRedis() ?? await initRedis();
+  const redis = getSessionRedis();
   await redis?.del(sessionKey(sessionId));
 }

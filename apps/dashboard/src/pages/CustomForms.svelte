@@ -1,6 +1,7 @@
 <script lang="ts">
   import { explainDisabled } from '../lib/actions/explainDisabled';
   import { onMount } from 'svelte';
+  import { DEMO_BASE } from '../lib/demo/mode';
   import { router } from 'tinro';
   import { authStore } from '../lib/stores/auth.svelte';
   import { fetchStaffHierarchies, dashboardFetch } from '../lib/api';
@@ -272,10 +273,10 @@
                     {m.cf_public_link()}
                   </span>
                   <div class="flex items-center gap-1 min-w-0 max-w-[150px]">
-                    <span class="truncate text-2xs font-mono">{window.location.origin}/form/{form.id}</span>
+                    <span class="truncate text-2xs font-mono">{window.location.origin}{DEMO_BASE}/form/{form.id}</span>
                     <button
                       onclick={() => {
-                        navigator.clipboard.writeText(`${window.location.origin}/form/${form.id}`);
+                        navigator.clipboard.writeText(`${window.location.origin}${DEMO_BASE}/form/${form.id}`);
                         toast.success(m.cf_copy_link_toast());
                       }}
                       class="p-1 rounded-md hover:bg-surface-container-high transition-colors shrink-0"

@@ -5,6 +5,7 @@ import { validateGraph, type WorkflowGraph } from '@kotbo/shared';
 import { logger } from '../../../utils/logger.js';
 import { getGuildName, resolveMemberFeatureAccess, safePushAudit } from '../../shared.js';
 import { fail, guildRoute, readBody, send } from '../../hono/dashboard/kit.js';
+import { workflowActorRefusal } from '../../shared/workflowActorGuard.js';
 import {
   WorkflowValidationError,
   createWorkflow,
@@ -71,6 +72,15 @@ export function createWorkflowsRouter(client: Client) {
     await next();
   });
   const gate = [...guildRoute(client), workflowAccess] as const;
+
+  /**
+   * Un workflow agit avec les droits du bot : qui n'est pas admin ne peut pas y mettre
+   * un rôle plus haut que le sien, ni une sanction qu'il n'aurait pas le droit d'appliquer.
+   */
+  const actorRefusal = async (c: Context, guildId: string, graph: WorkflowGraph): Promise<string | null> =>
+    c.var.effectiveAccess.canManageSettings
+      ? null
+      : workflowActorRefusal(client, guildId, c.var.dashboardUser.userId, graph);
 
   const audit = (c: Context, action: string, details: string) => {
     const guildId = c.req.param('guildId')!;
@@ -191,6 +201,9 @@ export function createWorkflowsRouter(client: Client) {
       const graph = parseGraph(body?.graph);
       if (!graph || typeof body?.name !== 'string') return send(c, { error: 'Nom ou graphe manquant' }, 400);
 
+      const refusal = await actorRefusal(c, guildId, graph);
+      if (refusal) return send(c, { error: refusal }, 403);
+
       const workflow = await createWorkflow(guildId, {
         name: body.name,
         description: typeof body.description === 'string' ? body.description : null,
@@ -226,6 +239,9 @@ export function createWorkflowsRouter(client: Client) {
       const body = await readBody<WorkflowBody>(c);
       const graph = parseGraph(body?.graph);
       if (!graph || typeof body?.name !== 'string') return send(c, { error: 'Nom ou graphe manquant' }, 400);
+
+      const refusal = await actorRefusal(c, guildId, graph);
+      if (refusal) return send(c, { error: refusal }, 403);
 
       const workflow = await updateWorkflow(guildId, c.req.param('workflowId'), {
         name: body.name,

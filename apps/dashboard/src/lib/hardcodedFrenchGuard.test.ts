@@ -118,6 +118,7 @@ const TRANSLATED = [
   'pages/Migration.svelte',
   'pages/NicknameModeration.svelte',
   'pages/NotificationsSettings.svelte',
+  'pages/Updates.svelte',
   'pages/Onboarding.svelte',
   'pages/Profile.svelte',
   'pages/PublicAppeal.svelte',

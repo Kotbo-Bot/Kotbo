@@ -9,6 +9,7 @@
   import ModulePage from "../lib/components/ModulePage.svelte";
   import UserDisplay from "../lib/components/UserDisplay.svelte";
   import { logEntryUser } from "../lib/logEntryUser";
+  import { logModuleHref } from "../lib/logModuleLinks";
   import ColumnSortFilter, {
     type ColumnFilterOption,
   } from "../lib/components/sanctions/ColumnSortFilter.svelte";
@@ -359,7 +360,11 @@
                 {/if}
               </td>
               <td class="px-6 py-6 font-bold text-sm text-primary">
-                {entry.module}
+                {#if logModuleHref(entry.module)}
+                  <a href={logModuleHref(entry.module)} class="hover:underline focus-visible:underline">{entry.module}</a>
+                {:else}
+                  {entry.module}
+                {/if}
               </td>
               <td class="px-6 py-6 font-medium text-sm text-on-surface-variant">
                 {entry.action}
@@ -408,7 +413,7 @@
               </td>
               <td class="px-6 py-6 text-center">
                 <span
-                  class="inline-flex items-center justify-center w-24 px-3 py-1 rounded-full text-2xs font-bold
+                  class="inline-flex items-center justify-center min-w-24 max-w-full px-3 py-1 rounded-full text-2xs font-bold break-all text-center
  {entry.eventType === 'Automatique'
                     ? 'bg-blue-100 text-blue-700'
                     : 'bg-warning/10 text-on-warning-container'}"

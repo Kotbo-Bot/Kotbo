@@ -33,7 +33,7 @@
   }
   const { serverId, giveawayId }: Props = $props();
 
-  const currentLocale = getLocale();
+  const currentLocale = $derived(getLocale());
   function switchLocale(loc: Locale) {
     if (loc === currentLocale) return;
     userPrefs.set('language', loc);

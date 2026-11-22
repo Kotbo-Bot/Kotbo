@@ -26,6 +26,7 @@ import {
 import { v2Message } from '@arcscord/components';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
+import { ENTITLING_STATUSES } from '../billing/entitlingStatuses.js';
 import { kotboContainer, COLORS_RAW } from '../../utils/embeds.js';
 import { E } from '../../utils/emojis.js';
 import { resolveGuildLocale } from '../../utils/i18n.js';
@@ -520,6 +521,20 @@ export async function announceAccessRevoked(client: Client, guildId: string): Pr
 }
 
 /**
+ * Message de fin d'un essai ou d'un abonnement, en salon et en MP au
+ * propriétaire : le serveur repasse sur l'offre gratuite. Rien à voir avec
+ * announceAccessRevoked, un retrait décidé par l'équipe Kotbo.
+ */
+export async function announceAccessEnded(client: Client, guildId: string, type: AccessType): Promise<void> {
+  const guild = await client.guilds.fetch(guildId).catch(() => null);
+  if (!guild) return;
+
+  const content = await endedContent(guild, type);
+  await publishNotice(guild, content);
+  await dmOwner(guild, content);
+}
+
+/**
  * Annonce publiquement le démarrage d'une période d'essai. Appelé juste après
  * l'activation par un code « essai ».
  */
@@ -541,6 +556,18 @@ export async function announceTrialStart(
 // ─────────────────────────────────────────────────────────────
 
 /**
+ * Marque l'accès expiré, ce qui sort le serveur du cron. Seul l'appel qui le
+ * marque reçoit true : le cron et le webhook Stripe n'annoncent la fin qu'une fois.
+ */
+export async function markAccessExpired(guildId: string): Promise<boolean> {
+  const { count } = await prisma.guild.updateMany({
+    where: { id: guildId, accessExpiredAt: null },
+    data: { accessExpiredAt: new Date() },
+  });
+  return count > 0;
+}
+
+/**
  * Termine l'accès d'un serveur : retour sur l'offre gratuite, puis message de
  * fin en salon **et** en MP au propriétaire.
  *
@@ -555,10 +582,7 @@ export async function expireAccess(client: Client, guildId: string): Promise<voi
   const { setGuildPlan } = await import('./planService.js');
   await setGuildPlan(guildId, 'FREE', `accès ${status.accessType} expiré`);
 
-  await prisma.guild.update({
-    where: { id: guildId },
-    data: { accessExpiredAt: new Date() },
-  });
+  if (!(await markAccessExpired(guildId))) return;
 
   logger.info('Access', `Accès ${status.accessType} expiré pour ${guildId} : retour sur l'offre gratuite.`);
 
@@ -571,12 +595,7 @@ export async function expireAccess(client: Client, guildId: string): Promise<voi
     metadata: { accessType: status.accessType },
   });
 
-  const guild = await client.guilds.fetch(guildId).catch(() => null);
-  if (!guild) return;
-
-  const content = await endedContent(guild, status.accessType);
-  await publishNotice(guild, content);
-  await dmOwner(guild, content);
+  await announceAccessEnded(client, guildId, status.accessType);
 }
 
 /**
@@ -655,6 +674,9 @@ export async function processReminder(
   logger.info('Access', `Rappel « ${formatDuration(milestone)} restantes » envoyé à ${guildId}.`);
 }
 
+/** Marge laissée au webhook de renouvellement pour repousser `accessExpiresAt`. */
+const SUBSCRIPTION_RENEWAL_GRACE_MS = 48 * 60 * 60 * 1000;
+
 /**
  * Balayage du cycle de vie : envoie les rappels dus et coupe les accès arrivés à
  * échéance. Idempotent : un double passage ne renvoie rien deux fois.
@@ -681,6 +703,8 @@ export async function runAccessLifecycleCheck(client: Client): Promise<void> {
       accessExpiredAt: true,
       accessDurationMinutes: true,
       accessRemindersSent: true,
+      stripeSubscriptionStatus: true,
+      stripeCancelAtPeriodEnd: true,
     },
   });
 
@@ -689,11 +713,19 @@ export async function runAccessLifecycleCheck(client: Client): Promise<void> {
 
   for (const row of candidates) {
     const status = toStatus(row.id, row, now);
+
+    // Un abonnement actif et non résilié se reconduit : sa fin de période n'est
+    // qu'un jalon que le webhook repousse. Ni rappel, ni coupure avant la marge.
+    const autoRenewing = ENTITLING_STATUSES.has(row.stripeSubscriptionStatus ?? '') && !row.stripeCancelAtPeriodEnd;
+
     try {
       if (status.expired) {
+        if (autoRenewing && now.getTime() - row.accessExpiresAt!.getTime() < SUBSCRIPTION_RENEWAL_GRACE_MS) continue;
         await expireAccess(client, row.id);
         continue;
       }
+
+      if (autoRenewing) continue;
 
       await processReminder(client, row.id, status);
     } catch (err) {

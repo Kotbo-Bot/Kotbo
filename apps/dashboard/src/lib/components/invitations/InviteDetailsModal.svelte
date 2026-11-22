@@ -1,5 +1,6 @@
 <script lang="ts">
   import MemberTag from '../MemberTag.svelte';
+  import UserDisplay from '../UserDisplay.svelte';
   /**
    * Vue détaillée d'un code d'invitation, présentée comme la fiche membre :
    * tuiles qui pilotent la courbe (période précédente en pointillé), sections
@@ -458,6 +459,9 @@
             </SectionCard>
 
             <SectionCard title={m.d7_inv_creator()}>
+              {#if details.invite?.inviterId}
+                <UserDisplay userId={details.invite.inviterId} name={details.invite.inviterTag} size="sm" />
+              {/if}
               {@render facts([
                 { label: m.d7_inv_tag(), value: details.invite?.inviterTag || m.d7_unknown() },
                 { label: m.d7_inv_id(), value: details.invite?.inviterId || '–' },

@@ -23,6 +23,7 @@ import {
 import type { TagAutomodConfig, TagAutomodRule } from '@prisma/client';
 import prisma from '../../../utils/db.js';
 import { logger } from '../../../utils/logger.js';
+import { isAutoGrantableRole } from '../../../utils/adminLockPermissions.js';
 import { getCachedGuild } from '../../../utils/cache.js';
 import { resolveLogChannel } from '../../../utils/logChannel.js';
 import { resolveGuildLocale, type BotLocale } from '../../../utils/i18n.js';
@@ -298,10 +299,14 @@ export async function applyTagHit(
           if (await recentTicketExists(guild.id, member.id)) status = 'SKIPPED';
           else await openTagTicket(member, t.ticketReason(tagText), renderTagMessage(hit.message || t.defaultTicket, vars));
           break;
-        case 'ROLE':
-          if (!hit.roleId) status = 'FAILED';
-          else await member.roles.add(hit.roleId, t.reason(label, tagText));
+        case 'ROLE': {
+          // Le bot ne distribue pas un rôle Administrateur, géré ou placé au-dessus
+          // de lui : une règle ne contourne pas l'Admin Lock par ce biais.
+          const role = hit.roleId ? guild.roles.cache.get(hit.roleId) : null;
+          if (!role || role.managed || !role.editable || !isAutoGrantableRole(role)) status = 'FAILED';
+          else await member.roles.add(role, t.reason(label, tagText));
           break;
+        }
         default: {
           const result = await applyAutoSanction({
             client: member.client,

@@ -26,7 +26,6 @@ import {
   rankCardPreviewRateLimiter,
   setDashboardStateBroadcaster,
   setDashboardEventBroadcaster,
-  collectShardGuilds,
   resolveDashboardAccess,
   type DashboardEvent,
   type DashboardSanctionType,
@@ -180,7 +179,7 @@ export const startDashboardApi = async (client: Client) => {
   // Annonces globales programmees : le planificateur vit dans le processus qui
   // porte l'API, seul endroit qui dispose a la fois du client Discord et de la
   // base. L'etat etant persiste, un redemarrage ne perd aucune annonce.
-  startBroadcastScheduler(client, collectShardGuilds);
+  startBroadcastScheduler(client);
 
   const handleRequest = async (request: Request, serverInstance: Server<WebSocketData>): Promise<Response | undefined> => {
     const url = new URL(request.url);
@@ -269,6 +268,9 @@ export const startDashboardApi = async (client: Client) => {
   const startServer = (listenPort: number) => Bun.serve<WebSocketData>({
     port: listenPort,
     reusePort: true,
+    // Par défaut Bun coupe toute requête HTTP sans réponse après 10s, ce qui
+    // provoque des 502 côté proxy (sans en-têtes CORS) sur les routes lentes.
+    idleTimeout: 120,
     fetch(request, serverInstance) {
       // Domaine perso d'un serveur : liste blanche de routes, un seul serveur
       // accessible, et la portée suit la requête jusqu'aux contrôles d'accès.
@@ -343,17 +345,25 @@ export const startDashboardApi = async (client: Client) => {
           return;
         }
         if (data.type !== 'analytics_live_subscribe' || live.has(guildId) || live.size >= LIVE_SUBSCRIPTIONS_MAX) return;
+        // Réservée et comptée avant l'attente des droits : un doublon est ignoré,
+        // et un désabonnement ou un `close` survenus entre-temps la décomptent.
+        live.add(guildId);
+        addLiveSubscriber(guildId);
+        const release = () => {
+          if (live.delete(guildId)) removeLiveSubscriber(guildId);
+        };
         try {
           const access = await resolveDashboardAccess(client, guildId, ws.data.userId);
           if (!access.canViewDashboard || !(await canViewFeatureSection(client, guildId, access, ws.data.userId, 'analytics'))) {
+            release();
             ws.send(JSON.stringify({ type: 'analytics_live_denied', guildId }));
             return;
           }
-          live.add(guildId);
+          if (!live.has(guildId)) return;
           ws.subscribe(liveTopic(guildId));
-          addLiveSubscriber(guildId);
           ws.send(JSON.stringify(liveSnapshot(client, guildId)));
         } catch (err) {
+          release();
           logger.warn('DashboardWS', `Abonnement live refusé pour ${guildId} :`, err);
         }
       },

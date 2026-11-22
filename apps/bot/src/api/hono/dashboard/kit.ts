@@ -10,6 +10,7 @@ import { createMiddleware } from 'hono/factory';
 import type { Client } from 'discord.js';
 import {
   HttpError,
+  auditActorStore,
   etagMatches,
   splitPath,
   verifyAuthHeaders,
@@ -92,7 +93,7 @@ export const dashboardAuth = createMiddleware(async (c, next) => {
   const user = await verifyAuthHeaders(c.req.header('authorization'), c.req.header('cookie'));
   if (!user) return c.json({ error: 'Non authentifié' }, 401);
   c.set('dashboardUser', user);
-  await next();
+  await auditActorStore.run({ userId: user.userId, username: user.username ?? null }, next);
 });
 
 /**

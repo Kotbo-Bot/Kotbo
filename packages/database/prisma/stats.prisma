@@ -45,7 +45,27 @@ model FeaturedGuild {
 model LocalInstanceIdentity {
   id                 String   @id @default("singleton")
   machineFingerprint String   @unique @default(uuid())
+  // Dernier bail signe par le master (voir instanceRegistry.ts) : conserve
+  // pour qu'un redemarrage pendant une panne du master ne coupe pas une
+  // instance autorisee.
+  lease              String?
   createdAt          DateTime @default(now())
 
   @@map("local_instance_identity")
+}
+
+// Liste blanche des instances externes (self-host) autorisees a tourner. Table
+// distincte de bot_instance_stats : celle-ci est purgee apres 48 h sans ping,
+// alors qu'une autorisation doit survivre. Sans ligne active ici, le master
+// refuse de delivrer un bail quand KOTBO_REQUIRE_INSTANCE_AUTH=true.
+model AuthorizedInstance {
+  botClientId  String    @id
+  label        String?
+  authorizedBy String
+  createdAt    DateTime  @default(now())
+  revokedAt    DateTime?
+  revokedBy    String?
+
+  @@index([revokedAt])
+  @@map("authorized_instances")
 }

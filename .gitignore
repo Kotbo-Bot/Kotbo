@@ -21,3 +21,6 @@ AGENTS.md
 # Sortie du generateur de maquette (scratch local, jamais livre)
 .maquette-tmp/
 /docs/releases
+
+# Clé privée d'émission des baux du registre d'instances : ne jamais committer
+.registry-private-key

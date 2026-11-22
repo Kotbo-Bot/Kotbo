@@ -41,6 +41,7 @@ import { kotboEventBus } from '@kotbo/core';
 import prisma, { prismaRead } from '../../utils/db.js';
 import { upsertRetryingRace } from '../../utils/upsertRetry.js';
 import { logger } from '../../utils/logger.js';
+import { isAutoGrantableRoleId } from '../../utils/adminLockPermissions.js';
 import { cache, getCachedGuild } from '../../utils/cache.js';
 import { type BotLocale, resolveGuildLocale } from '../../utils/i18n.js';
 import * as m from '../../lib/paraglide/messages.js';
@@ -463,7 +464,7 @@ async function runRoleResync(guildId: string, client: Client, job: RoleResyncJob
       const member = await discordGuild.members.fetch(move.userId).catch(() => null);
       if (member) {
         const target = new Set(move.roles);
-        const toAdd = move.roles.filter((roleId) => !member.roles.cache.has(roleId));
+        const toAdd = move.roles.filter((roleId) => !member.roles.cache.has(roleId) && isAutoGrantableRoleId(member.guild, roleId));
         const toRemove = job.managedRoleIds.filter((roleId) => !target.has(roleId) && member.roles.cache.has(roleId));
         if (toRemove.length > 0) await member.roles.remove(toRemove).catch(() => null);
         if (toAdd.length > 0) await member.roles.add(toAdd).catch(() => null);
@@ -848,11 +849,14 @@ export async function addXp(
       // échec du crédit (module économie momentanément indisponible, etc.) laisserait le
       // niveau monté sans aucune compensation.
       const coinReward = await getLevelUpCoinReward(guildId, newLevel);
-      await prisma.$transaction(async (tx) => {
-        await tx.memberLevel.update({
-          where: { guildId_userId: { guildId, userId } },
+      const reserved = await prisma.$transaction(async (tx) => {
+        // Écriture conditionnelle en guise de verrou : de deux gains simultanés, seul
+        // celui qui trouve encore l'ancien niveau fait monter, crédite et annonce.
+        const moved = await tx.memberLevel.updateMany({
+          where: { guildId, userId, level: previousLevel },
           data: { level: newLevel },
         });
+        if (moved.count === 0) return false;
         if (coinReward) {
           await tx.rpgProfile.upsert({
             where: { guildId_userId: { guildId, userId } },
@@ -872,7 +876,9 @@ export async function addXp(
             },
           });
         }
+        return true;
       });
+      if (!reserved) return;
 
       // Notification + récompenses annexes (rôles, points de clan) : best-effort, le
       // niveau et les pièces sont déjà garantis commis à ce stade.
@@ -1150,7 +1156,7 @@ async function processLevelUp(
 
       for (const reward of rewards) {
         if (newLevel >= reward.level) {
-          if (!member.roles.cache.has(reward.roleId)) {
+          if (!member.roles.cache.has(reward.roleId) && isAutoGrantableRoleId(member.guild, reward.roleId)) {
             rolesToAdd.push(reward.roleId);
           }
         } else {
@@ -1686,7 +1692,7 @@ export async function updateMemberLevelRoles(guildId: string, userId: string, le
 
       for (const reward of rewards) {
         if (level >= reward.level) {
-          if (!member.roles.cache.has(reward.roleId)) {
+          if (!member.roles.cache.has(reward.roleId) && isAutoGrantableRoleId(member.guild, reward.roleId)) {
             rolesToAdd.push(reward.roleId);
           }
         } else {

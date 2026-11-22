@@ -80,14 +80,16 @@ export function chunkLogins(logins: readonly string[], size = TWITCH_BATCH_SIZE)
 }
 
 /**
- * Un live est annonce lorsqu'il devient visible ou que son identifiant change
- * (nouveau stream apres une coupure), jamais deux fois pour le meme stream.
+ * Un live est annonce lorsque son identifiant change (nouveau stream apres une
+ * coupure), jamais deux fois pour le meme stream. `isLive` ne sert qu'a
+ * l'affichage : un passage hors ligne a tort, sur une reponse Helix incomplete,
+ * ne doit pas faire reannoncer le meme live avec sa mention.
  */
 export function shouldAnnounceStream(
   state: Pick<TwitchChannelFollow, 'isLive' | 'lastStreamId'>,
   streamId: string,
 ): boolean {
-  return !state.isLive || state.lastStreamId !== streamId;
+  return state.lastStreamId !== streamId;
 }
 
 /** Contenu du message et titre de l'embed d'une alerte live. */
@@ -221,12 +223,17 @@ export async function getTwitchUserId(username: string, fetchImpl: FetchLike = f
   }
 }
 
-/** Statut live d'un ensemble de chaines, indexe par login en minuscules. */
+/**
+ * Statut live d'un ensemble de chaines, indexe par login en minuscules.
+ * `checked` ne retient que les logins dont le lot a repondu : une chaine
+ * absente de `live` n'est hors ligne que si Helix a bien ete interroge.
+ */
 export async function fetchLiveStreams(
   logins: readonly string[],
   fetchImpl: FetchLike = fetch,
-): Promise<Map<string, TwitchStream>> {
+): Promise<{ live: Map<string, TwitchStream>; checked: Set<string> }> {
   const liveMap = new Map<string, TwitchStream>();
+  const checked = new Set<string>();
 
   for (const batch of chunkLogins(logins)) {
     const res = await helixFetch(buildStreamsUrl(batch), fetchImpl);
@@ -236,12 +243,17 @@ export async function fetchLiveStreams(
     }
 
     const data = await res.json().catch(() => null) as { data?: TwitchStream[] } | null;
-    for (const stream of data?.data ?? []) {
+    if (!Array.isArray(data?.data)) {
+      logger.warn('TwitchService', 'Reponse Helix illisible, statuts du lot ignores.');
+      continue;
+    }
+    for (const stream of data.data) {
       liveMap.set(stream.user_login.toLowerCase(), stream);
     }
+    for (const login of batch) checked.add(login.toLowerCase());
   }
 
-  return liveMap;
+  return { live: liveMap, checked };
 }
 
 // ==================== BOUCLE PRINCIPALE ====================
@@ -271,10 +283,13 @@ export async function checkTwitchFollows(client: Client, fetchImpl: FetchLike = 
     if (activeFollows.length === 0) return;
 
     const logins = Array.from(new Set(activeFollows.map((f) => f.streamerName.toLowerCase())));
-    const liveMap = await fetchLiveStreams(logins, fetchImpl);
+    const { live, checked } = await fetchLiveStreams(logins, fetchImpl);
 
     for (const follow of activeFollows) {
-      await processFollow(client, follow, liveMap.get(follow.streamerName.toLowerCase()));
+      const login = follow.streamerName.toLowerCase();
+      // Lot en echec : statut inconnu, l'etat reste tel quel.
+      if (!checked.has(login)) continue;
+      await processFollow(client, follow, live.get(login));
     }
   } catch (error) {
     logger.error('TwitchService', 'Erreur pendant la verification des abonnements Twitch:', error);
@@ -297,7 +312,17 @@ async function processFollow(
     return;
   }
 
-  if (!shouldAnnounceStream(follow, stream.id)) return;
+  if (!shouldAnnounceStream(follow, stream.id)) {
+    // Live deja annonce : rien a envoyer, mais un etat passe hors ligne entre
+    // deux reponses Helix repasse en live pour le dashboard.
+    if (!follow.isLive) {
+      await prisma.twitchChannelFollow.update({
+        where: { id: follow.id },
+        data: { isLive: true },
+      }).catch((e: Error) => logger.error('TwitchService', "Mise a jour de l'abonnement impossible:", e));
+    }
+    return;
+  }
 
   const targetChannelId = follow.discordChannelId || follow.guild.publicChannelId;
   if (targetChannelId) {

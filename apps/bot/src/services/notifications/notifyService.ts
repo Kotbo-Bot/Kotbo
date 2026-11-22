@@ -69,7 +69,7 @@ export type NotifyResult = {
 };
 
 // Pas `getDashboardUrl` (api/shared/core) : ce module tire toute l'API dans le graphe d'import.
-function dashboardOrigin(): string {
+export function dashboardOrigin(): string {
   try {
     return getCurrentInstance().dashboardUrl;
   } catch {

@@ -4,7 +4,8 @@
 import type { MemberCaseLogEntry, MemberCaseResponse, SanctionItem, SanctionReportItem } from '@kotbo/contracts';
 import { route } from '../backend';
 import { demoDb } from '../db';
-import { MEMBERS, ROLES, VOICE_CHANNELS, ago, role, ME, HOUR, DAY, channelByName, personById, personByName, type DemoPerson } from '../fixtures';
+import { MEMBERS, ROLES, VOICE_CHANNELS, ago, avatarOf, role, ME, HOUR, DAY, channelByName, personById, personByName, type DemoPerson } from '../fixtures';
+import { DEMO_GUILD_ID } from '../mode';
 import { sanctionsSeed, auditSeed } from '../stories';
 import { interactionEdges, messagesOf, type DemoMessage } from '../activity';
 import { inviteOf } from './analytics';
@@ -467,4 +468,123 @@ export function registerMembersRoutes(): void {
       suggestions: [],
     };
   });
+
+  // ── Membres fantômes (Ghost Members) ───────────────────────────────────
+  const ghostConfigSeed = () => ({
+    guildId: DEMO_GUILD_ID,
+    enabled: true,
+    inactiveDays: 60,
+    spectatorWindowDays: 30,
+    gracePeriodDays: 30,
+    protectStaff: true,
+    protectBoosters: true,
+    protectedRoleIds: [] as string[],
+    maxPruneBatch: 50,
+    pruneReason: 'Nettoyage des membres inactifs',
+    lastComputedAt: ago(3 * HOUR),
+  });
+
+  const ghostMembersList = () => {
+    const humans = MEMBERS.filter((m) => !m.bot);
+    return humans.map((m, i) => {
+      const status = m.messages >= 400 ? 'ACTIVE' : m.messages >= 80 ? 'SPECTATOR' : m.joinedMinutesAgo < 14 * DAY ? 'NEW' : 'INACTIVE';
+      const protections: string[] = [];
+      if (m.grade) protections.push('STAFF');
+      if (i % 7 === 0) protections.push('BOOSTER');
+      if (status === 'NEW') protections.push('GRACE_PERIOD');
+      return {
+        userId: m.id,
+        username: m.username,
+        displayName: m.displayName,
+        avatarUrl: avatarOf(m),
+        status,
+        ghostScore: status === 'INACTIVE' ? 75 + (i % 20) : status === 'SPECTATOR' ? 40 + (i % 20) : 10 + (i % 15),
+        joinedAt: ago(m.joinedMinutesAgo),
+        lastMessageAt: status === 'INACTIVE' ? ago(70 * DAY) : ago((i % 10) * DAY),
+        lastSilentActivityAt: ago((i % 15) * DAY),
+        lastAnyActivityAt: status === 'INACTIVE' ? ago(65 * DAY) : ago((i % 8) * DAY),
+        messageCount: m.messages,
+        voiceTimeSeconds: m.voiceMinutes * 60,
+        interactionCount: Math.max(0, Math.round(m.messages * 0.15)),
+        protections,
+        stillInGuild: true,
+      };
+    });
+  };
+
+  const ghostCounts = (rows: ReturnType<typeof ghostMembersList>) => {
+    const counts = { ACTIVE: 0, SPECTATOR: 0, INACTIVE: 0, NEW: 0 };
+    for (const r of rows) counts[r.status as keyof typeof counts] += 1;
+    return counts;
+  };
+
+  route('GET', '/api/dashboard/guilds/:id/ghost-members', () => {
+    const rows = ghostMembersList();
+    const config = demoDb.get('ghost-config', ghostConfigSeed);
+    return {
+      distribution: { counts: ghostCounts(rows), total: rows.length, lastComputedAt: config.lastComputedAt },
+      config,
+    };
+  });
+
+  route('GET', '/api/dashboard/guilds/:id/ghost-members/members', ({ query }) => {
+    const status = query.get('status') ?? '';
+    const search = (query.get('search') ?? '').trim().toLowerCase();
+    const page = Math.max(1, parseInt(query.get('page') ?? '1', 10) || 1);
+    const pageSize = Math.min(100, Math.max(1, parseInt(query.get('pageSize') ?? '25', 10) || 25));
+    const filtered = ghostMembersList().filter((m) => {
+      if (status && m.status !== status) return false;
+      if (search && !m.username.toLowerCase().includes(search) && !(m.displayName ?? '').toLowerCase().includes(search)) return false;
+      return true;
+    });
+    return { members: filtered.slice((page - 1) * pageSize, page * pageSize), total: filtered.length, page, pageSize };
+  });
+
+  route('PATCH', '/api/dashboard/guilds/:id/ghost-members/config', ({ body }) => {
+    const config = demoDb.update('ghost-config', ghostConfigSeed, (cur) => ({ ...cur, ...(body ?? {}) }));
+    return { config };
+  });
+
+  route('POST', '/api/dashboard/guilds/:id/ghost-members/recompute', () => {
+    const rows = ghostMembersList();
+    demoDb.update('ghost-config', ghostConfigSeed, (cur) => ({ ...cur, lastComputedAt: new Date().toISOString() }));
+    return { counts: ghostCounts(rows) };
+  });
+
+  route('POST', '/api/dashboard/guilds/:id/ghost-members/prune/preview', ({ body }) => {
+    const statuses: string[] = Array.isArray(body?.statuses) ? body.statuses : ['INACTIVE'];
+    const config = demoDb.get('ghost-config', ghostConfigSeed);
+    const all = ghostMembersList().filter((m) => statuses.includes(m.status));
+    const candidates = all.filter((m) => m.protections.length === 0).slice(0, config.maxPruneBatch);
+    return {
+      candidates,
+      protectedCount: all.filter((m) => m.protections.length > 0).length,
+      analyzedCount: all.length,
+      truncated: false,
+      maxPruneBatch: config.maxPruneBatch,
+      config,
+    };
+  });
+
+  route('POST', '/api/dashboard/guilds/:id/ghost-members/prune', ({ body }) => {
+    const count = Array.isArray(body?.userIds) ? body.userIds.length : 0;
+    return { runId: `ghost-run-${Date.now()}`, status: 'COMPLETED', totalTargeted: count, successCount: count, failureCount: 0, failures: [] };
+  });
+
+  route('GET', '/api/dashboard/guilds/:id/ghost-members/runs', () => ({
+    runs: [
+      {
+        id: 'ghost-run-1',
+        executedByName: ME.displayName,
+        status: 'COMPLETED',
+        targetStatuses: ['INACTIVE'],
+        totalTargeted: 4,
+        successCount: 4,
+        failureCount: 0,
+        reason: 'Nettoyage trimestriel',
+        startedAt: ago(18 * DAY),
+        completedAt: ago(18 * DAY),
+      },
+    ],
+  }));
 }

@@ -1171,6 +1171,10 @@
               load={() => import("./pages/Notifications.svelte")}
             />
             <LazyRoute
+              path="/updates"
+              load={() => import("./pages/Updates.svelte")}
+            />
+            <LazyRoute
               path="/tutoring/*"
               load={() => import("./pages/Tutoring.svelte")}
             />
@@ -1287,6 +1291,18 @@
             <LazyRoute
               path="/userSettings/*"
               load={() => import("./pages/UserSettings.svelte")}
+            />
+
+            <!-- Retirés en v10.0 : un ancien lien explique au lieu d'une 404. -->
+            <LazyRoute
+              path="/partnerships/*"
+              load={() => import("./pages/RetiredFeature.svelte")}
+              props={() => ({ feature: "partnerships" })}
+            />
+            <LazyRoute
+              path="/daily-algo/*"
+              load={() => import("./pages/RetiredFeature.svelte")}
+              props={() => ({ feature: "daily_algo" })}
             />
 
             <!-- Fallback for authenticated users -->

@@ -102,6 +102,8 @@ export const NOTIFICATION_KINDS = {
   'system.workflow_failed': { category: 'system' },
   'system.reaction_role_blocked': { category: 'system' },
   'system.reaction_role_message_deleted': { category: 'system' },
+  // Annonce globale Kotbo (mise à jour, sondage) : lue sur la page /updates.
+  'system.announcement': { category: 'system' },
   // Repli pour ce qui n'a pas encore de type
   'system.generic': { category: 'system' },
 } as const satisfies Record<string, NotificationKindMeta>;

@@ -29,8 +29,8 @@ const data = new SlashCommandBuilder()
     sub
       .setName('send')
       .setNameLocalizations({ fr: 'envoyer' })
-      .setDescription('Post an anonymous confession')
-      .setDescriptionLocalizations({ fr: 'Publier une confession anonyme' })
+      .setDescription('Post a confession (hidden from members; an admin can reveal the author)')
+      .setDescriptionLocalizations({ fr: 'Publier une confession (masquée aux membres, révélable par un admin)' })
       .addStringOption((o) =>
         o
           .setName('message')
@@ -201,7 +201,7 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
   );
 
   if (result.ok) {
-    await reply(successEmbed(t('Confession envoyée', 'Confession sent'), t(`Publiée anonymement (#${result.number}).`, `Posted anonymously (#${result.number}).`)));
+    await reply(successEmbed(t('Confession envoyée', 'Confession sent'), t(`Publiée sans votre nom (#${result.number}). Votre identité est enregistrée : un administrateur du serveur peut la révéler.`, `Posted without your name (#${result.number}). Your identity is recorded: a server administrator can reveal it.`)));
     return;
   }
 

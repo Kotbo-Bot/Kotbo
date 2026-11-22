@@ -74,6 +74,8 @@ model YoutubeChannelFollow {
   lastLiveId String?
   lastVideoId String?
   lastShortId String?
+  // Derniers identifiants vus, tous types confondus : une vidéo revenue en tête du flux n'est pas réannoncée
+  recentVideoIds String[] @default([])
 
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())

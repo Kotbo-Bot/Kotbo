@@ -68,3 +68,15 @@ export function allowedMentionsFor(mention?: string | null): MessageMentionOptio
   if (normalized === '@everyone' || normalized === '@here') return { parse: ['everyone'] };
   return { parse: [], roles: [normalized.slice(3, -1)] };
 }
+
+const MASS_MENTION = /@(everyone|here)/g;
+
+/**
+ * Rend inoffensive une mention de masse dans un texte qui ne vient pas d'un
+ * administrateur (message relayé, pseudo repris dans un gabarit). L'espace de
+ * largeur nulle se lit à l'identique mais ne notifie plus, sans brider l'envoi :
+ * un `@everyone` écrit par l'administrateur dans le gabarit reste actif.
+ */
+export function neutralizeMassMentions(text: string): string {
+  return text.replace(MASS_MENTION, '@\u200b$1');
+}

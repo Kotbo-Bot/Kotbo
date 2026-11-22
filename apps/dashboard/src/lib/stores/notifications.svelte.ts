@@ -68,7 +68,7 @@ class NotificationsStore {
   constructor() {
     onNotificationOpened((id) => {
       const notif = this.items.find((n) => n.id === id);
-      if (notif && !notif.isRead) void this.markAsRead(id);
+      return notif && !notif.isRead ? this.markAsRead(id) : undefined;
     });
   }
 
@@ -94,14 +94,22 @@ class NotificationsStore {
   }
 
   /** Ouvre ce qu'annonce la notification, en basculant sur son serveur si besoin. */
-  open(n: Notification) {
-    if (!n.isRead) void this.markAsRead(n.id);
+  async open(n: Notification) {
+    const read = n.isRead ? undefined : this.markAsRead(n.id);
     const link = n.link || '/notifications';
     if (!link.startsWith('/') || link.startsWith('//')) {
       window.location.href = link;
       return;
     }
-    if (n.guildId !== authStore.selectedGuildId && authStore.guilds.some((g) => g.id === n.guildId)) authStore.setGuild(n.guildId);
+    // Changer de serveur demande un rechargement complet, comme le sélecteur de
+    // serveurs (ServerSwitcherModal) : LazyPage ne se remonte pas sur le serveur.
+    // Le rechargement couperait la requête de lecture : on attend qu'elle aboutisse.
+    if (n.guildId !== authStore.selectedGuildId && authStore.guilds.some((g) => g.id === n.guildId)) {
+      await read;
+      authStore.setGuild(n.guildId);
+      window.location.assign(link);
+      return;
+    }
     router.goto(link);
   }
 

@@ -166,6 +166,16 @@ function fullAnalytics(period: number) {
     .map((r) => ({ roleId: r.id, roleName: r.name, color: r.color, count: MEMBERS.filter((m) => m.roles.includes(r.id)).length }))
     .sort((a, b) => b.count - a.count);
 
+  const inviterCounts = new Map<string, { inviterId: string; tag: string; count: number }>();
+  for (const inv of INVITES) {
+    const inviterId = personByName(inv.inviter).id;
+    const count = Math.round(inv.uses * Math.min(1, days / 120)) || 1;
+    const prev = inviterCounts.get(inviterId);
+    if (prev) prev.count += count;
+    else inviterCounts.set(inviterId, { inviterId, tag: inv.inviter, count });
+  }
+  const topInviters = [...inviterCounts.values()].sort((a, b) => b.count - a.count);
+
   return {
     period: days,
     timezone: 'Europe/Paris',
@@ -244,7 +254,7 @@ function fullAnalytics(period: number) {
       voiceTimeSeconds: t.voiceMinutes * 60,
       voiceSessionCount: Math.max(1, Math.round(t.voiceMinutes / 50)),
     })),
-    topInviters: INVITES.map((inv) => ({ inviterId: personByName(inv.inviter).id, tag: inv.inviter, count: Math.round(inv.uses * Math.min(1, days / 120)) || 1 })),
+    topInviters,
     topModerators,
     topSanctionedMembers: mostSanctioned,
     recentSanctions,
@@ -868,28 +878,6 @@ function inviteAnalytics() {
   });
 }
 
-function channelDetail(channelId: string, days: number) {
-  const channel = [...CHANNELS, ...VOICE_CHANNELS].find((c) => c.id === channelId) ?? CHANNELS[3];
-  const isVoice = channel.type === 'voice';
-  const share = channelMessages(days).find((c) => c.channel.id === channel.id)?.messages ?? 0;
-  const series = serverSeries(days);
-  const total = sum(series, (d) => d.messages) || 1;
-  const authors = messageCorpus().filter((m) => m.channelId === channel.id);
-  const counts = new Map<string, number>();
-  for (const m of authors) counts.set(m.authorId, (counts.get(m.authorId) ?? 0) + 1);
-  return {
-    channel: { id: channel.id, name: channel.name, type: channel.type, topic: null, createdAt: ago(500 * DAY), categoryName: CATEGORY_OF[channel.name] ?? null },
-    period: days,
-    totals: { messages: share, voiceMinutes: isVoice ? Math.round(total * 0.4) : 0, activeMembers: counts.size, avgPerDay: Math.round(share / days) },
-    dailyTrend: series.map((d) => ({ dateKey: d.dateKey, messages: Math.round((d.messages * share) / total), voiceMinutes: isVoice ? Math.round(d.voiceMinutes * 0.7) : 0 })),
-    topMembers: [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10).map(([userId, count]) => ({
-      userId, name: nameOf(userId), avatarUrl: null, messages: Math.round(count * (share / Math.max(1, authors.length))), voiceMinutes: 0,
-    })),
-    hourly: Array.from({ length: 24 }, (_, hour) => ({ hour, messages: Math.round(Math.exp(-((hour - 21) ** 2) / 14) * share / 60) })),
-    recentMessages: authors.slice(0, 8).map((m) => ({ id: m.id, authorId: m.authorId, authorName: m.author.displayName, content: m.content, createdAt: m.createdAt })),
-  };
-}
-
 export function registerAnalyticsRoutes(): void {
   const base = '/api/dashboard/guilds/:guildId/analytics';
   route('GET', base, ({ query }) => fullAnalytics(periodOf(query)));
@@ -906,7 +894,6 @@ export function registerAnalyticsRoutes(): void {
   route('GET', `${base}/advanced`, ({ query }) => advanced(query.get('section') ?? ''));
   route('GET', `${base}/members`, ({ query }) => memberDetailed(query.get('userId') ?? '', Number(query.get('period')) || 30));
   route('GET', `${base}/invites`, () => inviteAnalytics());
-  route('GET', `${base}/channels/:channelId`, ({ params, query }) => channelDetail(params.channelId, Number(query.get('days')) || 30));
   route('GET', `${base}/correlation`, () => ({
     data: memberTotals(30).filter((t) => t.messages || t.voiceMinutes).map((t) => ({ userId: t.person.id, messages: t.messages, voice: t.voiceMinutes })),
   }));

@@ -6,7 +6,12 @@ const SECRET = 'test-secret';
 describe('lien iCal du planning', () => {
   test('un lien signé se relit, un lien modifié est refusé', () => {
     const token = signIcalToken('123456789012345678', '987654321098765432', SECRET);
-    expect(verifyIcalToken(token, SECRET)).toEqual({ guildId: '123456789012345678', userId: '987654321098765432' });
+    expect(verifyIcalToken(token, SECRET)).toEqual({ guildId: '123456789012345678', userId: '987654321098765432', version: 0 });
+
+    // Un lien versionné se relit avec sa version ; une autre version ne ressemble pas à la première.
+    const v2 = signIcalToken('123456789012345678', '987654321098765432', SECRET, 2);
+    expect(verifyIcalToken(v2, SECRET)?.version).toBe(2);
+    expect(v2).not.toBe(token);
 
     const [payload, sig] = token.split('.');
     const other = Buffer.from('123456789012345678.111111111111111111').toString('base64url');

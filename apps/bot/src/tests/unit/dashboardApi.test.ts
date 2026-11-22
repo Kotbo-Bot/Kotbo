@@ -6,7 +6,7 @@ import { Socket, type AddressInfo } from 'node:net';
 import { completeModuleMock } from '../helpers/moduleMock.js';
 import { resetCurrentInstance } from '../../utils/instanceContext.js';
 import jwt from 'jsonwebtoken';
-import { type Client } from 'discord.js';
+import { PermissionFlagsBits, type Client } from 'discord.js';
 
 // Setup DB Mock before importing route modules
 const mockDb = {
@@ -293,6 +293,11 @@ function createMockResponse(): MockResponse {
   return res;
 }
 
+/** Droits de l'auteur dans le salon visé, tels que `permissionsFor(membre)` les rend. */
+const noChannelPermissions = { has: () => false };
+let authorChannelPermissions: { has: (flag: bigint) => boolean } = noChannelPermissions;
+const channelSend = mock((options: Record<string, unknown>) => Promise.resolve({ id: 'sent-msg-id', ...options }));
+
 // Mock Discord Client
 const mockClient = {
   users: {
@@ -323,7 +328,9 @@ const mockClient = {
             get: mock((channelId: string) => ({
               id: channelId,
               isTextBased: () => true,
-              send: mock((options: Record<string, unknown>) => Promise.resolve({ id: 'sent-msg-id', ...options })),
+              // Comme discord.js : un identifiant ne se résout que dans le cache des membres, vide ici.
+              permissionsFor: (cible: unknown) => (typeof cible === 'string' ? null : authorChannelPermissions),
+              send: channelSend,
               messages: {
                 fetch: mock((messageId: string) => Promise.resolve({
                   id: messageId,
@@ -615,6 +622,25 @@ describe('Modular Routers Unit Tests', () => {
       expect(JSON.parse(res.body).error).toBe('plan_required');
     });
 
+    async function registerOAuthClient(redirectUri: string): Promise<string> {
+      const regReq = createMockRequest({
+        method: 'POST',
+        url: '/api/mcp/112233445566778899/oauth/register',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ client_name: 'Test client', redirect_uris: [redirectUri] }),
+      });
+      const regRes = createMockResponse();
+      await handleMCPRoutes(
+        regReq as IncomingMessage & { bodyText?: string },
+        regRes,
+        splitPath(new URL(regReq.url!, 'http://localhost').pathname),
+        new URL(regReq.url!, 'http://localhost'),
+        mockClient,
+      );
+      expect(regRes.statusCode).toBe(201);
+      return JSON.parse(regRes.body).client_id as string;
+    }
+
     test('rejects encoded guildId template from OAuth discovery', async () => {
       const req = createMockRequest({
         method: 'GET',
@@ -632,9 +658,10 @@ describe('Modular Routers Unit Tests', () => {
     });
 
     test('OAuth authorize page overrides global CSP so inline CSS can render', async () => {
+      const registeredId = await registerOAuthClient('https://claude.ai/api/mcp/auth_callback');
       const req = createMockRequest({
         method: 'GET',
-        url: '/api/mcp/112233445566778899/oauth/authorize?client_id=test&redirect_uri=https%3A%2F%2Fclaude.ai%2Fapi%2Fmcp%2Fauth_callback&code_challenge=abc',
+        url: `/api/mcp/112233445566778899/oauth/authorize?client_id=${registeredId}&redirect_uri=https%3A%2F%2Fclaude.ai%2Fapi%2Fmcp%2Fauth_callback&code_challenge=abc`,
       });
       const res = createMockResponse();
       const parts = splitPath(new URL(req.url!, 'http://localhost').pathname);
@@ -648,10 +675,32 @@ describe('Modular Routers Unit Tests', () => {
       expect(res.body).toContain('<style>');
     });
 
-    test('OAuth authorize page lets the form redirect back to the client callback', async () => {
+    test('OAuth authorize refuses a redirect_uri the client never registered', async () => {
+      const registeredId = await registerOAuthClient('https://claude.ai/api/mcp/auth_callback');
       const req = createMockRequest({
         method: 'GET',
-        url: '/api/mcp/112233445566778899/oauth/authorize?client_id=test&redirect_uri=http%3A%2F%2Flocalhost%3A33418%2Fcallback&code_challenge=abc',
+        url: `/api/mcp/112233445566778899/oauth/authorize?client_id=${registeredId}&redirect_uri=https%3A%2F%2Fevil.example%2Fcb&code_challenge=abc`,
+      });
+      const res = createMockResponse();
+      const url = new URL(req.url!, 'http://localhost');
+      await handleMCPRoutes(req as IncomingMessage & { bodyText?: string }, res, splitPath(url.pathname), url, mockClient);
+      expect(res.statusCode).toBe(400);
+
+      const unknownReq = createMockRequest({
+        method: 'GET',
+        url: '/api/mcp/112233445566778899/oauth/authorize?client_id=never-registered&redirect_uri=https%3A%2F%2Fclaude.ai%2Fapi%2Fmcp%2Fauth_callback&code_challenge=abc',
+      });
+      const unknownRes = createMockResponse();
+      const unknownUrl = new URL(unknownReq.url!, 'http://localhost');
+      await handleMCPRoutes(unknownReq as IncomingMessage & { bodyText?: string }, unknownRes, splitPath(unknownUrl.pathname), unknownUrl, mockClient);
+      expect(unknownRes.statusCode).toBe(400);
+    });
+
+    test('OAuth authorize page lets the form redirect back to the client callback', async () => {
+      const registeredId = await registerOAuthClient('http://localhost:33418/callback');
+      const req = createMockRequest({
+        method: 'GET',
+        url: `/api/mcp/112233445566778899/oauth/authorize?client_id=${registeredId}&redirect_uri=http%3A%2F%2Flocalhost%3A33418%2Fcallback&code_challenge=abc`,
       });
       const res = createMockResponse();
       const parts = splitPath(new URL(req.url!, 'http://localhost').pathname);
@@ -839,8 +888,8 @@ describe('Modular Routers Unit Tests', () => {
     test('OAuth authorization_code returns JWT access token and refresh token accepted by MCP endpoint', async () => {
       const keyId = 'mcp-key-id';
       const rawKey = 'mcp_test_secret';
-      const clientId = 'oauth-client-id';
       const redirectUri = 'https://claude.ai/api/mcp/auth_callback';
+      const clientId = await registerOAuthClient(redirectUri);
       const codeVerifier = 'test-verifier';
       const codeChallenge = nodeCrypto.createHash('sha256').update(codeVerifier).digest('base64url');
       const resource = 'https://api-kotbo.example/api/mcp/112233445566778899';
@@ -1121,6 +1170,22 @@ describe('Modular Routers Unit Tests', () => {
       expect(data.jsonrpc).toBe('2.0');
       expect(data.id).toBe(7);
     });
+
+    test("un GET authentifié reçoit 405 au lieu d'un flux SSE jamais refermé", async () => {
+      const token = makeMcpDirectToken('112233445566778899', 'direct-key-id');
+      mockMcpKeyService.getActiveMcpKeyById.mockImplementation(() => Promise.resolve({
+        id: 'direct-key-id',
+        guildId: '112233445566778899',
+        permissions: ['READ_STATS'],
+        isActive: true,
+      } as unknown));
+      const res = await Promise.race([
+        createMcpServerRouter(mockClient).request(`/api/mcp-direct/112233445566778899/${token}`),
+        Bun.sleep(2000).then(() => null),
+      ]);
+      expect(res?.status).toBe(405);
+      expect(res?.headers.get('allow')).toBe('POST, DELETE');
+    });
   });
 
   describe('2. Auth Routes', () => {
@@ -1232,6 +1297,36 @@ describe('Modular Routers Unit Tests', () => {
       const data = await res.json() as { ok?: boolean; messageId?: string };
       expect(data.ok).toBeTrue();
       expect(data.messageId).toBe('sent-msg-id');
+    });
+
+    test('POST embed-builder ne notifie @everyone et les rôles que si l\'auteur peut les mentionner dans le salon', async () => {
+      mockDb.guild.findUnique.mockResolvedValue({ id: '1122334455667788' });
+      mockDb.dashboardFeatureConfig.findMany.mockResolvedValue([]);
+      const post = () => createDashboardRouter(mockClient).request(
+        '/api/dashboard/guilds/1122334455667788/embed-builder',
+        {
+          method: 'POST',
+          headers: authenticatedHeaders({ 'content-type': 'application/json' }),
+          body: JSON.stringify({ channelId: '12345678', content: '@everyone <@&998877665544332211> nouvelle annonce' }),
+        },
+      );
+
+      try {
+        // Sans « Mentionner @everyone » dans ce salon : seules les mentions d'utilisateurs notifient.
+        authorChannelPermissions = { has: (flag) => flag !== PermissionFlagsBits.MentionEveryone };
+        expect((await post()).status).toBe(200);
+        expect(channelSend).toHaveBeenLastCalledWith(expect.objectContaining({
+          content: '@everyone <@&998877665544332211> nouvelle annonce',
+          allowedMentions: { parse: ['users'] },
+        }));
+
+        // Avec ce droit, le message notifie comme l'auteur l'a écrit, même absent du cache des membres.
+        authorChannelPermissions = { has: (flag) => flag === PermissionFlagsBits.MentionEveryone };
+        expect((await post()).status).toBe(200);
+        expect(channelSend).toHaveBeenLastCalledWith(expect.objectContaining({ allowedMentions: undefined }));
+      } finally {
+        authorChannelPermissions = noChannelPermissions;
+      }
     });
   });
 });

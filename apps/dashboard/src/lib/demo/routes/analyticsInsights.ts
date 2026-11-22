@@ -7,7 +7,8 @@
 import { route } from '../backend';
 import { demoDb, demoId } from '../db';
 import { channelMessages, dateKey, memberSeries, memberTotals, serverSeries, voiceChannelMinutes, CHANNEL_SHARE, VOICE_SHARE } from '../activity';
-import { CATEGORIES, CHANNELS, MEMBERS, VOICE_CHANNELS, avatarOf, sessionUser } from '../fixtures';
+import { CATEGORIES, CHANNELS, MEMBERS, ROLES, VOICE_CHANNELS, avatarOf, sessionUser } from '../fixtures';
+import { DEMO_GUILD_ID, DEMO_GUILD_NAME } from '../mode';
 import { CATEGORY_OF, heatmap } from './analytics';
 
 const DAY_MS = 86_400_000;
@@ -678,6 +679,48 @@ function commandStats(days: number) {
   };
 }
 
+function reactionRoleStats(days: number) {
+  const cur = serverSeries(days);
+  const prev = serverSeries(days, days);
+  const daily = cur.map((d, i) => {
+    const p = prev[i];
+    const added = Math.max(0, Math.round(d.membersJoined * 1.4 + (i % 3)));
+    const removed = Math.max(0, Math.round(d.membersJoined * 0.35));
+    const previousAdded = Math.max(0, Math.round((p?.membersJoined ?? d.membersJoined) * 1.2 + ((i + 1) % 3)));
+    const previousRemoved = Math.max(0, Math.round((p?.membersJoined ?? d.membersJoined) * 0.3));
+    return { dateKey: d.dateKey, added, removed, previousAdded, previousRemoved };
+  });
+  const added = sum(daily, (d) => d.added);
+  const removed = sum(daily, (d) => d.removed);
+  const previousAdded = sum(daily, (d) => d.previousAdded);
+  const previousRemoved = sum(daily, (d) => d.previousRemoved);
+  const pickRoles = ROLES.filter((r) => !r.managed).slice(0, 6);
+  const weights = [0.28, 0.22, 0.18, 0.14, 0.1, 0.08];
+  const roles = pickRoles.map((r, i) => {
+    const w = weights[i] ?? 0.08;
+    const roleAdded = Math.max(1, Math.round(added * w));
+    const roleRemoved = Math.round(removed * w);
+    return {
+      menuId: i < 3 ? 'rr-menu-games' : 'rr-menu-notifs',
+      roleId: r.id,
+      menuTitle: i < 3 ? 'Rôles de jeux' : 'Notifications',
+      roleName: r.name,
+      roleColor: r.color,
+      added: roleAdded,
+      removed: roleRemoved,
+      net: roleAdded - roleRemoved,
+      previousAdded: Math.max(1, Math.round(previousAdded * w)),
+      holders: MEMBERS.filter((m) => m.roles.includes(r.id)).length,
+      spark: bucketize(daily.map((d) => Math.round(d.added * w))),
+    };
+  });
+  return {
+    totals: { added, removed, net: added - removed, previousAdded, previousRemoved },
+    daily,
+    roles,
+  };
+}
+
 // ── Annotations ────────────────────────────────────────────────────────
 
 const ANNOTATIONS = 'analytics-annotations';
@@ -748,6 +791,7 @@ export function registerAnalyticsInsightsRoutes(): void {
   });
   route('GET', `${base}/members/overview`, ({ query }) => memberOverview(periodOf(query)));
   route('GET', `${base}/commands/stats`, ({ query }) => commandStats(periodOf(query)));
+  route('GET', `${base}/reaction-roles/stats`, ({ query }) => reactionRoleStats(periodOf(query)));
   route('GET', `${base}/heatmap`, ({ query }) => (query.get('compare') === '1' ? heatmapComparison(periodOf(query)) : heatmap()));
   route('GET', `${base}/weekly-comparison`, ({ query }) => periodComparison(Math.max(1, Number(query.get('offset')) || 1), query.get('mode') === 'month' ? 'month' : 'week'));
   route('GET', `${base}/annotations`, ({ query }) => {
@@ -770,10 +814,10 @@ export function registerAnalyticsInsightsRoutes(): void {
 
   const demoTagServers = [
     {
-      guildId: '930000000000000001',
-      name: 'Kotbo Community',
+      guildId: DEMO_GUILD_ID,
+      name: DEMO_GUILD_NAME,
       iconUrl: null,
-      tag: 'KTBO',
+      tag: 'NOVA',
       badgeUrl: null,
       memberCount: 14,
       isOwnGuild: true,
@@ -809,7 +853,7 @@ export function registerAnalyticsInsightsRoutes(): void {
 
   const demoTagMembers = [
     { userId: MEMBERS[0]?.id ?? '1', name: MEMBERS[0]?.username ?? 'vantar', username: MEMBERS[0]?.username ?? 'vantar', avatarUrl: null, tag: 'DEVH', badgeUrl: null, serverId: '930000000000000011', serverName: 'DevHub Community', isOwnGuild: false, updatedAt: new Date(Date.now() - 2 * DAY_MS).toISOString() },
-    { userId: MEMBERS[1]?.id ?? '2', name: MEMBERS[1]?.username ?? 'kyzo', username: MEMBERS[1]?.username ?? 'kyzo', avatarUrl: null, tag: 'KTBO', badgeUrl: null, serverId: '930000000000000001', serverName: 'Kotbo Community', isOwnGuild: true, updatedAt: new Date(Date.now() - 4 * DAY_MS).toISOString() },
+    { userId: MEMBERS[1]?.id ?? '2', name: MEMBERS[1]?.username ?? 'kyzo', username: MEMBERS[1]?.username ?? 'kyzo', avatarUrl: null, tag: 'NOVA', badgeUrl: null, serverId: DEMO_GUILD_ID, serverName: DEMO_GUILD_NAME, isOwnGuild: true, updatedAt: new Date(Date.now() - 4 * DAY_MS).toISOString() },
     { userId: MEMBERS[2]?.id ?? '3', name: MEMBERS[2]?.username ?? 'tom', username: MEMBERS[2]?.username ?? 'tom', avatarUrl: null, tag: 'KODA', badgeUrl: null, serverId: '930000000000000012', serverName: 'Koda', isOwnGuild: false, updatedAt: new Date(Date.now() - 6 * DAY_MS).toISOString() },
   ];
 
@@ -849,10 +893,10 @@ export function registerAnalyticsInsightsRoutes(): void {
     untaggedMembers: Math.max(0, MEMBERS.length - 24),
     serverCount: demoTagServers.length,
     ownGuild: {
-      guildId: '930000000000000001',
-      name: 'Kotbo Community',
+      guildId: DEMO_GUILD_ID,
+      name: DEMO_GUILD_NAME,
       iconUrl: null,
-      tag: 'KTBO',
+      tag: 'NOVA',
       badgeUrl: null,
       count: 14,
     },
@@ -913,9 +957,71 @@ export function registerAnalyticsInsightsRoutes(): void {
         members: holders,
       },
       assets: {
-        emojis: [],
-        stickers: [],
-        totalUses: 0,
+        emojis: ['pepe_gg', 'cat_vibe', 'party_blob', 'sus', 'gigachad', 'kekw'].map((name, i) => ({ id: `em-${i}`, kind: 'emoji' as const, name, animated: i % 3 === 0, imageUrl: '', uses: 420 - i * 55 })),
+        stickers: ['Salut !', 'GG', 'Bien joué'].map((name, i) => ({ id: `st-${i}`, kind: 'sticker' as const, name, animated: false, imageUrl: '', uses: 130 - i * 30 })),
+        totalUses: 1_790,
+        usageByDay: Array.from({ length: 14 }, (_, i) => ({ date: new Date(Date.now() - (13 - i) * DAY_MS).toISOString().slice(0, 10), count: 90 + ((i * 23) % 70) })),
+      },
+      profile: {
+        defaultInvite: { code: 'atelier-nova', url: 'https://discord.gg/atelier-nova', kind: 'tracked' as const },
+        discoveryUrl: null,
+        discoverable: false,
+        siteUrl: srv.isOwnGuild ? 'https://kotbo.fr/s/atelier-nova' : null,
+        features: ['COMMUNITY', 'NEWS', 'ROLE_ICONS'],
+        vanityCode: null,
+        createdAt: new Date(Date.now() - 600 * DAY_MS).toISOString(),
+        premiumTier: 2,
+        boostCount: 12,
+        locale: 'fr',
+        verificationLevel: 2,
+      },
+      activity: { messages: srv.isOwnGuild ? 48_200 : 9_400, voiceHours: srv.isOwnGuild ? 1_860 : 310, active7d: srv.memberCount ? Math.round(srv.memberCount * 0.34) : 0, shareOfGuild: srv.isOwnGuild ? null : 4.2 },
+    };
+  });
+
+  // Recoupement des porteurs du tag chez nous : nombres, activité et modération.
+  route('GET', `${base}/servers/:targetGuildId/insights`, ({ params }) => {
+    const holderIds = demoTagMembers.filter((m) => m.serverId === params.targetGuildId).map((m) => m.userId);
+    const holders = MEMBERS.filter((m) => holderIds.includes(m.id));
+    const sum = (list: typeof MEMBERS, pick: (m: (typeof MEMBERS)[number]) => number) => list.reduce((total, m) => total + pick(m), 0);
+    const others = MEMBERS.filter((m) => !holderIds.includes(m.id) && !m.bot);
+    const group = (list: typeof MEMBERS, toxic: number, sanctions: number) => ({
+      members: list.length,
+      active: list.filter((m) => m.messages > 50).length,
+      messages: sum(list, (m) => m.messages),
+      voiceMinutes: sum(list, (m) => m.voiceMinutes),
+      analyzed: Math.round(sum(list, (m) => m.messages) * 0.8),
+      toxic,
+      sanctions,
+    });
+    const isPartner = params.targetGuildId === '930000000000000011';
+    const first = holders[0];
+    return {
+      holders: group(holders, isPartner ? 3 : 0, isPartner ? 1 : 0),
+      others: group(others, 14, 6),
+      activityByDay: Array.from({ length: 30 }, (_, i) => ({
+        date: new Date(Date.now() - (29 - i) * DAY_MS).toISOString().slice(0, 10),
+        holders: holders.length ? 4 + ((i * 7) % 9) : 0,
+        others: 60 + ((i * 13) % 35),
+      })),
+      topHolders: holders.map((m) => ({ userId: m.id, messages: m.messages, voiceMinutes: m.voiceMinutes })),
+      movement: { joined30d: holders.length ? 2 : 0, left30d: isPartner ? 1 : 0, leftTotal: isPartner ? 2 : 0 },
+      overlap: { botPresent: false, shared: null, share: null },
+      moderation: {
+        sanctionsByType: isPartner ? [{ type: 'WARN', count: 1 }] : [],
+        recentSanctions:
+          isPartner && first
+            ? [{ id: 'svdx-sanction-1', type: 'WARN', targetUserId: first.id, targetTag: first.username, reason: 'Pub pour son serveur en MP', createdAt: new Date(Date.now() - 12 * DAY_MS).toISOString() }]
+            : [],
+        fleet: { blocks: isPartner ? 1 : 0, waveReports: 0 },
+        rule: isPartner
+          ? { id: 'tag-rule-1', name: 'Surveiller DevHub', effect: 'BLOCK' as const, action: 'ALERT', enabled: true, expiresAt: null }
+          : null,
+        events:
+          isPartner && first
+            ? [{ id: 'svdx-event-1', userId: first.id, userTag: first.username, trigger: 'JOIN', action: 'ALERT', status: 'APPLIED', createdAt: new Date(Date.now() - 2 * DAY_MS).toISOString() }]
+            : [],
+        waves: 0,
       },
     };
   });

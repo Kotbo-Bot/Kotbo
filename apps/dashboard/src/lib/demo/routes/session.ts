@@ -12,6 +12,9 @@ import { demoDb } from '../db';
 import { DEMO_GUILD_NAME } from '../mode';
 import {
   CATEGORIES,
+  COMMAND_CATALOG,
+  COMMAND_RESTRICTIONS,
+  regulationSeed,
   CHANNELS,
   ROLES,
   VOICE_CHANNELS,
@@ -38,6 +41,17 @@ export function registerSessionRoutes(): void {
   route('POST', '/api/auth/logout', () => ({ ok: true }));
   route('GET', '/api/user/me', () => sessionUser());
   route('GET', '/api/user/guilds', () => ({ guilds: sessionGuilds() }));
+  // Page « Mes serveurs » : le serveur de démo, plus deux autres où l'on est admin mais sans Kotbo.
+  route('GET', '/api/user/servers', () => ({
+    guilds: [
+      ...sessionGuilds().map((g) => ({ id: g.id, name: g.name, icon: g.icon, owner: true, botPresent: true, activated: true })),
+      { id: '930000000000000031', name: 'Les Veilleurs', icon: null, owner: true, botPresent: false, activated: false },
+      { id: '930000000000000032', name: 'Labo de Zenox', icon: null, owner: false, botPresent: true, activated: false },
+    ],
+    clientId: '1100000000000000001',
+    invitePermissions: '8',
+    oauthUnavailable: false,
+  }));
   // L'instance publique de Kotbo, sans marque blanche.
   route('GET', '/api/branding', () => ({
     instanceId: 'public',
@@ -51,7 +65,7 @@ export function registerSessionRoutes(): void {
   }));
 
   /** L'état complet du serveur, tel que le rend `buildGuildState`. */
-  route('GET', '/api/dashboard/guilds/:guildId', () => {
+  const guildState = () => {
     const states = moduleStates();
     const featureKeys = [...MODULE_REGISTRY.map((m) => m.key), 'centralized_config', 'commands', 'settings'];
 
@@ -64,6 +78,7 @@ export function registerSessionRoutes(): void {
       logChannelId: channelByName('logs').id,
       logIgnoredChannelIds: [],
       regulationChannelId: channelByName('règlement').id,
+      regulationMessageId: '900000000000009301',
       publicChannelId: channelByName('général').id,
       newsChannelId: channelByName('annonces').id,
       baseStaffRoleId: role('Helper').id,
@@ -86,18 +101,20 @@ export function registerSessionRoutes(): void {
       discordVoiceChannels: VOICE_CHANNELS,
       discordCategories: CATEGORIES,
       discordRoles: ROLES,
-      commandRestrictions: [],
+      commandRestrictions: demoDb.get('command-access', () => COMMAND_RESTRICTIONS),
       sidebarFavorites: [],
-      commandCatalog: [],
+      commandCatalog: COMMAND_CATALOG,
       access: { level: 'admin', canModerateContent: true, canManageSettings: true },
       featureAccess: featureAccessFor(featureKeys),
       auditTrail: demoDb.get(AUDIT, auditSeed),
       sanctions: demoDb.get(SANCTIONS, sanctionsSeed),
       sanctionReports: [],
       sanctionTables: [],
-      regulationRules: [],
+      regulationRules: demoDb.get('regulation/rules', regulationSeed),
       messageTemplate: '',
       member: sessionMember(),
     };
-  });
+  };
+  route('GET', '/api/dashboard/guilds/:guildId', guildState);
+  route('GET', '/api/dashboard/guilds/:guildId/state', guildState);
 }

@@ -4,6 +4,7 @@
   import { m, locales } from '../lib/i18n';
   import type { PreviewSample } from '../lib/giveawayPreview';
   import { channelDisplayName } from '../lib/channelUtils';
+  import { toLocalInputValue } from '../lib/datetimeLocal';
   import { onMount } from 'svelte';
   import { router } from 'tinro';
   import { fade, scale } from 'svelte/transition';
@@ -509,12 +510,6 @@
 
   /** Bornes du service : au moins une minute, au plus un an. */
   const durationIsValid = $derived(computedDurationMinutes >= 1 && computedDurationMinutes <= 525_600);
-
-  /** Valeur d'un `datetime-local`, qui attend l'heure locale sans fuseau. */
-  function toLocalInputValue(date: Date): string {
-    const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
-    return local.toISOString().slice(0, 16);
-  }
 
   const presets = [
     { get label() { return m.e8_giveaways_preset_30m(); }, value: 30, unit: 'minutes' },

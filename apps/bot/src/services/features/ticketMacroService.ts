@@ -12,6 +12,7 @@ import type { Client, Guild, GuildMember, TextBasedChannel } from 'discord.js';
 import type { Ticket, TicketMacro } from '@prisma/client';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
+import { isAutoGrantableRole } from '../../utils/adminLockPermissions.js';
 
 /** Nombre d'entrees tenables dans un selecteur Discord. */
 export const MACRO_SELECT_LIMIT = 25;
@@ -268,6 +269,10 @@ async function grantRole(
   // test, l'echec ne se voit qu'au log alors qu'il est previsible.
   if (!role || !role.editable) {
     logger.warn('TicketMacro', `Rôle ${roleId} absent ou non modifiable sur ${member.guild.id}`);
+    return;
+  }
+  if (direction === 'add' && !isAutoGrantableRole(role)) {
+    logger.warn('TicketMacro', `Rôle ${roleId} ignoré sur ${member.guild.id} : il donne la permission Administrateur`);
     return;
   }
 
