@@ -959,21 +959,70 @@ function censorRangesForRule(
 }
 
 /**
+ * Journalise un déclenchement de l'AutoMod Discord, et pose un warn si le
+ * serveur l'a demandé pour les règles qui ne sont pas celles de Kotbo.
+ * Une règle qui bloque ET alerte déclenche deux exécutions : seule l'action
+ * principale est retenue, pour ne compter qu'un événement par message.
+ */
+async function recordDiscordAutoModEvent(
+  execution: AutoModerationActionExecution,
+  rule: { name: string; actions: Array<{ type: AutoModerationActionType }>; triggerType: number },
+  config: AutoModConfig,
+): Promise<void> {
+  const type = execution.action.type;
+  const blocks = rule.actions.some((a) => a.type === AutoModerationActionType.BlockMessage);
+  if (blocks ? type !== AutoModerationActionType.BlockMessage : type === AutoModerationActionType.SendAlertMessage && rule.actions.length > 1) return;
+
+  const managed = (Object.values(NATIVE_RULE_NAMES) as string[]).includes(rule.name);
+  const action = type === AutoModerationActionType.BlockMessage ? 'BLOCK' : type === AutoModerationActionType.Timeout ? 'TIMEOUT' : 'ALERT';
+  try {
+    await prisma.discordAutoModEvent.create({
+      data: {
+        guildId: execution.guild.id,
+        ruleId: execution.ruleId,
+        ruleName: rule.name.slice(0, 200),
+        triggerType: rule.triggerType,
+        action,
+        userId: execution.userId,
+        channelId: execution.channelId,
+        keyword: execution.matchedKeyword?.slice(0, 200) ?? null,
+        content: execution.content ? execution.content.slice(0, 500) : null,
+        managed,
+      },
+    });
+  } catch (err) {
+    logger.warn('AutoModService', 'Journal AutoMod Discord impossible :', err);
+  }
+
+  if (managed || !config.discordRulesWarn) return;
+  const client = execution.guild.client;
+  await registerWarnSanction({
+    guildId: execution.guild.id,
+    target: { id: execution.userId, tag: execution.user?.tag ?? execution.userId },
+    moderator: { id: client.user!.id, tag: client.user!.tag },
+    reason: `[AutoMod Discord] ${rule.name}`,
+    client,
+  }).catch((err) => logger.warn('AutoModService', 'Warn AutoMod Discord impossible :', err));
+}
+
+/**
  * Exécution d'une règle native Discord. Seules les règles Kotbo réglées sur
  * « Censurer » sont traitées ici : Discord a déjà bloqué le message, le bot
  * le republie avec les passages interdits masqués.
  */
 export async function handleAutoModExecution(execution: AutoModerationActionExecution): Promise<void> {
-  if (execution.action.type !== AutoModerationActionType.BlockMessage) return;
-
   const { guild, channelId, content, userId } = execution;
-  if (!channelId || !content) return;
 
   const rule = execution.autoModerationRule
     ?? await guild.autoModerationRules.fetch(execution.ruleId).catch(() => null);
   if (!rule) return;
 
   const config = await getOrCreateAutoModConfig(guild.id);
+  await recordDiscordAutoModEvent(execution, rule, config);
+
+  if (execution.action.type !== AutoModerationActionType.BlockMessage) return;
+  if (!channelId || !content) return;
+
   const censor = censorRangesForRule(rule.name, config, content);
   if (!censor) return;
 
