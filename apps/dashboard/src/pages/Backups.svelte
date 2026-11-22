@@ -48,6 +48,8 @@
     includeChannels: true,
     includeEmojis: true,
     includeStickers: true,
+    includeKotbo: true,
+    messagesDays: 15,
   });
 
   onMount(async () => {
@@ -113,8 +115,10 @@
       includeChannels: true,
       includeEmojis: true,
       includeStickers: true,
+      includeKotbo: true,
+      messagesDays: 15,
     };
-    
+
     await createAction.run(async () => {
       try {
         await createBackup(optionsToCreate, authStore.selectedGuildId ?? '');
@@ -552,7 +556,28 @@
           />
           <span class="text-xs font-semibold text-on-surface-variant group-hover:text-on-surface transition-colors">{m.backups_opt_stickers()}</span>
         </label>
+        <label class="flex items-center gap-3 cursor-pointer group">
+          <input
+            type="checkbox"
+            bind:checked={createOptions.includeKotbo}
+            class="w-5 h-5 rounded-lg border-2 border-outline-variant/20 text-primary focus:ring-primary/40 transition-all checked:bg-primary checked:border-primary cursor-pointer accent-primary"
+          />
+          <span class="text-xs font-semibold text-on-surface-variant group-hover:text-on-surface transition-colors">{m.backups_opt_kotbo()}</span>
+        </label>
       </div>
+      {#if createOptions.includeMessages}
+        <label class="flex items-center justify-between gap-3 bg-surface-container-high/20 border border-outline-variant/5 p-4 rounded-lg">
+          <span class="text-xs font-semibold text-on-surface-variant">{m.backups_messages_days()}</span>
+          <select
+            bind:value={createOptions.messagesDays}
+            class="bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-2 text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30"
+          >
+            {#each [1, 3, 7, 15, 30, 60, 90] as d}
+              <option value={d}>{m.backups_messages_days_option({ count: d })}</option>
+            {/each}
+          </select>
+        </label>
+      {/if}
     </div>
 
     <div class="flex justify-end gap-3 pt-2">

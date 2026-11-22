@@ -51,6 +51,8 @@ export function createBackupsRouter(client: Client) {
         includeChannels?: boolean;
         includeEmojis?: boolean;
         includeStickers?: boolean;
+        includeKotbo?: boolean;
+        messagesDays?: number;
       }>(c);
 
       if (!body) {
@@ -68,6 +70,8 @@ export function createBackupsRouter(client: Client) {
         includeChannels: body.includeChannels ?? true,
         includeEmojis: body.includeEmojis ?? true,
         includeStickers: body.includeStickers ?? true,
+        includeKotbo: body.includeKotbo ?? true,
+        messagesDays: body.messagesDays,
         createdByUserId: user.userId,
         createdByUsername: user.username || 'Unknown',
         createdByTag: '0000',
