@@ -13,7 +13,23 @@
   type TranscriptData = DiscordConversation & {
     channel: { id: string; name: string; topic: string | null };
     generatedAt: string;
+    /** Prises en charge et transferts du ticket (absent hors tickets). */
+    handling?: Array<{
+      type: 'CLAIM' | 'UNCLAIM' | 'TRANSFER';
+      at: string;
+      byName: string;
+      toRoleName?: string | null;
+      toUserName?: string | null;
+    }>;
   };
+
+  function handlingLabel(event: NonNullable<TranscriptData['handling']>[number]): string {
+    const who = event.byName;
+    if (event.type === 'CLAIM') return m.d7_ts_handling_claim({ who });
+    if (event.type === 'UNCLAIM') return m.d7_ts_handling_unclaim({ who });
+    const to = [event.toRoleName ? `@${event.toRoleName}` : null, event.toUserName].filter(Boolean).join(' · ');
+    return m.d7_ts_handling_transfer({ who, to });
+  }
 
   /** Messages ajoutés à chaque tranche : un gros salon s'affiche sans bloquer la page. */
   const PAGE_SIZE = 200;
@@ -111,6 +127,19 @@
             <span class="transcript-summary">{summary}</span>
           {/snippet}
         </ChannelHeader>
+        {#if transcript.handling?.length}
+          <section class="transcript-handling" aria-label={m.d7_ts_handling_title()}>
+            <h2>{m.d7_ts_handling_title()}</h2>
+            <ul>
+              {#each transcript.handling as event (event.at + event.type)}
+                <li>
+                  <time datetime={event.at}>{new Date(event.at).toLocaleString(dateLocale(), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</time>
+                  <span>{handlingLabel(event)}</span>
+                </li>
+              {/each}
+            </ul>
+          </section>
+        {/if}
         <div class="transcript-messages">
           <MessageList messages={visibleViews} showDateSeparators />
           {#if remaining > 0}
@@ -149,6 +178,36 @@
 
   .transcript-messages {
     padding-top: 1rem;
+  }
+
+  .transcript-handling {
+    margin-top: 1rem;
+    padding: 0.75rem 1rem;
+    border-radius: 0.5rem;
+    background: rgba(255, 255, 255, 0.05);
+    font-size: 0.8125rem;
+  }
+
+  .transcript-handling h2 {
+    margin: 0 0 0.375rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    opacity: 0.7;
+  }
+
+  .transcript-handling ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 0.25rem;
+  }
+
+  .transcript-handling time {
+    margin-right: 0.5rem;
+    opacity: 0.6;
   }
 
   .transcript-summary {

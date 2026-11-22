@@ -2,7 +2,8 @@
   import { m } from '../i18n';
   import Papicon from './Papicon.svelte';
   export let values: string[] = [];
-  export let options: Array<{ id: string; name: string }> = [];
+  /** `color` : couleur Discord d'un rôle ; la pastille la reprend, façon Discord. */
+  export let options: Array<{ id: string; name: string; color?: string | null }> = [];
   export let placeholder: string | undefined = undefined;
   export let disabled: boolean = false;
   export let accentClass: string = 'bg-primary/20 text-primary border-primary/40'; // active pill style
@@ -37,6 +38,18 @@
 
   $: if (active >= filtered.length) active = filtered.length - 1;
   $: activeOption = open && !disabled && active >= 0 ? filtered[active] : undefined;
+
+  /** Rôle sans couleur : Discord envoie 0, soit du noir, illisible sur fond sombre. */
+  function roleColor(color: string | null | undefined): string | null {
+    return color && !/^#?0{6}$/i.test(color) ? color : null;
+  }
+
+  function pillStyle(color: string | null | undefined): string | undefined {
+    const c = roleColor(color);
+    if (!c) return undefined;
+    // Texte éclairci vers le blanc : une couleur sombre reste lisible sur la pastille teintée.
+    return `background: color-mix(in srgb, ${c} 20%, transparent); border-color: color-mix(in srgb, ${c} 50%, transparent); color: color-mix(in srgb, ${c} 65%, white);`;
+  }
 
   function toggle(optId: string) {
     if (disabled) return;
@@ -89,7 +102,10 @@
   >
     <!-- Selected pills -->
     {#each selectedOptions as opt (opt.id)}
-      <span class="inline-flex items-center gap-1 text-2xs font-bold px-2 py-0.5 rounded-lg border {accentClass} transition-all">
+      <span
+        class="inline-flex items-center gap-1 text-2xs font-bold px-2 py-0.5 rounded-lg border {roleColor(opt.color) ? '' : accentClass} transition-all"
+        style={pillStyle(opt.color)}
+      >
         {opt.name}
         {#if !disabled}
           <button
@@ -152,7 +168,12 @@
               onclick={() => toggle(opt.id)}
               class="w-full text-left px-3 py-2 rounded-xl hover:bg-surface-container-low/60 text-sm font-semibold text-on-surface transition-colors flex items-center justify-between gap-2 cursor-pointer {i === active ? 'bg-surface-container-low/60 outline outline-2 outline-primary' : ''}"
             >
-              <span>{opt.name}</span>
+              <span class="inline-flex items-center gap-2">
+                {#if roleColor(opt.color)}
+                  <span class="size-2.5 rounded-full shrink-0" style="background: {roleColor(opt.color)}" aria-hidden="true"></span>
+                {/if}
+                {opt.name}
+              </span>
               <span class="text-2xs text-on-surface-variant font-mono">{opt.id.slice(0, 8)}…</span>
             </div>
           {/each}

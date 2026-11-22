@@ -43,6 +43,13 @@
   let ticketCategoryId = $state('');
   let ticketLogChannelId = $state('');
   let ticketStaffRoleId = $state('');
+  // Le premier rôle d'assistance est recopié dans ticketStaffRoleId par l'API.
+  let ticketSupportRoleIds = $state([] as string[]);
+  let ticketManagerRoleIds = $state([] as string[]);
+  let ticketMentionRoleIds = $state([] as string[]);
+  let ticketExcludedRoleIds = $state([] as string[]);
+  let ticketClaimHidesSupport = $state(false);
+  let ticketClaimExclusive = $state(false);
   let ticketChannelId = $state('');
   let ticketEmbedTitle = $state('');
   let ticketEmbedDesc = $state('');
@@ -157,6 +164,12 @@
     ticketCategoryId,
     ticketLogChannelId,
     ticketStaffRoleId,
+    ticketSupportRoleIds,
+    ticketManagerRoleIds,
+    ticketMentionRoleIds,
+    ticketExcludedRoleIds,
+    ticketClaimHidesSupport,
+    ticketClaimExclusive,
     ticketChannelId,
     ticketEmbedTitle,
     ticketEmbedDesc,
@@ -232,6 +245,12 @@
     ticketCategoryId = savedSettingsConfig.ticketCategoryId;
     ticketLogChannelId = savedSettingsConfig.ticketLogChannelId;
     ticketStaffRoleId = savedSettingsConfig.ticketStaffRoleId;
+    ticketSupportRoleIds = savedSettingsConfig.ticketSupportRoleIds;
+    ticketManagerRoleIds = savedSettingsConfig.ticketManagerRoleIds;
+    ticketMentionRoleIds = savedSettingsConfig.ticketMentionRoleIds;
+    ticketExcludedRoleIds = savedSettingsConfig.ticketExcludedRoleIds;
+    ticketClaimHidesSupport = savedSettingsConfig.ticketClaimHidesSupport;
+    ticketClaimExclusive = savedSettingsConfig.ticketClaimExclusive;
     ticketChannelId = savedSettingsConfig.ticketChannelId;
     ticketEmbedTitle = savedSettingsConfig.ticketEmbedTitle;
     ticketEmbedDesc = savedSettingsConfig.ticketEmbedDesc;
@@ -296,6 +315,10 @@
   const discordChannels = $derived(dashboardStore.state.discordChannels || []);
   const discordCategories = $derived(dashboardStore.state.discordCategories || []);
   const discordRoles = $derived(dashboardStore.state.discordRoles || []);
+  /** Rôles proposés aux listes, avec leur couleur Discord pour les pastilles. */
+  const roleOptions = $derived(
+    discordRoles.filter((r) => r.name !== '@everyone').map((r) => ({ id: r.id, name: r.name, color: r.color ?? null })),
+  );
 
   /**
    * Les seuls reglages qui empechent un ticket d'exister. Tout le reste de la
@@ -305,7 +328,7 @@
   const configBlockers = $derived(
     [
       { key: 'category', label: m.tq_blocker_category(), ok: !!ticketCategoryId },
-      { key: 'staffRole', label: m.tq_blocker_staff_role(), ok: !!ticketStaffRoleId },
+      { key: 'staffRole', label: m.tq_blocker_staff_role(), ok: ticketSupportRoleIds.length > 0 || !!ticketStaffRoleId },
       { key: 'panelChannel', label: m.tq_blocker_panel_channel(), ok: !!ticketChannelId },
     ].filter((item) => !item.ok)
   );
@@ -565,6 +588,15 @@
     ticketCategoryId = config.ticketCategoryId || '';
     ticketLogChannelId = config.ticketLogChannelId || '';
     ticketStaffRoleId = config.ticketStaffRoleId || '';
+    // Une config d'avant les listes n'a que le rôle unique : il devient la première équipe.
+    ticketSupportRoleIds = Array.isArray(config.ticketSupportRoleIds) && config.ticketSupportRoleIds.length > 0
+      ? [...config.ticketSupportRoleIds]
+      : (ticketStaffRoleId ? [ticketStaffRoleId] : []);
+    ticketManagerRoleIds = [...(config.ticketManagerRoleIds || [])];
+    ticketMentionRoleIds = [...(config.ticketMentionRoleIds || [])];
+    ticketExcludedRoleIds = [...(config.ticketExcludedRoleIds || [])];
+    ticketClaimHidesSupport = config.ticketClaimHidesSupport === true;
+    ticketClaimExclusive = config.ticketClaimExclusive === true;
     ticketChannelId = config.ticketChannelId || '';
     // Laisses vides quand ils le sont : le bot compose alors le texte par
     // defaut dans la langue du serveur. Les remplir ici reviendrait a figer
@@ -636,6 +668,12 @@
       ticketCategoryId,
       ticketLogChannelId,
       ticketStaffRoleId,
+      ticketSupportRoleIds: [...ticketSupportRoleIds],
+      ticketManagerRoleIds: [...ticketManagerRoleIds],
+      ticketMentionRoleIds: [...ticketMentionRoleIds],
+      ticketExcludedRoleIds: [...ticketExcludedRoleIds],
+      ticketClaimHidesSupport,
+      ticketClaimExclusive,
       ticketChannelId,
       ticketEmbedTitle,
       ticketEmbedDesc,
@@ -732,7 +770,12 @@
         body: JSON.stringify({
           ticketCategoryId,
           ticketLogChannelId,
-          ticketStaffRoleId,
+          ticketSupportRoleIds,
+          ticketManagerRoleIds,
+          ticketMentionRoleIds,
+          ticketExcludedRoleIds,
+          ticketClaimHidesSupport,
+          ticketClaimExclusive,
           ticketChannelId,
           ticketEmbedTitle,
           ticketEmbedDesc,
@@ -993,19 +1036,56 @@
               <p class="text-2xs text-warning mt-1.5">{m.e1_tickets_missing_ref()}</p>
             {/if}
           </label>
-          <label class="block">
-            <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">{m.e1_tickets_field_staff_role()}</span>
-            <SearchableSelect bind:value={ticketStaffRoleId} options={discordRoles.map(r => ({ id: r.id, name: `@${r.name}` }))} placeholder={m.e1_tickets_select_ph()} className="w-full" />
-            {#if isMissingReference(ticketStaffRoleId, discordRoles)}
-              <p class="text-2xs text-warning mt-1.5">{m.e1_tickets_missing_ref()}</p>
-            {/if}
-          </label>
           <label class="block col-span-1 md:col-span-2">
             <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">{m.e1_tickets_field_dm_relay()}</span>
             <SearchableSelect bind:value={ticketDmRelayChannelId} options={discordChannels.map(c => ({ id: c.id, name: channelDisplayName(c) }))} placeholder={m.e1_tickets_select_channel_ph()} className="w-full" />
             {#if isMissingReference(ticketDmRelayChannelId, discordChannels)}
               <p class="text-2xs text-warning mt-1.5">{m.e1_tickets_missing_ref()}</p>
             {/if}
+          </label>
+        </div>
+
+        <div class="border-t border-outline-variant/10 pt-4 space-y-4">
+          <p class="text-xs font-bold text-on-surface">{m.tkr_title()}</p>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label for="tkr-support" class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">{m.tkr_support()}</label>
+              <MultiSelect id="tkr-support" bind:values={ticketSupportRoleIds} options={roleOptions} placeholder={m.tkr_placeholder()} />
+              <p class="text-2xs text-on-surface-variant ml-1 mt-1.5">{m.tkr_support_hint()}</p>
+            </div>
+            <div>
+              <label for="tkr-manager" class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 flex items-center gap-1.5">
+                {m.tkr_manager()}
+                <span class="inline-flex size-4 items-center justify-center rounded-full border border-outline-variant/40 text-[10px] leading-none text-on-surface-variant cursor-help" title={m.tkr_manager_help()} aria-label={m.tkr_manager_help()} role="img">?</span>
+              </label>
+              <MultiSelect id="tkr-manager" bind:values={ticketManagerRoleIds} options={roleOptions} placeholder={m.tkr_placeholder()} />
+              <p class="text-2xs text-on-surface-variant ml-1 mt-1.5">{m.tkr_manager_hint()}</p>
+            </div>
+            <div>
+              <label for="tkr-mention" class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">{m.tkr_mention()}</label>
+              <MultiSelect id="tkr-mention" bind:values={ticketMentionRoleIds} options={roleOptions} placeholder={m.tkr_placeholder()} />
+              <p class="text-2xs text-on-surface-variant ml-1 mt-1.5">{m.tkr_mention_hint()}</p>
+            </div>
+            <div>
+              <label for="tkr-excluded" class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">{m.tkr_excluded()}</label>
+              <MultiSelect id="tkr-excluded" bind:values={ticketExcludedRoleIds} options={roleOptions} placeholder={m.tkr_placeholder()} />
+              <p class="text-2xs text-on-surface-variant ml-1 mt-1.5">{m.tkr_excluded_hint()}</p>
+            </div>
+          </div>
+
+          <label class="flex items-center gap-3 cursor-pointer p-2.5 hover:bg-white/5 rounded-xl transition-colors">
+            <input type="checkbox" bind:checked={ticketClaimHidesSupport} class="w-4 h-4 rounded text-primary focus:ring-primary border-outline-variant/30" />
+            <div>
+              <span class="text-xs font-bold text-on-surface">{m.tkr_claim_hides()}</span>
+              <p class="text-2xs text-on-surface-variant">{m.tkr_claim_hides_desc()}</p>
+            </div>
+          </label>
+          <label class="flex items-center gap-3 cursor-pointer p-2.5 hover:bg-white/5 rounded-xl transition-colors">
+            <input type="checkbox" bind:checked={ticketClaimExclusive} class="w-4 h-4 rounded text-primary focus:ring-primary border-outline-variant/30" />
+            <div>
+              <span class="text-xs font-bold text-on-surface">{m.tkr_claim_exclusive()}</span>
+              <p class="text-2xs text-on-surface-variant">{m.tkr_claim_exclusive_desc()}</p>
+            </div>
           </label>
         </div>
 
