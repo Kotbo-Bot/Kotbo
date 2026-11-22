@@ -5415,5 +5415,7 @@
   "gvw_opt_member_age_name": "anciennete_membre",
   "gvw_opt_member_age_description": "Ancienneté minimale sur le serveur, en jours",
   "gvw_opt_vote_name": "vote_topgg",
-  "gvw_opt_vote_description": "Exiger d'avoir voté pour Kotbo sur Top.gg"
+  "gvw_opt_vote_description": "Exiger d'avoir voté pour Kotbo sur Top.gg",
+  "gvw_check_button": "Vérifier mes conditions",
+  "gvw_check_ok": "Tu remplis toutes les conditions : tu peux participer."
 }

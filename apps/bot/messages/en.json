@@ -5415,5 +5415,7 @@
   "gvw_opt_member_age_name": "member_age",
   "gvw_opt_member_age_description": "Minimum time on the server, in days",
   "gvw_opt_vote_name": "topgg_vote",
-  "gvw_opt_vote_description": "Require a Top.gg vote for Kotbo"
+  "gvw_opt_vote_description": "Require a Top.gg vote for Kotbo",
+  "gvw_check_button": "Check my requirements",
+  "gvw_check_ok": "You meet every requirement: you can enter."
 }

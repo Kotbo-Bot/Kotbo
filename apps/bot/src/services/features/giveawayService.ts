@@ -224,11 +224,12 @@ function bonusRolesBlockFor(config: GiveawayConfig, bonus: ResolvedBonus): strin
  * réinjecter à chaque `message.edit`.
  */
 function buildGiveawayJoinRow(
-  giveawayId: string,
+  giveaway: { id: string; conditions?: unknown },
   appearance: GiveawayAppearance,
+  locale: BotLocale,
 ): ActionRowBuilder<ButtonBuilder> {
   const button = new ButtonBuilder()
-    .setCustomId(`giveaway_join:${giveawayId}`)
+    .setCustomId(`giveaway_join:${giveaway.id}`)
     .setLabel(appearance.joinButtonLabel)
     .setStyle(resolveButtonStyle(appearance.joinButtonStyle));
 
@@ -240,7 +241,16 @@ function buildGiveawayJoinRow(
     // Emoji invalide, on garde le bouton nu.
   }
 
-  return new ActionRowBuilder<ButtonBuilder>().addComponents(button);
+  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(button);
+
+  // Un concours à conditions propose de les contrôler sans s'inscrire.
+  if (normalizeConditions(giveaway.conditions).conditions.length > 0) {
+    row.addComponents(new ButtonBuilder()
+      .setCustomId(`giveaway_check:${giveaway.id}`)
+      .setLabel(m.gvw_check_button({}, { locale }))
+      .setStyle(ButtonStyle.Secondary));
+  }
+  return row;
 }
 
 /**
@@ -439,7 +449,7 @@ export async function createGiveaway(
     bonusRolesBlock: bonusRolesBlockFor(config, bonus),
     itemLabel,
   });
-  const row = buildGiveawayJoinRow(giveaway.id, appearance);
+  const row = buildGiveawayJoinRow(giveaway, appearance, config.locale);
 
   let publishedMessage: Message | null = null;
   try {
@@ -651,7 +661,7 @@ export async function toggleGiveawayParticipation(
           // ne fournit pas `components` efface les boutons du message.
           await message.edit({
             embeds: [updatedEmbed],
-            components: [buildGiveawayJoinRow(giveaway.id, appearance)],
+            components: [buildGiveawayJoinRow(giveaway, appearance, config.locale)],
             allowedMentions: GIVEAWAY_MENTIONS,
           }).catch(() => null);
         }
@@ -688,6 +698,40 @@ export async function toggleGiveawayParticipation(
     logger.error('GiveawayService', 'Erreur lors de toggleGiveawayParticipation :', err);
     return { ok: false, reason: 'error', message: m.gvw_join_error({}, { locale: config.locale }) };
   }
+}
+
+/**
+ * « Vérifier mes conditions » : même contrôle que l'inscription, sans s'inscrire.
+ * Un concours antérieur aux conditions propres se contrôle sur le filtre du serveur.
+ */
+export async function handleGiveawayCheck(interaction: ButtonInteraction) {
+  const giveawayId = interaction.customId.split(':')[1];
+  const guildId = interaction.guildId;
+  const reply = (content: string) => interaction.reply({ content: resolveEmojiShortcodes(content).slice(0, 2000), flags: [MessageFlags.Ephemeral] });
+  if (!guildId) return reply(m.gvw_guild_only({}, { locale: getLocale(interaction) }));
+
+  const [config, row] = await Promise.all([
+    getGiveawayConfig(guildId),
+    prisma.giveaway.findFirst({ where: { id: giveawayId, guildId }, select: { conditions: true, ended: true, createdAt: true } }),
+  ]);
+  if (!row || row.ended) return reply(m.gvw_join_ended({}, { locale: config.locale }));
+
+  const conditions = row.conditions === null ? conditionsFromConfig(config) : normalizeConditions(row.conditions).conditions;
+  const member = interaction.guild
+    ? await interaction.guild.members.fetch(interaction.user.id).catch(() => null)
+    : null;
+  const result = await evaluateConditions(
+    conditions,
+    buildConditionSubject({
+      userId: interaction.user.id,
+      guildId,
+      roleIds: memberRoleIds(interaction),
+      accountCreatedAt: interaction.user.createdAt ?? null,
+      joinedAt: memberJoinedAt(interaction),
+    }, member, row.createdAt),
+    buildConditionResolvers(interaction.client, guildId, interaction.user.id),
+  );
+  return reply(result.allowed ? m.gvw_check_ok({}, { locale: config.locale }) : failuresMessage(result.failures, config.locale));
 }
 
 export async function handleGiveawayJoin(interaction: ButtonInteraction) {
@@ -764,7 +808,7 @@ export async function refreshActiveGiveaways(client: Client, guildId: string): P
           },
         )],
         // En Components V2, une édition sans `components` efface les boutons.
-        components: [buildGiveawayJoinRow(giveaway.id, appearance)],
+        components: [buildGiveawayJoinRow(giveaway, appearance, config.locale)],
         allowedMentions: GIVEAWAY_MENTIONS,
       });
       refreshed += 1;
@@ -836,7 +880,7 @@ export async function removeMemberFromActiveGiveaways(
           itemLabel,
         })],
         // En Components V2, une edition sans `components` efface les boutons.
-        components: [buildGiveawayJoinRow(giveaway.id, appearance)],
+        components: [buildGiveawayJoinRow(giveaway, appearance, config.locale)],
         allowedMentions: GIVEAWAY_MENTIONS,
       }).catch(() => null);
     } catch (err) {
