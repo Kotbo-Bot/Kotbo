@@ -9,9 +9,10 @@
   import { m } from '../i18n';
   import { authStore } from '../stores/auth.svelte';
   import { dashboardStore } from '../stores/dashboard.svelte';
-  import { ActionRow, Button, Embed, Markdown, type EmbedView } from '@arcscord/discord-ui-svelte';
+  import { MessageComponents, type ButtonView, type MessageComponent } from '@arcscord/discord-ui-svelte';
+  import { botEmbedToV2 } from './discord/botEmbedV2';
   import DiscordScope from './discord/DiscordScope.svelte';
-  import { mergeEntities, toPreviewMarkdown } from './discord/previewEntities.svelte';
+  import { mergeEntities } from './discord/previewEntities.svelte';
   import { renderMarkdown, type PreviewLabels, type PreviewSample } from '../giveawayPreview';
   import type { GiveawayAppearance, GiveawayGeneratedLabels } from '../api';
 
@@ -93,8 +94,9 @@
   // ce qu'on aurait inventé pour l'illustrer.
   const sample: PreviewSample = $derived({ ...example, ...(overrides ?? {}) });
 
-  // Titre et pied : Discord n'y résout pas les mentions, le nom y reste en clair.
-  const title = $derived(renderMarkdown(appearance.titleTemplate, sample, labels, { mentions: false }));
+  // Le bot publie l'annonce en Components V2 : titre et pied y sont des blocs
+  // de texte comme les autres, où Discord affiche les mentions.
+  const title = $derived(renderMarkdown(appearance.titleTemplate, sample, labels));
   const body = $derived.by(() => {
     const template = appearance.descriptionTemplate;
     // Comme le bot : un corps d'annonce qui ne réserve pas de place aux rôles
@@ -102,17 +104,7 @@
     const withRoles = sample.bonusRoles.length > 0 && !template.includes('{bonusRoles}') ? `${template}\n{bonusRoles}` : template;
     return renderMarkdown(withRoles, sample, labels);
   });
-  const footer = $derived(renderMarkdown(appearance.footerTemplate, sample, labels, { mentions: false }));
-
-  const embed = $derived<EmbedView>({
-    id: 'giveaway',
-    color: appearance.embedColorActive,
-    ...(title.markdown ? { title: title.markdown } : {}),
-    ...(body.markdown ? { description: body.markdown } : {}),
-    ...(appearance.thumbnailUrl ? { thumbnail: { id: 'thumbnail', url: appearance.thumbnailUrl, alt: '' } } : {}),
-    ...(appearance.imageUrl ? { image: { id: 'image', url: appearance.imageUrl, alt: '' } } : {}),
-    ...(footer.markdown ? { footer: { text: footer.markdown } } : {}),
-  });
+  const footer = $derived(renderMarkdown(appearance.footerTemplate, sample, labels));
 
   const buttonVariant: Record<GiveawayAppearance['joinButtonStyle'], 'primary' | 'secondary' | 'success' | 'danger'> = {
     PRIMARY: 'primary',
@@ -121,13 +113,40 @@
     DANGER: 'danger',
   };
 
-  /** Emoji du bouton : texte, ou `<:nom:id>` d'un emoji de serveur. */
-  const buttonEmoji = $derived.by(() => {
+  /** Emoji du bouton : texte, ou `<:nom:id>` d'un emoji de serveur (son image). */
+  const buttonEmoji = $derived.by((): ButtonView['emoji'] => {
     const raw = appearance.joinButtonEmoji?.trim() ?? '';
-    return raw ? toPreviewMarkdown(raw, { mentions: false }) : null;
+    if (!raw) return undefined;
+    const custom = raw.match(/^<(a?):(\w+):(\d+)>$/);
+    return custom
+      ? { name: custom[2], image: `https://cdn.discordapp.com/emojis/${custom[3]}.${custom[1] ? 'gif' : 'webp'}?size=48` }
+      : { name: raw };
   });
 
-  const entities = $derived(mergeEntities([title.entities, body.entities, footer.entities, buttonEmoji?.entities ?? {}]));
+  /** Message tel que le bot le publie : embed converti en conteneur V2, bouton en dessous. */
+  const components = $derived<MessageComponent[]>([
+    botEmbedToV2({
+      color: appearance.embedColorActive,
+      ...(title.markdown ? { title: title.markdown } : {}),
+      ...(body.markdown ? { description: body.markdown } : {}),
+      ...(appearance.thumbnailUrl ? { thumbnailUrl: appearance.thumbnailUrl } : {}),
+      ...(appearance.imageUrl ? { imageUrl: appearance.imageUrl } : {}),
+      ...(footer.markdown ? { footer: footer.markdown } : {}),
+    }, 'giveaway'),
+    {
+      id: 'giveaway-actions',
+      kind: 'action-row',
+      buttons: [{
+        id: 'giveaway-join',
+        kind: 'button',
+        label: appearance.joinButtonLabel,
+        style: buttonVariant[appearance.joinButtonStyle] ?? 'primary',
+        ...(buttonEmoji ? { emoji: buttonEmoji } : {}),
+      }],
+    },
+  ]);
+
+  const entities = $derived(mergeEntities([title.entities, body.entities, footer.entities]));
 </script>
 
 <div class="preview">
@@ -143,15 +162,7 @@
   {/if}
 
   <DiscordScope class="giveaway-discord" {entities}>
-    <Embed {embed} />
-    <ActionRow>
-      {#if buttonEmoji}
-        {#snippet emoji()}<Markdown inline content={buttonEmoji.markdown} />{/snippet}
-        <Button label={appearance.joinButtonLabel} variant={buttonVariant[appearance.joinButtonStyle] ?? 'primary'} {emoji} />
-      {:else}
-        <Button label={appearance.joinButtonLabel} variant={buttonVariant[appearance.joinButtonStyle] ?? 'primary'} />
-      {/if}
-    </ActionRow>
+    <MessageComponents {components} />
   </DiscordScope>
 
   {#if !compact}
