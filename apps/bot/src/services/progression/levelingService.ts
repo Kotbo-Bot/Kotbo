@@ -761,7 +761,7 @@ export async function addXp(
   amount: number,
   client: Client,
   channelId?: string,
-  options: { applyDailyCap?: boolean; rankedSource?: 'text' | 'voice' } = {},
+  options: { applyDailyCap?: boolean; rankedSource?: 'text' | 'voice'; fromQuest?: boolean } = {},
 ) {
   if (amount <= 0) return;
   if (!(await isModuleEnabled(guildId, 'leveling'))) return;
@@ -816,6 +816,14 @@ export async function addXp(
       level: 0,
     },
   });
+
+  // L'XP de niveau gagnée alimente les quêtes « gagner N XP », sauf celle qu'une quête verse
+  // elle-même : une quête répétable se paierait sinon en boucle.
+  if (!options.fromQuest) {
+    void import('../features/rpg/rpgQuestService.js')
+      .then((m) => m.trackRpgQuest(client, guildId, userId, 'XP_EARNED', finalAmount, { channelId }))
+      .catch(() => null);
+  }
 
   // Le RP compétitif se greffe ici, sur l'XP *réellement* accordée : il hérite
   // ainsi du cooldown, des exclusions de salons/rôles et du plafond quotidien
