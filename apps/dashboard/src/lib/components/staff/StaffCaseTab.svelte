@@ -12,6 +12,8 @@
   import { staff, staffName } from './staffStore.svelte';
   import { memberMenuItems } from './memberActions';
   import { formatDate, formatNumber, formatRelative, formatTenure, formatVoice, weekTrend } from './format';
+  import { dashboardFetch } from '../../api';
+  import { toast } from '../../stores/toast.svelte';
   import { m } from '../../i18n';
 
   const { userId }: { userId: string } = $props();
@@ -58,6 +60,39 @@
     // Le parcours lit l'historique complet, avertissements expires compris.
     if (staff.guildId) void staff.loadWarnings();
   });
+
+  let savingClearances = $state(false);
+  let generalClearance = $state(0);
+  let poleClearances = $state<Record<string, number>>({});
+
+  $effect(() => {
+    if (member) {
+      generalClearance = Number((member as any).generalClearance ?? 0);
+      poleClearances = { ...((member as any).poleClearances ?? {}) };
+    }
+  });
+
+  async function saveClearances() {
+    if (!staff.canManageSettings || savingClearances) return;
+    savingClearances = true;
+    try {
+      const res = await dashboardFetch(`/staff/${userId}/clearances`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ generalClearance, poleClearances }),
+      });
+      if (!res.ok) throw new Error('clearances');
+      if (member) {
+        (member as any).generalClearance = generalClearance;
+        (member as any).poleClearances = { ...poleClearances };
+      }
+      toast.success('Habilitations enregistrées');
+    } catch {
+      toast.error('Impossible de sauvegarder les habilitations.');
+    } finally {
+      savingClearances = false;
+    }
+  }
 </script>
 
 {#if member}
@@ -134,6 +169,42 @@
           {:else}
             <p class="px-4 pb-4 pt-1 text-sm text-on-surface-variant">{m.sm_no_secondary_hierarchy()}</p>
           {/if}
+        </section>
+
+        <section class="sc-card">
+          <div class="flex items-center justify-between pr-3">
+            <h4 class="sc-title">Habilitations (Général & Pôle)</h4>
+            {#if staff.canManageSettings}
+              <Button size="sm" variant="ghost" loading={savingClearances} onclick={() => void saveClearances()}>Enregistrer</Button>
+            {/if}
+          </div>
+          <div class="px-4 pb-4 pt-1 space-y-3 text-sm">
+            <label class="flex items-center justify-between gap-3">
+              <span class="text-on-surface-variant">Niveau général</span>
+              <select class="input w-24 py-1 text-xs" bind:value={generalClearance} disabled={!staff.canManageSettings}>
+                {#each [0, 1, 2, 3, 4, 5] as lvl (lvl)}
+                  <option value={lvl}>N{lvl}</option>
+                {/each}
+              </select>
+            </label>
+            {#each staff.hierarchies as h (h.id)}
+              <label class="flex items-center justify-between gap-3">
+                <span class="text-on-surface-variant truncate">{h.name}</span>
+                <select
+                  class="input w-24 py-1 text-xs"
+                  disabled={!staff.canManageSettings}
+                  value={poleClearances[h.id] ?? 0}
+                  onchange={(e) => {
+                    poleClearances = { ...poleClearances, [h.id]: Number(e.currentTarget.value) };
+                  }}
+                >
+                  {#each [0, 1, 2, 3, 4, 5] as lvl (lvl)}
+                    <option value={lvl}>N{lvl}</option>
+                  {/each}
+                </select>
+              </label>
+            {/each}
+          </div>
         </section>
       </div>
 

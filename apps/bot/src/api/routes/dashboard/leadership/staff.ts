@@ -76,7 +76,7 @@ import * as altAccountService from '../../../../services/moderation/altAccountSe
 import { canViewFeatureSection } from '../featureGate.js';
 import { type OverwriteResolvable, Client, ChannelType, PermissionFlagsBits, EmbedBuilder, TextChannel } from 'discord.js';
 
-import { fail, guildRoute, readBody, send } from '../../../hono/dashboard/kit.js';
+import { auditUserOf, fail, guildRoute, readBody, send } from '../../../hono/dashboard/kit.js';
 import { deleteStaffListPanel, saveStaffListPanel } from '../../../../services/staff/staffListPanelService.js';
 import { publicErrorMessage } from '../../../../utils/publicError.js';
 export function createStaffRouter(client: Client) {
@@ -1658,6 +1658,61 @@ export function createStaffRouter(client: Client) {
     } catch (err) {
       logger.error('ResignationsAPI', 'Error creating resignation ticket:', err);
       return fail(c, err, 'Erreur lors de la création du ticket', 'ResignationsAPI');
+    }
+  });
+
+  // Habilitations à deux niveaux (général 0..5 + par pôle)
+  router.patch(`${base}/staff/:staffUserId{[0-9]+}/clearances`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const staffUserId = c.req.param('staffUserId');
+    if (!c.var.effectiveAccess.canManageSettings) {
+      return send(c, { error: 'Réservé aux administrateurs.' }, 403);
+    }
+    try {
+      const body = await readBody<{ generalClearance?: number; poleClearances?: Record<string, number> }>(c);
+      const member = await prisma.staffMember.findUnique({
+        where: { guildId_userId: { guildId, userId: staffUserId } },
+      });
+      if (!member) return send(c, { error: 'Membre staff introuvable.' }, 404);
+
+      const clamp = (v: unknown) => {
+        const n = Math.trunc(Number(v));
+        return Number.isFinite(n) ? Math.max(0, Math.min(5, n)) : 0;
+      };
+
+      const generalClearance = body?.generalClearance !== undefined ? clamp(body.generalClearance) : member.generalClearance;
+      const poleClearances: Record<string, number> = {};
+      if (body?.poleClearances && typeof body.poleClearances === 'object') {
+        for (const [k, v] of Object.entries(body.poleClearances)) {
+          if (typeof k === 'string' && k.trim()) {
+            poleClearances[k.trim()] = clamp(v);
+          }
+        }
+      }
+
+      const updated = await prisma.staffMember.update({
+        where: { id: member.id },
+        data: {
+          generalClearance,
+          ...(body?.poleClearances !== undefined ? { poleClearances } : {}),
+        },
+        select: { id: true, userId: true, generalClearance: true, poleClearances: true },
+      });
+
+      await pushAudit(guildId, {
+        user: auditUserOf(c),
+        action: 'Mise à jour habilitations staff',
+        context: getGuildName(client, guildId),
+        module: 'Staff Management',
+        eventType: 'Manuel',
+        details: `Membre ${staffUserId} · Général N${updated.generalClearance}`,
+        channelId: null,
+      });
+
+      return send(c, { member: updated });
+    } catch (err) {
+      logger.error('StaffAPI', 'Error updating clearances:', err);
+      return fail(c, err, 'Erreur lors de la mise à jour des habilitations.', 'StaffAPI');
     }
   });
 
