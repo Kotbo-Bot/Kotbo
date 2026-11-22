@@ -9,7 +9,7 @@ import { describe, expect, mock, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { getModuleDefinition } from '@kotbo/contracts';
-import { mcpToolModule, mcpToolRight, withKeyAccessGate, withModuleGate, type McpKeyRule } from '../../api/mcp/toolModules.js';
+import { mcpToolModule, mcpToolRight, withKeyAccessGate, withModuleGate, type McpKeyRight, type McpKeyRule } from '../../api/mcp/toolModules.js';
 
 /** Noms réellement enregistrés, lus dans les sources des outils. */
 function registeredToolNames(): string[] {
@@ -113,7 +113,7 @@ describe('droits d\'une clé MCP par module', () => {
     featureKey, canView: false, canModerate: false, canConfigure: false, canDelete: false, ...over,
   });
 
-  test.each([
+  test.each<[string, McpKeyRight]>([
     ['get_tickets', 'canView'],
     ['reply_ticket', 'canModerate'],
     ['update_ticket_system_config', 'canConfigure'],

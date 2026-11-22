@@ -2,13 +2,13 @@ import prisma from '../../utils/db.js';
 
 export type OrgCanvasLinkStyle = 'solid' | 'dashed' | 'ochre';
 
-export interface OrgCanvas {
+export type OrgCanvas = {
   /** Position de la carte d'un pôle, par id de hiérarchie. */
   nodes: Record<string, { x: number; y: number }>;
   frames: Array<{ id: string; label: string; x: number; y: number; w: number; h: number; color: string | null; dashed: boolean }>;
   /** `linked` : le trait plein reflète le parent réel du pôle (`to` est enfant de `from`). */
   links: Array<{ id: string; from: string; to: string; style: OrgCanvasLinkStyle; linked: boolean }>;
-}
+};
 
 const MAX_NODES = 300;
 const MAX_FRAMES = 60;
