@@ -173,6 +173,7 @@ export function createPublicEmbedWidgetsRouter(client: Client) {
 </body>
 </html>`;
 
+    c.header('X-Frame-Options', undefined);
     c.header('Content-Security-Policy', 'frame-ancestors *');
     c.header('Cache-Control', 'public, max-age=60');
     return c.html(html);
