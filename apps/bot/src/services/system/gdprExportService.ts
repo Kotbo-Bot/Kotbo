@@ -114,6 +114,7 @@ const STATIC_SOURCES: GdprSource[] = [
   { category: 'identity', key: 'seasonBaseline', label: 'XP au début des saisons', model: 'seasonBaseline', where: ({ discordId }) => ({ userId: discordId }) },
   { category: 'identity', key: 'memberDailyStat', label: 'Statistiques quotidiennes', model: 'memberDailyStat', where: ({ discordId }) => ({ userId: discordId }) },
   { category: 'identity', key: 'boostEvent', label: 'Boosts du serveur', model: 'boostEvent', where: ({ discordId }) => ({ userId: discordId }) },
+  { category: 'moderation', key: 'discordAutoModEvent', label: "Événements de l'automod Discord", model: 'discordAutoModEvent', where: ({ discordId }) => ({ userId: discordId }) },
   { category: 'moderation', key: 'tagAutomodEvent', label: "Événements de l'automod des tags", model: 'tagAutomodEvent', where: ({ discordId }) => ({ userId: discordId }) },
   { category: 'identity', key: 'dashboardCommandUsage', label: 'Usage des commandes dashboard', model: 'dashboardCommandUsage', where: ({ discordId }) => ({ userId: discordId }) },
   { category: 'identity', key: 'dashboardUserSettings', label: 'Préférences dashboard', model: 'dashboardUserSettings', where: ({ discordId }) => ({ userId: discordId }) },
