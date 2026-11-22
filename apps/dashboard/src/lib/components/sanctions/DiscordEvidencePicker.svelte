@@ -29,6 +29,7 @@
     attachments: { url: string; name: string; contentType: string | null; size: number; kind: 'image' | 'video' | 'file' }[];
     embeds: ParsedEmbed[];
     stickers: { id: string; name: string; url: string }[];
+    deleted?: boolean;
   }
 
   interface EvidenceChannelResult {
@@ -355,6 +356,7 @@
                     <div class="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1">
                       <span class="text-2xs font-semibold text-primary"># {message.channelName}</span>
                       <span class="text-2xs text-on-surface-variant/45">{formatTimestamp(message.createdAt)}</span>
+                      {#if message.deleted}<span class="rounded bg-error/15 px-1.5 py-0.5 text-2xs font-semibold text-error">{m.sev_deleted_badge()}</span>{/if}
                     </div>
                     <div class="discord-bubble">
                       {#if message.content}

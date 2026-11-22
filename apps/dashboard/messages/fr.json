@@ -4241,6 +4241,7 @@
   "sev_deselect_all": "Tout désélectionner",
   "sev_select_all": "Tout sélectionner",
   "sev_no_text": "(Pas de texte)",
+  "sev_deleted_badge": "Supprimé",
   "sev_generating": "Génération des transcriptions en cours",
   "sei_link_placeholder": "Lien de preuve (https://…)",
   "sei_upload_error": "Une erreur est survenue lors de l'upload.",

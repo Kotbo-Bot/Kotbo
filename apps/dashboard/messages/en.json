@@ -4241,6 +4241,7 @@
   "sev_deselect_all": "Deselect all",
   "sev_select_all": "Select all",
   "sev_no_text": "(No text)",
+  "sev_deleted_badge": "Deleted",
   "sev_generating": "Generating transcripts",
   "sei_link_placeholder": "Evidence link (https://…)",
   "sei_upload_error": "Something went wrong during the upload.",
