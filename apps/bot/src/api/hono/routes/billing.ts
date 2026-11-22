@@ -53,6 +53,9 @@ import {
 import { syncSubscription, guildIdForSubscription, transferSubscription, TransferError } from '../../../services/billing/subscriptionSync.js';
 import { LIVE_STATUSES } from '../../../services/billing/entitlingStatuses.js';
 import { recordBillingConsent } from '../../../services/billing/consentService.js';
+import { getGuildPlan } from '../../../services/system/planService.js';
+import { invalidateNetworkScope } from '../../../services/network/networkScope.js';
+import { mergeGuildIntoPrimary } from '../../../services/network/networkMergeService.js';
 import {
   recordFailedInvoice,
   recordInvoice,
@@ -1005,6 +1008,11 @@ export function createBillingRouter(client: Client): OpenAPIHono {
       return c.json({ network: updated });
     }
 
+    // Le serveur principal doit avoir une offre payante (Plus, Pro, Ultimate ou sur mesure).
+    if ((await getGuildPlan(guildId)) === 'FREE') {
+      return c.json({ error: 'Le réseau de serveurs demande l’offre Plus (ou sur mesure) sur le serveur principal.' }, 402);
+    }
+
     const created = await prisma.guildNetwork.create({
       data: {
         name,
@@ -1024,8 +1032,10 @@ export function createBillingRouter(client: Client): OpenAPIHono {
   router.post(`${GUARDED}/network/guilds`, async (c) => {
     const guildId = c.req.param('guildId')!;
     const userId = c.var.auth.userId;
-    const raw = await c.req.json().catch(() => ({})) as { targetGuildId?: string };
+    const raw = await c.req.json().catch(() => ({})) as { targetGuildId?: string; mode?: string };
     const targetGuildId = raw.targetGuildId?.trim() ?? '';
+    // merge : les données du sous-serveur rejoignent le principal ; fresh : on repart du principal.
+    const mode = raw.mode === 'fresh' ? 'fresh' : 'merge';
     if (!/^\d{17,20}$/.test(targetGuildId)) {
       return c.json({ error: 'Identifiant de serveur invalide.' }, 400);
     }
@@ -1051,6 +1061,20 @@ export function createBillingRouter(client: Client): OpenAPIHono {
       return c.json({ error: 'Vous devez administrer le serveur à rattacher.' }, 403);
     }
 
+    // Chaque sous-serveur doit lui aussi avoir une offre payante (Plus, Pro, Ultimate ou sur mesure).
+    if ((await getGuildPlan(targetGuildId)) === 'FREE') {
+      return c.json({ error: 'Le serveur à rattacher doit avoir l’offre Plus (ou sur mesure).' }, 402);
+    }
+
+    // La fusion doit précéder le rattachement : ensuite, la redirection s'applique.
+    const primary = await prisma.guildNetworkMember.findFirst({
+      where: { networkId: membership.networkId, role: 'PRIMARY' },
+      select: { guildId: true },
+    });
+    const merge = mode === 'merge' && primary
+      ? await mergeGuildIntoPrimary(targetGuildId, primary.guildId)
+      : null;
+
     await prisma.guildNetworkMember.create({
       data: {
         networkId: membership.networkId,
@@ -1059,8 +1083,9 @@ export function createBillingRouter(client: Client): OpenAPIHono {
         addedById: userId,
       },
     });
+    invalidateNetworkScope();
 
-    return c.json({ ok: true }, 201);
+    return c.json({ ok: true, mode, merge }, 201);
   });
 
   router.delete(`${GUARDED}/network/guilds/:targetGuildId`, async (c) => {
@@ -1075,6 +1100,7 @@ export function createBillingRouter(client: Client): OpenAPIHono {
     await prisma.guildNetworkMember.deleteMany({
       where: { networkId: membership.networkId, guildId: targetGuildId },
     });
+    invalidateNetworkScope();
     return c.json({ ok: true });
   });
 
