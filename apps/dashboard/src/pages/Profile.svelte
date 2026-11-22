@@ -16,6 +16,7 @@
   import type { APIKey, StaffMember, TestingPeriod, StaffManagerNote } from '../lib/types';
   import MetricCard from '../lib/components/MetricCard.svelte';
   import FormInput from '../lib/components/FormInput.svelte';
+  import FormSelect from '../lib/components/FormSelect.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
   import RankCardCustomizer from '../lib/components/RankCardCustomizer.svelte';
   import Chart from '../lib/components/charts/Chart.svelte';
@@ -70,6 +71,12 @@
 
   // Manager Notes Form
   let newNoteContent = $state('');
+  let newNoteTitle = $state('');
+  let newNoteCategory = $state('NOTE');
+  const noteCategoryLabels = $derived<Record<string, string>>({
+    NOTE: m.pf_report_cat_note(), PRAISE: m.pf_report_cat_praise(),
+    WARNING: m.pf_report_cat_warning(), FOLLOWUP: m.pf_report_cat_followup(),
+  });
   let sendingNote = $state(false);
 
   // Resignation
@@ -307,9 +314,14 @@
     if (!newNoteContent.trim() || !staffMember) return;
     sendingNote = true;
     try {
-      const success = await addManagerNote(staffMember.userId, newNoteContent.trim(), staffMember.guildId);
+      const success = await addManagerNote(staffMember.userId, newNoteContent.trim(), staffMember.guildId, {
+        title: newNoteTitle.trim(),
+        category: newNoteCategory,
+      });
       if (success) {
         newNoteContent = '';
+        newNoteTitle = '';
+        newNoteCategory = 'NOTE';
         toast.success(m.pf_note_added());
         // Reload notes
         notesAbout = await fetchManagerNotes(staffMember.userId, staffMember.guildId);
@@ -694,6 +706,11 @@
                 {#each notesAbout as note}
                   <li class="flex items-start justify-between gap-4 py-3 first:pt-0">
                     <div>
+                      {#if note.category && note.category !== 'NOTE' || note.title}
+                        <p class="text-sm font-semibold text-on-surface">
+                          <span class="mr-2 rounded-md bg-surface-container px-2 py-0.5 text-xs font-medium text-on-surface-variant">{noteCategoryLabels[note.category ?? 'NOTE']}</span>{note.title ?? ''}
+                        </p>
+                      {/if}
                       <p class="text-sm text-on-surface">{note.content}</p>
                       <p class="mt-1 text-xs text-on-surface-variant">
                         {m.pf_posted_on({ date: formatDate(note.createdAt), author: note.author?.username || m.pf_a_manager() })}
@@ -707,6 +724,12 @@
               </ul>
 
               <div class="flex flex-col md:flex-row gap-3 md:items-end">
+                <FormSelect ariaLabel={m.pf_manager_notes()} bind:value={newNoteCategory} className="md:w-44">
+                  {#each Object.entries(noteCategoryLabels) as [key, label]}<option value={key}>{label}</option>{/each}
+                </FormSelect>
+                <div class="md:w-64">
+                  <FormInput ariaLabel={m.pf_report_title_ph()} id="new-note-title" placeholder={m.pf_report_title_ph()} bind:value={newNoteTitle} className="w-full" />
+                </div>
                 <div class="flex-1">
                   <FormInput ariaLabel={m.pf_add_note_ph()} id="new-note" placeholder={m.pf_add_note_ph()} bind:value={newNoteContent} className="w-full" />
                 </div>

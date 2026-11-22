@@ -1,5 +1,6 @@
 <script lang="ts">
   import { m, dateLocale } from '../lib/i18n';
+  import { exportRows } from '../lib/exportData';
   import { channelDisplayName } from '../lib/channelUtils';
   import { onMount } from 'svelte';
   import { router } from 'tinro';
@@ -17,6 +18,7 @@
     fetchPlanningExtras,
     fetchPlanningIcalLink,
     fetchStaffRoles,
+    fetchStaffNotesAbsencesExport,
     rsvpMeeting,
     updateCall,
     dashboardFetch,
@@ -1008,8 +1010,58 @@
     })),
   );
 
+  async function exportAbsencesAndNotes(format: 'csv' | 'json') {
+    try {
+      const res = await fetchStaffNotesAbsencesExport();
+      const absences = res?.absences ?? [];
+      const notes = res?.notes ?? [];
+      const combined = [
+        ...absences.map((a: any) => ({
+          kind: 'ABSENCE',
+          date: a.startDate,
+          endDate: a.endDate ?? '',
+          staff: a.staffMember?.displayName || a.staffMember?.username || a.staffUserId,
+          author: '',
+          typeOrStatus: `${a.type ?? ''} (${a.status ?? ''})`.trim(),
+          content: a.reason ?? a.message ?? '',
+          note: a.decisionNote ?? '',
+        })),
+        ...notes.map((n: any) => ({
+          kind: 'NOTE_STAFF',
+          date: n.createdAt,
+          endDate: '',
+          staff: n.staffMember?.displayName || n.staffMember?.username || n.staffUserId,
+          author: n.author?.displayName || n.author?.username || n.authorUserId,
+          typeOrStatus: 'NOTE',
+          content: n.content ?? '',
+          note: '',
+        })),
+      ];
+      exportRows(
+        format,
+        'kotbo_absences_notes_staff',
+        combined,
+        [
+          { label: 'Catégorie', value: (r) => r.kind },
+          { label: 'Date', value: (r) => r.date },
+          { label: 'Fin', value: (r) => r.endDate },
+          { label: 'Membre staff', value: (r) => r.staff },
+          { label: 'Auteur', value: (r) => r.author },
+          { label: 'Type / Statut', value: (r) => r.typeOrStatus },
+          { label: 'Motif / Contenu', value: (r) => r.content },
+          { label: 'Note décision', value: (r) => r.note },
+        ],
+        { absences, notes },
+      );
+    } catch {
+      toast.error(m.common_error());
+    }
+  }
+
   const moreMenu = $derived<MenuItem[]>([
     ...(myStaffRecord ? [{ label: m.planning_ical_menu(), description: m.planning_ical_menu_desc(), icon: 'link', onselect: () => void openIcal() }] : []),
+    { label: 'Exporter absences & notes (CSV)', icon: 'download', onselect: () => void exportAbsencesAndNotes('csv') },
+    { label: 'Exporter absences & notes (JSON)', icon: 'code', onselect: () => void exportAbsencesAndNotes('json') },
     {
       label: colorMode === 'type' ? m.planning_color_by_person() : m.planning_color_by_type(),
       icon: 'palette',

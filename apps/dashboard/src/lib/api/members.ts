@@ -144,3 +144,11 @@ export async function deleteLinkedAccount(id: string, guildId = authStore.select
     errorContext: 'API Error (Delete Linked Account):'
   });
 }
+
+export async function fetchMemberProgressionExport(guildId = authStore.selectedGuildId) {
+  return dashboardRequest<{ members: any[] }>('/exports/progression', {
+    method: 'GET',
+    guildId,
+    errorContext: 'API Error (Export Member Progression):'
+  });
+}

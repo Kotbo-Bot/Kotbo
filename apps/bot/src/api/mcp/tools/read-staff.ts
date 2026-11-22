@@ -2,6 +2,7 @@
 import { getEvaluationsDashboardData } from '../../../services/staff/staffEvaluationService.js';
 import { getAbsences, getCallPermissionConfig, getCalls, getMeetings, getNotifications, getPolls, getStaffAlertsAndProgression, getStaffCalendarData, getTasks } from '../../../services/staff/staffLeadershipService.js';
 import { getAPIKeys, getStaffHierarchies, getStaffRoles } from '../../../services/staff/staffManagementService.js';
+import { getCandidatures } from '../../../services/staff/recruitmentService.js';
 import prisma from '../../../utils/db.js';
 import { z } from 'zod';
 import { type McpToolContext, err, ok, resolveMember, toolError } from '../toolkit.js';
@@ -337,6 +338,49 @@ export function registerReadStaffTools(ctx: McpToolContext) {
 
         try {
           return ok(await getStaffCalendarData(guildId, startDate, endDate, staff_ids));
+        } catch (e) {
+          return toolError(e);
+        }
+      })
+    );
+
+    server.registerTool(
+      'get_recruitment_candidatures',
+      {
+        description: 'Récupère les candidatures de recrutement du serveur (filtrables par statut).',
+        inputSchema: {
+          status: z.enum(['PENDING', 'APPROVED', 'REJECTED', 'ORAL_DONE']).optional().describe('Filtrer par statut'),
+          limit: z.number().int().min(1).max(200).default(50).describe('Nombre maximum de candidatures à retourner'),
+        },
+        _meta: toolMeta,
+      },
+      guard('READ_STAFF', async ({ status, limit }) => {
+        try {
+          const all = await getCandidatures(guildId);
+          const filtered = status ? all.filter((c) => c.status === status) : all;
+          return ok(filtered.slice(0, limit));
+        } catch (e) {
+          return toolError(e);
+        }
+      })
+    );
+
+    server.registerTool(
+      'get_recruitment_candidature',
+      {
+        description: "Récupère le détail complet d'une candidature de recrutement par son identifiant.",
+        inputSchema: {
+          candidature_id: z.string().min(1).describe('Identifiant de la candidature'),
+        },
+        _meta: toolMeta,
+      },
+      guard('READ_STAFF', async ({ candidature_id }) => {
+        try {
+          const candidature = await prisma.recruitmentCandidature.findFirst({
+            where: { id: candidature_id, guildId },
+          });
+          if (!candidature) return err('Candidature introuvable.');
+          return ok(candidature);
         } catch (e) {
           return toolError(e);
         }

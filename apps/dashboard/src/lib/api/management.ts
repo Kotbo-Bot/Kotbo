@@ -65,6 +65,15 @@ export async function updateFeatureConfiguration(featureKey, config, guildId = a
   });
 }
 
+export async function updateKeyAccess(featureKey, keyAccessConfigs, guildId = authStore.selectedGuildId) {
+  return dashboardMutation(`/management/features/${featureKey}/key-access`, {
+    method: 'PUT',
+    payload: { keyAccessConfigs },
+    guildId,
+    errorContext: 'API Error (Update MCP Key Access):'
+  });
+}
+
 export async function updateRoleAccess(featureKey, roleAccessConfigs, guildId = authStore.selectedGuildId) {
   return dashboardMutation(`/management/features/${featureKey}/role-access`, {
     method: 'PUT',

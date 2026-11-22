@@ -14,6 +14,8 @@
   import StaffAvatar from './StaffAvatar.svelte';
   import HierarchyIcon from './HierarchyIcon.svelte';
   import { staff, staffName } from './staffStore.svelte';
+  import { applyStaffSeparators } from '../../api';
+  import { STAFF_SEPARATOR_STYLE_KEYS, staffSeparatorName } from '@kotbo/shared';
   import type { StaffHierarchy, StaffRole } from '../../types';
   import { m } from '../../i18n';
 
@@ -117,7 +119,27 @@
   let hRole = $state('');
   let hResp = $state('');
   let hParent = $state('');
+  // '' = aucun, 'role' = rôle existant, sinon la clé d'un style créé par Kotbo.
+  let hSepKind = $state('');
+  let hSepRole = $state('');
   let savingH = $state(false);
+  let realigning = $state(false);
+
+  // Style le plus utilisé par les autres hiérarchies, pour garder une liste homogène ; « line » à défaut.
+  const suggestedStyle = $derived.by(() => {
+    const counts = new Map<string, number>();
+    for (const x of staff.orderedHierarchies) {
+      if (x.id !== hEditing?.id && x.separatorStyle) counts.set(x.separatorStyle, (counts.get(x.separatorStyle) ?? 0) + 1);
+    }
+    const [top] = [...counts].sort((a, b) => b[1] - a[1])[0] ?? [];
+    return (STAFF_SEPARATOR_STYLE_KEYS as string[]).includes(top ?? '') ? (top as (typeof STAFF_SEPARATOR_STYLE_KEYS)[number]) : STAFF_SEPARATOR_STYLE_KEYS[0];
+  });
+
+  async function realignSeparators() {
+    realigning = true;
+    try { await applyStaffSeparators(); } catch { /* toast d'erreur déjà affiché par le client */ }
+    realigning = false;
+  }
 
   function openHierarchy(h: StaffHierarchy | null) {
     hEditing = h;
@@ -128,6 +150,8 @@
     hRole = h?.discordRoleId || '';
     hResp = h?.responsableUserId || '';
     hParent = h?.parentHierarchyId || '';
+    hSepKind = h?.separatorStyle || (h?.separatorRoleId ? 'role' : '');
+    hSepRole = h?.separatorRoleId || '';
     hModal = true;
   }
 
@@ -142,6 +166,9 @@
         discordRoleId: hRole.trim() || null,
         responsableUserId: hResp.trim() || null,
         parentHierarchyId: hParent || null,
+        separatorStyle: hSepKind && hSepKind !== 'role' ? hSepKind : null,
+        // Un style auto garde le rôle déjà créé (sinon le serveur le recrée) ; « role » prend le rôle choisi.
+        separatorRoleId: hSepKind === 'role' ? hSepRole || null : hSepKind ? hEditing?.separatorRoleId ?? null : null,
       },
       hEditing?.id ?? null,
     );
@@ -280,6 +307,7 @@
     </p>
     {#if canEdit}
       <div class="flex items-center gap-2">
+        <Button icon="refresh-cw" loading={realigning} onclick={realignSeparators}>{m.sx_sep_apply()}</Button>
         <Button icon="layers" onclick={() => openHierarchy(null)}>{m.sm_btn_new_hierarchy()}</Button>
         <Button variant="primary" icon="plus" onclick={() => openCreateRole('')}>{m.sm_btn_new_role()}</Button>
       </div>
@@ -540,6 +568,30 @@
         </select>
       {/snippet}
     </Field>
+    <Field label={m.sx_sep_label()} hint={m.sx_sep_hint()}>
+      {#snippet children(id)}
+        <select {id} class="input" bind:value={hSepKind}>
+          <option value="">{m.sx_sep_none()}</option>
+          <option value="role">{m.sx_sep_existing()}</option>
+          {#each STAFF_SEPARATOR_STYLE_KEYS as key (key)}<option value={key}>{staffSeparatorName(key, hName.trim() || '…')}</option>{/each}
+        </select>
+      {/snippet}
+    </Field>
+    {#if !hSepKind && hName.trim()}
+      <button type="button" class="-mt-2 text-left text-xs text-primary hover:underline" onclick={() => (hSepKind = suggestedStyle)}>
+        {m.sx_sep_suggest({ name: staffSeparatorName(suggestedStyle, hName) })}
+      </button>
+    {/if}
+    {#if hSepKind === 'role'}
+      <Field label={m.sx_sep_role()}>
+        {#snippet children(id)}
+          <select {id} class="input" bind:value={hSepRole}>
+            <option value="">{m.sm_none_option()}</option>
+            {#each staff.discordRoles as dr (dr.id)}<option value={dr.id}>{dr.name}</option>{/each}
+          </select>
+        {/snippet}
+      </Field>
+    {/if}
     <div class="grid gap-4 sm:grid-cols-2">
       <Field label={m.sm_field_hierarchy_responsible_member()}>
         {#snippet children(id)}

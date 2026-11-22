@@ -100,6 +100,17 @@
   const endpointUrl = $derived(guildId ? `${API_BASE_URL}/api/mcp/${guildId}` : '');
   const restApiUrl = $derived(guildId ? `${API_BASE_URL}/api/v1/${guildId}` : '');
 
+  let widgetType = $state<'stats' | 'messages' | 'leaderboard'>('stats');
+  let widgetTheme = $state<'dark' | 'light'>('dark');
+  const widgetEmbedUrl = $derived(
+    guildId ? `${API_BASE_URL}/api/public/widgets/${guildId}/embed?type=${widgetType}&theme=${widgetTheme}` : ''
+  );
+  const widgetIframeCode = $derived(
+    widgetEmbedUrl
+      ? `<iframe src="${widgetEmbedUrl}" width="100%" height="210" frameborder="0" loading="lazy" style="border-radius:14px;overflow:hidden;"></iframe>`
+      : ''
+  );
+
   const presets = $derived([
     { id: 'read', label: m.mcp_preset_read_only(), hint: m.mcp_preset_read_only_hint(), icon: 'eye', perms: readValues },
     { id: 'all', label: m.mcp_preset_all(), hint: m.mcp_preset_all_hint(), icon: 'zap', perms: allValues },
@@ -417,6 +428,44 @@
         {/if}
       </div>
     </SectionCard>
+
+    {#if widgetEmbedUrl}
+      <SectionCard title="Widgets web intégrables" description="HTML / iframe prêt à intégrer sur un site externe" icon="code">
+        <div class="space-y-3 px-4 pb-4 pt-2">
+          <div class="flex flex-wrap gap-1.5">
+            {#each [
+              { id: 'stats', label: 'Stats live' },
+              { id: 'messages', label: 'Messages / jour' },
+              { id: 'leaderboard', label: 'Classement' },
+            ] as opt (opt.id)}
+              <button
+                type="button"
+                onclick={() => (widgetType = opt.id as typeof widgetType)}
+                class="px-2.5 py-1 rounded-md text-xs font-medium border transition-colors {widgetType === opt.id ? 'bg-primary/15 text-primary border-primary/40' : 'bg-surface-container-low text-on-surface-variant border-outline-variant hover:text-on-surface'}"
+              >
+                {opt.label}
+              </button>
+            {/each}
+            <button
+              type="button"
+              onclick={() => (widgetTheme = widgetTheme === 'dark' ? 'light' : 'dark')}
+              class="ml-auto px-2.5 py-1 rounded-md text-xs font-medium border border-outline-variant bg-surface-container-low text-on-surface-variant hover:text-on-surface transition-colors"
+            >
+              Thème : {widgetTheme === 'dark' ? 'Sombre' : 'Clair'}
+            </button>
+          </div>
+          <iframe
+            src={widgetEmbedUrl}
+            title="Aperçu widget Kotbo"
+            class="w-full h-[185px] rounded-xl border border-outline-variant bg-surface-container-low"
+          ></iframe>
+          <div class="space-y-1">
+            <p class="text-2xs font-medium text-on-surface-variant">Code HTML à copier</p>
+            {@render copyRow(widgetIframeCode, 'widget-iframe')}
+          </div>
+        </div>
+      </SectionCard>
+    {/if}
   </aside>
 
   <!-- Keys -->

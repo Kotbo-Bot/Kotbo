@@ -38,9 +38,12 @@
   import { toast } from '../lib/stores/toast.svelte';
   import { confirmDialog } from '../lib/stores/confirmDialog.svelte';
   import { downloadSingleSheetXlsx } from '../lib/xlsxExport';
+  import { exportRows } from '../lib/exportData';
+  import ExportDropdown from '../lib/components/analytics/ExportDropdown.svelte';
+import DiscordAutomodEvents from '../lib/components/automod/DiscordAutomodEvents.svelte';
 
   // « appeals » est rendu par la page enveloppe (security/Sanctions) : il figure ici pour que l'onglet existe.
-  const sanctionTabs = ['sanctions', 'settings', 'appeals'] as const;
+  const sanctionTabs = ['sanctions', 'settings', 'appeals', 'automod'] as const;
   let activeTab = $state('sanctions');
 
   $effect(() => {
@@ -399,6 +402,21 @@
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  }
+
+  function exportSanctionsList(format: 'csv' | 'json') {
+    const rows = filteredAndSortedSanctions ?? [];
+    exportRows(format, 'kotbo_sanctions', rows, [
+      { label: 'ID', value: (s) => s.id },
+      { label: 'Date', value: (s) => s.createdAt },
+      { label: 'Type', value: (s) => typeLabel(s.type) },
+      { label: 'Statut', value: (s) => statusLabel(s.status) },
+      { label: 'Cible', value: (s) => s.targetTag ?? s.targetUserId ?? '' },
+      { label: 'ID Cible', value: (s) => s.targetUserId ?? '' },
+      { label: 'Modérateur', value: (s) => s.moderatorTag ?? s.moderatorUserId ?? '' },
+      { label: 'Raison', value: (s) => s.reason ?? '' },
+      { label: 'Durée', value: (s) => durationLabel(s.durationSeconds) },
+    ]);
   }
 
   let creatingReport = $state(false);
@@ -1085,6 +1103,10 @@
           label={m.sc_import_sanctions()}
         />
       {/if}
+      <ExportDropdown
+        onExportCSV={() => exportSanctionsList('csv')}
+        onExportJSON={() => exportSanctionsList('json')}
+      />
       <RefreshButton
         onClick={() => dashboardStore.refresh()}
         loading={dashboardStore.state.loading}
@@ -1102,6 +1124,10 @@
       active={activeTab}
       onchange={(id) => gotoTab('/security/sanctions', id, 'sanctions')}
     />
+
+    {#if activeTab === 'automod'}
+      <DiscordAutomodEvents />
+    {/if}
 
     {#if activeTab === 'sanctions'}
       <section class="section-card-flush font-inter" data-tour="sanctions-list">

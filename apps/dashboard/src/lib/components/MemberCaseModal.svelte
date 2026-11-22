@@ -1490,6 +1490,7 @@
                         icon="history"
                         title={m.mcm_history_empty()}
                         description={m.mcm_history_empty_desc()}
+                        reason={historyFilter === 'all' ? 'accumulating' : 'nothing-matches'}
                       />
                     {:else}
                       <ul class="space-y-3">

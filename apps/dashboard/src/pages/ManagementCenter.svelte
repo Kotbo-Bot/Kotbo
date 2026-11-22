@@ -16,7 +16,9 @@
   import {
     applyGuildPreset,
     fetchFeatureConfigurations,
+    fetchMcpKeys,
     updateFeatureConfiguration,
+    updateKeyAccess,
     updateRoleAccess,
     updateGlobalSettings,
   } from '../lib/api';
@@ -67,6 +69,8 @@
     userActivityTracking: boolean;
     roleAccess: any[];
     roleAccessByRole: any[];
+    /** Droits des cles MCP sur ce module (liste blanche par cle). */
+    keyAccess: any[];
     notificationTargets: any[];
     metadata?: Record<string, unknown>;
   };
@@ -135,6 +139,7 @@
   let loading = $state(true);
   const saveAction = createAsyncActionState();
 
+  let mcpKeys = $state<Array<{ id: string; name: string }>>([]);
   let features = $state<FeatureConfig[]>([]);
   let savedFeatures = $state<FeatureConfig[]>([]);
   let guildSettings = $state<GuildSettings>({});
@@ -186,7 +191,12 @@
         ...feature,
         metadata: feature.metadata || {},
         roleAccessByRole: feature.roleAccessByRole || [],
+        keyAccess: feature.keyAccess || [],
       }));
+
+      // Les cles viennent d'une autre route : sans elles la matrice reste celle des roles.
+      const keyResult = await fetchMcpKeys().catch(() => []);
+      mcpKeys = Array.isArray(keyResult) ? keyResult : [];
 
       features = loaded;
       savedFeatures = clone(loaded);
@@ -255,6 +265,11 @@
 
             if (!before || JSON.stringify(before.roleAccessByRole) !== JSON.stringify(feature.roleAccessByRole)) {
               const ok = await updateRoleAccess(feature.featureKey, feature.roleAccessByRole);
+              if (!ok) throw new Error(m.mgmt_save_error());
+            }
+
+            if (!before || JSON.stringify(before.keyAccess) !== JSON.stringify(feature.keyAccess)) {
+              const ok = await updateKeyAccess(feature.featureKey, feature.keyAccess);
               if (!ok) throw new Error(m.mgmt_save_error());
             }
           }
@@ -385,6 +400,7 @@
               <ManagementAccess
                 bind:features
                 availableRoles={staffRoles}
+                keys={mcpKeys}
                 modules={modulesById}
                 onApplyPreset={handleApplyPreset}
               />

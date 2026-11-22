@@ -205,7 +205,7 @@ describe('B — journal des changements de réglages vocaux', () => {
     expect(res.statusCode).toBe(200);
     const [entry, ...reste] = audits();
     expect(reste).toHaveLength(0);
-    expect(entry.user).toBe('Toji (dashboard)');
+    expect(entry.user).toBe('Toji (dashboard) (user-1)');
     const lignes = String(entry.details).split('\n');
     expect(lignes).toContain('Panneau : mode : CLASSIC → FLAT');
     expect(lignes).toContain('Mention du propriétaire : panel → none');

@@ -35,6 +35,13 @@ const KIND_LABEL: Record<CensorKind, string | null> = {
 export const LINK_KEYWORDS = ['*http://*', '*https://*'];
 export const INVITE_KEYWORDS = ['*discord.gg/*', '*discord.com/invite/*', '*discordapp.com/invite/*'];
 
+/** Liens toujours tolérés au niveau « liens externes » : liens internes à Discord (salon, évènement, pièce jointe) et GIF. */
+export const SAFE_LINK_ALLOW = [
+  '*discord.com/channels/*', '*discordapp.com/channels/*', '*discord.com/events/*',
+  '*cdn.discordapp.com*', '*media.discordapp.net*',
+  '*tenor.com*', '*giphy.com*', '*klipy.com*',
+];
+
 const WORD_CHAR = '[\\p{L}\\p{N}]';
 
 function escapeRegex(str: string): string {

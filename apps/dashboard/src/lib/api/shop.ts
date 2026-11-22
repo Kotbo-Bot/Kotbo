@@ -14,6 +14,12 @@ export interface ShopSettingsAdmin {
   approvalChannelId: string | null;
   logChannelId: string | null;
   graceDays: number;
+  webShopEnabled?: boolean;
+  webShopTitle?: string | null;
+  webShopDescription?: string | null;
+  webShopAccentColor?: string | null;
+  webShopBannerUrl?: string | null;
+  webShopCustomCss?: string | null;
 }
 
 export interface ShopOfferAdmin {

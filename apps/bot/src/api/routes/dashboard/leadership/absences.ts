@@ -449,6 +449,37 @@ export function createAbsencesRouter(client: Client) {
     }
   });
 
+  // Export global : absences + notes de manager du staff
+  router.get(`${base}/absences/export`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const access = c.var.effectiveAccess;
+    const featureAccess = await getCachedFeatureAccess(client, guildId, access, c.var.dashboardUser.userId);
+    const canViewNotes = access.canManageSettings || !!featureAccess.staff_directory?.canModerate || !!featureAccess.staff_directory?.canConfigure;
+    try {
+      const [absences, notes] = await Promise.all([
+        prisma.staffAbsence.findMany({
+          where: { guildId },
+          include: { staffMember: { select: { userId: true, username: true, displayName: true, grade: true } } },
+          orderBy: { startDate: 'desc' },
+        }),
+        canViewNotes
+          ? prisma.staffManagerNote.findMany({
+              where: { guildId },
+              include: {
+                staffMember: { select: { userId: true, username: true, displayName: true } },
+                author: { select: { userId: true, username: true, displayName: true } },
+              },
+              orderBy: { createdAt: 'desc' },
+            })
+          : Promise.resolve([]),
+      ]);
+      return send(c, { absences, notes });
+    } catch (err) {
+      logger.error('StaffAPI', 'Error exporting absences and notes:', err);
+      return fail(c, err, "Erreur lors de l'export des absences et notes", 'StaffAPI');
+    }
+  });
+
   return router;
 }
 

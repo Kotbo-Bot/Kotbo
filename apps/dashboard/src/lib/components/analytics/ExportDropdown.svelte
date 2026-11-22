@@ -2,8 +2,9 @@
   import Papicon from '../Papicon.svelte';
   import { m } from '../../i18n';
 
-  const { onExportCSV, onExportXLSX, onExportImage } = $props<{
+  const { onExportCSV, onExportJSON, onExportXLSX, onExportImage } = $props<{
     onExportCSV?: () => void;
+    onExportJSON?: () => void;
     onExportXLSX?: () => void;
     onExportImage?: () => void;
   }>();
@@ -36,6 +37,15 @@
         >
           <Papicon icon="Table" size={14} />
           {m.an_export_csv()}
+        </button>
+      {/if}
+      {#if onExportJSON}
+        <button
+          onclick={() => handleAction(onExportJSON)}
+          class="w-full flex items-center gap-2.5 px-4 py-2.5 text-xs font-semibold text-on-surface-variant hover:bg-primary/10 hover:text-primary transition-colors"
+        >
+          <Papicon icon="Code" size={14} />
+          JSON
         </button>
       {/if}
       {#if onExportXLSX}

@@ -11,6 +11,7 @@
   import { Button, Callout, EmptyState, Field, Menu, Modal, type MenuItem } from '../ui';
   import { m } from '../../i18n';
   import { confirmDialog } from '../../stores/confirmDialog.svelte';
+  import { dashboardStore } from '../../stores/dashboard.svelte';
   import { toast } from '../../stores/toast.svelte';
   import {
     deleteTutoringItem,
@@ -98,8 +99,12 @@
   let itemDescription = $state('');
   let itemHierarchyId = $state('');
   let itemGrade = $state('');
+  let itemGrantRoleIds = $state<string[]>([]);
+  let itemGrantDashboardSection = $state('');
   let itemSaving = $state(false);
   let itemError = $state('');
+
+  const discordRoles = $derived((dashboardStore.state.discordRoles ?? []) as Array<{ id: string; name: string }>);
 
   function openItem(item: TutoringItem | null, step = '') {
     editing = item;
@@ -108,6 +113,8 @@
     itemDescription = item?.description ?? '';
     itemHierarchyId = item?.hierarchyId ?? '';
     itemGrade = item?.grade ?? '';
+    itemGrantRoleIds = [...(item?.grantRoleIds ?? [])];
+    itemGrantDashboardSection = item?.grantDashboardSection ?? '';
     itemError = '';
     itemOpen = true;
   }
@@ -128,6 +135,8 @@
         description: itemDescription || null,
         hierarchyId: itemHierarchyId || null,
         grade: itemGrade || null,
+        grantRoleIds: itemGrantRoleIds,
+        grantDashboardSection: itemGrantDashboardSection.trim() || null,
       });
       items = editing ? items.map((entry) => (entry.id === item.id ? item : entry)) : [...items, item];
       itemOpen = false;
@@ -260,6 +269,38 @@
             {#each (targets?.grades ?? []).filter((grade) => !itemHierarchyId || !grade.hierarchyId || grade.hierarchyId === itemHierarchyId) as grade ((grade.hierarchyId ?? '') + grade.name)}
               <option value={grade.name}>{grade.name}</option>
             {/each}
+          </select>
+        {/snippet}
+      </Field>
+    </div>
+    <div class="grid gap-4 sm:grid-cols-2">
+      <Field label="Rôles Discord débloqués à la validation" hint="Attribués automatiquement quand l'étape passe à Acquis.">
+        {#snippet children(id, describedBy)}
+          <select
+            {id}
+            aria-describedby={describedBy}
+            multiple
+            class="input w-full h-24"
+            value={itemGrantRoleIds}
+            onchange={(e) => {
+              itemGrantRoleIds = Array.from(e.currentTarget.selectedOptions).map((o) => o.value);
+            }}
+          >
+            {#each discordRoles as role (role.id)}
+              <option value={role.id}>@{role.name}</option>
+            {/each}
+          </select>
+        {/snippet}
+      </Field>
+      <Field label="Accès dashboard débloqué" hint="Section ou note d'habilitation débloquée à la validation.">
+        {#snippet children(id, describedBy)}
+          <select {id} aria-describedby={describedBy} class="input w-full" bind:value={itemGrantDashboardSection}>
+            <option value="">Aucun</option>
+            <option value="sanctions">Sanctions & Modération</option>
+            <option value="tickets">Tickets</option>
+            <option value="recruitment">Recrutement</option>
+            <option value="absences">Planning & Absences</option>
+            <option value="logs">Journaux</option>
           </select>
         {/snippet}
       </Field>

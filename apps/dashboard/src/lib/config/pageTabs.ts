@@ -86,6 +86,7 @@ export const PAGE_TABS: Record<string, PageTabConfig[]> = {
     { id: 'logs', label: () => m.lg_tab_journal(), icon: 'file-text' },
     { id: 'audit', label: () => m.audit_tab(), icon: 'history' },
     { id: 'config', label: () => m.lg_tab_config(), icon: 'settings' },
+    { id: 'automod', label: () => m.dam_tab(), icon: 'shield-alert' },
   ],
 
   // ── Sécurité ──────────────────────────────────────────────────────────────
@@ -126,6 +127,7 @@ export const PAGE_TABS: Record<string, PageTabConfig[]> = {
     { id: 'network', label: () => m.da_tab_network(), icon: 'GitMerge' },
     { id: 'verification', label: () => m.da_tab_verification(), icon: 'ShieldCheck' },
     { id: 'config', label: () => m.da_tab_config(), icon: 'Settings' },
+    { id: 'automod', label: () => m.dam_tab(), icon: 'ShieldAlert' },
   ],
 
   '/security/sanctions': [
@@ -133,6 +135,7 @@ export const PAGE_TABS: Record<string, PageTabConfig[]> = {
     { id: 'settings', label: () => m.sc_tab_configuration(), icon: 'settings' },
     // Meme raison que les pseudos : /security/sanctions/appeals devient un onglet.
     { id: 'appeals', label: () => m.nav_ban_appeals(), icon: 'gavel' },
+    { id: 'automod', label: () => m.dam_tab(), icon: 'shield-alert' },
   ],
 
   // ── Progression ───────────────────────────────────────────────────────────

@@ -35,6 +35,64 @@
   let clientId = $state('');
   let inviteModalOpen = $state(false);
 
+  // Tickets du membre (Discord + hors Discord)
+  let myTickets = $state<any[]>([]);
+  let ticketsLoading = $state(false);
+  let selectedTicket = $state<any>(null);
+  let ticketReply = $state('');
+  let ticketReplying = $state(false);
+
+  async function loadMyTickets() {
+    ticketsLoading = true;
+    try {
+      const res = await authorizedFetch(`${API_BASE_URL}/api/user/me/tickets`);
+      if (res.ok) {
+        const data = await res.json();
+        myTickets = data.tickets ?? [];
+      }
+    } catch { /* ignored */ }
+    finally {
+      ticketsLoading = false;
+    }
+  }
+
+  async function openMyTicket(ticketId: string) {
+    try {
+      const res = await authorizedFetch(`${API_BASE_URL}/api/user/me/tickets/${ticketId}`);
+      if (res.ok) {
+        const data = await res.json();
+        selectedTicket = data.ticket;
+      }
+    } catch {
+      toast.error(m.common_error());
+    }
+  }
+
+  async function sendTicketReply(event: SubmitEvent) {
+    event.preventDefault();
+    if (!selectedTicket || !ticketReply.trim() || ticketReplying) return;
+    ticketReplying = true;
+    try {
+      const res = await authorizedFetch(`${API_BASE_URL}/api/user/me/tickets/${selectedTicket.id}/reply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: ticketReply.trim() }),
+      });
+      if (!res.ok) throw new Error('reply failed');
+      const data = await res.json();
+      selectedTicket = {
+        ...selectedTicket,
+        messages: [...(selectedTicket.messages ?? []), data.message],
+      };
+      ticketReply = '';
+      toast.success('Réponse envoyée');
+    } catch {
+      toast.error(m.common_error());
+    } finally {
+      ticketReplying = false;
+    }
+  }
+
   const dirty = $derived(bio.trim() !== saved.bio || isPublic !== saved.isPublic);
 
   $effect(() => {
@@ -48,7 +106,10 @@
   }
 
   $effect(() => {
-    if (userId) void load(userId);
+    if (userId) {
+      void load(userId);
+      void loadMyTickets();
+    }
   });
 
   async function load(id: string) {
@@ -182,6 +243,58 @@
     </SectionCard>
 
     <SiteEditorSpace />
+
+    <SectionCard title="Mes tickets" description="Suivez vos demandes et répondez au staff depuis le web" icon="life-buoy">
+      <div class="p-4 space-y-4">
+        {#if ticketsLoading}
+          <p class="text-sm text-on-surface-variant">Chargement de vos tickets…</p>
+        {:else if myTickets.length === 0}
+          <p class="text-sm text-on-surface-variant">Vous n'avez aucun ticket pour le moment.</p>
+        {:else}
+          <div class="divide-y divide-outline-variant rounded-lg border border-outline-variant overflow-hidden">
+            {#each myTickets as tk (tk.id)}
+              <button
+                type="button"
+                onclick={() => void openMyTicket(tk.id)}
+                class="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-surface-container-low transition-colors {selectedTicket?.id === tk.id ? 'bg-primary/5' : ''}"
+              >
+                <div class="min-w-0">
+                  <p class="text-sm font-medium text-on-surface truncate">{tk.reason}</p>
+                  <p class="text-xs text-on-surface-variant">{tk.guildName} · {new Date(tk.createdAt).toLocaleDateString('fr-FR')}</p>
+                </div>
+                <span class="shrink-0 px-2 py-0.5 rounded-full text-2xs font-semibold bg-surface-container-high text-on-surface-variant">
+                  {tk.status}
+                </span>
+              </button>
+            {/each}
+          </div>
+        {/if}
+
+        {#if selectedTicket}
+          <div class="rounded-xl border border-outline-variant bg-surface-container-low p-4 space-y-3">
+            <div class="flex items-center justify-between gap-2">
+              <h3 class="text-sm font-semibold text-on-surface">{selectedTicket.reason}</h3>
+              <button type="button" class="text-xs text-on-surface-variant hover:text-on-surface" onclick={() => (selectedTicket = null)}>Fermer</button>
+            </div>
+            <div class="space-y-2 max-h-64 overflow-y-auto">
+              {#each selectedTicket.messages ?? [] as msg (msg.id)}
+                <div class="rounded-lg border border-outline-variant p-2.5 text-xs {msg.isStaff ? 'bg-primary/5 border-primary/25' : 'bg-surface-container-lowest'}">
+                  <div class="flex justify-between text-on-surface-variant mb-1">
+                    <span class="font-semibold text-on-surface">{msg.authorName}</span>
+                    <span>{new Date(msg.createdAt).toLocaleString('fr-FR')}</span>
+                  </div>
+                  <p class="whitespace-pre-wrap text-on-surface">{msg.content}</p>
+                </div>
+              {/each}
+            </div>
+            <form onsubmit={sendTicketReply} class="flex gap-2">
+              <input bind:value={ticketReply} placeholder="Répondre à ce ticket…" class="input flex-1 text-sm" required />
+              <Button type="submit" size="sm" variant="primary" loading={ticketReplying}>Envoyer</Button>
+            </form>
+          </div>
+        {/if}
+      </div>
+    </SectionCard>
 
     <section class="section-card p-5">
       <RankCardCustomizer />

@@ -2,6 +2,7 @@
 import { Hono, type Context } from 'hono';
 import { createMiddleware } from 'hono/factory';
 import type { Client } from 'discord.js';
+import { randomBytes } from 'node:crypto';
 import { cache } from '../../../../utils/cache.js';
 import prisma from '../../../../utils/db.js';
 import { COLORS, successEmbed } from '../../../../utils/embeds.js';
@@ -13,6 +14,7 @@ import { broadcastDashboardStateChange, getDashboardUrl, getGuildName, pushAudit
 import { type ProvisionedEntry, acquireProvisionLock, missingProvisionPermissions, provisionCooldown, provisionCooldownMessage, releaseProvisionLock, startProvisionCooldown } from '../../../../services/core/channelProvisioningService.js';
 import { Prisma } from '@prisma/client';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, type ColorResolvable, EmbedBuilder, PermissionFlagsBits, TextChannel } from 'discord.js';
+import type { APIMessage } from 'discord-api-types/v10';
 import { STORED_TRANSCRIPT_SELECT, transcriptConversation } from '../../../../services/features/transcriptReader.js';
 import { buildConversation, type DiscordConversation } from '../../../../services/features/transcriptData.js';
 import { clampCommentTimeout } from '../../../../services/features/ticketSatisfactionService.js';
@@ -29,6 +31,12 @@ import { publicErrorMessage } from '../../../../utils/publicError.js';
  * colonne oubliee ici revient a `undefined`, s'affiche a sa valeur par defaut
  * et ecrase la base au prochain enregistrement.
  */
+/** Un e-mail entrant sans secret serait ouvert à tous : on en garde un, ou on en génère un. */
+async function inboundSecretFallback(guildId: string): Promise<string> {
+  const g = await prisma.guild.findUnique({ where: { id: guildId }, select: { ticketInboundEmailSecret: true } });
+  return g?.ticketInboundEmailSecret || `ies_${randomBytes(24).toString('hex')}`;
+}
+
 const TICKET_CONFIG_SELECT = {
   ticketRecordingNoticeEnabled: true,
   ticketRecordingNoticeSeconds: true,
@@ -68,6 +76,8 @@ const TICKET_CONFIG_SELECT = {
   ticketInactivityMessage: true,
   ticketStaffReminderEnabled: true,
   ticketStaffReminderMinutes: true,
+  ticketStaffReminderTarget: true,
+  ticketStaffReminderChannelId: true,
   ticketSatisfactionCommentEnabled: true,
   ticketSatisfactionCommentQuestion: true,
   ticketSatisfactionCommentTimeout: true,
@@ -93,6 +103,10 @@ const TICKET_CONFIG_SELECT = {
   ticketQuotaStaffLoadBypassRoleIds: true,
   ticketQuotaReopenEnabled: true,
   ticketQuotaReopenMax: true,
+  ticketWebFormEnabled: true,
+  ticketInboundEmailEnabled: true,
+  ticketInboundEmailAddress: true,
+  ticketInboundEmailSecret: true,
 } satisfies Prisma.GuildSelect;
 
 /** Objectif de service : entier strictement positif et borne, ou `null` pour « aucun ». */
@@ -265,6 +279,10 @@ export function createTicketsRouter(client: Client) {
     }
 
     interface TicketConfigInput {
+      ticketWebFormEnabled?: boolean;
+      ticketInboundEmailEnabled?: boolean;
+      ticketInboundEmailAddress?: string | null;
+      ticketInboundEmailSecret?: string | null;
       ticketCategoryId?: string | null;
       ticketLogChannelId?: string | null;
       ticketStaffRoleId?: string | null;
@@ -297,6 +315,8 @@ export function createTicketsRouter(client: Client) {
       ticketInactivityMessage?: unknown;
       ticketStaffReminderEnabled?: unknown;
       ticketStaffReminderMinutes?: unknown;
+      ticketStaffReminderTarget?: unknown;
+      ticketStaffReminderChannelId?: string | null;
       ticketSatisfactionCommentEnabled?: unknown;
       ticketSatisfactionCommentQuestion?: unknown;
       ticketSatisfactionCommentTimeout?: unknown;
@@ -436,37 +456,37 @@ export function createTicketsRouter(client: Client) {
           ticketWelcomeFooter: body.ticketWelcomeFooter ?? '',
           ...(body.ticketTypes !== undefined
             ? {
-                ticketTypes: Array.isArray(body.ticketTypes)
-                  ? body.ticketTypes
-                      .filter((item): item is Record<string, unknown> => !!item && typeof item === 'object')
-                      .map((item, index: number) => ({
-                        id: typeof item.id === 'string' && item.id.trim() ? item.id.trim() : `ticket-type-${index + 1}`,
-                        label: typeof item.label === 'string' && item.label.trim() ? item.label.trim().slice(0, 80) : `Ticket ${index + 1}`,
-                        description: typeof item.description === 'string' ? item.description.trim().slice(0, 200) : null,
-                        emoji: typeof item.emoji === 'string' ? item.emoji.trim().slice(0, 16) : null,
-                        categoryId: typeof item.categoryId === 'string' && item.categoryId.trim() ? item.categoryId.trim() : null,
-                        staffRoleId: typeof item.staffRoleId === 'string' && item.staffRoleId.trim() ? item.staffRoleId.trim() : null,
-                        buttonStyle: item.buttonStyle === 'SECONDARY' || item.buttonStyle === 'SUCCESS' || item.buttonStyle === 'DANGER'
-                          ? item.buttonStyle
-                          : 'PRIMARY',
-                        mode: item.mode === 'CHANNEL' || item.mode === 'DM' || item.mode === 'THREAD' ? item.mode : null,
-                        anonymous: item.anonymous === true,
-                        staffServerRelay: item.staffServerRelay === true,
-                        staffServerChannel: item.staffServerChannel === true,
-                        staffServerCategoryId: typeof item.staffServerCategoryId === 'string' && item.staffServerCategoryId.trim() ? item.staffServerCategoryId.trim() : null,
-                        formEnabled: item.formEnabled !== false,
-                        lockUntilClaim: inheritedFlag(item.lockUntilClaim),
-                        requireApproval: inheritedFlag(item.requireApproval),
-                        fields: Array.isArray(item.fields) ? item.fields : null,
-                        formCustomFields: customFormFields(item.formCustomFields),
-                        // Surcharges de quota : `null` = herite du serveur.
-                        quotaOpenMax: inheritedNumber(item.quotaOpenMax, 50),
-                        quotaCooldownMinutes: inheritedNumber(item.quotaCooldownMinutes, 10080),
-                        quotaPeriodMax: inheritedNumber(item.quotaPeriodMax, 500),
-                        quotaReopenMax: inheritedNumber(item.quotaReopenMax, 50),
-                      })) as unknown as Prisma.InputJsonValue
-                  : Prisma.JsonNull,
-              }
+              ticketTypes: Array.isArray(body.ticketTypes)
+                ? body.ticketTypes
+                  .filter((item): item is Record<string, unknown> => !!item && typeof item === 'object')
+                  .map((item, index: number) => ({
+                    id: typeof item.id === 'string' && item.id.trim() ? item.id.trim() : `ticket-type-${index + 1}`,
+                    label: typeof item.label === 'string' && item.label.trim() ? item.label.trim().slice(0, 80) : `Ticket ${index + 1}`,
+                    description: typeof item.description === 'string' ? item.description.trim().slice(0, 200) : null,
+                    emoji: typeof item.emoji === 'string' ? item.emoji.trim().slice(0, 16) : null,
+                    categoryId: typeof item.categoryId === 'string' && item.categoryId.trim() ? item.categoryId.trim() : null,
+                    staffRoleId: typeof item.staffRoleId === 'string' && item.staffRoleId.trim() ? item.staffRoleId.trim() : null,
+                    buttonStyle: item.buttonStyle === 'SECONDARY' || item.buttonStyle === 'SUCCESS' || item.buttonStyle === 'DANGER'
+                      ? item.buttonStyle
+                      : 'PRIMARY',
+                    mode: item.mode === 'CHANNEL' || item.mode === 'DM' || item.mode === 'THREAD' ? item.mode : null,
+                    anonymous: item.anonymous === true,
+                    staffServerRelay: item.staffServerRelay === true,
+                    staffServerChannel: item.staffServerChannel === true,
+                    staffServerCategoryId: typeof item.staffServerCategoryId === 'string' && item.staffServerCategoryId.trim() ? item.staffServerCategoryId.trim() : null,
+                    formEnabled: item.formEnabled !== false,
+                    lockUntilClaim: inheritedFlag(item.lockUntilClaim),
+                    requireApproval: inheritedFlag(item.requireApproval),
+                    fields: Array.isArray(item.fields) ? item.fields : null,
+                    formCustomFields: customFormFields(item.formCustomFields),
+                    // Surcharges de quota : `null` = herite du serveur.
+                    quotaOpenMax: inheritedNumber(item.quotaOpenMax, 50),
+                    quotaCooldownMinutes: inheritedNumber(item.quotaCooldownMinutes, 10080),
+                    quotaPeriodMax: inheritedNumber(item.quotaPeriodMax, 500),
+                    quotaReopenMax: inheritedNumber(item.quotaReopenMax, 50),
+                  })) as unknown as Prisma.InputJsonValue
+                : Prisma.JsonNull,
+            }
             : {}),
           ticketAllowOverclaim: typeof body.ticketAllowOverclaim === 'boolean' ? body.ticketAllowOverclaim : true,
           ticketOverclaimPermission: typeof body.ticketOverclaimPermission === 'string' ? body.ticketOverclaimPermission : 'ANY',
@@ -476,6 +496,13 @@ export function createTicketsRouter(client: Client) {
           ticketInactivityMessage: body.ticketInactivityMessage !== undefined ? String(body.ticketInactivityMessage) : '',
           ...('ticketStaffReminderEnabled' in body ? { ticketStaffReminderEnabled: body.ticketStaffReminderEnabled === true } : {}),
           ...('ticketStaffReminderMinutes' in body ? { ticketStaffReminderMinutes: quotaNumber(body.ticketStaffReminderMinutes, 60, 7 * 24 * 60) } : {}),
+          ...('ticketStaffReminderTarget' in body
+            ? { ticketStaffReminderTarget: ['TICKET', 'DASHBOARD', 'CHANNEL'].includes(String(body.ticketStaffReminderTarget)) ? String(body.ticketStaffReminderTarget) : 'TICKET' }
+            : {}),
+          // Identifiant Discord seulement : le salon peut être sur un autre serveur (celui du staff).
+          ...('ticketStaffReminderChannelId' in body
+            ? { ticketStaffReminderChannelId: /^\d{15,25}$/.test(String(body.ticketStaffReminderChannelId ?? '')) ? String(body.ticketStaffReminderChannelId) : null }
+            : {}),
           ticketSatisfactionCommentEnabled: typeof body.ticketSatisfactionCommentEnabled === 'boolean' ? body.ticketSatisfactionCommentEnabled : true,
           // Vide = le bot pose sa question par defaut, comme pour les textes d'embed.
           ticketSatisfactionCommentQuestion: typeof body.ticketSatisfactionCommentQuestion === 'string' ? body.ticketSatisfactionCommentQuestion.trim().slice(0, 200) : '',
@@ -492,6 +519,15 @@ export function createTicketsRouter(client: Client) {
           ticketHistoryPanelEnabled: body.ticketHistoryPanelEnabled !== false,
           ticketSelfReopenEnabled: body.ticketSelfReopenEnabled !== false,
           ticketSelfDeleteEnabled: body.ticketSelfDeleteEnabled === true,
+          ...('ticketWebFormEnabled' in body ? { ticketWebFormEnabled: body.ticketWebFormEnabled === true } : {}),
+          ...('ticketInboundEmailEnabled' in body ? { ticketInboundEmailEnabled: body.ticketInboundEmailEnabled === true } : {}),
+          ...('ticketInboundEmailAddress' in body ? { ticketInboundEmailAddress: typeof body.ticketInboundEmailAddress === 'string' ? body.ticketInboundEmailAddress.trim().slice(0, 160) || null : null } : {}),
+          ...('ticketInboundEmailSecret' in body || body.ticketInboundEmailEnabled === true
+            ? {
+              ticketInboundEmailSecret: (typeof body.ticketInboundEmailSecret === 'string' ? body.ticketInboundEmailSecret.trim().slice(0, 120) : '')
+                || (body.ticketInboundEmailEnabled === true ? await inboundSecretFallback(guildId) : null),
+            }
+            : {}),
           // Quotas : chaque interrupteur commande, la valeur n'est qu'un seuil.
           ticketQuotaOpenEnabled: body.ticketQuotaOpenEnabled === true,
           ticketQuotaOpenMax: quotaNumber(body.ticketQuotaOpenMax, 1, 50),
@@ -885,12 +921,14 @@ export function createTicketsRouter(client: Client) {
       const requestedView = (c.req.query('view') ?? null);
       const query = (c.req.query('q') ?? '').trim().slice(0, 100);
       const search: Prisma.TicketWhereInput = query
-        ? { OR: [
-          { username: { contains: query, mode: 'insensitive' } },
-          { reason: { contains: query, mode: 'insensitive' } },
-          { userId: query },
-          { tags: { has: query.toLowerCase() } },
-        ] }
+        ? {
+          OR: [
+            { username: { contains: query, mode: 'insensitive' } },
+            { reason: { contains: query, mode: 'insensitive' } },
+            { userId: query },
+            { tags: { has: query.toLowerCase() } },
+          ]
+        }
         : {};
       const viewFilter = requestedView ? viewWhere(normalizeView(requestedView), viewContext) : null;
       const listWhere: Prisma.TicketWhereInput = requestedView
@@ -932,6 +970,8 @@ export function createTicketsRouter(client: Client) {
             closedAt: true,
             lastMemberMessageAt: true,
             lastStaffMessageAt: true,
+            source: true,
+            requesterEmail: true,
             // Humeur du demandeur (Kotbo × AegisAI).
             moodLabel: true,
             moodScore: true,
@@ -974,7 +1014,8 @@ export function createTicketsRouter(client: Client) {
     const ticketId = c.req.param('ticketId');
     try {
       const ticket = await prisma.ticket.findFirst({
-        where: { id: ticketId, guildId }
+        where: { id: ticketId, guildId },
+        include: { webMessages: { orderBy: { createdAt: 'asc' } } },
       });
 
       if (!ticket) {
@@ -999,6 +1040,53 @@ export function createTicketsRouter(client: Client) {
             conversation = await buildConversation(discordChannel.guild, [...fetched.values()].reverse(), { fetchMissingReferences: false });
           } catch { /* ignored */ }
         }
+      }
+
+      if (ticket.webMessages.length > 0) {
+        const extraAuthors = { ...conversation.authors };
+        const webApiMessages: APIMessage[] = ticket.webMessages.map((wm) => {
+          // Identifiant numérique requis par @arcscord/discord-ui pour l'avatar par défaut.
+          const authorId = wm.authorId && /^\d+$/.test(wm.authorId) ? wm.authorId : '0';
+          if (!extraAuthors[authorId]) {
+            const cachedAvatar = authorId !== '0' ? client.users.cache.get(authorId)?.displayAvatarURL({ size: 64 }) : undefined;
+            const defaultAvatar = `https://cdn.discordapp.com/embed/avatars/${(BigInt(authorId) >> 22n) % 6n}.png`;
+            extraAuthors[authorId] = {
+              displayName: wm.authorName,
+              avatarUrl: cachedAvatar ?? defaultAvatar,
+              bot: false,
+              verified: false,
+            };
+          }
+          return {
+            id: wm.id,
+            channel_id: ticket.channelId ?? ticket.threadId ?? ticket.id,
+            type: 0,
+            author: {
+              id: authorId,
+              username: wm.authorName,
+              global_name: wm.authorName,
+              discriminator: '0',
+              avatar: null,
+            },
+            content: wm.content,
+            timestamp: wm.createdAt.toISOString(),
+            edited_timestamp: null,
+            tts: false,
+            mention_everyone: false,
+            mentions: [],
+            mention_roles: [],
+            attachments: [],
+            embeds: [],
+            pinned: false,
+          } as APIMessage;
+        });
+        conversation = {
+          ...conversation,
+          authors: extraAuthors,
+          messages: [...conversation.messages, ...webApiMessages].sort(
+            (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+          ),
+        };
       }
 
       // Un ticket fermé n'a plus de salon à lire : on relit alors sa transcription
@@ -1043,8 +1131,8 @@ export function createTicketsRouter(client: Client) {
     const ticketId = c.req.param('ticketId');
     try {
       const ticket = await prisma.ticket.findFirst({ where: { id: ticketId, guildId } });
-      if (!ticket || !ticket.channelId) {
-        return send(c, { error: 'Ticket introuvable ou salon inactif' }, 404);
+      if (!ticket) {
+        return send(c, { error: 'Ticket introuvable' }, 404);
       }
 
       const body = await readBody<{ content: string }>(c);
@@ -1053,6 +1141,43 @@ export function createTicketsRouter(client: Client) {
       }
       if (body.content.length > TICKET_DASHBOARD_MESSAGE_MAX) {
         return send(c, { error: `Message trop long (${TICKET_DASHBOARD_MESSAGE_MAX} caractères maximum).` }, 400);
+      }
+
+      // Ticket hors Discord (formulaire web / e-mail) : la réponse est enregistrée en base.
+      if (!ticket.channelId) {
+        const now = new Date();
+        const saved = await prisma.ticketWebMessage.create({
+          data: {
+            ticketId: ticket.id,
+            authorId: user.userId,
+            authorName: user.username ?? 'Staff',
+            isStaff: true,
+            source: 'DASHBOARD',
+            content: body.content.trim(),
+          },
+        });
+        await prisma.ticket.update({
+          where: { id: ticket.id },
+          data: {
+            lastStaffMessageAt: now,
+            ...(ticket.firstResponseAt ? {} : { firstResponseAt: now, firstResponderId: user.userId }),
+          },
+        }).catch(() => null);
+        return send(c, {
+          success: true,
+          message: {
+            id: saved.id,
+            author: {
+              id: user.userId,
+              username: user.username ?? 'Staff',
+              displayName: user.username ?? 'Staff',
+              avatar: '',
+              bot: false,
+            },
+            content: saved.content,
+            createdAt: saved.createdAt.toISOString(),
+          },
+        });
       }
 
       const discordChannel = client.channels.cache.get(ticket.channelId);
@@ -1072,7 +1197,7 @@ export function createTicketsRouter(client: Client) {
         where: { id: ticket.id },
         data: { lastStaffMessageAt: sent.createdAt, ...(ticket.firstResponseAt ? {} : { firstResponseAt: sent.createdAt, firstResponderId: user.userId }) },
       }).catch(() => null);
-      
+
       return send(c, {
         success: true,
         message: {
@@ -1269,10 +1394,10 @@ export function createTicketsRouter(client: Client) {
             ViewChannel: true,
             SendMessages: true,
             ReadMessageHistory: true
-          }).catch(() => {});
+          }).catch(() => { });
 
           const { renameChannelToOpen } = await import('../../../../services/features/ticketService.js');
-          await renameChannelToOpen(client, ticket.channelId).catch(() => {});
+          await renameChannelToOpen(client, ticket.channelId).catch(() => { });
 
           await ch.send({
             embeds: [successEmbed('Ticket Réouvert', `Le ticket a été réouvert depuis le Dashboard Kotbo par **${user.username}**.`)]
@@ -1371,79 +1496,79 @@ export function createTicketsRouter(client: Client) {
     const guildId = c.req.param('guildId');
     const user = c.var.dashboardUser;
     const archiveAction = c.req.param('archiveAction');
-      const ticketId = c.req.param('ticketId');
-      const archiving = archiveAction === 'archive';
-      try {
-        const ticket = await prisma.ticket.findFirst({ where: { id: ticketId, guildId } });
-        if (!ticket) {
-          return send(c, { error: 'Ticket introuvable' }, 404);
-        }
-
-        const actor = { id: user.userId, username: user.username || 'Staff' };
-        const { archiveTicket, unarchiveTicket } = await import('../../../../services/features/ticketLifecycleService.js');
-        const { logTicketEvent } = await import('../../../../services/features/ticketService.js');
-        const guildConfig = await prisma.guild.findUnique({ where: { id: guildId } });
-
-        if (archiving) {
-          const result = await archiveTicket(client, ticketId, actor);
-          if (guildConfig) {
-            const link = result.transcriptId
-              ? `${getDashboardUrl().replace(/\/$/, '')}/transcripts/${result.transcriptId}`
-              : undefined;
-            await logTicketEvent(client, guildConfig, 'ARCHIVED', result.ticket, actor, link);
-          }
-          return send(c, { success: true, ticket: result.ticket, transcriptId: result.transcriptId });
-        } else {
-          const updated = await unarchiveTicket(client, ticketId, actor);
-          if (guildConfig) await logTicketEvent(client, guildConfig, 'UNARCHIVED', updated, actor);
-          return send(c, { success: true, ticket: updated });
-        }
-      } catch (err: unknown) {
-        logger.error('TicketsAPI', `Error on ticket ${archiveAction}: ${errorMessage(err)}`);
-        return send(c, { error: publicErrorMessage(err) }, 400);
+    const ticketId = c.req.param('ticketId');
+    const archiving = archiveAction === 'archive';
+    try {
+      const ticket = await prisma.ticket.findFirst({ where: { id: ticketId, guildId } });
+      if (!ticket) {
+        return send(c, { error: 'Ticket introuvable' }, 404);
       }
+
+      const actor = { id: user.userId, username: user.username || 'Staff' };
+      const { archiveTicket, unarchiveTicket } = await import('../../../../services/features/ticketLifecycleService.js');
+      const { logTicketEvent } = await import('../../../../services/features/ticketService.js');
+      const guildConfig = await prisma.guild.findUnique({ where: { id: guildId } });
+
+      if (archiving) {
+        const result = await archiveTicket(client, ticketId, actor);
+        if (guildConfig) {
+          const link = result.transcriptId
+            ? `${getDashboardUrl().replace(/\/$/, '')}/transcripts/${result.transcriptId}`
+            : undefined;
+          await logTicketEvent(client, guildConfig, 'ARCHIVED', result.ticket, actor, link);
+        }
+        return send(c, { success: true, ticket: result.ticket, transcriptId: result.transcriptId });
+      } else {
+        const updated = await unarchiveTicket(client, ticketId, actor);
+        if (guildConfig) await logTicketEvent(client, guildConfig, 'UNARCHIVED', updated, actor);
+        return send(c, { success: true, ticket: updated });
+      }
+    } catch (err: unknown) {
+      logger.error('TicketsAPI', `Error on ticket ${archiveAction}: ${errorMessage(err)}`);
+      return send(c, { error: publicErrorMessage(err) }, 400);
+    }
   });
 
   router.post(`${base}/tickets/:ticketId/:lockAction{lock|unlock}`, ...gate, async (c) => {
     const guildId = c.req.param('guildId');
     const user = c.var.dashboardUser;
     const lockAction = c.req.param('lockAction');
-      const ticketId = c.req.param('ticketId');
-      const locking = lockAction === 'lock';
-      try {
-        const ticket = await prisma.ticket.findFirst({ where: { id: ticketId, guildId } });
-        if (!ticket) {
-          return send(c, { error: 'Ticket introuvable' }, 404);
-        }
-
-        const actor = { id: user.userId, username: user.username || 'Staff' };
-        const { lockTicketDeletion, unlockTicketDeletion } = await import('../../../../services/features/ticketLifecycleService.js');
-        const { logTicketEvent } = await import('../../../../services/features/ticketService.js');
-        const guildConfig = await prisma.guild.findUnique({ where: { id: guildId } });
-
-        let updated;
-        if (locking) {
-          const body = await readBody<{ durationMs?: number | null; reason?: string | null }>(c);
-          updated = await lockTicketDeletion(ticketId, actor, {
-            durationMs: typeof body?.durationMs === 'number' ? body.durationMs : null,
-            reason: body?.reason ?? null,
-          });
-          if (guildConfig) {
-            await logTicketEvent(
-              client, guildConfig, 'LOCKED', updated, actor,
-              updated.deletionLockedUntil ? `<t:${Math.floor(updated.deletionLockedUntil.getTime() / 1000)}:f>` : undefined,
-            );
-          }
-        } else {
-          updated = await unlockTicketDeletion(ticketId);
-          if (guildConfig) await logTicketEvent(client, guildConfig, 'UNLOCKED', updated, actor);
-        }
-
-        return send(c, { success: true, ticket: updated });
-      } catch (err: unknown) {
-        logger.error('TicketsAPI', `Error on ticket ${lockAction}: ${errorMessage(err)}`);
-        return send(c, { error: 'Erreur lors de la mise à jour du verrou' }, 500);
+    const ticketId = c.req.param('ticketId');
+    const locking = lockAction === 'lock';
+    try {
+      const ticket = await prisma.ticket.findFirst({ where: { id: ticketId, guildId } });
+      if (!ticket) {
+        return send(c, { error: 'Ticket introuvable' }, 404);
       }
+
+      const actor = { id: user.userId, username: user.username || 'Staff' };
+      const { lockTicketDeletion, unlockTicketDeletion } = await import('../../../../services/features/ticketLifecycleService.js');
+      const { logTicketEvent } = await import('../../../../services/features/ticketService.js');
+      const guildConfig = await prisma.guild.findUnique({ where: { id: guildId } });
+
+      let updated;
+      if (locking) {
+        const body = await readBody<{ durationMs?: number | null; reason?: string | null }>(c);
+        updated = await lockTicketDeletion(ticketId, actor, {
+          durationMs: typeof body?.durationMs === 'number' ? body.durationMs : null,
+          reason: body?.reason ?? null,
+        });
+        if (guildConfig) {
+          await logTicketEvent(
+            client, guildConfig, 'LOCKED', updated, actor,
+            updated.deletionLockedUntil ? `<t:${Math.floor(updated.deletionLockedUntil.getTime() / 1000)}:f>` : undefined,
+          );
+        }
+      } else {
+        updated = await unlockTicketDeletion(ticketId);
+        if (guildConfig) await logTicketEvent(client, guildConfig, 'UNLOCKED', updated, actor);
+      }
+
+      return send(c, { success: true, ticket: updated });
+    } catch (err: unknown) {
+      logger.error('TicketsAPI', `Error on ticket ${lockAction}: ${errorMessage(err)}`);
+      return send(c, { error: 'Erreur lors de la mise à jour du verrou' }, 500);
+    }
   });
 
   router.post(`${base}/tickets/:ticketId/delete`, ...gate, async (c) => {
@@ -1477,7 +1602,7 @@ export function createTicketsRouter(client: Client) {
       if (ch && ch instanceof TextChannel) {
         const { generateTranscript } = await import('../../../../services/features/transcriptService.js');
         const transcriptData = await generateTranscript(ch);
-        
+
         await prisma.ticket.update({
           where: { id: ticketId },
           data: {
@@ -1491,13 +1616,13 @@ export function createTicketsRouter(client: Client) {
         const { getDashboardUrl } = await import('../../../shared.js');
         const dashboardUrl = getDashboardUrl();
         const publicLink = `${dashboardUrl}/transcripts/${transcriptData.id}`;
-        
+
         const usersToDm = new Set<string>();
         if (ticket.userId) usersToDm.add(ticket.userId);
         if (ticket.claimedById) usersToDm.add(ticket.claimedById);
         if (ticket.closedById) usersToDm.add(ticket.closedById);
         if (user.userId) usersToDm.add(user.userId);
-        
+
         const serverName = getGuildName(client, guildId);
         const { notifyMany } = await import('../../../../services/notifications/notifyService.js');
         await notifyMany(usersToDm, {
@@ -1522,12 +1647,12 @@ export function createTicketsRouter(client: Client) {
               ])
               .setTimestamp()
               .setFooter({ text: `Kotbo · Ticket ID: ${ticket.id}` });
-            await logCh.send({ embeds: [logEmbed], allowedMentions: { parse: [] } }).catch(() => {});
+            await logCh.send({ embeds: [logEmbed], allowedMentions: { parse: [] } }).catch(() => { });
           }
         }
 
         setTimeout(async () => {
-          await ch.delete(`Ticket supprimé depuis le Dashboard par ${user.username}`).catch(() => {});
+          await ch.delete(`Ticket supprimé depuis le Dashboard par ${user.username}`).catch(() => { });
         }, 1000);
 
         broadcastDashboardStateChange(guildId, 'tickets_updated');

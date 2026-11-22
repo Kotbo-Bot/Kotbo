@@ -16,6 +16,8 @@ export interface BackupOptions {
   includeStickers: boolean;
   /** Configuration Kotbo (modules, staff, formulaires…). Incluse par défaut. */
   includeKotbo?: boolean;
+  /** Ancienneté max des messages sauvegardés, en jours (1 à 365). Défaut 15. */
+  messagesDays?: number;
   createdByUserId: string;
   createdByUsername: string;
   createdByTag?: string;
@@ -276,11 +278,14 @@ export async function createBackup(guild: Guild, options: BackupOptions) {
   if (options.includeMessages) {
     console.log('[BackupService] Fetching messages from channels...');
     backupData.messages = [];
+    const days = Math.min(365, Math.max(1, Math.floor(options.messagesDays ?? 15) || 15));
+    const since = Date.now() - days * 86_400_000;
     const textChannels = guild.channels.cache.filter((c) => c.isTextBased());
     for (const [_channelId, channel] of textChannels) {
       try {
         const fetchedMessages = await channel.messages.fetch({ limit: 50 });
         for (const [_msgId, msg] of fetchedMessages) {
+          if (msg.createdTimestamp < since) continue;
           if (msg.content || msg.embeds.length > 0 || msg.attachments.size > 0) {
             backupData.messages.push({
               id: msg.id,

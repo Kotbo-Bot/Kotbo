@@ -58,7 +58,7 @@ describe('PUT /settings et journal des actions du staff', () => {
     expect(res.statusCode).toBe(200);
     expect(auditCreate).toHaveBeenCalledTimes(1);
     expect(auditCreate.mock.calls[0]).toMatchObject([
-      { data: { guildId: GUILD, user: 'Tojii', action: 'Sauvegarde paramètres globaux' } },
+      { data: { guildId: GUILD, user: 'Tojii (200000000000000000)', action: 'Sauvegarde paramètres globaux' } },
     ]);
   });
 });

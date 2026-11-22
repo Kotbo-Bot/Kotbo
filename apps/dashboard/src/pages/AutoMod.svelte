@@ -70,6 +70,8 @@
     linksEnabled: false,
     linksAction: 'DELETE_AND_WARN',
     linksWhitelist: [] as string[],
+    linksLevel: 1,
+    discordRulesWarn: false,
 
     capsEnabled: false,
     capsThresholdPercent: 80,
@@ -133,7 +135,7 @@
     spamGroupSlowmodeEnabled: false, spamGroupSlowmodeSeconds: 10, spamGroupSlowmodeMinutes: 5,
     preventiveSlowmodeEnabled: false, preventiveSlowmodeMsgThreshold: 15, preventiveSlowmodeMinUsers: 3,
     preventiveSlowmodeWindowSec: 10, preventiveSlowmodeSeconds: 5, preventiveSlowmodeMinutes: 5,
-    linksEnabled: false, linksAction: 'DELETE_AND_WARN', linksWhitelist: [],
+    linksEnabled: false, linksAction: 'DELETE_AND_WARN', linksWhitelist: [], linksLevel: 1, discordRulesWarn: false,
     capsEnabled: false, capsThresholdPercent: 80, capsMinLength: 10,
     emojisEnabled: false, emojisLimit: 10,
     mentionsEnabled: false, mentionsLimit: 5,
@@ -595,8 +597,19 @@
                   {/if}
                 </div>
 
+                <div class="space-y-2">
+                  <label for="linksLevel" class="text-xs font-semibold text-on-surface-variant ml-2">{m.am_links_level_label()}</label>
+                  <input id="linksLevel" type="range" min="0" max="2" step="1" bind:value={config.linksLevel} class="w-full accent-primary" disabled={!canManageSettings} />
+                  <div class="flex justify-between text-2xs text-on-surface-variant px-1">
+                    <span>{m.am_links_level_0()}</span><span>{m.am_links_level_1()}</span><span>{m.am_links_level_2()}</span>
+                  </div>
+                  <p class="text-2xs text-on-surface-variant ml-2">
+                    {config.linksLevel === 0 ? m.am_links_level_0_hint() : config.linksLevel === 2 ? m.am_links_level_2_hint() : m.am_links_level_1_hint()}
+                  </p>
+                </div>
+
                 <div class="space-y-1.5">
-                  <label for="whitelist" class="text-xs font-semibold text-on-surface-variant ml-2">{m.am_links_whitelist_label()}</label>
+                  <label for="whitelist"class="text-xs font-semibold text-on-surface-variant ml-2">{m.am_links_whitelist_label()}</label>
                   <textarea 
                     id="whitelist"
                     bind:value={whitelistInput} 
@@ -810,6 +823,13 @@
 
     {:else if activeTab === 'discord'}
       <div class="space-y-6 animate-in fade-in duration-300">
+        <label class="flex items-start gap-3 bg-surface-container-low/40 p-4 rounded-xl border border-outline-variant/20 text-body-sm">
+          <input type="checkbox" class="mt-0.5" bind:checked={config.discordRulesWarn} disabled={!canManageSettings} />
+          <span>
+            <span class="font-semibold text-on-surface">{m.dam_warn_label()}</span>
+            <span class="block text-on-surface-variant">{m.dam_warn_hint()}</span>
+          </span>
+        </label>
         <!-- Native Discord AutoMod Header -->
         <div class="bg-surface-container-low/40 p-6 rounded-xl border border-outline-variant/20 flex flex-col md:flex-row md:items-center gap-4">
           <div class="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center text-primary shrink-0">

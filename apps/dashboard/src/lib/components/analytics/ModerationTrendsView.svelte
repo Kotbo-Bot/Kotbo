@@ -8,6 +8,7 @@
   import MetricTabs, { type MetricTab } from './MetricTabs.svelte';
   import TimeSeriesChart from './TimeSeriesChart.svelte';
   import AnalyticsSkeleton from './AnalyticsSkeleton.svelte';
+  import DiscordAutomodEvents from '../automod/DiscordAutomodEvents.svelte';
   import { fetchModerationTrends, type ModerationTrends } from '../../api';
   import { m } from '../../i18n';
   import { analyticsLoader } from './analyticsLoader.svelte';
@@ -117,6 +118,9 @@
         {/if}
       </SectionCard>
     </div>
+    <SectionCard title={m.dam_tab()}>
+      <div class="p-4"><DiscordAutomodEvents compact /></div>
+    </SectionCard>
   </div>
 {/if}
 

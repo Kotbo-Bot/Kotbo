@@ -13,8 +13,10 @@ export function createNotificationsRouter(client: Client) {
 
   router.get(`${base}/features`, ...gate, async (c) => {
     try {
-      const { getAvailableFeatureConfigs } = await import('../../../../services/core/dashboardManagementService.js');
-      return send(c, { features: await getAvailableFeatureConfigs(c.req.param('guildId')) });
+      const { getAvailableFeatureConfigs, listKeyAccessByFeature } = await import('../../../../services/core/dashboardManagementService.js');
+      const guildId = c.req.param('guildId');
+      const [configs, keyAccess] = await Promise.all([getAvailableFeatureConfigs(guildId), listKeyAccessByFeature(guildId)]);
+      return send(c, { features: configs.map((config) => ({ ...config, keyAccess: keyAccess[config.featureKey] ?? [] })) });
     } catch (err) {
       logger.error('NotificationsAPI', 'Error fetching feature configurations:', err);
       return fail(c, err, 'Erreur lors de la récupération des configurations des modules', 'NotificationsAPI');

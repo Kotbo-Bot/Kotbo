@@ -184,7 +184,7 @@ export function createTutoringRouter(client: Client) {
   router.post(`${base}/items`, ...gate, async (c) => {
     if (!c.var.viewer.isManager) return denied(c);
     const guildId = c.req.param('guildId');
-    const body = (await readBody<{ id?: unknown; category?: unknown; title?: unknown; description?: unknown; sortOrder?: unknown; hierarchyId?: unknown; grade?: unknown }>(c)) ?? {};
+    const body = (await readBody<{ id?: unknown; category?: unknown; title?: unknown; description?: unknown; sortOrder?: unknown; hierarchyId?: unknown; grade?: unknown; grantRoleIds?: unknown; grantDashboardSection?: unknown }>(c)) ?? {};
     const title = readText(body.title, 200);
     const category = readText(body.category, 80) ?? 'Général';
     if (!title) return send(c, { error: "Donne un intitulé à l'objectif." }, 400);
@@ -194,6 +194,21 @@ export function createTutoringRouter(client: Client) {
     const hierarchyId = typeof body.hierarchyId === 'string' && body.hierarchyId
       ? (await prisma.staffHierarchy.findFirst({ where: { id: body.hierarchyId, guildId }, select: { id: true } }))?.id ?? null
       : null;
+    const grantRoleIds = Array.isArray(body.grantRoleIds)
+      ? body.grantRoleIds.filter((r): r is string => typeof r === 'string' && /^\d{17,20}$/.test(r))
+      : undefined;
+    const grantDashboardSection = readText(body.grantDashboardSection, 60);
+    // Un rôle que le bot ne peut pas gérer (ou @everyone, ou rôle d'intégration) échouerait en silence à la validation.
+    if (grantRoleIds && grantRoleIds.length > 0) {
+      const discordGuild = client.guilds.cache.get(guildId);
+      if (discordGuild) {
+        const bad = grantRoleIds.filter((id) => {
+          const role = discordGuild.roles.cache.get(id);
+          return !role || !role.editable || role.managed || role.id === guildId;
+        });
+        if (bad.length > 0) return send(c, { error: 'Un des rôles choisis est introuvable ou ne peut pas être attribué par le bot (rôle plus haut que le sien, géré par une intégration ou @everyone).' }, 400);
+      }
+    }
     const item = await tutoringService.upsertTutoringItem(guildId, {
       id: typeof body.id === 'string' ? body.id : undefined,
       category,
@@ -202,6 +217,8 @@ export function createTutoringRouter(client: Client) {
       sortOrder: typeof body.sortOrder === 'number' ? Math.floor(body.sortOrder) : undefined,
       hierarchyId,
       grade: readText(body.grade, 80),
+      ...(grantRoleIds !== undefined ? { grantRoleIds } : {}),
+      ...(body.grantDashboardSection !== undefined ? { grantDashboardSection } : {}),
     });
     await audit(c, body.id ? 'Objectif de tutorat modifié' : 'Objectif de tutorat ajouté', `« ${title} » (${category}).`);
     return send(c, { item }, 201);
@@ -335,7 +352,36 @@ export function createTutoringRouter(client: Client) {
       return send(c, { error: 'Objectif introuvable pour ce tutorat.' }, 404);
     }
     const progress = await tutoringService.updateChecklistProgress(c.req.param('periodId'), item.id, body.state as TutoringItemState, c.var.dashboardUser.userId);
-    return send(c, { progress });
+
+    // Déblocage automatique à la validation (`ACQUIRED`) : rôles Discord et accès dashboard
+    const unlocked: { roles: string[]; dashboardSection: string | null } = { roles: [], dashboardSection: null };
+    if (body.state === 'ACQUIRED') {
+      const guildId = c.req.param('guildId');
+      if (item.grantRoleIds.length > 0) {
+        const discordGuild = client.guilds.cache.get(guildId) ?? await client.guilds.fetch(guildId).catch(() => null);
+        const member = discordGuild ? await discordGuild.members.fetch(period.staffMember.userId).catch(() => null) : null;
+        if (member) {
+          for (const roleId of item.grantRoleIds) {
+            if (!member.roles.cache.has(roleId)) {
+              const ok = await member.roles.add(roleId, `Tutorat validé : ${item.title}`).then(() => true).catch(() => false);
+              if (ok) unlocked.roles.push(roleId);
+            }
+          }
+        }
+      }
+      if (item.grantDashboardSection) {
+        unlocked.dashboardSection = item.grantDashboardSection;
+      }
+      if (unlocked.roles.length > 0 || unlocked.dashboardSection) {
+        await audit(
+          c,
+          'Déblocage automatique tutorat',
+          `${period.staffMember.username ?? period.staffMember.userId} · « ${item.title} » → rôles: ${unlocked.roles.length}, section: ${unlocked.dashboardSection ?? 'aucune'}`,
+        );
+      }
+    }
+
+    return send(c, { progress, unlocked });
   });
 
   // { type, content } : point d'étape.

@@ -252,6 +252,12 @@ export function registerStaffRoutes(): void {
 
   route('GET', `${base}/hierarchies`, () => ({ hierarchies: hierarchiesWithRoles() }));
   route('GET', `${base}/hierarchies/schema`, () => schema());
+  let orgCanvas = { nodes: {}, frames: [], links: [] };
+  route('GET', `${base}/org-canvas`, () => ({ canvas: orgCanvas }));
+  route('PUT', `${base}/org-canvas`, ({ body }) => {
+    orgCanvas = body?.canvas ?? orgCanvas;
+    return { canvas: orgCanvas };
+  });
   route('POST', `${base}/hierarchies`, ({ body }) => {
     const created: HierarchyRow = {
       id: `hier-${demoId()}`,
@@ -281,6 +287,7 @@ export function registerStaffRoutes(): void {
   });
   route('POST', `${base}/hierarchies/:hierarchyId/import-roles`, () => ({ imported: 2, skipped: 1, total: 3 }));
   route('POST', `${base}/hierarchies/sync`, () => ({ success: true, synced: 6 }));
+  route('POST', `${base}/hierarchies/separators/apply`, () => ({ separators: [] }));
 
   route('POST', `${base}/members/:userId/tutor`, () => ({ success: true }));
   route('POST', `${base}/members/:userId/hierarchy-grade`, ({ body }) => ({ success: true, grade: { id: `hg-${demoId()}`, ...body, joinedAt: new Date().toISOString() } }));

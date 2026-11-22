@@ -98,6 +98,8 @@ export type HierarchyPayload = {
   discordRoleId: string | null;
   responsableUserId: string | null;
   parentHierarchyId: string | null;
+  separatorRoleId?: string | null;
+  separatorStyle?: string | null;
 };
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
@@ -260,13 +262,21 @@ class StaffStore {
     return this.orderedRoles.findIndex((role) => role.name === grade);
   }
 
+  /** Echelle de grades dans laquelle le membre monte et descend : sa branche, a defaut tous les grades. */
+  gradeLadder(member: StaffMember): StaffRole[] {
+    const hierarchyId =
+      this.roleByName(member.grade)?.hierarchyId ?? this.resolveMemberHierarchyDraft(member)?.hierarchyId ?? null;
+    return hierarchyId ? this.rolesInHierarchy(hierarchyId) : this.orderedRoles;
+  }
+
   canPromote(member: StaffMember): boolean {
-    return this.gradeIndex(member.grade) > 0;
+    return this.gradeLadder(member).findIndex((role) => role.name === member.grade) > 0;
   }
 
   canDemote(member: StaffMember): boolean {
-    const index = this.gradeIndex(member.grade);
-    return index !== -1 && index < this.orderedRoles.length - 1;
+    const ladder = this.gradeLadder(member);
+    const index = ladder.findIndex((role) => role.name === member.grade);
+    return index !== -1 && index < ladder.length - 1;
   }
 
   metricFor(userId: string): LeadershipMetric | undefined {
@@ -612,7 +622,8 @@ class StaffStore {
 
   async shiftGrade(member: StaffMember, direction: 'up' | 'down'): Promise<void> {
     if (!this.guildId) return;
-    const index = this.gradeIndex(member.grade);
+    const ladder = this.gradeLadder(member);
+    const index = ladder.findIndex((role) => role.name === member.grade);
     if (index === -1) {
       toast.warning(m.sm_toast_grade_not_found());
       return;
@@ -621,11 +632,11 @@ class StaffStore {
       toast.warning(m.sm_toast_grade_max());
       return;
     }
-    if (direction === 'down' && index >= this.orderedRoles.length - 1) {
+    if (direction === 'down' && index >= ladder.length - 1) {
       toast.warning(m.sm_toast_grade_min());
       return;
     }
-    const nextGrade = this.orderedRoles[direction === 'up' ? index - 1 : index + 1].name;
+    const nextGrade = ladder[direction === 'up' ? index - 1 : index + 1].name;
     try {
       await this.patchMember(member.userId, { grade: nextGrade });
       await this.refreshMembers();

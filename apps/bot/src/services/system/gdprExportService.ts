@@ -240,6 +240,7 @@ const STATIC_SOURCES: GdprSource[] = [
 
   // ── Tickets & support ──────────────────────────────────────────
   { category: 'tickets', key: 'ticket', label: 'Tickets', model: 'ticket', where: ({ discordId }) => ({ userId: discordId }) },
+  { category: 'tickets', key: 'ticketWebMessage', label: 'Messages web/e-mail de tickets', model: 'ticketWebMessage', where: ({ discordId }) => ({ authorId: discordId }) },
   { category: 'tickets', key: 'ticketBlacklist', label: 'Exclusions des tickets', model: 'ticketBlacklist', where: ({ discordId }) => ({ userId: discordId }) },
   { category: 'tickets', key: 'siteTicketLink', label: 'Tickets ouverts depuis le site', model: 'siteTicketLink', where: ({ discordId }) => ({ userId: discordId }) },
 
@@ -268,6 +269,7 @@ const STATIC_SOURCES: GdprSource[] = [
   { category: 'staff', key: 'staffManagerNote', label: 'Notes de suivi', model: 'staffManagerNote', where: ({ staffIds }) => ({ staffUserId: { in: staffIds } }) },
   { category: 'staff', key: 'staffPollVote', label: 'Votes aux sondages staff', model: 'staffPollVote', where: ({ staffIds }) => ({ staffUserId: { in: staffIds } }) },
   { category: 'staff', key: 'staffProcedureRead', label: 'Lectures de procédures', model: 'staffProcedureRead', where: ({ staffIds }) => ({ staffUserId: { in: staffIds } }) },
+  { category: 'staff', key: 'wellbeingCaseNote', label: 'Notes cellule bien-être', model: 'wellbeingCaseNote', where: ({ discordId }) => ({ authorId: discordId }) },
 
   // ── Système ────────────────────────────────────────────────────
   { category: 'system', key: 'scheduledTask', label: 'Tâches planifiées', model: 'scheduledTask', where: ({ discordId }) => ({ targetId: discordId }) },
@@ -277,6 +279,7 @@ const STATIC_SOURCES: GdprSource[] = [
   { category: 'system', key: 'mcpApiKey', label: 'Clés MCP', model: 'mcpApiKey', where: ({ discordId }) => ({ ownerId: discordId }), project: projectMcpApiKey },
   { category: 'system', key: 'workflowTemporaryRole', label: 'Rôles temporaires des workflows', model: 'workflowTemporaryRole', where: ({ discordId }) => ({ userId: discordId }) },
   { category: 'system', key: 'workflowMemberRun', label: 'Passages dans les workflows', model: 'workflowMemberRun', where: ({ discordId }) => ({ userId: discordId }) },
+  { category: 'system', key: 'guildNetwork', label: 'Réseaux multi-serveurs possédés', model: 'guildNetwork', where: ({ discordId }) => ({ ownerUserId: discordId }) },
 ];
 
 /**

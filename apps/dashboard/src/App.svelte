@@ -698,6 +698,18 @@
         props={(meta) => ({ guildId: meta.params.guildId })}
       />
       <LazyRoute
+        path="/support/track/:token"
+        load={() => import("./pages/PublicTicketForm.svelte")}
+      />
+      <LazyRoute
+        path="/support/:guildId"
+        load={() => import("./pages/PublicTicketForm.svelte")}
+      />
+      <LazyRoute
+        path="/boutique/:guildId"
+        load={() => import("./pages/PublicShop.svelte")}
+      />
+      <LazyRoute
         path="/verify/:guildId/:token"
         load={() => import("./pages/Verify.svelte")}
         props={(meta) => ({ guildId: meta.params.guildId, token: meta.params.token })}
@@ -1177,6 +1189,10 @@
             <LazyRoute
               path="/tutoring/*"
               load={() => import("./pages/Tutoring.svelte")}
+            />
+            <LazyRoute
+              path="/wellbeing"
+              load={() => import("./pages/Wellbeing.svelte")}
             />
             <LazyRoute
               path="/doing-lists"

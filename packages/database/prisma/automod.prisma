@@ -61,6 +61,8 @@ model AutoModConfig {
   linksEnabled         Boolean  @default(false)
   linksAction          String   @default("DELETE_AND_WARN")
   linksWhitelist       String[] @default([]) // Whitelisted domains
+  discordRulesWarn     Boolean  @default(false) // Un warn par déclenchement d'une règle Discord qui n'est pas gérée par Kotbo
+  linksLevel           Int      @default(1) // 0 = invitations seulement, 1 = liens externes (hors Discord et GIF), 2 = tous les liens
 
   capsEnabled          Boolean  @default(false)
   capsThresholdPercent Int      @default(80)
@@ -125,4 +127,28 @@ model AutoModConfig {
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
 
   @@map("automod_configs")
+}
+
+/// Un déclenchement de l'AutoMod natif de Discord (règles Kotbo ou règles du serveur).
+/// Sans relation Guild : simple journal, purgé par ancienneté.
+model DiscordAutoModEvent {
+  id String @id @default(cuid())
+
+  guildId     String
+  ruleId      String
+  ruleName    String
+  triggerType Int // AutoModerationRuleTriggerType de discord.js
+  action      String // BLOCK | ALERT | TIMEOUT
+  userId      String
+  channelId   String?
+  keyword     String? // Mot-clé ou motif qui a déclenché la règle
+  content     String? // Extrait du message (500 car. max)
+  managed     Boolean @default(false) // true = règle créée par Kotbo
+
+  createdAt DateTime @default(now())
+
+  @@index([guildId, createdAt])
+  @@index([guildId, userId, createdAt])
+  @@index([guildId, ruleId, createdAt])
+  @@map("discord_automod_events")
 }

@@ -16,6 +16,8 @@
   import { createAsyncActionState } from '../lib/asyncAction.svelte';
   import { toast } from '../lib/stores/toast.svelte';
   import { confirmDialog } from '../lib/stores/confirmDialog.svelte';
+  import { exportRows } from '../lib/exportData';
+  import ExportDropdown from '../lib/components/analytics/ExportDropdown.svelte';
   import { errorMessage } from '@kotbo/shared';
 
   type Status = 'PENDING' | 'ORAL' | 'APPROVED' | 'REJECTED' | 'AUTO_REJECTED';
@@ -117,6 +119,20 @@
   function select(id: string) {
     selectedId = id;
     document.getElementById(`cand-${id}`)?.scrollIntoView({ block: 'nearest' });
+  }
+
+  function exportCandidatures(format: 'csv' | 'json') {
+    exportRows(format, 'kotbo_candidatures', visible, [
+      { label: 'ID', value: (c) => c.id },
+      { label: 'Date', value: (c) => c.createdAt },
+      { label: 'Candidat', value: (c) => nameOf(c) },
+      { label: 'ID Discord', value: (c) => c.discordId ?? '' },
+      { label: 'E-mail', value: (c) => c.email ?? '' },
+      { label: 'Poste / Formulaire', value: (c) => formNames[formOf(c)] ?? formOf(c) },
+      { label: 'Statut', value: (c) => statusLabel(c.status) },
+      { label: 'Notes', value: (c) => c.notes ?? '' },
+      { label: 'Réponses', value: (c) => answersOf(c).map(([k, v]) => `${fieldLabels[k] ?? k}: ${formatValue(v)}`).join(' | ') },
+    ]);
   }
 
   function move(step: number) {
@@ -521,6 +537,10 @@
         ]}
         active={activeTab}
         onchange={(id) => (activeTab = id as typeof activeTab)}
+      />
+      <ExportDropdown
+        onExportCSV={() => exportCandidatures('csv')}
+        onExportJSON={() => exportCandidatures('json')}
       />
       <RefreshButton
         onClick={activeTab === 'candidatures' ? fetchInitialData : fetchForms}

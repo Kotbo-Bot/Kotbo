@@ -62,6 +62,7 @@ export * from './adminAnalytics';
 export * from './outgoingWebhooks';
 export * from './site';
 export * from './automodSimulation';
+export * from './discordAutomod';
 export * from './memberProfile';
 export * from './ticketHelpdesk';
 export * from './welcomeExperiments';

@@ -596,10 +596,11 @@ export function createUserRouter(client: Client) {
           accessLevel,
           isStaffServer: staffGuildToMain.has(guildId),
           pairedGuildId: staffGuildToMain.get(guildId) ?? mainGuildToStaff.get(guildId) ?? null,
-          billingAccess:
-            accessLevel === 'admin' ||
-            billing?.billingOwnerId === user.userId ||
-            Boolean(billing?.billingStaffAccess),
+          // Même règle que `requireBillingAccess` : un payeur connu est seul à
+          // la gérer ; le staff ne la voit que si le serveur l'a ouverte.
+          billingAccess: billing?.billingOwnerId
+            ? billing.billingOwnerId === user.userId || Boolean(billing.billingStaffAccess)
+            : accessLevel === 'admin' || Boolean(billing?.billingStaffAccess),
         });
       }
 
@@ -608,6 +609,164 @@ export function createUserRouter(client: Client) {
     } catch (err) {
       logger.error('API', 'Unexpected error in /api/user/guilds:', err);
       return fail(c, err, 'Une erreur interne est survenue', 'API');
+    }
+  });
+
+  // Espace de suivi membre (/me) : liste des tickets du membre connecté
+  router.get('/api/user/me/tickets', async (c) => {
+    const user = c.var.dashboardUser;
+    try {
+      const tickets = await prisma.ticket.findMany({
+        where: { userId: user.userId },
+        orderBy: { updatedAt: 'desc' },
+        take: 100,
+      });
+      return send(c, {
+        tickets: tickets.map((t) => {
+          const g = client.guilds.cache.get(t.guildId);
+          return {
+            id: t.id,
+            guildId: t.guildId,
+            guildName: g?.name ?? t.guildId,
+            guildIconUrl: g?.iconURL({ size: 64, extension: 'png' }) ?? null,
+            reason: t.reason,
+            description: t.description,
+            status: t.status,
+            source: t.source,
+            ticketTypeLabel: t.ticketTypeLabel,
+            createdAt: t.createdAt.toISOString(),
+            updatedAt: t.updatedAt.toISOString(),
+            closedAt: t.closedAt?.toISOString() ?? null,
+            lastStaffMessageAt: t.lastStaffMessageAt?.toISOString() ?? null,
+            lastMemberMessageAt: t.lastMemberMessageAt?.toISOString() ?? null,
+          };
+        }),
+      });
+    } catch (err) {
+      logger.error('API', 'Error fetching member tickets:', err);
+      return fail(c, err, 'Impossible de charger vos tickets', 'API');
+    }
+  });
+
+  router.get('/api/user/me/tickets/:ticketId', async (c) => {
+    const user = c.var.dashboardUser;
+    const ticketId = c.req.param('ticketId');
+    try {
+      const ticket = await prisma.ticket.findFirst({
+        where: { id: ticketId, userId: user.userId },
+        include: {
+          webMessages: { orderBy: { createdAt: 'asc' } },
+        },
+      });
+      if (!ticket) return send(c, { error: 'Ticket introuvable' }, 404);
+
+      const g = client.guilds.cache.get(ticket.guildId);
+      let messages = ticket.webMessages.map((m) => ({
+        id: m.id,
+        authorName: m.authorName,
+        isStaff: m.isStaff,
+        source: m.source,
+        content: m.content,
+        createdAt: m.createdAt.toISOString(),
+      }));
+
+      const conversationId = ticket.channelId ?? ticket.threadId;
+      if (conversationId) {
+        const ch = client.channels.cache.get(conversationId) ?? await client.channels.fetch(conversationId).catch(() => null);
+        if (ch && ch.isTextBased()) {
+          const fetched = await ch.messages.fetch({ limit: 40 }).catch(() => null);
+          if (fetched) {
+            const discordMsgs = [...fetched.values()]
+              // Seuls les messages du membre : le salon contient aussi les échanges internes du staff.
+              .filter((m) => m.author.id === user.userId && m.content?.trim())
+              .map((m) => ({
+                id: m.id,
+                authorName: m.member?.displayName ?? m.author.displayName ?? m.author.username,
+                isStaff: false,
+                source: 'DISCORD',
+                content: m.content,
+                createdAt: m.createdAt.toISOString(),
+              }));
+            messages = [...discordMsgs, ...messages].sort(
+              (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+            );
+          }
+        }
+      }
+
+      return send(c, {
+        ticket: {
+          id: ticket.id,
+          guildId: ticket.guildId,
+          guildName: g?.name ?? ticket.guildId,
+          reason: ticket.reason,
+          description: ticket.description,
+          status: ticket.status,
+          source: ticket.source,
+          createdAt: ticket.createdAt.toISOString(),
+          closedAt: ticket.closedAt?.toISOString() ?? null,
+          messages,
+        },
+      });
+    } catch (err) {
+      logger.error('API', 'Error fetching member ticket detail:', err);
+      return fail(c, err, 'Impossible de charger ce ticket', 'API');
+    }
+  });
+
+  router.post('/api/user/me/tickets/:ticketId/reply', async (c) => {
+    const user = c.var.dashboardUser;
+    const ticketId = c.req.param('ticketId');
+    try {
+      const ticket = await prisma.ticket.findFirst({ where: { id: ticketId, userId: user.userId } });
+      if (!ticket) return send(c, { error: 'Ticket introuvable' }, 404);
+
+      const body = await readBody<{ content?: string }>(c);
+      const content = body?.content?.trim().slice(0, 1800) ?? '';
+      if (!content) return send(c, { error: 'Message requis' }, 400);
+
+      const now = new Date();
+      const msg = await prisma.ticketWebMessage.create({
+        data: {
+          ticketId: ticket.id,
+          authorId: user.userId,
+          authorName: user.username ?? 'Membre',
+          isStaff: false,
+          source: 'WEB',
+          content,
+        },
+      });
+
+      const conversationId = ticket.channelId ?? ticket.threadId;
+      if (conversationId) {
+        const ch = client.channels.cache.get(conversationId) ?? await client.channels.fetch(conversationId).catch(() => null);
+        if (ch && ch.isTextBased() && 'send' in ch) {
+          await ch.send({
+            content: `💬 **[${user.username ?? 'Membre'} via /me]** ${content}`.slice(0, 2000),
+            allowedMentions: { parse: [] },
+          }).catch(() => null);
+        }
+      }
+
+      await prisma.ticket.update({
+        where: { id: ticket.id },
+        data: { lastMemberMessageAt: now },
+      });
+
+      return send(c, {
+        ok: true,
+        message: {
+          id: msg.id,
+          authorName: msg.authorName,
+          isStaff: false,
+          source: 'WEB',
+          content: msg.content,
+          createdAt: msg.createdAt.toISOString(),
+        },
+      }, 201);
+    } catch (err) {
+      logger.error('API', 'Error replying to member ticket:', err);
+      return fail(c, err, "Impossible d'envoyer la réponse", 'API');
     }
   });
 

@@ -53,6 +53,13 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// shortcut: hash simple, deux noms peuvent tomber sur la même seconde ; suffisant pour étaler.
+function defaultJitterMs(name: string): number {
+  let h = 0;
+  for (const c of name) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return (h % 30) * 1000;
+}
+
 /**
  * Planifie un job, en file d'attente si Redis repond, en local sinon.
  *
@@ -63,7 +70,10 @@ function delay(ms: number): Promise<void> {
  * declenchement sur un « Aucun handler enregistre ». C'est ce qui est arrive aux
  * quatre cycles de partenariats, restes muets depuis leur arrivee.
  */
-async function runCronJob(name: BackgroundJobName, task: () => Promise<void>, jitterMs = 0): Promise<void> {
+async function runCronJob(name: BackgroundJobName, task: () => Promise<void>, jitterMs?: number): Promise<void> {
+  // Sans décalage explicite : un décalage fixe par nom, pour que la vingtaine de
+  // tâches « chaque minute » ne démarrent plus toutes à la seconde 0 (pics de CPU).
+  jitterMs ??= defaultJitterMs(name);
   const minuteTimestamp = Math.floor(Date.now() / 60000);
   const enqueued = await enqueueBackgroundJob(name, { jitterMs }, { jobId: `cron-${name}-${minuteTimestamp}` });
   if (enqueued) {
@@ -108,6 +118,7 @@ async function runLocalSweep(name: string, task: () => Promise<void>): Promise<v
   if (runningSweeps.has(name)) return;
   runningSweeps.add(name);
   try {
+    await delay(defaultJitterMs(name));
     await task();
   } catch (error) {
     logger.error('Cron', `Erreur balayage ${name}:`, error);
@@ -214,6 +225,10 @@ export async function registerCrons(client: Client): Promise<void> {
     },
     'staff-warnings-expiration': expireStaffWarnings,
     'staff-blacklist-expiration': expireStaffBlacklist,
+    'staff-night-report': async () => {
+      const { sendNightReports } = await import('../services/staff/staffNightReport.js');
+      await sendNightReports(client);
+    },
     'activity-10min-snapshot': async () => {
       await runActivitySnapshot(client);
     },
@@ -898,6 +913,15 @@ export async function registerCrons(client: Client): Promise<void> {
     }, 2000);
   });
 
+  // 📊 Agrégats analytics fins: purge au-delà de la plage affichable, par lots (tous les jours à 04:05)
+  cron.schedule('5 4 * * *', async () => {
+    await runCronJob('stats-retention-prune', async () => {
+      const { pruneOldStats } = await import('../services/analytics/statsRetentionService.js');
+      const deleted = await pruneOldStats();
+      if (deleted > 0) logger.info('Cron', `${deleted} ligne(s) d'agrégats analytics purgée(s)`);
+    }, 2000);
+  });
+
   // 🛡️ Kotbo × AegisAI: extraits à l'échéance de la rétention des logs, détections et agrégats anciens (tous les jours à 03:50)
   cron.schedule('50 3 * * *', async () => {
     await runCronJob('aegis-prune', async () => {
@@ -934,6 +958,14 @@ export async function registerCrons(client: Client): Promise<void> {
   cron.schedule('0 12 * * *', async () => {
     await runCronJob('missing-reports-check', async () => {
       await checkMissingReports();
+    }, 2000);
+  }, { timezone: 'Europe/Paris' });
+
+  // 🌙 Rapport de la nuit dans le salon de logs du serveur staff (8h, heure de Paris)
+  cron.schedule('0 8 * * *', async () => {
+    await runCronJob('staff-night-report', async () => {
+      const { sendNightReports } = await import('../services/staff/staffNightReport.js');
+      await sendNightReports(client);
     }, 2000);
   }, { timezone: 'Europe/Paris' });
 

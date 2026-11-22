@@ -12,27 +12,41 @@
    * Le composant charge et enregistre lui-meme la configuration : la page qui l'accueille
    * n'a aucune raison de porter cet etat.
    */
-  import { router } from 'tinro';
-  import { onMount, onDestroy, untrack } from 'svelte';
-  import { m } from '../../i18n';
-  import { dashboardStore } from '../../stores/dashboard.svelte';
-  import { unsavedChanges } from '../../stores/unsavedChanges.svelte';
-  import { createAsyncActionState } from '../../asyncAction.svelte';
-  import Skeleton from '../Skeleton.svelte';
-  import InlineFeedback from '../InlineFeedback.svelte';
-  import EconomyPresetPicker from '../EconomyPresetPicker.svelte';
-  import { findEconomyPreset, type EconomyPreset, type EconomyPresetValues } from '../../economyPresets';
-  import { fetchEconomyConfig, updateEconomyConfig } from '../../api';
+  import { router } from "tinro";
+  import { onMount, onDestroy, untrack } from "svelte";
+  import { m } from "../../i18n";
+  import { dashboardStore } from "../../stores/dashboard.svelte";
+  import { unsavedChanges } from "../../stores/unsavedChanges.svelte";
+  import { createAsyncActionState } from "../../asyncAction.svelte";
+  import Skeleton from "../Skeleton.svelte";
+  import InlineFeedback from "../InlineFeedback.svelte";
+  import EconomyPresetPicker from "../EconomyPresetPicker.svelte";
+  import {
+    findEconomyPreset,
+    type EconomyPreset,
+    type EconomyPresetValues,
+  } from "../../economyPresets";
+  import { fetchEconomyConfig, updateEconomyConfig } from "../../api";
+  import { isDashboardApiError } from "../../api/errors";
 
   const actionState = createAsyncActionState();
   let loading = $state(true);
   // Sans cet etat, un chargement en echec rendait une page blanche : ni rythme, ni
   // explication, alors que la cause est presque toujours une configuration illisible.
   let loadFailed = $state(false);
+  let accessError = $state<string | null>(null);
+
+  const economyModule = $derived(
+    (dashboardStore.state.modules as any[]).find((mod) => mod.id === "economy"),
+  );
+  const economyBlocked = $derived(
+    !!economyModule &&
+      (!!economyModule.lockedByPlan || economyModule.status !== "active"),
+  );
 
   const canManageSettings = $derived(
-    !!dashboardStore.state.featureAccess?.economy?.canConfigure
-      || !!dashboardStore.state.access?.canManageSettings
+    !!dashboardStore.state.featureAccess?.economy?.canConfigure ||
+      !!dashboardStore.state.access?.canManageSettings,
   );
 
   // La configuration est chargee telle quelle et renvoyee entiere : un rythme ne touche
@@ -42,9 +56,13 @@
   let config = $state<Config | null>(null);
   let savedConfig = $state<Config | null>(null);
 
-  const dirty = $derived(JSON.stringify(config) !== JSON.stringify(savedConfig));
+  const dirty = $derived(
+    JSON.stringify(config) !== JSON.stringify(savedConfig),
+  );
   const selectedPreset = $derived(config ? findEconomyPreset(config) : null);
-  const activePreset = $derived(savedConfig ? findEconomyPreset(savedConfig) : null);
+  const activePreset = $derived(
+    savedConfig ? findEconomyPreset(savedConfig) : null,
+  );
 
   function valuesOf(source: Config): EconomyPresetValues {
     return {
@@ -60,9 +78,11 @@
   // Des qu'un rythme est choisi, la configuration courante est la sienne : la carte
   // « Personnalise » doit alors montrer la configuration enregistree, sans quoi elle
   // devient le sosie de la carte qu'on vient de cliquer.
-  const customValues = $derived(valuesOf((selectedPreset ? savedConfig : config) ?? {}));
+  const customValues = $derived(
+    valuesOf((selectedPreset ? savedConfig : config) ?? {}),
+  );
 
-  const OWNER = 'economy-quick-setup';
+  const OWNER = "economy-quick-setup";
 
   $effect(() => {
     if (dirty && canManageSettings) {
@@ -72,7 +92,9 @@
           label: m.eco_quick_setup_title(),
           onSave: () => save(),
           onReset: () => {
-            config = savedConfig ? JSON.parse(JSON.stringify(savedConfig)) : null;
+            config = savedConfig
+              ? JSON.parse(JSON.stringify(savedConfig))
+              : null;
           },
         });
       });
@@ -92,7 +114,11 @@
       // Les droits viennent du store, que ModulePage ne rafraichit qu'au bascul d'un
       // module : sans cet appel, la section peut s'afficher en lecture seule alors que
       // l'administrateur peut tout regler.
-      const [, res] = await Promise.all([dashboardStore.refresh(), fetchEconomyConfig()]);
+      await dashboardStore.refresh();
+      if (economyBlocked) {
+        return;
+      }
+      const res = await fetchEconomyConfig();
       if (res?.config) {
         config = res.config;
         savedConfig = JSON.parse(JSON.stringify(res.config));
@@ -101,7 +127,18 @@
       }
     } catch (err) {
       console.error(err);
-      loadFailed = true;
+      if (
+        isDashboardApiError(err) &&
+        (err.status === 402 ||
+          err.status === 403 ||
+          err.code === "module_disabled" ||
+          err.code === "feature_denied" ||
+          err.code === "plan_required")
+      ) {
+        accessError = err.code !== "module_disabled" ? err.userMessage : null;
+      } else {
+        loadFailed = true;
+      }
     } finally {
       loading = false;
     }
@@ -124,14 +161,17 @@
     if (!canManageSettings || !config) return false;
 
     let success = false;
-    await actionState.run(async () => {
-      const res = await updateEconomyConfig(valuesOf(config));
-      if (!res?.config) throw new Error(m.eco_quick_setup_save_failed());
-      config = res.config;
-      savedConfig = JSON.parse(JSON.stringify(res.config));
-      success = true;
-      return true;
-    }, { successMessage: m.eco_toast_config_saved() });
+    await actionState.run(
+      async () => {
+        const res = await updateEconomyConfig(valuesOf(config));
+        if (!res?.config) throw new Error(m.eco_quick_setup_save_failed());
+        config = res.config;
+        savedConfig = JSON.parse(JSON.stringify(res.config));
+        success = true;
+        return true;
+      },
+      { successMessage: m.eco_toast_config_saved() },
+    );
     return success;
   }
 </script>
@@ -140,8 +180,18 @@
 
 {#if loading}
   <Skeleton height="350px" radius="2.5rem" />
+{:else if economyBlocked}
+  <!-- ModulePage affiche deja l'encadre d'offre ou de reactivation au-dessus. -->
+{:else if accessError}
+  <p
+    class="text-sm text-on-surface-variant bg-surface-container-high/30 border border-outline-variant/10 rounded-xl px-6 py-8 text-center leading-relaxed"
+  >
+    {accessError}
+  </p>
 {:else if loadFailed || !config}
-  <p class="text-sm text-on-surface-variant bg-surface-container-high/30 border border-outline-variant/10 rounded-xl px-6 py-8 text-center leading-relaxed">
+  <p
+    class="text-sm text-on-surface-variant bg-surface-container-high/30 border border-outline-variant/10 rounded-xl px-6 py-8 text-center leading-relaxed"
+  >
     {m.eco_config_load_failed()}
   </p>
 {:else}
@@ -149,13 +199,13 @@
     selectedId={selectedPreset?.id ?? null}
     activeId={activePreset?.id ?? null}
     {customValues}
-    currencyName={String(config.currencyName ?? '')}
+    currencyName={String(config.currencyName ?? "")}
     disabled={!canManageSettings}
     {dirty}
     saving={actionState.state.loading}
     moduleEnabled={config.enabled === true}
     onselect={selectPreset}
     onsave={save}
-    ondetail={() => router.goto('/economy')}
+    ondetail={() => router.goto("/economy")}
   />
 {/if}

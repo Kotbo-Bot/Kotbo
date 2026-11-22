@@ -13,6 +13,8 @@ import * as altAccountService from '../moderation/altAccountService.js';
 import { fetchAllMembers } from '../../utils/discord.js';
 import type { GuildMember } from 'discord.js';
 import { publicErrorMessage } from '../../utils/publicError.js';
+import { isStaffSeparatorStyle } from '@kotbo/shared';
+import { UserFacingError } from '../../utils/userFacingError.js';
 
 /**
  * Service de gestion du personnel staff
@@ -128,10 +130,12 @@ const resolveHierarchyAssignmentForGrade = async (guildId: string, grade: string
     return { hierarchyId: normalizedHierarchyId, grade: normalizedHierarchyGrade };
   }
 
-  const staffRole = await prisma.staffRole.findFirst({
+  const matches = await prisma.staffRole.findMany({
     where: { guildId, enabled: true, name: grade.trim() },
     select: { hierarchyId: true, name: true },
   });
+  // Même nom de grade dans plusieurs hiérarchies : on ne devine pas.
+  const staffRole = new Set(matches.map((r) => r.hierarchyId)).size === 1 ? matches[0] : null;
 
   if (staffRole?.hierarchyId) {
     return {
@@ -324,7 +328,8 @@ export const syncStaffHierarchyMembershipsThrottled = async (guildId: string) =>
 export const syncStaffDiscordRoles = async (
   guildId: string,
   userId: string,
-  gradeName: string
+  gradeName: string,
+  hierarchyId?: string | null
 ) => {
   try {
     const client = getClient();
@@ -355,7 +360,10 @@ export const syncStaffDiscordRoles = async (
       return;
     }
 
-    const targetStaffRole = staffRoles.find(r => r.name.toLowerCase() === gradeName.toLowerCase());
+    const sameName = staffRoles.filter(r => r.name.toLowerCase() === gradeName.toLowerCase());
+    // Homonymes entre hiérarchies : on prend celui de la hiérarchie demandée, jamais le premier venu.
+    const targetStaffRole = sameName.find(r => hierarchyId && r.hierarchyId === hierarchyId)
+      ?? (sameName.length === 1 ? sameName[0] : undefined);
     const targetRoleId = targetStaffRole?.discordRoleId;
 
     // Roles to add
@@ -421,6 +429,21 @@ export const addStaffMember = async (
   hierarchyId?: string,
   hierarchyGrade?: string
 ) => {
+  // Ajout par ID brut : le dashboard n'a aucun nom, on le résout côté bot.
+  if (!username && !displayName) {
+    try {
+      const client = getClient();
+      const gm = await client.guilds.cache.get(guildId)?.members.fetch(userId).catch(() => null);
+      const u = gm?.user ?? await client.users.fetch(userId).catch(() => null);
+      if (u) {
+        username = u.username;
+        displayName = gm?.displayName || u.globalName || u.username;
+        avatarUrl = avatarUrl || u.displayAvatarURL();
+        userTag = userTag || u.tag;
+      }
+    } catch { /* identité facultative, on garde l'ID */ }
+  }
+
   const result = await upsertStaffMemberRow(guildId, userId, {
     update: {
       grade,
@@ -450,7 +473,7 @@ export const addStaffMember = async (
   }
 
   // Sync Discord roles in background
-  void syncStaffDiscordRoles(guildId, userId, grade).catch(() => null);
+  void syncStaffDiscordRoles(guildId, userId, grade, resolvedHierarchyAssignment?.hierarchyId).catch(() => null);
 
   await cache.invalidateGuild(guildId);
 
@@ -1159,26 +1182,10 @@ export const deleteStaffRole = async (guildId: string, roleId: string) => {
   });
   if (!roleToDelete) return null;
 
-  const deleted = await prisma.staffRole.delete({
+  // Pas de renumérotation : les trous dans sortOrder sont sans effet sur le tri.
+  return prisma.staffRole.delete({
     where: { id: roleId }
   });
-
-  // Reorder remaining roles to keep sortOrder contiguous
-  const remainingRoles = await prisma.staffRole.findMany({
-    where: { guildId },
-    orderBy: [{ level: 'desc' }, { sortOrder: 'asc' }, { createdAt: 'asc' }]
-  });
-
-  await prisma.$transaction(
-    remainingRoles.map((role, index) =>
-      prisma.staffRole.update({
-        where: { id: role.id },
-        data: { sortOrder: index }
-      })
-    )
-  );
-
-  return deleted;
 };
 
 export const createAPIKey = async (
@@ -1384,6 +1391,8 @@ export const updateStaffHierarchy = async (
     color?: string | null;
     icon?: string | null;
     discordRoleId?: string | null;
+    separatorRoleId?: string | null;
+    separatorStyle?: string | null;
     responsableUserId?: string | null;
     parentHierarchyId?: string | null;
     enabled?: boolean;
@@ -1395,6 +1404,13 @@ export const updateStaffHierarchy = async (
     where: { id: hierarchyId, guildId },
   });
   if (!hierarchy) return null;
+
+  if (data.separatorStyle && !isStaffSeparatorStyle(data.separatorStyle)) {
+    throw new UserFacingError('Hiérarchie : style de séparateur inconnu');
+  }
+  if (data.separatorRoleId && !/^\d{17,20}$/.test(data.separatorRoleId)) {
+    throw new UserFacingError('Hiérarchie : rôle séparateur invalide');
+  }
 
   if (data.parentHierarchyId) {
     if (data.parentHierarchyId === hierarchyId) {
