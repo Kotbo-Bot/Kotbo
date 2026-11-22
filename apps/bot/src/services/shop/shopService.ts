@@ -76,7 +76,7 @@ export class ShopError extends UserFacingError {
 
 export async function getShopSettings(guildId: string) {
   const row = await prisma.shopSettings.findUnique({ where: { guildId } });
-  return row ?? { guildId, enabled: true, approvalChannelId: null, logChannelId: null, graceDays: 3 };
+  return row ?? { guildId, enabled: true, approvalChannelId: null, logChannelId: null, graceDays: 3, webShopEnabled: false, webShopTitle: null, webShopDescription: null, webShopAccentColor: null, webShopBannerUrl: null, webShopCustomCss: null };
 }
 
 const SNOWFLAKE = /^\d{17,20}$/;
@@ -91,6 +91,20 @@ export async function saveShopSettings(guildId: string, input: Record<string, un
   if (input.graceDays !== undefined) {
     const n = Math.floor(Number(input.graceDays));
     if (Number.isFinite(n)) data.graceDays = Math.min(SHOP_LIMITS.graceDays, Math.max(0, n));
+  }
+  if (typeof input.webShopEnabled === 'boolean') data.webShopEnabled = input.webShopEnabled;
+  if ('webShopTitle' in input) data.webShopTitle = typeof input.webShopTitle === 'string' ? input.webShopTitle.trim().slice(0, 100) || null : null;
+  if ('webShopDescription' in input) data.webShopDescription = typeof input.webShopDescription === 'string' ? input.webShopDescription.trim().slice(0, 400) || null : null;
+  if ('webShopAccentColor' in input) {
+    const color = typeof input.webShopAccentColor === 'string' ? input.webShopAccentColor.trim() : '';
+    data.webShopAccentColor = /^#[0-9a-fA-F]{6}$/.test(color) ? color : null;
+  }
+  if ('webShopBannerUrl' in input) {
+    const url = typeof input.webShopBannerUrl === 'string' ? input.webShopBannerUrl.trim().slice(0, 300) : '';
+    data.webShopBannerUrl = /^https?:\/\//i.test(url) ? url : null;
+  }
+  if ('webShopCustomCss' in input) {
+    data.webShopCustomCss = typeof input.webShopCustomCss === 'string' ? input.webShopCustomCss.slice(0, 4000) || null : null;
   }
   return prisma.shopSettings.upsert({
     where: { guildId },
