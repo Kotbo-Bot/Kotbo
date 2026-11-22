@@ -4,6 +4,7 @@
   import { router } from 'tinro';
   import { resolveTabFromUrl, gotoTab } from '../lib/tabRouting';
   import { pageTabItems } from '../lib/config/pageTabs';
+import DiscordAutomodEvents from '../lib/components/automod/DiscordAutomodEvents.svelte';
   import { Tabs, FilterPills, Button } from '../lib/components/ui';
   import { unsavedChanges } from '../lib/stores/unsavedChanges.svelte';
   import { authStore } from '../lib/stores/auth.svelte';
@@ -26,8 +27,8 @@
 
   import { errorMessage } from '@kotbo/shared';
   // ── Tabs ──
-  type Tab = 'links' | 'detections' | 'network' | 'verification' | 'config';
-  const daTabs = ['links', 'detections', 'network', 'verification', 'config'] as const;
+  type Tab = 'links' | 'detections' | 'network' | 'verification' | 'config' | 'automod';
+  const daTabs = ['links', 'detections', 'network', 'verification', 'config', 'automod'] as const;
   let activeTab = $state<Tab>('links');
 
   $effect(() => {
@@ -1163,6 +1164,8 @@
     </div>
 
   <!-- ═══ TAB: Vérification ═══ -->
+  {:else if activeTab === 'automod'}
+    <DiscordAutomodEvents />
   {:else if activeTab === 'verification'}
     <IdentityVerificationPanel />
 

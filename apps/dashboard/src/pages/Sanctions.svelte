@@ -40,9 +40,10 @@
   import { downloadSingleSheetXlsx } from '../lib/xlsxExport';
   import { exportRows } from '../lib/exportData';
   import ExportDropdown from '../lib/components/analytics/ExportDropdown.svelte';
+import DiscordAutomodEvents from '../lib/components/automod/DiscordAutomodEvents.svelte';
 
   // « appeals » est rendu par la page enveloppe (security/Sanctions) : il figure ici pour que l'onglet existe.
-  const sanctionTabs = ['sanctions', 'settings', 'appeals'] as const;
+  const sanctionTabs = ['sanctions', 'settings', 'appeals', 'automod'] as const;
   let activeTab = $state('sanctions');
 
   $effect(() => {
@@ -1123,6 +1124,10 @@
       active={activeTab}
       onchange={(id) => gotoTab('/security/sanctions', id, 'sanctions')}
     />
+
+    {#if activeTab === 'automod'}
+      <DiscordAutomodEvents />
+    {/if}
 
     {#if activeTab === 'sanctions'}
       <section class="section-card-flush font-inter" data-tour="sanctions-list">

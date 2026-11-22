@@ -2,6 +2,7 @@
   import { m } from "../lib/i18n";
   import { channelDisplayName } from "../lib/channelUtils";
   import { router } from "tinro";
+  import DiscordAutomodEvents from "../lib/components/automod/DiscordAutomodEvents.svelte";
   import { resolveTabFromUrl, gotoTab } from "../lib/tabRouting";
   import { pageTabItems } from "../lib/config/pageTabs";
   import {
@@ -632,8 +633,8 @@
       }),
   );
 
-  const logsTabs = ["logs", "audit", "config"] as const;
-  let activeTab = $state<"logs" | "audit" | "config">("logs");
+  const logsTabs = ["logs", "audit", "config", "automod"] as const;
+  let activeTab = $state<"logs" | "audit" | "config" | "automod">("logs");
 
   $effect(() => {
     const _path = $router.path;
@@ -686,6 +687,10 @@
     active={activeTab}
     onchange={(id) => gotoTab("/logs", id, "logs")}
   />
+
+  {#if activeTab === "automod"}
+    <DiscordAutomodEvents />
+  {/if}
 
   {#if activeTab === "audit"}
     <!-- Audit structurel : autonome, charge ses propres données -->
