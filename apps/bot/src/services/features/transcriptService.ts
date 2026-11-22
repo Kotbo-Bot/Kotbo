@@ -4,6 +4,7 @@ import type { Prisma } from '@prisma/client';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { buildTranscriptData } from './transcriptData.js';
+import { parseHandlingLog } from './ticketHandling.js';
 
 export interface ParsedTranscriptEmbed {
   color: string | null;
@@ -275,7 +276,13 @@ export async function generateTranscript(channel: TextChannel): Promise<{ id: st
  * lisibles via `parseTranscriptHtml`.
  */
 export async function generateTranscriptFromMessages(channel: TextChannel | NewsChannel, allMessages: Message[]): Promise<{ id: string; url: string; count: number }> {
-  const data = await buildTranscriptData(channel, allMessages);
+  const built = await buildTranscriptData(channel, allMessages);
+  // Un salon de ticket garde dans sa transcription qui l'a pris et à qui il a été transféré.
+  const ticket = await prisma.ticket
+    .findFirst({ where: { OR: [{ channelId: channel.id }, { threadId: channel.id }] }, select: { handlingLog: true } })
+    .catch(() => null);
+  const handling = parseHandlingLog(ticket?.handlingLog);
+  const data = handling.length > 0 ? { ...built, handling } : built;
   const firstMsg = allMessages[0];
   const lastMsg = allMessages[allMessages.length - 1];
 

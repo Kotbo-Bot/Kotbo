@@ -22,6 +22,7 @@ import type {
 } from 'discord-api-types/v10';
 import type { Guild, Message, MessageInteractionMetadata, User } from 'discord.js';
 import { msgMentionEntities, type MessageEntities } from '../../utils/messageEntities.js';
+import type { TicketHandlingEvent } from './ticketHandling.js';
 
 export const TRANSCRIPT_DATA_VERSION = 1;
 
@@ -48,6 +49,8 @@ export type TranscriptDataV1 = DiscordConversation & {
   guildId: string;
   channel: { id: string; name: string; topic: string | null };
   generatedAt: string;
+  /** Prises en charge et transferts du ticket, absent pour un salon qui n'en est pas un. */
+  handling?: TicketHandlingEvent[];
 };
 
 /** Bit `VerifiedBot` des drapeaux publics d'un utilisateur Discord. */
