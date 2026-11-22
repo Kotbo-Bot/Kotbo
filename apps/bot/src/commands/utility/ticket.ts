@@ -1,7 +1,8 @@
 import type { SlashCommandDefinition } from '../../commands.js';
 import { ActionRowBuilder, SlashCommandBuilder, type ChatInputCommandInteraction, PermissionFlagsBits, MessageFlags, TextChannel, Role, User, type GuildMember, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder } from 'discord.js';
 import prisma from '../../utils/db.js';
-import { canManageTicket, findActiveTicketBlacklist, renameTicketChannel, renameChannelToOpen, closeTicket, logTicketEvent, ticketBlacklistMessage, applyTicketLockState } from '../../services/features/ticketService.js';
+import { onTicketClaimed, transferTicket } from '../../services/features/ticketTransferService.js';
+import { canManageTicket, isTicketOpeningRoleExcluded, TICKET_ROLE_EXCLUDED_MESSAGE, findActiveTicketBlacklist, renameTicketChannel, renameChannelToOpen, closeTicket, logTicketEvent, ticketBlacklistMessage, applyTicketLockState } from '../../services/features/ticketService.js';
 import {
   archiveTicket,
   DELETION_LOCK_DURATIONS,
@@ -46,6 +47,31 @@ const data = new SlashCommandBuilder()
       .setName('claim')
       .setDescription(m.c7_ticket_claim_desc({}, { locale: 'en' }))
       .setDescriptionLocalizations({ fr: m.c7_ticket_claim_desc({}, { locale: 'fr' }) })
+  )
+  .addSubcommand((subcommand) =>
+    subcommand
+      .setName('transfer')
+      .setDescription('Transfer this ticket to another team or to a superior')
+      .setDescriptionLocalizations({ fr: 'Transférer ce ticket à une autre équipe ou à un supérieur' })
+      .addRoleOption((opt) =>
+        opt
+          .setName('equipe')
+          .setDescription('Team (role) that takes over')
+          .setDescriptionLocalizations({ fr: 'Équipe (rôle) qui reprend le ticket' }),
+      )
+      .addUserOption((opt) =>
+        opt
+          .setName('membre')
+          .setDescription('Member who takes over, e.g. a superior')
+          .setDescriptionLocalizations({ fr: 'Membre qui reprend le ticket, par exemple un supérieur' }),
+      )
+      .addStringOption((opt) =>
+        opt
+          .setName('note')
+          .setDescription('Reason shown in the ticket history')
+          .setDescriptionLocalizations({ fr: "Raison affichée dans l'historique du ticket" })
+          .setMaxLength(200),
+      ),
   )
   .addSubcommand((subcommand) =>
     subcommand
@@ -266,6 +292,8 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
       },
     });
 
+    await onTicketClaimed(interaction.client, ticket, guildConfig as unknown as Record<string, unknown>, interaction.user);
+
     await channel.send({
       embeds: [successEmbed(m.c7_ticket_claim_embed_title({}, { locale }), m.c7_ticket_claim_embed_desc({ userId: interaction.user.id }, { locale }))],
     }).catch(() => null);
@@ -274,6 +302,37 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
       content: m.c7_ticket_claim_success({}, { locale }),
       flags: [MessageFlags.Ephemeral],
     });
+    return;
+  }
+
+  if (subcommand === 'transfer') {
+    if (!isStaff) {
+      await interaction.reply({ content: '❌ Seul le personnel peut transférer un ticket.', flags: [MessageFlags.Ephemeral] });
+      return;
+    }
+    const targetRole = interaction.options.getRole('equipe');
+    const targetUser = interaction.options.getUser('membre');
+    const note = interaction.options.getString('note');
+
+    await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
+    const result = await transferTicket(
+      interaction.client,
+      ticket.id,
+      interaction.user,
+      { roleId: targetRole?.id ?? null, userId: targetUser?.id ?? null },
+      note,
+    );
+    if (!result.ok) {
+      await interaction.editReply({ content: `❌ ${result.error}` });
+      return;
+    }
+
+    const target = [targetRole ? `<@&${targetRole.id}>` : null, targetUser ? `<@${targetUser.id}>` : null].filter(Boolean).join(' ');
+    await channel.send({
+      embeds: [successEmbed('Ticket transféré', `Ce ticket a été transféré par <@${interaction.user.id}> à ${target}.${note ? `\n> ${note}` : ''}`)],
+      allowedMentions: { users: targetUser ? [targetUser.id] : [], roles: targetRole ? [targetRole.id] : [] },
+    }).catch(() => null);
+    await interaction.editReply({ content: '✅ Ticket transféré.' });
     return;
   }
 
@@ -744,6 +803,14 @@ async function handleOpen(interaction: ChatInputCommandInteraction): Promise<voi
       content: m.c7_ticket_open_err_guild_not_configured({}, { locale }),
       flags: [MessageFlags.Ephemeral],
     });
+    return;
+  }
+
+  const targetMember = interaction.guildId === targetGuildId
+    ? interaction.member
+    : await interaction.client.guilds.cache.get(targetGuildId!)?.members.fetch(interaction.user.id).catch(() => null);
+  if (isTicketOpeningRoleExcluded(guildConfig as Record<string, unknown>, targetMember as GuildMember | null)) {
+    await interaction.reply({ content: TICKET_ROLE_EXCLUDED_MESSAGE, flags: [MessageFlags.Ephemeral] });
     return;
   }
 

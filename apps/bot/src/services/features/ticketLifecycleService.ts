@@ -16,6 +16,7 @@ import { COLORS } from '../../utils/embeds.js';
 import { broadcastDashboardStateChange } from '../../api/shared/sharding.js';
 import { generateTranscript, type ParsedTranscriptMessage } from './transcriptService.js';
 import { loadTranscriptMessages } from './transcriptReader.js';
+import { ticketAccessRoleIds } from './ticketRoles.js';
 import { resolveTicketQuotas } from './ticketQuotaService.js';
 
 /**
@@ -135,7 +136,7 @@ export function resolveLockDuration(value: string): number | null {
 function buildArchivePermissionOverwrites(
   guild: { roles: { everyone: { id: string } } },
   ticket: Ticket,
-  guildConfig: { ticketStaffRoleId: string | null; moderatorRoleId: string | null; ticketArchiveKeepOpenerView: boolean },
+  guildConfig: { ticketStaffRoleId: string | null; ticketSupportRoleIds?: string[]; ticketManagerRoleIds?: string[]; moderatorRoleId: string | null; ticketArchiveKeepOpenerView: boolean },
 ): OverwriteResolvable[] {
   const readOnly = [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory];
   const overwrites: OverwriteResolvable[] = [
@@ -149,11 +150,11 @@ function buildArchivePermissionOverwrites(
     },
   ];
 
-  const staffRoleId = ticket.staffRoleId || guildConfig.ticketStaffRoleId;
-  if (staffRoleId) {
-    overwrites.push({ id: staffRoleId, allow: readOnly, deny: [PermissionFlagsBits.SendMessages] });
+  const accessRoleIds = ticketAccessRoleIds(guildConfig, ticket.staffRoleId);
+  for (const roleId of accessRoleIds) {
+    overwrites.push({ id: roleId, allow: readOnly, deny: [PermissionFlagsBits.SendMessages] });
   }
-  if (guildConfig.moderatorRoleId && guildConfig.moderatorRoleId !== staffRoleId) {
+  if (guildConfig.moderatorRoleId && !accessRoleIds.includes(guildConfig.moderatorRoleId)) {
     overwrites.push({ id: guildConfig.moderatorRoleId, allow: readOnly, deny: [PermissionFlagsBits.SendMessages] });
   }
   return overwrites;
@@ -223,6 +224,8 @@ export async function archiveTicket(
       await channel.permissionOverwrites.set(
         buildArchivePermissionOverwrites(channel.guild, ticket, {
           ticketStaffRoleId: guildConfig.ticketStaffRoleId,
+          ticketSupportRoleIds: guildConfig.ticketSupportRoleIds,
+          ticketManagerRoleIds: guildConfig.ticketManagerRoleIds,
           moderatorRoleId: guildConfig.moderatorRoleId,
           ticketArchiveKeepOpenerView: guildConfig.ticketArchiveKeepOpenerView,
         }),
@@ -318,13 +321,13 @@ export async function unarchiveTicket(
       }
     }
 
-    const staffRoleId = ticket.staffRoleId || guildConfig.ticketStaffRoleId;
-    if (staffRoleId) {
-      await channel.permissionOverwrites.edit(staffRoleId, {
+    const accessRoleIds = ticketAccessRoleIds(guildConfig, ticket.staffRoleId);
+    for (const roleId of accessRoleIds) {
+      await channel.permissionOverwrites.edit(roleId, {
         ViewChannel: true, SendMessages: true, ReadMessageHistory: true, EmbedLinks: true, AttachFiles: true,
       }).catch(() => null);
     }
-    if (guildConfig.moderatorRoleId && guildConfig.moderatorRoleId !== staffRoleId) {
+    if (guildConfig.moderatorRoleId && !accessRoleIds.includes(guildConfig.moderatorRoleId)) {
       await channel.permissionOverwrites.edit(guildConfig.moderatorRoleId, {
         ViewChannel: true, SendMessages: true, ReadMessageHistory: true, EmbedLinks: true, AttachFiles: true,
       }).catch(() => null);
@@ -472,7 +475,7 @@ export async function restoreTicketFromTranscript(
   const ticketCategory = categoryId
     ? await client.channels.fetch(categoryId).catch(() => null)
     : null;
-  const staffRoleId = ticket.staffRoleId || guildConfig.ticketStaffRoleId || null;
+  const accessRoleIds = ticketAccessRoleIds(guildConfig, ticket.staffRoleId);
 
   const cleanedUsername = ticket.username.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || 'membre';
   const channelName = `ticket-${cleanedUsername}`.slice(0, 100);
@@ -488,8 +491,8 @@ export async function restoreTicketFromTranscript(
     { id: discordGuild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
     { id: ticket.userId, allow: memberPerms },
   ];
-  if (staffRoleId) permissionOverwrites.push({ id: staffRoleId, allow: memberPerms });
-  if (guildConfig.moderatorRoleId && guildConfig.moderatorRoleId !== staffRoleId) {
+  for (const roleId of accessRoleIds) permissionOverwrites.push({ id: roleId, allow: memberPerms });
+  if (guildConfig.moderatorRoleId && !accessRoleIds.includes(guildConfig.moderatorRoleId)) {
     permissionOverwrites.push({ id: guildConfig.moderatorRoleId, allow: memberPerms });
   }
 

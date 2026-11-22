@@ -4,6 +4,9 @@ import { AuditLogEvent } from 'discord.js';
 import { type Client, type APIInteractionGuildMember, type ButtonInteraction, type ModalSubmitInteraction, type StringSelectMenuInteraction, TextChannel, ChannelType, PermissionFlagsBits, PermissionsBitField, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags, ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize, type Guild, type GuildMember, type ThreadChannel, Message, ComponentType } from 'discord.js';
 import { kotboEventBus } from '@kotbo/core';
 import { ticketGuildChannelId } from './ticketGuildChannel.js';
+import { onTicketClaimed } from './ticketTransferService.js';
+import { formatHandlingHistory, parseHandlingLog } from './ticketHandling.js';
+import { hasTicketExcludedRole, roleMentionText, ticketAccessRoleIds, ticketMentionRoleIds } from './ticketRoles.js';
 import { ensureBotCanPost } from '../../utils/channelAccess.js';
 import prisma from '../../utils/db.js';
 import { notify, notifyMany } from '../notifications/notifyService.js';
@@ -263,7 +266,9 @@ export function listTicketPanelTypes(guildConfig: Record<string, unknown>): Tick
     label: asText(guildConfig.ticketEmbedButtonText, 'Ouvrir un ticket'),
     description: asText(guildConfig.ticketEmbedDesc, "Cliquez sur le bouton ci-dessous pour ouvrir un ticket d'assistance."),
     categoryId: asId(guildConfig.ticketCategoryId),
-    staffRoleId: asId(guildConfig.ticketStaffRoleId),
+    // Le type par défaut ne désigne aucun rôle : c'est l'équipe d'assistance du
+    // serveur (plusieurs rôles possibles) qui s'applique, via ticketRoles.
+    staffRoleId: null,
     emoji: '📩',
     buttonStyle: 'PRIMARY',
   });
@@ -362,10 +367,10 @@ export function canManageTicket(member: GuildMember | APIInteractionGuildMember 
 
   const moderatorRoleId = typeof guildConfig.moderatorRoleId === 'string' ? guildConfig.moderatorRoleId : null;
   if (moderatorRoleId && roleIds.includes(moderatorRoleId)) return true;
-  const configuredStaffRoleId = typeof guildConfig.ticketStaffRoleId === 'string' ? guildConfig.ticketStaffRoleId : null;
-  const effectiveTicketStaffRoleId = ticketStaffRoleId || configuredStaffRoleId;
-  if (effectiveTicketStaffRoleId && roleIds.includes(effectiveTicketStaffRoleId)) return true;
-  return false;
+  // Le rôle du ticket (celui de son type) s'ajoute à l'équipe du serveur : un
+  // ticket ouvert avant un changement de config reste géré par son équipe d'origine.
+  const allowed = new Set([...ticketAccessRoleIds(guildConfig), ...(ticketStaffRoleId ? [ticketStaffRoleId] : [])]);
+  return roleIds.some((id) => allowed.has(id));
 }
 
 // ─── Blacklist d'ouverture ────────────────────────────────────────────────────
@@ -428,6 +433,23 @@ async function rejectIfBlacklisted(
   return true;
 }
 
+/** Refus affiché au membre dont un rôle figure dans la liste d'exclusion. */
+export const TICKET_ROLE_EXCLUDED_MESSAGE = '⛔ Vous n\'êtes pas autorisé à ouvrir un ticket sur ce serveur.';
+
+/**
+ * Vrai si un rôle du membre est exclu de l'ouverture de tickets. Accepte le
+ * membre du cache comme le membre brut d'une interaction (identifiants seuls).
+ */
+export function isTicketOpeningRoleExcluded(
+  guildConfig: Record<string, unknown>,
+  member: GuildMember | APIInteractionGuildMember | null | undefined,
+): boolean {
+  if (!member) return false;
+  const roles = (member as GuildMember).roles as { cache?: Map<string, unknown> } | string[] | undefined;
+  const roleIds = Array.isArray(roles) ? roles : roles?.cache ? [...roles.cache.keys()] : [];
+  return hasTicketExcludedRole(guildConfig, roleIds);
+}
+
 // ─── Verrouillage jusqu'a la prise en charge ─────────────────────────────────
 
 /**
@@ -456,8 +478,7 @@ export async function applyTicketLockState(
   if (!(channel instanceof TextChannel)) return;
 
   const moderatorRoleId = typeof guildConfig.moderatorRoleId === 'string' ? guildConfig.moderatorRoleId : null;
-  const configuredStaffRoleId = typeof guildConfig.ticketStaffRoleId === 'string' ? guildConfig.ticketStaffRoleId : null;
-  const targets = [ticket.userId, ticket.staffRoleId, configuredStaffRoleId, moderatorRoleId]
+  const targets = [ticket.userId, ticket.staffRoleId, ...ticketAccessRoleIds(guildConfig), moderatorRoleId]
     .filter((id): id is string => typeof id === 'string' && id.length > 0);
 
   // `true` et non `null` au deverrouillage : c'est ce que pose la creation du
@@ -580,7 +601,7 @@ export async function sendTicketSetupEmbed(client: Client, guildId: string): Pro
     label: panelButton,
     description: panelDesc,
     categoryId: guildConfig.ticketCategoryId ?? null,
-    staffRoleId: guildConfig.ticketStaffRoleId ?? null,
+    staffRoleId: null,
     emoji: '📩',
     buttonStyle: 'PRIMARY',
   });
@@ -930,6 +951,11 @@ export async function handleTicketSelectMenu(client: Client, customId: string, i
 
   const typeId = interaction.values[0];
   const ticketType = resolveTicketPanelType(guildConfig, typeId);
+
+  if (isTicketOpeningRoleExcluded(guildConfig as Record<string, unknown>, interaction.member as GuildMember)) {
+    await interaction.reply({ content: TICKET_ROLE_EXCLUDED_MESSAGE, flags: [MessageFlags.Ephemeral] });
+    return;
+  }
 
   const isBlacklisted = await rejectIfBlacklisted(guildId, user.id, (content) =>
     interaction.reply({ content, flags: [MessageFlags.Ephemeral] }));
@@ -1535,6 +1561,11 @@ export async function handleTicketButton(client: Client, customId: string, inter
     const typeId = customId.startsWith('ticket:open_modal:') ? customId.split(':')[2] : null;
     const ticketType = resolveTicketPanelType(guildConfig, typeId);
 
+    if (isTicketOpeningRoleExcluded(guildConfig as Record<string, unknown>, member as GuildMember)) {
+      await interaction.reply({ content: TICKET_ROLE_EXCLUDED_MESSAGE, flags: [MessageFlags.Ephemeral] });
+      return;
+    }
+
     const isBlacklisted = await rejectIfBlacklisted(guildId, user.id, (content) =>
       interaction.reply({ content, flags: [MessageFlags.Ephemeral] }));
     if (isBlacklisted) return;
@@ -1715,6 +1746,9 @@ export async function handleTicketButton(client: Client, customId: string, inter
     // Panneau personnel du staff qui vient de prendre le ticket.
     await interaction.followUp({ ...(await buildStaffPanel(ticket, member as GuildMember)), flags: [MessageFlags.Ephemeral] })
       .catch((err) => logger.error('Ticket', 'Panneau staff non envoyé après prise en charge:', err));
+
+    // Historique et accès au salon : après le déverrouillage, qui rouvre l'écriture à tous.
+    await onTicketClaimed(client, ticket, guildConfig as unknown as Record<string, unknown>, user);
 
     // Logger
     await logTicketEvent(client, guildConfig, 'CLAIMED', ticket, user);
@@ -2337,8 +2371,13 @@ async function buildTicketWorkspace(
     return prisma.ticket.create({ data: data as never });
   };
 
+  // Rôle enregistré sur le ticket : celui du type, sinon le premier de l'équipe.
   const ticketStaffRoleId = ticketType.staffRoleId || guildConfig.ticketStaffRoleId || null;
-  const staffMention = ticketStaffRoleId ? `<@&${ticketStaffRoleId}>` : null;
+  // Mentions à l'ouverture : la liste dédiée, sinon l'équipe d'assistance.
+  const mentionRoleIds = ticketMentionRoleIds(guildConfig as Record<string, unknown>, ticketType.staffRoleId);
+  const staffMention = roleMentionText(mentionRoleIds);
+  // Rôles qui ont accès au ticket : assistance (ou rôle du type) + responsables.
+  const accessRoleIds = ticketAccessRoleIds(guildConfig as Record<string, unknown>, ticketType.staffRoleId);
 
   if (ticketMode === 'DM') {
     // ─── Mode DM : ticket via messages privés ───────────────────────
@@ -2427,7 +2466,7 @@ async function buildTicketWorkspace(
       new ButtonBuilder().setCustomId(`ticket:close:${ticket.id}`).setLabel('Fermer').setStyle(ButtonStyle.Danger).setEmoji('🔒')
     );
 
-    if (staffMention) await thread.send({ content: staffMention, allowedMentions: { roles: ticketStaffRoleId ? [ticketStaffRoleId] : [] } });
+    if (staffMention) await thread.send({ content: staffMention, allowedMentions: { roles: mentionRoleIds } });
     await thread.send({ embeds: [staffEmbed], components: [row] });
 
     const dmEmbed = new EmbedBuilder()
@@ -2513,7 +2552,7 @@ async function buildTicketWorkspace(
     await thread.send({
       components: [welcomeContainer, row],
       flags: MessageFlags.IsComponentsV2,
-      allowedMentions: { users: [user.id], roles: ticketStaffRoleId ? [ticketStaffRoleId] : [] },
+      allowedMentions: { users: [user.id], roles: mentionRoleIds },
     });
 
     // Le verrou vient apres l'accueil : un fil verrouille n'accepte plus que
@@ -2600,17 +2639,21 @@ async function buildTicketWorkspace(
 
     // Sur le serveur staff, les rôles du serveur principal n'existent pas : n'ajouter un
     // overwrite de rôle que s'il existe réellement sur la guilde cible.
-    const staffRoleForOverwrite = ticketStaffRoleId && targetGuild.roles.cache.has(ticketStaffRoleId)
+    const accessRolesOnGuild = accessRoleIds.filter((id) => targetGuild.roles.cache.has(id));
+    const staffRoleForOverwrite = accessRolesOnGuild.includes(ticketStaffRoleId ?? '')
       ? ticketStaffRoleId
-      : (onStaffServer && staffLinkForTicket?.simpleStaffRoleId && targetGuild.roles.cache.has(staffLinkForTicket.simpleStaffRoleId)
-        ? staffLinkForTicket.simpleStaffRoleId
-        : null);
+      : (accessRolesOnGuild[0]
+        ?? (onStaffServer && staffLinkForTicket?.simpleStaffRoleId && targetGuild.roles.cache.has(staffLinkForTicket.simpleStaffRoleId)
+          ? staffLinkForTicket.simpleStaffRoleId
+          : null));
 
-    if (staffRoleForOverwrite) {
-      permissionOverwrites.push(participantOverwrite(staffRoleForOverwrite));
+    const overwrittenRoleIds = new Set<string>(accessRolesOnGuild);
+    if (staffRoleForOverwrite) overwrittenRoleIds.add(staffRoleForOverwrite);
+    for (const roleId of overwrittenRoleIds) {
+      permissionOverwrites.push(participantOverwrite(roleId));
     }
 
-    if (guildConfig.moderatorRoleId && targetGuild.roles.cache.has(guildConfig.moderatorRoleId)) {
+    if (guildConfig.moderatorRoleId && targetGuild.roles.cache.has(guildConfig.moderatorRoleId) && !overwrittenRoleIds.has(guildConfig.moderatorRoleId)) {
       permissionOverwrites.push(participantOverwrite(guildConfig.moderatorRoleId));
     }
 
@@ -2661,7 +2704,7 @@ async function buildTicketWorkspace(
     await ticketChannel.send({
       components: [welcomeContainer, row],
       flags: MessageFlags.IsComponentsV2,
-      allowedMentions: { users: [user.id], roles: staffRoleForOverwrite ? [staffRoleForOverwrite] : [] },
+      allowedMentions: { users: [user.id], roles: mentionRoleIds },
     });
 
     if (lockUntilClaim) {
@@ -2995,7 +3038,12 @@ export async function executeTicketCreation(
     return null;
   }
 
-  // Dernier filet : le formulaire a pu etre ouvert avant la mise en blacklist.
+  // Dernier filet : le formulaire a pu etre ouvert avant la mise en blacklist
+  // ou avant l'ajout du rôle à la liste d'exclusion.
+  if (isTicketOpeningRoleExcluded(guildConfig as Record<string, unknown>, interaction.member as GuildMember | null)) {
+    await interaction.editReply({ content: TICKET_ROLE_EXCLUDED_MESSAGE });
+    return null;
+  }
   const blacklisted = await findActiveTicketBlacklist(guildId, user.id);
   if (blacklisted) {
     await interaction.editReply({ content: ticketBlacklistMessage(blacklisted) });
@@ -3611,6 +3659,7 @@ export async function autoClaimTicketOnStaffMessage(client: Client, message: Mes
     logger.error('Ticket', 'Error updating welcome message after auto-claim:', err);
   }
 
+  await onTicketClaimed(client, ticket, guildConfig as unknown as Record<string, unknown>, message.author);
   await logTicketEvent(client, guildConfig, 'CLAIMED', updatedTicket, message.author);
 }
 
@@ -3692,6 +3741,10 @@ export async function logTicketEvent(
           { name: 'Créateur', value: `<@${ticket.userId}>`, inline: true },
           { name: 'Fermé par', value: `<@${executor.id}>`, inline: true }
         ]);
+      {
+        const history = formatHandlingHistory(parseHandlingLog(ticket.handlingLog));
+        if (history) embed.addFields([{ name: 'Prise en charge', value: history }]);
+      }
       break;
 
     case 'REOPENED':
@@ -3968,6 +4021,10 @@ export async function closeTicket(
         .setDescription(`Le ticket a été fermé par <@${closedByUserId}>.\n\nLe personnel peut le réouvrir, l'archiver en lecture seule sans rien perdre, le protéger contre la suppression, ou le supprimer définitivement.`)
         .setColor(COLORS.danger as ColorResolvable)
         .setTimestamp();
+
+      // Qui a pris le ticket et par quelles équipes il est passé.
+      const handlingHistory = formatHandlingHistory(parseHandlingLog(updatedTicket.handlingLog));
+      if (handlingHistory) closeEmbed.addFields([{ name: 'Prise en charge', value: handlingHistory }]);
 
       const row = new ActionRowBuilder<ButtonBuilder>().addComponents(...buildClosedTicketButtons(updatedTicket));
 
