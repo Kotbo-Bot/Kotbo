@@ -898,6 +898,15 @@ export async function registerCrons(client: Client): Promise<void> {
     }, 2000);
   });
 
+  // 📊 Agrégats analytics fins: purge au-delà de la plage affichable, par lots (tous les jours à 04:05)
+  cron.schedule('5 4 * * *', async () => {
+    await runCronJob('stats-retention-prune', async () => {
+      const { pruneOldStats } = await import('../services/analytics/statsRetentionService.js');
+      const deleted = await pruneOldStats();
+      if (deleted > 0) logger.info('Cron', `${deleted} ligne(s) d'agrégats analytics purgée(s)`);
+    }, 2000);
+  });
+
   // 🛡️ Kotbo × AegisAI: extraits à l'échéance de la rétention des logs, détections et agrégats anciens (tous les jours à 03:50)
   cron.schedule('50 3 * * *', async () => {
     await runCronJob('aegis-prune', async () => {
