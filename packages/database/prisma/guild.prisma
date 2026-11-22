@@ -389,6 +389,7 @@ model Guild {
   sanctionReports SanctionReport[]
   sanctionEvidenceFiles SanctionEvidenceFile[]
   sanctionDeletions SanctionDeletion[]
+  dashboardFeatureUserAccesses DashboardFeatureUserAccess[]
   regulationArticles GuildRegulationArticle[]
   memberProfiles MemberProfile[]
   memberProfileHistories MemberProfileHistory[]

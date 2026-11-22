@@ -171,6 +171,30 @@ model DashboardFeatureConfig {
   @@map("dashboard_feature_configs")
 }
 
+// Droit accordé à une personne précise (hors rôle) : un tutorat validé débloque
+// des modules sans passer par un rôle Discord. S'ajoute aux droits par rôle.
+model DashboardFeatureUserAccess {
+  id String @id @default(cuid())
+
+  guildId String
+  userId String
+  featureKey String
+
+  canView Boolean @default(true)
+  canModerate Boolean @default(true)
+
+  source String @default("TUTORING")
+  sourceId String?
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([guildId, userId, featureKey])
+  @@index([guildId, sourceId])
+  @@map("dashboard_feature_user_accesses")
+}
+
 model DashboardFeatureRoleAccess {
   id String @id @default(cuid())
 
