@@ -65,6 +65,8 @@
       fullSyncError?: string | null;
     } | null;
     shardId: number;
+    assetsBytes: number;
+    backupsBytes: number;
   }
 
   interface AdminStats {
@@ -220,6 +222,7 @@
         case 'joinedAt': return (new Date(a.joinedAt).getTime() - new Date(b.joinedAt).getTime()) * direction;
         case 'shardId': return (a.shardId - b.shardId) * direction;
         case 'activated': return (Number(a.activated) - Number(b.activated)) * direction;
+        case 'storage': return (storageOf(a) - storageOf(b)) * direction;
         default: return (a.memberCount - b.memberCount) * direction;
       }
     });
@@ -344,6 +347,19 @@
     return value.toLocaleString('fr-FR');
   }
 
+  function storageOf(guild: AdminGuild): number {
+    return (guild.assetsBytes ?? 0) + (guild.backupsBytes ?? 0);
+  }
+
+  function formatBytes(bytes: number): string {
+    if (bytes < 1024) return `${bytes} o`;
+    const units = ['Ko', 'Mo', 'Go', 'To'];
+    let value = bytes / 1024;
+    let i = 0;
+    while (value >= 1024 && i < units.length - 1) { value /= 1024; i++; }
+    return `${value.toLocaleString('fr-FR', { maximumFractionDigits: value < 10 ? 1 : 0 })} ${units[i]}`;
+  }
+
   function formatDate(value: string | null): string {
     if (!value) return '-';
     return new Date(value).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -395,6 +411,7 @@
     { key: 'plan', label: 'Offre', sortKey: 'plan', width: 'w-28' },
     { key: 'status', label: 'État', sortKey: 'activated', width: 'w-44' },
     { key: 'members', label: 'Membres', sortKey: 'memberCount', align: 'right', width: 'w-28' },
+    { key: 'storage', label: 'Stockage', sortKey: 'storage', align: 'right', width: 'w-28', hideBelow: 'md' },
     { key: 'shard', label: 'Shard', sortKey: 'shardId', align: 'right', width: 'w-20', hideBelow: 'md' },
     { key: 'joined', label: 'Ajouté le', sortKey: 'joinedAt', align: 'right', width: 'w-32', hideBelow: 'lg' },
     { key: 'actions', label: '', align: 'right', width: 'w-24' },
@@ -530,6 +547,10 @@
         </td>
 
         <td class="px-4 py-3 text-right hidden md:table-cell">
+          <span class="text-body-sm text-on-surface tabular-nums">{formatBytes(storageOf(guild))}</span>
+        </td>
+
+        <td class="px-4 py-3 text-right hidden md:table-cell">
           <span class="text-xs text-on-surface-variant tabular-nums">#{guild.shardId}</span>
         </td>
 
@@ -633,6 +654,23 @@
             Synchronisation complète en cours - étape&nbsp;: {guild.statsConfig.fullSyncStage === 'MEMBERS' ? 'membres' : 'historique'}.
           </p>
         {/if}
+      </div>
+
+      <!-- Stockage -->
+      <div class="rounded-xl border border-outline-variant/25 bg-surface-container-low/40 p-3.5 space-y-2">
+        <p class="text-xs font-semibold text-on-surface-variant">Stockage</p>
+        <div class="flex items-center justify-between gap-3">
+          <span class="text-body-sm text-on-surface-variant">Images du site (disque)</span>
+          <span class="text-body-sm text-on-surface tabular-nums">{formatBytes(guild.assetsBytes ?? 0)}</span>
+        </div>
+        <div class="flex items-center justify-between gap-3">
+          <span class="text-body-sm text-on-surface-variant">Sauvegardes (base)</span>
+          <span class="text-body-sm text-on-surface tabular-nums">{formatBytes(guild.backupsBytes ?? 0)}</span>
+        </div>
+        <div class="flex items-center justify-between gap-3">
+          <span class="text-body-sm font-semibold text-on-surface">Total</span>
+          <span class="text-body-sm font-semibold text-on-surface tabular-nums">{formatBytes(storageOf(guild))}</span>
+        </div>
       </div>
 
       <!-- Activation -->
