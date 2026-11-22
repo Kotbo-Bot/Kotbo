@@ -53,6 +53,23 @@ export type TranscriptDataV1 = DiscordConversation & {
 /** Bit `VerifiedBot` des drapeaux publics d'un utilisateur Discord. */
 const VERIFIED_BOT_FLAG = 1 << 16;
 
+/**
+ * Auteur d'un message. Un webhook a un seul identifiant pour toutes les
+ * identités qu'il emprunte : les réponses « au nom du staff » (`sendAsStaff`)
+ * passent toutes par le même, chacune avec le pseudo et l'avatar de son
+ * auteur. Chaque identité (webhook, pseudo, avatar) reçoit donc son propre
+ * identifiant, stable pour regrouper les messages consécutifs, et numérique
+ * comme un identifiant Discord (la lib en tire l'avatar par défaut).
+ */
+export function messageAuthorId(msg: Message): string {
+  if (!msg.webhookId) return msg.author.id;
+  let hash = 2166136261n;
+  for (const char of `${msg.webhookId}:${msg.author.username}:${msg.author.avatar ?? ''}`) {
+    hash = ((hash ^ BigInt(char.codePointAt(0) ?? 0)) * 16777619n) % 10n ** 17n;
+  }
+  return `8${hash.toString().padStart(17, '0')}`;
+}
+
 function serializeUser(user: User): APIUser {
   const primaryGuild = user.primaryGuild;
   return {
@@ -159,7 +176,7 @@ export function serializeMessage(msg: Message, referenced?: Message | null): API
     id: msg.id,
     channel_id: msg.channelId,
     type: msg.type,
-    author: serializeUser(msg.author),
+    author: { ...serializeUser(msg.author), id: messageAuthorId(msg) },
     content: msg.content,
     timestamp: msg.createdAt.toISOString(),
     edited_timestamp: msg.editedAt?.toISOString() ?? null,
@@ -251,7 +268,8 @@ export async function buildConversation(
   const entities: Required<MessageEntities> = { users: {}, roles: {}, channels: {}, emojis: {} };
   const authors: Record<string, TranscriptAuthor> = {};
   const addAuthor = (user: User, msg?: Message) => {
-    if (!authors[user.id]) authors[user.id] = authorOf(user, guild, msg);
+    const id = msg ? messageAuthorId(msg) : user.id;
+    if (!authors[id]) authors[id] = authorOf(user, guild, msg);
   };
 
   const serialized: APIMessage[] = [];

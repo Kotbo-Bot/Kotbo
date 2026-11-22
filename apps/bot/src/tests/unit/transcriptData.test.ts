@@ -242,3 +242,31 @@ describe('buildConversation', () => {
     expect(archived.messages[0].referenced_message).toBeNull();
   });
 });
+
+describe('messages envoyés par webhook (réponses au nom du staff)', () => {
+  const webhookId = '900000000000000001';
+  const viaWebhook = (id: string, name: string, avatar: string) => message(id, user(webhookId, name, {
+    bot: true, avatar, displayAvatarURL: () => `https://cdn.discordapp.com/avatars/${webhookId}/${avatar}.webp`,
+  }), { webhookId, content: `Réponse de ${name}` });
+
+  test('chaque identité du webhook garde son auteur', async () => {
+    const alice = viaWebhook('500000000000000030', 'Alice', 'hash-alice');
+    const bob = viaWebhook('500000000000000031', 'Bob', 'hash-bob');
+    const aliceAgain = viaWebhook('500000000000000032', 'Alice', 'hash-alice');
+
+    const data = await buildConversation(guild, [alice, bob, aliceAgain]);
+    const [first, second, third] = data.messages.map((msg) => msg.author.id);
+
+    expect(first).not.toBe(second);
+    // Même webhook, même pseudo et même avatar : même auteur, messages regroupés.
+    expect(third).toBe(first);
+    expect(first).toMatch(/^\d{18}$/);
+    expect(data.authors[first]).toMatchObject({ displayName: 'Alice', avatarUrl: `https://cdn.discordapp.com/avatars/${webhookId}/hash-alice.webp` });
+    expect(data.authors[second]).toMatchObject({ displayName: 'Bob', avatarUrl: `https://cdn.discordapp.com/avatars/${webhookId}/hash-bob.webp` });
+    expect(data.messages[0].webhook_id).toBe(webhookId);
+  });
+
+  test('un message ordinaire garde l\u2019identifiant de son auteur', () => {
+    expect(serializeMessage(message('500000000000000033', alice)).author.id).toBe(alice.id);
+  });
+});
