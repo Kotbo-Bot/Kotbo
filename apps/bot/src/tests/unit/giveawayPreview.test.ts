@@ -1,16 +1,15 @@
 import { describe, expect, test } from 'bun:test';
 import {
   fillTemplate,
-  renderPreview,
-  toDiscordHtml,
+  renderMarkdown,
   type PreviewLabels,
   type PreviewSample,
 } from '../../../../dashboard/src/lib/giveawayPreview.ts';
 
 /**
- * Aperçu de l'annonce, rendu dans le dashboard. Il est testé depuis ici faute
- * de tests côté dashboard, et parce que son point sensible le mérite : le
- * rendu insère du HTML construit à partir d'un gabarit librement saisi.
+ * Aperçu de l'annonce, rendu dans le dashboard par @arcscord/discord-ui. Le
+ * gabarit, librement saisi, ressort en Markdown Discord : c'est la lib qui le
+ * met en forme et en échappe le HTML, le rendu ne produit aucune balise.
  */
 
 const labels: PreviewLabels = {
@@ -39,28 +38,58 @@ const sample: PreviewSample = {
   endsAt: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000),
 };
 
-describe('toDiscordHtml', () => {
-  test('neutralise le HTML avant toute mise en forme', () => {
-    // Un gabarit est saisi librement : sans cette neutralisation, il ouvrirait
-    // une brèche dans la page de configuration.
-    const rendered = toDiscordHtml('<img src=x onerror="alert(1)">');
+/** Nom de la mention `<@id>` d'après les entités renvoyées. */
+function mentionNames(markdown: string, users: Record<string, { name: string }> = {}): string {
+  return markdown.replace(/<@(\d{17,20})>/g, (_, id: string) => `@${users[id]?.name ?? '?'}`);
+}
 
-    expect(rendered).not.toContain('<img');
-    expect(rendered).toContain('&lt;img');
+describe('renderMarkdown', () => {
+  test('laisse le HTML d\'un gabarit en texte, sans le transformer', () => {
+    // Plus de HTML construit ici : la lib affiche le texte tel quel.
+    expect(renderMarkdown('<img src=x onerror="alert(1)">', sample, labels).markdown)
+      .toBe('<img src=x onerror="alert(1)">');
   });
 
-  test('rend le balisage que le bot produit', () => {
-    expect(toDiscordHtml('**gras**')).toBe('<strong>gras</strong>');
-    expect(toDiscordHtml('*doux*')).toBe('<em>doux</em>');
-    expect(toDiscordHtml('~~barré~~')).toBe('<s>barré</s>');
-    expect(toDiscordHtml('une\ndeux')).toBe('une<br />deux');
+  test('mentions du remplissage en vraies mentions nommées, virgule hors mention', () => {
+    const { markdown, entities } = renderMarkdown('Bravo {winners} de {server}', sample, labels);
+    expect(markdown).toMatch(/^Bravo <@\d{18}>, <@\d{18}> de Mon serveur$/);
+    expect(mentionNames(markdown, entities.users)).toBe('Bravo @Camille, @Dominique de Mon serveur');
+  });
+
+  test('assemble le gabarit : la variable porte déjà l\'arobase', () => {
+    const { markdown, entities } = renderMarkdown('**{prize}** pour {host}', sample, labels);
+    expect(mentionNames(markdown, entities.users)).toBe('**Un mois de Nitro** pour @Alex');
+  });
+
+  test('titre ou pied : le nom reste écrit en clair, comme Discord', () => {
+    expect(renderMarkdown('Concours de {host}', sample, labels, { mentions: false }))
+      .toEqual({ markdown: 'Concours de @Alex', entities: {} });
   });
 
   test('laisse nue une arobase simplement tapée', () => {
     // Discord ne fait rien d'une arobase écrite à la main : seule une vraie
     // mention devient une pastille, et l'aperçu doit dire la même chose.
-    expect(toDiscordHtml('écris @Camille pour la retrouver'))
-      .toBe('écris @Camille pour la retrouver');
+    expect(renderMarkdown('écris @Camille pour la retrouver', sample, labels))
+      .toEqual({ markdown: 'écris @Camille pour la retrouver', entities: {} });
+  });
+
+  test('mention d\'un rôle nommé avec un emoji ou plusieurs mots', () => {
+    // La pastille se devinait du texte et s'arrêtait au premier caractère qui
+    // n'était ni lettre ni chiffre : le nom sortait nu, emoji compris.
+    const orne = { ...sample, bonusRoles: [{ name: '🔺 Ancien Membre', weight: 4 }] };
+    const { markdown, entities } = renderMarkdown('{bonusRoles}', orne, labels);
+    expect(mentionNames(markdown, entities.users)).toContain('@🔺 Ancien Membre ×4');
+  });
+
+  test('rôles avantagés, le plus favorisé devant', () => {
+    const { markdown, entities } = renderMarkdown('{bonusRoles}', sample, labels);
+    expect(mentionNames(markdown, entities.users))
+      .toBe('\n**Chances supplémentaires :**\n@Boosters ×5\n@Actifs ×2\n');
+  });
+
+  test('émojis du serveur en entité, pour leur image', () => {
+    const { entities } = renderMarkdown('🎉 <:gift:123456789012345678> {prize}', sample, labels);
+    expect(entities.emojis?.['123456789012345678']).toMatchObject({ name: 'gift' });
   });
 });
 
@@ -68,33 +97,13 @@ describe('fillTemplate', () => {
   test('remplace les variables du concours', () => {
     expect(fillTemplate('{prize} pour {winnerCount} sur {participants}', sample, labels))
       .toBe('Un mois de Nitro pour 2 sur 37');
-    // La virgule qui sépare deux gagnants reste hors des pastilles.
-    expect(renderPreview('Bravo {winners} de {server}', sample, labels))
-      .toBe('Bravo <span class="mention">@Camille</span>, '
-        + '<span class="mention">@Dominique</span> de Mon serveur');
   });
 
-  test('compose les blocs des récompenses et des rôles avantagés', () => {
+  test('compose les blocs des récompenses', () => {
     const rewards = fillTemplate('{bonus}', sample, labels);
     expect(rewards).toContain('**En plus du lot :**');
     expect(rewards).toContain('**Pièces :** +250');
     expect(rewards).not.toContain('Objet');
-
-    // Le rôle le plus favorisé passe devant, comme dans l'annonce réelle.
-    expect(renderPreview('{bonusRoles}', sample, labels)).toBe(
-      '<br /><strong>Chances supplémentaires :</strong><br />'
-      + '<span class="mention">@Boosters</span> ×5<br />'
-      + '<span class="mention">@Actifs</span> ×2<br />',
-    );
-  });
-
-  test('pastille un rôle nommé avec un emoji ou plusieurs mots', () => {
-    // La pastille se devinait du texte et s'arrêtait au premier caractère qui
-    // n'était ni lettre ni chiffre : le nom sortait nu, emoji compris.
-    const orne = { ...sample, bonusRoles: [{ name: '🔺 Ancien Membre', weight: 4 }] };
-
-    expect(renderPreview('{bonusRoles}', orne, labels))
-      .toContain('<span class="mention">@🔺 Ancien Membre</span> ×4');
   });
 
   test('efface les blocs facultatifs quand il n\'y a rien à montrer', () => {
@@ -109,16 +118,5 @@ describe('fillTemplate', () => {
     // Discord affiche un compte à rebours vivant, impossible à reproduire.
     expect(rendered).toBe('dans 2 j');
     expect(rendered).not.toContain('<t:');
-  });
-});
-
-describe('renderPreview', () => {
-  test('assemble le gabarit et sa mise en forme', () => {
-    // La variable porte déjà l'arobase : en ajouter une la doublerait.
-    const rendered = renderPreview('**{prize}** pour {host}', sample, labels);
-
-    expect(rendered).toBe(
-      '<strong>Un mois de Nitro</strong> pour <span class="mention">@Alex</span>',
-    );
   });
 });
