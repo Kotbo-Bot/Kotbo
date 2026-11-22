@@ -961,10 +961,7 @@ export function createBillingRouter(client: Client): OpenAPIHono {
       include: {
         network: {
           include: {
-            members: {
-              include: { guild: { select: { id: true, name: true } } },
-              orderBy: { addedAt: 'asc' },
-            },
+            members: { orderBy: { addedAt: 'asc' } },
           },
         },
       },
@@ -982,7 +979,8 @@ export function createBillingRouter(client: Client): OpenAPIHono {
               const g = client.guilds.cache.get(m.guildId);
               return {
                 guildId: m.guildId,
-                name: g?.name ?? m.guild.name,
+                // `Guild` n'a pas de nom en base : seul le cache Discord le connaît.
+                name: g?.name ?? m.guildId,
                 iconUrl: g?.iconURL({ size: 64, extension: 'png' }) ?? null,
                 role: m.role,
                 addedAt: m.addedAt.toISOString(),
