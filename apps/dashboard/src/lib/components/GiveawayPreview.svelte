@@ -9,8 +9,7 @@
   import { m } from '../i18n';
   import { authStore } from '../stores/auth.svelte';
   import { dashboardStore } from '../stores/dashboard.svelte';
-  import { MessageComponents, type ButtonView, type MessageComponent } from '@arcscord/discord-ui-svelte';
-  import { botEmbedToV2 } from './discord/botEmbedV2';
+  import { MessageComponents, type ButtonView, type ContainerChild, type MessageComponent } from '@arcscord/discord-ui-svelte';
   import DiscordScope from './discord/DiscordScope.svelte';
   import { mergeEntities } from './discord/previewEntities.svelte';
   import { renderMarkdown, type PreviewLabels, type PreviewSample } from '../giveawayPreview';
@@ -123,16 +122,37 @@
       : { name: raw };
   });
 
-  /** Message tel que le bot le publie : embed converti en conteneur V2, bouton en dessous. */
+  /**
+   * Annonce en Components V2, comme le bot la publie : conteneur à la couleur
+   * de l'état (titre `###`, vignette en accessoire, texte, image, pied `-#`
+   * sous un séparateur), bouton de participation en dessous.
+   */
+  const container = $derived.by((): ContainerChild[] => {
+    const children: ContainerChild[] = [];
+    const heading = title.markdown ? `### ${title.markdown}` : '';
+    if (appearance.thumbnailUrl) {
+      children.push({
+        id: 'giveaway-header',
+        kind: 'section',
+        components: heading ? [{ id: 'giveaway-title', kind: 'text-display', content: heading }] : [],
+        accessory: { id: 'giveaway-thumbnail', kind: 'thumbnail', media: { id: 'giveaway-thumbnail-media', url: appearance.thumbnailUrl, alt: '' } },
+      });
+    } else if (heading) {
+      children.push({ id: 'giveaway-title', kind: 'text-display', content: heading });
+    }
+    if (body.markdown) children.push({ id: 'giveaway-body', kind: 'text-display', content: body.markdown });
+    if (appearance.imageUrl) {
+      children.push({ id: 'giveaway-image', kind: 'media-gallery', items: [{ id: 'giveaway-image-media', url: appearance.imageUrl, alt: '' }] });
+    }
+    if (footer.markdown) {
+      children.push({ id: 'giveaway-footer-separator', kind: 'separator', divider: false, spacing: 'small' });
+      children.push({ id: 'giveaway-footer', kind: 'text-display', content: `-# ${footer.markdown}` });
+    }
+    return children;
+  });
+
   const components = $derived<MessageComponent[]>([
-    botEmbedToV2({
-      color: appearance.embedColorActive,
-      ...(title.markdown ? { title: title.markdown } : {}),
-      ...(body.markdown ? { description: body.markdown } : {}),
-      ...(appearance.thumbnailUrl ? { thumbnailUrl: appearance.thumbnailUrl } : {}),
-      ...(appearance.imageUrl ? { imageUrl: appearance.imageUrl } : {}),
-      ...(footer.markdown ? { footer: footer.markdown } : {}),
-    }, 'giveaway'),
+    { id: 'giveaway', kind: 'container', accentColor: appearance.embedColorActive, components: container },
     {
       id: 'giveaway-actions',
       kind: 'action-row',
