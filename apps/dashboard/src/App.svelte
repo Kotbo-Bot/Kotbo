@@ -239,6 +239,7 @@
     if (path.startsWith("/schedules")) return "settings";
     if (path.startsWith("/mcp-settings")) return "settings";
     if (path.startsWith("/webhooks")) return "settings";
+    if (path.startsWith("/network")) return "settings";
     if (path.startsWith("/fun")) return "fun";
     if (path.startsWith("/channel-health")) return "channel_health";
     if (path.startsWith("/channel-links")) return "channel_links";
@@ -300,7 +301,7 @@
   const ADMIN_ROUTES = [
     "/management", "/modules", "/server-template", "/setup",
     "/migration", "/campaigns", "/module-settings", "/alerts",
-    "/command-access", "/backups", "/schedules", "/mcp-settings", "/webhooks",
+    "/command-access", "/backups", "/schedules", "/mcp-settings", "/webhooks", "/network",
     "/custom-bot", "/automations", "/staff-management", "/channels-management",
   ];
 
@@ -1118,6 +1119,10 @@
             <LazyRoute
               path="/billing"
               load={() => import("./pages/Billing.svelte")}
+            />
+            <LazyRoute
+              path="/network"
+              load={() => import("./pages/Network.svelte")}
             />
             <LazyRoute
               path="/channel-links"
