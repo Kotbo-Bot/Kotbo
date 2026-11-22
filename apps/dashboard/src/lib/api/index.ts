@@ -60,6 +60,7 @@ export * from './billing';
 export * from './servers';
 export * from './adminAnalytics';
 export * from './outgoingWebhooks';
+export * from './mail';
 export * from './site';
 export * from './automodSimulation';
 export * from './discordAutomod';

@@ -1056,6 +1056,10 @@
                 load={() => import("./pages/OutgoingWebhooks.svelte")}
               />
               <LazyRoute
+                path="/mail/*"
+                load={() => import("./pages/Mail.svelte")}
+              />
+              <LazyRoute
                 path="/custom-bot"
                 load={() => import("./pages/CustomBot.svelte")}
               />

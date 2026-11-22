@@ -14185,6 +14185,7 @@
   "anx_rr_role_deleted": "Deleted role",
   "anx_rr_menu_deleted": "Deleted menu",
   "nav_outgoing_webhooks": "Outgoing webhooks",
+  "nav_mail": "Mail",
   "owh_page_desc": "Send your server's events, signed, to your CRM, spreadsheet, n8n or your own backend.",
   "owh_add": "Add endpoint",
   "owh_back": "All webhooks",
