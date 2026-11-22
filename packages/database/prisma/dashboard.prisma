@@ -171,6 +171,27 @@ model DashboardFeatureConfig {
   @@map("dashboard_feature_configs")
 }
 
+// Disposition des onglets de la fiche membre selon le rôle du staff qui la
+// consulte : la première règle (par position) dont un rôle correspond s'applique.
+model MemberCaseLayout {
+  id String @id @default(cuid())
+
+  guildId String
+  name String
+  position Int @default(0)
+  roleIds String[] @default([])
+  tabOrder String[] @default([])
+  hiddenTabs String[] @default([])
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([guildId, position])
+  @@map("member_case_layouts")
+}
+
 // Droit accordé à une personne précise (hors rôle) : un tutorat validé débloque
 // des modules sans passer par un rôle Discord. S'ajoute aux droits par rôle.
 model DashboardFeatureUserAccess {
