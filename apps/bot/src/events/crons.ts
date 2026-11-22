@@ -225,6 +225,10 @@ export async function registerCrons(client: Client): Promise<void> {
     },
     'staff-warnings-expiration': expireStaffWarnings,
     'staff-blacklist-expiration': expireStaffBlacklist,
+    'staff-night-report': async () => {
+      const { sendNightReports } = await import('../services/staff/staffNightReport.js');
+      await sendNightReports(client);
+    },
     'activity-10min-snapshot': async () => {
       await runActivitySnapshot(client);
     },
@@ -954,6 +958,14 @@ export async function registerCrons(client: Client): Promise<void> {
   cron.schedule('0 12 * * *', async () => {
     await runCronJob('missing-reports-check', async () => {
       await checkMissingReports();
+    }, 2000);
+  }, { timezone: 'Europe/Paris' });
+
+  // 🌙 Rapport de la nuit dans le salon de logs du serveur staff (8h, heure de Paris)
+  cron.schedule('0 8 * * *', async () => {
+    await runCronJob('staff-night-report', async () => {
+      const { sendNightReports } = await import('../services/staff/staffNightReport.js');
+      await sendNightReports(client);
     }, 2000);
   }, { timezone: 'Europe/Paris' });
 
