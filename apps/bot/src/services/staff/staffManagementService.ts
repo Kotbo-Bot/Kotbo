@@ -130,10 +130,12 @@ const resolveHierarchyAssignmentForGrade = async (guildId: string, grade: string
     return { hierarchyId: normalizedHierarchyId, grade: normalizedHierarchyGrade };
   }
 
-  const staffRole = await prisma.staffRole.findFirst({
+  const matches = await prisma.staffRole.findMany({
     where: { guildId, enabled: true, name: grade.trim() },
     select: { hierarchyId: true, name: true },
   });
+  // Même nom de grade dans plusieurs hiérarchies : on ne devine pas.
+  const staffRole = new Set(matches.map((r) => r.hierarchyId)).size === 1 ? matches[0] : null;
 
   if (staffRole?.hierarchyId) {
     return {
@@ -326,7 +328,8 @@ export const syncStaffHierarchyMembershipsThrottled = async (guildId: string) =>
 export const syncStaffDiscordRoles = async (
   guildId: string,
   userId: string,
-  gradeName: string
+  gradeName: string,
+  hierarchyId?: string | null
 ) => {
   try {
     const client = getClient();
@@ -357,7 +360,10 @@ export const syncStaffDiscordRoles = async (
       return;
     }
 
-    const targetStaffRole = staffRoles.find(r => r.name.toLowerCase() === gradeName.toLowerCase());
+    const sameName = staffRoles.filter(r => r.name.toLowerCase() === gradeName.toLowerCase());
+    // Homonymes entre hiérarchies : on prend celui de la hiérarchie demandée, jamais le premier venu.
+    const targetStaffRole = sameName.find(r => hierarchyId && r.hierarchyId === hierarchyId)
+      ?? (sameName.length === 1 ? sameName[0] : undefined);
     const targetRoleId = targetStaffRole?.discordRoleId;
 
     // Roles to add
@@ -423,6 +429,21 @@ export const addStaffMember = async (
   hierarchyId?: string,
   hierarchyGrade?: string
 ) => {
+  // Ajout par ID brut : le dashboard n'a aucun nom, on le résout côté bot.
+  if (!username && !displayName) {
+    try {
+      const client = getClient();
+      const gm = await client.guilds.cache.get(guildId)?.members.fetch(userId).catch(() => null);
+      const u = gm?.user ?? await client.users.fetch(userId).catch(() => null);
+      if (u) {
+        username = u.username;
+        displayName = gm?.displayName || u.globalName || u.username;
+        avatarUrl = avatarUrl || u.displayAvatarURL();
+        userTag = userTag || u.tag;
+      }
+    } catch { /* identité facultative, on garde l'ID */ }
+  }
+
   const result = await upsertStaffMemberRow(guildId, userId, {
     update: {
       grade,
@@ -452,7 +473,7 @@ export const addStaffMember = async (
   }
 
   // Sync Discord roles in background
-  void syncStaffDiscordRoles(guildId, userId, grade).catch(() => null);
+  void syncStaffDiscordRoles(guildId, userId, grade, resolvedHierarchyAssignment?.hierarchyId).catch(() => null);
 
   await cache.invalidateGuild(guildId);
 
