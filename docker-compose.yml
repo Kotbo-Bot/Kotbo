@@ -21,6 +21,21 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-kotbo}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kotbo}
       POSTGRES_DB: ${POSTGRES_DB:-kotbo}
+    # lz4 : compression des gros JSON/textes (TOAST) bien plus rapide que pglz,
+    # a taux comparable. Ne s'applique qu'aux nouvelles valeurs.
+    # pg_stat_statements : requetes les plus lentes (cf. scripts/db-audit.sql).
+    # Autovacuum plus precoce : les tables d'agregats sont mises a jour en continu,
+    # le seuil par defaut (20 %) laisse trop de lignes mortes s'accumuler.
+    command:
+      - postgres
+      - -c
+      - default_toast_compression=lz4
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - autovacuum_vacuum_scale_factor=0.05
+      - -c
+      - autovacuum_analyze_scale_factor=0.02
     # 5432 est deja pris sur beaucoup de postes (Postgres.app, Homebrew).
     # On expose 5433 cote hote : DATABASE_URL doit pointer sur ce port.
     ports:
