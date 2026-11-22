@@ -104,18 +104,21 @@
     <div class="flex items-center justify-center h-full text-white/50 text-sm">{error}</div>
   {:else if transcript && conversation}
     <DiscordScope class="transcript-view" entities={conversation.entities}>
-      <ChannelHeader name={transcript.channel.name} topic={transcript.channel.topic ?? undefined}>
-        {#snippet actions()}
-          <span class="transcript-summary">{summary}</span>
-        {/snippet}
-      </ChannelHeader>
-      <div class="transcript-messages">
-        <MessageList messages={visibleViews} showDateSeparators />
-        {#if remaining > 0}
-          <div bind:this={sentinel} class="transcript-more">
-            <button type="button" onclick={showMore}>{m.d7_ts_show_more({ count: Math.min(PAGE_SIZE, remaining) })}</button>
-          </div>
-        {/if}
+      <!-- Colonne centrée, comme les transcriptions historiques et le salon Discord. -->
+      <div class="transcript-column">
+        <ChannelHeader name={transcript.channel.name} topic={transcript.channel.topic ?? undefined}>
+          {#snippet actions()}
+            <span class="transcript-summary">{summary}</span>
+          {/snippet}
+        </ChannelHeader>
+        <div class="transcript-messages">
+          <MessageList messages={visibleViews} showDateSeparators />
+          {#if remaining > 0}
+            <div bind:this={sentinel} class="transcript-more">
+              <button type="button" onclick={showMore}>{m.d7_ts_show_more({ count: Math.min(PAGE_SIZE, remaining) })}</button>
+            </div>
+          {/if}
+        </div>
       </div>
     </DiscordScope>
   {:else if iframeUrl}
@@ -133,17 +136,19 @@
 
 <style>
   :global(.arcscord-discord-ui.transcript-view) {
-    display: flex;
-    flex-direction: column;
     height: 100%;
-    min-height: 0;
+    overflow-y: auto;
+  }
+
+  /* Mêmes mesures que l'ancienne page : 900 px de large, 24 px de marge. */
+  .transcript-column {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 24px;
   }
 
   .transcript-messages {
-    flex: 1;
-    min-height: 0;
-    overflow-y: auto;
-    padding: 1rem 0 2rem;
+    padding-top: 1rem;
   }
 
   .transcript-summary {
