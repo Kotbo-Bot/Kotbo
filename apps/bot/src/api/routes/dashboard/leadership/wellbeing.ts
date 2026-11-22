@@ -233,8 +233,10 @@ export function createWellbeingRouter(client: Client) {
       if (!state.hasCaseAccess) {
         return send(c, { error: 'Espace cloisonné : accès réservé à la cellule bien-être (ou break-glass direction).' }, 403);
       }
+      // Filtre optionnel : la fiche membre ne charge que les dossiers de la personne.
+      const subjectUserId = c.req.query('subjectUserId');
       const cases = await prisma.wellbeingCase.findMany({
-        where: { guildId },
+        where: { guildId, ...(subjectUserId && /^\d{17,20}$/.test(subjectUserId) ? { subjectUserId } : {}) },
         include: { notes: { orderBy: { createdAt: 'asc' } } },
         orderBy: { updatedAt: 'desc' },
       });

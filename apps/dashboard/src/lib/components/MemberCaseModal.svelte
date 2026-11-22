@@ -19,7 +19,8 @@
   import { inviteDetailsModal } from '../stores/inviteDetailsModal.svelte';
   import { channelDetailsModal } from '../stores/channelDetailsModal.svelte';
   import { serverDetailsModal } from '../stores/serverDetailsModal.svelte';
-  import { fetchMemberCase, fetchMemberDetailedAnalytics, updateSanctionReport, linkMemberAccount, unlinkMemberAccount, updateMemberNote, runMemberCaseAction, searchMessages, formatMessageSearchTotal, fetchMessageLogChannels } from '../api';
+  import MemberWellbeingPanel from './MemberWellbeingPanel.svelte';
+  import { dashboardFetch, fetchMemberCase, fetchMemberDetailedAnalytics, updateSanctionReport, linkMemberAccount, unlinkMemberAccount, updateMemberNote, runMemberCaseAction, searchMessages, formatMessageSearchTotal, fetchMessageLogChannels } from '../api';
   import { toDateTimeLocal, typeLabel as formatTypeLabel } from '../sanctions/formatters';
   import { buildReportRuleOptions, getRuleIdsFromBrokenRules, getRulesFromBrokenRules, buildBrokenRulesPayload } from '../sanctions/reportRules';
   import SelectedRuleChips from './sanctions/SelectedRuleChips.svelte';
@@ -43,7 +44,7 @@
   import MemberReputationCard from './members/MemberReputationCard.svelte';
 
   import { errorMessage } from '@kotbo/shared';
-  type MemberCaseTab = 'extra' | 'resume' | 'identite' | 'activite' | 'messages' | 'logs' | 'sanctions' | 'invites' | 'connexions' | 'analytics' | 'contenu' | 'candidatures' | 'linked_accounts' | 'notes';
+  type MemberCaseTab = 'extra' | 'resume' | 'identite' | 'activite' | 'messages' | 'logs' | 'sanctions' | 'invites' | 'connexions' | 'analytics' | 'contenu' | 'candidatures' | 'linked_accounts' | 'notes' | 'wellbeing';
 
   type MemberAnalyticsResponse = {
     totalMessages: number;
@@ -100,6 +101,17 @@
   }>();
 
   let activeTab = $state<MemberCaseTab>('resume');
+  // Onglet Bien-être : seulement pour la cellule, et sur le serveur sélectionné.
+  let wellbeingAccess = $state(false);
+  $effect(() => {
+    const id = userId;
+    wellbeingAccess = false;
+    if (!open || !id || caseGuildId) return;
+    dashboardFetch('/wellbeing/status')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((st) => { if (userId === id) wellbeingAccess = !!st?.hasCaseAccess; })
+      .catch(() => {});
+  });
   let analyticsData = $state<MemberAnalyticsResponse | null>(null);
   /** Les 30 jours d'avant, jour par jour : la courbe les montre en pointilles, comme Analytics. */
   let previousTrend = $state<Array<{ dateKey: string; messages: number; voiceMinutes: number }>>([]);
@@ -777,6 +789,7 @@
     { id: 'connexions', label: m.mcm_tab_connections(), icon: 'link' },
     { id: 'linked_accounts', label: m.mcm_tab_linked(), icon: 'link-2', count: () => (caseData?.linkedAccounts?.length ?? 0) + pendingCrossServerLinks.length },
     { id: 'notes', label: m.mcm_tab_notes(), icon: 'edit-3' },
+    ...(wellbeingAccess ? [{ id: 'wellbeing' as const, label: 'Bien-être', icon: 'heart' }] : []),
   ]);
 
   const displayName = $derived(caseData?.profile?.displayName || caseData?.profile?.globalName || userName);
@@ -2077,6 +2090,8 @@
                   {/if}
                 </div>
               </SectionCard>
+            {:else if activeTab === 'wellbeing' && userId}
+              <MemberWellbeingPanel {userId} userName={displayName} />
             {/if}
           </div>
 
