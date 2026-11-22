@@ -75,3 +75,21 @@ export async function removeMemberHierarchyGrade(userId, hierarchyId, guildId = 
     errorContext: 'API Error (Remove Member Hierarchy Grade):'
   });
 }
+
+// Canvas libre de l'organigramme (positions, cadres, traits)
+export async function fetchOrgCanvas(guildId = authStore.selectedGuildId) {
+  return dashboardRequest('/staff/org-canvas', {
+    method: 'GET',
+    guildId,
+    errorContext: 'API Error (Fetch Org Canvas):'
+  });
+}
+
+export async function saveOrgCanvas(canvas, guildId = authStore.selectedGuildId) {
+  return dashboardRequest('/staff/org-canvas', {
+    method: 'PUT',
+    payload: { canvas },
+    guildId,
+    errorContext: 'API Error (Save Org Canvas):'
+  });
+}

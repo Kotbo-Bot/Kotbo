@@ -252,6 +252,12 @@ export function registerStaffRoutes(): void {
 
   route('GET', `${base}/hierarchies`, () => ({ hierarchies: hierarchiesWithRoles() }));
   route('GET', `${base}/hierarchies/schema`, () => schema());
+  let orgCanvas = { nodes: {}, frames: [], links: [] };
+  route('GET', `${base}/org-canvas`, () => ({ canvas: orgCanvas }));
+  route('PUT', `${base}/org-canvas`, ({ body }) => {
+    orgCanvas = body?.canvas ?? orgCanvas;
+    return { canvas: orgCanvas };
+  });
   route('POST', `${base}/hierarchies`, ({ body }) => {
     const created: HierarchyRow = {
       id: `hier-${demoId()}`,
