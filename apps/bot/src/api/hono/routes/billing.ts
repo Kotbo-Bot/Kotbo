@@ -37,6 +37,7 @@ import { Prisma } from '@prisma/client';
 import prisma from '../../../utils/db.js';
 import { logger } from '../../../utils/logger.js';
 import { requireAuth } from '../middleware/auth.js';
+import { resolveDashboardAccess } from '../../shared.js';
 import { requireGuildAccess } from '../middleware/guildAccess.js';
 import { rateLimit } from '../middleware/rateLimit.js';
 import { dashboardSensitiveRateLimiter } from '../../limiters.js';
@@ -941,6 +942,137 @@ export function createBillingRouter(client: Client): OpenAPIHono {
       },
       200,
     );
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Multi-serveurs publics (Associations / Réseaux)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  router.get(`${GUARDED}/network`, async (c) => {
+    const guildId = c.req.param('guildId')!;
+    const membership = await prisma.guildNetworkMember.findFirst({
+      where: { guildId },
+      include: {
+        network: {
+          include: {
+            members: {
+              include: { guild: { select: { id: true, name: true } } },
+              orderBy: { addedAt: 'asc' },
+            },
+          },
+        },
+      },
+    });
+    const network = membership?.network ?? null;
+    return c.json({
+      network: network
+        ? {
+            id: network.id,
+            name: network.name,
+            planKey: network.planKey,
+            maxGuilds: network.maxGuilds,
+            billingStatus: network.billingStatus,
+            members: network.members.map((m) => {
+              const g = client.guilds.cache.get(m.guildId);
+              return {
+                guildId: m.guildId,
+                name: g?.name ?? m.guild.name,
+                iconUrl: g?.iconURL({ size: 64, extension: 'png' }) ?? null,
+                role: m.role,
+                addedAt: m.addedAt.toISOString(),
+              };
+            }),
+          }
+        : null,
+    });
+  });
+
+  router.post(`${GUARDED}/network`, async (c) => {
+    const guildId = c.req.param('guildId')!;
+    const userId = c.var.auth.userId;
+    const raw = await c.req.json().catch(() => ({})) as { name?: string };
+    const name = raw.name?.trim().slice(0, 80) || 'Réseau multi-serveurs';
+
+    const existing = await prisma.guildNetworkMember.findFirst({ where: { guildId } });
+    if (existing) {
+      const updated = await prisma.guildNetwork.update({
+        where: { id: existing.networkId },
+        data: { name },
+      });
+      return c.json({ network: updated });
+    }
+
+    const created = await prisma.guildNetwork.create({
+      data: {
+        name,
+        ownerUserId: userId,
+        members: {
+          create: {
+            guildId,
+            role: 'PRIMARY',
+            addedById: userId,
+          },
+        },
+      },
+    });
+    return c.json({ network: created }, 201);
+  });
+
+  router.post(`${GUARDED}/network/guilds`, async (c) => {
+    const guildId = c.req.param('guildId')!;
+    const userId = c.var.auth.userId;
+    const raw = await c.req.json().catch(() => ({})) as { targetGuildId?: string };
+    const targetGuildId = raw.targetGuildId?.trim() ?? '';
+    if (!/^\d{17,20}$/.test(targetGuildId)) {
+      return c.json({ error: 'Identifiant de serveur invalide.' }, 400);
+    }
+
+    const membership = await prisma.guildNetworkMember.findFirst({
+      where: { guildId },
+      include: { network: { include: { members: true } } },
+    });
+    if (!membership) {
+      return c.json({ error: "Créez d'abord le réseau sur ce serveur." }, 404);
+    }
+    if (membership.network.members.length >= membership.network.maxGuilds) {
+      return c.json({ error: `Limite atteinte (${membership.network.maxGuilds} serveurs max).` }, 400);
+    }
+
+    const already = await prisma.guildNetworkMember.findFirst({ where: { guildId: targetGuildId } });
+    if (already) {
+      return c.json({ error: 'Ce serveur appartient déjà à un réseau.' }, 409);
+    }
+
+    const targetAccess = await resolveDashboardAccess(client, targetGuildId, userId);
+    if (!targetAccess.canManageSettings) {
+      return c.json({ error: 'Vous devez administrer le serveur à rattacher.' }, 403);
+    }
+
+    await prisma.guildNetworkMember.create({
+      data: {
+        networkId: membership.networkId,
+        guildId: targetGuildId,
+        role: 'MEMBER',
+        addedById: userId,
+      },
+    });
+
+    return c.json({ ok: true }, 201);
+  });
+
+  router.delete(`${GUARDED}/network/guilds/:targetGuildId`, async (c) => {
+    const guildId = c.req.param('guildId')!;
+    const targetGuildId = c.req.param('targetGuildId')!;
+    const membership = await prisma.guildNetworkMember.findFirst({ where: { guildId } });
+    if (!membership) return c.json({ error: 'Réseau introuvable.' }, 404);
+    if (targetGuildId === guildId) {
+      return c.json({ error: 'Impossible de retirer le serveur principal.' }, 400);
+    }
+
+    await prisma.guildNetworkMember.deleteMany({
+      where: { networkId: membership.networkId, guildId: targetGuildId },
+    });
+    return c.json({ ok: true });
   });
 
   return router;
