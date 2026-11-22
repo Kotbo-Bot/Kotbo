@@ -424,6 +424,7 @@ model Guild {
   reactionRoleDailyStats ReactionRoleDailyStat[]
   contentItemDailyStats ContentItemDailyStat[]
   outgoingWebhooks OutgoingWebhook[]
+  mailAccounts     MailAccount[]
   doingLists       DoingList[]
   communitySite    CommunitySite?
 

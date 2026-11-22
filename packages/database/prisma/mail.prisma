@@ -1,0 +1,112 @@
+// Intégration mail BYOP (Bring Your Own Provider) : comptes connectés
+// (AWS SES, Resend, SMTP/IMAP), fils de discussion et messages RFC 5322.
+
+enum MailProvider {
+  AWS_SES
+  RESEND
+  SMTP_IMAP
+}
+
+enum MailAccountStatus {
+  PENDING
+  VERIFIED
+  ERROR
+}
+
+enum MailThreadStatus {
+  OPEN
+  CLOSED
+  ARCHIVED
+}
+
+enum MailDirection {
+  INBOUND
+  OUTBOUND
+}
+
+model MailAccount {
+  id String @id @default(cuid())
+
+  guildId     String
+  provider    MailProvider
+  fromEmail   String
+  displayName String?
+
+  // Identifiants du fournisseur (JSON sérialisé), chiffrés au repos en AES-256-GCM.
+  encryptedCredentials String
+
+  status     MailAccountStatus @default(PENDING)
+  lastError  String?
+  verifiedAt DateTime?
+
+  // Secret de vérification des webhooks entrants, chiffré au repos en AES-256-GCM.
+  webhookSecret String
+  enabled       Boolean @default(true)
+
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  guild   Guild        @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  threads MailThread[]
+
+  @@index([guildId])
+  @@index([guildId, fromEmail])
+  @@map("mail_accounts")
+}
+
+model MailThread {
+  id String @id @default(cuid())
+
+  accountId String
+  guildId   String
+
+  subject            String
+  status             MailThreadStatus @default(OPEN)
+  participants       String[]         @default([])
+  lastMessageAt      DateTime         @default(now())
+  lastMessageSnippet String?
+  messageCount       Int              @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  account  MailAccount   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  messages MailMessage[]
+
+  @@index([accountId, lastMessageAt])
+  @@index([guildId, status, lastMessageAt])
+  @@map("mail_threads")
+}
+
+model MailMessage {
+  id String @id @default(cuid())
+
+  threadId  String
+  accountId String
+
+  // En-têtes RFC 5322 pour le regroupement en fils de discussion.
+  messageId  String?
+  inReplyTo  String?
+  references String[] @default([])
+
+  direction  MailDirection
+  fromEmail  String
+  fromName   String?
+  toEmails   String[] @default([])
+  ccEmails   String[] @default([])
+  subject    String
+  textBody   String?
+  htmlBody   String?
+  attachments Json?
+
+  providerMessageId String?
+  receivedAt        DateTime @default(now())
+  createdAt         DateTime @default(now())
+
+  thread MailThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@index([threadId, receivedAt])
+  @@index([accountId, messageId])
+  @@map("mail_messages")
+}
