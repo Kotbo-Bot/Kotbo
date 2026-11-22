@@ -48,6 +48,9 @@ ORDER BY seq_tup_read DESC
 LIMIT 20;
 
 \echo '== 6. Requetes les plus couteuses (necessite pg_stat_statements)'
+-- Sans effet si la base ne charge pas encore la bibliotheque (cf. docker-compose.yml) :
+-- la section 6 echouera alors, les cinq autres s'affichent quand meme.
+CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
 SELECT round(total_exec_time::numeric / 1000, 1) AS secondes_total,
        calls, round(mean_exec_time::numeric, 2) AS ms_moyenne,
        rows, left(regexp_replace(query, '\s+', ' ', 'g'), 140) AS requete
