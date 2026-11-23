@@ -45,6 +45,7 @@ import { registerReadStats2Tools } from './tools/read-stats-2.js';
 import { registerWriteMembers2Tools } from './tools/write-members-2.js';
 import { registerWriteWelcomeThreadTools } from './tools/write-welcome-thread.js';
 import { registerDashboardAccessTools } from './tools/dashboard-access.js';
+import { registerAntiraidConfigTools } from './tools/antiraid-config.js';
 import { registerManagementCenterTools } from './tools/management-center.js';
 import { registerRpgTools } from './tools/rpg.js';
 import { registerRpgTowerTools } from './tools/rpg-tower.js';
@@ -189,6 +190,7 @@ export function registerMcpTools(
   registerWriteMembers2Tools(ctx);
   registerWriteWelcomeThreadTools(ctx);
   registerDashboardAccessTools(ctx);
+  registerAntiraidConfigTools(ctx);
   registerManagementCenterTools(ctx);
   registerSiteTools(ctx);
   registerShopTools(ctx);
