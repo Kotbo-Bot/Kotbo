@@ -289,6 +289,29 @@ model VisionReview {
   @@map("vision_reviews")
 }
 
+// Historique des images bloquées par Kotbo Vision (une ligne par blocage).
+model VisionBlock {
+  id        String   @id @default(cuid())
+  guildId   String
+  authorId  String
+  channelId String
+  listId    String?
+  // Entrée du catalogue reconnue ; null pour une image inédite détectée par OCR.
+  matchId   String?
+  // CATALOG (reconnue) | OCR (inédite, auto-indexée)
+  kind      String
+  similarity Float?
+  sanction  String
+  reason    String
+  createdAt DateTime @default(now())
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@index([guildId, createdAt])
+  @@index([guildId, authorId])
+  @@map("vision_blocks")
+}
+
 // Rôles d'un membre au moment de son départ, rendus à son retour puis supprimés.
 model MemberRoleSnapshot {
   guildId String

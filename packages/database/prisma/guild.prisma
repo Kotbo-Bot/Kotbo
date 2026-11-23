@@ -870,6 +870,7 @@ model Guild {
   scamImageHashes      ScamImageHash[]
   visionLists       VisionList[]
   visionReviews     VisionReview[]
+  visionBlocks      VisionBlock[]
   memberJails          MemberJail[]
   fileFilterRules      FileFilterRule[]
   scamDomains          ScamDomain[]
