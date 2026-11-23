@@ -66,6 +66,9 @@ Kotbo est architecturé sous forme de monorepo moderne géré par **Bun** :
 - **Suivi d'Activité** : Enregistrement de la présence en réunion, de l'activité vocale et textuelle, et des signalements traités.
 - **Périodes d'Essai & Mentorat** : Attribution d'un tuteur (mentor), suivi de la progression et génération de bilans automatiques.
 - **Absences & Démissions** : Gestion des demandes d'absence avec `/absent` et de démission avec `/demission` directement intégrée dans le workflow du staff.
+- **Organigramme libre** : canvas libre, séparateurs de rôle et rôle Discord commun par pôle, synchronisé automatiquement.
+- **Fiche membre par rôle** : les onglets s'adaptent au rôle du staff, avec un onglet Bien-être confidentiel et accès exceptionnel journalisé.
+- **Tutorat** : la validation d'un tutorat peut débloquer des modules.
 - **Notes Managériales** : Carnet de notes privées `/note` réservé aux responsables du personnel pour un suivi individuel juste et documenté.
 
 ### 🔑 Détection & Liaison de Doubles Comptes (Alt Accounts)
@@ -81,7 +84,22 @@ Kotbo est architecturé sous forme de monorepo moderne géré par **Bun** :
 ### 🚨 Modération Robuste & Casier Judiciaire
 - **Sanctions Standards** : Warns, Kicks, Timeouts temporaires et Bans (temporaires ou définitifs) enregistrés en base de données.
 - **Commandes `/casier` & `/sanction`** : Historique complet des sanctions d'un utilisateur consultable via un embed clair ou un menu contextuel Discord.
+- **Corbeille & restauration** : une sanction supprimée est gardée en instantané et restaurable par les administrateurs.
+- **Rappel & gravité** : type « Rappel » (warn de poids 0 hors des seuils), gravité du warn par palier, bans temporaires jusqu'à un an.
+- **AutoMod Discord** : déclenchements journalisés et warn automatique sur les règles du serveur.
 - **Synchronisation Globale** : Propagation optionnelle des sanctions sur les différents serveurs liés pour limiter la récidive.
+
+### 🎁 Giveaways & Quêtes
+- **Giveaways à conditions** : rôles, ancienneté, profil, activité, vote Top.gg ou présence sur un autre serveur, combinables en ET avec des groupes « au moins une ». Bouton « Vérifier mes conditions » et revérification avant le tirage. Voir [`docs/giveaways-conditions.md`](./docs/giveaways-conditions.md).
+- **Événement Discord planifié** : chaque giveaway peut créer son événement.
+- **Quêtes unifiées** : un seul moteur pour les quêtes communautaires et celles du RPG, avec conditions, prérequis, dates, paliers et récompenses libres.
+
+### 🌐 Réseaux de serveurs
+- **Page Réseau** : un sous-serveur rejoint le principal avec une fusion sans perte, sous un seul abonnement. Le serveur staff lié hérite de l'offre du principal.
+
+### 🤖 Automatisations & MCP
+- **Automatisations** : classements du mois et d'XP dans les textes, embeds enrichis (vignette, image, pied de page) aussi en message privé, conditions sur la photo de profil et le score de risque, déclencheurs « Vérification réussie » et « Alerte AegisAI ». Voir [`docs/automatisations-embeds-classements.md`](./docs/automatisations-embeds-classements.md).
+- **MCP** : droits par module sur les clés, page Intégrations restreignable à un rôle, configuration anti-raid complète, rôles avec dégradé, holographique et icône. Voir [`docs/mcp-droits-et-outils.md`](./docs/mcp-droits-et-outils.md).
 
 ### 💻 Code Police
 - **Code Police** : Détecte les blocs de code mal formatés (envoyés sans balises markdown) et propose un reformatage automatique propre à l'utilisateur.
