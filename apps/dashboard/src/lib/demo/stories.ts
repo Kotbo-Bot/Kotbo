@@ -37,6 +37,7 @@ function sanction(
     archiveReason: null,
     appealable: true,
     appealLockReason: null,
+    weight: 1,
     ...extra,
   };
 }

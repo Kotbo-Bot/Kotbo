@@ -141,6 +141,9 @@ export function registerDashboardAccessTools(ctx: McpToolContext) {
             ? guild.roles.cache.get(role)
             : guild.roles.cache.find((r) => r.name.toLowerCase() === role.toLowerCase());
           if (!discordRole) return err(`Role « ${role} » introuvable`);
+          if (!remove && discordRole.managed) {
+            return err(`Le role « ${discordRole.name} » est gere par Discord (bot, integration, booster) et ne peut pas recevoir de droits`);
+          }
 
           const configs = await getAvailableFeatureConfigs(guildId);
           const config = configs.find((entry) => entry.featureKey === feature_key);

@@ -1,7 +1,8 @@
 import { m } from '../i18n';
 
-export function typeLabel(value: string): string {
-  if (value === 'WARN') return m.fmt_type_warn();
+/** `weight` distingue le rappel (warn de poids 0) d'un avertissement. */
+export function typeLabel(value: string, weight?: number): string {
+  if (value === 'WARN') return weight === 0 ? m.fmt_type_reminder() : m.fmt_type_warn();
   if (value === 'KICK') return m.fmt_type_kick();
   if (value === 'TIMEOUT') return m.fmt_type_timeout();
   if (value === 'TEMP_BAN') return m.fmt_type_temp_ban();

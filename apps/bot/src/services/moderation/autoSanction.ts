@@ -12,6 +12,7 @@
 import type { Client, Guild, GuildMember, User } from 'discord.js';
 import { logger } from '../../utils/logger.js';
 import {
+  getAutomodWarnWeight,
   registerBanSanction,
   registerJailSanction,
   registerKickSanction,
@@ -30,6 +31,11 @@ export function normalizeAutoSanction(value: unknown, fallback: AutoSanction = '
 
 /** Durée maximale d'un timeout Discord. */
 const MAX_TIMEOUT_MIN = 28 * 24 * 60 - 1;
+/**
+ * Durée maximale saisissable pour une sanction automatique. Un ban ou une
+ * quarantaine la suit telle quelle ; un timeout est ramené à MAX_TIMEOUT_MIN.
+ */
+export const MAX_AUTO_SANCTION_DURATION_MIN = 365 * 24 * 60;
 const DEFAULT_TIMEOUT_MIN = 60;
 const RATE_LIMIT_MS = 60_000;
 
@@ -101,7 +107,7 @@ export async function applyAutoSanction(params: {
   try {
     switch (action) {
       case 'WARN':
-        await registerWarnSanction(base);
+        await registerWarnSanction({ ...base, weight: await getAutomodWarnWeight(params.guild.id) });
         break;
       case 'TIMEOUT': {
         if (!params.member?.moderatable) return { applied: action, done: false };

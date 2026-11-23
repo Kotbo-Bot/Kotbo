@@ -292,6 +292,7 @@
                     <FilterPills {describedBy}
                       label={m.aegis_warn_weight()}
                       options={[
+                        { value: '0', label: m.da_automod_warn_weight_0() },
                         { value: '1', label: m.aegis_weight_1() },
                         { value: '2', label: m.aegis_weight_2() },
                         { value: '3', label: m.aegis_weight_3() },

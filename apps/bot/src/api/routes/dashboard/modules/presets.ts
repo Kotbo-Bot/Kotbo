@@ -48,10 +48,10 @@ export function createPresetsRouter(client: Client) {
     });
 
     const adminRoleIds = discordGuild.roles.cache
-      .filter((role) => !!role && role.permissions.has(PermissionFlagsBits.Administrator))
+      .filter((role) => !!role && !role.managed && role.permissions.has(PermissionFlagsBits.Administrator))
       .map((role) => role.id);
     const modRoleIds = discordGuild.roles.cache
-      .filter((role) => !!role && (role.permissions.has(PermissionFlagsBits.ModerateMembers)
+      .filter((role) => !!role && !role.managed && (role.permissions.has(PermissionFlagsBits.ModerateMembers)
         || role.permissions.has(PermissionFlagsBits.ManageMessages)
         || role.permissions.has(PermissionFlagsBits.KickMembers)
         || role.permissions.has(PermissionFlagsBits.BanMembers)))

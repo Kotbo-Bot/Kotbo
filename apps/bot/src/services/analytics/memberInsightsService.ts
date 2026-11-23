@@ -3,6 +3,7 @@ import { normalizeTimezone } from '@kotbo/contracts';
 import prisma, { prismaRead } from '../../utils/db.js';
 import { BucketZoner } from './zonedBuckets.js';
 import { getWarnScore, countWarns } from '../moderation/sanctionService.js';
+import { REMINDER_WEIGHT } from '../moderation/warnWeight.js';
 import * as altAccountService from '../moderation/altAccountService.js';
 
 /**
@@ -226,11 +227,11 @@ async function computeRisk(guildId: string, userId: string, userIds: string[]): 
       take: 500,
     }),
     prismaRead.sanction.aggregate({
-      where: { guildId, type: SanctionType.WARN },
+      where: { guildId, type: SanctionType.WARN, weight: { gt: REMINDER_WEIGHT } },
       _sum: { weight: true },
     }),
     prismaRead.sanction.findMany({
-      where: { guildId, type: SanctionType.WARN },
+      where: { guildId, type: SanctionType.WARN, weight: { gt: REMINDER_WEIGHT } },
       select: { targetUserId: true },
       distinct: ['targetUserId'],
     }),

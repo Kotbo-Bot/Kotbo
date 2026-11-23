@@ -21,7 +21,7 @@ model AegisConfig {
   reviewThreshold Int     @default(80)
   autoThreshold   Int     @default(95)
   autoAction      String  @default("DELETE_AND_WARN") // DELETE | DELETE_AND_WARN | DELETE_AND_TIMEOUT
-  warnWeight      Int     @default(2) // poids du warn sur l'échelle pondérée (1-3)
+  warnWeight      Int     @default(2) // poids du warn sur l'échelle pondérée (0-3, 0 = rappel)
   timeoutMinutes  Int     @default(10)
   notifyMember    Boolean @default(true)
   reviewChannelId String? // à défaut : salon de logs du serveur

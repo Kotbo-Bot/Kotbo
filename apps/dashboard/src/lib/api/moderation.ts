@@ -365,6 +365,7 @@ export type VerificationConfigPayload = {
   warnAutoArchiveDays?: number | null;
   wordStatsEnabled?: boolean;
   banHygieneEnabled?: boolean;
+  automodWarnWeight?: number;
 };
 
 export async function fetchVerificationConfig(guildId = authStore.selectedGuildId) {

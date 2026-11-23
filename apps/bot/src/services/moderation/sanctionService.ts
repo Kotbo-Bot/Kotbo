@@ -14,6 +14,7 @@ import { getMissingReportReminderActions, type MissingReportReminderState } from
 import { archiveScoreFilter } from './sanctionArchiveService.js';
 import { publicErrorMessage } from '../../utils/publicError.js';
 import { attachSanctionToJail, imprison, processJailReleases, type JailSource } from './jailService.js';
+import { REMINDER_WEIGHT, normalizeWarnWeight } from './warnWeight.js';
 
 const MAX_DISCORD_TIMEOUT_MS = 27 * 24 * 60 * 60 * 1000;
 const RENEWAL_BUFFER_MS = 60 * 1000;
@@ -110,66 +111,7 @@ async function incrementModerationStats(guildId: string, type: SanctionType): Pr
   });
 }
 
-const DURATION_UNITS_MS: Record<string, number> = {
-  s: 1000,
-  sec: 1000,
-  secs: 1000,
-  seconde: 1000,
-  secondes: 1000,
-  m: 60 * 1000,
-  min: 60 * 1000,
-  mins: 60 * 1000,
-  minute: 60 * 1000,
-  minutes: 60 * 1000,
-  h: 60 * 60 * 1000,
-  heure: 60 * 60 * 1000,
-  heures: 60 * 60 * 1000,
-  d: 24 * 60 * 60 * 1000,
-  j: 24 * 60 * 60 * 1000,
-  jour: 24 * 60 * 60 * 1000,
-  jours: 24 * 60 * 60 * 1000,
-  w: 7 * 24 * 60 * 60 * 1000,
-  semaine: 7 * 24 * 60 * 60 * 1000,
-  semaines: 7 * 24 * 60 * 60 * 1000,
-};
-
-function normalizeDurationInput(input: string): string {
-  return input
-    .toLowerCase()
-    .trim()
-    .replace(/,/g, '.')
-    .replace(/\s+/g, ' ');
-}
-
-export function parseDurationToMs(input: string): number | null {
-  const normalized = normalizeDurationInput(input);
-  if (!normalized) return null;
-
-  const pattern = /(\d+(?:\.\d+)?)\s*([a-zA-Z]+)/g;
-  let total = 0;
-  let matched = false;
-
-  for (const match of normalized.matchAll(pattern)) {
-    const rawValue = match[1];
-    const rawUnit = match[2];
-    if (!rawValue || !rawUnit) continue;
-
-    const value = Number(rawValue);
-    const unit = rawUnit.toLowerCase();
-    const unitMs = DURATION_UNITS_MS[unit];
-
-    if (!Number.isFinite(value) || value <= 0 || !unitMs) {
-      return null;
-    }
-
-    total += Math.round(value * unitMs);
-    matched = true;
-  }
-
-  if (!matched) return null;
-  if (total < 1000) return null;
-  return total;
-}
+export { parseDurationToMs } from '../../utils/sanctionDuration.js';
 
 export function formatDurationFr(durationMs: number): string {
   const totalSeconds = Math.max(1, Math.floor(durationMs / 1000));
@@ -672,7 +614,7 @@ export async function registerWarnSanction(params: {
       moderatorUserId: params.moderator.id,
       moderatorTag: params.moderator.tag,
       reason: params.reason,
-      weight: Math.min(3, Math.max(1, params.weight ?? 1)),
+      weight: normalizeWarnWeight(params.weight),
       resolvedAt: new Date(),
       resolutionNote: 'Avertissement enregistré.'
     }
@@ -1563,16 +1505,23 @@ export async function countWarns(guildId: string, targetUserId: string, targetUs
       guildId,
       ...buildTargetUserWhere(targetUserId, targetUserIds),
       ...(await archiveScoreFilter(guildId)),
-      type: SanctionType.WARN
+      type: SanctionType.WARN,
+      weight: { gt: REMINDER_WEIGHT },
     }
   });
+}
+
+/** Poids des warns posés automatiquement (AutoMod, filtres) ; 0 = rappel. */
+export async function getAutomodWarnWeight(guildId: string): Promise<number> {
+  const guild = await prisma.guild.findUnique({ where: { id: guildId }, select: { automodWarnWeight: true } });
+  return normalizeWarnWeight(guild?.automodWarnWeight);
 }
 
 /**
  * Score de warns d'un membre, pondération incluse si activée sur la guilde.
  *
  * - warnWeightingEnabled désactivé → compte brut (comportement historique).
- * - Activé → somme des poids (1/2/3) des warns encore « vivants » :
+ * - Activé → somme des poids (0 à 3) des warns encore « vivants » :
  *   si warnDecayDays est défini, seuls les warns plus récents que N jours comptent.
  *
  * Dans les deux cas les warns archivés sont écartés, à moins que la guilde
@@ -1619,6 +1568,8 @@ export interface ListedSanction {
   status: SanctionStatus;
   reason: string;
   durationSeconds: number | null;
+  /** 0 = rappel. */
+  weight: number;
   expiresAt: Date | null;
   resolvedAt: Date | null;
   createdAt: Date;
@@ -1683,6 +1634,7 @@ export async function listSanctionsByMember(params: {
         status: true,
         reason: true,
         durationSeconds: true,
+        weight: true,
         expiresAt: true,
         resolvedAt: true,
         createdAt: true,

@@ -5,7 +5,7 @@ import { logger } from '../../utils/logger.js';
 import { COLORS, truncate } from '../../utils/embeds.js';
 import { fetchExternal } from '../../utils/http.js';
 import { getRaidProtectionConfig } from './raidProtectionService.js';
-import { registerWarnSanction, registerTimeoutSanction, registerBanSanction } from './sanctionService.js';
+import { getAutomodWarnWeight, registerWarnSanction, registerTimeoutSanction, registerBanSanction } from './sanctionService.js';
 import { analyzeImage, hammingDistance, PHASH_MATCH_THRESHOLD, serializeFingerprint } from './imageForensics.js';
 import { invalidateVisionCache } from './visionService.js';
 import { compactOcrText } from './scamHeuristics.js';
@@ -371,7 +371,7 @@ export async function handleScamMessage(message: Message): Promise<boolean> {
   try {
     switch (config.scamFilterAction) {
       case 'DELETE_AND_WARN':
-        await registerWarnSanction({ guildId, target, moderator, reason, client: message.client });
+        await registerWarnSanction({ guildId, target, moderator, reason, client: message.client, weight: await getAutomodWarnWeight(guildId) });
         break;
       case 'DELETE_AND_TIMEOUT':
         await registerTimeoutSanction({

@@ -27,10 +27,10 @@ import {
   scanTagMembers,
 } from '../../../../services/moderation/tagAutomod/tagAutomodService.js';
 import { normalizeTagAction, type RuleLike } from '../../../../services/moderation/tagAutomod/tagRules.js';
+import { MAX_AUTO_SANCTION_DURATION_MIN } from '../../../../services/moderation/autoSanction.js';
 
 const MAX_RULES = 100;
 const SNOWFLAKE = /^\d{17,20}$/;
-const MAX_DURATION_MIN = 28 * 24 * 60;
 
 type Body = Record<string, unknown>;
 
@@ -63,31 +63,31 @@ function parseConfig(body: Body): Prisma.TagAutomodConfigUncheckedUpdateInput {
     alertChannelId: body.alertChannelId === null ? null : typeof body.alertChannelId === 'string' && SNOWFLAKE.test(body.alertChannelId) ? body.alertChannelId : undefined,
     allowlistOnly: bool(body.allowlistOnly),
     allowlistAction: action(body.allowlistAction),
-    allowlistDurationMin: optInt(body.allowlistDurationMin, 1, MAX_DURATION_MIN),
+    allowlistDurationMin: optInt(body.allowlistDurationMin, 1, MAX_AUTO_SANCTION_DURATION_MIN),
     sharedListEnabled: bool(body.sharedListEnabled),
     sharedListAction: action(body.sharedListAction),
-    sharedListDurationMin: optInt(body.sharedListDurationMin, 1, MAX_DURATION_MIN),
+    sharedListDurationMin: optInt(body.sharedListDurationMin, 1, MAX_AUTO_SANCTION_DURATION_MIN),
     waveEnabled: bool(body.waveEnabled),
     waveMode: oneOf(body.waveMode, ['ADAPTIVE', 'FIXED'] as const),
     wavePreset: oneOf(body.wavePreset, ['SOFT', 'NORMAL', 'STRICT'] as const),
     waveThreshold: int(body.waveThreshold, 2, 100),
     waveWindowSec: int(body.waveWindowSec, 10, 3600),
     waveAction: action(body.waveAction),
-    waveDurationMin: optInt(body.waveDurationMin, 1, MAX_DURATION_MIN),
+    waveDurationMin: optInt(body.waveDurationMin, 1, MAX_AUTO_SANCTION_DURATION_MIN),
     waveBlockHours: int(body.waveBlockHours, 0, 24 * 30),
     waveReportFleet: bool(body.waveReportFleet),
     newAccountEnabled: bool(body.newAccountEnabled),
     newAccountDays: int(body.newAccountDays, 1, 365),
     newAccountScope: oneOf(body.newAccountScope, ['ANY', 'UNKNOWN'] as const),
     newAccountAction: action(body.newAccountAction),
-    newAccountDurationMin: optInt(body.newAccountDurationMin, 1, MAX_DURATION_MIN),
+    newAccountDurationMin: optInt(body.newAccountDurationMin, 1, MAX_AUTO_SANCTION_DURATION_MIN),
     massAdoptEnabled: bool(body.massAdoptEnabled),
     massAdoptThreshold: int(body.massAdoptThreshold, 2, 100),
     massAdoptWindowMin: int(body.massAdoptWindowMin, 1, 24 * 60),
     massAdoptAction: action(body.massAdoptAction),
     impersonationEnabled: bool(body.impersonationEnabled),
     impersonationAction: action(body.impersonationAction),
-    impersonationDurationMin: optInt(body.impersonationDurationMin, 1, MAX_DURATION_MIN),
+    impersonationDurationMin: optInt(body.impersonationDurationMin, 1, MAX_AUTO_SANCTION_DURATION_MIN),
   };
   for (const key of Object.keys(out)) if (out[key] === undefined) delete out[key];
   return out as Prisma.TagAutomodConfigUncheckedUpdateInput;
@@ -134,13 +134,13 @@ function parseRule(body: Body, partial = false): { rule: Partial<RuleInput> } | 
   }
 
   if (body.action !== undefined || !partial) rule.action = action(body.action) ?? 'ALERT';
-  if (body.durationMin !== undefined) rule.durationMin = optInt(body.durationMin, 1, MAX_DURATION_MIN) ?? null;
+  if (body.durationMin !== undefined) rule.durationMin = optInt(body.durationMin, 1, MAX_AUTO_SANCTION_DURATION_MIN) ?? null;
   if (body.roleId !== undefined) rule.roleId = typeof body.roleId === 'string' && SNOWFLAKE.test(body.roleId) ? body.roleId : null;
   if (rule.action === 'ROLE' && !rule.roleId && !partial) return { error: 'Choisis le rôle à ajouter.' };
   if (body.message !== undefined) rule.message = typeof body.message === 'string' && body.message.trim() ? body.message.slice(0, 1500) : null;
   if (body.escalateAfterMin !== undefined) rule.escalateAfterMin = optInt(body.escalateAfterMin, 1, 7 * 24 * 60) ?? null;
   if (body.escalateAction !== undefined) rule.escalateAction = body.escalateAction === null ? null : action(body.escalateAction) ?? null;
-  if (body.escalateDurationMin !== undefined) rule.escalateDurationMin = optInt(body.escalateDurationMin, 1, MAX_DURATION_MIN) ?? null;
+  if (body.escalateDurationMin !== undefined) rule.escalateDurationMin = optInt(body.escalateDurationMin, 1, MAX_AUTO_SANCTION_DURATION_MIN) ?? null;
   if (body.source !== undefined) rule.source = oneOf(body.source, ['MANUAL', 'TEMPLATE'] as const) ?? 'MANUAL';
   return { rule };
 }

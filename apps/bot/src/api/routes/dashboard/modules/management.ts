@@ -6,6 +6,7 @@ import { cache } from '../../../../utils/cache.js';
 import { logger } from '../../../../utils/logger.js';
 import { broadcastDashboardStateChange, getGuildName, pushAudit } from '../../../shared.js';
 import { auditUserOf, fail, guildRoute, readBody, send } from '../../../hono/dashboard/kit.js';
+import { withoutManagedRoles } from '../../../../services/core/dashboardAccessRoles.js';
 
 export function createManagementRouter(client: Client) {
   const router = new Hono();
@@ -36,7 +37,9 @@ export function createManagementRouter(client: Client) {
       if (!featureConfig) return send(c, { error: 'Configuration du module introuvable' }, 404);
 
       const { updateRoleAccess } = await import('../../../../services/core/dashboardManagementService.js');
-      const updated = await updateRoleAccess(guildId, featureConfig.id, body.roleAccessConfigs);
+      // Enregistrer la matrice purge aussi les règles héritées sur des rôles de bots.
+      const roleAccessConfigs = withoutManagedRoles(client.guilds.cache.get(guildId), body.roleAccessConfigs);
+      const updated = await updateRoleAccess(guildId, featureConfig.id, roleAccessConfigs);
 
       // Les droits de dashboard sont mis en cache sous le prefixe `guild:`.
       // Sans purge, un membre garde ses anciens acces jusqu'a une minute.

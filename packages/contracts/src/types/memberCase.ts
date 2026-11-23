@@ -34,6 +34,8 @@ export type SanctionItem = {
   moderatorTag: string;
   reason: string;
   durationSeconds: number | null;
+  /** Gravite d'un warn ; 0 = rappel, qui ne compte dans aucun seuil. */
+  weight: number;
   expiresAt: string | null;
   createdAt: string;
   resolvedAt: string | null;

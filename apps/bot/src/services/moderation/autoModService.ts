@@ -5,7 +5,7 @@ import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { cache } from '../../utils/cache.js';
 import { resolveLogChannel } from '../../utils/logChannel.js';
-import { registerWarnSanction, registerTimeoutSanction } from './sanctionService.js';
+import { getAutomodWarnWeight, registerWarnSanction, registerTimeoutSanction } from './sanctionService.js';
 import { loadBannedWords, loadGlobalWords, loadCustomWords } from './bannedWordsService.js';
 import { isReservedByNicknameModeration } from './nicknameModerationService.js';
 import { mirrorModlogToStaffServer } from '../staff/staffServerService.js';
@@ -1002,6 +1002,7 @@ async function recordDiscordAutoModEvent(
     moderator: { id: client.user!.id, tag: client.user!.tag },
     reason: `[AutoMod Discord] ${rule.name}`,
     client,
+    weight: await getAutomodWarnWeight(execution.guild.id),
   }).catch((err) => logger.warn('AutoModService', 'Warn AutoMod Discord impossible :', err));
 }
 
@@ -1127,6 +1128,7 @@ async function applySanction(message: Message, action: string, reason: string, c
       reason,
       client: client as any,
       evidenceLinks,
+      weight: await getAutomodWarnWeight(guildId),
     });
   } else if (action === 'TIMEOUT') {
     // Timeout de 10 minutes par défaut pour l'AutoMod
@@ -1374,6 +1376,7 @@ async function triggerGhostPingAlert(
       moderator,
       reason,
       client,
+      weight: await getAutomodWarnWeight(guildId),
     });
   }
 }

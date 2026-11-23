@@ -40,6 +40,7 @@ import {
 import { getModuleStates } from '../../services/core/moduleGate.js';
 import { canFinishOnboardingWithoutPayment, isOnboardingFeatureEnabled } from '../../services/core/onboardingGate.js';
 import { getGuildName, getOrCreateRuntime, isRecruitmentAutoRejectEnabled, resolveAdminAccess } from './core.js';
+import { withoutManagedRoles } from '../../services/core/dashboardAccessRoles.js';
 import type { AuditEntry, CommandCatalogEntry, DashboardAccess, DashboardChannel, DashboardState, FeatureAccess, FeatureAccessMap, ModuleItem, ModuleStatus, RegulationRuleItem } from './core.js';
 
 export async function resolveFeatureAccessMap(
@@ -52,6 +53,7 @@ export async function resolveFeatureAccessMap(
   const { getOrCreateFeatureConfigs } = await import('../../services/core/dashboardManagementService.js');
   const featureConfigs = await getOrCreateFeatureConfigs(guildId);
   const isGlobalAdmin = userId ? await resolveAdminAccess(client, userId) : false;
+  const discordGuild = client.guilds.cache.get(guildId);
 
   const moderationFeatureKeys = new Set([
     'content',
@@ -94,7 +96,8 @@ export async function resolveFeatureAccessMap(
       continue;
     }
 
-    const hasFeatureRoleOverrides = (feature.roleAccessByRole?.length ?? 0) > 0;
+    const roleRules = withoutManagedRoles(discordGuild, feature.roleAccessByRole ?? []);
+    const hasFeatureRoleOverrides = roleRules.length > 0;
     
     if (!hasFeatureRoleOverrides) {
       const isModeration = moderationFeatureKeys.has(feature.featureKey);
@@ -111,7 +114,7 @@ export async function resolveFeatureAccessMap(
       continue;
     }
 
-    const permissions = feature.roleAccessByRole?.filter((entry) => roleIds.includes(entry.roleId)) ?? [];
+    const permissions = roleRules.filter((entry) => roleIds.includes(entry.roleId));
     if (permissions.length === 0) {
       featureAccess[feature.featureKey] = {
         canView: false,
@@ -457,6 +460,7 @@ export const getGuildState = async (
     moderatorTag: entry.moderatorTag ?? `Modérateur ${entry.moderatorUserId}`,
     reason: entry.reason,
     durationSeconds: entry.durationSeconds,
+    weight: entry.weight,
     expiresAt: entry.expiresAt?.toISOString() ?? null,
     createdAt: entry.createdAt.toISOString(),
     resolvedAt: entry.resolvedAt?.toISOString() ?? null,
