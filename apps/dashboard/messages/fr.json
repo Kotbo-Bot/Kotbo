@@ -1197,6 +1197,8 @@
   "sc_search_ph": "Rechercher par type, cible, staff, raison…",
   "sc_col_target": "Cible",
   "sc_col_duration": "Durée",
+  "sc_col_duration_weight": "Durée / gravité",
+  "sc_tier_weight": "Gravité du warn",
   "sc_col_status": "Statut",
   "sc_delete_infraction_title": "Supprimer cette infraction",
   "sc_deleting": "Suppression…",

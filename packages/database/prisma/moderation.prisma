@@ -208,6 +208,8 @@ model SanctionTier {
   level           Int          // 1, 2, 3...
   action          SanctionType
   durationSeconds Int?
+  // Gravité du warn posé par un palier WARN (0 = rappel), ignorée pour les autres actions.
+  weight          Int          @default(1)
   customReason    String?
   
   table           SanctionTable @relation(fields: [tableId], references: [id], onDelete: Cascade)

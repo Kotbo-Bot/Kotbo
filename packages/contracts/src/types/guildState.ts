@@ -111,6 +111,8 @@ export type SanctionTableTier = {
   level: number;
   action: string;
   durationSeconds: number | null;
+  /** Gravite du warn d'un palier WARN (0 = rappel). */
+  weight: number;
   customReason: string | null;
 };
 

@@ -1197,6 +1197,8 @@
   "sc_search_ph": "Search by type, target, staff, reason...",
   "sc_col_target": "Target",
   "sc_col_duration": "Duration",
+  "sc_col_duration_weight": "Duration / severity",
+  "sc_tier_weight": "Warning severity",
   "sc_col_status": "Status",
   "sc_delete_infraction_title": "Delete this infraction",
   "sc_deleting": "Deleting...",
