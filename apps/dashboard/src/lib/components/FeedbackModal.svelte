@@ -5,6 +5,7 @@
   import FormTextarea from './FormTextarea.svelte';
   import ActionButton from './ActionButton.svelte';
   import Modal from './Modal.svelte';
+  import MyFeedbacks from './MyFeedbacks.svelte';
   import { feedbackModal } from '../stores/feedbackModal.svelte';
   import { authStore } from '../stores/auth.svelte';
   import { toast } from '../stores/toast.svelte';
@@ -15,6 +16,7 @@
   let type = $state<'retour' | 'bloquage' | 'suggestion' | 'autre'>('retour');
   let message = $state('');
   let isSending = $state(false);
+  let view = $state<'send' | 'mine'>('send');
 
   const isOpen = $derived(feedbackModal.open);
 
@@ -22,6 +24,7 @@
     if (isOpen) {
       type = 'retour';
       message = '';
+      view = 'send';
     }
   });
 
@@ -72,6 +75,22 @@
     <div class="absolute bottom-[20%] right-[-10%] w-[50%] h-[50%] bg-secondary rounded-full blur-none hidden"></div>
   </div>
 
+  <div class="flex gap-1 px-6 pt-4 relative z-10" role="tablist">
+    {#each [['send', m.d1_fb_tab_send()], ['mine', m.d1_fb_tab_mine()]] as [id, label] (id)}
+      <button
+        type="button"
+        role="tab"
+        aria-selected={view === id}
+        onclick={() => (view = id as 'send' | 'mine')}
+        class="rounded-full border px-3 h-7 text-xs font-semibold transition
+          {view === id ? 'border-primary bg-primary/12 text-primary' : 'border-outline-variant/30 text-on-surface-variant hover:border-primary/40'}"
+      >{label}</button>
+    {/each}
+  </div>
+
+  {#if view === 'mine'}
+    <MyFeedbacks />
+  {:else}
   <!-- Form Content -->
     <form onsubmit={handleSubmit} class="p-6 space-y-5 relative z-10">
       <!-- Type Selection -->
@@ -128,4 +147,5 @@
         </button>
       </div>
     </form>
+  {/if}
 </Modal>
