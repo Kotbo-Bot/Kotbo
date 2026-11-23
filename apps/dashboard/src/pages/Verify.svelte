@@ -19,7 +19,13 @@
     color: string;
     userId: string;
     expiresAt: string;
+    level?: string;
+    turnstileSiteKey?: string | null;
   } | null>(null);
+  let captchaEl = $state<HTMLDivElement | null>(null);
+  let captchaToken = $state<string | null>(null);
+  let captchaError = $state<string | null>(null);
+  let widgetId: string | null = null;
   let result = $state<{
     success: boolean;
     message: string;
@@ -101,12 +107,9 @@
     }
   }
 
-  function startOAuth() {
-    verifying = true;
-
-    let clientInfo: any = {};
+  function collectClientInfo(): Record<string, unknown> {
     try {
-      clientInfo = {
+      return {
         userAgent: navigator.userAgent,
         platform: navigator.platform || (navigator as any).userAgentData?.platform || 'inconnu',
         language: navigator.language,
@@ -117,7 +120,65 @@
       };
     } catch (e) {
       console.error('Failed to collect hardware/software info:', e);
+      return {};
     }
+  }
+
+  // Niveau LINK : le widget Turnstile est rendu une fois le conteneur monté.
+  $effect(() => {
+    const siteKey = sessionInfo?.level === 'LINK' ? sessionInfo.turnstileSiteKey : null;
+    if (!siteKey || !captchaEl) return;
+    const el = captchaEl;
+    const render = () => {
+      const ts = (window as any).turnstile;
+      if (!ts || widgetId !== null) return;
+      widgetId = ts.render(el, {
+        sitekey: siteKey,
+        action: 'verify',
+        callback: (t: string) => { captchaToken = t; },
+        'expired-callback': () => { captchaToken = null; },
+        'error-callback': () => { captchaToken = null; },
+      });
+    };
+    if ((window as any).turnstile) {
+      render();
+    } else {
+      const s = document.createElement('script');
+      s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js';
+      s.async = true;
+      s.onload = render;
+      document.head.appendChild(s);
+    }
+  });
+
+  async function submitCaptcha() {
+    if (!captchaToken) return;
+    verifying = true;
+    try {
+      const res = await fetch(`${getApiBase()}/api/verify/${guildId}/${token}/captcha`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cfToken: captchaToken, clientInfo: collectClientInfo() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        result = data;
+      } else {
+        captchaError = data.error || m.vfy_err_generic();
+        // Jeton à usage unique : on repart d'un widget neuf.
+        captchaToken = null;
+        if (widgetId !== null) (window as any).turnstile?.reset(widgetId);
+      }
+    } catch {
+      captchaError = m.vfy_err_network();
+    }
+    verifying = false;
+  }
+
+  function startOAuth() {
+    verifying = true;
+
+    const clientInfo = collectClientInfo();
 
     let clientInfoParam = '';
     try {
@@ -235,6 +296,28 @@
             {/each}
           </ul>
 
+          {#if sessionInfo.level === 'LINK'}
+            <div bind:this={captchaEl} class="mb-4 flex justify-center"></div>
+            {#if captchaError}
+              <p class="mb-3 text-center text-xs text-error" role="alert">{captchaError}</p>
+            {/if}
+            <button
+              type="button"
+              onclick={submitCaptcha}
+              disabled={verifying || !captchaToken}
+              aria-busy={verifying}
+              class="admin-press w-full h-12 flex items-center justify-center gap-2.5 px-5 rounded-full bg-primary text-on-primary font-semibold text-sm shadow-sm hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            >
+              {#if verifying}
+                <span class="spinner" aria-hidden="true"></span>
+              {:else}
+                <Papicon icon="shield-check" size={18} />
+              {/if}
+              {m.vfy_captcha()}
+            </button>
+
+            <p class="mt-4 text-center text-2xs text-on-surface-variant">{m.vfy_captcha_consent()}</p>
+          {:else}
           <button
             type="button"
             onclick={startOAuth}
@@ -252,6 +335,7 @@
           </button>
 
           <p class="mt-4 text-center text-2xs text-on-surface-variant">{m.vfy_consent()}</p>
+          {/if}
 
           <div class="mt-4 rounded-2xl bg-surface-container px-4 py-3.5">
             <p class="mb-1.5 text-xs font-semibold">{m.vfy_data_title()}</p>

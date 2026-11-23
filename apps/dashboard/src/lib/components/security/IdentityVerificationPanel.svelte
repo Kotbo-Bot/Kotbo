@@ -191,6 +191,7 @@
         <label class="space-y-1.5">
           <span class="text-xs font-medium text-on-surface-variant/40">{m.da_level_command()}</span>
           <select bind:value={verifConfig.verificationLevelCommand} class="w-full rounded-lg border border-field-border bg-surface-container-high/40 px-3 py-2.5 text-sm">
+            <option value="LINK">{m.da_level_link()}</option>
             <option value="LOW">{m.da_level_low()}</option>
             <option value="MEDIUM">{m.da_level_medium()}</option>
             <option value="HIGH">{m.da_level_high()}</option>
@@ -199,6 +200,7 @@
         <label class="space-y-1.5">
           <span class="text-xs font-medium text-on-surface-variant/40">{m.da_level_join()}</span>
           <select bind:value={verifConfig.verificationLevelJoin} class="w-full rounded-lg border border-field-border bg-surface-container-high/40 px-3 py-2.5 text-sm">
+            <option value="LINK">{m.da_level_link()}</option>
             <option value="LOW">{m.da_level_low()}</option>
             <option value="MEDIUM">{m.da_level_medium()}</option>
             <option value="HIGH">{m.da_level_high()}</option>
