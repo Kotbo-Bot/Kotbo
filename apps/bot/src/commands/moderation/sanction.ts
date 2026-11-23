@@ -279,6 +279,19 @@ async function notifyModeratorDashboardReportReminder(
   }
 }
 
+function gravityLabel(weight: number, locale: Locale): string {
+  if (weight === REMINDER_WEIGHT) return m.b1_gravity_reminder({}, { locale });
+  if (weight === 3) return m.b1_gravity_high({}, { locale });
+  if (weight === 2) return m.b1_gravity_normal({}, { locale });
+  return m.b1_gravity_low({}, { locale });
+}
+
+/** Libellé d'un palier : un palier WARN annonce sa gravité. */
+function tierActionLabel(action: SanctionType, weight: number, locale: Locale): string {
+  if (action !== SanctionType.WARN || weight === REMINDER_WEIGHT) return sanctionTypeLabel(action, locale, weight);
+  return `${sanctionTypeLabel(action, locale)} (${gravityLabel(weight, locale)})`;
+}
+
 function sanctionTypeLabel(type: SanctionType, locale: Locale = 'fr', weight?: number): string {
   switch (type) {
     case SanctionType.WARN:
@@ -544,13 +557,12 @@ async function executeInternal(interaction: ChatInputCommandInteraction | UserCo
       const warnCount = await countWarns(interaction.guildId, targetUser.id, linkedUserIds);
       const warnScore = await getWarnScore(interaction.guildId, targetUser.id, linkedUserIds);
 
-      const gravityLabel = weight === 3 ? m.b1_gravity_high({}, { locale }) : weight === 2 ? m.b1_gravity_normal({}, { locale }) : weight === REMINDER_WEIGHT ? m.b1_gravity_reminder({}, { locale }) : m.b1_gravity_low({}, { locale });
       // Un rappel ne bouge ni le compte ni le score : sans sa gravité affichée, rien ne le distinguerait d'un échec.
       const scoreFields = warnScore !== warnCount || weight === REMINDER_WEIGHT
         ? [
             { name: m.b1_total_warns({}, { locale }), value: `${warnCount}`, inline: true },
             { name: m.b1_weighted_score({}, { locale }), value: m.b1_points({ score: warnScore }, { locale }), inline: true },
-            { name: m.b1_gravity({}, { locale }), value: gravityLabel, inline: true },
+            { name: m.b1_gravity({}, { locale }), value: gravityLabel(weight, locale), inline: true },
           ]
         : [{ name: m.b1_total_warns({}, { locale }), value: `${warnCount}`, inline: true }];
 
@@ -888,7 +900,7 @@ async function executeInternal(interaction: ChatInputCommandInteraction | UserCo
       // Passé ce point la sanction est appliquée : un compte rendu qui échoue ne
       // doit plus s'annoncer comme un échec de sanction, sinon le modérateur
       // sanctionne une deuxième fois.
-      const actionLabel = sanctionTypeLabel(result.action, locale);
+      const actionLabel = tierActionLabel(result.action, result.sanction.weight, locale);
       const actionEmoji = sanctionTypeEmoji(result.action);
       const bypassText = bypassLevel ? m.b1_bypass_forced({ level: bypassLevel }, { locale }) : '';
 
@@ -980,7 +992,7 @@ async function autocomplete(interaction: AutocompleteInteraction) {
 
       const locale = await getEffectiveLocale(interaction);
       const choices = table.tiers.map((tier) => {
-        const actionLabel = sanctionTypeLabel(tier.action, locale);
+        const actionLabel = tierActionLabel(tier.action, tier.weight, locale);
         const durationLabel = tier.durationSeconds ? ` (${formatDurationFr(tier.durationSeconds * 1000)})` : '';
         const name = `T${tier.level} - ${actionLabel}${durationLabel}`;
         return {

@@ -3,6 +3,7 @@ import { Hono, type Context } from 'hono';
 import type { Client } from 'discord.js';
 import { generateTranscriptFromMessages } from '../../../../services/features/transcriptService.js';
 import { formatSanctionDurationLabel, registerImportedSanction } from '../../../../services/moderation/sanctionService.js';
+import { tierWarnWeight } from '../../../../services/moderation/warnWeight.js';
 import {
   archiveSanctions,
   DELETION_RETENTION_DAYS,
@@ -67,6 +68,7 @@ export function createSanctionsRouter(client: Client) {
         level: number;
         action: SanctionType;
         durationSeconds: number | null;
+        weight: number;
         customReason: string | null;
       };
       type SanctionTableInput = { id?: string; name: string; tiers: SanctionTierInput[] };
@@ -108,6 +110,7 @@ export function createSanctionsRouter(client: Client) {
             level: Number(tier.level),
             action,
             durationSeconds,
+            weight: tierWarnWeight(action, tier.weight),
             customReason: typeof tier.customReason === 'string' ? tier.customReason : null,
           });
         }
@@ -167,6 +170,7 @@ export function createSanctionsRouter(client: Client) {
                 level: tier.level,
                 action: tier.action,
                 durationSeconds: tier.durationSeconds,
+                weight: tier.weight,
                 customReason: tier.customReason?.trim() || null,
               })),
             });

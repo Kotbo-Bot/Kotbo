@@ -824,6 +824,7 @@ export const getGuildState = async (
         level: tier.level,
         action: tier.action,
         durationSeconds: tier.durationSeconds,
+        weight: tier.weight,
         customReason: tier.customReason,
       })),
     })),

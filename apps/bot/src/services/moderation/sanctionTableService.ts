@@ -190,6 +190,7 @@ export async function applyProgressiveSanction(params: {
         moderator: params.moderator,
         reason: customReason,
         client: params.client,
+        weight: tier.weight,
       });
       break;
     }

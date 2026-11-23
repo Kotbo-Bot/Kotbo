@@ -109,6 +109,7 @@ import DiscordAutomodEvents from '../lib/components/automod/DiscordAutomodEvents
           level: 1,
           action: 'WARN',
           durationSeconds: null,
+          weight: 1,
           customReason: m.sc_auto_warn_reason({ name })
         }
       ]
@@ -146,6 +147,7 @@ import DiscordAutomodEvents from '../lib/components/automod/DiscordAutomodEvents
       level: nextLevel,
       action: defaultAction,
       durationSeconds: defaultDuration,
+      weight: 1,
       customReason: m.sc_repeat_reason({ name: table.name, level: nextLevel })
     });
   }
@@ -172,6 +174,13 @@ import DiscordAutomodEvents from '../lib/components/automod/DiscordAutomodEvents
     if (seconds % 86400 === 0) return 'd';
     if (seconds % 3600 === 0) return 'h';
     return 'm';
+  }
+
+  function tierWeightLabel(weight: number): string {
+    if (weight === 0) return m.da_automod_warn_weight_0();
+    if (weight === 3) return m.aegis_weight_3();
+    if (weight === 2) return m.aegis_weight_2();
+    return m.aegis_weight_1();
   }
 
   function updateTierDuration(tableIndex: number, tierIndex: number, value: number, unit: 'm' | 'h' | 'd') {
@@ -298,7 +307,7 @@ import DiscordAutomodEvents from '../lib/components/automod/DiscordAutomodEvents
       ctx.fillStyle = '#ffffff';
       
       let actionLabel = tier.action;
-      if (tier.action === 'WARN') actionLabel = m.sc_action_warn();
+      if (tier.action === 'WARN') actionLabel = tier.weight === 0 ? m.fmt_type_reminder() : `${m.sc_action_warn()} (${tierWeightLabel(tier.weight)})`;
       else if (tier.action === 'TIMEOUT') actionLabel = `TIMEOUT (${formatSeconds(tier.durationSeconds)})`;
       else if (tier.action === 'TEMP_BAN') actionLabel = m.sc_action_temp_ban({ d: formatSeconds(tier.durationSeconds) });
       else if (tier.action === 'KICK') actionLabel = m.sc_action_kick();
@@ -1591,7 +1600,7 @@ import DiscordAutomodEvents from '../lib/components/automod/DiscordAutomodEvents
                           <tr class="bg-surface-container-high/40 text-xs font-semibold text-on-surface-variant border-b border-outline-variant/15 select-none">
                             <th class="py-3 px-4 w-20 text-center border-r border-outline-variant/10">{m.sc_col_tier()}</th>
                             <th class="py-3 px-4 w-48 border-r border-outline-variant/10">{m.sc_col_action()}</th>
-                            <th class="py-3 px-4 w-48 border-r border-outline-variant/10">{m.sc_col_duration()}</th>
+                            <th class="py-3 px-4 w-48 border-r border-outline-variant/10">{m.sc_col_duration_weight()}</th>
                             <th class="py-3 px-4 border-r border-outline-variant/10">{m.sc_col_custom_reason()}</th>
                             <th class="py-3 px-2 w-12 text-center"></th>
                           </tr>
@@ -1648,6 +1657,16 @@ import DiscordAutomodEvents from '../lib/components/automod/DiscordAutomodEvents
                                       <option value="d" class="text-on-surface bg-surface-container-lowest">{m.sc_unit_days()}</option>
                                     </select>
                                   </div>
+                                {:else if tier.action === 'WARN'}
+                                  <select
+                                    bind:value={tier.weight}
+                                    aria-label={m.sc_tier_weight()}
+                                    class="w-full bg-transparent py-1 px-1.5 rounded-lg border border-transparent hover:border-outline-variant/10 focus:border-primary/30 outline-hidden transition-all text-xs font-semibold cursor-pointer"
+                                  >
+                                    {#each [0, 1, 2, 3] as weight}
+                                      <option value={weight} class="text-on-surface bg-surface-container-lowest">{tierWeightLabel(weight)}</option>
+                                    {/each}
+                                  </select>
                                 {:else}
                                   <div class="h-7 flex items-center justify-center text-2xs font-semibold tracking-wider text-on-surface-variant/30 select-none bg-linear-to-br from-outline-variant/5 to-transparent rounded-lg">
                                     {m.sc_not_applicable()}
