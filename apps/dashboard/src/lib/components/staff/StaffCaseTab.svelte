@@ -86,9 +86,9 @@
         (member as any).generalClearance = generalClearance;
         (member as any).poleClearances = { ...poleClearances };
       }
-      toast.success('Habilitations enregistrées');
+      toast.success(m.toast_clearances_saved());
     } catch {
-      toast.error('Impossible de sauvegarder les habilitations.');
+      toast.error(m.toast_clearances_error());
     } finally {
       savingClearances = false;
     }

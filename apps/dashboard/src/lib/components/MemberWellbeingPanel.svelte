@@ -7,7 +7,7 @@
   import { onMount } from 'svelte';
   import { dashboardFetch } from '../api';
   import { toast } from '../stores/toast.svelte';
-  import { dateLocale } from '../i18n';
+  import { dateLocale, m } from '../i18n';
 
   let { userId, userName }: { userId: string; userName: string } = $props();
 
@@ -51,9 +51,9 @@
       if (!res.ok) throw new Error(data.error || 'Erreur');
       cases = [data.item, ...cases];
       text = '';
-      toast.success('Note confidentielle enregistrée');
+      toast.success(m.toast_wb_note_saved());
     } catch (err: any) {
-      toast.error(err?.message || "Erreur lors de l'enregistrement.");
+      toast.error(err?.message || m.toast_save_error());
     } finally {
       busy = false;
     }
