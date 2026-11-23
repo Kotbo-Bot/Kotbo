@@ -1,4 +1,4 @@
-import './tinroLib';
+import type {} from './tinroLib';
 import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
