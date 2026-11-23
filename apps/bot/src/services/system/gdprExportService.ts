@@ -151,6 +151,7 @@ const STATIC_SOURCES: GdprSource[] = [
   { category: 'moderation', key: 'aegisMemberDailyStat', label: 'Statistiques Aegis', model: 'aegisMemberDailyStat', where: ({ discordId }) => ({ userId: discordId }) },
   { category: 'moderation', key: 'banHygieneRecord', label: 'Suivi des bannissements', model: 'banHygieneRecord', where: ({ discordId }) => ({ userId: discordId }) },
   { category: 'moderation', key: 'memberJail', label: "Mises à l'isolement", model: 'memberJail', where: ({ discordId }) => ({ userId: discordId }) },
+  { category: 'moderation', key: 'visionBlock', label: "Images bloquées par Kotbo Vision", model: 'visionBlock', where: ({ discordId }) => ({ authorId: discordId }) },
   { category: 'moderation', key: 'visionReview', label: "Analyses d'images", model: 'visionReview', where: ({ discordId }) => ({ authorId: discordId }) },
   { category: 'moderation', key: 'inviteApprovalRequest', label: "Demandes d'approbation d'invitation", model: 'inviteApprovalRequest', where: ({ discordId }) => ({ creatorId: discordId }) },
   { category: 'moderation', key: 'memberReport', label: 'Signalements', model: 'memberReport', where: ({ discordId }) => ({ OR: [{ reporterId: discordId }, { targetId: discordId }] }), project: projectMemberReport },
@@ -233,6 +234,8 @@ const STATIC_SOURCES: GdprSource[] = [
   { category: 'engagement', key: 'rankedSeasonEntry', label: 'Saisons classées', model: 'rankedSeasonEntry', where: ({ discordId }) => ({ userId: discordId }) },
   { category: 'engagement', key: 'funCountingPlayer', label: 'Jeu du comptage', model: 'funCountingPlayer', where: ({ discordId }) => ({ userId: discordId }) },
   { category: 'engagement', key: 'broadcastPollVote', label: 'Votes aux sondages diffusés', model: 'broadcastPollVote', where: ({ discordId }) => ({ userId: discordId }) },
+  { category: 'engagement', key: 'feedback', label: 'Retours envoyés depuis le dashboard', model: 'feedback', where: ({ discordId }) => ({ userId: discordId }) },
+  { category: 'engagement', key: 'feedbackMessage', label: 'Réponses dans les retours', model: 'feedbackMessage', where: ({ discordId }) => ({ authorId: discordId }) },
   { category: 'engagement', key: 'broadcastFeedback', label: 'Avis laissés sur les annonces diffusées', model: 'broadcastFeedback', where: ({ discordId }) => ({ userId: discordId }) },
   { category: 'engagement', key: 'eventQuizResponse', label: 'Réponses aux quiz', model: 'eventQuizResponse', where: ({ discordId }) => ({ participant: { userId: discordId } }) },
   { category: 'engagement', key: 'eventCtfSolve', label: 'Épreuves CTF résolues', model: 'eventCtfSolve', where: ({ discordId }) => ({ participant: { userId: discordId } }) },
@@ -248,6 +251,7 @@ const STATIC_SOURCES: GdprSource[] = [
   // ── Staff ──────────────────────────────────────────────────────
   // Les tables staff référencent selon les cas l'ID Discord ou l'ID cuid du
   // StaffMember. On interroge donc l'ensemble des identifiants connus.
+  { category: 'staff', key: 'dashboardFeatureUserAccess', label: 'Accès au dashboard accordés à titre personnel', model: 'dashboardFeatureUserAccess', where: ({ discordId }) => ({ userId: discordId }) },
   { category: 'staff', key: 'staffMember', label: 'Fiches staff', model: 'staffMember', where: ({ discordId }) => ({ userId: discordId }) },
   { category: 'staff', key: 'staffActivity', label: 'Activité staff', model: 'staffActivity', where: ({ staffIds }) => ({ staffUserId: { in: staffIds } }) },
   { category: 'staff', key: 'staffVoiceSession', label: 'Sessions vocales staff', model: 'staffVoiceSession', where: ({ staffIds }) => ({ staffUserId: { in: staffIds } }) },
