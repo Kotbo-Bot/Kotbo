@@ -41,6 +41,6 @@ Documentation technique et fonctionnelle du bot Kotbo.
 
 ## Notes de version
 
-- [`releases/`](./releases/) - Un dossier par version : notes GitHub, annonce
-  Discord, article de blog et bannière. La plus récente est
-  [`releases/10.1/`](./releases/10.1/release-github.md).
+- [Releases GitHub](https://github.com/Kotbo-Bot/Kotbo/releases) - Notes de chaque
+  version, avec les migrations et variables à prévoir pour les instances
+  auto-hébergées.
