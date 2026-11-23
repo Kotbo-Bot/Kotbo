@@ -166,6 +166,32 @@
   const hasRule = (feature: any, who: any) =>
     !!feature[listProp(who)]?.some((rule: any) => rule[idProp(who)] === who.id);
 
+  // Copie des droits d'un role modele vers d'autres, dans la matrice seulement :
+  // l'enregistrement habituel les applique. Une fonctionnalite ou le modele n'a
+  // aucune regle retire celle de la cible, sinon elle garderait un droit que le
+  // modele n'a pas.
+  let copyOpen = $state(false);
+  let copySource = $state('');
+  let copyTargets = $state<string[]>([]);
+  let copyDone = $state(false);
+
+  function copyRoleRights() {
+    if (!copySource) return;
+    const targets = copyTargets.filter((id) => id !== copySource);
+    features = features.map((feature: any) => {
+      const list: any[] = feature.roleAccessByRole ?? [];
+      const source = list.find((rule) => rule.roleId === copySource);
+      const kept = list.filter((rule) => !targets.includes(rule.roleId));
+      if (!source) return list.length === kept.length ? feature : { ...feature, roleAccessByRole: kept };
+      const { canView, canModerate, canConfigure, canDelete } = source;
+      return {
+        ...feature,
+        roleAccessByRole: [...kept, ...targets.map((roleId) => ({ roleId, canView, canModerate, canConfigure, canDelete }))],
+      };
+    });
+    copyDone = true;
+  }
+
   const ruledFeatureCount = (who: any) =>
     features.filter((feature: any) => hasRule(feature, who)).length;
 </script>
@@ -223,6 +249,57 @@
               />
             </label>
           </div>
+        </div>
+
+        <div class="rounded-xl border border-outline-variant/10 bg-surface-container-high/10">
+          <button
+            type="button"
+            onclick={() => (copyOpen = !copyOpen)}
+            aria-expanded={copyOpen}
+            class="w-full flex items-center justify-between gap-2 px-4 py-3 text-body-sm font-medium text-on-surface"
+          >
+            {m.ma_copy_title()}
+            <Papicon icon="CaretDown" size={14} class={copyOpen ? 'rotate-180' : ''} />
+          </button>
+          {#if copyOpen}
+            <div class="px-4 pb-4 space-y-3">
+              <label class="block space-y-1">
+                <span class="text-xs text-on-surface-variant">{m.ma_copy_source()}</span>
+                <select
+                  bind:value={copySource}
+                  onchange={() => (copyDone = false)}
+                  class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-2 text-xs"
+                >
+                  <option value=""></option>
+                  {#each roleEntries as role (role.id)}
+                    <option value={role.id}>{role.name}</option>
+                  {/each}
+                </select>
+              </label>
+              <fieldset class="space-y-1">
+                <legend class="text-xs text-on-surface-variant">{m.ma_copy_targets()}</legend>
+                <div class="max-h-40 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 gap-1">
+                  {#each roleEntries.filter((role) => role.id !== copySource) as role (role.id)}
+                    <label class="flex items-center gap-2 text-xs">
+                      <input type="checkbox" value={role.id} bind:group={copyTargets} onchange={() => (copyDone = false)} />
+                      {role.name}
+                    </label>
+                  {/each}
+                </div>
+              </fieldset>
+              <div class="flex items-center gap-3">
+                <button
+                  type="button"
+                  disabled={!copySource || copyTargets.length === 0}
+                  onclick={copyRoleRights}
+                  class="px-3 py-1.5 rounded-lg bg-primary text-on-primary text-xs font-semibold disabled:opacity-40"
+                >
+                  {m.ma_copy_action({ count: copyTargets.filter((id) => id !== copySource).length })}
+                </button>
+                {#if copyDone}<span class="text-xs text-on-surface-variant" role="status">{m.ma_copy_done()}</span>{/if}
+              </div>
+            </div>
+          {/if}
         </div>
 
         <dl class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 p-4 rounded-xl border border-outline-variant/10 bg-surface-container-high/10">
