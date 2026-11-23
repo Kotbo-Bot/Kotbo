@@ -211,6 +211,14 @@ export function registerWorkflowBusSubscribers(client: Client): void {
     await dispatchEvent(client, payload.guildId, 'automod:triggered', payload as never);
   }, MODULE_NAME);
 
+  subscribeForModule('workflows', 'aegis:alert', async (payload) => {
+    await dispatchEvent(client, payload.guildId, 'aegis:alert', payload as never);
+  }, MODULE_NAME);
+
+  subscribeForModule('workflows', 'verification:passed', async (payload) => {
+    await dispatchEvent(client, payload.guildId, 'verification:passed', payload as never);
+  }, MODULE_NAME);
+
   subscribeForModule('workflows', 'sanction:revoked', async (payload) => {
     await dispatchEvent(client, payload.guildId, 'sanction:revoked', payload as never);
   }, MODULE_NAME);

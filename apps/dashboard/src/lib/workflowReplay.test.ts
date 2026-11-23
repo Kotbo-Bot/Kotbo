@@ -58,6 +58,10 @@ describe('messagePreviewOf', () => {
       .toEqual({ channel: 'général', embed: { title: 'Bienvenue', description: 'Lis le règlement', color: '#ff0000' } });
   });
 
+  it('montre le texte au-dessus de l encadré', () => {
+    expect(messagePreviewOf('SendEmbed', { channel: general, title: 'Annonce', content: '@Staff' })?.content).toBe('@Staff');
+  });
+
   it('ignore une couleur qui n est pas un code hexadécimal', () => {
     expect(messagePreviewOf('SendEmbed', { channel: general, title: 'T' }, { color: 'red;x' })?.embed?.color).toBe('#5865F2');
   });

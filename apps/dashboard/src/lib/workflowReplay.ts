@@ -80,11 +80,14 @@ export function messagePreviewOf(
       return { channel: channelName(inputs.channel, 'salon'), content: text(inputs.text) };
     case 'ReplyToMessage':
       return { channel: 'salon', content: text(inputs.text) };
-    case 'SendEmbed':
+    case 'SendEmbed': {
+      const content = text(inputs.content);
       return {
         channel: channelName(inputs.channel, 'salon'),
+        ...(content ? { content } : {}),
         embed: { title: text(inputs.title), description: text(inputs.description), color: embedColor(config.color) },
       };
+    }
     case 'SendLogMessage':
       return { channel: 'logs', embed: { title: '', description: text(inputs.text), color: DEFAULT_COLOR } };
     default:

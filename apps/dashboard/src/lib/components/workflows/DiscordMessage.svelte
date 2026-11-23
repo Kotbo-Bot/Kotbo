@@ -7,7 +7,7 @@
 </script>
 
 {#if message.embed}
-  <DiscordPreview channel={message.channel}>
+  <DiscordPreview channel={message.channel} content={message.content}>
     <div class="mt-1 max-w-md rounded border-l-4 bg-[#2b2d31] px-3 py-2.5" style="border-left-color: {message.embed.color}">
       {#if message.embed.title}
         <p class="text-sm font-semibold text-[#f2f3f5] break-words">{message.embed.title}</p>

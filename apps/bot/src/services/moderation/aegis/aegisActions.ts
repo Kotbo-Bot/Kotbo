@@ -17,6 +17,7 @@ import type { AegisRuntimeConfig } from './aegisConfig.js';
 import type { AegisJob } from './aegisQueue.js';
 import { buildButtons, buildToxicEmbed, closeAlert, pct, postAlert } from './aegisAlerts.js';
 import { captureEvidence, evidenceLinks, reasonWithExcerpt } from './aegisEvidence.js';
+import { publishAegisAlert } from './aegisEvents.js';
 
 export type Actor = { id: string; tag: string };
 
@@ -184,6 +185,7 @@ export async function handleToxic(ctx: ToxicContext): Promise<AegisDetection> {
 
   if (decision === 'review') {
     const detection = await prisma.aegisDetection.create({ data: { ...base, action: 'REVIEW', status: 'PENDING' } });
+    publishAegisAlert(detection);
     await postAlert(guild, config.reviewChannelId, detection.id, {
       embeds: [buildToxicEmbed(detection, note)],
       components: buildButtons(detection),
@@ -224,6 +226,7 @@ export async function handleToxic(ctx: ToxicContext): Promise<AegisDetection> {
   }
 
   const detection = await prisma.aegisDetection.create({ data: { ...base, action, status: 'AUTO', sanctionId } });
+  publishAegisAlert(detection);
 
   kotboEventBus.publish('automod:triggered', {
     guildId: guild.id,

@@ -9,6 +9,7 @@ import {
   ButtonStyle,
 } from 'discord.js';
 import crypto from 'node:crypto';
+import { kotboEventBus } from '@kotbo/core';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { isAutoGrantableRoleId } from '../../utils/adminLockPermissions.js';
@@ -612,6 +613,16 @@ export async function completeVerification(params: {
     fallbackChannelId: verification.fallbackChannelId,
     fallbackKind: verification.fallbackKind,
   });
+
+  // Un appel de bannissement ou un double compte n'ouvre pas l'accès : ce n'est pas une réussite.
+  if (!verification.appealId && !duplicateDetected) {
+    kotboEventBus.publish('verification:passed', {
+      guildId: verification.guildId,
+      userId: verifiedDiscordId,
+      method: 'SECURITY',
+      timestamp: Date.now(),
+    });
+  }
 
   await notifyStaffVerificationCompleted({
     client,
