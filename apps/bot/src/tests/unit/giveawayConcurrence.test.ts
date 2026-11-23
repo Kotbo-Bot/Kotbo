@@ -163,6 +163,8 @@ function concoursDeBase(etat: Partial<Giveaway>): Giveaway {
     createdById: null,
     styleOverrides: null,
     ignoreBonuses: false,
+    conditions: null,
+    discordEventId: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...etat,

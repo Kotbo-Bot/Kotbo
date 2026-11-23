@@ -18,12 +18,12 @@ describe('aegisAlertOf', () => {
   });
 
   test('une détresse porte le score de l’émotion', () => {
-    expect(aegisAlertOf({ ...detection, kind: 'DISTRESS' }).score).toBe(20);
+    expect(aegisAlertOf({ ...detection, kind: 'DISTRESS' })?.score).toBe(20);
   });
 
   test('harcèlement et conflit n’ont pas de score', () => {
-    expect(aegisAlertOf({ ...detection, kind: 'HARASSMENT', toxicity: null }).score).toBeNull();
-    expect(aegisAlertOf({ ...detection, kind: 'CONFLICT', toxicity: null }).score).toBeNull();
+    expect(aegisAlertOf({ ...detection, kind: 'HARASSMENT', toxicity: null })?.score).toBeNull();
+    expect(aegisAlertOf({ ...detection, kind: 'CONFLICT', toxicity: null })?.score).toBeNull();
   });
 
   test('une catégorie inconnue n’est pas publiée', () => {
