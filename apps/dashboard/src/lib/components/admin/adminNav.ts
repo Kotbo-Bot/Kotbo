@@ -71,6 +71,7 @@ export const ADMIN_SPACES: AdminSpace[] = [
       { path: '/admin/broadcast', label: 'Annonces' },
       { path: '/admin/achievements', label: 'Succès' },
       { path: '/admin/feature-pages', label: 'Pages du site' },
+      { path: '/admin/feedback', label: 'Retours' },
     ],
   },
   {

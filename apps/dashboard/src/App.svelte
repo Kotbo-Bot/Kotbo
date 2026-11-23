@@ -893,6 +893,10 @@
               load={() => import("./pages/admin/Audit.svelte")}
             />
             <LazyRoute
+              path="/admin/feedback"
+              load={() => import("./pages/admin/Feedback.svelte")}
+            />
+            <LazyRoute
               path="/admin/sites"
               load={() => import("./pages/admin/Sites.svelte")}
             />
