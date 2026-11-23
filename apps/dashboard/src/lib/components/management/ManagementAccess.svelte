@@ -378,7 +378,7 @@
                                           <span class="h-2.5 w-2.5 shrink-0 rounded-full" style="background-color:{roleDotColor(role.color)}"></span>
                                         {/if}
                                         <span class="text-body-sm font-medium">{role.name}</span>
-                                        {#if role.kind === 'key'}<span class="text-2xs text-on-surface-variant/60">{m.ma_key_badge()}</span>{/if}
+                                        {#if role.kind === 'key'}<span class="text-2xs text-on-surface-variant">{m.ma_key_badge()}</span>{/if}
                                       </span>
                                       <span class="ml-2 text-2xs text-on-surface-variant/40">{grantedCount(feature, role)}/{permissions.length}</span>
                                     </td>
@@ -437,7 +437,7 @@
                       <span class="h-2.5 w-2.5 shrink-0 rounded-full" style="background-color:{roleDotColor(role.color)}"></span>
                     {/if}
                     <span class="text-sm font-medium truncate">{role.name}</span>
-                    {#if role.kind === 'key'}<span class="text-2xs text-on-surface-variant/60">{m.ma_key_badge()}</span>{/if}
+                    {#if role.kind === 'key'}<span class="text-2xs text-on-surface-variant">{m.ma_key_badge()}</span>{/if}
                   </span>
                   <span class="flex items-center gap-3 shrink-0">
                     <span class="text-2xs font-medium {ruled > 0 ? 'text-primary' : 'text-on-surface-variant/40'}">

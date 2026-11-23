@@ -19,11 +19,11 @@
   let loading = $state(true);
   let failed = $state(false);
 
-  const periodOptions: FilterOption[] = [
+  const periodOptions = $derived<FilterOption[]>([
     { value: '7', label: m.dam_period_7() },
     { value: '30', label: m.dam_period_30() },
     { value: '90', label: m.dam_period_90() },
-  ];
+  ]);
 
   const formatDate = (iso: string) => new Date(iso).toLocaleString(dateLocale(), { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
   const actionLabel = (a: string) => (a === 'BLOCK' ? m.dam_action_block() : a === 'TIMEOUT' ? m.dam_action_timeout() : m.dam_action_alert());
@@ -73,7 +73,7 @@
     {#if !compact}
       <SectionCard title={m.dam_events()} flush>
         <div class="overflow-x-auto">
-          <table class="w-full text-left text-sm">
+          <table class="w-full text-left text-sm" aria-label={m.dam_events()}>
             <thead class="text-xs uppercase text-on-surface-variant">
               <tr>
                 <th class="px-4 py-3">{m.dam_col_date()}</th>

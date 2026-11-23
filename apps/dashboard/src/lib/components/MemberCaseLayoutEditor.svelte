@@ -3,6 +3,7 @@
   la première règle dont un rôle correspond au staff qui consulte s'applique.
 -->
 <script lang="ts">
+  import { m } from '../i18n';
   import { dashboardFetch } from '../api';
   import { toast } from '../stores/toast.svelte';
   import { dashboardStore } from '../stores/dashboard.svelte';
@@ -64,11 +65,11 @@
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Erreur');
-      toast.success('Disposition enregistrée');
+      toast.success(m.toast_layout_saved());
       open = false;
       onSaved();
     } catch (err: any) {
-      toast.error(err?.message || "Erreur lors de l'enregistrement.");
+      toast.error(err?.message || m.toast_save_error());
     } finally {
       saving = false;
     }
@@ -82,7 +83,7 @@
     {#each rules as rule, ri (ri)}
       <section class="space-y-3 rounded-lg border border-outline-variant p-4">
         <div class="flex items-center gap-2">
-          <input class="input flex-1" aria-label="Nom de la règle" bind:value={rule.name} maxlength="60" />
+          <input class="input flex-1" aria-label={m.a11y_rule_name()} bind:value={rule.name} maxlength="60" />
           <Button variant="ghost" onclick={() => (rules = rules.filter((_, i) => i !== ri))}>Supprimer</Button>
         </div>
         <div>

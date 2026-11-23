@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../lib/i18n';
   import { onMount } from 'svelte';
   import { router } from 'tinro';
   import { API_BASE_URL } from '../lib/api/client';
@@ -176,6 +177,7 @@
           <form onsubmit={sendReply} class="pt-3 border-t border-outline-variant space-y-3">
             <textarea
               bind:value={replyContent}
+              aria-label={m.a11y_public_reply()}
               rows={3}
               required
               placeholder="Ajouter une réponse…"

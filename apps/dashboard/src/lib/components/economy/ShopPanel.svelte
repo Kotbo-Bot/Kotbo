@@ -530,8 +530,8 @@
             {/snippet}
           </Field>
           <Field label="CSS personnalisé (optionnel)" hint="Appliqué sur .shop-public-root">
-            {#snippet children(id)}
-              <textarea {id} rows={3} class="input w-full font-mono text-xs" value={shop!.settings.webShopCustomCss ?? ''} placeholder=".shop-public-root &#123; ... &#125;" onchange={(e) => saveSetting({ webShopCustomCss: e.currentTarget.value })}></textarea>
+            {#snippet children(id, describedBy)}
+              <textarea {id} aria-describedby={describedBy} rows={3} class="input w-full font-mono text-xs" value={shop!.settings.webShopCustomCss ?? ''} placeholder=".shop-public-root &#123; ... &#125;" onchange={(e) => saveSetting({ webShopCustomCss: e.currentTarget.value })}></textarea>
             {/snippet}
           </Field>
         {/if}

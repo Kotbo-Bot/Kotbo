@@ -85,7 +85,7 @@
         messages: [...(selectedTicket.messages ?? []), data.message],
       };
       ticketReply = '';
-      toast.success('Réponse envoyée');
+      toast.success(m.toast_reply_sent());
     } catch {
       toast.error(m.common_error());
     } finally {
@@ -288,7 +288,7 @@
               {/each}
             </div>
             <form onsubmit={sendTicketReply} class="flex gap-2">
-              <input bind:value={ticketReply} placeholder="Répondre à ce ticket…" class="input flex-1 text-sm" required />
+              <input bind:value={ticketReply} aria-label={m.a11y_ticket_reply()} placeholder="Répondre à ce ticket…" class="input flex-1 text-sm" required />
               <Button type="submit" size="sm" variant="primary" loading={ticketReplying}>Envoyer</Button>
             </form>
           </div>

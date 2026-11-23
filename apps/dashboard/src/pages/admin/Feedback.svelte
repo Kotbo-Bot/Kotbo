@@ -7,6 +7,7 @@
    * retours ». Les retours antérieurs à cette page n'étaient pas conservés.
    */
   import { onMount } from 'svelte';
+  import { m } from '../../lib/i18n';
   import { toast } from '../../lib/stores/toast.svelte';
   import {
     FEEDBACK_STATUS_ORDER,
@@ -54,7 +55,7 @@
     try {
       feedbacks = (await fetchAdminFeedbacks({ status: statusFilter || undefined, type: typeFilter || undefined })).feedbacks;
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Chargement impossible');
+      toast.error(err instanceof Error ? err.message : m.toast_load_failed());
     } finally {
       loading = false;
     }
@@ -68,7 +69,7 @@
       detail = (await fetchFeedback(id)).feedback;
       open = true;
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Chargement impossible');
+      toast.error(err instanceof Error ? err.message : m.toast_load_failed());
     }
   }
 
@@ -86,9 +87,9 @@
       await replyToFeedback(detail.id, reply.trim());
       reply = '';
       await refreshDetail();
-      toast.success('Réponse envoyée');
+      toast.success(m.toast_reply_sent());
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Envoi impossible');
+      toast.error(err instanceof Error ? err.message : m.toast_send_failed());
     } finally {
       busy = false;
     }
@@ -102,9 +103,9 @@
       await setFeedbackStatus(detail.id, status, reply.trim() || undefined);
       reply = '';
       await refreshDetail();
-      toast.success(`Statut : ${STATUS[status].label}`);
+      toast.success(m.toast_status_changed({ label: STATUS[status].label }));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Changement impossible');
+      toast.error(err instanceof Error ? err.message : m.toast_change_failed());
     } finally {
       busy = false;
     }
@@ -214,6 +215,7 @@
 
       <div class="space-y-2">
         <FormTextarea
+          ariaLabel="Réponse à l’auteur"
           bind:value={reply}
           rows={3}
           placeholder="Réponse à l’auteur (envoyée aussi par MP)…"

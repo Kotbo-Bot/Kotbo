@@ -1912,16 +1912,15 @@
     );
   }
 
-  const difficultyRows = $derived<
-    Array<{
-      scope: BestiaryScope;
-      label: string;
-      current: BestiaryDifficulty;
-      advice: BestiaryDifficulty | null;
-      adviceLabel: string;
-      sample: BattleSample;
-    }>
-  >([
+  type DifficultyRow = {
+    scope: BestiaryScope;
+    label: string;
+    current: BestiaryDifficulty;
+    advice: BestiaryDifficulty | null;
+    adviceLabel: string;
+    sample: BattleSample;
+  };
+  const difficultyRows = $derived.by((): DifficultyRow[] => [
     {
       scope: "boss",
       label: m.eco_bestiary_filter_boss(),
@@ -2080,7 +2079,7 @@
           title={m.eco_public_page_copy()}
           aria-label={m.eco_public_page_copy()}
           class="flex items-center gap-2 px-3 py-2.5 rounded-lg text-xs font-bold transition-all {publicUrlCopied
-            ? 'bg-success/15 text-success border border-success/20'
+            ? 'bg-success/15 text-on-success-container border border-success/20'
             : 'bg-surface-container-high/40 text-on-surface-variant border border-outline-variant/10 hover:bg-surface-container-high/60'}"
         >
           <Papicon icon={publicUrlCopied ? "Check" : "Link"} size={15} />
@@ -5306,8 +5305,7 @@
                           class="block text-left font-semibold text-sm enabled:hover:text-primary transition-colors"
                           disabled={!memberCaseModal.canOpen}
                           onclick={() => openMember(player)}
-                          >{player.displayName || player.username}</button
-                        >
+                          >{player.displayName || player.username}</button>
                         <div
                           class="text-2xs text-on-surface-variant/40 font-mono mt-0.5"
                         >

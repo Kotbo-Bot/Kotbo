@@ -976,7 +976,7 @@
               ] as rule}
                 <li class="rounded-lg border border-outline-variant/15 px-4 py-3">
                   <p class="text-xs text-on-surface-variant">{rule.label}</p>
-                  <p class="text-sm font-semibold {rule.on ? 'text-on-surface' : 'text-on-surface-variant/60'}">
+                  <p class="text-sm font-semibold {rule.on ? 'text-on-surface' : 'text-on-surface-variant'}">
                     {rule.on ? (availableRoles.find((r) => r.id === rule.role)?.name ?? m.announcements_autorole_overview_on()) : m.announcements_autorole_overview_off()}
                   </p>
                 </li>

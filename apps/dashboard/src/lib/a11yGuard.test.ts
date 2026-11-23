@@ -241,6 +241,8 @@ describe("garde-fou d'accessibilite", () => {
       'pages/Activation.svelte',
       'pages/Login.svelte',
       'pages/MemberSpace.svelte',
+      'pages/PublicShop.svelte',
+      'pages/PublicTicketForm.svelte',
       'pages/SanctionEvidenceFile.svelte',
       'pages/Verify.svelte',
     ];

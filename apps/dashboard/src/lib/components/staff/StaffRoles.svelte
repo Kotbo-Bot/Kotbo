@@ -585,8 +585,8 @@
       {/snippet}
     </Field>
     <Field label={m.sx_sep_label()} hint={m.sx_sep_hint()}>
-      {#snippet children(id)}
-        <select {id} class="input" bind:value={hSepKind}>
+      {#snippet children(id, describedBy)}
+        <select {id} aria-describedby={describedBy} class="input" bind:value={hSepKind}>
           <option value="">{m.sx_sep_none()}</option>
           <option value="role">{m.sx_sep_existing()}</option>
           {#each STAFF_SEPARATOR_STYLE_KEYS as key (key)}<option value={key}>{staffSeparatorName(key, hName.trim() || '…')}</option>{/each}

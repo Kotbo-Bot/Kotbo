@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../lib/i18n';
   import { onMount } from 'svelte';
   import { dashboardFetch } from '../lib/api';
   import { dashboardStore } from '../lib/stores/dashboard.svelte';
@@ -78,7 +79,7 @@
         }
       }
     } catch {
-      toast.error('Impossible de charger la cellule bien-être.');
+      toast.error(m.toast_wb_load_failed());
     } finally {
       loading = false;
     }
@@ -99,7 +100,7 @@
       cfgDirectorRoleIds = [...(config.directorRoleIds ?? [])];
       configOpen = true;
     } catch {
-      toast.error('Accès réservé à la direction.');
+      toast.error(m.toast_wb_management_only());
     }
   }
 
@@ -119,10 +120,10 @@
       });
       if (!res.ok) throw new Error('save');
       configOpen = false;
-      toast.success('Configuration enregistrée');
+      toast.success(m.toast_wb_config_saved());
       await loadAll();
     } catch {
-      toast.error('Erreur lors de la sauvegarde.');
+      toast.error(m.toast_wb_save_failed());
     } finally {
       savingConfig = false;
     }
@@ -142,10 +143,10 @@
       if (!res.ok) throw new Error(data.error || 'Refusé');
       breakGlassOpen = false;
       breakGlassReason = '';
-      toast.success('Accès exceptionnel activé (2h) et journalisé.');
+      toast.success(m.toast_wb_break_glass_on());
       await loadAll();
     } catch (err: any) {
-      toast.error(err?.message || "Impossible d'activer l'accès.");
+      toast.error(err?.message || m.toast_wb_break_glass_failed());
     } finally {
       breakGlassSubmitting = false;
     }
@@ -175,9 +176,9 @@
       newSubjectName = '';
       newTitle = '';
       newSummary = '';
-      toast.success('Dossier confidentiel créé');
+      toast.success(m.toast_wb_file_created());
     } catch (err: any) {
-      toast.error(err?.message || 'Erreur lors de la création.');
+      toast.error(err?.message || m.toast_wb_create_failed());
     } finally {
       creatingCase = false;
     }
@@ -198,7 +199,7 @@
       cases = cases.map((c) => (c.id === selectedCase.id ? { ...c, notes: [...(c.notes ?? []), note] } : c));
       newNote = '';
     } catch {
-      toast.error("Impossible d'ajouter la note.");
+      toast.error(m.toast_wb_note_failed());
     } finally {
       addingNote = false;
     }
@@ -285,7 +286,7 @@
               </p>
 
               <div class="space-y-2">
-                <h3 class="text-xs font-semibold uppercase tracking-wider text-on-surface-variant">Notes de suivi</h3>
+                <h3 class="text-xs font-semibold text-on-surface-variant">Notes de suivi</h3>
                 {#each selectedCase.notes ?? [] as note (note.id)}
                   <div class="rounded-lg border border-outline-variant p-3 text-xs bg-surface-container-lowest">
                     <div class="flex justify-between text-on-surface-variant mb-1">
@@ -298,7 +299,7 @@
               </div>
 
               <form onsubmit={addNote} class="flex gap-2">
-                <input bind:value={newNote} required placeholder="Ajouter une note confidentielle…" class="input flex-1 text-sm" />
+                <input bind:value={newNote} aria-label={m.a11y_wellbeing_note()} required placeholder="Ajouter une note confidentielle…" class="input flex-1 text-sm" />
                 <Button type="submit" size="sm" variant="primary" loading={addingNote}>Ajouter</Button>
               </form>
             </div>

@@ -84,6 +84,7 @@
       {/each}
     </ul>
     <FormTextarea
+      ariaLabel={m.d1_fb_reply_ph()}
       bind:value={reply}
       rows={3}
       placeholder={m.d1_fb_reply_ph()}

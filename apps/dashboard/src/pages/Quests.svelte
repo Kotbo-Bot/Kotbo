@@ -266,7 +266,7 @@
             <span class="font-semibold text-sm text-on-surface">{tpl.name}</span>
             <span class="text-xs text-on-surface-variant">{tpl.description}</span>
           </div>
-          <span class="text-2xs text-on-surface-variant/60">{windowLabel(presetHours(tpl.preset, 24))} · {objectiveLabel(tpl.objective)}</span>
+          <span class="text-2xs text-on-surface-variant">{windowLabel(presetHours(tpl.preset, 24))} · {objectiveLabel(tpl.objective)}</span>
         </button>
       {/each}
       <button
@@ -395,7 +395,7 @@
           <input id="q-au" type="datetime-local" bind:value={form.activeUntil} class={input} />
         </div>
       </div>
-      <p class="text-2xs text-on-surface-variant/70">{m.quz_cond_hours_hint()}</p>
+      <p class="text-2xs text-on-surface-variant">{m.quz_cond_hours_hint()}</p>
     </div>
 
     <!-- Récompenses -->
@@ -438,7 +438,7 @@
             <SearchableSelect bind:value={extra.giveawayId} options={giveawayOptions} placeholder={m.quz_rew_giveaway_pick()} showId={false} />
           {:else}
             <textarea rows="3" maxlength="1500" bind:value={extra.content} aria-label={m.quz_rew_message()} class={input}></textarea>
-            <p class="text-2xs text-on-surface-variant/70">{m.quz_rew_message_hint()}</p>
+            <p class="text-2xs text-on-surface-variant">{m.quz_rew_message_hint()}</p>
             <SearchableSelect bind:value={extra.channelId} options={channelOptions} placeholder={m.quz_rew_channel()} showId={false} />
           {/if}
         </div>

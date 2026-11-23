@@ -57,10 +57,10 @@
         body: JSON.stringify({ name: networkName.trim() || 'Réseau multi-serveurs' }),
       });
       if (!res.ok) throw new Error('network');
-      toast.success('Réseau enregistré');
+      toast.success(m.toast_network_saved());
       await loadNetwork();
     } catch {
-      toast.error('Impossible de créer le réseau.');
+      toast.error(m.toast_network_create_failed());
     } finally {
       networkBusy = false;
     }
@@ -81,15 +81,17 @@
       const merge = data.merge as { moved: number; combined: number; kept: string[] } | null;
       toast.success(
         merge
-          ? `Serveur rattaché : ${merge.moved} éléments fusionnés${merge.combined ? ` (dont ${merge.combined} additionnés avec ceux du principal)` : ''}.`
-          : 'Serveur rattaché au réseau',
+          ? merge.combined
+            ? m.toast_network_merged_combined({ moved: merge.moved, combined: merge.combined })
+            : m.toast_network_merged({ moved: merge.moved })
+          : m.toast_network_attached(),
       );
       if (merge?.kept.length) {
-        toast.info(`${merge.kept.length} réglages en doublon sont restés tels quels sur le serveur rattaché : le principal garde les siens.`);
+        toast.info(m.toast_network_kept({ count: merge.kept.length }));
       }
       await loadNetwork();
     } catch (err: any) {
-      toast.error(err?.message || 'Impossible de rattacher ce serveur.');
+      toast.error(err?.message || m.toast_network_attach_failed());
     } finally {
       networkBusy = false;
     }
@@ -101,10 +103,10 @@
     try {
       const res = await dashboardFetch(`/billing/network/guilds/${targetGuildId}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('unlink');
-      toast.success('Serveur retiré du réseau');
+      toast.success(m.toast_network_removed());
       await loadNetwork();
     } catch {
-      toast.error('Impossible de retirer ce serveur.');
+      toast.error(m.toast_network_remove_failed());
     } finally {
       networkBusy = false;
     }
@@ -140,7 +142,7 @@
       <Button size="sm" variant="secondary" onclick={() => void loadNetwork()}>Réessayer</Button>
     {:else if !network}
       <form onsubmit={createOrRenameNetwork} class="flex flex-wrap gap-2">
-        <input bind:value={networkName} placeholder="Nom de l'association ou du réseau" class="input flex-1 text-sm" required />
+        <input bind:value={networkName} aria-label={m.a11y_network_name()} placeholder="Nom de l'association ou du réseau" class="input flex-1 text-sm" required />
         <Button type="submit" size="sm" variant="primary" loading={networkBusy}>Créer le regroupement</Button>
       </form>
     {:else}
@@ -172,7 +174,7 @@
 
       {#if network.members.length < network.maxGuilds && linkableGuilds.length > 0}
         <div class="flex flex-wrap gap-2">
-          <select bind:value={linkGuildId} class="input flex-1 text-sm">
+          <select bind:value={linkGuildId} aria-label={m.a11y_network_link_server()} class="input flex-1 text-sm">
             <option value="">Sélectionner un autre serveur à rattacher…</option>
             {#each linkableGuilds as g (g.id)}
               <option value={g.id}>{g.name}</option>

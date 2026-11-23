@@ -121,7 +121,7 @@
             <article class="rounded-xl border border-outline-variant bg-surface-container-low p-5 flex flex-col justify-between gap-4">
               <div>
                 <div class="flex items-center justify-between gap-2 mb-2">
-                  <span class="text-2xs font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full" style="background: color-mix(in srgb, var(--shop-accent) 15%, transparent); color: var(--shop-accent);">
+                  <span class="text-2xs font-semibold px-2 py-0.5 rounded-full" style="background: color-mix(in srgb, var(--shop-accent) 15%, transparent); color: var(--shop-accent);">
                     {KIND_LABEL[offer.kind] ?? offer.kind}
                   </span>
                   {#if offer.stock === 0}

@@ -1396,7 +1396,7 @@
           <div class="space-y-3">
             <label class="block sm:max-w-[50%]">
               <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">{m.e1_tickets_staff_reminder_target()}</span>
-              <select bind:value={ticketStaffReminderTarget} class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-field-border outline-none">
+              <select bind:value={ticketStaffReminderTarget} class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-field-border focus:ring-1 ring-primary/30 outline-none">
                 <option value="TICKET">{m.e1_tickets_staff_reminder_target_ticket()}</option>
                 <option value="DASHBOARD">{m.e1_tickets_staff_reminder_target_dashboard()}</option>
                 <option value="CHANNEL">{m.e1_tickets_staff_reminder_target_channel()}</option>
@@ -1405,7 +1405,7 @@
             {#if ticketStaffReminderTarget === 'CHANNEL'}
               <label class="block sm:max-w-[50%]">
                 <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">{m.e1_tickets_staff_reminder_channel()}</span>
-                <input type="text" bind:value={ticketStaffReminderChannelId} placeholder={m.e1_tickets_staff_reminder_channel_id_ph()} class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-field-border outline-none" />
+                <input type="text" bind:value={ticketStaffReminderChannelId} placeholder={m.e1_tickets_staff_reminder_channel_id_ph()} class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-field-border focus:ring-1 ring-primary/30 outline-none" />
               </label>
             {/if}
           </div>
@@ -1502,7 +1502,7 @@
               type="button"
               onclick={() => {
                 navigator.clipboard.writeText(`${window.location.origin}/support/${authStore.selectedGuildId}`);
-                toast.success('Lien copié');
+                toast.success(m.toast_link_copied());
               }}
               class="px-2.5 py-1 rounded-md bg-primary/15 text-primary font-semibold hover:bg-primary/25 transition-colors"
             >
@@ -1536,7 +1536,7 @@
                 type="button"
                 onclick={() => {
                   navigator.clipboard.writeText(`${API_BASE_URL}/api/public/tickets/${authStore.selectedGuildId}/inbound-email`);
-                  toast.success('URL webhook copiée');
+                  toast.success(m.toast_webhook_url_copied());
                 }}
                 class="px-2.5 py-1 rounded-md bg-primary/15 text-primary font-semibold hover:bg-primary/25 transition-colors"
               >

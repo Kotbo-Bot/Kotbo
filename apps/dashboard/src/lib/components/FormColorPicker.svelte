@@ -56,7 +56,7 @@
       class="w-6 h-6 rounded-full border border-white/20 shadow-inner transition-transform" 
       style="background-color: {getPreviewColor(value)};"
     ></div>
-    <span class="font-mono font-bold text-on-surface uppercase tracking-wider">{value || m.fcp_none()}</span>
+    <span class="font-mono font-bold text-on-surface">{value || m.fcp_none()}</span>
   </div>
   <Papicon icon="chevron-down" size={16} class="text-on-surface-variant" />
 </button>
