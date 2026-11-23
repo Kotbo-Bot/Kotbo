@@ -32,6 +32,8 @@
     updateWelcomeThreadSteps,
     updateWelcomeThreadPages,
     rescanIdentityAutoRoles,
+    fetchRaidProtection,
+    updateRaidProtection,
   } from '../lib/api';
 
   const actionState = createAsyncActionState();
@@ -192,7 +194,15 @@
           statusScanRoleId: res.config.statusScanRoleId ?? null,
           statusScanScope: res.config.statusScanScope ?? 'STATUS',
         };
+        // Le rôle du tag se règle ici seulement : s'il n'existait que côté
+        // Shield (ancien réglage), on le reprend pour ne rien perdre. Il est
+        // alors proposé à l'enregistrement.
+        const shield = (await fetchRaidProtection().catch(() => null))?.config;
         savedConfig = { ...config };
+        if (shield?.tagRoleEnabled && shield.tagRoleId && !config.tagAutoRoleEnabled) {
+          config.tagAutoRoleEnabled = true;
+          config.tagAutoRoleId = config.tagAutoRoleId ?? shield.tagRoleId;
+        }
       }
     } catch (err) {
       console.error(err);
@@ -207,6 +217,13 @@
     await actionState.run(async () => {
       const res = await updateWelcomeConfig(config);
       if (!res) throw new Error(m.announcements_save_error());
+      // Un seul réglage pour l'utilisateur, deux services qui lisent chacun le
+      // leur : on aligne celui de Shield. Sans droit sur Shield, on laisse.
+      await updateRaidProtection(
+        { tagRoleEnabled: config.tagAutoRoleEnabled, tagRoleId: config.tagAutoRoleId },
+        undefined,
+        { silent: true },
+      ).catch(() => null);
       const saved = {
         welcomeEnabled: res.config.welcomeEnabled ?? false,
         welcomeChannelId: res.config.welcomeChannelId ?? null,
@@ -947,7 +964,27 @@
       <!-- Auto-Roles Tab -->
       {#if activeTab === 'autoroles'}
         <section class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-8 max-w-4xl">
-          
+
+          <!-- Vue d'ensemble : toutes les règles en un coup d'œil -->
+          <div class="space-y-3">
+            <h3 class="text-lg font-semibold">{m.announcements_autorole_overview_title()}</h3>
+            <ul class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {#each [
+                { label: m.announcements_autorole_join_title(), on: !!config.joinRoleId, role: config.joinRoleId },
+                { label: m.announcements_autorole_tag_title(), on: config.tagAutoRoleEnabled && !!config.tagAutoRoleId, role: config.tagAutoRoleId },
+                { label: m.announcements_autorole_status_title(), on: config.statusScanEnabled, role: config.statusScanRoleId ?? config.tagAutoRoleId },
+              ] as rule}
+                <li class="rounded-lg border border-outline-variant/15 px-4 py-3">
+                  <p class="text-xs text-on-surface-variant">{rule.label}</p>
+                  <p class="text-sm font-semibold {rule.on ? 'text-on-surface' : 'text-on-surface-variant/60'}">
+                    {rule.on ? (availableRoles.find((r) => r.id === rule.role)?.name ?? m.announcements_autorole_overview_on()) : m.announcements_autorole_overview_off()}
+                  </p>
+                </li>
+              {/each}
+            </ul>
+            <p class="text-2xs text-on-surface-variant leading-relaxed">{m.announcements_autorole_overview_limits()}</p>
+          </div>
+
           <!-- Join Auto-role -->
           <div class="space-y-4 border-b border-outline-variant/15 pb-6">
             <h3 class="text-lg font-semibold flex items-center gap-3">

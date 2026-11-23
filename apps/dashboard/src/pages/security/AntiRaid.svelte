@@ -818,10 +818,10 @@
         description={m.arx_tag_desc()}
         icon="Tag"
       >
-        <div class="space-y-3">
-          {@render switchRow('tagRoleEnabled', m.arx_tag_role(), m.arx_tag_help())}
-          {@render roleSelect('tagRoleId', m.arx_tag_role_given())}
-        </div>
+        <Callout variant="info">
+          {m.arx_tag_moved()}
+          <a href="/welcome/autoroles" class="underline font-semibold">{m.arx_tag_moved_link()}</a>
+        </Callout>
       </SectionCard>
 
       <SectionCard
