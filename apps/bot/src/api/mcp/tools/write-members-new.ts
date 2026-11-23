@@ -81,6 +81,32 @@ const economySettingsSchema = z.object({
   raidRoleId: z.string().nullable(),
 }).partial();
 
+/** Couleurs du style holographique de Discord (valeurs fixes imposées par l'API). */
+const HOLOGRAPHIC = { primaryColor: 11127295, secondaryColor: 16759788, tertiaryColor: 16761760 } as const;
+
+const ROLE_STYLE_SCHEMA = {
+  gradient_end_color: z.string().regex(/^#?[0-9a-fA-F]{6}$/).optional().describe("Couleur d'arrivée du dégradé (hex). Combinée à `color` (départ). Serveur boost niveau 3."),
+  holographic: z.boolean().optional().describe('Style holographique (remplace les couleurs). Serveur boost niveau 3.'),
+  icon_url: z.string().url().startsWith('https://').optional().describe("Icône du rôle : URL https d'une image. Serveur boost niveau 2."),
+  unicode_emoji: z.string().max(32).optional().describe('Icône du rôle : emoji Unicode (alternative à icon_url).'),
+};
+
+type RoleStyleInput = { color?: string; gradient_end_color?: string; holographic?: boolean; icon_url?: string; unicode_emoji?: string };
+
+/** Options discord.js du style d'un rôle ; undefined pour ce qui n'est pas demandé. */
+function roleStyleOptions(input: RoleStyleInput) {
+  const colors = input.holographic
+    ? { ...HOLOGRAPHIC }
+    : input.gradient_end_color
+      ? { primaryColor: (input.color ?? '#99AAB5') as `#${string}`, secondaryColor: (input.gradient_end_color.startsWith('#') ? input.gradient_end_color : `#${input.gradient_end_color}`) as `#${string}` }
+      : undefined;
+  return {
+    ...(colors ? { colors } : {}),
+    ...(input.icon_url ? { icon: input.icon_url } : {}),
+    ...(input.unicode_emoji ? { unicodeEmoji: input.unicode_emoji } : {}),
+  };
+}
+
 export function registerWriteMembersNewTools(ctx: McpToolContext) {
   const { server, guildId, client, shouldRegister, guard, audit, toolMeta } = ctx;
 
@@ -937,7 +963,7 @@ export function registerWriteMembersNewTools(ctx: McpToolContext) {
         },
         _meta: toolMeta,
       },
-      guard('WRITE_MEMBERS', async ({ name, color, hoist, mentionable, permissions, reason, key_name }) => {
+      guard('WRITE_MEMBERS', async ({ name, color, hoist, mentionable, permissions, gradient_end_color, holographic, icon_url, unicode_emoji, reason, key_name }) => {
         try {
           const guild = client.guilds.cache.get(guildId);
           if (!guild) return err('Serveur Discord introuvable');
@@ -981,9 +1007,12 @@ export function registerWriteMembersNewTools(ctx: McpToolContext) {
             }
           }
 
+          const style = roleStyleOptions({ color, gradient_end_color, holographic, icon_url, unicode_emoji });
           const role = await guild.roles.create({
             name,
-            color: color || undefined,
+            // Avec `colors`, la couleur simple est redondante et refusée par Discord.
+            ...(style.colors ? {} : { color: color || undefined }),
+            ...style,
             hoist: hoist ?? false,
             mentionable: mentionable ?? false,
             permissions: permBits !== undefined ? permBits : undefined,
@@ -1008,12 +1037,13 @@ export function registerWriteMembersNewTools(ctx: McpToolContext) {
           color: z.string().optional().describe('Nouvelle couleur hexadécimale (ex: "#00FF00")'),
           hoist: z.boolean().optional().describe('Afficher les membres ayant ce rôle séparément'),
           mentionable: z.boolean().optional().describe('Rendre le rôle mentionnable'),
+          ...ROLE_STYLE_SCHEMA,
           reason: z.string().optional().describe('Raison de la modification'),
           key_name: z.string().optional(),
         },
         _meta: toolMeta,
       },
-      guard('WRITE_MEMBERS', async ({ role, name, color, hoist, mentionable, reason, key_name }) => {
+      guard('WRITE_MEMBERS', async ({ role, name, color, hoist, mentionable, gradient_end_color, holographic, icon_url, unicode_emoji, reason, key_name }) => {
         try {
           const guild = client.guilds.cache.get(guildId);
           if (!guild) return err('Serveur Discord introuvable');
@@ -1025,9 +1055,11 @@ export function registerWriteMembersNewTools(ctx: McpToolContext) {
 
           if (!discordRole) return err(`Rôle « ${role} » introuvable`);
 
+          const style = roleStyleOptions({ color, gradient_end_color, holographic, icon_url, unicode_emoji });
           const updated = await discordRole.edit({
             name: name !== undefined ? name : undefined,
-            color: color !== undefined ? color : undefined,
+            ...(style.colors ? {} : { color: color !== undefined ? color : undefined }),
+            ...style,
             hoist: hoist !== undefined ? hoist : undefined,
             mentionable: mentionable !== undefined ? mentionable : undefined,
             reason: reason || 'Modifié via MCP',
