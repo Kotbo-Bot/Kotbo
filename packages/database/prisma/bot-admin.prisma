@@ -259,3 +259,40 @@ model AdminAuditLog {
   @@index([targetType, targetId])
   @@map("admin_audit_logs")
 }
+
+// Retour envoyé depuis le dashboard (bug, suggestion, avis) : suivi par statut
+// et conversation entre l'auteur et les admins globaux.
+model Feedback {
+  id        String   @id @default(cuid())
+  userId    String
+  username  String
+  type      String // retour | bloquage | suggestion | autre
+  message   String
+  url       String
+  guildId   String?
+  // NEW | ACKNOWLEDGED | PLANNED | DONE | DECLINED
+  status    String   @default("NEW")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  messages FeedbackMessage[]
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+  @@map("feedbacks")
+}
+
+model FeedbackMessage {
+  id         String   @id @default(cuid())
+  feedbackId String
+  authorId   String
+  authorName String
+  fromStaff  Boolean  @default(false)
+  content    String
+  createdAt  DateTime @default(now())
+
+  feedback Feedback @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
+
+  @@index([feedbackId, createdAt])
+  @@map("feedback_messages")
+}
