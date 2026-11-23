@@ -13,6 +13,8 @@
   import { confirmDialog } from '../../stores/confirmDialog.svelte';
   import {
     fetchVision,
+    fetchVisionBlocks,
+    type VisionBlock,
     createVisionList,
     updateVisionList,
     deleteVisionList,
@@ -32,6 +34,7 @@
   import ToggleSwitch from '../ToggleSwitch.svelte';
   import EmptyState from '../EmptyState.svelte';
   import LoadingHint from '../LoadingHint.svelte';
+  import UserDisplay from '../UserDisplay.svelte';
   import { formatRelative } from '../staff/format';
 
   let { channels = [] }: { channels?: { id: string; name: string }[] } = $props();
@@ -69,6 +72,7 @@
   let dragOver = $state(false);
 
   let newListName = $state('');
+  let blocks = $state<VisionBlock[]>([]);
 
   const openedListMeta = $derived(openedList ? overview?.lists.find((l) => l.id === openedList) ?? null : null);
   const canCreateList = $derived((overview?.lists.length ?? 0) < (overview?.maxLists ?? 10));
@@ -83,6 +87,7 @@
     loading = true;
     try {
       overview = await fetchVision(authStore.selectedGuildId);
+      blocks = (await fetchVisionBlocks(authStore.selectedGuildId).catch(() => null))?.blocks ?? [];
     } catch {
       toast.error(m.vis_load_error());
     } finally {
@@ -258,6 +263,26 @@
       <div class="text-[15px] font-semibold text-on-surface tabular-nums">{overview.lists.length} / {overview.maxLists}</div>
     </div>
   </div>
+
+  <SectionCard title={m.vis_history_title()} description={m.vis_history_desc()} icon="Image">
+    {#if blocks.length === 0}
+      <p class="text-body-sm text-on-surface-variant">{m.vis_history_empty()}</p>
+    {:else}
+      <ul class="divide-y divide-outline-variant/20 max-h-96 overflow-y-auto">
+        {#each blocks as block (block.id)}
+          <li class="py-2 flex flex-wrap items-center gap-x-4 gap-y-1">
+            <UserDisplay userId={block.authorId} size="xs" boost={false} />
+            <span class="text-xs text-on-surface-variant">#{channelName(block.channelId)}</span>
+            <span class="text-xs text-on-surface">{block.sanction}</span>
+            <span class="text-xs text-on-surface-variant">
+              {block.kind === 'OCR' ? m.vis_history_ocr() : `${m.vis_history_catalog()} · ${Math.round((block.similarity ?? 0) * 100)} %`}
+            </span>
+            <span class="text-xs text-on-surface-variant ml-auto">{formatRelative(block.createdAt)}</span>
+          </li>
+        {/each}
+      </ul>
+    {/if}
+  </SectionCard>
 
   <SectionCard
     title={m.vis_review_title()}

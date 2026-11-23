@@ -154,6 +154,26 @@ export type VisionOverview = {
   maxLists: number;
 };
 
+export type VisionBlock = {
+  id: string;
+  authorId: string;
+  channelId: string;
+  listId: string | null;
+  kind: 'CATALOG' | 'OCR';
+  similarity: number | null;
+  sanction: string;
+  reason: string;
+  createdAt: string;
+};
+
+export async function fetchVisionBlocks(guildId = authStore.selectedGuildId) {
+  return dashboardRequest<{ blocks: VisionBlock[] }>('/raid-protection/vision/blocks', {
+    method: 'GET',
+    guildId,
+    errorContext: 'API Error (Vision blocks):'
+  });
+}
+
 export type VisionAddResult = { added: number; variants: number; duplicates: number; refused: number };
 
 export async function fetchVision(guildId = authStore.selectedGuildId) {
