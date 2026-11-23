@@ -128,10 +128,10 @@ export function createVerificationModuleRouter(client: Client) {
       if (has('verificationOnJoin')) data.verificationOnJoin = !!body.verificationOnJoin;
       if (has('verificationSaveIp')) data.verificationSaveIp = !!body.verificationSaveIp;
       if (has('verificationSaveDevice')) data.verificationSaveDevice = !!body.verificationSaveDevice;
-      if (has('verificationLevelCommand') && ['LOW', 'MEDIUM', 'HIGH'].includes(body.verificationLevelCommand as string)) {
+      if (has('verificationLevelCommand') && ['LINK', 'LOW', 'MEDIUM', 'HIGH'].includes(body.verificationLevelCommand as string)) {
         data.verificationLevelCommand = body.verificationLevelCommand;
       }
-      if (has('verificationLevelJoin') && ['LOW', 'MEDIUM', 'HIGH'].includes(body.verificationLevelJoin as string)) {
+      if (has('verificationLevelJoin') && ['LINK', 'LOW', 'MEDIUM', 'HIGH'].includes(body.verificationLevelJoin as string)) {
         data.verificationLevelJoin = body.verificationLevelJoin;
       }
       if (has('verificationWarnThreshold')) {

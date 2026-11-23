@@ -173,7 +173,71 @@ export function createVerificationRouter(client: Client) {
       color: guildConfig?.verificationEmbedColor || '#5865F2',
       expiresAt: verification.expiresAt.toISOString(),
       level: verification.level,
+      // Clé publique : destinée au navigateur, contrairement au secret.
+      turnstileSiteKey: verification.level === 'LINK' ? (process.env.TURNSTILE_SITE_KEY || null) : null,
     }, 200);
+  });
+
+  // 2b. POST /api/verify/:guildId/:token/captcha - Niveau LINK : le lien identifie
+  // l'utilisateur, Turnstile prouve qu'il est humain. Pas de connexion Discord.
+  router.post('/api/verify/:guildId/:token/captcha', async (c) => {
+    const guildId = c.req.param('guildId');
+    const token = c.req.param('token');
+    const secret = process.env.TURNSTILE_SECRET_KEY;
+    if (!secret) return c.json({ error: 'Captcha non configuré.' }, 503);
+
+    try {
+      const body = await readBody<{ cfToken?: unknown; clientInfo?: unknown }>(c);
+      const cfToken = body?.cfToken;
+      if (typeof cfToken !== 'string' || !cfToken || cfToken.length > 2048) {
+        return c.json({ error: 'Captcha requis.' }, 400);
+      }
+
+      const verification = await getVerificationByToken(token);
+      if (!verification || verification.guildId !== guildId || verification.level !== 'LINK') {
+        return c.json({ error: 'Session de vérification invalide ou expirée.' }, 404);
+      }
+
+      const ipAddress = requestIp(c) || '127.0.0.1';
+      const check = await fetchExternal('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ secret, response: cfToken, remoteip: ipAddress }),
+      }, 10_000);
+      const verdict = check.ok
+        ? await check.json() as { success?: boolean; action?: string; hostname?: string }
+        : null;
+      const allowedHosts = (process.env.TURNSTILE_HOSTNAMES || '').split(',').map((h) => h.trim()).filter(Boolean);
+      if (
+        !verdict?.success ||
+        (verdict.action && verdict.action !== 'verify') ||
+        (allowedHosts.length > 0 && !allowedHosts.includes(verdict.hostname || ''))
+      ) {
+        return c.json({ error: 'Captcha refusé, réessaie.' }, 400);
+      }
+
+      // Empreinte facultative : objet plat de petite taille, sinon ignorée.
+      const rawInfo = body?.clientInfo;
+      const clientInfo = rawInfo && typeof rawInfo === 'object' && !Array.isArray(rawInfo) && JSON.stringify(rawInfo).length <= 2000
+        ? rawInfo
+        : null;
+
+      const result = await completeVerification({
+        token,
+        verifiedDiscordId: verification.userId,
+        ipAddress,
+        dashboardUrl: getDashboardUrl(),
+        client,
+        clientInfo,
+      });
+      return c.json(result, result.success ? 200 : 400);
+    } catch (err) {
+      if (err instanceof HttpError) {
+        return c.json({ error: err.message }, err.statusCode as 400);
+      }
+      logger.error('VerifyAPI', 'Erreur captcha:', err);
+      return fail(c, err, 'Erreur interne.', 'VerifyAPI');
+    }
   });
 
   // 3. GET /api/verify/:guildId/:token/oauth - Redirection vers OAuth Discord pour vérification
