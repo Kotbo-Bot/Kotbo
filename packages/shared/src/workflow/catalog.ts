@@ -1122,7 +1122,7 @@ const ACTIONS: NodeDef[] = [
     label: 'Envoyer un embed',
     category: 'action',
     description:
-      "Poste un message enrichi dans un salon. Une mention dans l'embed ne notifie personne : le texte au-dessus sert à pinger un membre ou un rôle (jamais @everyone ni @here).",
+      "Poste un message enrichi dans un salon. Une mention dans l'embed ne notifie personne : le texte au-dessus sert à pinger un membre ou un rôle (jamais @everyone ni @here). Le menu d'informations ajoute un menu déroulant : une entrée par ligne, « Libellé | Texte », 25 au plus ; le texte s'affiche en privé à celui qui choisit.",
     inputs: [
       EXEC_IN,
       { id: 'channel', label: 'Salon', type: 'Channel' },
@@ -1134,6 +1134,13 @@ const ACTIONS: NodeDef[] = [
     outputs: [EXEC_OUT],
     config: [
       { key: 'color', label: 'Couleur', type: 'text', placeholder: '#5865F2', defaultValue: '#5865F2' },
+      {
+        key: 'infoMenu',
+        label: "Menu d'informations",
+        type: 'textarea',
+        placeholder: 'Règlement | Lis le règlement dans #règlement\nRecrutement | Les candidatures sont ouvertes',
+        defaultValue: '',
+      },
     ],
   },
   {

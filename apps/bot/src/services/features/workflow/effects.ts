@@ -28,6 +28,7 @@ import { expectBotRoleChange } from './roleEcho.js';
 import { keepMessage, serialized } from './keptMessage.js';
 import { buildEmbedMessage } from './embedMessage.js';
 import { buildRankings } from './rankings.js';
+import { infoMenuRow, parseInfoMenu } from './infoMenu.js';
 import {
   coerceToNumber,
   coerceToString,
@@ -475,7 +476,12 @@ export function createWorkflowEffects(guild: Guild, workflowId?: string): Workfl
             footerIcon: coerceToString(inputs.footerIcon),
           });
           if (!payload) throw new WorkflowActionError('Envoyer un embed', 'titre et description vides');
-          await channel.send(payload);
+          // Sans workflow enregistré (essai) le menu n'a pas de quoi se relire : il est omis.
+          const menuItems = parseInfoMenu(config.infoMenu);
+          const components = workflowId && context?.nodeId && menuItems.length > 0
+            ? [infoMenuRow(workflowId, context.nodeId, menuItems)]
+            : [];
+          await channel.send({ ...payload, components });
           return {};
         }
 

@@ -1353,6 +1353,17 @@ export async function handleSelectMenu(interaction: AnySelectMenuInteraction, cl
   }
 
   // Verdict par sanction contestée, dans l'embed staff des appels
+  if (customId.startsWith('wfinfo:') && interaction.isStringSelectMenu() && interaction.guildId) {
+    const { resolveInfoMenuAnswer } = await import('../services/features/workflow/infoMenu.js');
+    const answer = await resolveInfoMenuAnswer(interaction.guildId, customId, interaction.values[0] ?? '');
+    await interaction.reply({
+      content: answer ?? 'Cette information n\'est plus disponible.',
+      flags: MessageFlags.Ephemeral,
+      allowedMentions: { parse: [] },
+    });
+    return;
+  }
+
   if (customId.startsWith('appeal_item:') && interaction.isStringSelectMenu()) {
     const { handleAppealItemSelect } = await import('../services/moderation/banAppealService.js');
     await handleAppealItemSelect(client, customId, interaction);
