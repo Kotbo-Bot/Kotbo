@@ -522,6 +522,7 @@ async function handleDeepImageInspection(
   if (config.visionNotifyMember && result.done && result.applied !== 'DELETE') {
     await notifyAuthor(message.author, message.guild, detected.reason, sanctionLabel);
   }
+  await recordVisionBlock({ guildId: message.guild.id, authorId: message.author.id, channelId: message.channelId, kind: 'OCR', sanction: sanctionLabel, reason: detected.reason });
   await logDeepBlocked(message, detected, sanctionLabel, config);
   return true;
 }
@@ -603,8 +604,20 @@ export async function handleVision(message: Message): Promise<boolean> {
   if (effectiveConfig.visionNotifyMember && result.done && result.applied !== 'DELETE') {
     await notifyAuthor(message.author, message.guild, reason, autoSanctionLabel(result.applied, durationMin));
   }
+  await recordVisionBlock({
+    guildId: message.guild.id, authorId: message.author.id, channelId: message.channelId, listId: list?.id ?? null,
+    matchId: match.entry.id, kind: 'CATALOG', similarity: match.comparison.similarity,
+    sanction: result.done ? autoSanctionLabel(result.applied, durationMin) : 'Message supprimé seulement', reason,
+  });
   await logBlocked(message, match, list, reason, result.done ? autoSanctionLabel(result.applied, durationMin) : 'Message supprimé seulement', effectiveConfig);
   return true;
+}
+
+/** Historique des blocages : une panne de base ne doit jamais défaire le blocage lui-même. */
+async function recordVisionBlock(data: { guildId: string; authorId: string; channelId: string; listId?: string | null; matchId?: string | null; kind: 'CATALOG' | 'OCR'; similarity?: number; sanction: string; reason: string }): Promise<void> {
+  await prisma.visionBlock.create({ data: { ...data, reason: data.reason.slice(0, 500) } }).catch((err) => {
+    logger.warn('Kotbo Vision', `Historique du blocage non enregistré : ${err instanceof Error ? err.message : String(err)}`);
+  });
 }
 
 async function notifyAuthor(user: User, guild: Guild, reason: string, sanction: string): Promise<void> {

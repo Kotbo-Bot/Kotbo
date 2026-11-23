@@ -109,6 +109,18 @@ export function createVisionRouter(client: Client) {
     });
   });
 
+  // ── Historique des blocages ───────────────────────────────────────────
+  router.get(`${base}/vision/blocks`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const authorId = c.req.query('authorId');
+    const blocks = await prisma.visionBlock.findMany({
+      where: { guildId, ...(authorId && /^\d{17,20}$/.test(authorId) ? { authorId } : {}) },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
+    return send(c, { blocks });
+  });
+
   // ── Listes ────────────────────────────────────────────────────────────
   router.post(`${base}/vision/lists`, ...gate, async (c) => {
     const guildId = c.req.param('guildId');
