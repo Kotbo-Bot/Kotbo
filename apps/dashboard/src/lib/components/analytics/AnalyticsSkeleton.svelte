@@ -1,7 +1,24 @@
 <script lang="ts">
   import Skeleton from '../Skeleton.svelte';
+
+  // `compact` : squelette d'une liste à l'intérieur d'une carte. La version
+  // pleine page (grille 4 colonnes + graphique) déborde d'une carte étroite.
+  const { compact = false, rows = 5 }: { compact?: boolean; rows?: number } = $props();
 </script>
 
+{#if compact}
+  <div class="space-y-3" aria-busy="true">
+    {#each Array(rows) as _}
+      <div class="flex items-center gap-3">
+        <Skeleton width="w-8" height="h-8" rounded="rounded-lg" class="shrink-0" />
+        <div class="min-w-0 flex-1 space-y-1.5">
+          <Skeleton width="w-full" height="h-3" />
+          <Skeleton width="w-1/2" height="h-2" />
+        </div>
+      </div>
+    {/each}
+  </div>
+{:else}
 <div class="space-y-6">
   <!-- Top Stats Grid -->
   <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -65,6 +82,7 @@
     </div>
   </div>
 </div>
+{/if}
 
 <style>
   .premium-card {

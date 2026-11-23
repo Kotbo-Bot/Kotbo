@@ -297,7 +297,7 @@
   </header>
 
   {#if loading && !data}
-    <AnalyticsSkeleton />
+    <AnalyticsSkeleton compact />
   {:else if error}
     <Callout variant="danger">{error}</Callout>
   {:else if data && !data.available}
@@ -378,7 +378,7 @@
       >
     </div>
     {#if fullLoading && !full}
-      <AnalyticsSkeleton />
+      <AnalyticsSkeleton compact rows={8} />
     {:else if visible.length === 0}
       <p class="py-6 text-center text-body-sm text-on-surface-variant">
         {m.anx_top_empty()}
