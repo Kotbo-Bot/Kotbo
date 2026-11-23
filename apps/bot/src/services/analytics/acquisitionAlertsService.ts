@@ -18,6 +18,7 @@ import type { Client } from 'discord.js';
 import { EmbedBuilder } from 'discord.js';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
+import { isWhiteLabelInstance } from '../../utils/instanceContext.js';
 import { getAlertThresholds } from './adminAnalyticsService.js';
 import { getDashboardOrigin } from '../../api/shared/core.js';
 
@@ -87,6 +88,7 @@ export async function notifyBotAdmins(client: Client, embed: EmbedBuilder): Prom
  * Balayage périodique des alertes du tunnel d'acquisition et des risques commerciaux.
  */
 export async function runAcquisitionAlertsCheck(client: Client): Promise<void> {
+  if (isWhiteLabelInstance()) return;
   logger.debug('AcquisitionAlerts', 'Vérification des alertes d\'acquisition et de facturation...');
   const { thresholds } = await getAlertThresholds();
   const dashboard = getDashboardOrigin();
@@ -315,6 +317,8 @@ export async function runAcquisitionAlertsCheck(client: Client): Promise<void> {
  * Envoie le récapitulatif commercial et acquisition hebdomadaire (chaque lundi matin).
  */
 export async function runWeeklyAcquisitionRecap(client: Client): Promise<void> {
+  // Les bots custom n'envoient pas ce récap : il passe par le bot principal.
+  if (isWhiteLabelInstance()) return;
   logger.info('AcquisitionAlerts', 'Génération du récapitulatif hebdomadaire d\'acquisition et de revenus...');
   const dashboard = getDashboardOrigin();
   const now = new Date();
