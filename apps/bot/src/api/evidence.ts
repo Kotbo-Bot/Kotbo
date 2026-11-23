@@ -11,6 +11,7 @@ import {
   type Client,
   type Guild,
   type Message,
+  type NewsChannel,
   type TextChannel,
 } from 'discord.js';
 import type { MessageLog } from '@prisma/client';
@@ -128,7 +129,7 @@ export function fetchDeletedUserMessages(guildId: string, authorId: string, limi
  * Charge les messages selectionnes : ceux encore sur Discord, et pour les autres
  * (supprimes) leur copie dans le journal. Seuls ceux de `authorId` sont gardes.
  */
-export async function loadEvidenceMessages(channel: TextChannel, messageIds: string[], authorId: string) {
+export async function loadEvidenceMessages(channel: TextChannel | NewsChannel, messageIds: string[], authorId: string) {
   const fetched = await Promise.all(messageIds.map((id) => channel.messages.fetch(id).catch(() => null)));
   const messages = fetched.filter((m): m is Message<true> => m !== null && m.author.id === authorId);
   const found = new Set(fetched.filter((m): m is Message<true> => m !== null).map((m) => m.id));

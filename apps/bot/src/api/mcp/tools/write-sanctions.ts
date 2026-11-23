@@ -576,7 +576,7 @@ export function registerWriteSanctionsTools(ctx: McpToolContext) {
             try {
               const { messages: validMessages, deleted } = await loadEvidenceMessages(
                 resolved.channel,
-                [...new Set(selection.message_ids)],
+                [...new Set<string>(selection.message_ids)],
                 sanction.targetUserId,
               );
 
