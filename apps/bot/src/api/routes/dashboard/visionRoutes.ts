@@ -10,7 +10,7 @@ import {
   invalidateVisionCache,
   MAX_LISTS_PER_GUILD,
 } from '../../../services/moderation/visionService.js';
-import { normalizeAutoSanction } from '../../../services/moderation/autoSanction.js';
+import { MAX_AUTO_SANCTION_DURATION_MIN, normalizeAutoSanction } from '../../../services/moderation/autoSanction.js';
 import { provisionJail } from '../../../services/moderation/jailService.js';
 
 /** Image envoyée en base64 : le navigateur la réduit avant l'envoi. */
@@ -24,7 +24,7 @@ function cleanName(value: unknown): string | null {
 function cleanDuration(value: unknown): number | null {
   if (value === null || value === '' || value === undefined) return null;
   const minutes = Math.floor(Number(value));
-  return Number.isFinite(minutes) && minutes > 0 ? Math.min(minutes, 365 * 24 * 60) : null;
+  return Number.isFinite(minutes) && minutes > 0 ? Math.min(minutes, MAX_AUTO_SANCTION_DURATION_MIN) : null;
 }
 
 function cleanChannelId(value: unknown): string | null {

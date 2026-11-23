@@ -27,7 +27,7 @@ import { getLineageReport, quarantineLineage } from '../../../services/moderatio
 import { fail, guildRoute, readBody, send } from '../../hono/dashboard/kit.js';
 import { MAX_OTHER_SERVERS, resolveInvite } from '../../../services/moderation/otherServersFilter.js';
 import { FILE_GROUPS, MAX_FILE_RULES, invalidateFileRules, normalizeExtensions } from '../../../services/moderation/fileExtensionFilter.js';
-import { normalizeAutoSanction } from '../../../services/moderation/autoSanction.js';
+import { MAX_AUTO_SANCTION_DURATION_MIN, normalizeAutoSanction } from '../../../services/moderation/autoSanction.js';
 import {
   createShieldPanelChannel,
   createShieldStatusChannel,
@@ -256,14 +256,14 @@ export function createRaidProtectionRouter(client: Client) {
       for (const field of ['otherDurationMin', 'fileDurationMin']) {
         if (field in data) {
           const minutes = data[field] === null || data[field] === '' ? null : Math.floor(Number(data[field]));
-          data[field] = minutes && minutes > 0 ? Math.min(minutes, 365 * 24 * 60) : null;
+          data[field] = minutes && minutes > 0 ? Math.min(minutes, MAX_AUTO_SANCTION_DURATION_MIN) : null;
         }
       }
       if ('captchaTrigger' in data && !['ALWAYS', 'AUTO', 'SMART'].includes(String(data.captchaTrigger))) data.captchaTrigger = 'ALWAYS';
       if ('visionSanction' in data && !['DELETE', 'WARN', 'TIMEOUT', 'KICK', 'SOFTBAN', 'BAN', 'JAIL'].includes(String(data.visionSanction))) data.visionSanction = 'TIMEOUT';
       if ('visionDurationMin' in data) {
         const minutes = data.visionDurationMin === null || data.visionDurationMin === '' ? null : Math.floor(Number(data.visionDurationMin));
-        data.visionDurationMin = minutes && minutes > 0 ? Math.min(minutes, 365 * 24 * 60) : null;
+        data.visionDurationMin = minutes && minutes > 0 ? Math.min(minutes, MAX_AUTO_SANCTION_DURATION_MIN) : null;
       }
       if ('rolePersistRoleIds' in data) {
         const list = Array.isArray(data.rolePersistRoleIds) ? data.rolePersistRoleIds : [];

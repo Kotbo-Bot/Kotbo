@@ -19,13 +19,12 @@ import { kotboEventBus } from '@kotbo/core';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { resolveLogChannel } from '../../utils/logChannel.js';
-import { AUTO_SANCTIONS, applyAutoSanction, autoSanctionLabel, normalizeAutoSanction, type AutoSanction } from './autoSanction.js';
+import { AUTO_SANCTIONS, MAX_AUTO_SANCTION_DURATION_MIN, applyAutoSanction, autoSanctionLabel, normalizeAutoSanction, type AutoSanction } from './autoSanction.js';
 
 export const EMOJI_BAN_KINDS = ['EMOJI', 'UNICODE', 'STICKER', 'SOURCE_GUILD'] as const;
 export type EmojiBanKind = (typeof EMOJI_BAN_KINDS)[number];
 
 export const MAX_EMOJI_BAN_RULES = 200;
-const MAX_DURATION_MIN = 28 * 24 * 60;
 const CACHE_TTL_MS = 60_000;
 
 // ── Règles (cache court, invalidé à chaque écriture) ─────────────────────────
@@ -74,7 +73,7 @@ export function sanitizeEmojiBan(input: EmojiBanInput): {
   const action = normalizeAutoSanction(input.action, 'DELETE');
   const needsDuration = action === 'TIMEOUT' || action === 'BAN' || action === 'JAIL';
   const duration = needsDuration && typeof input.durationMin === 'number' && Number.isFinite(input.durationMin)
-    ? Math.min(MAX_DURATION_MIN, Math.max(1, Math.round(input.durationMin)))
+    ? Math.min(MAX_AUTO_SANCTION_DURATION_MIN, Math.max(1, Math.round(input.durationMin)))
     : null;
   const iconUrl = typeof input.iconUrl === 'string' && input.iconUrl.startsWith('https://cdn.discordapp.com/') ? input.iconUrl : null;
   return {

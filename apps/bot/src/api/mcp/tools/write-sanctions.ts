@@ -10,6 +10,9 @@ import { type SanctionStatus, type SanctionType } from '@prisma/client';
 import { z } from 'zod';
 import { type McpToolContext, err, ok, resolveChannel, resolveMember, toolError } from '../toolkit.js';
 
+const MAX_TIMEOUT_SECONDS = 27 * 24 * 60 * 60;
+const MAX_TEMP_BAN_SECONDS = 365 * 24 * 60 * 60;
+
 export function registerWriteSanctionsTools(ctx: McpToolContext) {
   const { server, guildId, client, shouldRegister, guard, audit, toolMeta } = ctx;
 
@@ -26,9 +29,9 @@ export function registerWriteSanctionsTools(ctx: McpToolContext) {
             .number()
             .int()
             .positive()
-            .max(2332800)
+            .max(MAX_TEMP_BAN_SECONDS)
             .optional()
-            .describe('Durée en secondes (obligatoire pour TIMEOUT et TEMP_BAN, max 27 jours)'),
+            .describe('Durée en secondes (obligatoire pour TIMEOUT et TEMP_BAN ; max 27 jours pour TIMEOUT, 1 an pour TEMP_BAN)'),
           key_name: z.string().optional().describe("Nom de la clé MCP (pour l'audit)"),
         },
         _meta: toolMeta,
@@ -36,6 +39,9 @@ export function registerWriteSanctionsTools(ctx: McpToolContext) {
       guard('WRITE_SANCTIONS', async ({ member, type, reason, duration_seconds, key_name }) => {
         if ((type === 'TIMEOUT' || type === 'TEMP_BAN') && !duration_seconds) {
           return err(`duration_seconds est obligatoire pour le type ${type}`);
+        }
+        if (type === 'TIMEOUT' && duration_seconds! > MAX_TIMEOUT_SECONDS) {
+          return err('duration_seconds ne peut pas dépasser 27 jours pour un TIMEOUT');
         }
 
         const resolved = await resolveMember(guildId, member);

@@ -110,66 +110,7 @@ async function incrementModerationStats(guildId: string, type: SanctionType): Pr
   });
 }
 
-const DURATION_UNITS_MS: Record<string, number> = {
-  s: 1000,
-  sec: 1000,
-  secs: 1000,
-  seconde: 1000,
-  secondes: 1000,
-  m: 60 * 1000,
-  min: 60 * 1000,
-  mins: 60 * 1000,
-  minute: 60 * 1000,
-  minutes: 60 * 1000,
-  h: 60 * 60 * 1000,
-  heure: 60 * 60 * 1000,
-  heures: 60 * 60 * 1000,
-  d: 24 * 60 * 60 * 1000,
-  j: 24 * 60 * 60 * 1000,
-  jour: 24 * 60 * 60 * 1000,
-  jours: 24 * 60 * 60 * 1000,
-  w: 7 * 24 * 60 * 60 * 1000,
-  semaine: 7 * 24 * 60 * 60 * 1000,
-  semaines: 7 * 24 * 60 * 60 * 1000,
-};
-
-function normalizeDurationInput(input: string): string {
-  return input
-    .toLowerCase()
-    .trim()
-    .replace(/,/g, '.')
-    .replace(/\s+/g, ' ');
-}
-
-export function parseDurationToMs(input: string): number | null {
-  const normalized = normalizeDurationInput(input);
-  if (!normalized) return null;
-
-  const pattern = /(\d+(?:\.\d+)?)\s*([a-zA-Z]+)/g;
-  let total = 0;
-  let matched = false;
-
-  for (const match of normalized.matchAll(pattern)) {
-    const rawValue = match[1];
-    const rawUnit = match[2];
-    if (!rawValue || !rawUnit) continue;
-
-    const value = Number(rawValue);
-    const unit = rawUnit.toLowerCase();
-    const unitMs = DURATION_UNITS_MS[unit];
-
-    if (!Number.isFinite(value) || value <= 0 || !unitMs) {
-      return null;
-    }
-
-    total += Math.round(value * unitMs);
-    matched = true;
-  }
-
-  if (!matched) return null;
-  if (total < 1000) return null;
-  return total;
-}
+export { parseDurationToMs } from '../../utils/sanctionDuration.js';
 
 export function formatDurationFr(durationMs: number): string {
   const totalSeconds = Math.max(1, Math.floor(durationMs / 1000));
