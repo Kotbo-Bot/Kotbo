@@ -61,6 +61,14 @@ export const STARBOARD_REMOVAL_LABELS: Record<string, string> = {
 const EXEC_IN: PortDef = { id: 'exec', label: '', type: 'Exec' };
 const EXEC_OUT: PortDef = { id: 'next', label: '', type: 'Exec' };
 
+/** Éléments optionnels d'un embed (images en https), communs au salon et au MP. */
+const EMBED_EXTRA_INPUTS: PortDef[] = [
+  { id: 'thumbnail', label: 'Vignette (URL https)', type: 'String', optional: true },
+  { id: 'image', label: 'Grande image (URL https)', type: 'String', optional: true },
+  { id: 'footer', label: 'Pied de page', type: 'String', optional: true },
+  { id: 'footerIcon', label: 'Icône du pied de page (URL https)', type: 'String', optional: true },
+];
+
 // ============================================================================
 // DÉCLENCHEURS - sans entrée d'exécution, ils démarrent le graphe
 // ============================================================================
@@ -1121,6 +1129,7 @@ const ACTIONS: NodeDef[] = [
       { id: 'title', label: 'Titre', type: 'String' },
       { id: 'description', label: 'Description', type: 'String' },
       { id: 'content', label: "Texte au-dessus de l'embed", type: 'String', optional: true },
+      ...EMBED_EXTRA_INPUTS,
     ],
     outputs: [EXEC_OUT],
     config: [
@@ -1131,13 +1140,19 @@ const ACTIONS: NodeDef[] = [
     type: 'SendDM',
     label: 'Envoyer un message privé',
     category: 'action',
-    description: 'Envoie un message privé à un membre. Sans effet si ses MP sont fermés.',
+    description: 'Envoie un message privé à un membre, en texte et/ou en embed (titre ou description renseignés). Sans effet si ses MP sont fermés.',
     inputs: [
       EXEC_IN,
       { id: 'member', label: 'Membre', type: 'Member' },
-      { id: 'text', label: 'Texte', type: 'String' },
+      { id: 'text', label: 'Texte', type: 'String', optional: true },
+      { id: 'title', label: "Titre de l'embed", type: 'String', optional: true },
+      { id: 'description', label: "Description de l'embed", type: 'String', optional: true },
+      ...EMBED_EXTRA_INPUTS,
     ],
     outputs: [EXEC_OUT],
+    config: [
+      { key: 'color', label: "Couleur de l'embed", type: 'text', placeholder: '#5865F2', defaultValue: '#5865F2' },
+    ],
   },
   {
     type: 'AddRole',

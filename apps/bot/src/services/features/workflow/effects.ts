@@ -459,6 +459,10 @@ export function createWorkflowEffects(guild: Guild, workflowId?: string): Workfl
             description: coerceToString(inputs.description),
             content: coerceToString(inputs.content),
             color: parseColor(config.color),
+            thumbnail: coerceToString(inputs.thumbnail),
+            image: coerceToString(inputs.image),
+            footer: coerceToString(inputs.footer),
+            footerIcon: coerceToString(inputs.footerIcon),
           });
           if (!payload) throw new WorkflowActionError('Envoyer un embed', 'titre et description vides');
           await channel.send(payload);
@@ -476,7 +480,21 @@ export function createWorkflowEffects(guild: Guild, workflowId?: string): Workfl
             return {};
           }
           // Des MP fermés sont un cas normal, pas une erreur de workflow.
-          await member.send(safeContent(inputs.text, 'Envoyer un message privé')).catch(() => {
+          const dmEmbed = buildEmbedMessage({
+            title: coerceToString(inputs.title),
+            description: coerceToString(inputs.description),
+            content: '',
+            color: parseColor(config.color),
+            thumbnail: coerceToString(inputs.thumbnail),
+            image: coerceToString(inputs.image),
+            footer: coerceToString(inputs.footer),
+            footerIcon: coerceToString(inputs.footerIcon),
+          });
+          // Texte seul (comportement historique), embed seul, ou les deux.
+          const dmText = coerceToString(inputs.text).trim().slice(0, 2000);
+          if (!dmEmbed && !dmText) throw new WorkflowActionError('Envoyer un message privé', 'le texte est vide');
+          const dmPayload = { ...(dmText ? { content: dmText } : {}), ...(dmEmbed ? { embeds: dmEmbed.embeds } : {}) };
+          await member.send(dmPayload).catch(() => {
             logger.debug('Workflow', `MP impossible vers ${member.user.tag} (messages privés fermés).`);
           });
           return {};

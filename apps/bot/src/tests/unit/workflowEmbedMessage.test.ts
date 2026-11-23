@@ -28,4 +28,14 @@ describe('buildEmbedMessage', () => {
   test('rien à envoyer sans titre ni description', () => {
     expect(buildEmbedMessage({ title: '', description: '', content: 'ping', color: 0 })).toBeNull();
   });
+
+  test('ajoute vignette, grande image et pied de page en https, ignore le reste', () => {
+    const data = buildEmbedMessage({
+      title: 'T', description: '', content: '', color: 0,
+      thumbnail: 'https://exemple.fr/a.png', image: 'http://exemple.fr/b.png', footer: 'Art : Camille', footerIcon: 'https://exemple.fr/i.png',
+    })?.embeds[0]?.data;
+    expect(data?.thumbnail?.url).toBe('https://exemple.fr/a.png');
+    expect(data?.image).toBeUndefined();
+    expect(data?.footer).toEqual({ text: 'Art : Camille', icon_url: 'https://exemple.fr/i.png' });
+  });
 });
