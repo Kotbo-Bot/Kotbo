@@ -17,6 +17,8 @@ export type {
   SanctionAppliedEvent,
   SanctionRevokedEvent,
   AutoModTriggeredEvent,
+  VerificationPassedEvent,
+  AegisAlertEvent,
   ReactionAddEvent,
   ReactionRemoveEvent,
   FormSubmittedEvent,

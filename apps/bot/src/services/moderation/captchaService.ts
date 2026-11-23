@@ -2,6 +2,7 @@ import { type Client, type Guild, type GuildMember, type Message, type TextChann
 import { createCanvas, loadImage, type Image } from '@napi-rs/canvas';
 import { fetchExternal } from '../../utils/http.js';
 import crypto from 'node:crypto';
+import { kotboEventBus } from '@kotbo/core';
 import prisma from '../../utils/db.js';
 import { notifyJoinBlocked } from '../notifications/notifyService.js';
 import { logger } from '../../utils/logger.js';
@@ -469,6 +470,12 @@ export async function handleCaptchaMessage(message: Message): Promise<boolean> {
     if (granted) {
       await restorePersistedRoles(message.member, config).catch((err) => {
         logger.error('Captcha', `Restauration des rôles impossible pour ${message.author.id}`, err);
+      });
+      kotboEventBus.publish('verification:passed', {
+        guildId: message.guild.id,
+        userId: message.author.id,
+        method: 'CAPTCHA',
+        timestamp: Date.now(),
       });
     }
 

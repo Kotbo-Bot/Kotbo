@@ -16,6 +16,7 @@ import { buildButtons, buildConflictEmbed, buildDistressEmbed, buildHarassmentEm
 import { tallyTargeting } from './aegisSignals.js';
 import { liftSlowmode } from './aegisActions.js';
 import { captureEvidence, evidenceLinks, reasonWithExcerpt } from './aegisEvidence.js';
+import { publishAegisAlert } from './aegisEvents.js';
 
 // ── Escalade ────────────────────────────────────────────────────────────────
 
@@ -96,6 +97,7 @@ export async function raiseConflict(
       evidenceUrl,
     },
   });
+  publishAegisAlert(detection);
   if (restoreAt) scheduleRestore(client, detection.id, guild.id, restoreAt);
 
   await postAlert(guild, config.reviewChannelId, detection.id, {
@@ -168,6 +170,7 @@ export async function raiseHarassment(
       evidenceUrl,
     },
   });
+  publishAegisAlert(detection);
 
   kotboEventBus.publish('automod:triggered', {
     guildId: guild.id,
@@ -234,6 +237,7 @@ export async function checkLongHarassment(guild: Guild, job: AegisJob, config: A
       evidenceUrl,
     },
   });
+  publishAegisAlert(detection);
 
   kotboEventBus.publish('automod:triggered', {
     guildId: guild.id,
@@ -279,6 +283,7 @@ export async function raiseDistress(guild: Guild, job: AegisJob, config: AegisRu
       status: 'PENDING',
     },
   });
+  publishAegisAlert(detection);
   await postAlert(guild, config.distressChannelId ?? config.reviewChannelId, detection.id, {
     embeds: [buildDistressEmbed(detection)],
     components: buildButtons(detection),

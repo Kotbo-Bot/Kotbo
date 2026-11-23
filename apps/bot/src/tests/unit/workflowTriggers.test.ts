@@ -844,3 +844,30 @@ describe('déclencheurs de Starlight', () => {
     expect(decompileGraph(graph)).toEqual(recipe);
   });
 });
+
+describe('déclencheurs Vérification réussie et Alerte AegisAI', () => {
+  const keys = (type: string) => availableConditions(type).map((condition) => condition.key);
+
+  test('chacun écoute son événement', () => {
+    expect(getNodeDef('OnVerificationPassed')).toMatchObject({ category: 'trigger', event: 'verification:passed' });
+    expect(getNodeDef('OnAegisAlert')).toMatchObject({ category: 'trigger', event: 'aegis:alert' });
+  });
+
+  test('l’alerte expose le membre, le salon, la catégorie et le score, et se filtre par salon', () => {
+    const paths = contextTokens('OnAegisAlert').map((token) => token.path);
+    expect(paths).toEqual(expect.arrayContaining(['member.displayName', 'channel.name', 'categoryLabel', 'score']));
+    expect(getNodeDef('OnAegisAlert')?.config?.some((field) => field.key === 'channelIds')).toBe(true);
+  });
+
+  test('conditions sur la catégorie, le score et le traitement automatique', () => {
+    expect(keys('OnAegisAlert')).toEqual(expect.arrayContaining([
+      'aegis.isToxic', 'aegis.isHarassment', 'aegis.isConflict', 'aegis.isDistress', 'aegis.isAutomatic', 'aegis.score',
+    ]));
+    expect(keys('OnStarboardFeatured')).not.toContain('aegis.score');
+  });
+
+  test('la vérification distingue le captcha du parcours web', () => {
+    expect(contextTokens('OnVerificationPassed').map((token) => token.path)).toEqual(expect.arrayContaining(['member.displayName', 'methodLabel']));
+    expect(keys('OnVerificationPassed')).toContain('verification.isCaptcha');
+  });
+});

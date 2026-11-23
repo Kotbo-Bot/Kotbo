@@ -774,6 +774,44 @@ const TRIGGERS: NodeDef[] = [
     config: [CHANNEL_FILTER_FIELD],
   },
   {
+    type: 'OnAegisAlert',
+    label: 'Alerte AegisAI',
+    category: 'trigger',
+    description:
+      "Se déclenche à chaque détection d'AegisAI (propos toxiques, harcèlement, escalade de conflit, détresse), qu'il ait agi seul ou laissé l'alerte au staff. Le score va de 0 à 100 et vaut 0 pour le harcèlement et l'escalade, qui n'en ont pas.",
+    event: 'aegis:alert',
+    inputs: [],
+    outputs: [
+      EXEC_OUT,
+      { id: 'member', label: 'Membre', type: 'Member' },
+      { id: 'channel', label: 'Salon', type: 'Channel' },
+      { id: 'categoryLabel', label: 'Catégorie', type: 'String' },
+      { id: 'score', label: 'Score', type: 'Number' },
+      { id: 'isToxic', label: 'Propos toxiques', type: 'Boolean' },
+      { id: 'isHarassment', label: 'Harcèlement', type: 'Boolean' },
+      { id: 'isConflict', label: 'Escalade de conflit', type: 'Boolean' },
+      { id: 'isDistress', label: 'Détresse', type: 'Boolean' },
+      { id: 'isAutomatic', label: 'Traitée par AegisAI', type: 'Boolean' },
+      { id: 'category', label: 'Code de la catégorie', type: 'String' },
+    ],
+    config: [CHANNEL_FILTER_FIELD],
+  },
+  {
+    type: 'OnVerificationPassed',
+    label: 'Vérification réussie',
+    category: 'trigger',
+    description:
+      "Se déclenche quand un membre réussit la vérification de sécurité ou le captcha d'arrivée, une fois son accès donné. Un double compte repéré ou un appel de bannissement ne comptent pas comme une réussite.",
+    event: 'verification:passed',
+    inputs: [],
+    outputs: [
+      EXEC_OUT,
+      { id: 'member', label: 'Membre', type: 'Member' },
+      { id: 'methodLabel', label: 'Méthode', type: 'String' },
+      { id: 'isCaptcha', label: 'Par captcha', type: 'Boolean' },
+    ],
+  },
+  {
     type: 'OnSanctionRevoked',
     label: 'Sanction levée',
     category: 'trigger',
@@ -1075,12 +1113,14 @@ const ACTIONS: NodeDef[] = [
     type: 'SendEmbed',
     label: 'Envoyer un embed',
     category: 'action',
-    description: 'Poste un message enrichi dans un salon.',
+    description:
+      "Poste un message enrichi dans un salon. Une mention dans l'embed ne notifie personne : le texte au-dessus sert à pinger un membre ou un rôle (jamais @everyone ni @here).",
     inputs: [
       EXEC_IN,
       { id: 'channel', label: 'Salon', type: 'Channel' },
       { id: 'title', label: 'Titre', type: 'String' },
       { id: 'description', label: 'Description', type: 'String' },
+      { id: 'content', label: "Texte au-dessus de l'embed", type: 'String', optional: true },
     ],
     outputs: [EXEC_OUT],
     config: [

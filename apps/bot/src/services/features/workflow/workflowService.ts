@@ -359,6 +359,13 @@ export async function getWorkflow(guildId: string, id: string) {
 // DÉCLENCHEMENT
 // ============================================================================
 
+const AEGIS_CATEGORY_LABELS: Record<string, string> = {
+  TOXIC: 'Propos toxiques',
+  HARASSMENT: 'Harcèlement',
+  CONFLICT: 'Escalade de conflit',
+  DISTRESS: 'Détresse',
+};
+
 function sanctionTypeLabel(type: string): string {
   return Object.hasOwn(SANCTION_TYPE_LABELS, type) ? SANCTION_TYPE_LABELS[type] : type;
 }
@@ -820,6 +827,35 @@ export async function buildTriggerOutputs(
         channel: channelOf(payload.channelId),
         rule: String(payload.rule ?? ''),
         action: String(payload.action ?? ''),
+      };
+    }
+
+    case 'OnAegisAlert': {
+      const member = await memberOf(payload.userId);
+      if (!member) return null;
+      const category = String(payload.category ?? '');
+      return {
+        member,
+        channel: channelOf(payload.channelId),
+        category,
+        categoryLabel: AEGIS_CATEGORY_LABELS[category] ?? category,
+        score: typeof payload.score === 'number' ? payload.score : 0,
+        isToxic: category === 'TOXIC',
+        isHarassment: category === 'HARASSMENT',
+        isConflict: category === 'CONFLICT',
+        isDistress: category === 'DISTRESS',
+        isAutomatic: payload.status === 'AUTO',
+      };
+    }
+
+    case 'OnVerificationPassed': {
+      const member = await memberOf(payload.userId);
+      if (!member) return null;
+      const isCaptcha = payload.method === 'CAPTCHA';
+      return {
+        member,
+        methodLabel: isCaptcha ? 'Captcha' : 'Vérification de sécurité',
+        isCaptcha,
       };
     }
 

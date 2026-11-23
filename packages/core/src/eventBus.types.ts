@@ -185,6 +185,28 @@ export interface AutoModTriggeredEvent {
   timestamp: number;
 }
 
+/** Vérification passée : parcours web de la vérification de sécurité, ou captcha d'arrivée. */
+export interface VerificationPassedEvent {
+  guildId: string;
+  userId: string;
+  method: 'SECURITY' | 'CAPTCHA';
+  timestamp: number;
+}
+
+/** Détection AegisAI enregistrée, qu'elle ait été traitée seule ou laissée au staff. */
+export interface AegisAlertEvent {
+  guildId: string;
+  detectionId: string;
+  userId: string;
+  channelId: string;
+  category: 'TOXIC' | 'HARASSMENT' | 'CONFLICT' | 'DISTRESS';
+  /** Score de 0 à 100 ; null quand la catégorie n'en a pas (harcèlement, conflit). */
+  score: number | null;
+  /** AUTO : AegisAI a agi seul ; PENDING : l'alerte attend le staff. */
+  status: string;
+  timestamp: number;
+}
+
 // ── Reaction / Thread Events ────────────────────────────────────
 export interface ReactionAddEvent {
   guildId: string;
@@ -582,6 +604,8 @@ export interface KotboEventMap {
   'sanction:applied': SanctionAppliedEvent;
   'sanction:revoked': SanctionRevokedEvent;
   'automod:triggered': AutoModTriggeredEvent;
+  'verification:passed': VerificationPassedEvent;
+  'aegis:alert': AegisAlertEvent;
   'reaction:add': ReactionAddEvent;
   'reaction:remove': ReactionRemoveEvent;
   'form:submitted': FormSubmittedEvent;

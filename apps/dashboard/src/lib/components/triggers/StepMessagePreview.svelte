@@ -30,8 +30,10 @@
     const channel = previewChannelName(step.values.channel, channels);
     if (step.action !== 'SendEmbed') return { channel, content: render(step.values.text) };
     const color = step.values.color?.from === 'text' ? step.values.color.template : undefined;
+    const content = render(step.values.content);
     return {
       channel,
+      ...(content ? { content } : {}),
       embed: { title: render(step.values.title), description: render(step.values.description), color: embedColor(color) },
     };
   });

@@ -26,6 +26,7 @@ import { MEMBER_NOTE_MAX_LENGTH, appendAutomaticNoteLine, formatAutomaticNoteLin
 import { expectBotNickname } from './nicknameEcho.js';
 import { expectBotRoleChange } from './roleEcho.js';
 import { keepMessage, serialized } from './keptMessage.js';
+import { buildEmbedMessage } from './embedMessage.js';
 import {
   coerceToNumber,
   coerceToString,
@@ -453,13 +454,14 @@ export function createWorkflowEffects(guild: Guild, workflowId?: string): Workfl
 
         case 'SendEmbed': {
           const channel = await resolveTextChannel(guild, inputs.channel);
-          const embed = new EmbedBuilder().setColor(parseColor(config.color));
-          const title = coerceToString(inputs.title).slice(0, 256);
-          const description = coerceToString(inputs.description).slice(0, 4096);
-          if (title) embed.setTitle(title);
-          if (description) embed.setDescription(description);
-          if (!title && !description) throw new WorkflowActionError('Envoyer un embed', 'titre et description vides');
-          await channel.send({ embeds: [embed] });
+          const payload = buildEmbedMessage({
+            title: coerceToString(inputs.title),
+            description: coerceToString(inputs.description),
+            content: coerceToString(inputs.content),
+            color: parseColor(config.color),
+          });
+          if (!payload) throw new WorkflowActionError('Envoyer un embed', 'titre et description vides');
+          await channel.send(payload);
           return {};
         }
 
