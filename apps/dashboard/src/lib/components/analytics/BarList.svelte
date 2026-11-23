@@ -46,7 +46,8 @@
   <p class="text-body-sm text-on-surface-variant py-2">{empty}</p>
 {:else}
   <ul class="flex flex-col gap-2.5">
-    {#each items as item (item.id)}
+    <!-- Clé suffixée par l'index : un id en double côté appelant ferait planter la page (each_key_duplicate). -->
+    {#each items as item, i (`${item.id}:${i}`)}
       <li>
         {#if onselect}
           <button type="button" class="bar-row bar-row--button" onclick={() => onselect(item)} title={tip(item)}>
