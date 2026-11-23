@@ -6,6 +6,7 @@ import { dashboardCall, mockDashboardGate } from '../helpers/honoDashboard.js';
 const ADMIN_ID = '700000000000000001';
 const mockDb = {
   globalAdmin: { findMany: mock(async () => [{ userId: ADMIN_ID }]) },
+  feedback: { create: mock(async () => ({ id: 'ckfeedback0000000000001' })) },
 };
 for (const ext of ['ts', 'js']) {
   mock.module(path.resolve(import.meta.dir, `../../utils/db.${ext}`), () => ({ default: mockDb, prisma: mockDb, prismaRead: mockDb }));
