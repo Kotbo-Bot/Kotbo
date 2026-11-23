@@ -1837,7 +1837,7 @@
   "b1_sanction_warn_opt_membre": "Member to warn",
   "b1_sanction_warn_opt_raison": "Reason for the warning",
   "b1_sanction_warn_opt_gravite": "Warning severity (counts toward the score if weighting is enabled)",
-  "b1_sanction_gravite_0": "Reminder (0 points, not counted)",
+  "b1_sanction_gravite_0": "Reminder (0 points)",
   "b1_sanction_gravite_1": "Minor (1 point)",
   "b1_sanction_gravite_2": "Normal (2 points)",
   "b1_sanction_gravite_3": "Severe (3 points)",
