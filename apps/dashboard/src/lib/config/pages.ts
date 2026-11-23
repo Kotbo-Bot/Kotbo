@@ -230,7 +230,7 @@ export const configItems: PageConfig[] = [
 
 /** Ce qui relie Kotbo a l'exterieur : agents, services tiers, autres serveurs. */
 export const integrationItems: PageConfig[] = [
-  { get name() { return m.nav_mcp_api(); },             icon: "cpu",           href: "/mcp-settings",         featureKey: "settings", beta: false, wip: false, plan: "plus" },
+  { get name() { return m.nav_mcp_api(); },             icon: "cpu",           href: "/mcp-settings",         featureKey: "mcp_integrations", beta: false, wip: false, plan: "plus" },
   { get name() { return m.nav_outgoing_webhooks(); },   icon: "send",          href: "/webhooks",             featureKey: "settings", beta: true, wip: false },
   { get name() { return m.nav_network(); },             icon: "network",       href: "/network",              featureKey: "settings", beta: false, wip: false, plan: "plus" },
 ];

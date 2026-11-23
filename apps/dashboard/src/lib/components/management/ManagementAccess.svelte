@@ -14,6 +14,7 @@
    */
   const LEGACY_CATEGORIES: Record<string, string> = {
     content: 'moderation',
+    mcp_integrations: 'integrations',
   };
 
   export function featureCategory(featureKey: string): string {

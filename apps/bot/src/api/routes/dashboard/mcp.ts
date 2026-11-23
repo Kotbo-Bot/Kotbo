@@ -6,6 +6,7 @@ import { getMcpConnectionLogs, makeMcpDirectUrl } from '../../mcp/mcpServer.js';
 import { createMcpKey, getMcpKeys, deactivateMcpKey, findActiveMcpKeyById } from '../../mcp/mcpKeyService.js';
 import type { McpKeyPermission } from '@prisma/client';
 import { fail, guildRoute, readBody, send } from '../../hono/dashboard/kit.js';
+import { getCachedFeatureAccess } from './featureGate.js';
 
 const VALID_PERMISSIONS: McpKeyPermission[] = [
   'READ_STATS',
@@ -32,9 +33,16 @@ export function createMcpKeysRouter(client: Client) {
   const router = new Hono();
   const base = '/api/dashboard/guilds/:guildId';
 
+  // Une clé agit avec les droits de ses permissions : seuls un administrateur
+  // ou un rôle à qui le Centre de gestion a donné « Configurer » sur la
+  // fonctionnalité des clés MCP peuvent la gérer. Strictement `true` : l'absence
+  // de règle ne doit jamais ouvrir la page.
   const adminOnly = createMiddleware(async (c, next) => {
-    if (!c.var.effectiveAccess.canManageSettings) {
-      return send(c, { error: 'Réservé aux administrateurs du dashboard.' }, 403);
+    const access = c.var.effectiveAccess;
+    const allowed = access.canManageSettings
+      || (await getCachedFeatureAccess(client, c.req.param('guildId')!, access, c.var.dashboardUser.userId)).mcp_integrations?.canConfigure === true;
+    if (!allowed) {
+      return send(c, { error: 'Réservé aux administrateurs du dashboard ou aux rôles autorisés.' }, 403);
     }
     await next();
   });

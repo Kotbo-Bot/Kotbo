@@ -45,6 +45,10 @@ export const SEGMENT_FEATURE_KEYS: Record<string, string | string[]> = {
   // Seule la page Pseudos ecrit la liste de mots bannis ; AutoMod la lit.
   'banned-words': ['nickname_moderation', 'automod'],
   'raid-protection': 'raid_protection',
+  // Page Connecter une IA : reservee aux administrateurs, ou aux roles a qui
+  // le Centre de gestion donne la fonctionnalite.
+  'mcp-keys': 'mcp_integrations',
+  'mcp-logs': 'mcp_integrations',
   'nickname-moderation': 'nickname_moderation',
   'tag-automod': 'raid_protection',
   detections: 'double_accounts',

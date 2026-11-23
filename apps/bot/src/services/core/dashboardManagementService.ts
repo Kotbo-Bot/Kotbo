@@ -18,6 +18,12 @@ import { getDeclaredModuleStates } from './moduleGate.js';
  */
 const LEGACY_FEATURES = [
   {
+    featureKey: 'mcp_integrations',
+    featureName: 'Intégrations (clés MCP)',
+    description: 'Page Connecter une IA : création et révocation des clés MCP',
+    category: 'integrations',
+  },
+  {
     featureKey: 'content',
     featureName: 'Contenu',
     description: 'Gestion du contenu et messages',
