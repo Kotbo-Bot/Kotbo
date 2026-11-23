@@ -58,6 +58,8 @@ export interface WorkflowEffects {
   getRole(roleId: string): Promise<RoleValue | null>;
   getChannel(channelId: string): Promise<ChannelValue | null>;
   getMember(userId: string): Promise<MemberValue | null>;
+  /** Score de risque 0-100 du membre ; absent (essai à blanc, tests) = 0. */
+  getMemberRisk?(userId: string): Promise<number>;
   getGuildInfo(): Promise<{ name: string; memberCount: number }>;
   /** Exécute une action à effet de bord et retourne ses éventuelles sorties. */
   runAction(
@@ -571,7 +573,7 @@ export async function evaluatePureNode(
     case 'MemberInfo': {
       const member = inputs.member;
       if (!isMember(member)) {
-        return { displayName: '', tag: '', id: '', accountAgeDays: 0, joinedDaysAgo: 0, isBot: false, roles: [] };
+        return { displayName: '', tag: '', id: '', accountAgeDays: 0, joinedDaysAgo: 0, isBot: false, hasAvatar: true, riskScore: 0, roles: [] };
       }
       // Les rôles sont résolus en entités pour rester utilisables en aval
       const roles = await Promise.all(member.roleIds.map((id) => effects.getRole(id)));
@@ -582,6 +584,8 @@ export async function evaluatePureNode(
         accountAgeDays: daysSince(member.accountCreatedAt, now),
         joinedDaysAgo: daysSince(member.joinedAt, now),
         isBot: member.isBot,
+        hasAvatar: member.hasAvatar ?? true,
+        riskScore: (await effects.getMemberRisk?.(member.id)) ?? 0,
         roles: roles.filter((role): role is RoleValue => role !== null),
       };
     }

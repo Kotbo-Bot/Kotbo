@@ -18,6 +18,8 @@ export interface MemberValue {
   accountCreatedAt: number | null;
   /** Timestamp d'arrivée sur le serveur */
   joinedAt: number | null;
+  /** Photo de profil personnalisée (faux : avatar par défaut de Discord). Absent = inconnu, compté comme présent. */
+  hasAvatar?: boolean;
 }
 
 export interface RoleValue {

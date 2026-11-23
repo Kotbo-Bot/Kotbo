@@ -68,6 +68,7 @@ export function createDryRunEffects(real: WorkflowEffects, sample: DryRunSample)
     getRole: (roleId) => real.getRole(roleId),
     getChannel: (channelId) => real.getChannel(channelId),
     getMember: (userId) => real.getMember(userId),
+    getMemberRisk: (userId) => real.getMemberRisk?.(userId) ?? Promise.resolve(0),
     getGuildInfo: () => real.getGuildInfo(),
     // Un essai ne réserve aucun délai : il passe toujours, sans gêner le
     // prochain vrai déclenchement.

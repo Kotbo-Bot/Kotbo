@@ -36,6 +36,7 @@ const PROPERTY_EXAMPLES: Record<string, string> = {
   id: '123456789012345678',
   accountAgeDays: '120',
   joinedDaysAgo: '0',
+  riskScore: '0',
   get isBot() { return m.wfp_no(); },
   get roles() { return m.wfp_role(); },
   get content() { return m.wfp_message(); },

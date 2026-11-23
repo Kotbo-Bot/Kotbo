@@ -444,6 +444,13 @@ async function computeRanking(
   };
 }
 
+/** Score de risque seul (0-100), sans le reste des statistiques du membre. */
+export async function getMemberRiskLevel(guildId: string, userId: string): Promise<number> {
+  const linkedUserIds = await altAccountService.getAllLinkedUserIds(guildId, userId).catch(() => [] as string[]);
+  const userIds = [...new Set([userId, ...linkedUserIds])];
+  return (await computeRisk(guildId, userId, userIds)).riskLevel;
+}
+
 export async function getMemberInsights(
   guildId: string,
   userId: string,

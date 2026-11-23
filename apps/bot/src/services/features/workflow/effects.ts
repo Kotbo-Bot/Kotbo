@@ -70,6 +70,7 @@ export function toMemberValue(member: GuildMember): MemberValue {
     roleIds: [...member.roles.cache.keys()],
     accountCreatedAt: member.user.createdTimestamp ?? null,
     joinedAt: member.joinedTimestamp ?? null,
+    hasAvatar: member.user.avatar !== null,
   };
 }
 
@@ -383,6 +384,12 @@ export function createWorkflowEffects(guild: Guild, workflowId?: string): Workfl
       : {}),
     getVariable: (name, subject) => getVariable(guild.id, name, subject),
     updateVariable: (name, subject, operation, amount) => updateVariable(guild.id, name, subject, operation, amount),
+
+    // Une panne de la base ne doit pas faire échouer une condition : score nul.
+    async getMemberRisk(userId) {
+      const { getMemberRiskLevel } = await import('../../analytics/memberInsightsService.js');
+      return getMemberRiskLevel(guild.id, userId).catch(() => 0);
+    },
 
     async getRole(roleId) {
       if (!roleId) return null;

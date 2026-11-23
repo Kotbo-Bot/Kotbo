@@ -1491,6 +1491,8 @@ const DATA: NodeDef[] = [
       { id: 'accountAgeDays', label: 'Âge du compte (j)', type: 'Number' },
       { id: 'joinedDaysAgo', label: 'Arrivé il y a (j)', type: 'Number' },
       { id: 'isBot', label: 'Est un bot', type: 'Boolean' },
+      { id: 'hasAvatar', label: 'A une photo de profil', type: 'Boolean' },
+      { id: 'riskScore', label: 'Score de risque (0-100)', type: 'Number' },
       { id: 'roles', label: 'Rôles', type: 'List', itemType: 'Role' },
     ],
   },
