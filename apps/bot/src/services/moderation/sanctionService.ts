@@ -14,6 +14,7 @@ import { getMissingReportReminderActions, type MissingReportReminderState } from
 import { archiveScoreFilter } from './sanctionArchiveService.js';
 import { publicErrorMessage } from '../../utils/publicError.js';
 import { attachSanctionToJail, imprison, processJailReleases, type JailSource } from './jailService.js';
+import { REMINDER_WEIGHT, normalizeWarnWeight } from './warnWeight.js';
 
 const MAX_DISCORD_TIMEOUT_MS = 27 * 24 * 60 * 60 * 1000;
 const RENEWAL_BUFFER_MS = 60 * 1000;
@@ -613,7 +614,7 @@ export async function registerWarnSanction(params: {
       moderatorUserId: params.moderator.id,
       moderatorTag: params.moderator.tag,
       reason: params.reason,
-      weight: Math.min(3, Math.max(1, params.weight ?? 1)),
+      weight: normalizeWarnWeight(params.weight),
       resolvedAt: new Date(),
       resolutionNote: 'Avertissement enregistré.'
     }
@@ -1504,16 +1505,23 @@ export async function countWarns(guildId: string, targetUserId: string, targetUs
       guildId,
       ...buildTargetUserWhere(targetUserId, targetUserIds),
       ...(await archiveScoreFilter(guildId)),
-      type: SanctionType.WARN
+      type: SanctionType.WARN,
+      weight: { gt: REMINDER_WEIGHT },
     }
   });
+}
+
+/** Poids des warns posés automatiquement (AutoMod, filtres) ; 0 = rappel. */
+export async function getAutomodWarnWeight(guildId: string): Promise<number> {
+  const guild = await prisma.guild.findUnique({ where: { id: guildId }, select: { automodWarnWeight: true } });
+  return normalizeWarnWeight(guild?.automodWarnWeight);
 }
 
 /**
  * Score de warns d'un membre, pondération incluse si activée sur la guilde.
  *
  * - warnWeightingEnabled désactivé → compte brut (comportement historique).
- * - Activé → somme des poids (1/2/3) des warns encore « vivants » :
+ * - Activé → somme des poids (0 à 3) des warns encore « vivants » :
  *   si warnDecayDays est défini, seuls les warns plus récents que N jours comptent.
  *
  * Dans les deux cas les warns archivés sont écartés, à moins que la guilde
@@ -1560,6 +1568,8 @@ export interface ListedSanction {
   status: SanctionStatus;
   reason: string;
   durationSeconds: number | null;
+  /** 0 = rappel. */
+  weight: number;
   expiresAt: Date | null;
   resolvedAt: Date | null;
   createdAt: Date;
@@ -1624,6 +1634,7 @@ export async function listSanctionsByMember(params: {
         status: true,
         reason: true,
         durationSeconds: true,
+        weight: true,
         expiresAt: true,
         resolvedAt: true,
         createdAt: true,

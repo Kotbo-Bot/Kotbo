@@ -460,6 +460,7 @@ export const getGuildState = async (
     moderatorTag: entry.moderatorTag ?? `Modérateur ${entry.moderatorUserId}`,
     reason: entry.reason,
     durationSeconds: entry.durationSeconds,
+    weight: entry.weight,
     expiresAt: entry.expiresAt?.toISOString() ?? null,
     createdAt: entry.createdAt.toISOString(),
     resolvedAt: entry.resolvedAt?.toISOString() ?? null,

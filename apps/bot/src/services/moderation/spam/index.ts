@@ -14,7 +14,7 @@ import prisma from '../../../utils/db.js';
 import { logger } from '../../../utils/logger.js';
 import { COLORS, truncate } from '../../../utils/embeds.js';
 import { getCachedGuild } from '../../../utils/cache.js';
-import { registerTimeoutSanction, registerBanSanction, registerWarnSanction } from '../sanctionService.js';
+import { getAutomodWarnWeight, registerTimeoutSanction, registerBanSanction, registerWarnSanction } from '../sanctionService.js';
 import { mirrorModlogToStaffServer } from '../../staff/staffServerService.js';
 import { getSpamConfig, thresholdsFromConfig, tuningFromConfig } from './config.js';
 import {
@@ -185,7 +185,7 @@ async function applySpamAction(message: Message, verdict: SpamVerdict, action: S
         client: message.client,
       });
     } else if (action === 'DELETE') {
-      await registerWarnSanction({ guildId, target, moderator, reason, client: message.client });
+      await registerWarnSanction({ guildId, target, moderator, reason, client: message.client, weight: await getAutomodWarnWeight(guildId) });
     }
   } catch (err) {
     logger.error('SpamEngine', `Sanction ${action} impossible pour ${message.author.id}`, err);

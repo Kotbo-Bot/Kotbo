@@ -410,7 +410,7 @@ import DiscordAutomodEvents from '../lib/components/automod/DiscordAutomodEvents
     exportRows(format, 'kotbo_sanctions', rows, [
       { label: 'ID', value: (s) => s.id },
       { label: 'Date', value: (s) => s.createdAt },
-      { label: 'Type', value: (s) => typeLabel(s.type) },
+      { label: 'Type', value: (s) => typeLabel(s.type, s.weight) },
       { label: 'Statut', value: (s) => statusLabel(s.status) },
       { label: 'Cible', value: (s) => s.targetTag ?? s.targetUserId ?? '' },
       { label: 'ID Cible', value: (s) => s.targetUserId ?? '' },
@@ -427,7 +427,7 @@ import DiscordAutomodEvents from '../lib/components/automod/DiscordAutomodEvents
   let deletionMessage = $state('');
   let deletionMessageIsError = $state(false);
   let deleteModalOpen = $state(false);
-  let pendingDeletion = $state<{ id: string; type: string; targetTag: string } | null>(null);
+  let pendingDeletion = $state<{ id: string; type: string; targetTag: string; weight?: number } | null>(null);
   let deleteConfirmationText = $state('');
 
   let modalOpen = $state(false);
@@ -1274,7 +1274,7 @@ import DiscordAutomodEvents from '../lib/components/automod/DiscordAutomodEvents
               </td>
               <td class="px-4 py-4 text-xs font-medium">{new Date(entry.createdAt).toLocaleString('fr-FR')}</td>
               <td class="px-4 py-4 text-xs font-bold text-primary">
-                {typeLabel(entry.type)}
+                {typeLabel(entry.type, entry.weight)}
                 {#if entry.archivedAt}
                   <span class="ml-1 inline-flex items-center rounded-full bg-success/10 px-2 py-0.5 text-2xs font-bold text-on-success-container"
                     title={entry.archiveReason || ''}>{m.sc_badge_archived()}</span>
@@ -1726,7 +1726,7 @@ import DiscordAutomodEvents from '../lib/components/automod/DiscordAutomodEvents
         <div class="flex items-start justify-between gap-4">
           <div>
             <p class="text-xs font-semibold text-primary">{m.sc_sanction_file()}</p>
-            <h3 id="modal-title" class="text-2xl font-semibold text-on-surface mt-1">{typeLabel(selectedSanction.type)}</h3>
+            <h3 id="modal-title" class="text-2xl font-semibold text-on-surface mt-1">{typeLabel(selectedSanction.type, selectedSanction.weight)}</h3>
             <p class="text-xs font-bold text-on-surface-variant mt-1">
               {m.sc_applied_to()}
               <button use:explainDisabled={(!memberCase.canOpen) ? m.common_reason_no_permission() : ''} onclick={() => openCaseModal(selectedSanction.targetUserId, selectedSanction.targetTag)} class="text-on-surface transition-colors font-semibold enabled:hover:text-primary disabled:cursor-default">
@@ -1938,7 +1938,7 @@ import DiscordAutomodEvents from '../lib/components/automod/DiscordAutomodEvents
         <p class="text-xs font-semibold text-error">{m.sc_sensitive_action()}</p>
         <h3 id="delete-sanction-title" class="mt-1 text-xl font-semibold text-on-surface">{m.sc_confirm_deletion()}</h3>
         <p class="mt-2 text-sm text-on-surface-variant">
-          {m.sc_delete_confirm_pre()} <span class="font-bold text-on-surface">{typeLabel(pendingDeletion.type)}</span>
+          {m.sc_delete_confirm_pre()} <span class="font-bold text-on-surface">{typeLabel(pendingDeletion.type, pendingDeletion.weight)}</span>
           {m.sc_for_target()} <span class="font-bold text-on-surface">{pendingDeletion.targetTag}</span>. {m.sc_irreversible()}
         </p>
       </div>

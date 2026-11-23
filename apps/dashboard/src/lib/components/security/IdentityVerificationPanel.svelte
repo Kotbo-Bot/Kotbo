@@ -41,6 +41,7 @@
     verificationWarnThreshold: number | null;
     warnWeightingEnabled: boolean;
     warnDecayDays: number | null;
+    automodWarnWeight: number;
     countArchivedInWarnScore: boolean;
     warnAutoArchiveDays: number | null;
     wordStatsEnabled: boolean;
@@ -82,6 +83,7 @@
       verificationWarnThreshold: data?.verificationWarnThreshold ?? null,
       warnWeightingEnabled: data?.warnWeightingEnabled ?? false,
       warnDecayDays: data?.warnDecayDays ?? null,
+      automodWarnWeight: data?.automodWarnWeight ?? 1,
       countArchivedInWarnScore: data?.countArchivedInWarnScore ?? false,
       warnAutoArchiveDays: data?.warnAutoArchiveDays ?? null,
       wordStatsEnabled: data?.wordStatsEnabled ?? false,
@@ -392,6 +394,17 @@
                   <strong>{m.da_weighted_warns_score()}</strong> {m.da_weighted_warns_desc_3()}
                 </span>
               </span>
+            </label>
+
+            <label class="space-y-1.5 block">
+              <span class="text-xs font-medium text-on-surface-variant/40">{m.da_automod_warn_weight()}</span>
+              <select bind:value={verifConfig.automodWarnWeight} class="w-full rounded-lg border border-field-border bg-surface-container-high/40 px-3 py-2.5 text-sm">
+                <option value={0}>{m.da_automod_warn_weight_0()}</option>
+                <option value={1}>{m.aegis_weight_1()}</option>
+                <option value={2}>{m.aegis_weight_2()}</option>
+                <option value={3}>{m.aegis_weight_3()}</option>
+              </select>
+              <p class="text-2xs text-on-surface-variant/40">{m.da_automod_warn_weight_hint()}</p>
             </label>
 
             {#if verifConfig.warnWeightingEnabled}

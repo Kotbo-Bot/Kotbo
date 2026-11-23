@@ -121,7 +121,7 @@ const BOOLEAN_FIELDS = [
 const INT_FIELDS: Record<string, [number, number, string]> = {
   reviewThreshold: [50, 99, 'Seuil de revue'],
   autoThreshold: [50, 100, "Seuil d'action automatique"],
-  warnWeight: [1, 3, 'Poids du warn'],
+  warnWeight: [0, 3, 'Poids du warn'],
   timeoutMinutes: [1, 40_320, 'Durée du timeout'],
   conflictWindowSec: [30, 900, "Fenêtre d'escalade"],
   conflictMessageThreshold: [2, 30, "Seuil d'escalade"],

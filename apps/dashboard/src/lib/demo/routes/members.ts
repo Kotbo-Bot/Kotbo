@@ -427,6 +427,7 @@ export function registerMembersRoutes(): void {
       archiveReason: null,
       appealable: true,
       appealLockReason: null,
+      weight: 1,
     };
 
     demoDb.update('sanctions', sanctionsSeed, (current) => [newSanction, ...current]);

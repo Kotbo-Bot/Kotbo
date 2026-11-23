@@ -36,6 +36,7 @@ import {
   registerJailSanction,
   runGuildBan,
 } from '../../services/moderation/sanctionService.js';
+import { REMINDER_WEIGHT } from '../../services/moderation/warnWeight.js';
 import { JailNotConfiguredError, releaseJail } from '../../services/moderation/jailService.js';
 import { applyProgressiveSanction, getOrCreateDefaultTables } from '../../services/moderation/sanctionTableService.js';
 import { sendBanAppealNotificationDM, sendPreActionAppealDM } from '../../services/moderation/banAppealService.js';
@@ -76,7 +77,7 @@ const describe = (key: string) => ({
   fr: (m as any)[key]({}, { locale: 'fr' }) as string,
 });
 
-const graviteChoice = (level: 1 | 2 | 3) => ({
+const graviteChoice = (level: 0 | 1 | 2 | 3) => ({
   name: (m as any)[`b1_sanction_gravite_${level}`]({}, { locale: 'en' }) as string,
   name_localizations: { fr: (m as any)[`b1_sanction_gravite_${level}`]({}, { locale: 'fr' }) as string },
   value: level,
@@ -102,7 +103,7 @@ const data = new SlashCommandBuilder()
           .setDescription(describe('b1_sanction_warn_opt_gravite').en)
           .setDescriptionLocalizations({ fr: describe('b1_sanction_warn_opt_gravite').fr })
           .setRequired(false)
-          .addChoices(graviteChoice(1), graviteChoice(2), graviteChoice(3)),
+          .addChoices(graviteChoice(0), graviteChoice(1), graviteChoice(2), graviteChoice(3)),
       ),
   )
   .addSubcommand((sub) =>
@@ -278,10 +279,10 @@ async function notifyModeratorDashboardReportReminder(
   }
 }
 
-function sanctionTypeLabel(type: SanctionType, locale: Locale = 'fr'): string {
+function sanctionTypeLabel(type: SanctionType, locale: Locale = 'fr', weight?: number): string {
   switch (type) {
     case SanctionType.WARN:
-      return m.b1_sanction_label_warn({}, { locale });
+      return weight === REMINDER_WEIGHT ? m.b1_gravity_reminder({}, { locale }) : m.b1_sanction_label_warn({}, { locale });
     case SanctionType.TIMEOUT:
       return m.b1_sanction_label_timeout({}, { locale });
     case SanctionType.KICK:
@@ -368,7 +369,7 @@ async function buildSanctionListView(guildId: string, targetUserId: string, targ
       const expiryLabel = sanction.expiresAt ? `\n${m.b1_sanction_line_end({ date: `<t:${Math.floor(sanction.expiresAt.getTime() / 1000)}:R>` }, { locale })}` : '';
 
       return [
-        `**${absoluteIndex}. ${sanctionTypeEmoji(sanction.type)} ${sanctionTypeLabel(sanction.type, locale)}** (${sanctionStatusLabel(sanction.status, locale)})${durationLabel}`,
+        `**${absoluteIndex}. ${sanctionTypeEmoji(sanction.type)} ${sanctionTypeLabel(sanction.type, locale, sanction.weight)}** (${sanctionStatusLabel(sanction.status, locale)})${durationLabel}`,
         m.b1_sanction_line_reason({ reason }, { locale }),
         m.b1_sanction_line_moderation({ moderator: moderatorLabel, created: `<t:${Math.floor(sanction.createdAt.getTime() / 1000)}:R>` }, { locale }) + expiryLabel,
       ].join('\n');
@@ -543,8 +544,9 @@ async function executeInternal(interaction: ChatInputCommandInteraction | UserCo
       const warnCount = await countWarns(interaction.guildId, targetUser.id, linkedUserIds);
       const warnScore = await getWarnScore(interaction.guildId, targetUser.id, linkedUserIds);
 
-      const gravityLabel = weight === 3 ? m.b1_gravity_high({}, { locale }) : weight === 2 ? m.b1_gravity_normal({}, { locale }) : m.b1_gravity_low({}, { locale });
-      const scoreFields = warnScore !== warnCount
+      const gravityLabel = weight === 3 ? m.b1_gravity_high({}, { locale }) : weight === 2 ? m.b1_gravity_normal({}, { locale }) : weight === REMINDER_WEIGHT ? m.b1_gravity_reminder({}, { locale }) : m.b1_gravity_low({}, { locale });
+      // Un rappel ne bouge ni le compte ni le score : sans sa gravité affichée, rien ne le distinguerait d'un échec.
+      const scoreFields = warnScore !== warnCount || weight === REMINDER_WEIGHT
         ? [
             { name: m.b1_total_warns({}, { locale }), value: `${warnCount}`, inline: true },
             { name: m.b1_weighted_score({}, { locale }), value: m.b1_points({ score: warnScore }, { locale }), inline: true },

@@ -628,6 +628,7 @@ export async function buildMemberCaseData(client: Client, guildId: string, userI
         moderatorTag: entry.moderatorTag ?? `Modérateur ${entry.moderatorUserId}`,
         reason: entry.reason,
         durationSeconds: entry.durationSeconds,
+        weight: entry.weight,
         expiresAt: safeIsoDate(entry.expiresAt),
         createdAt: safeIsoDate(entry.createdAt) || new Date().toISOString(),
         resolvedAt: safeIsoDate(entry.resolvedAt),

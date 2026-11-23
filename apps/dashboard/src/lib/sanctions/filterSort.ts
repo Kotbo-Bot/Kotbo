@@ -26,6 +26,8 @@ export interface Sanction {
   moderatorTag: string;
   moderatorUserId: string;
   durationSeconds: number | null;
+  /** 0 = rappel. */
+  weight?: number;
   status: string;
   reason: string;
   /** Non nul = sanction archivee : desactivee mais conservee. */

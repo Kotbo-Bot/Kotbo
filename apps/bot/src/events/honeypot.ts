@@ -4,6 +4,7 @@ import { resolveLogChannel } from '../utils/logChannel.js';
 import { errorEmbed } from '../utils/embeds.js';
 import { getCachedGuild } from '../utils/cache.js';
 import {
+  getAutomodWarnWeight,
   registerWarnSanction,
   registerKickSanction,
   registerBanSanction,
@@ -252,6 +253,7 @@ async function punish(client: Client, message: Message, guildConfig: GuildConfig
           reason,
           client,
           evidenceLinks,
+          weight: await getAutomodWarnWeight(guild.id),
         }).catch(() => null);
 
         actionText = 'averti (warn)';

@@ -769,6 +769,8 @@ model Guild {
   // Quand actif, les seuils (vérif auto, escalade) utilisent le score pondéré au lieu du compte brut.
   warnWeightingEnabled Boolean @default(false)
   warnDecayDays        Int?    // null = pas de décroissance. Un warn ne compte plus après N jours.
+  // Poids des warns posés par l'AutoMod et les filtres ; 0 = rappel, qui ne compte dans aucun seuil.
+  automodWarnWeight    Int     @default(1)
 
   // Une sanction archivée est « désactivée mais conservée ». Par défaut elle
   // sort du score de warns et de l'escalade automatique ; ce commutateur permet

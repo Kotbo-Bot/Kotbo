@@ -12,6 +12,7 @@
 import type { Client, Guild, GuildMember, User } from 'discord.js';
 import { logger } from '../../utils/logger.js';
 import {
+  getAutomodWarnWeight,
   registerBanSanction,
   registerJailSanction,
   registerKickSanction,
@@ -106,7 +107,7 @@ export async function applyAutoSanction(params: {
   try {
     switch (action) {
       case 'WARN':
-        await registerWarnSanction(base);
+        await registerWarnSanction({ ...base, weight: await getAutomodWarnWeight(params.guild.id) });
         break;
       case 'TIMEOUT': {
         if (!params.member?.moderatable) return { applied: action, done: false };

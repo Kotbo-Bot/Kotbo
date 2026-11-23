@@ -1888,7 +1888,7 @@
                               <span class="inline-flex items-center gap-2">
                                 <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg {style.tile}"><Papicon icon={style.icon} size={13} /></span>
                                 <span>
-                                  <span class="block font-medium text-on-surface">{formatTypeLabel(sanction.type)}</span>
+                                  <span class="block font-medium text-on-surface">{formatTypeLabel(sanction.type, sanction.weight)}</span>
                                   <span class="block text-xs text-on-surface-variant">{m.mcm_by_moderator({ moderator: sanction.moderatorTag })}</span>
                                 </span>
                               </span>
@@ -2212,7 +2212,7 @@
   open={!!(viewingReportSanctionId && selectedSanctionForReport)}
   onClose={() => { viewingReportSanctionId = null; isEditingReport = false; }}
   size="lg"
-  title={selectedSanctionForReport ? formatTypeLabel(selectedSanctionForReport.type) : m.mcm_sanction_report()}
+  title={selectedSanctionForReport ? formatTypeLabel(selectedSanctionForReport.type, selectedSanctionForReport.weight) : m.mcm_sanction_report()}
   subtitle={selectedSanctionForReport ? m.mcm_applied_on({ date: formatDateTime(selectedSanctionForReport.createdAt), moderator: selectedSanctionForReport.moderatorTag }) : ''}
 >
   <div class="space-y-5">

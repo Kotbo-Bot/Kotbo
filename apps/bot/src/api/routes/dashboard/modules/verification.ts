@@ -8,6 +8,7 @@ import { getGuildName, pushAudit } from '../../../shared.js';
 import { readWordStatsEnabled, startWordStatsBackfillIfTurnedOn } from './_shared.js';
 
 import { auditUserOf, fail, guildRoute, readBody, send } from '../../../hono/dashboard/kit.js';
+import { normalizeWarnWeight } from '../../../../services/moderation/warnWeight.js';
 /**
  * La verification de securite se reglait depuis `channels-management`, segment
  * du module « Auto-thread & salons », alors qu'elle ne s'affiche que dans
@@ -54,6 +55,7 @@ export function createVerificationModuleRouter(client: Client) {
           verificationWarnReason: true,
           warnWeightingEnabled: true,
           warnDecayDays: true,
+          automodWarnWeight: true,
           countArchivedInWarnScore: true,
           warnAutoArchiveDays: true,
           wordStatsEnabled: true,
@@ -95,6 +97,7 @@ export function createVerificationModuleRouter(client: Client) {
         verificationWarnReason?: string;
         warnWeightingEnabled?: boolean;
         warnDecayDays?: number | null;
+        automodWarnWeight?: number;
         countArchivedInWarnScore?: boolean;
         warnAutoArchiveDays?: number | null;
         wordStatsEnabled?: boolean;
@@ -151,6 +154,9 @@ export function createVerificationModuleRouter(client: Client) {
         } else if (typeof body.warnDecayDays === 'number' && body.warnDecayDays > 0) {
           data.warnDecayDays = Math.floor(body.warnDecayDays);
         }
+      }
+      if (has('automodWarnWeight') && typeof body.automodWarnWeight === 'number') {
+        data.automodWarnWeight = normalizeWarnWeight(Math.floor(body.automodWarnWeight));
       }
       if (has('countArchivedInWarnScore')) data.countArchivedInWarnScore = !!body.countArchivedInWarnScore;
       if (has('warnAutoArchiveDays')) {
