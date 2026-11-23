@@ -12,7 +12,7 @@ import path from 'node:path';
 type VerificationRow = {
   id: string;
   status: 'PENDING' | 'VERIFIED' | 'FLAGGED' | 'EXPIRED';
-  level: 'LOW' | 'MEDIUM' | 'HIGH';
+  level: 'LINK' | 'LOW' | 'MEDIUM' | 'HIGH';
   createdAt: Date;
   verifiedAt: Date | null;
   expiresAt: Date | null;

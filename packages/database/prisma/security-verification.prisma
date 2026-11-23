@@ -16,6 +16,7 @@ enum VerificationStatus {
 }
 
 enum VerificationLevel {
+  LINK
   LOW
   MEDIUM
   HIGH

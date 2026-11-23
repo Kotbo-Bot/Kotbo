@@ -265,7 +265,7 @@ export type MemberCaseServerTag = {
 export type MemberCaseVerificationEntry = {
   id: string;
   status: 'PENDING' | 'VERIFIED' | 'FLAGGED' | 'EXPIRED';
-  level: 'LOW' | 'MEDIUM' | 'HIGH';
+  level: 'LINK' | 'LOW' | 'MEDIUM' | 'HIGH';
   requestedAt: string;
   verifiedAt: string | null;
   expiresAt: string | null;
