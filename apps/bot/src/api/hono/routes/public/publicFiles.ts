@@ -50,32 +50,45 @@ export function createPublicFilesRouter(): Hono {
       return send(c, { error: 'Lien invalide ou expiré. Demandez un nouveau lien depuis le dashboard.' }, 403);
     }
 
-    // Suffixe à changer quand le HTML servi change (fond des avatars : v2).
-    const etag = `"transcript-${transcriptId}-v2"`;
     const maxAge = Math.max(0, Math.min(3600, parseInt(expires, 10) - Math.floor(Date.now() / 1000)));
-    if (c.req.header('if-none-match') === etag) {
-      return c.body(null, 304, { ETag: etag, 'Cache-Control': `private, max-age=${maxAge}` });
-    }
 
     try {
-      const transcript = await prisma.transcript.findUnique({ where: { id: transcriptId }, select: { html: true } });
-      if (!transcript) return send(c, { error: 'Transcription introuvable' }, 404);
-      const html = stripLegacyAvatarBackground(transcript.html);
+      const meta = await prisma.transcript.findUnique({ where: { id: transcriptId }, select: { format: true } });
+      if (!meta) return send(c, { error: 'Transcription introuvable' }, 404);
 
-      allowDashboardFraming(c);
-      c.header('Content-Type', 'text/html; charset=utf-8');
+      // Suffixe à changer quand le contenu servi change (HTML : fond des avatars, v2 ; JSON : version du format).
+      const isJson = meta.format === 'json';
+      const etag = isJson ? `"transcript-${transcriptId}-json-v1"` : `"transcript-${transcriptId}-v2"`;
+      if (c.req.header('if-none-match') === etag) {
+        return c.body(null, 304, { ETag: etag, 'Cache-Control': `private, max-age=${maxAge}` });
+      }
+
+      const transcript = await prisma.transcript.findUnique({ where: { id: transcriptId }, select: { html: true, data: true } });
+      if (!transcript) return send(c, { error: 'Transcription introuvable' }, 404);
+
+      let body: string;
+      if (isJson) {
+        // Lu par la page /transcripts du dashboard (fetch, CORS du dashboard), rendu par @arcscord/discord-ui.
+        body = JSON.stringify(transcript.data);
+        c.header('Content-Type', 'application/json; charset=utf-8');
+      } else {
+        if (!transcript.html) return send(c, { error: 'Transcription introuvable' }, 404);
+        body = stripLegacyAvatarBackground(transcript.html);
+        allowDashboardFraming(c);
+        c.header('Content-Type', 'text/html; charset=utf-8');
+      }
       c.header('Cache-Control', `private, max-age=${maxAge}`);
       c.header('ETag', etag);
 
-      // Plusieurs Mo de HTML possibles : compression asynchrone ici pour ne pas
+      // Plusieurs Mo possibles : compression asynchrone ici pour ne pas
       // bloquer l'event loop.
       if (/\bgzip\b/.test(c.req.header('accept-encoding') ?? '')) {
-        const compressed = await gzipAsync(Buffer.from(html));
+        const compressed = await gzipAsync(Buffer.from(body));
         c.header('Content-Encoding', 'gzip');
         c.header('Vary', 'Accept-Encoding');
         return c.body(new Uint8Array(compressed), 200);
       }
-      return c.body(html, 200);
+      return c.body(body, 200);
     } catch (err: unknown) {
       logger.error('PublicAPI', `Error fetching public transcript ${transcriptId}: ${err instanceof Error ? err.message : String(err)}`);
       return send(c, { error: 'Erreur interne du serveur' }, 500);

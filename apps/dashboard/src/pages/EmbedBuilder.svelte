@@ -13,7 +13,9 @@
   import { sendOrUpdateEmbed } from '../lib/api';
   import { authStore } from '../lib/stores/auth.svelte';
   import ModulePage from '../lib/components/ModulePage.svelte';
-  import { parseDiscordEmojisAndMarkdown } from '../lib/emojiParser';
+  import { Embed, type EmbedView, type MessageEntities } from '@arcscord/discord-ui-svelte';
+  import DiscordPreview from '../lib/components/onboarding/DiscordPreview.svelte';
+  import { mergeEntities, toPreviewMarkdown } from '../lib/components/discord/previewEntities.svelte';
 
   const actionState = createAsyncActionState();
   const templateAction = createAsyncActionState();
@@ -84,6 +86,39 @@
 
   let embed = $state<EmbedModel>(emptyEmbed());
   let content = $state('');
+
+  // ── Aperçu, rendu par @arcscord/discord-ui ─────────────────────────────
+  const hasEmbed = $derived(Boolean(
+    embed.title || embed.description || embed.authorName || embed.footerText || embed.fields.length > 0 || embed.imageUrl || embed.thumbnailUrl,
+  ));
+  const previewChannel = $derived(availableChannels.find((channel) => channel.id === targetChannelId)?.name ?? 'general');
+
+  /** Champ visible seulement complet, comme Discord le refuserait sinon. */
+  const previewEmbed = $derived<EmbedView>({
+    id: 'builder',
+    color: embed.color || '#5865F2',
+    ...(embed.title ? { title: embed.title } : {}),
+    ...(embed.url ? { url: embed.url } : {}),
+    ...(embed.description ? { description: embed.description } : {}),
+    ...(embed.authorName ? { author: { name: embed.authorName, ...(embed.authorUrl ? { url: embed.authorUrl } : {}), ...(embed.authorIconUrl ? { iconUrl: embed.authorIconUrl } : {}) } } : {}),
+    ...(embed.thumbnailUrl ? { thumbnail: { id: 'thumbnail', url: embed.thumbnailUrl, alt: '' } } : {}),
+    ...(embed.imageUrl ? { image: { id: 'image', url: embed.imageUrl, alt: '' } } : {}),
+    fields: embed.fields
+      .filter((field) => field.name && field.value)
+      .map((field, index) => ({ id: String(index), name: field.name, value: field.value, inline: field.inline })),
+    ...(embed.footerText ? { footer: { text: embed.footerText, ...(embed.footerIconUrl ? { iconUrl: embed.footerIconUrl } : {}) } } : {}),
+    ...(embed.timestamp ? { timestamp: new Date().toISOString() } : {}),
+  });
+
+  /** Rôles et salons du serveur pour les mentions `<@&id>` et `<#id>`, émojis du serveur cités. */
+  const previewEntities = $derived.by((): MessageEntities => {
+    const roles: NonNullable<MessageEntities['roles']> = {};
+    for (const role of dashboardStore.state.discordRoles || []) roles[role.id] = { name: role.name, ...(role.color ? { color: role.color } : {}) };
+    const channels: NonNullable<MessageEntities['channels']> = {};
+    for (const channel of availableChannels) channels[channel.id] = { name: channel.name };
+    const texts = [embed.title, embed.description, embed.authorName, embed.footerText, ...embed.fields.flatMap((field) => [field.name, field.value])];
+    return mergeEntities([{ roles, channels }, ...texts.filter(Boolean).map((text) => toPreviewMarkdown(text, { mentions: false }).entities)]);
+  });
   let savedTemplates = $state<SavedEmbedTemplate[]>([]);
   let templateName = $state('');
   let selectedTemplateId = $state<string | null>(null);
@@ -587,112 +622,14 @@
           {m.embed_builder_live_preview()}
         </h3>
 
-        <div class="p-6 rounded-xl bg-surface-container-low/30 border border-outline-variant/10 flex flex-col gap-4 select-none relative overflow-hidden">
-          <div class="flex items-start gap-4">
-            <div class="w-10 h-10 rounded-full bg-outline-variant/30 flex items-center justify-center text-xs font-semibold text-on-surface-variant">
-              BOT
-            </div>
-            <div class="flex-1 min-w-0">
-              <div class="flex items-center gap-2">
-                <span class="font-bold text-primary">Kotbo</span>
-                <span class="bg-primary/20 text-primary text-2xs font-semibold px-1.5 py-0.5 rounded uppercase leading-none">BOT</span>
-                <span class="text-2xs text-on-surface-variant/40">{m.announcements_today_at({ time: '12:10' })}</span>
-              </div>
-              
-              <!-- Message content (outside embed) -->
-              {#if content.trim()}
-                <p class="mt-2 text-sm font-medium text-[#dcddde] whitespace-pre-wrap leading-relaxed text-left">{@html parseDiscordEmojisAndMarkdown(content)}</p>
-              {/if}
-
-              <!-- Simulated Discord Embed Body -->
-              {#if embed.title || embed.description || embed.authorName || embed.footerText || embed.fields.length > 0 || embed.imageUrl || embed.thumbnailUrl}
-                <div 
-                  class="mt-3 p-4 rounded-md border-l-4 bg-[#2f3136] max-w-lg shadow-md flex gap-4"
-                  style={`border-color: ${embed.color || '#5865F2'};`}
-                >
-                  <div class="flex-1 min-w-0 space-y-2 font-sans text-left">
-                    <!-- Author -->
-                    {#if embed.authorName}
-                      <div class="flex items-center gap-2 text-xs font-bold text-white">
-                        {#if embed.authorIconUrl}
-                          <img src={embed.authorIconUrl} alt="" class="w-6 h-6 rounded-full object-cover" />
-                        {/if}
-                        {#if embed.authorUrl}
-                          <a href={embed.authorUrl} target="_blank" rel="noopener noreferrer" class="hover:underline text-white">{@html parseDiscordEmojisAndMarkdown(embed.authorName)}</a>
-                        {:else}
-                          <span>{@html parseDiscordEmojisAndMarkdown(embed.authorName)}</span>
-                        {/if}
-                      </div>
-                    {/if}
-
-                    <!-- Title -->
-                    {#if embed.title}
-                      <h4 class="text-base font-semibold text-white leading-snug">
-                        {#if embed.url}
-                          <a href={embed.url} target="_blank" rel="noopener noreferrer" class="text-[#00a8fc] hover:underline">{@html parseDiscordEmojisAndMarkdown(embed.title)}</a>
-                        {:else}
-                          {@html parseDiscordEmojisAndMarkdown(embed.title)}
-                        {/if}
-                      </h4>
-                    {/if}
-
-                    <!-- Description -->
-                    {#if embed.description}
-                      <p class="text-sm font-medium text-[#dcddde] whitespace-pre-wrap leading-relaxed">{@html parseDiscordEmojisAndMarkdown(embed.description)}</p>
-                    {/if}
-
-                    <!-- Fields Grid -->
-                    {#if embed.fields.length > 0}
-                      <div class="grid grid-cols-3 gap-3 pt-1">
-                        {#each embed.fields as f}
-                          {#if f.name && f.value}
-                            <div class={f.inline ? "col-span-1" : "col-span-3"}>
-                              <h5 class="text-xs font-bold text-white leading-tight">{@html parseDiscordEmojisAndMarkdown(f.name)}</h5>
-                              <p class="text-xs text-[#dcddde] mt-0.5 whitespace-pre-wrap leading-normal font-medium">{@html parseDiscordEmojisAndMarkdown(f.value)}</p>
-                            </div>
-                          {/if}
-                        {/each}
-                      </div>
-                    {/if}
-
-                    <!-- Main Image -->
-                    {#if embed.imageUrl}
-                      <div class="mt-2 rounded-md overflow-hidden border border-[#202225]">
-                        <img src={embed.imageUrl} alt="" class="max-h-80 w-full object-cover" />
-                      </div>
-                    {/if}
-
-                    <!-- Footer / Timestamp -->
-                    {#if embed.footerText || embed.timestamp}
-                      <div class="flex items-center gap-2 text-2xs text-[#72767d] font-bold pt-1">
-                        {#if embed.footerIconUrl}
-                          <img src={embed.footerIconUrl} alt="" class="w-4 h-4 rounded-full object-cover" />
-                        {/if}
-                        <span>
-                          {@html parseDiscordEmojisAndMarkdown(embed.footerText)}
-                          {#if embed.footerText && embed.timestamp}
-                            <span class="mx-1">•</span>
-                          {/if}
-                          {#if embed.timestamp}
-                            {m.announcements_today_at({ time: '12:10' })}
-                          {/if}
-                        </span>
-                      </div>
-                    {/if}
-                  </div>
-
-                  <!-- Thumbnail -->
-                  {#if embed.thumbnailUrl}
-                    <div class="w-20 h-20 rounded-md overflow-hidden shrink-0 self-start border border-[#202225]">
-                      <img src={embed.thumbnailUrl} alt="" class="w-full h-full object-cover" />
-                    </div>
-                  {/if}
-                </div>
-              {:else if !content.trim()}
-                <p class="text-xs text-on-surface-variant/40 italic mt-2">{m.embed_builder_preview_empty_hint()}</p>
-              {/if}
-            </div>
-          </div>
+        <div class="select-none">
+          {#if hasEmbed || content.trim()}
+            <DiscordPreview channel={previewChannel} content={content.trim() ? content : undefined} mentions={false} entities={previewEntities}>
+              {#if hasEmbed}<Embed embed={previewEmbed} />{/if}
+            </DiscordPreview>
+          {:else}
+            <p class="text-xs text-on-surface-variant/40 italic">{m.embed_builder_preview_empty_hint()}</p>
+          {/if}
         </div>
       </section>
     </div>

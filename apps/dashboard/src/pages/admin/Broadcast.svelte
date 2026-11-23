@@ -362,52 +362,45 @@
   }
 
   // ── Rendu des emojis ──────────────────────────────────────────────────────
-  function escapeHtml(value: string): string {
-    return value
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
+  /**
+   * Raccourcis `:nom:` remplacés comme le bot le fera à l'envoi. Les formes
+   * complètes `<:nom:id>` sont lues d'abord, pour ne pas y prendre un `:nom:`.
+   */
+  function replaceEmojis(text: string, replacement: (emoji: BroadcastEmoji) => string, fullForms: boolean): string {
+    if (!text) return "";
+    const byName = new Map<string, BroadcastEmoji>();
+    for (const emoji of emojis) {
+      const discordName = emoji.formatted.match(/<a?:(\w+):\d+>/)?.[1];
+      if (!discordName) continue;
+      byName.set(discordName, emoji);
+      byName.set(emoji.key, emoji);
+    }
+    return text.replace(/<a?:(\w+):\d+>|:(\w+):/g, (whole, fullName: string | undefined, shortName: string | undefined) => {
+      const emoji = byName.get(fullName ?? shortName ?? '');
+      if (!emoji || (fullName && !fullForms)) return whole;
+      return replacement(emoji);
+    });
   }
 
+  /** Description : émojis du serveur, en `<:nom:id>` affiché par la lib. */
   function renderEmojiPreview(text: string): string {
-    if (!text) return "";
-    let result = escapeHtml(text);
-    for (const emoji of emojis) {
-      const match = emoji.formatted.match(/<a?:(\w+):(\d+)>/);
-      if (!match) continue;
-      const [, discordName, emojiId] = match;
-      const img = `<img src="https://cdn.discordapp.com/emojis/${emojiId}.webp?size=24" alt="${escapeHtml(emoji.key)}" class="inline-block w-[22px] h-[22px] align-text-bottom" />`;
-      // Les formes complètes `<:nom:id>` d'abord : sinon la passe `:nom:` les casse.
-      result = result.replace(
-        new RegExp(`&lt;a?:${discordName}:\\d+&gt;`, "g"),
-        img,
-      );
-      result = result.replaceAll(`:${discordName}:`, img);
-      if (emoji.key !== discordName)
-        result = result.replaceAll(`:${emoji.key}:`, img);
-    }
-    return result;
+    return replaceEmojis(text, (emoji) => emoji.formatted, false);
   }
 
+  /** Titre et pied : Discord n'y affiche pas les émojis du serveur, l'équivalent unicode les remplace. */
   function renderTitlePreview(text: string): string {
-    if (!text) return "";
-    let result = escapeHtml(text);
+    return replaceEmojis(text, (emoji) => emoji.unicode || "❓", true);
+  }
+
+  /** Images des émojis du serveur, pour l'aperçu. */
+  const emojiEntities = $derived.by(() => {
+    const result: Record<string, { name: string; image: string }> = {};
     for (const emoji of emojis) {
-      const match = emoji.formatted.match(/<a?:(\w+):(\d+)>/);
-      if (!match) continue;
-      const discordName = match[1];
-      const unicode = emoji.unicode || "❓";
-      result = result.replace(
-        new RegExp(`&lt;a?:${discordName}:\\d+&gt;`, "g"),
-        unicode,
-      );
-      result = result.replaceAll(`:${discordName}:`, unicode);
-      if (emoji.key !== discordName)
-        result = result.replaceAll(`:${emoji.key}:`, unicode);
+      const match = emoji.formatted.match(/<(a?):(\w+):(\d+)>/);
+      if (match) result[match[3]] = { name: match[2], image: `https://cdn.discordapp.com/emojis/${match[3]}.${match[1] ? "gif" : "webp"}?size=48` };
     }
     return result;
-  }
+  });
 
   function insertAtCursor(text: string) {
     if (!messageTextarea) {
@@ -1911,6 +1904,7 @@
                 {footerText}
                 renderEmoji={renderEmojiPreview}
                 renderTitle={renderTitlePreview}
+                entities={{ emojis: emojiEntities }}
               />
             </div>
           </AdminCard>

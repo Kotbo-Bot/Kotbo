@@ -7,6 +7,7 @@
    */
   import { SUGGESTION_STATUS_COLORS, isSuggestionVotingOpen, type SuggestionStatus } from '@kotbo/shared';
   import { m } from '../../i18n';
+  import { ActionRow, Button } from '@arcscord/discord-ui-svelte';
   import DiscordEmbedPreview from '../DiscordEmbedPreview.svelte';
   import { fillDropTemplate } from '../../dropPreview';
   import type { SuggestionMessageLabels } from '../../api';
@@ -37,31 +38,9 @@
 </script>
 
 <DiscordEmbedPreview title={m.suggestions_preview_title()} {body} color={SUGGESTION_STATUS_COLORS[status]}>
-  <div class="buttons" aria-hidden="true">
-    <span class="button" class:disabled={!votingOpen}>{labels.voteUp} · {UP}</span>
-    <span class="button" class:disabled={!votingOpen}>{labels.voteDown} · {DOWN}</span>
-  </div>
+  <ActionRow>
+    <Button label="{labels.voteUp} · {UP}" variant="secondary" disabled={!votingOpen} />
+    <Button label="{labels.voteDown} · {DOWN}" variant="secondary" disabled={!votingOpen} />
+  </ActionRow>
 </DiscordEmbedPreview>
 
-<style>
-  .buttons {
-    display: flex;
-    gap: 0.5rem;
-    margin-top: 0.5rem;
-  }
-
-  /* Bouton secondaire de Discord, dans le fond sombre de l'aperçu. */
-  .button {
-    background: #4e5058;
-    color: #ffffff;
-    border-radius: 0.1875rem;
-    padding: 0.125rem 1rem;
-    font-size: 0.8125rem;
-    font-weight: 500;
-    line-height: 1.75rem;
-  }
-
-  .button.disabled {
-    opacity: 0.5;
-  }
-</style>

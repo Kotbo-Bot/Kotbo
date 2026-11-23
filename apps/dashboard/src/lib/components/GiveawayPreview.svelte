@@ -9,7 +9,10 @@
   import { m } from '../i18n';
   import { authStore } from '../stores/auth.svelte';
   import { dashboardStore } from '../stores/dashboard.svelte';
-  import { renderPreview, type PreviewLabels, type PreviewSample } from '../giveawayPreview';
+  import { MessageComponents, type ButtonView, type ContainerChild, type MessageComponent } from '@arcscord/discord-ui-svelte';
+  import DiscordScope from './discord/DiscordScope.svelte';
+  import { mergeEntities } from './discord/previewEntities.svelte';
+  import { renderMarkdown, type PreviewLabels, type PreviewSample } from '../giveawayPreview';
   import type { GiveawayAppearance, GiveawayGeneratedLabels } from '../api';
 
   let {
@@ -90,37 +93,80 @@
   // ce qu'on aurait inventé pour l'illustrer.
   const sample: PreviewSample = $derived({ ...example, ...(overrides ?? {}) });
 
-  const title = $derived(renderPreview(appearance.titleTemplate, sample, labels));
+  // Le bot publie l'annonce en Components V2 : titre et pied y sont des blocs
+  // de texte comme les autres, où Discord affiche les mentions.
+  const title = $derived(renderMarkdown(appearance.titleTemplate, sample, labels));
   const body = $derived.by(() => {
     const template = appearance.descriptionTemplate;
-    const rendered = renderPreview(template, sample, labels);
-
     // Comme le bot : un corps d'annonce qui ne réserve pas de place aux rôles
     // avantagés les reçoit à la suite, plutôt que de les perdre.
-    if (sample.bonusRoles.length > 0 && !template.includes('{bonusRoles}')) {
-      return `${rendered}<br />${renderPreview('{bonusRoles}', sample, labels)}`;
-    }
-    return rendered;
+    const withRoles = sample.bonusRoles.length > 0 && !template.includes('{bonusRoles}') ? `${template}\n{bonusRoles}` : template;
+    return renderMarkdown(withRoles, sample, labels);
   });
-  const footer = $derived(renderPreview(appearance.footerTemplate, sample, labels));
+  const footer = $derived(renderMarkdown(appearance.footerTemplate, sample, labels));
 
-  const buttonColors: Record<GiveawayAppearance['joinButtonStyle'], string> = {
-    PRIMARY: 'background:#5865F2;color:#fff',
-    SECONDARY: 'background:#4E5058;color:#fff',
-    SUCCESS: 'background:#248046;color:#fff',
-    DANGER: 'background:#DA373C;color:#fff',
+  const buttonVariant: Record<GiveawayAppearance['joinButtonStyle'], 'primary' | 'secondary' | 'success' | 'danger'> = {
+    PRIMARY: 'primary',
+    SECONDARY: 'secondary',
+    SUCCESS: 'success',
+    DANGER: 'danger',
   };
 
-  /** Un emoji de serveur s'écrit `<:nom:id>` : on n'en montre que l'image. */
-  const buttonEmoji = $derived.by(() => {
+  /** Emoji du bouton : texte, ou `<:nom:id>` d'un emoji de serveur (son image). */
+  const buttonEmoji = $derived.by((): ButtonView['emoji'] => {
     const raw = appearance.joinButtonEmoji?.trim() ?? '';
-    if (!raw) return null;
-    const mention = raw.match(/^<(a?):([^:]+):(\d+)>$/);
-    if (mention) {
-      return { url: `https://cdn.discordapp.com/emojis/${mention[3]}.${mention[1] ? 'gif' : 'png'}?size=32` };
-    }
-    return { text: raw };
+    if (!raw) return undefined;
+    const custom = raw.match(/^<(a?):(\w+):(\d+)>$/);
+    return custom
+      ? { name: custom[2], image: `https://cdn.discordapp.com/emojis/${custom[3]}.${custom[1] ? 'gif' : 'webp'}?size=48` }
+      : { name: raw };
   });
+
+  /**
+   * Annonce en Components V2, comme le bot la publie : conteneur à la couleur
+   * de l'état (titre `###`, vignette en accessoire, texte, image, pied `-#`
+   * sous un séparateur), bouton de participation en dessous.
+   */
+  const container = $derived.by((): ContainerChild[] => {
+    const children: ContainerChild[] = [];
+    const heading = title.markdown ? `### ${title.markdown}` : '';
+    if (appearance.thumbnailUrl) {
+      children.push({
+        id: 'giveaway-header',
+        kind: 'section',
+        components: heading ? [{ id: 'giveaway-title', kind: 'text-display', content: heading }] : [],
+        accessory: { id: 'giveaway-thumbnail', kind: 'thumbnail', media: { id: 'giveaway-thumbnail-media', url: appearance.thumbnailUrl, alt: '' } },
+      });
+    } else if (heading) {
+      children.push({ id: 'giveaway-title', kind: 'text-display', content: heading });
+    }
+    if (body.markdown) children.push({ id: 'giveaway-body', kind: 'text-display', content: body.markdown });
+    if (appearance.imageUrl) {
+      children.push({ id: 'giveaway-image', kind: 'media-gallery', items: [{ id: 'giveaway-image-media', url: appearance.imageUrl, alt: '' }] });
+    }
+    if (footer.markdown) {
+      children.push({ id: 'giveaway-footer-separator', kind: 'separator', divider: false, spacing: 'small' });
+      children.push({ id: 'giveaway-footer', kind: 'text-display', content: `-# ${footer.markdown}` });
+    }
+    return children;
+  });
+
+  const components = $derived<MessageComponent[]>([
+    { id: 'giveaway', kind: 'container', accentColor: appearance.embedColorActive, components: container },
+    {
+      id: 'giveaway-actions',
+      kind: 'action-row',
+      buttons: [{
+        id: 'giveaway-join',
+        kind: 'button',
+        label: appearance.joinButtonLabel,
+        style: buttonVariant[appearance.joinButtonStyle] ?? 'primary',
+        ...(buttonEmoji ? { emoji: buttonEmoji } : {}),
+      }],
+    },
+  ]);
+
+  const entities = $derived(mergeEntities([title.entities, body.entities, footer.entities]));
 </script>
 
 <div class="preview">
@@ -135,36 +181,9 @@
     </div>
   {/if}
 
-  <div class="discord">
-    <div class="embed" style="border-left-color: {appearance.embedColorActive}">
-      <div class="embed-main">
-        <div class="embed-text">
-          <p class="embed-title">{@html title}</p>
-          <p class="embed-body">{@html body}</p>
-        </div>
-        {#if appearance.thumbnailUrl}
-          <img class="embed-thumb" src={appearance.thumbnailUrl} alt="" />
-        {/if}
-      </div>
-
-      {#if appearance.imageUrl}
-        <img class="embed-image" src={appearance.imageUrl} alt="" />
-      {/if}
-
-      <p class="embed-footer">{@html footer}</p>
-    </div>
-
-    <div class="actions">
-      <span class="button" style={buttonColors[appearance.joinButtonStyle] ?? buttonColors.PRIMARY}>
-        {#if buttonEmoji?.url}
-          <img src={buttonEmoji.url} alt="" />
-        {:else if buttonEmoji?.text}
-          {buttonEmoji.text}
-        {/if}
-        {appearance.joinButtonLabel}
-      </span>
-    </div>
-  </div>
+  <DiscordScope class="giveaway-discord" {entities}>
+    <MessageComponents {components} />
+  </DiscordScope>
 
   {#if !compact}
     <p class="field-hint">{m.giv_preview_hint()}</p>
@@ -212,89 +231,8 @@
   }
 
   /* Fond sombre quel que soit le thème : Discord n'a pas celui du dashboard. */
-  .discord {
-    background: #313338;
+  :global(.arcscord-discord-ui.giveaway-discord) {
     border-radius: 0.75rem;
     padding: 1rem;
-    color: #dbdee1;
-    font-size: 0.8125rem;
-    line-height: 1.4;
   }
-
-  .embed {
-    background: #2b2d31;
-    border-left: 4px solid #5865f2;
-    border-radius: 0.25rem;
-    padding: 0.75rem 1rem;
-    max-width: 32rem;
-  }
-
-  .embed-main { display: flex; gap: 1rem; align-items: flex-start; }
-  .embed-text { min-width: 0; flex: 1; }
-
-  /* `.discord` en préfixe : les styles de paragraphe du dashboard passent
-     devant sans lui, et l'aperçu perdait les couleurs de Discord. */
-  .discord .embed-title {
-    font-weight: 600;
-    color: #f2f3f5;
-    margin: 0 0 0.5rem;
-    word-break: break-word;
-  }
-
-  .discord .embed-body {
-    color: #dbdee1;
-    margin: 0;
-    white-space: normal;
-    word-break: break-word;
-  }
-
-  .embed-thumb {
-    width: 5rem;
-    height: 5rem;
-    object-fit: cover;
-    border-radius: 0.25rem;
-    flex-shrink: 0;
-  }
-
-  .embed-image {
-    margin-top: 0.75rem;
-    width: 100%;
-    border-radius: 0.25rem;
-  }
-
-  .discord .embed-footer {
-    margin: 0.75rem 0 0;
-    font-size: 0.6875rem;
-    color: #949ba4;
-  }
-
-  .actions { margin-top: 0.5rem; }
-
-  .button {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.375rem;
-    padding: 0.5rem 1rem;
-    border-radius: 0.25rem;
-    font-size: 0.8125rem;
-    font-weight: 500;
-  }
-
-  .button img { width: 1.125rem; height: 1.125rem; }
-
-  .preview :global(.mention) {
-    background: rgba(88, 101, 242, 0.3);
-    color: #c9cdfb;
-    border-radius: 0.1875rem;
-    padding: 0 0.125rem;
-  }
-
-  .preview :global(code) {
-    background: #1e1f22;
-    border-radius: 0.1875rem;
-    padding: 0.0625rem 0.1875rem;
-    font-size: 0.75rem;
-  }
-
-  .preview :global(strong) { color: #f2f3f5; }
 </style>

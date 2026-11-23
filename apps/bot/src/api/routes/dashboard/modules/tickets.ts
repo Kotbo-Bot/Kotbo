@@ -10,12 +10,12 @@ import { errorMessage, errorStack } from '../../../../utils/errors.js';
 import { resolveGuildLocale } from '../../../../utils/i18n.js';
 import { logger } from '../../../../utils/logger.js';
 import * as m from '../../../../lib/paraglide/messages.js';
-import { broadcastDashboardStateChange, extractMediaUrls, getDashboardUrl, getGuildName, parseDiscordMarkdown, pushAudit, resolveMemberFeatureAccess, type FeatureAccessMap } from '../../../shared.js';
+import { broadcastDashboardStateChange, getDashboardUrl, getGuildName, pushAudit, resolveMemberFeatureAccess, type FeatureAccessMap } from '../../../shared.js';
 import { type ProvisionedEntry, acquireProvisionLock, missingProvisionPermissions, provisionCooldown, provisionCooldownMessage, releaseProvisionLock, startProvisionCooldown } from '../../../../services/core/channelProvisioningService.js';
 import { Prisma } from '@prisma/client';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, type ColorResolvable, EmbedBuilder, PermissionFlagsBits, TextChannel } from 'discord.js';
-import { msgComponentsV2Map, msgEmbedsMap, msgReactionsMap } from './_shared.js';
-import { parseTranscriptHtml } from '../../../../services/features/transcriptService.js';
+import { STORED_TRANSCRIPT_SELECT, transcriptConversation } from '../../../../services/features/transcriptReader.js';
+import { addExternalMessage, buildConversation, type DiscordConversation } from '../../../../services/features/transcriptData.js';
 import { clampCommentTimeout } from '../../../../services/features/ticketSatisfactionService.js';
 import { INBOX_VIEWS, computeSla, normalizeView, viewWhere, waitingOn, type SlaConfig } from '../../../../services/features/ticketHelpdesk.js';
 import { noticeSeconds } from '../../../../services/features/ticketRecordingNotice.js';
@@ -1020,7 +1020,9 @@ export function createTicketsRouter(client: Client) {
       }
 
       let channelName: string | null = null;
-      let messages: unknown[] = [];
+      // Messages au format de l'API Discord, rendus par @arcscord/discord-ui
+      // (Components V2 compris), avec les noms des mentions et les auteurs.
+      let conversation: DiscordConversation = { messages: [], entities: {}, authors: {} };
       // Salon du ticket, ou fil pour les modes « fil » et MP relayé : sans
       // le fil, ces tickets s'affichaient vides.
       const conversationId = ticket.channelId ?? ticket.threadId;
@@ -1031,102 +1033,32 @@ export function createTicketsRouter(client: Client) {
           channelName = discordChannel.name;
           try {
             const fetched = await discordChannel.messages.fetch({ limit: 50 });
-            const guild = discordChannel.guild;
-            messages = fetched.map(m => {
-              // Les messages du bot sont en Components V2 : leur texte et
-              // leurs « embeds » vivent dans des conteneurs, pas dans
-              // `content` ni `embeds`.
-              const v2 = msgComponentsV2Map(m.components, guild);
-              const content = [m.content, v2.text].filter(Boolean).join('\n');
-              return {
-                id: m.id,
-                authorId: m.author.id,
-                authorName: m.member?.displayName || m.author.displayName || m.author.username,
-                authorAvatar: m.author.displayAvatarURL(),
-                isStaff: m.author.bot,
-                content,
-                htmlContent: parseDiscordMarkdown(content, guild),
-                mediaUrls: extractMediaUrls(content),
-                stickers: m.stickers ? m.stickers.map(s => ({ id: s.id, name: s.name, url: s.url })) : [],
-                attachments: m.attachments.map(a => ({ url: a.url, contentType: a.contentType })),
-                embeds: [...msgEmbedsMap(m.embeds, guild), ...v2.cards],
-                buttons: v2.buttons,
-                reactions: msgReactionsMap(m.reactions.cache.values()),
-                createdAt: m.createdAt.toISOString()
-              };
-            });
-            messages.reverse();
+            // Vue rafraîchie à chaque message : pas d'appel Discord pour les citations hors fenêtre.
+            conversation = await buildConversation(discordChannel.guild, [...fetched.values()].reverse(), { fetchMissingReferences: false });
           } catch { /* ignored */ }
         }
       }
 
-      if (ticket.webMessages.length > 0) {
-        const webMsgs = ticket.webMessages.map((wm) => ({
-          id: wm.id,
-          authorId: wm.authorId ?? '',
-          authorName: wm.authorName,
-          authorAvatar: null,
-          isStaff: wm.isStaff,
-          content: wm.content,
-          htmlContent: parseDiscordMarkdown(wm.content, null),
-          mediaUrls: extractMediaUrls(wm.content),
-          stickers: [],
-          attachments: [],
-          embeds: [],
-          buttons: [],
-          reactions: [],
-          source: wm.source,
-          createdAt: wm.createdAt.toISOString(),
-        }));
-        messages = [...messages, ...webMsgs].sort((a: any, b: any) =>
-          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-        );
-      }
-
       // Un ticket fermé n'a plus de salon à lire : on relit alors sa transcription
       // archivée, sans quoi le panneau affiche « Aucun message ».
-      if (messages.length === 0 && ticket.transcriptId) {
+      if (conversation.messages.length === 0 && ticket.transcriptId) {
         try {
           const transcript = await prisma.transcript.findFirst({
             where: { id: ticket.transcriptId, guildId },
-            select: { html: true, endTime: true, createdAt: true },
+            select: { ...STORED_TRANSCRIPT_SELECT, endTime: true, createdAt: true },
           });
           if (transcript) {
-            const fallbackDate = (transcript.endTime ?? transcript.createdAt).toISOString();
-            messages = parseTranscriptHtml(transcript.html).map((m, i) => {
-              const parsed = new Date(m.timestamp);
-              return {
-                id: `transcript-${i}`,
-                authorId: '',
-                authorName: m.username,
-                authorAvatar: m.avatarUrl,
-                isStaff: m.isBot,
-                content: m.content,
-                htmlContent: parseDiscordMarkdown(m.content, null),
-                mediaUrls: extractMediaUrls(m.content),
-                stickers: [],
-                attachments: m.imageUrls.map(url => ({ url, contentType: 'image/png' })),
-                embeds: m.embeds.map(e => ({
-                  title: e.title,
-                  description: e.description,
-                  htmlDescription: e.description ? parseDiscordMarkdown(e.description, null) : '',
-                  color: e.color,
-                  fields: e.fields.map(f => ({
-                    name: f.name,
-                    value: f.value,
-                    htmlValue: f.value ? parseDiscordMarkdown(f.value, null) : '',
-                  })),
-                  image: e.imageUrl ? { url: e.imageUrl } : null,
-                  thumbnail: e.thumbnailUrl ? { url: e.thumbnailUrl } : null,
-                  video: null,
-                })),
-                createdAt: Number.isNaN(parsed.getTime()) ? fallbackDate : parsed.toISOString(),
-              };
-            });
+            conversation = transcriptConversation(transcript, (transcript.endTime ?? transcript.createdAt).toISOString());
           }
         } catch (err) {
           logger.warn('TicketsAPI', `Transcript fallback failed for ticket ${ticketId}: ${(err as Error).message}`);
         }
+      }
+
+      // Messages écrits hors Discord (formulaire web, e-mail, dashboard).
+      if (ticket.webMessages.length > 0) {
+        for (const wm of ticket.webMessages) addExternalMessage(conversation, wm);
+        conversation.messages.sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
       }
 
       const fetchAvatarDetail = async (discordId: string, size = 128): Promise<string | null> => {
@@ -1142,7 +1074,7 @@ export function createTicketsRouter(client: Client) {
         ticket.claimedById ? fetchAvatarDetail(ticket.claimedById) : Promise.resolve(null),
       ]);
 
-      return send(c, { ticket: { ...ticket, channelName, userAvatar, claimedByAvatar }, messages });
+      return send(c, { ticket: { ...ticket, channelName, userAvatar, claimedByAvatar }, ...conversation });
     } catch (err: unknown) {
       logger.error('TicketsAPI', `Error reading ticket details: ${errorStack(err)}`);
       return send(c, { error: `Erreur lors de la récupération du ticket: ${errorStack(err)}` }, 500);

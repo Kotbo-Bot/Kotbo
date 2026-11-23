@@ -21,7 +21,7 @@
 
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
-import { parseTranscriptHtml } from '../features/transcriptService.js';
+import { loadTranscriptMessages, STORED_TRANSCRIPT_SELECT } from '../features/transcriptReader.js';
 import { GLOBAL_PROMOTION_GUILDS, promoteImageIfWidespread, recordScamSignals } from './scamDatasetService.js';
 import { recordScamImageFromUrl } from './scamFilterService.js';
 import { scoreScamText, suspiciousDomainsOf } from './scamHeuristics.js';
@@ -113,7 +113,7 @@ export async function backfillScamDatasetFromHoneypots(options: BackfillOptions 
   const transcriptIds = await findHoneypotTranscriptIds(options.guildId);
 
   for (const [transcriptId, guildId] of transcriptIds) {
-    const transcript = await prisma.transcript.findUnique({ where: { id: transcriptId }, select: { html: true } });
+    const transcript = await prisma.transcript.findUnique({ where: { id: transcriptId }, select: STORED_TRANSCRIPT_SELECT });
     if (!transcript) continue;
     report.transcripts++;
 
@@ -121,7 +121,7 @@ export async function backfillScamDatasetFromHoneypots(options: BackfillOptions 
     // d'avertissement du staff, par exemple) : on ne traite chaque texte et
     // chaque image qu'une fois.
     const seenTexts = new Set<string>();
-    for (const message of parseTranscriptHtml(transcript.html)) {
+    for (const message of loadTranscriptMessages(transcript)) {
       if (message.isBot) continue;
       report.messages++;
 

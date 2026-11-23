@@ -29,6 +29,7 @@
   import FormColorPicker from '../FormColorPicker.svelte';
   import ToggleSwitch from '../ToggleSwitch.svelte';
   import Callout from '../ui/Callout.svelte';
+  import TicketRecordingNoticePreview from './TicketRecordingNoticePreview.svelte';
 
   const {
     refreshToken = 0,
@@ -1455,13 +1456,11 @@
             </label>
           </div>
           <!-- Aperçu : ce que voit le membre, lui seul, avant la création. -->
-          <div class="tn-preview" aria-label={m.tn_preview()}>
-            <p class="tn-preview__only"><Papicon icon="eye" size={12} /> {m.tn_only_you()}</p>
-            <div class="tn-preview__embed">
-              <p class="font-semibold text-on-surface text-body-sm">ℹ️ {m.tn_preview_title()}</p>
-              <p class="text-body-sm text-on-surface-variant whitespace-pre-line mt-1">{ticketRecordingNoticeText.trim() || m.tn_default_text()}</p>
-              <p class="text-body-sm text-on-surface-variant mt-2">⏳ {m.tn_preview_countdown({ seconds: Math.min(30, Math.max(5, Number(ticketRecordingNoticeSeconds) || 10)) })}</p>
-            </div>
+          <div aria-label={m.tn_preview()}>
+            <TicketRecordingNoticePreview
+              text={ticketRecordingNoticeText.trim() || m.tn_default_text()}
+              seconds={Math.min(30, Math.max(5, Number(ticketRecordingNoticeSeconds) || 10))}
+            />
           </div>
         {/if}
       </div>
@@ -2140,27 +2139,3 @@
 
 </div>
 {/await}
-
-<style>
-  .tn-preview {
-    padding: 0.75rem 0.9rem;
-    border-radius: 0.75rem;
-    background: var(--surface-container-lowest);
-    border: 1px solid var(--outline-variant);
-  }
-  .tn-preview__only {
-    display: flex;
-    align-items: center;
-    gap: 0.35rem;
-    margin-bottom: 0.5rem;
-    font-size: 0.6875rem;
-    color: var(--on-surface-variant);
-  }
-  /* Le bandeau bleu à gauche reprend celui d'un embed Discord. */
-  .tn-preview__embed {
-    padding: 0.6rem 0.8rem;
-    border-left: 4px solid #5865f2;
-    border-radius: 0.25rem;
-    background: var(--surface-container);
-  }
-</style>

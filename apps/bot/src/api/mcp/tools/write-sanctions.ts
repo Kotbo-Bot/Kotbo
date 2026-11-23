@@ -541,7 +541,7 @@ export function registerWriteSanctionsTools(ctx: McpToolContext) {
       'import_sanction_discord_transcripts',
       {
         description:
-          'Génère des transcriptions HTML à partir de messages Discord sélectionnés, pour les joindre comme preuves à une sanction. Requiert WRITE_SANCTIONS.',
+          'Génère des transcriptions à partir de messages Discord sélectionnés, pour les joindre comme preuves à une sanction. Requiert WRITE_SANCTIONS.',
         inputSchema: {
           sanction_id: z.string().describe('ID de la sanction concernée'),
           selections: z.array(z.object({

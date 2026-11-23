@@ -111,6 +111,13 @@ async function transcriptMessageCount(transcriptId: string): Promise<number | nu
   if (typeof cached === 'number') return cached;
 
   try {
+    // Renseigné à la création depuis la migration JSON ; les anciennes se comptent dans leur HTML.
+    const stored = await prisma.transcript.findUnique({ where: { id: transcriptId }, select: { messageCount: true } });
+    if (typeof stored?.messageCount === 'number') {
+      await cache.set(cacheKey, stored.messageCount, 86_400);
+      return stored.messageCount;
+    }
+
     const marker = '<div class="message-group">';
     const rows = await prisma.$queryRaw<{ count: bigint | number }[]>`
       SELECT (length(html) - length(replace(html, ${marker}, ''))) / length(${marker}) AS count

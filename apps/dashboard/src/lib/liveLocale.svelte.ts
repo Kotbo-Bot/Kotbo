@@ -48,11 +48,19 @@ class LiveLocaleStore {
   }
 }
 
-let liveLocaleStore: LiveLocaleStore | null = null;
+// `var` et non `let` : userPreferences appelle applyLocale pendant le cycle
+// d'import, avant cette ligne. Un `let` serait encore en TDZ (ReferenceError).
+// eslint-disable-next-line no-var
+var liveLocaleStore: LiveLocaleStore | undefined;
 
 liveLocaleStore = new LiveLocaleStore();
 
 /** Aligne la langue sur la preference utilisateur et la memorise, sans rechargement. */
 export function applyLocale(lang: string): void {
-  liveLocaleStore?.apply(lang);
+  if (liveLocaleStore) {
+    liveLocaleStore.apply(lang);
+    return;
+  }
+  // Appel premature : on memorise via Paraglide, le store la relira a sa creation.
+  if (locales.includes(lang as Locale)) setLocale(lang as Locale, { reload: false });
 }

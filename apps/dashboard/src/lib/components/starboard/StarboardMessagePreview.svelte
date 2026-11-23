@@ -9,6 +9,7 @@
    * le texte de l'aperçu : seul le score est alors montré.
    */
   import { m } from '../../i18n';
+  import { ActionRow, LinkButton } from '@arcscord/discord-ui-svelte';
   import DiscordEmbedPreview from '../DiscordEmbedPreview.svelte';
   import { fillDropTemplate } from '../../dropPreview';
   import type { StarboardMessageLabels } from '../../api';
@@ -40,26 +41,9 @@
 </script>
 
 <DiscordEmbedPreview title={m.starboard_preview_author()} body={m.starboard_preview_content()} {color} {content} {footer}>
-  <div class="buttons" aria-hidden="true">
-    <span class="button">{labels.jumpButton}</span>
-  </div>
+  <ActionRow>
+    <!-- Lien vers le message d'origine : en aperçu, vers Discord. -->
+    <LinkButton label={labels.jumpButton} url="https://discord.com/channels/@me" />
+  </ActionRow>
 </DiscordEmbedPreview>
 
-<style>
-  .buttons {
-    display: flex;
-    gap: 0.5rem;
-    margin-top: 0.5rem;
-  }
-
-  /* Bouton lien de Discord, dans le fond sombre de l'aperçu. */
-  .button {
-    background: #4e5058;
-    color: #ffffff;
-    border-radius: 0.1875rem;
-    padding: 0.125rem 1rem;
-    font-size: 0.8125rem;
-    font-weight: 500;
-    line-height: 1.75rem;
-  }
-</style>
