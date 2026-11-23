@@ -5,16 +5,19 @@ import { generateTranscriptFromMessages } from '../../../../services/features/tr
 import { formatSanctionDurationLabel, registerImportedSanction } from '../../../../services/moderation/sanctionService.js';
 import {
   archiveSanctions,
+  DELETION_RETENTION_DAYS,
   deleteSanctions,
+  listDeletedSanctions,
+  restoreDeletedSanction,
   setSanctionAppealLock,
   unarchiveSanctions,
 } from '../../../../services/moderation/sanctionArchiveService.js';
 import prisma from '../../../../utils/db.js';
 import { logger } from '../../../../utils/logger.js';
-import { EVIDENCE_CHANNEL_CONCURRENCY, type FetchedEvidenceChannel, fetchUserMessagesInChannel, MAX_EVIDENCE_MESSAGES, parseEvidenceLinks, resolveEvidenceChannel, serializeEvidenceMessage } from '../../../evidence.js';
+import { EVIDENCE_CHANNEL_CONCURRENCY, type FetchedEvidenceChannel, fetchDeletedUserMessages, fetchUserMessagesInChannel, loadEvidenceMessages, MAX_EVIDENCE_MESSAGES, mergeDeletedIntoChannels, parseEvidenceLinks, resolveEvidenceChannel, serializeEvidenceMessage } from '../../../evidence.js';
 import { getAuditActor, getGuildName, pushAudit, resolveMemberFeatureAccess } from '../../../shared.js';
 import { SanctionType } from '@prisma/client';
-import { ChannelType, type Message, PermissionFlagsBits, TextChannel } from 'discord.js';
+import { ChannelType, PermissionFlagsBits, TextChannel } from 'discord.js';
 import pLimit from 'p-limit';
 import { type DashboardSanctionType, normalizeBrokenRulesPayload, toSanctionType, verifyMagicBytes } from './_shared.js';
 
@@ -283,7 +286,7 @@ export function createSanctionsRouter(client: Client) {
         return send(c, { error: 'Infraction introuvable sur ce serveur.' }, 404);
       }
 
-      await prisma.sanction.delete({ where: { id: sanction.id } });
+      await deleteSanctions(guildId, [sanction.id], { userId: c.var.dashboardUser.userId, tag: auditUser });
 
       await pushAudit(guildId, {
         user: auditUser,
@@ -299,6 +302,57 @@ export function createSanctionsRouter(client: Client) {
     } catch (err) {
       logger.error('SanctionsAPI', 'Error deleting sanction:', err);
       return fail(c, err, "Erreur lors de la suppression de l'infraction", 'SanctionsAPI');
+    }
+  });
+
+  // Corbeille : relire une sanction supprimée puis la restaurer (admins seulement,
+  // l'issue #745 vise l'abus de pouvoir : un modérateur n'y a pas accès).
+  router.get(`${base}/sanctions/deleted`, ...gate, async (c) => {
+    if (c.var.effectiveAccess.level !== 'admin') {
+      return send(c, { error: 'Réservé aux administrateurs.' }, 403);
+    }
+    try {
+      const items = await listDeletedSanctions(c.req.param('guildId'));
+      return send(c, { items, retentionDays: DELETION_RETENTION_DAYS });
+    } catch (err) {
+      logger.error('SanctionsAPI', 'Error listing deleted sanctions:', err);
+      return fail(c, err, 'Erreur lors du chargement des infractions supprimées', 'SanctionsAPI');
+    }
+  });
+
+  router.post(`${base}/sanctions/deleted/:deletionId/restore`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const auditUser = auditUserOf(c);
+    if (c.var.effectiveAccess.level !== 'admin') {
+      return send(c, { error: 'Réservé aux administrateurs.' }, 403);
+    }
+    try {
+      const result = await restoreDeletedSanction(guildId, c.req.param('deletionId'), {
+        userId: c.var.dashboardUser.userId,
+        tag: auditUser,
+      });
+      if (!result.ok) {
+        const messages = {
+          not_found: ['Infraction supprimée introuvable.', 404],
+          already_restored: ['Cette infraction a déjà été restaurée.', 409],
+          id_taken: ['Une infraction avec cet identifiant existe déjà.', 409],
+        } as const;
+        const [error, status] = messages[result.reason];
+        return send(c, { error }, status);
+      }
+      await pushAudit(guildId, {
+        user: auditUser,
+        action: 'Restauration infraction',
+        context: getGuildName(client, guildId),
+        module: 'Sanctions',
+        eventType: 'Manuel',
+        details: `Infraction ${result.sanctionId} restaurée depuis les suppressions.`,
+        channelId: null,
+      });
+      return send(c, { ok: true, sanctionId: result.sanctionId });
+    } catch (err) {
+      logger.error('SanctionsAPI', 'Error restoring sanction:', err);
+      return fail(c, err, "Erreur lors de la restauration de l'infraction", 'SanctionsAPI');
     }
   });
 
@@ -847,23 +901,25 @@ export function createSanctionsRouter(client: Client) {
         .slice(0, messageLimit);
 
       const includedMessageIds = new Set(newestMessages.map(({ message }) => message.id));
-      const channels = successfulChannels
+      const liveChannels = successfulChannels
         .map((channel) => ({
           channelId: channel.channelId,
           channelName: channel.channelName,
           messages: channel.rawMessages
             .filter((message) => includedMessageIds.has(message.id))
             .sort((a, b) => b.createdTimestamp - a.createdTimestamp)
-            .map((message) => serializeEvidenceMessage(message, guild)),
+            .map((message) => serializeEvidenceMessage(message, guild)) as Array<Record<string, unknown>>,
           truncated: channel.truncated,
         }))
-        .filter((channel) => channel.messages.length > 0)
-        .sort((a, b) => a.channelName.localeCompare(b.channelName, 'fr'));
+        .filter((channel) => channel.messages.length > 0);
+
+      const deleted = await fetchDeletedUserMessages(guildId, sanction.targetUserId, messageLimit);
+      const channels = mergeDeletedIntoChannels(liveChannels, deleted);
 
       return send(c, {
         targetTag: sanction.targetTag,
         channels,
-        messageCount: newestMessages.length,
+        messageCount: newestMessages.length + deleted.length,
         searchedChannelCount: searchableChannels.length,
         failedChannelCount,
         truncatedChannelCount: successfulChannels.filter((channel) => channel.truncated).length,
@@ -936,16 +992,15 @@ export function createSanctionsRouter(client: Client) {
         }
 
         try {
-          const fetched = await Promise.all(messageIds.map((id) => resolved.channel.messages.fetch(id).catch(() => null)));
-          const validMessages = fetched.filter((msg): msg is Message<true> => msg !== null && msg.author.id === sanction.targetUserId);
+          const { messages: validMessages, deleted } = await loadEvidenceMessages(resolved.channel, messageIds, sanction.targetUserId);
 
-          if (validMessages.length === 0) {
+          if (validMessages.length === 0 && deleted.length === 0) {
             errors.push({ channelId, error: 'Aucun message valide à transcrire.' });
             return;
           }
 
           validMessages.sort((a, b) => a.createdTimestamp - b.createdTimestamp);
-          const transcript = await generateTranscriptFromMessages(resolved.channel, validMessages);
+          const transcript = await generateTranscriptFromMessages(resolved.channel, validMessages, deleted);
 
           await pushAudit(guildId, {
             user: auditUser,

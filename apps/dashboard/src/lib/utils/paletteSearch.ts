@@ -54,6 +54,7 @@ const PAGE_KEYWORDS: Record<string, string> = {
   '/schedules': 'cron planifie automatique rappel',
   '/mcp-settings': 'mcp ia ai claude chatgpt agent api cle token llm',
   '/webhooks': 'webhook http integration evenements sortants',
+  '/network': 'reseau multi serveurs association regrouper rattacher principal',
   '/billing': 'abonnement paiement plus premium facture prix offre stripe',
   '/userSettings': 'parametres reglages compte langue theme',
 };

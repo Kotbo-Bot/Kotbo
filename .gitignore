@@ -5,6 +5,7 @@ coverage/
 .env.local
 *.log
 .svelte-kit/
+.svelte-check/
 build/
 .DS_Store
 .vscode/

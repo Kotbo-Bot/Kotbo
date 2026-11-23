@@ -11,8 +11,10 @@ import { logger } from '../../utils/logger.js';
 import { isAutoGrantableRoleId } from '../../utils/adminLockPermissions.js';
 import * as altAccountService from '../moderation/altAccountService.js';
 import { fetchAllMembers } from '../../utils/discord.js';
-import type { GuildMember } from 'discord.js';
+import { PermissionFlagsBits, type GuildMember } from 'discord.js';
 import { publicErrorMessage } from '../../utils/publicError.js';
+import { isStaffSeparatorStyle } from '@kotbo/shared';
+import { UserFacingError } from '../../utils/userFacingError.js';
 
 /**
  * Service de gestion du personnel staff
@@ -128,10 +130,12 @@ const resolveHierarchyAssignmentForGrade = async (guildId: string, grade: string
     return { hierarchyId: normalizedHierarchyId, grade: normalizedHierarchyGrade };
   }
 
-  const staffRole = await prisma.staffRole.findFirst({
+  const matches = await prisma.staffRole.findMany({
     where: { guildId, enabled: true, name: grade.trim() },
     select: { hierarchyId: true, name: true },
   });
+  // Même nom de grade dans plusieurs hiérarchies : on ne devine pas.
+  const staffRole = new Set(matches.map((r) => r.hierarchyId)).size === 1 ? matches[0] : null;
 
   if (staffRole?.hierarchyId) {
     return {
@@ -324,14 +328,19 @@ export const syncStaffHierarchyMembershipsThrottled = async (guildId: string) =>
 export const syncStaffDiscordRoles = async (
   guildId: string,
   userId: string,
-  gradeName: string
+  gradeName: string,
+  hierarchyId?: string | null
 ) => {
   try {
     const client = getClient();
-    const [guildConfig, staffRoles, staffMember] = await Promise.all([
+    const [guildConfig, staffRoles, staffHierarchies, staffMember] = await Promise.all([
       prisma.guild.findUnique({ where: { id: guildId } }),
       prisma.staffRole.findMany({ where: { guildId, enabled: true } }),
-      prisma.staffMember.findUnique({ where: { guildId_userId: { guildId, userId } }, select: { suspendedAt: true } })
+      prisma.staffHierarchy.findMany({ where: { guildId }, select: { id: true, enabled: true, poleRoleId: true } }),
+      prisma.staffMember.findUnique({
+        where: { guildId_userId: { guildId, userId } },
+        select: { suspendedAt: true, hierarchyGrades: { select: { hierarchyId: true } } },
+      }),
     ]);
 
     if (!guildConfig) return;
@@ -355,13 +364,27 @@ export const syncStaffDiscordRoles = async (
       return;
     }
 
-    const targetStaffRole = staffRoles.find(r => r.name.toLowerCase() === gradeName.toLowerCase());
+    const sameName = staffRoles.filter(r => r.name.toLowerCase() === gradeName.toLowerCase());
+    // Homonymes entre hiérarchies : on prend celui de la hiérarchie demandée, jamais le premier venu.
+    const targetStaffRole = sameName.find(r => hierarchyId && r.hierarchyId === hierarchyId)
+      ?? (sameName.length === 1 ? sameName[0] : undefined);
     const targetRoleId = targetStaffRole?.discordRoleId;
+
+    const memberHierarchyIds = new Set((staffMember?.hierarchyGrades ?? []).map(g => g.hierarchyId));
+    if (hierarchyId) memberHierarchyIds.add(hierarchyId);
+    const targetPoleRoleIds = new Set(
+      staffHierarchies
+        .filter(h => h.enabled && h.poleRoleId && memberHierarchyIds.has(h.id))
+        .map(h => h.poleRoleId!)
+    );
 
     // Roles to add
     const rolesToAdd: string[] = [];
     if (targetRoleId) rolesToAdd.push(targetRoleId);
     if (guildConfig.baseStaffRoleId) rolesToAdd.push(guildConfig.baseStaffRoleId);
+    for (const poleRoleId of targetPoleRoleIds) {
+      if (!rolesToAdd.includes(poleRoleId)) rolesToAdd.push(poleRoleId);
+    }
 
     // If grade is a test grade (contains 'test' or 'helper' case insensitive), add testStaffRoleId
     const isTestGrade = gradeName.toLowerCase().includes('test') || gradeName.toLowerCase().includes('helper');
@@ -374,8 +397,15 @@ export const syncStaffDiscordRoles = async (
     
     // Remove other grade-specific roles
     for (const r of staffRoles) {
-      if (r.discordRoleId && (!targetRoleId || r.discordRoleId !== targetRoleId)) {
+      if (r.discordRoleId && (!targetRoleId || r.discordRoleId !== targetRoleId) && !targetPoleRoleIds.has(r.discordRoleId)) {
         rolesToRemove.push(r.discordRoleId);
+      }
+    }
+
+    // Retirer les rôles de pôle des hiérarchies dont le membre ne fait plus partie
+    for (const h of staffHierarchies) {
+      if (h.poleRoleId && !targetPoleRoleIds.has(h.poleRoleId) && (!targetRoleId || h.poleRoleId !== targetRoleId)) {
+        rolesToRemove.push(h.poleRoleId);
       }
     }
 
@@ -421,6 +451,21 @@ export const addStaffMember = async (
   hierarchyId?: string,
   hierarchyGrade?: string
 ) => {
+  // Ajout par ID brut : le dashboard n'a aucun nom, on le résout côté bot.
+  if (!username && !displayName) {
+    try {
+      const client = getClient();
+      const gm = await client.guilds.cache.get(guildId)?.members.fetch(userId).catch(() => null);
+      const u = gm?.user ?? await client.users.fetch(userId).catch(() => null);
+      if (u) {
+        username = u.username;
+        displayName = gm?.displayName || u.globalName || u.username;
+        avatarUrl = avatarUrl || u.displayAvatarURL();
+        userTag = userTag || u.tag;
+      }
+    } catch { /* identité facultative, on garde l'ID */ }
+  }
+
   const result = await upsertStaffMemberRow(guildId, userId, {
     update: {
       grade,
@@ -450,7 +495,7 @@ export const addStaffMember = async (
   }
 
   // Sync Discord roles in background
-  void syncStaffDiscordRoles(guildId, userId, grade).catch(() => null);
+  void syncStaffDiscordRoles(guildId, userId, grade, resolvedHierarchyAssignment?.hierarchyId).catch(() => null);
 
   await cache.invalidateGuild(guildId);
 
@@ -550,9 +595,10 @@ const stripStaffDiscordRoles = async (
 ) => {
   try {
     const client = getClient();
-    const [guildConfig, staffRoles] = await Promise.all([
+    const [guildConfig, staffRoles, staffHierarchies] = await Promise.all([
       prisma.guild.findUnique({ where: { id: guildId } }),
-      prisma.staffRole.findMany({ where: { guildId, enabled: true } })
+      prisma.staffRole.findMany({ where: { guildId, enabled: true } }),
+      prisma.staffHierarchy.findMany({ where: { guildId, poleRoleId: { not: null } }, select: { poleRoleId: true } }),
     ]);
 
     if (!guildConfig) return;
@@ -568,6 +614,9 @@ const stripStaffDiscordRoles = async (
     if (guildConfig.testStaffRoleId) rolesToRemove.push(guildConfig.testStaffRoleId);
     for (const r of staffRoles) {
       if (r.discordRoleId) rolesToRemove.push(r.discordRoleId);
+    }
+    for (const h of staffHierarchies) {
+      if (h.poleRoleId) rolesToRemove.push(h.poleRoleId);
     }
 
     const currentRoleIds = discordMember.roles.cache.map(r => r.id);
@@ -879,9 +928,10 @@ export const blacklistStaff = async (
 
   // Retirer les rôles staff sur Discord si l'utilisateur est présent sur le serveur
   try {
-    const [guildConfig, staffRoles] = await Promise.all([
+    const [guildConfig, staffRoles, staffHierarchies] = await Promise.all([
       prisma.guild.findUnique({ where: { id: guildId } }),
-      prisma.staffRole.findMany({ where: { guildId, enabled: true } })
+      prisma.staffRole.findMany({ where: { guildId, enabled: true } }),
+      prisma.staffHierarchy.findMany({ where: { guildId, poleRoleId: { not: null } }, select: { poleRoleId: true } }),
     ]);
     const client = getClient();
     if (guildConfig) {
@@ -892,6 +942,9 @@ export const blacklistStaff = async (
         if (guildConfig.testStaffRoleId) rolesToRemove.push(guildConfig.testStaffRoleId);
         for (const r of staffRoles) {
           if (r.discordRoleId) rolesToRemove.push(r.discordRoleId);
+        }
+        for (const h of staffHierarchies) {
+          if (h.poleRoleId) rolesToRemove.push(h.poleRoleId);
         }
 
         for (const userId of linkedUserIds) {
@@ -1159,26 +1212,10 @@ export const deleteStaffRole = async (guildId: string, roleId: string) => {
   });
   if (!roleToDelete) return null;
 
-  const deleted = await prisma.staffRole.delete({
+  // Pas de renumérotation : les trous dans sortOrder sont sans effet sur le tri.
+  return prisma.staffRole.delete({
     where: { id: roleId }
   });
-
-  // Reorder remaining roles to keep sortOrder contiguous
-  const remainingRoles = await prisma.staffRole.findMany({
-    where: { guildId },
-    orderBy: [{ level: 'desc' }, { sortOrder: 'asc' }, { createdAt: 'asc' }]
-  });
-
-  await prisma.$transaction(
-    remainingRoles.map((role, index) =>
-      prisma.staffRole.update({
-        where: { id: role.id },
-        data: { sortOrder: index }
-      })
-    )
-  );
-
-  return deleted;
 };
 
 export const createAPIKey = async (
@@ -1330,6 +1367,117 @@ export const getStaffHierarchies = async (guildId: string) => {
   });
 };
 
+const createPoleDiscordRole = async (
+  guildId: string,
+  name: string,
+  color?: string | null
+): Promise<string> => {
+  const client = getClient();
+  const discordGuild = client.guilds.cache.get(guildId) ?? await client.guilds.fetch(guildId).catch(() => null);
+  if (!discordGuild) {
+    throw new UserFacingError('Hiérarchie : serveur Discord introuvable.');
+  }
+
+  const me = discordGuild.members.me ?? await discordGuild.members.fetchMe().catch(() => null);
+  if (!me?.permissions.has(PermissionFlagsBits.ManageRoles)) {
+    throw new UserFacingError('Hiérarchie : le bot doit avoir la permission « Gérer les rôles » pour créer le rôle du pôle.');
+  }
+
+  const resolvedColor = color && /^#[0-9a-fA-F]{6}$/.test(color)
+    ? (color as `#${string}`)
+    : undefined;
+
+  const role = await discordGuild.roles.create({
+    name: name.slice(0, 100),
+    color: resolvedColor,
+    permissions: [],
+    hoist: false,
+    mentionable: false,
+    reason: 'Rôle de pôle staff',
+  });
+  return role.id;
+};
+
+/**
+ * Répercute sur Discord le changement (ajout, remplacement, retrait ou activation)
+ * du rôle commun d'une hiérarchie pour tous ses membres actuels.
+ */
+const syncHierarchyPoleRoles = async (
+  guildId: string,
+  hierarchyId: string,
+  previousPoleRoleId?: string | null
+) => {
+  try {
+    const [hierarchy, allHierarchies] = await Promise.all([
+      prisma.staffHierarchy.findFirst({
+        where: { id: hierarchyId, guildId },
+        select: {
+          enabled: true,
+          poleRoleId: true,
+          memberGrades: {
+            include: {
+              staffMember: {
+                select: {
+                  userId: true,
+                  suspendedAt: true,
+                  hierarchyGrades: { select: { hierarchyId: true } },
+                },
+              },
+            },
+          },
+        },
+      }),
+      prisma.staffHierarchy.findMany({
+        where: { guildId, enabled: true, poleRoleId: { not: null } },
+        select: { id: true, poleRoleId: true },
+      }),
+    ]);
+
+    if (!hierarchy || hierarchy.memberGrades.length === 0) return;
+
+    const client = getClient();
+    const discordGuild = client.guilds.cache.get(guildId) ?? await client.guilds.fetch(guildId).catch(() => null);
+    if (!discordGuild) return;
+
+    const userIds = hierarchy.memberGrades.map(mg => mg.staffMember.userId);
+    const discordMembers = await fetchGuildMembersByIds(guildId, userIds);
+    if (!discordMembers) return;
+
+    const activeHierarchyRoleMap = new Map(allHierarchies.map(h => [h.id, h.poleRoleId]));
+    // Anciens et nouveau rôle de pôle : ceux qu'il faut potentiellement retirer.
+    const candidates = [...new Set([previousPoleRoleId, hierarchy.poleRoleId].filter((id): id is string => !!id))];
+
+    for (const mg of hierarchy.memberGrades) {
+      const discordMember = discordMembers.get(mg.staffMember.userId);
+      if (!discordMember) continue;
+
+      // Rôles de pôle que le membre doit garder : ceux des hiérarchies actives qui le contiennent (aucun s'il est suspendu).
+      const wanted = new Set<string>();
+      if (!mg.staffMember.suspendedAt) {
+        for (const g of mg.staffMember.hierarchyGrades) {
+          const id = activeHierarchyRoleMap.get(g.hierarchyId);
+          if (id) wanted.add(id);
+        }
+      }
+
+      const toRemove = candidates.filter(id => !wanted.has(id) && discordMember.roles.cache.has(id));
+      if (toRemove.length > 0) await discordMember.roles.remove(toRemove).catch(() => null);
+
+      if (
+        hierarchy.enabled
+        && hierarchy.poleRoleId
+        && wanted.has(hierarchy.poleRoleId)
+        && !discordMember.roles.cache.has(hierarchy.poleRoleId)
+        && isAutoGrantableRoleId(discordGuild, hierarchy.poleRoleId)
+      ) {
+        await discordMember.roles.add(hierarchy.poleRoleId).catch(() => null);
+      }
+    }
+  } catch (err) {
+    logger.error('StaffManagement', `Erreur lors de syncHierarchyPoleRoles pour ${hierarchyId}: ${err instanceof Error ? err.message : err}`);
+  }
+};
+
 export const createStaffHierarchy = async (
   guildId: string,
   name: string,
@@ -1338,8 +1486,14 @@ export const createStaffHierarchy = async (
   icon?: string,
   discordRoleId?: string,
   responsableUserId?: string,
-  parentHierarchyId?: string | null
+  parentHierarchyId?: string | null,
+  poleRoleId?: string | null,
+  createPoleRole?: boolean
 ) => {
+  if (poleRoleId && !/^\d{17,20}$/.test(poleRoleId)) {
+    throw new UserFacingError('Hiérarchie : rôle de pôle invalide');
+  }
+
   if (parentHierarchyId) {
     const parentHierarchy = await prisma.staffHierarchy.findFirst({
       where: { id: parentHierarchyId, guildId },
@@ -1350,6 +1504,10 @@ export const createStaffHierarchy = async (
       throw new Error('Hiérarchie parente introuvable');
     }
   }
+
+  const resolvedPoleRoleId = createPoleRole
+    ? await createPoleDiscordRole(guildId, name, color)
+    : (poleRoleId ?? null);
 
   const lastHierarchy = await prisma.staffHierarchy.findFirst({
     where: { guildId },
@@ -1365,6 +1523,7 @@ export const createStaffHierarchy = async (
       color: color ?? null,
       icon: icon ?? null,
       discordRoleId: discordRoleId ?? null,
+      poleRoleId: resolvedPoleRoleId,
       responsableUserId: responsableUserId ?? null,
       sortOrder: (lastHierarchy?.sortOrder ?? -1) + 1,
       parentHierarchyId: parentHierarchyId ?? null,
@@ -1384,6 +1543,10 @@ export const updateStaffHierarchy = async (
     color?: string | null;
     icon?: string | null;
     discordRoleId?: string | null;
+    poleRoleId?: string | null;
+    createPoleRole?: boolean;
+    separatorRoleId?: string | null;
+    separatorStyle?: string | null;
     responsableUserId?: string | null;
     parentHierarchyId?: string | null;
     enabled?: boolean;
@@ -1395,6 +1558,16 @@ export const updateStaffHierarchy = async (
     where: { id: hierarchyId, guildId },
   });
   if (!hierarchy) return null;
+
+  if (data.separatorStyle && !isStaffSeparatorStyle(data.separatorStyle)) {
+    throw new UserFacingError('Hiérarchie : style de séparateur inconnu');
+  }
+  if (data.separatorRoleId && !/^\d{17,20}$/.test(data.separatorRoleId)) {
+    throw new UserFacingError('Hiérarchie : rôle séparateur invalide');
+  }
+  if (data.poleRoleId && !/^\d{17,20}$/.test(data.poleRoleId)) {
+    throw new UserFacingError('Hiérarchie : rôle de pôle invalide');
+  }
 
   if (data.parentHierarchyId) {
     if (data.parentHierarchyId === hierarchyId) {
@@ -1426,14 +1599,21 @@ export const updateStaffHierarchy = async (
     }
   }
 
-  const { parentHierarchyId, ...updateData } = data;
+  const { parentHierarchyId, createPoleRole, ...updateData } = data;
+  if (createPoleRole) {
+    updateData.poleRoleId = await createPoleDiscordRole(
+      guildId,
+      data.name ?? hierarchy.name,
+      data.color !== undefined ? data.color : hierarchy.color
+    );
+  }
   const parentHierarchyRelation = parentHierarchyId === undefined
     ? undefined
     : parentHierarchyId
       ? { connect: { id: parentHierarchyId } }
       : { disconnect: true };
 
-  return prisma.staffHierarchy.update({
+  const updated = await prisma.staffHierarchy.update({
     where: { id: hierarchyId },
     data: {
       ...updateData,
@@ -1443,17 +1623,53 @@ export const updateStaffHierarchy = async (
       roles: { where: { enabled: true }, orderBy: [{ level: 'desc' }, { sortOrder: 'asc' }] },
     },
   });
+
+  if (updated.poleRoleId !== hierarchy.poleRoleId || updated.enabled !== hierarchy.enabled) {
+    void syncHierarchyPoleRoles(guildId, hierarchyId, hierarchy.poleRoleId).catch(() => null);
+  }
+
+  return updated;
+};
+
+const releaseDeletedPoleRole = async (guildId: string, poleRoleId: string, userIds: string[]) => {
+  try {
+    const stillHolding = await prisma.staffMemberHierarchyGrade.findMany({
+      where: { hierarchy: { guildId, enabled: true, poleRoleId }, staffMember: { guildId, userId: { in: userIds }, suspendedAt: null } },
+      select: { staffMember: { select: { userId: true } } },
+    });
+    const keep = new Set(stillHolding.map(g => g.staffMember.userId));
+    const discordMembers = await fetchGuildMembersByIds(guildId, userIds.filter(id => !keep.has(id)));
+    if (!discordMembers) return;
+    for (const member of discordMembers.values()) {
+      if (member.roles.cache.has(poleRoleId)) await member.roles.remove(poleRoleId).catch(() => null);
+    }
+  } catch (err) {
+    logger.error('StaffManagement', `Erreur lors du retrait du rôle de pôle supprimé : ${err instanceof Error ? err.message : err}`);
+  }
 };
 
 export const deleteStaffHierarchy = async (guildId: string, hierarchyId: string) => {
   const hierarchy = await prisma.staffHierarchy.findFirst({
     where: { id: hierarchyId, guildId },
+    include: {
+      memberGrades: {
+        include: { staffMember: { select: { userId: true, grade: true } } },
+      },
+    },
   });
   if (!hierarchy) return null;
 
   // Les StaffRole liés auront hierarchyId mis à null (onDelete: SetNull)
   // Les StaffMemberHierarchyGrade liés seront supprimés (onDelete: Cascade)
-  return prisma.staffHierarchy.delete({ where: { id: hierarchyId } });
+  const deleted = await prisma.staffHierarchy.delete({ where: { id: hierarchyId } });
+
+  // La hiérarchie n'existe plus : syncStaffDiscordRoles ne la verrait pas, on retire le rôle ici
+  // sauf pour les membres qui le tiennent encore d'une autre hiérarchie active.
+  if (hierarchy.poleRoleId && hierarchy.memberGrades.length > 0) {
+    void releaseDeletedPoleRole(guildId, hierarchy.poleRoleId, hierarchy.memberGrades.map(mg => mg.staffMember.userId));
+  }
+
+  return deleted;
 };
 
 // ============================================================================
@@ -1537,7 +1753,9 @@ export const addMemberToHierarchy = async (
     throw new Error('Impossible de détecter automatiquement la hiérarchie ou le grade. Veuillez les renseigner manuellement.');
   }
 
-  return upsertHierarchyGradeRow(staffMember.id, resolvedHierarchyId, resolvedGrade, { hierarchy: true });
+  const upserted = await upsertHierarchyGradeRow(staffMember.id, resolvedHierarchyId, resolvedGrade, { hierarchy: true });
+  void syncStaffDiscordRoles(guildId, userId, staffMember.grade, resolvedHierarchyId).catch(() => null);
+  return upserted;
 };
 
 export const removeMemberFromHierarchy = async (
@@ -1550,9 +1768,11 @@ export const removeMemberFromHierarchy = async (
   });
   if (!staffMember) throw new Error('Membre staff introuvable');
 
-  return prisma.staffMemberHierarchyGrade.deleteMany({
+  const deleted = await prisma.staffMemberHierarchyGrade.deleteMany({
     where: { staffMemberId: staffMember.id, hierarchyId },
   });
+  void syncStaffDiscordRoles(guildId, userId, staffMember.grade).catch(() => null);
+  return deleted;
 };
 
 // ============================================================================
@@ -1605,6 +1825,16 @@ export const importRoleMembers = async (
 
       // Upsert du grade dans la hiérarchie
       await upsertHierarchyGradeRow(staffMember.id, hierarchyId, grade);
+
+      if (
+        hierarchy.enabled
+        && hierarchy.poleRoleId
+        && !staffMember.suspendedAt
+        && !discordMember.roles.cache.has(hierarchy.poleRoleId)
+        && isAutoGrantableRoleId(discordGuild, hierarchy.poleRoleId)
+      ) {
+        await discordMember.roles.add(hierarchy.poleRoleId).catch(() => null);
+      }
 
       imported++;
     } catch (err) {

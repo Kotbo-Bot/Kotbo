@@ -91,6 +91,7 @@ export const NOTIFICATION_KINDS = {
   // Tickets
   'tickets.update': { category: 'tickets', mandatory: true },
   'tickets.queue': { category: 'tickets' },
+  'tickets.staff_reminder': { category: 'tickets' },
 
   // Communauté
   'community.level_up': { category: 'community' },

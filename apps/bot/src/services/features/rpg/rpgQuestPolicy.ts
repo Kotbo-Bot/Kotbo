@@ -6,6 +6,12 @@
  */
 
 import { asRpgTeamMode } from './rpgTeamResolver.js';
+import {
+  normalizeQuestConditions,
+  normalizeQuestRewards,
+  type QuestConditions,
+  type QuestReward,
+} from './rpgQuestRules.js';
 
 export const RPG_QUEST_OBJECTIVES = [
   'MONSTER_KILLS',
@@ -24,8 +30,32 @@ export const RPG_QUEST_OBJECTIVES = [
   'TOWER_FLOORS',
   'TOWER_MONSTER_KILLS',
   'TOWER_BOSS_KILLS',
+  'SEND_MESSAGES',
+  'REPLY_MESSAGES',
+  'VOICE_MINUTES',
+  'REACT_MESSAGES',
+  'CREATE_THREADS',
+  'GIVE_REP',
+  'WIN_GAME',
+  'EARN_COINS',
+  'GIVEAWAYS_JOINED',
+  'GIVEAWAYS_WON',
+  'LEVEL_REACHED',
+  'XP_EARNED',
+  'ACTIVE_STREAK',
+  'ACTIVE_DAYS',
+  'INVITES',
+  'TICKETS_OPENED',
+  'SUGGESTIONS_SENT',
+  'QUESTS_COMPLETED',
 ] as const;
 export type RpgQuestObjective = (typeof RPG_QUEST_OBJECTIVES)[number];
+
+/**
+ * Objectifs qui se lisent comme un état et non comme un compteur : « atteindre le niveau 10 »,
+ * « 7 jours d'affilée ». L'action en donne la valeur courante, la quête garde la plus haute.
+ */
+export const ABSOLUTE_QUEST_OBJECTIVES: ReadonlySet<string> = new Set(['LEVEL_REACHED', 'ACTIVE_STREAK', 'ACTIVE_DAYS']);
 
 export const RPG_QUEST_SCOPES = ['MEMBER', 'TEAM'] as const;
 export type RpgQuestScope = (typeof RPG_QUEST_SCOPES)[number];
@@ -108,6 +138,12 @@ export interface RpgQuestInput {
   rewardClanPoints?: unknown;
   repeatable?: unknown;
   enabled?: unknown;
+  /** Absent : la valeur enregistrée n'est pas touchée. `null` ou vide : elle est effacée. */
+  conditions?: unknown;
+  rewards?: unknown;
+  prerequisiteQuestId?: unknown;
+  activeFrom?: unknown;
+  activeUntil?: unknown;
 }
 
 export interface NormalizedRpgQuest {
@@ -124,6 +160,19 @@ export interface NormalizedRpgQuest {
   rewardClanPoints: number;
   repeatable: boolean;
   enabled: boolean;
+  conditions?: QuestConditions | null;
+  rewards?: QuestReward[] | null;
+  prerequisiteQuestId?: string | null;
+  activeFrom?: Date | null;
+  activeUntil?: Date | null;
+}
+
+function optionalDate(value: unknown): Date | null {
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+  if (typeof value !== 'string' && typeof value !== 'number') return null;
+  if (value === '') return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 export type RpgQuestNormalizeResult =
@@ -164,8 +213,16 @@ export function normalizeRpgQuestInput(input: RpgQuestInput): RpgQuestNormalizeR
       rewardClanPoints: clampInt(input.rewardClanPoints, QUEST_CLAN_POINTS_RANGE, 0),
       // La répétition n'a de sens que pour une quête personnelle : une quête d'équipe se paie
       // déjà d'elle-même, et la laisser repartir en boucle ferait tourner la caisse du clan.
-      repeatable: scope === 'MEMBER' && input.repeatable === true,
+      // Un objectif d'état (niveau, série) ne se répète pas : la valeur ne repart jamais de zéro.
+      repeatable: scope === 'MEMBER' && input.repeatable === true && !ABSOLUTE_QUEST_OBJECTIVES.has(input.objective),
       enabled: input.enabled !== false,
+      ...(input.conditions !== undefined ? { conditions: normalizeQuestConditions(input.conditions) } : {}),
+      ...(input.rewards !== undefined ? { rewards: normalizeQuestRewards(input.rewards) } : {}),
+      ...(input.prerequisiteQuestId !== undefined
+        ? { prerequisiteQuestId: text(input.prerequisiteQuestId).slice(0, 40) || null }
+        : {}),
+      ...(input.activeFrom !== undefined ? { activeFrom: optionalDate(input.activeFrom) } : {}),
+      ...(input.activeUntil !== undefined ? { activeUntil: optionalDate(input.activeUntil) } : {}),
     },
   };
 }

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import MemberTag from './MemberTag.svelte';
   import BoosterBadge from './BoosterBadge.svelte';
   import HintTip from './economy/HintTip.svelte';
@@ -19,7 +20,9 @@
   import { inviteDetailsModal } from '../stores/inviteDetailsModal.svelte';
   import { channelDetailsModal } from '../stores/channelDetailsModal.svelte';
   import { serverDetailsModal } from '../stores/serverDetailsModal.svelte';
-  import { fetchMemberCase, fetchMemberDetailedAnalytics, updateSanctionReport, linkMemberAccount, unlinkMemberAccount, updateMemberNote, runMemberCaseAction, searchMessages, formatMessageSearchTotal, fetchMessageLogChannels } from '../api';
+  import MemberWellbeingPanel from './MemberWellbeingPanel.svelte';
+  import MemberCaseLayoutEditor from './MemberCaseLayoutEditor.svelte';
+  import { dashboardFetch, fetchMemberCase, fetchMemberDetailedAnalytics, updateSanctionReport, linkMemberAccount, unlinkMemberAccount, updateMemberNote, runMemberCaseAction, searchMessages, formatMessageSearchTotal, fetchMessageLogChannels } from '../api';
   import { toDateTimeLocal, typeLabel as formatTypeLabel } from '../sanctions/formatters';
   import { buildReportRuleOptions, getRuleIdsFromBrokenRules, getRulesFromBrokenRules, buildBrokenRulesPayload } from '../sanctions/reportRules';
   import SelectedRuleChips from './sanctions/SelectedRuleChips.svelte';
@@ -43,7 +46,7 @@
   import MemberReputationCard from './members/MemberReputationCard.svelte';
 
   import { errorMessage } from '@kotbo/shared';
-  type MemberCaseTab = 'extra' | 'resume' | 'identite' | 'activite' | 'messages' | 'logs' | 'sanctions' | 'invites' | 'connexions' | 'analytics' | 'contenu' | 'candidatures' | 'linked_accounts' | 'notes';
+  type MemberCaseTab = 'extra' | 'resume' | 'identite' | 'activite' | 'messages' | 'logs' | 'sanctions' | 'invites' | 'connexions' | 'analytics' | 'contenu' | 'candidatures' | 'linked_accounts' | 'notes' | 'wellbeing';
 
   type MemberAnalyticsResponse = {
     totalMessages: number;
@@ -100,6 +103,30 @@
   }>();
 
   let activeTab = $state<MemberCaseTab>('resume');
+  // Disposition des onglets propre au rôle du lecteur (réglée par les admins).
+  let layout = $state<{ tabOrder: string[]; hiddenTabs: string[] } | null>(null);
+  let layoutEditorOpen = $state(false);
+  async function loadLayout() {
+    layout = null;
+    if (!open || caseGuildId) return;
+    try {
+      const res = await dashboardFetch('/member-case-layout');
+      if (res.ok) layout = (await res.json()).mine ?? null;
+    } catch { /* disposition par défaut */ }
+  }
+  $effect(() => { void open; untrack(loadLayout); });
+
+  // Onglet Bien-être : seulement pour la cellule, et sur le serveur sélectionné.
+  let wellbeingAccess = $state(false);
+  $effect(() => {
+    const id = userId;
+    wellbeingAccess = false;
+    if (!open || !id || caseGuildId) return;
+    dashboardFetch('/wellbeing/status')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((st) => { if (userId === id) wellbeingAccess = !!st?.hasCaseAccess; })
+      .catch(() => {});
+  });
   let analyticsData = $state<MemberAnalyticsResponse | null>(null);
   /** Les 30 jours d'avant, jour par jour : la courbe les montre en pointilles, comme Analytics. */
   let previousTrend = $state<Array<{ dateKey: string; messages: number; voiceMinutes: number }>>([]);
@@ -777,15 +804,27 @@
     { id: 'connexions', label: m.mcm_tab_connections(), icon: 'link' },
     { id: 'linked_accounts', label: m.mcm_tab_linked(), icon: 'link-2', count: () => (caseData?.linkedAccounts?.length ?? 0) + pendingCrossServerLinks.length },
     { id: 'notes', label: m.mcm_tab_notes(), icon: 'edit-3' },
+    ...(wellbeingAccess ? [{ id: 'wellbeing' as const, label: 'Bien-être', icon: 'heart' }] : []),
   ]);
 
   const displayName = $derived(caseData?.profile?.displayName || caseData?.profile?.globalName || userName);
   const activeSanctionCount = $derived(sanctions.filter((s) => s.status === 'ACTIVE').length);
   const riskTone = $derived(moderationRiskScore < 30 ? 'success' : moderationRiskScore < 70 ? 'warning' : 'error');
-  const visibleTabs = $derived(tabs.map((tab) => {
-    const count = tab.count && caseData ? tab.count() : 0;
-    return { id: tab.id, label: tab.label, icon: tab.icon, badge: count > 0 ? count : undefined };
-  }));
+  const visibleTabs = $derived.by(() => {
+    const rank = (id: string) => { const i = layout?.tabOrder.indexOf(id) ?? -1; return i === -1 ? 999 : i; };
+    return tabs
+      .filter((tab) => tab.id === 'resume' || !layout?.hiddenTabs.includes(tab.id))
+      .map((tab, index) => ({ tab, index }))
+      .sort((a, b) => rank(a.tab.id) - rank(b.tab.id) || a.index - b.index)
+      .map(({ tab }) => {
+        const count = tab.count && caseData ? tab.count() : 0;
+        return { id: tab.id, label: tab.label, icon: tab.icon, badge: count > 0 ? count : undefined };
+      });
+  });
+  // Un onglet masqué par la règle ne doit pas rester affiché.
+  $effect(() => {
+    if (visibleTabs.length && !visibleTabs.some((tab) => tab.id === activeTab)) activeTab = visibleTabs[0].id as MemberCaseTab;
+  });
 
   function formatDateTime(value: string | null | undefined) {
     if (!value) return 'Inconnu';
@@ -1159,6 +1198,10 @@
     <!-- ── Onglets ────────────────────────────────────────── -->
     <div class="mc-tabs">
       <Tabs label={m.nav_members()} class="max-w-full" tabs={visibleTabs} active={activeTab} onchange={(id) => (activeTab = id as typeof activeTab)} />
+      {#if authStore.isAdmin && !caseGuildId}
+        <button type="button" class="text-xs text-on-surface-variant underline" onclick={() => (layoutEditorOpen = true)}>Disposition des onglets</button>
+        <MemberCaseLayoutEditor bind:open={layoutEditorOpen} onSaved={loadLayout} />
+      {/if}
     </div>
 
     <!-- ── Contenu ────────────────────────────────────────── -->
@@ -1490,6 +1533,7 @@
                         icon="history"
                         title={m.mcm_history_empty()}
                         description={m.mcm_history_empty_desc()}
+                        reason={historyFilter === 'all' ? 'accumulating' : 'nothing-matches'}
                       />
                     {:else}
                       <ul class="space-y-3">
@@ -2076,6 +2120,8 @@
                   {/if}
                 </div>
               </SectionCard>
+            {:else if activeTab === 'wellbeing' && userId}
+              <MemberWellbeingPanel {userId} userName={displayName} />
             {/if}
           </div>
 

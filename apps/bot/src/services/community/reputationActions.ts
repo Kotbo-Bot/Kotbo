@@ -26,7 +26,6 @@ import {
 } from './reputationService.js';
 import { applyReputationGain, applyReputationLoss } from './reputationTierService.js';
 import { grantRepRewards, reclaimRepRewards } from './reputationRewards.js';
-import { incrementQuestProgress } from './questService.js';
 import { hasMemberGuards, repGuardRefusal, type RepGuardCode } from './reputationGuards.js';
 
 export interface RecordRepInput {
@@ -107,8 +106,6 @@ async function afterVote(client: Client, input: RecordRepInput, newTotal: number
     // Un vote vaut toujours +1 : le total d'avant se déduit, sans relire la base.
     applyReputationGain(client, guildId, receiverId, newTotal - 1, newTotal),
     grantRepRewards(client, guildId, receiverId, settings, channelId).then((gains) => recordVoteGains(voteId, gains)),
-    // Quête « remercier » : elle avance pour celui qui donne, quelle que soit la source du vote.
-    incrementQuestProgress(client, guildId, giverId, 'GIVE_REP', 1, channelId),
   ]);
   for (const outcome of outcomes) {
     if (outcome.status === 'rejected') {

@@ -2,7 +2,8 @@
   import { router } from 'tinro';
   import { resolveTabFromUrl, gotoTab } from '../lib/tabRouting';
   import { pageTabItems } from '../lib/config/pageTabs';
-  import { Tabs, Button, Callout } from '../lib/components/ui';
+  import { Tabs, Button, Callout, FilterPills } from '../lib/components/ui';
+  import OrgCanvas from '../lib/components/staff/OrgCanvas.svelte';
   import { authStore } from '../lib/stores/auth.svelte';
   import { MemberCaseState } from '../lib/memberCase.svelte';
   import ModulePage from '../lib/components/ModulePage.svelte';
@@ -27,6 +28,7 @@
   }
 
   let activeTab = $state<StaffTab>('members');
+  let orgMode = $state<'chart' | 'canvas'>('chart');
 
   const tabVisible = $derived<Record<StaffTab, boolean>>({
     members: !!staff.directoryAccess.canView || staff.isAdmin,
@@ -207,7 +209,25 @@
           {#if staff.loading.organigramme && !staff.hierarchySchema}
             <div class="section-card h-[60vh] animate-pulse" aria-busy="true"></div>
           {:else}
-            <OrgChart schema={staff.hierarchySchema} {openCase} />
+            <div class="space-y-3">
+              <div class="flex items-center gap-2">
+                <span class="text-xs text-on-surface-variant">{m.sm_org_mode_label()}</span>
+                <FilterPills
+                  label={m.sm_org_mode_label()}
+                  options={[
+                    { value: 'chart', label: m.sm_org_mode_chart() },
+                    { value: 'canvas', label: m.sm_org_mode_canvas() },
+                  ]}
+                  value={orgMode}
+                  onchange={(value) => (orgMode = value)}
+                />
+              </div>
+              {#if orgMode === 'canvas'}
+                <OrgCanvas schema={staff.hierarchySchema} />
+              {:else}
+                <OrgChart schema={staff.hierarchySchema} {openCase} />
+              {/if}
+            </div>
           {/if}
         {:else if activeTab === 'warnings'}
           <StaffWarnings {openCase} />

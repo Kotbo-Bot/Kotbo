@@ -39,6 +39,14 @@ model ShopSettings {
   // Jours de grâce d'un abonnement impayé avant le retrait du rôle.
   graceDays         Int     @default(3)
 
+  // Boutique web publique personnalisable (/boutique)
+  webShopEnabled     Boolean @default(false)
+  webShopTitle       String?
+  webShopDescription String?
+  webShopAccentColor String?
+  webShopBannerUrl   String?
+  webShopCustomCss   String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

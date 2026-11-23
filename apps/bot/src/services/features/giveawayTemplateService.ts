@@ -6,9 +6,10 @@
  * sur l'autre. Un modèle fige ces valeurs et sert de point de départ à la
  * création, sur Discord comme sur le dashboard.
  */
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import prisma from '../../utils/db.js';
 import { normalizeAppearancePatch, type GiveawayAppearance } from './giveawayAppearance.js';
+import { normalizeConditions, type GiveawayCondition } from './giveawayConditions.js';
 
 export interface GiveawayTemplate {
   id: string;
@@ -24,6 +25,9 @@ export interface GiveawayTemplate {
   rpgItemId: string | null;
   needValidation: boolean;
   ignoreBonuses: boolean;
+  /** `null` = reprendre le filtre du serveur au lancement. */
+  conditions: GiveawayCondition[] | null;
+  createDiscordEvent: boolean;
   styleOverrides: Partial<GiveawayAppearance>;
   /** Sauvegarde de configuration dont ce modèle est le jumeau. */
   presetId: string | null;
@@ -41,6 +45,8 @@ export type GiveawayTemplateInput = {
   rpgItemId?: string | null;
   needValidation?: boolean;
   ignoreBonuses?: boolean;
+  conditions?: unknown;
+  createDiscordEvent?: boolean;
   styleOverrides?: unknown;
   /**
    * Clef absente : le lien en place est conservé. Corriger un modèle depuis la
@@ -67,6 +73,8 @@ type TemplateRow = {
   rpgItemId: string | null;
   needValidation: boolean;
   ignoreBonuses: boolean;
+  conditions: unknown;
+  createDiscordEvent: boolean;
   styleOverrides: unknown;
   presetId: string | null;
 };
@@ -86,6 +94,8 @@ function toTemplate(row: TemplateRow): GiveawayTemplate {
     rpgItemId: row.rpgItemId,
     needValidation: row.needValidation,
     ignoreBonuses: row.ignoreBonuses,
+    conditions: row.conditions == null ? null : normalizeConditions(row.conditions).conditions,
+    createDiscordEvent: row.createDiscordEvent,
     styleOverrides: normalizeAppearancePatch(row.styleOverrides),
     presetId: row.presetId,
   };
@@ -115,6 +125,14 @@ function optionalText(value: unknown, limit: number): string | null {
   return trimmed;
 }
 
+/** Absent ou nul : le modèle suit le filtre du serveur. Une liste invalide est refusée, jamais élargie. */
+function normalizedTemplateConditions(raw: unknown): Prisma.InputJsonValue | typeof Prisma.JsonNull {
+  if (raw == null) return Prisma.JsonNull;
+  const { conditions, rejected } = normalizeConditions(raw);
+  if (rejected > 0) throw new Error(`${rejected} condition(s) invalide(s) : vérifie les champs de chaque type.`);
+  return conditions as unknown as Prisma.InputJsonValue;
+}
+
 /** Valide une saisie de modèle, ou explique pourquoi elle est refusée. */
 export function normalizeTemplateInput(input: GiveawayTemplateInput) {
   const name = optionalText(input.name, 80);
@@ -139,6 +157,8 @@ export function normalizeTemplateInput(input: GiveawayTemplateInput) {
     rpgItemId: optionalText(input.rpgItemId, 100),
     needValidation: input.needValidation === true,
     ignoreBonuses: input.ignoreBonuses === true,
+    conditions: normalizedTemplateConditions(input.conditions),
+    createDiscordEvent: input.createDiscordEvent === true,
     styleOverrides: normalizeAppearancePatch(input.styleOverrides),
   };
 }

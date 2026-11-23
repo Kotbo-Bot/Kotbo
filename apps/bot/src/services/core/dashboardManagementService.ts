@@ -71,7 +71,7 @@ export async function getOrCreateFeatureConfigs(guildId: string) {
 
   // La ligne cree ici devient l'etat qui fait foi pour la garde de lecture :
   // l'ecrire a `true` allumait, a la premiere ouverture du Centre de gestion,
-  // tous les modules qui demarrent eteints - niveaux, economie, Daily Algo,
+  // tous les modules qui demarrent eteints - niveaux, economie,
   // auto-thread... On reprend donc l'etat deja declare ailleurs (table propre au
   // module, colonne historique, defaut du registre). L'offre commerciale et la
   // cascade des dependances restent hors de cette valeur : elles s'appliquent a
@@ -201,16 +201,67 @@ export async function updateRoleAccess(
   });
 }
 
+/** Droits des cles MCP regroupes par fonctionnalite, pour la matrice du Centre de gestion. */
+export async function listKeyAccessByFeature(guildId: string) {
+  const rows = await prisma.mcpKeyFeatureAccess.findMany({
+    where: { guildId, key: { isActive: true } },
+    orderBy: { keyId: 'asc' },
+  });
+  const byFeature: Record<string, typeof rows> = {};
+  for (const row of rows) (byFeature[row.featureKey] ??= []).push(row);
+  return byFeature;
+}
+
+/** Remplace les droits des cles sur une fonctionnalite (meme transaction que les roles). */
+export async function updateKeyAccess(
+  guildId: string,
+  featureKey: string,
+  keyAccessConfigs: Array<{
+    keyId: string;
+    canView?: boolean;
+    canModerate?: boolean;
+    canConfigure?: boolean;
+    canDelete?: boolean;
+  }>
+) {
+  // Une cle d'un autre serveur ne doit pas pouvoir recevoir de regle ici.
+  const owned = new Set(
+    (await prisma.mcpApiKey.findMany({
+      where: { guildId, id: { in: keyAccessConfigs.map((c) => c.keyId) } },
+      select: { id: true },
+    })).map((k) => k.id)
+  );
+
+  await prisma.$transaction([
+    prisma.mcpKeyFeatureAccess.deleteMany({ where: { guildId, featureKey } }),
+    ...keyAccessConfigs
+      .filter((config) => owned.has(config.keyId))
+      .map((config) =>
+        prisma.mcpKeyFeatureAccess.create({
+          data: {
+            guildId,
+            featureKey,
+            keyId: config.keyId,
+            canView: config.canView ?? false,
+            canModerate: config.canModerate ?? false,
+            canConfigure: config.canConfigure ?? false,
+            canDelete: config.canDelete ?? false,
+          },
+        })
+      ),
+  ]);
+}
+
 export async function applyPresetToFeatureAccess(
   guildId: string,
   presetKey: 'general' | 'gaming' | 'dev',
   roleIds: { adminRoleIds: string[]; modRoleIds: string[] }
 ) {
   const configs = await getOrCreateFeatureConfigs(guildId);
-  
+
   const updates = configs.map(async (config) => {
     const featureKey = config.featureKey;
-    
+
     // Clear existing per-role access for this feature to avoid conflicts
     await prisma.dashboardFeatureRoleAccess.deleteMany({
       where: { featureConfigId: config.id }
@@ -236,7 +287,7 @@ export async function applyPresetToFeatureAccess(
       if (roleIds.adminRoleIds.includes(modId)) continue;
 
       const isRestricted = ['settings', 'commands', 'discipline'].includes(featureKey);
-      
+
       roleAccessToCreate.push({
         guildId,
         featureConfigId: config.id,

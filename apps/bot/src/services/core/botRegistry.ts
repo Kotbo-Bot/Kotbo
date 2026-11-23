@@ -416,7 +416,7 @@ export const KNOWN_BOTS: KnownBot[] = [
   {
     key: 'dbots-bump',
     label: 'Bots de bump',
-    usernames: ['discadia', 'discordservers', 'dsme', 'disforge'],
+    usernames: ['discadia', 'discordservers', 'dsme', 'disforge', 'dl', 'bot dl', 'discordl', 'discordl org'],
     covers: [],
   },
   {

@@ -14,6 +14,7 @@ import {
   Partials,
   Collection,
   Events,
+  Options,
   ActivityType,
   ApplicationCommandType,
   MessageFlags,
@@ -101,6 +102,7 @@ import { registerAnalyticsBusSubscribers } from './modules/analytics.module.js';
 import { registerWorkflowBusSubscribers } from './modules/workflow.module.js';
 import { registerOutgoingWebhookSubscribers } from './services/integrations/outgoingWebhookService.js';
 import { registerLevelingBusSubscribers } from './modules/leveling.module.js';
+import { registerQuestsBusSubscribers } from './modules/quests.module.js';
 import { registerRankedBusSubscribers } from './modules/ranked.module.js';
 import { registerAutoModBusSubscribers } from './modules/autoMod.module.js';
 import { registerAegisModule } from './modules/aegis.module.js';
@@ -177,6 +179,23 @@ const client = new Client({
     GatewayIntentBits.AutoModerationExecution,
   ],
   partials: [Partials.Message, Partials.Reaction],
+  // Par defaut discord.js garde 200 messages par salon, sans jamais les purger :
+  // c'est le premier poste de RAM d'un bot present sur beaucoup de serveurs.
+  // Les messages sont relus a la demande (fetch) quand ils manquent du cache ;
+  // les membres et leurs presences restent en cache, des fonctions en dependent.
+  makeCache: Options.cacheWithLimits({
+    ...Options.DefaultMakeCacheSettings,
+    MessageManager: 40,
+  }),
+  sweepers: {
+    ...Options.DefaultSweeperSettings,
+    // Toutes les 5 min, on retire les messages en cache depuis plus de 30 min.
+    messages: { interval: 300, lifetime: 1800 },
+    // Les fils archives n'ont plus besoin d'etre en memoire apres 1 h.
+    threads: { interval: 3600, lifetime: 3600 },
+    // Les autres bots ne servent a rien en cache (le notre est conserve).
+    users: { interval: 3600, filter: () => (user) => user.bot && user.id !== user.client.user?.id },
+  },
 });
 
 setClient(client);
@@ -533,6 +552,7 @@ client.once(Events.ClientReady, async (c) => {
   registerWorkflowBusSubscribers(client);
   registerOutgoingWebhookSubscribers();
   registerLevelingBusSubscribers(client);
+  registerQuestsBusSubscribers(client);
   registerRankedBusSubscribers(client);
   registerAutoModBusSubscribers(scopeClientToModule(client, 'automod'));
   registerAdminLockModule(scopeClientToModule(client, 'automod'));

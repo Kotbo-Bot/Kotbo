@@ -18,6 +18,8 @@
   import { createAsyncActionState } from '../../asyncAction.svelte';
   import { useUnsavedChanges } from '../../useUnsavedChanges.svelte';
   import { fetchStaffServerChannels, dashboardFetch } from '../../api';
+  import { API_BASE_URL } from '../../api/client';
+  import { authStore } from '../../stores/auth.svelte';
   import { errorMessage } from '@kotbo/shared';
   import Papicon from '../Papicon.svelte';
   import FormInput from '../FormInput.svelte';
@@ -58,6 +60,8 @@
   let ticketInactivityHours = $state(24);
   let ticketStaffReminderEnabled = $state(false);
   let ticketStaffReminderMinutes = $state(60);
+  let ticketStaffReminderTarget = $state('TICKET');
+  let ticketStaffReminderChannelId = $state('');
   let ticketInactivityMessage = $state('');
   let ticketSatisfactionCommentEnabled = $state(true);
   let ticketSatisfactionCommentQuestion = $state('');
@@ -92,6 +96,10 @@
   let ticketRecordingNoticeEnabled = $state(true);
   let ticketRecordingNoticeSeconds = $state(10);
   let ticketRecordingNoticeText = $state('');
+  let ticketWebFormEnabled = $state(false);
+  let ticketInboundEmailEnabled = $state(false);
+  let ticketInboundEmailAddress = $state('');
+  let ticketInboundEmailSecret = $state('');
   let ticketEmbedThumbnail = $state('');
   let ticketEmbedImage = $state('');
   let ticketEmbedFooter = $state('');
@@ -173,6 +181,8 @@
     ticketInactivityMessage,
     ticketStaffReminderEnabled,
     ticketStaffReminderMinutes,
+    ticketStaffReminderTarget,
+    ticketStaffReminderChannelId,
     ticketSatisfactionCommentEnabled,
     ticketSatisfactionCommentQuestion,
     ticketSatisfactionCommentTimeout,
@@ -203,6 +213,10 @@
     ticketRecordingNoticeEnabled,
     ticketRecordingNoticeSeconds,
     ticketRecordingNoticeText,
+    ticketWebFormEnabled,
+    ticketInboundEmailEnabled,
+    ticketInboundEmailAddress,
+    ticketInboundEmailSecret,
     ticketTypes,
     ticketEmbedThumbnail,
     ticketEmbedImage,
@@ -248,6 +262,8 @@
     ticketInactivityMessage = savedSettingsConfig.ticketInactivityMessage;
     ticketStaffReminderEnabled = savedSettingsConfig.ticketStaffReminderEnabled;
     ticketStaffReminderMinutes = savedSettingsConfig.ticketStaffReminderMinutes;
+    ticketStaffReminderTarget = savedSettingsConfig.ticketStaffReminderTarget;
+    ticketStaffReminderChannelId = savedSettingsConfig.ticketStaffReminderChannelId;
     ticketSatisfactionCommentEnabled = savedSettingsConfig.ticketSatisfactionCommentEnabled;
     ticketSatisfactionCommentQuestion = savedSettingsConfig.ticketSatisfactionCommentQuestion;
     ticketSatisfactionCommentTimeout = savedSettingsConfig.ticketSatisfactionCommentTimeout;
@@ -290,6 +306,10 @@
     ticketRecordingNoticeEnabled = savedSettingsConfig.ticketRecordingNoticeEnabled;
     ticketRecordingNoticeSeconds = savedSettingsConfig.ticketRecordingNoticeSeconds;
     ticketRecordingNoticeText = savedSettingsConfig.ticketRecordingNoticeText;
+    ticketWebFormEnabled = savedSettingsConfig.ticketWebFormEnabled ?? false;
+    ticketInboundEmailEnabled = savedSettingsConfig.ticketInboundEmailEnabled ?? false;
+    ticketInboundEmailAddress = savedSettingsConfig.ticketInboundEmailAddress ?? '';
+    ticketInboundEmailSecret = savedSettingsConfig.ticketInboundEmailSecret ?? '';
   }
 
   // Derived values from Dashboard Store
@@ -585,6 +605,8 @@
     ticketInactivityMessage = config.ticketInactivityMessage || '';
     ticketStaffReminderEnabled = config.ticketStaffReminderEnabled === true;
     ticketStaffReminderMinutes = config.ticketStaffReminderMinutes ?? 60;
+    ticketStaffReminderTarget = config.ticketStaffReminderTarget ?? 'TICKET';
+    ticketStaffReminderChannelId = config.ticketStaffReminderChannelId || '';
     ticketSatisfactionCommentEnabled = config.ticketSatisfactionCommentEnabled !== undefined ? config.ticketSatisfactionCommentEnabled : true;
     // Laisse vide : le bot pose alors sa question par defaut, comme pour les embeds.
     ticketSatisfactionCommentQuestion = config.ticketSatisfactionCommentQuestion || '';
@@ -620,6 +642,10 @@
     ticketRecordingNoticeSeconds = config.ticketRecordingNoticeSeconds ?? 10;
     // Vide : le bot affiche son texte par défaut.
     ticketRecordingNoticeText = config.ticketRecordingNoticeText || '';
+    ticketWebFormEnabled = config.ticketWebFormEnabled === true;
+    ticketInboundEmailEnabled = config.ticketInboundEmailEnabled === true;
+    ticketInboundEmailAddress = config.ticketInboundEmailAddress || '';
+    ticketInboundEmailSecret = config.ticketInboundEmailSecret || '';
     ticketTypes = normalizeTicketTypes(config);
     ticketEmbedThumbnail = config.ticketEmbedThumbnail || '';
     ticketEmbedImage = config.ticketEmbedImage || '';
@@ -652,6 +678,8 @@
       ticketInactivityMessage,
       ticketStaffReminderEnabled,
       ticketStaffReminderMinutes,
+      ticketStaffReminderTarget,
+      ticketStaffReminderChannelId,
       ticketSatisfactionCommentEnabled,
       ticketSatisfactionCommentQuestion,
       ticketSatisfactionCommentTimeout,
@@ -766,6 +794,10 @@
           ticketRecordingNoticeEnabled,
           ticketRecordingNoticeSeconds,
           ticketRecordingNoticeText: ticketRecordingNoticeText.trim() || null,
+          ticketWebFormEnabled,
+          ticketInboundEmailEnabled,
+          ticketInboundEmailAddress: ticketInboundEmailAddress.trim() || null,
+          ticketInboundEmailSecret: ticketInboundEmailSecret.trim() || null,
           ticketTypes: serializeTicketTypes(),
           ticketAllowOverclaim,
           ticketOverclaimPermission,
@@ -775,6 +807,8 @@
           ticketInactivityMessage,
           ticketStaffReminderEnabled,
           ticketStaffReminderMinutes,
+          ticketStaffReminderTarget,
+          ticketStaffReminderChannelId,
           ticketSatisfactionCommentEnabled,
           ticketSatisfactionCommentQuestion,
           ticketSatisfactionCommentTimeout,
@@ -1359,6 +1393,22 @@
             <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">{m.e1_tickets_staff_reminder_minutes()}</span>
             <input type="number" bind:value={ticketStaffReminderMinutes} min={1} max={10080} class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-field-border focus:ring-1 ring-primary/30 transition-all outline-none" />
           </label>
+          <div class="space-y-3">
+            <label class="block sm:max-w-[50%]">
+              <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">{m.e1_tickets_staff_reminder_target()}</span>
+              <select bind:value={ticketStaffReminderTarget} class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-field-border outline-none">
+                <option value="TICKET">{m.e1_tickets_staff_reminder_target_ticket()}</option>
+                <option value="DASHBOARD">{m.e1_tickets_staff_reminder_target_dashboard()}</option>
+                <option value="CHANNEL">{m.e1_tickets_staff_reminder_target_channel()}</option>
+              </select>
+            </label>
+            {#if ticketStaffReminderTarget === 'CHANNEL'}
+              <label class="block sm:max-w-[50%]">
+                <span class="text-xs font-bold text-on-surface-variant/80 ml-1 mb-2 block">{m.e1_tickets_staff_reminder_channel()}</span>
+                <input type="text" bind:value={ticketStaffReminderChannelId} placeholder={m.e1_tickets_staff_reminder_channel_id_ph()} class="w-full bg-surface-container-high text-sm px-4 py-2.5 rounded-xl border border-field-border outline-none" />
+              </label>
+            {/if}
+          </div>
         {/if}
       </div>
     {/if}
@@ -1412,6 +1462,88 @@
               seconds={Math.min(30, Math.max(5, Number(ticketRecordingNoticeSeconds) || 10))}
             />
           </div>
+        {/if}
+      </div>
+    {/if}
+  </div>
+
+  <!-- ─── Support hors Discord (Web & E-mail) ───────────────────────── -->
+  <div class="rounded-xl border border-outline-variant/10 bg-surface-container-low/40 overflow-hidden">
+    <button onclick={() => toggleConfigSection('external')} class="w-full flex items-center justify-between p-4 lg:p-5 hover:bg-white/3 transition-colors text-left">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+          <Papicon icon="globe" size={18} />
+        </div>
+        <div>
+          <p class="text-sm font-semibold text-on-surface">Support hors Discord (Web & E-mail)</p>
+          <p class="text-2xs text-on-surface-variant mt-0.5">Formulaire public externe, suivi web (/me) et réception par e-mail</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 shrink-0">
+        {#if ticketWebFormEnabled || ticketInboundEmailEnabled}
+          <span class="px-2 py-0.5 rounded-full text-2xs font-semibold bg-success/10 text-on-success-container border border-success/20">{m.e1_tickets_active_badge()}</span>
+        {/if}
+        <Papicon icon={expandedConfigSection === 'external' ? 'chevron-up' : 'chevron-down'} size={16} class="text-on-surface-variant/40" />
+      </div>
+    </button>
+    {#if expandedConfigSection === 'external'}
+      <div class="px-4 lg:px-5 pb-5 space-y-4 border-t border-outline-variant/10 pt-4">
+        <label class="flex items-center gap-3 cursor-pointer p-2.5 hover:bg-white/5 rounded-xl transition-colors">
+          <input type="checkbox" bind:checked={ticketWebFormEnabled} class="w-4 h-4 rounded text-primary focus:ring-primary border-outline-variant/30" />
+          <div>
+            <span class="text-xs font-semibold text-on-surface">Activer le formulaire web public</span>
+            <p class="text-2xs text-on-surface-variant">Permet à toute personne d'ouvrir un ticket sans passer par Discord.</p>
+          </div>
+        </label>
+        {#if ticketWebFormEnabled && authStore.selectedGuildId}
+          <div class="flex items-center gap-2 rounded-lg border border-outline-variant/20 bg-surface-container-lowest px-3 py-2 text-xs">
+            <span class="font-mono truncate flex-1">{window.location.origin}/support/{authStore.selectedGuildId}</span>
+            <button
+              type="button"
+              onclick={() => {
+                navigator.clipboard.writeText(`${window.location.origin}/support/${authStore.selectedGuildId}`);
+                toast.success('Lien copié');
+              }}
+              class="px-2.5 py-1 rounded-md bg-primary/15 text-primary font-semibold hover:bg-primary/25 transition-colors"
+            >
+              Copier
+            </button>
+          </div>
+        {/if}
+
+        <label class="flex items-center gap-3 cursor-pointer p-2.5 hover:bg-white/5 rounded-xl transition-colors">
+          <input type="checkbox" bind:checked={ticketInboundEmailEnabled} class="w-4 h-4 rounded text-primary focus:ring-primary border-outline-variant/30" />
+          <div>
+            <span class="text-xs font-semibold text-on-surface">Activer le support par e-mail (inbound)</span>
+            <p class="text-2xs text-on-surface-variant">Ouvre et alimente un ticket dès qu'un e-mail arrive sur le webhook dédié.</p>
+          </div>
+        </label>
+        {#if ticketInboundEmailEnabled}
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <label class="block">
+              <span class="text-xs font-semibold text-on-surface-variant ml-1 mb-1.5 block">Adresse e-mail de support</span>
+              <input type="email" bind:value={ticketInboundEmailAddress} class="input w-full" placeholder="support@domaine.fr" />
+            </label>
+            <label class="block">
+              <span class="text-xs font-semibold text-on-surface-variant ml-1 mb-1.5 block">Secret webhook (X-Inbound-Secret)</span>
+              <input type="text" bind:value={ticketInboundEmailSecret} class="input w-full font-mono" placeholder="secret_..." />
+            </label>
+          </div>
+          {#if authStore.selectedGuildId}
+            <div class="flex items-center gap-2 rounded-lg border border-outline-variant/20 bg-surface-container-lowest px-3 py-2 text-xs">
+              <span class="font-mono truncate flex-1">{API_BASE_URL}/api/public/tickets/{authStore.selectedGuildId}/inbound-email</span>
+              <button
+                type="button"
+                onclick={() => {
+                  navigator.clipboard.writeText(`${API_BASE_URL}/api/public/tickets/${authStore.selectedGuildId}/inbound-email`);
+                  toast.success('URL webhook copiée');
+                }}
+                class="px-2.5 py-1 rounded-md bg-primary/15 text-primary font-semibold hover:bg-primary/25 transition-colors"
+              >
+                Copier
+              </button>
+            </div>
+          {/if}
         {/if}
       </div>
     {/if}

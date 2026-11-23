@@ -46,8 +46,11 @@ describe('StaffServerService unit tests', () => {
           staffGuildId: 'staff-1',
           modlogMirrorChannelId: 'channel-modlog',
           sanctionReportChannelId: 'channel-sanctions',
+          internalReportChannelId: 'channel-reports',
         } as StaffServerLink,
       ];
+
+      expect(resolveStaffNotifyChannelId(links, 'main-1', 'internalReport')).toEqual({ staffGuildId: 'staff-1', channelId: 'channel-reports' });
 
       const res = resolveStaffNotifyChannelId(links, 'main-1', 'modlog');
       expect(res).toEqual({ staffGuildId: 'staff-1', channelId: 'channel-modlog' });

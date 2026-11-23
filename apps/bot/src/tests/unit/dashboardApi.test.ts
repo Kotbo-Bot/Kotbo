@@ -1,4 +1,5 @@
 import { describe, expect, test, mock, beforeEach, afterEach } from 'bun:test';
+import { Hono } from 'hono';
 import path from 'node:path';
 import nodeCrypto from 'node:crypto';
 import { createServer, IncomingMessage, ServerResponse } from 'node:http';
@@ -73,6 +74,9 @@ const mockDb = {
   },
   dashboardAuditLog: {
     create: mock(() => Promise.resolve({})),
+  },
+  mcpKeyFeatureAccess: {
+    findMany: mock(() => Promise.resolve([])),
   },
   dashboardFeatureConfig: {
     findMany: mock(() => Promise.resolve([])),
@@ -214,6 +218,7 @@ import { createUserRouter } from '../../api/routes/user.js';
 import { createAdminRouter } from '../../api/routes/admin.js';
 import { createDashboardRouter } from '../../api/hono/dashboard/index.js';
 import { getMcpConnectionLogs, handleMCPRoutes, makeMcpDirectToken, createMcpServerRouter } from '../../api/mcp/mcpServer.js';
+import { dashboardCors } from '../../api/hono/middleware/cors.js';
 
 // Helper mock req/res functions
 function createMockRequest(options: {
@@ -673,6 +678,21 @@ describe('Modular Routers Unit Tests', () => {
       expect(res.getHeader('content-security-policy')).toContain("style-src 'unsafe-inline'");
       expect(res.getHeader('content-type')).toContain('text/html');
       expect(res.body).toContain('<style>');
+    });
+
+    test('OAuth authorize page keeps inline CSS CSP when served through Hono + dashboardCors', async () => {
+      const registeredId = await registerOAuthClient('https://claude.ai/api/mcp/auth_callback');
+      const app = new Hono();
+      app.use('*', dashboardCors());
+      app.route('/', createMcpServerRouter(mockClient));
+
+      const response = await app.request(
+        `/api/mcp/112233445566778899/oauth/authorize?client_id=${registeredId}&redirect_uri=https%3A%2F%2Fclaude.ai%2Fapi%2Fmcp%2Fauth_callback&code_challenge=abc`,
+      );
+      expect(response.status).toBe(200);
+      const csp = response.headers.get('content-security-policy') ?? '';
+      expect(csp).toContain("style-src 'unsafe-inline'");
+      expect(csp).not.toContain("default-src 'self'");
     });
 
     test('OAuth authorize refuses a redirect_uri the client never registered', async () => {

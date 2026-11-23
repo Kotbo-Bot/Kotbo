@@ -239,6 +239,7 @@
     if (path.startsWith("/schedules")) return "settings";
     if (path.startsWith("/mcp-settings")) return "settings";
     if (path.startsWith("/webhooks")) return "settings";
+    if (path.startsWith("/network")) return "settings";
     if (path.startsWith("/fun")) return "fun";
     if (path.startsWith("/channel-health")) return "channel_health";
     if (path.startsWith("/channel-links")) return "channel_links";
@@ -300,7 +301,7 @@
   const ADMIN_ROUTES = [
     "/management", "/modules", "/server-template", "/setup",
     "/migration", "/campaigns", "/module-settings", "/alerts",
-    "/command-access", "/backups", "/schedules", "/mcp-settings", "/webhooks",
+    "/command-access", "/backups", "/schedules", "/mcp-settings", "/webhooks", "/network",
     "/custom-bot", "/automations", "/staff-management", "/channels-management",
   ];
 
@@ -696,6 +697,18 @@
         path="/appeal/:guildId"
         load={() => import("./pages/PublicAppeal.svelte")}
         props={(meta) => ({ guildId: meta.params.guildId })}
+      />
+      <LazyRoute
+        path="/support/track/:token"
+        load={() => import("./pages/PublicTicketForm.svelte")}
+      />
+      <LazyRoute
+        path="/support/:guildId"
+        load={() => import("./pages/PublicTicketForm.svelte")}
+      />
+      <LazyRoute
+        path="/boutique/:guildId"
+        load={() => import("./pages/PublicShop.svelte")}
       />
       <LazyRoute
         path="/verify/:guildId/:token"
@@ -1108,6 +1121,10 @@
               load={() => import("./pages/Billing.svelte")}
             />
             <LazyRoute
+              path="/network"
+              load={() => import("./pages/Network.svelte")}
+            />
+            <LazyRoute
               path="/channel-links"
               load={() => import("./pages/ChannelLinks.svelte")}
             />
@@ -1177,6 +1194,10 @@
             <LazyRoute
               path="/tutoring/*"
               load={() => import("./pages/Tutoring.svelte")}
+            />
+            <LazyRoute
+              path="/wellbeing"
+              load={() => import("./pages/Wellbeing.svelte")}
             />
             <LazyRoute
               path="/doing-lists"

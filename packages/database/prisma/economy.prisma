@@ -663,6 +663,28 @@ enum RpgQuestObjective {
   TOWER_FLOORS
   TOWER_MONSTER_KILLS
   TOWER_BOSS_KILLS
+  // Activité du serveur (ex-quêtes communautaires)
+  SEND_MESSAGES
+  REPLY_MESSAGES
+  VOICE_MINUTES
+  REACT_MESSAGES
+  CREATE_THREADS
+  GIVE_REP
+  WIN_GAME
+  EARN_COINS
+  // Concours, niveaux et fidélité
+  GIVEAWAYS_JOINED
+  GIVEAWAYS_WON
+  LEVEL_REACHED
+  XP_EARNED
+  ACTIVE_STREAK
+  ACTIVE_DAYS
+  // Communauté
+  INVITES
+  TICKETS_OPENED
+  SUGGESTIONS_SENT
+  // Méta : nombre d'autres quêtes terminées sur la fenêtre (paliers bonus)
+  QUESTS_COMPLETED
 }
 
 /// MEMBER : chacun sa progression. TEAM : toute une équipe pousse le même compteur.
@@ -705,6 +727,17 @@ model RpgQuest {
   rewardClanPoints Int @default(0)
 
   enabled Boolean @default(true)
+
+  /// Filtres appliqués à chaque action avant de la compter : salons, catégories, rôles,
+  /// contenu du message, jours et heures. `null` = toute action compte.
+  conditions Json?
+  /// Récompenses en plus des colonnes `reward*` : XP de niveau, rôle, objet, entrée de concours, message.
+  rewards Json?
+  /// Quête à terminer avant que celle-ci ne se mette à compter.
+  prerequisiteQuestId String?
+  /// Bornes de disponibilité : hors de cet intervalle, la quête ne compte rien.
+  activeFrom  DateTime?
+  activeUntil DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

@@ -1,7 +1,7 @@
 /**
  * Relais Discord du flux des gains de points de clan.
  *
- * Les mouvements arrivent en rafale : la fin d'un raid ou la clôture du Daily Algo crédite
+ * Les mouvements arrivent en rafale : la fin d'un raid
  * tout un serveur d'un coup. Un message par mouvement dépasserait vite la limite d'envoi
  * du salon, alors ils sont retenus quelques secondes et publiés ensemble : détaillés quand
  * la rafale est courte, résumés par clan dans un seul message quand elle est grosse.

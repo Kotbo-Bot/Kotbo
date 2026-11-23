@@ -74,15 +74,15 @@ export const projectMcpApiKey: GdprProjection = (record) => {
  * autre membre ou un réglage du serveur : seule une trace en est exportée.
  */
 export const ACTOR_FIELDS: readonly string[] = [
-  'acceptedByUsUserId', 'actorId', 'actorUserId', 'addedBy', 'addedByUserId', 'appealLockedByUserId',
-  'approvedByUserId', 'archivedById', 'archivedByUserId', 'authorUserId', 'bannedBy', 'blockedById', 'cancelledBy',
+  'acceptedByUsUserId', 'actorId', 'actorUserId', 'addedBy', 'addedById', 'addedByUserId', 'appealLockedByUserId',
+  'approvedByUserId', 'archivedById', 'archivedByUserId', 'authorUserId', 'authorizedBy', 'bannedBy', 'blockedById', 'cancelledBy',
   'claimedById', 'closedById', 'completedByUserId', 'createdBy', 'createdById', 'createdByUserId',
-  'decidedBy', 'decidedByUserId', 'decisionByUserId', 'deletedBy', 'deletionLockedById',
+  'decidedBy', 'decidedByUserId', 'decisionByUserId', 'deletedBy', 'deletedByUserId', 'deletionLockedById',
   'dismissedByUserId', 'endedByUserId', 'evaluatorId', 'executedById', 'executorId', 'grantedBy',
   'grantedById', 'handledBy', 'handledById', 'ingestedBy', 'issuedByUserId', 'lastEditedById',
   'lastPostBy', 'linkedByUserId', 'lockedById', 'manualByUserId', 'mentorId', 'moderatorUserId',
   'processedByUserId', 'proposedByUserId', 'recordedByUserId', 'reportedByUserId', 'requestedByUserId',
-  'resolvedBy', 'resolvedById', 'respondedById', 'revealedBy', 'reviewedById', 'secondApprovedByUserId',
+  'resolvedBy', 'resolvedById', 'respondedById', 'revealedBy', 'reviewedById', 'revokedBy', 'secondApprovedByUserId',
   'sentBy', 'sentByUserId', 'serverTemplateAppliedBy', 'shieldChangedBy', 'superiorUserId',
   'suspendedById', 'trainingConsentById', 'unbannedBy', 'updatedBy', 'uploadedBy', 'uploadedById',
   'uploadedByUserId', 'validatedById',

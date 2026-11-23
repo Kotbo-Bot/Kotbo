@@ -46,9 +46,36 @@ model McpApiKey {
   /// comportement plutot que de cesser de fonctionner du jour au lendemain.
   ownerId     String?
 
+  featureAccess McpKeyFeatureAccess[]
+
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   @@index([guildId, isActive])
   @@map("mcp_api_keys")
+}
+
+/// Droits d'une cle sur un module, comme `DashboardFeatureRoleAccess` pour un role.
+///
+/// Une cle sans aucune ligne garde ses permissions globales partout (cles
+/// existantes comprises). Des la premiere ligne, elle est en liste blanche :
+/// les outils d'un module sans ligne sont refuses.
+model McpKeyFeatureAccess {
+  id           String  @id @default(cuid())
+  guildId      String
+  keyId        String
+  key          McpApiKey @relation(fields: [keyId], references: [id], onDelete: Cascade)
+  featureKey   String
+
+  canView      Boolean @default(false)
+  canModerate  Boolean @default(false)
+  canConfigure Boolean @default(false)
+  canDelete    Boolean @default(false)
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([keyId, featureKey])
+  @@index([guildId, featureKey])
+  @@map("mcp_key_feature_accesses")
 }

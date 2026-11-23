@@ -137,6 +137,21 @@ export async function resolveFeatureAccessMap(
     });
   }
 
+  // Droits accordés à la personne elle-même (tutorat validé) : ils s'ajoutent
+  // aux droits par rôle, sans jamais en retirer. Jamais configure/delete.
+  if (userId && !isGlobalAdmin && access.level !== 'admin') {
+    const grants = await prisma.dashboardFeatureUserAccess.findMany({ where: { guildId, userId } });
+    for (const grant of grants) {
+      const current = featureAccess[grant.featureKey];
+      if (!current) continue;
+      featureAccess[grant.featureKey] = {
+        ...current,
+        canView: current.canView || grant.canView,
+        canModerate: current.canModerate || grant.canModerate,
+      };
+    }
+  }
+
   return featureAccess;
 }
 

@@ -329,7 +329,10 @@
                   </button>
 
                   <div class="min-w-0">
-                    <p class="mb-1 text-2xs font-semibold text-primary"># {message.channelName}</p>
+                    <div class="mb-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <span class="text-2xs font-semibold text-primary"># {message.channelName}</span>
+                      {#if message.deleted}<span class="rounded bg-error-container px-1.5 py-0.5 text-2xs font-semibold text-on-error-container">{m.sev_deleted_badge()}</span>{/if}
+                    </div>
                     <!-- Message tel que Discord l'affichait, rendu par @arcscord/discord-ui. -->
                     <DiscordScope class="evidence-message">
                       <Message message={toEvidenceMessageView(message, { id: 'evidence-target', displayName: targetTag || m.sev_target_fallback() })} />

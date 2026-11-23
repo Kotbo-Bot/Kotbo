@@ -1,5 +1,6 @@
 {
   "root": true,
+  "ignorePatterns": ["dist", "src/lib/paraglide", "node_modules"],
   "parser": "@typescript-eslint/parser",
   "plugins": ["@typescript-eslint"],
   "extends": [

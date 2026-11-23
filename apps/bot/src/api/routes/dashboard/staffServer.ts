@@ -211,7 +211,7 @@ export function createStaffServerRouter(client: Client) {
 
       const allowedFields = [
         'syncMode', 'simpleStaffRoleId', 'mainLogChannelId', 'staffLogChannelId', 'enabled',
-        'modlogMirrorChannelId', 'sanctionReportChannelId', 'recruitmentAlertChannelId',
+        'modlogMirrorChannelId', 'sanctionReportChannelId', 'internalReportChannelId', 'recruitmentAlertChannelId',
         'recruitmentOnStaffServer', 'staffRecruitmentCategoryId',
         'onboardingInviteEnabled', 'onboardingInviteChannelId', 'offboardingAlertChannelId',
       ];

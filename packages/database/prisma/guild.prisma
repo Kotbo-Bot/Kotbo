@@ -388,12 +388,16 @@ model Guild {
   sanctionTables SanctionTable[]
   sanctionReports SanctionReport[]
   sanctionEvidenceFiles SanctionEvidenceFile[]
+  sanctionDeletions SanctionDeletion[]
+  dashboardFeatureUserAccesses DashboardFeatureUserAccess[]
+  memberCaseLayouts MemberCaseLayout[]
   regulationArticles GuildRegulationArticle[]
   memberProfiles MemberProfile[]
   memberProfileHistories MemberProfileHistory[]
   staffMembers StaffMember[] @relation("GuildStaffMembers")
   staffRoles StaffRole[] @relation("GuildStaffRoles")
   staffHierarchies StaffHierarchy[] @relation("GuildStaffHierarchies")
+  staffOrgCanvas StaffOrgCanvas? @relation("GuildStaffOrgCanvas")
   chiefStaffRoleId String?   // Rôle Discord du Resp Staff global
   chiefStaffUserId String?   // UserId Discord du Resp Staff actuel
   staffAbsences StaffAbsence[]
@@ -496,6 +500,11 @@ model Guild {
   // `ticketStaffReminderMinutes`, le bot relance le staff dans le ticket.
   ticketStaffReminderEnabled  Boolean  @default(false)
   ticketStaffReminderMinutes  Int      @default(60)
+  // Où part la relance : "TICKET" (dans le ticket), "DASHBOARD" (notification
+  // du dashboard, MP si la personne l'a activé, résumé du jour compris) ou
+  // "CHANNEL" (salon choisi, y compris sur le serveur du staff).
+  ticketStaffReminderTarget    String   @default("TICKET")
+  ticketStaffReminderChannelId String?
   // Blacklist commune aux modules de progression (niveaux, saisons, RPG,
   // économie, quêtes...) : ni gain passif, ni commande, ni bouton. Les salons
   // couvrent aussi leurs fils et les salons d'une catégorie listée.
@@ -570,10 +579,18 @@ model Guild {
   ticketSelfReopenEnabled     Boolean  @default(true)
   // Le membre peut-il supprimer définitivement l'un de ses anciens tickets ?
   ticketSelfDeleteEnabled     Boolean  @default(false)
+  ticketWebFormEnabled        Boolean  @default(false)
+  ticketInboundEmailEnabled   Boolean  @default(false)
+  ticketInboundEmailAddress   String?
+  ticketInboundEmailSecret    String?
   tickets                Ticket[]
   ticketBlacklist        TicketBlacklist[]
   ticketMacros           TicketMacro[]
   ticketStaffSignatures  TicketStaffSignature[]
+  wellbeingConfig        WellbeingConfig?
+  wellbeingCases         WellbeingCase[]
+  wellbeingBreakGlassLogs WellbeingBreakGlassLog[]
+  networkMemberships     GuildNetworkMember[]
   campaigns              Campaign[]
 
   autoThreadEnabled  Boolean   @default(false)

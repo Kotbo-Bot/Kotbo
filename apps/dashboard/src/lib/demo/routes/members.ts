@@ -485,11 +485,12 @@ export function registerMembersRoutes(): void {
   });
 
   const ghostMembersList = () => {
+    const staffIds = new Set(staffMembers().map((s) => s.userId));
     const humans = MEMBERS.filter((m) => !m.bot);
     return humans.map((m, i) => {
       const status = m.messages >= 400 ? 'ACTIVE' : m.messages >= 80 ? 'SPECTATOR' : m.joinedMinutesAgo < 14 * DAY ? 'NEW' : 'INACTIVE';
       const protections: string[] = [];
-      if (m.grade) protections.push('STAFF');
+      if (staffIds.has(m.id)) protections.push('STAFF');
       if (i % 7 === 0) protections.push('BOOSTER');
       if (status === 'NEW') protections.push('GRACE_PERIOD');
       return {

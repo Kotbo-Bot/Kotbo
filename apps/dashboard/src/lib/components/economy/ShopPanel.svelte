@@ -491,6 +491,53 @@
       </div>
     </SectionCard>
 
+    <SectionCard title="Boutique web personnalisable (/boutique)" description="Interface publique adaptée à la charte graphique du serveur" icon="globe">
+      <div class="p-5 space-y-4">
+        <div class="flex items-center justify-between gap-4">
+          <div>
+            <p class="text-sm font-medium text-on-surface">Activer la boutique web publique</p>
+            <p class="text-xs text-on-surface-variant">Accessible sur /boutique/{guildId}</p>
+          </div>
+          <ToggleSwitch checked={!!shop!.settings.webShopEnabled} onToggle={(v) => saveSetting({ webShopEnabled: v })} ariaLabel="Activer la boutique web publique" />
+        </div>
+        {#if shop!.settings.webShopEnabled}
+          <div class="flex items-center gap-2 rounded-lg border border-outline-variant bg-surface-container-low px-3 py-2 text-xs">
+            <span class="font-mono truncate flex-1">{window.location.origin}/boutique/{guildId}</span>
+            <a href="/boutique/{guildId}" target="_blank" rel="noopener noreferrer" class="px-2.5 py-1 rounded-md bg-primary/15 text-primary font-semibold hover:bg-primary/25 transition-colors">
+              Ouvrir
+            </a>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Field label="Titre de la boutique">
+              {#snippet children(id)}
+                <input {id} class="input w-full" value={shop!.settings.webShopTitle ?? ''} placeholder="Boutique du serveur" onchange={(e) => saveSetting({ webShopTitle: e.currentTarget.value })} />
+              {/snippet}
+            </Field>
+            <Field label="Couleur d'accentuation (DA)">
+              {#snippet children(id)}
+                <input {id} type="color" class="input w-24 h-10 p-1" value={shop!.settings.webShopAccentColor ?? '#818cf8'} onchange={(e) => saveSetting({ webShopAccentColor: e.currentTarget.value })} />
+              {/snippet}
+            </Field>
+          </div>
+          <Field label="Description">
+            {#snippet children(id)}
+              <input {id} class="input w-full" value={shop!.settings.webShopDescription ?? ''} placeholder="Présentation courte de la boutique" onchange={(e) => saveSetting({ webShopDescription: e.currentTarget.value })} />
+            {/snippet}
+          </Field>
+          <Field label="URL bannière (optionnel)">
+            {#snippet children(id)}
+              <input {id} type="url" class="input w-full" value={shop!.settings.webShopBannerUrl ?? ''} placeholder="https://..." onchange={(e) => saveSetting({ webShopBannerUrl: e.currentTarget.value })} />
+            {/snippet}
+          </Field>
+          <Field label="CSS personnalisé (optionnel)" hint="Appliqué sur .shop-public-root">
+            {#snippet children(id)}
+              <textarea {id} rows={3} class="input w-full font-mono text-xs" value={shop!.settings.webShopCustomCss ?? ''} placeholder=".shop-public-root &#123; ... &#125;" onchange={(e) => saveSetting({ webShopCustomCss: e.currentTarget.value })}></textarea>
+            {/snippet}
+          </Field>
+        {/if}
+      </div>
+    </SectionCard>
+
     <SectionCard title={m.ste_shop_recent_title()} icon="clock" flush>
       {#if shop.recent.length === 0}
         <p class="px-5 pb-5 text-body-sm text-on-surface-variant">{m.ste_shop_recent_empty()}</p>

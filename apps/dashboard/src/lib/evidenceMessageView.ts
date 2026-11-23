@@ -29,6 +29,8 @@ export interface EvidenceMessage {
   attachments: { url: string; name: string; contentType: string | null; size: number; kind: 'image' | 'video' | 'file' }[];
   embeds: EvidenceEmbed[];
   stickers: { id: string; name: string; url: string }[];
+  /** Message supprimé, relu dans le journal des messages. */
+  deleted?: boolean;
 }
 
 export function toEvidenceEmbed(embed: EvidenceEmbed, id: string): EmbedView {

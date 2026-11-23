@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "migrate:deploy": "cd ../.. && bun run db:migrate:deploy",
-    "build:i18n": "bunx @inlang/paraglide-js compile --project ./project.inlang --outdir ./src/lib/paraglide",
+    "build:i18n": "bunx @inlang/paraglide-js compile --project ./project.inlang --outdir ./src/lib/paraglide --output-structure locale-modules",
     "prestart": "bun run build:i18n",
     "build": "bun run build:i18n && bun run typecheck",
     "dev": "bun run build:i18n && bun run --watch src/launcher.ts",
@@ -16,10 +16,10 @@
     "test:coverage": "bun run build:i18n && BUN_TEST_RUNNING=1 bun test --isolate --timeout 30000 --coverage src/tests",
     "coverage:gate": "bun run scripts/coverage-gate.ts",
     "test:watch": "BUN_TEST_RUNNING=1 bun test --isolate --timeout 30000 --watch src/tests",
-    "typecheck": "bun x tsgo -p tsconfig.json --noEmit",
+    "typecheck": "bun x tsgo -p tsconfig.json --noEmit --checkers 2",
     "typecheck:tsc": "bun x tsc -p tsconfig.json --noEmit",
     "quality:gate": "bun run build:i18n && bun run typecheck && bun run lint && bun run test:unit && bun run coverage:gate",
-    "lint": "eslint src --ext .ts"
+    "lint": "eslint src --ext .ts --cache --cache-location node_modules/.cache/eslint"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.12.0",
@@ -33,6 +33,7 @@
     "@kotbo/shared": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.32.2",
     "@napi-rs/canvas": "^0.1.100",
+    "@opentelemetry/core": "^2.12.0",
     "@prisma/adapter-pg": "^7.10.1",
     "@prisma/client": "^7.10.1",
     "@prisma/client-runtime-utils": "^7.10.1",

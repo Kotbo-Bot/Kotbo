@@ -486,6 +486,12 @@ export async function handleButton(interaction: Interaction, client: Client): Pr
   }
 
   // ── Giveaway buttons ────────────────────────────────────────────────
+  if (customId.startsWith('giveaway_check:')) {
+    const { handleGiveawayCheck } = await import('../services/features/giveawayService.js');
+    await handleGiveawayCheck(interaction);
+    return;
+  }
+
   if (customId.startsWith('giveaway_join:')) {
     const { handleGiveawayJoin } = await import('../services/features/giveawayService.js');
     await handleGiveawayJoin(interaction);

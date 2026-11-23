@@ -67,6 +67,28 @@ const denied = (c: Context, message = 'Action réservée aux responsables du tut
  * - tuteur : ses tutorés (objectifs, points d'étape, missions, décision) ;
  * - tutoré : lit son tutorat et tient son carnet de bord.
  */
+/** Clés de modules du dashboard, filtrées sur celles du serveur. */
+async function readFeatureKeys(guildId: string, value: unknown): Promise<string[]> {
+  if (!Array.isArray(value)) return [];
+  const { getOrCreateFeatureConfigs } = await import('../../../../services/core/dashboardManagementService.js');
+  const known = new Set((await getOrCreateFeatureConfigs(guildId)).map((config) => config.featureKey));
+  return [...new Set(value.filter((key): key is string => typeof key === 'string' && known.has(key)))];
+}
+
+/** À la validation : accorde au tutoré, en son nom propre, les modules prévus. */
+async function grantTutoringAccess(guildId: string, period: { id: string; staffUserId: string; unlockFeatureKeys?: string[] }): Promise<string[]> {
+  const keys = period.unlockFeatureKeys ?? [];
+  if (keys.length === 0) return [];
+  const member = await prisma.staffMember.findFirst({ where: { id: period.staffUserId, guildId }, select: { userId: true } });
+  if (!member) return [];
+  await prisma.$transaction(keys.map((featureKey) => prisma.dashboardFeatureUserAccess.upsert({
+    where: { guildId_userId_featureKey: { guildId, userId: member.userId, featureKey } },
+    create: { guildId, userId: member.userId, featureKey, source: 'TUTORING', sourceId: period.id },
+    update: { canView: true, canModerate: true, source: 'TUTORING', sourceId: period.id },
+  })));
+  return keys;
+}
+
 export function createTutoringRouter(client: Client) {
   const router = new Hono();
   const base = '/api/dashboard/guilds/:guildId/tutoring';
@@ -149,10 +171,13 @@ export function createTutoringRouter(client: Client) {
       prisma.staffRole.findMany({ where: { guildId, enabled: true }, select: { name: true, hierarchyId: true }, orderBy: [{ level: 'asc' }, { sortOrder: 'asc' }] }),
     ]);
     const busy = new Set(ongoing.map((period) => period.staffUserId));
+    const { getAvailableFeatureConfigs } = await import('../../../../services/core/dashboardManagementService.js');
+    const features = (await getAvailableFeatureConfigs(guildId)).map((config) => ({ key: config.featureKey, label: config.featureName }));
     return send(c, {
       members: members.map((member) => ({ ...member, inTutoring: busy.has(member.id) })),
       hierarchies,
       grades: roles,
+      features,
     });
   });
 
@@ -184,7 +209,7 @@ export function createTutoringRouter(client: Client) {
   router.post(`${base}/items`, ...gate, async (c) => {
     if (!c.var.viewer.isManager) return denied(c);
     const guildId = c.req.param('guildId');
-    const body = (await readBody<{ id?: unknown; category?: unknown; title?: unknown; description?: unknown; sortOrder?: unknown; hierarchyId?: unknown; grade?: unknown }>(c)) ?? {};
+    const body = (await readBody<{ id?: unknown; category?: unknown; title?: unknown; description?: unknown; sortOrder?: unknown; hierarchyId?: unknown; grade?: unknown; grantRoleIds?: unknown; grantDashboardSection?: unknown }>(c)) ?? {};
     const title = readText(body.title, 200);
     const category = readText(body.category, 80) ?? 'Général';
     if (!title) return send(c, { error: "Donne un intitulé à l'objectif." }, 400);
@@ -194,6 +219,21 @@ export function createTutoringRouter(client: Client) {
     const hierarchyId = typeof body.hierarchyId === 'string' && body.hierarchyId
       ? (await prisma.staffHierarchy.findFirst({ where: { id: body.hierarchyId, guildId }, select: { id: true } }))?.id ?? null
       : null;
+    const grantRoleIds = Array.isArray(body.grantRoleIds)
+      ? body.grantRoleIds.filter((r): r is string => typeof r === 'string' && /^\d{17,20}$/.test(r))
+      : undefined;
+    const grantDashboardSection = readText(body.grantDashboardSection, 60);
+    // Un rôle que le bot ne peut pas gérer (ou @everyone, ou rôle d'intégration) échouerait en silence à la validation.
+    if (grantRoleIds && grantRoleIds.length > 0) {
+      const discordGuild = client.guilds.cache.get(guildId);
+      if (discordGuild) {
+        const bad = grantRoleIds.filter((id) => {
+          const role = discordGuild.roles.cache.get(id);
+          return !role || !role.editable || role.managed || role.id === guildId;
+        });
+        if (bad.length > 0) return send(c, { error: 'Un des rôles choisis est introuvable ou ne peut pas être attribué par le bot (rôle plus haut que le sien, géré par une intégration ou @everyone).' }, 400);
+      }
+    }
     const item = await tutoringService.upsertTutoringItem(guildId, {
       id: typeof body.id === 'string' ? body.id : undefined,
       category,
@@ -202,6 +242,8 @@ export function createTutoringRouter(client: Client) {
       sortOrder: typeof body.sortOrder === 'number' ? Math.floor(body.sortOrder) : undefined,
       hierarchyId,
       grade: readText(body.grade, 80),
+      ...(grantRoleIds !== undefined ? { grantRoleIds } : {}),
+      ...(body.grantDashboardSection !== undefined ? { grantDashboardSection } : {}),
     });
     await audit(c, body.id ? 'Objectif de tutorat modifié' : 'Objectif de tutorat ajouté', `« ${title} » (${category}).`);
     return send(c, { item }, 201);
@@ -233,6 +275,7 @@ export function createTutoringRouter(client: Client) {
       targetGrade?: unknown;
       hierarchyId?: unknown;
       withMissions?: unknown;
+      unlockFeatureKeys?: unknown;
     }>(c)) ?? {};
     const apprentice = typeof body.staffMemberId === 'string'
       ? await prisma.staffMember.findFirst({ where: { id: body.staffMemberId, guildId }, select: { id: true, username: true, displayName: true, userId: true } })
@@ -258,6 +301,9 @@ export function createTutoringRouter(client: Client) {
       hierarchyId,
     );
     const name = apprentice.displayName || apprentice.username || apprentice.userId;
+    if (body.unlockFeatureKeys !== undefined) {
+      await prisma.testingPeriod.update({ where: { id: period.id }, data: { unlockFeatureKeys: await readFeatureKeys(guildId, body.unlockFeatureKeys) } });
+    }
     if (body.withMissions === true) await createTutoringBoard(guildId, period.id, name, c.var.dashboardUser.userId);
     await audit(c, 'Création tutorat', `Tutorat de ${name}.`);
     return send(c, { period: await getTutoringDetail(guildId, period.id) }, 201);
@@ -273,8 +319,9 @@ export function createTutoringRouter(client: Client) {
     if (role !== 'manager') return denied(c);
     const guildId = c.req.param('guildId');
     const periodId = c.req.param('periodId');
-    const body = (await readBody<{ mentorId?: unknown; plannedDurationDays?: unknown; targetGrade?: unknown; hierarchyId?: unknown }>(c)) ?? {};
-    const data: { mentorId?: string | null; plannedDurationDays?: number; targetGrade?: string | null; hierarchyId?: string | null } = {};
+    const body = (await readBody<{ mentorId?: unknown; plannedDurationDays?: unknown; targetGrade?: unknown; hierarchyId?: unknown; unlockFeatureKeys?: unknown }>(c)) ?? {};
+    const data: { mentorId?: string | null; plannedDurationDays?: number; targetGrade?: string | null; hierarchyId?: string | null; unlockFeatureKeys?: string[] } = {};
+    if (body.unlockFeatureKeys !== undefined) data.unlockFeatureKeys = await readFeatureKeys(guildId, body.unlockFeatureKeys);
     if (body.mentorId !== undefined) {
       if (body.mentorId === null || body.mentorId === '') data.mentorId = null;
       else {
@@ -335,7 +382,36 @@ export function createTutoringRouter(client: Client) {
       return send(c, { error: 'Objectif introuvable pour ce tutorat.' }, 404);
     }
     const progress = await tutoringService.updateChecklistProgress(c.req.param('periodId'), item.id, body.state as TutoringItemState, c.var.dashboardUser.userId);
-    return send(c, { progress });
+
+    // Déblocage automatique à la validation (`ACQUIRED`) : rôles Discord et accès dashboard
+    const unlocked: { roles: string[]; dashboardSection: string | null } = { roles: [], dashboardSection: null };
+    if (body.state === 'ACQUIRED') {
+      const guildId = c.req.param('guildId');
+      if (item.grantRoleIds.length > 0) {
+        const discordGuild = client.guilds.cache.get(guildId) ?? await client.guilds.fetch(guildId).catch(() => null);
+        const member = discordGuild ? await discordGuild.members.fetch(period.staffMember.userId).catch(() => null) : null;
+        if (member) {
+          for (const roleId of item.grantRoleIds) {
+            if (!member.roles.cache.has(roleId)) {
+              const ok = await member.roles.add(roleId, `Tutorat validé : ${item.title}`).then(() => true).catch(() => false);
+              if (ok) unlocked.roles.push(roleId);
+            }
+          }
+        }
+      }
+      if (item.grantDashboardSection) {
+        unlocked.dashboardSection = item.grantDashboardSection;
+      }
+      if (unlocked.roles.length > 0 || unlocked.dashboardSection) {
+        await audit(
+          c,
+          'Déblocage automatique tutorat',
+          `${period.staffMember.username ?? period.staffMember.userId} · « ${item.title} » → rôles: ${unlocked.roles.length}, section: ${unlocked.dashboardSection ?? 'aucune'}`,
+        );
+      }
+    }
+
+    return send(c, { progress, unlocked });
   });
 
   // { type, content } : point d'étape.
@@ -363,6 +439,17 @@ export function createTutoringRouter(client: Client) {
     return send(c, { log: await tutoringService.addApprenticeLog(c.req.param('periodId'), content) }, 201);
   });
 
+  // Retire les modules débloqués par ce tutorat.
+  router.delete(`${base}/periods/:periodId/grants`, ...periodGate, async (c) => {
+    const { role, apprenticeName } = c.var.tutoring;
+    if (role !== 'manager') return denied(c);
+    const { count } = await prisma.dashboardFeatureUserAccess.deleteMany({
+      where: { guildId: c.req.param('guildId'), source: 'TUTORING', sourceId: c.req.param('periodId') },
+    });
+    await audit(c, 'Droits du tutorat retirés', `Tutorat de ${apprenticeName} : ${count} module(s).`);
+    return send(c, { ok: true, count });
+  });
+
   // { status, notes, force } : fin du tutorat.
   router.post(`${base}/periods/:periodId/decision`, ...periodGate, async (c) => {
     const { period, role, canCoach, apprenticeName } = c.var.tutoring;
@@ -383,7 +470,8 @@ export function createTutoringRouter(client: Client) {
       if (force && !isAdmin) return denied(c, 'Seul un administrateur valide un tutorat avant la durée minimale.');
     }
     await endTestingPeriod(periodId, body.status, readText(body.notes) ?? undefined);
-    await audit(c, `Fin de tutorat (${body.status})${force ? ' [FORCÉ]' : ''}`, `Tutorat de ${apprenticeName}.`);
+    const unlocked = body.status === 'PASSED' ? await grantTutoringAccess(guildId, period) : [];
+    await audit(c, `Fin de tutorat (${body.status})${force ? ' [FORCÉ]' : ''}`, `Tutorat de ${apprenticeName}.${unlocked.length ? ` Modules débloqués : ${unlocked.join(', ')}.` : ''}`);
     return send(c, { period: await getTutoringDetail(guildId, periodId), role });
   });
 

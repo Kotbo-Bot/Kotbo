@@ -2,6 +2,7 @@
 import { Hono, type Context } from 'hono';
 import { createMiddleware } from 'hono/factory';
 import type { Client } from 'discord.js';
+import { randomBytes } from 'node:crypto';
 import { cache } from '../../../../utils/cache.js';
 import prisma from '../../../../utils/db.js';
 import { COLORS, successEmbed } from '../../../../utils/embeds.js';
@@ -14,7 +15,7 @@ import { type ProvisionedEntry, acquireProvisionLock, missingProvisionPermission
 import { Prisma } from '@prisma/client';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, type ColorResolvable, EmbedBuilder, PermissionFlagsBits, TextChannel } from 'discord.js';
 import { STORED_TRANSCRIPT_SELECT, transcriptConversation } from '../../../../services/features/transcriptReader.js';
-import { buildConversation, type DiscordConversation } from '../../../../services/features/transcriptData.js';
+import { addExternalMessage, buildConversation, type DiscordConversation } from '../../../../services/features/transcriptData.js';
 import { clampCommentTimeout } from '../../../../services/features/ticketSatisfactionService.js';
 import { INBOX_VIEWS, computeSla, normalizeView, viewWhere, waitingOn, type SlaConfig } from '../../../../services/features/ticketHelpdesk.js';
 import { noticeSeconds } from '../../../../services/features/ticketRecordingNotice.js';
@@ -29,6 +30,12 @@ import { publicErrorMessage } from '../../../../utils/publicError.js';
  * colonne oubliee ici revient a `undefined`, s'affiche a sa valeur par defaut
  * et ecrase la base au prochain enregistrement.
  */
+/** Un e-mail entrant sans secret serait ouvert à tous : on en garde un, ou on en génère un. */
+async function inboundSecretFallback(guildId: string): Promise<string> {
+  const g = await prisma.guild.findUnique({ where: { id: guildId }, select: { ticketInboundEmailSecret: true } });
+  return g?.ticketInboundEmailSecret || `ies_${randomBytes(24).toString('hex')}`;
+}
+
 const TICKET_CONFIG_SELECT = {
   ticketRecordingNoticeEnabled: true,
   ticketRecordingNoticeSeconds: true,
@@ -68,6 +75,8 @@ const TICKET_CONFIG_SELECT = {
   ticketInactivityMessage: true,
   ticketStaffReminderEnabled: true,
   ticketStaffReminderMinutes: true,
+  ticketStaffReminderTarget: true,
+  ticketStaffReminderChannelId: true,
   ticketSatisfactionCommentEnabled: true,
   ticketSatisfactionCommentQuestion: true,
   ticketSatisfactionCommentTimeout: true,
@@ -93,6 +102,10 @@ const TICKET_CONFIG_SELECT = {
   ticketQuotaStaffLoadBypassRoleIds: true,
   ticketQuotaReopenEnabled: true,
   ticketQuotaReopenMax: true,
+  ticketWebFormEnabled: true,
+  ticketInboundEmailEnabled: true,
+  ticketInboundEmailAddress: true,
+  ticketInboundEmailSecret: true,
 } satisfies Prisma.GuildSelect;
 
 /** Objectif de service : entier strictement positif et borne, ou `null` pour « aucun ». */
@@ -265,6 +278,10 @@ export function createTicketsRouter(client: Client) {
     }
 
     interface TicketConfigInput {
+      ticketWebFormEnabled?: boolean;
+      ticketInboundEmailEnabled?: boolean;
+      ticketInboundEmailAddress?: string | null;
+      ticketInboundEmailSecret?: string | null;
       ticketCategoryId?: string | null;
       ticketLogChannelId?: string | null;
       ticketStaffRoleId?: string | null;
@@ -297,6 +314,8 @@ export function createTicketsRouter(client: Client) {
       ticketInactivityMessage?: unknown;
       ticketStaffReminderEnabled?: unknown;
       ticketStaffReminderMinutes?: unknown;
+      ticketStaffReminderTarget?: unknown;
+      ticketStaffReminderChannelId?: string | null;
       ticketSatisfactionCommentEnabled?: unknown;
       ticketSatisfactionCommentQuestion?: unknown;
       ticketSatisfactionCommentTimeout?: unknown;
@@ -476,6 +495,13 @@ export function createTicketsRouter(client: Client) {
           ticketInactivityMessage: body.ticketInactivityMessage !== undefined ? String(body.ticketInactivityMessage) : '',
           ...('ticketStaffReminderEnabled' in body ? { ticketStaffReminderEnabled: body.ticketStaffReminderEnabled === true } : {}),
           ...('ticketStaffReminderMinutes' in body ? { ticketStaffReminderMinutes: quotaNumber(body.ticketStaffReminderMinutes, 60, 7 * 24 * 60) } : {}),
+          ...('ticketStaffReminderTarget' in body
+            ? { ticketStaffReminderTarget: ['TICKET', 'DASHBOARD', 'CHANNEL'].includes(String(body.ticketStaffReminderTarget)) ? String(body.ticketStaffReminderTarget) : 'TICKET' }
+            : {}),
+          // Identifiant Discord seulement : le salon peut être sur un autre serveur (celui du staff).
+          ...('ticketStaffReminderChannelId' in body
+            ? { ticketStaffReminderChannelId: /^\d{15,25}$/.test(String(body.ticketStaffReminderChannelId ?? '')) ? String(body.ticketStaffReminderChannelId) : null }
+            : {}),
           ticketSatisfactionCommentEnabled: typeof body.ticketSatisfactionCommentEnabled === 'boolean' ? body.ticketSatisfactionCommentEnabled : true,
           // Vide = le bot pose sa question par defaut, comme pour les textes d'embed.
           ticketSatisfactionCommentQuestion: typeof body.ticketSatisfactionCommentQuestion === 'string' ? body.ticketSatisfactionCommentQuestion.trim().slice(0, 200) : '',
@@ -492,6 +518,15 @@ export function createTicketsRouter(client: Client) {
           ticketHistoryPanelEnabled: body.ticketHistoryPanelEnabled !== false,
           ticketSelfReopenEnabled: body.ticketSelfReopenEnabled !== false,
           ticketSelfDeleteEnabled: body.ticketSelfDeleteEnabled === true,
+          ...('ticketWebFormEnabled' in body ? { ticketWebFormEnabled: body.ticketWebFormEnabled === true } : {}),
+          ...('ticketInboundEmailEnabled' in body ? { ticketInboundEmailEnabled: body.ticketInboundEmailEnabled === true } : {}),
+          ...('ticketInboundEmailAddress' in body ? { ticketInboundEmailAddress: typeof body.ticketInboundEmailAddress === 'string' ? body.ticketInboundEmailAddress.trim().slice(0, 160) || null : null } : {}),
+          ...('ticketInboundEmailSecret' in body || body.ticketInboundEmailEnabled === true
+            ? {
+                ticketInboundEmailSecret: (typeof body.ticketInboundEmailSecret === 'string' ? body.ticketInboundEmailSecret.trim().slice(0, 120) : '')
+                  || (body.ticketInboundEmailEnabled === true ? await inboundSecretFallback(guildId) : null),
+              }
+            : {}),
           // Quotas : chaque interrupteur commande, la valeur n'est qu'un seuil.
           ticketQuotaOpenEnabled: body.ticketQuotaOpenEnabled === true,
           ticketQuotaOpenMax: quotaNumber(body.ticketQuotaOpenMax, 1, 50),
@@ -932,6 +967,8 @@ export function createTicketsRouter(client: Client) {
             closedAt: true,
             lastMemberMessageAt: true,
             lastStaffMessageAt: true,
+            source: true,
+            requesterEmail: true,
             // Humeur du demandeur (Kotbo × AegisAI).
             moodLabel: true,
             moodScore: true,
@@ -974,7 +1011,8 @@ export function createTicketsRouter(client: Client) {
     const ticketId = c.req.param('ticketId');
     try {
       const ticket = await prisma.ticket.findFirst({
-        where: { id: ticketId, guildId }
+        where: { id: ticketId, guildId },
+        include: { webMessages: { orderBy: { createdAt: 'asc' } } },
       });
 
       if (!ticket) {
@@ -1017,6 +1055,12 @@ export function createTicketsRouter(client: Client) {
         }
       }
 
+      // Messages écrits hors Discord (formulaire web, e-mail, dashboard).
+      if (ticket.webMessages.length > 0) {
+        for (const wm of ticket.webMessages) addExternalMessage(conversation, wm);
+        conversation.messages.sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
+      }
+
       const fetchAvatarDetail = async (discordId: string, size = 128): Promise<string | null> => {
         try {
           const u = client.users.cache.get(discordId) || await client.users.fetch(discordId);
@@ -1043,8 +1087,8 @@ export function createTicketsRouter(client: Client) {
     const ticketId = c.req.param('ticketId');
     try {
       const ticket = await prisma.ticket.findFirst({ where: { id: ticketId, guildId } });
-      if (!ticket || !ticket.channelId) {
-        return send(c, { error: 'Ticket introuvable ou salon inactif' }, 404);
+      if (!ticket) {
+        return send(c, { error: 'Ticket introuvable' }, 404);
       }
 
       const body = await readBody<{ content: string }>(c);
@@ -1053,6 +1097,43 @@ export function createTicketsRouter(client: Client) {
       }
       if (body.content.length > TICKET_DASHBOARD_MESSAGE_MAX) {
         return send(c, { error: `Message trop long (${TICKET_DASHBOARD_MESSAGE_MAX} caractères maximum).` }, 400);
+      }
+
+      // Ticket hors Discord (formulaire web / e-mail) : la réponse est enregistrée en base.
+      if (!ticket.channelId) {
+        const now = new Date();
+        const saved = await prisma.ticketWebMessage.create({
+          data: {
+            ticketId: ticket.id,
+            authorId: user.userId,
+            authorName: user.username ?? 'Staff',
+            isStaff: true,
+            source: 'DASHBOARD',
+            content: body.content.trim(),
+          },
+        });
+        await prisma.ticket.update({
+          where: { id: ticket.id },
+          data: {
+            lastStaffMessageAt: now,
+            ...(ticket.firstResponseAt ? {} : { firstResponseAt: now, firstResponderId: user.userId }),
+          },
+        }).catch(() => null);
+        return send(c, {
+          success: true,
+          message: {
+            id: saved.id,
+            author: {
+              id: user.userId,
+              username: user.username ?? 'Staff',
+              displayName: user.username ?? 'Staff',
+              avatar: '',
+              bot: false,
+            },
+            content: saved.content,
+            createdAt: saved.createdAt.toISOString(),
+          },
+        });
       }
 
       const discordChannel = client.channels.cache.get(ticket.channelId);

@@ -16,6 +16,8 @@ import { createGeneralRouter, createGuildGeneralRouter } from '../../routes/dash
 import { createLeadershipRouter } from '../../routes/dashboard/leadership.js';
 import { createStaffRouter } from '../../routes/dashboard/leadership/staff.js';
 import { createTutoringRouter } from '../../routes/dashboard/leadership/tutoring.js';
+import { createWellbeingRouter } from '../../routes/dashboard/leadership/wellbeing.js';
+import { createMemberCaseLayoutsRouter } from '../../routes/dashboard/leadership/memberCaseLayouts.js';
 import { createDoingListsRouter } from '../../routes/dashboard/doingLists.js';
 import { createRecruitmentRouter } from '../../routes/dashboard/recruitment.js';
 import { createCustomBotRouter } from '../../routes/dashboard/customBot.js';
@@ -73,6 +75,7 @@ import { createNotificationInboxRouter } from '../../routes/dashboard/notificati
 import { createUpdatesRouter } from '../../routes/dashboard/updates.js';
 import { createMemberProfileRouter } from '../../routes/dashboard/memberProfile.js';
 import { createAutomodSimulationRouter } from '../../routes/dashboard/automodSimulation.js';
+import { createDiscordAutomodRouter } from '../../routes/dashboard/discordAutomod.js';
 import { createSetupRouter } from '../../routes/dashboard/setup.js';
 import { createLogsRouter } from '../../routes/dashboard/modules/logs.js';
 import { createNotificationsRouter } from '../../routes/dashboard/modules/notifications.js';
@@ -127,6 +130,7 @@ export function createDashboardRouter(client: Client) {
   router.route('/', createLogsRouter(client));
   router.route('/', createSetupRouter(client));
   router.route('/', createAutomodSimulationRouter(client));
+  router.route('/', createDiscordAutomodRouter(client));
   router.route('/', createMemberProfileRouter(client));
   // Hors serveur : session seule, sans garde de guilde.
   router.route('/', createTelemetryRouter(client));
@@ -185,6 +189,8 @@ export function createDashboardRouter(client: Client) {
   router.route('/', createRecruitmentRouter(client));
   router.route('/', createDoingListsRouter(client));
   router.route('/', createTutoringRouter(client));
+  router.route('/', createWellbeingRouter(client));
+  router.route('/', createMemberCaseLayoutsRouter(client));
   router.route('/', createStaffRouter(client));
   router.route('/', createLeadershipRouter(client));
   router.route('/', createGeneralRouter(client));

@@ -37,6 +37,7 @@ import { Prisma } from '@prisma/client';
 import prisma from '../../../utils/db.js';
 import { logger } from '../../../utils/logger.js';
 import { requireAuth } from '../middleware/auth.js';
+import { resolveDashboardAccess } from '../../shared.js';
 import { requireGuildAccess } from '../middleware/guildAccess.js';
 import { rateLimit } from '../middleware/rateLimit.js';
 import { dashboardSensitiveRateLimiter } from '../../limiters.js';
@@ -46,12 +47,16 @@ import {
   ensureCustomer,
   getStripe,
   isBillingEnabled,
+  planForPriceId,
   sellablePlans,
   type Stripe,
 } from '../../../services/billing/stripeService.js';
 import { syncSubscription, guildIdForSubscription, transferSubscription, TransferError } from '../../../services/billing/subscriptionSync.js';
 import { LIVE_STATUSES } from '../../../services/billing/entitlingStatuses.js';
 import { recordBillingConsent } from '../../../services/billing/consentService.js';
+import { getGuildPlan } from '../../../services/system/planService.js';
+import { invalidateNetworkScope } from '../../../services/network/networkScope.js';
+import { mergeGuildIntoPrimary } from '../../../services/network/networkMergeService.js';
 import {
   recordFailedInvoice,
   recordInvoice,
@@ -410,8 +415,11 @@ export function createBillingRouter(client: Client): OpenAPIHono {
     });
 
     const isOwner = Boolean(guild?.billingOwnerId && guild.billingOwnerId === userId);
-    const canManage = level === 'admin' || isOwner;
-    const canRead = canManage || (level === 'moderator' && Boolean(guild?.billingStaffAccess));
+    // Un payeur connu est seul maître de la facturation ; les administrateurs
+    // ne reprennent la main que tant que personne n'a encore engagé de dépense
+    // (ils doivent pouvoir ouvrir le tout premier paiement).
+    const canManage = guild?.billingOwnerId ? isOwner : level === 'admin';
+    const canRead = canManage || (level !== 'viewer' && Boolean(guild?.billingStaffAccess));
 
     if (!canRead) {
       throw new HTTPException(403, {
@@ -941,6 +949,229 @@ export function createBillingRouter(client: Client): OpenAPIHono {
       },
       200,
     );
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Multi-serveurs publics (Associations / Réseaux)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  router.get(`${GUARDED}/network`, async (c) => {
+    const guildId = c.req.param('guildId')!;
+    const membership = await prisma.guildNetworkMember.findFirst({
+      where: { guildId },
+      include: {
+        network: {
+          include: {
+            members: { orderBy: { addedAt: 'asc' } },
+          },
+        },
+      },
+    });
+    const network = membership?.network ?? null;
+    return c.json({
+      network: network
+        ? {
+            id: network.id,
+            name: network.name,
+            planKey: network.planKey,
+            maxGuilds: network.maxGuilds,
+            billingStatus: network.billingStatus,
+            members: network.members.map((m) => {
+              const g = client.guilds.cache.get(m.guildId);
+              return {
+                guildId: m.guildId,
+                // `Guild` n'a pas de nom en base : seul le cache Discord le connaît.
+                name: g?.name ?? m.guildId,
+                iconUrl: g?.iconURL({ size: 64, extension: 'png' }) ?? null,
+                role: m.role,
+                addedAt: m.addedAt.toISOString(),
+              };
+            }),
+          }
+        : null,
+    });
+  });
+
+  router.post(`${GUARDED}/network`, async (c) => {
+    const guildId = c.req.param('guildId')!;
+    const userId = c.var.auth.userId;
+    const raw = await c.req.json().catch(() => ({})) as { name?: string };
+    const name = raw.name?.trim().slice(0, 80) || 'Réseau multi-serveurs';
+
+    const existing = await prisma.guildNetworkMember.findFirst({ where: { guildId } });
+    if (existing) {
+      const updated = await prisma.guildNetwork.update({
+        where: { id: existing.networkId },
+        data: { name },
+      });
+      return c.json({ network: updated });
+    }
+
+    // Le serveur principal doit avoir une offre payante (Plus, Pro, Ultimate ou sur mesure).
+    if ((await getGuildPlan(guildId)) === 'FREE') {
+      return c.json({ error: 'Le réseau de serveurs demande l’offre Plus (ou sur mesure) sur le serveur principal.' }, 402);
+    }
+
+    const created = await prisma.guildNetwork.create({
+      data: {
+        name,
+        ownerUserId: userId,
+        members: {
+          create: {
+            guildId,
+            role: 'PRIMARY',
+            addedById: userId,
+          },
+        },
+      },
+    });
+    return c.json({ network: created }, 201);
+  });
+
+  router.post(`${GUARDED}/network/guilds`, async (c) => {
+    const guildId = c.req.param('guildId')!;
+    const userId = c.var.auth.userId;
+    const raw = await c.req.json().catch(() => ({})) as { targetGuildId?: string; mode?: string };
+    const targetGuildId = raw.targetGuildId?.trim() ?? '';
+    // merge : les données du sous-serveur rejoignent le principal ; fresh : on repart du principal.
+    const mode = raw.mode === 'fresh' ? 'fresh' : 'merge';
+    if (!/^\d{17,20}$/.test(targetGuildId)) {
+      return c.json({ error: 'Identifiant de serveur invalide.' }, 400);
+    }
+
+    const membership = await prisma.guildNetworkMember.findFirst({
+      where: { guildId },
+      include: { network: { include: { members: true } } },
+    });
+    if (!membership) {
+      return c.json({ error: "Créez d'abord le réseau sur ce serveur." }, 404);
+    }
+    if (membership.network.members.length >= membership.network.maxGuilds) {
+      return c.json({ error: `Limite atteinte (${membership.network.maxGuilds} serveurs max).` }, 400);
+    }
+
+    const already = await prisma.guildNetworkMember.findFirst({ where: { guildId: targetGuildId } });
+    if (already) {
+      return c.json({ error: 'Ce serveur appartient déjà à un réseau.' }, 409);
+    }
+
+    const targetAccess = await resolveDashboardAccess(client, targetGuildId, userId);
+    if (!targetAccess.canManageSettings) {
+      return c.json({ error: 'Vous devez administrer le serveur à rattacher.' }, 403);
+    }
+
+    // Chaque sous-serveur doit lui aussi avoir une offre payante (Plus, Pro, Ultimate ou sur mesure).
+    if ((await getGuildPlan(targetGuildId)) === 'FREE') {
+      return c.json({ error: 'Le serveur à rattacher doit avoir l’offre Plus (ou sur mesure).' }, 402);
+    }
+
+    // La fusion doit précéder le rattachement : ensuite, la redirection s'applique.
+    const primary = await prisma.guildNetworkMember.findFirst({
+      where: { networkId: membership.networkId, role: 'PRIMARY' },
+      select: { guildId: true },
+    });
+    const merge = mode === 'merge' && primary
+      ? await mergeGuildIntoPrimary(targetGuildId, primary.guildId)
+      : null;
+
+    await prisma.guildNetworkMember.create({
+      data: {
+        networkId: membership.networkId,
+        guildId: targetGuildId,
+        role: 'MEMBER',
+        addedById: userId,
+      },
+    });
+    invalidateNetworkScope();
+
+    return c.json({ ok: true, mode, merge }, 201);
+  });
+
+  router.delete(`${GUARDED}/network/guilds/:targetGuildId`, async (c) => {
+    const guildId = c.req.param('guildId')!;
+    const targetGuildId = c.req.param('targetGuildId')!;
+    const membership = await prisma.guildNetworkMember.findFirst({ where: { guildId } });
+    if (!membership) return c.json({ error: 'Réseau introuvable.' }, 404);
+    if (targetGuildId === guildId) {
+      return c.json({ error: 'Impossible de retirer le serveur principal.' }, 400);
+    }
+
+    await prisma.guildNetworkMember.deleteMany({
+      where: { networkId: membership.networkId, guildId: targetGuildId },
+    });
+    invalidateNetworkScope();
+    return c.json({ ok: true });
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Vue d'ensemble : tous les serveurs que l'utilisateur paye
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Hors `GUARDED` : elle ne dépend d'aucun serveur, seulement du payeur
+   * (`billingOwnerId`) ; on ne liste donc que ce que l'appelant a lui-même engagé.
+   * Les montants sont ceux du catalogue : un code de parrainage ou une remise
+   * Stripe n'y apparaît pas (shortcut: lire l'abonnement Stripe si on veut le réel).
+   */
+  router.get('/api/dashboard/billing/overview', requireAuth, async (c) => {
+    const userId = c.var.auth.userId;
+    const rows = await prisma.guild.findMany({
+      where: {
+        billingOwnerId: userId,
+        OR: [{ plan: { not: 'FREE' } }, { stripeSubscriptionId: { not: null } }],
+      },
+      select: {
+        id: true,
+        plan: true,
+        stripePriceId: true,
+        stripeSubscriptionStatus: true,
+        stripeCurrentPeriodEnd: true,
+        stripeCancelAtPeriodEnd: true,
+        accessExpiresAt: true,
+      },
+    });
+
+    // Le réseau est un plus : si ses tables manquent, la liste doit quand même s'afficher.
+    const networkOf = new Map<string, { name: string; role: string }>();
+    try {
+      const memberships = await prisma.guildNetworkMember.findMany({
+        where: { guildId: { in: rows.map((r) => r.id) } },
+        select: { guildId: true, role: true, network: { select: { name: true } } },
+      });
+      for (const m of memberships) networkOf.set(m.guildId, { name: m.network.name, role: m.role });
+    } catch (err) {
+      logger.warn('Billing', 'Réseaux illisibles dans la vue d\'ensemble :', err);
+    }
+
+    let totalMonthlyCents = 0;
+    const guilds = rows.map((row) => {
+      const plan = normalizePlanKey(row.plan);
+      const live = LIVE_STATUSES.has(row.stripeSubscriptionStatus ?? '');
+      const interval = row.stripePriceId ? planForPriceId(row.stripePriceId)?.interval ?? null : null;
+      // Rien n'est débité sans abonnement Stripe en cours (cadeau, accès offert).
+      const amountCents = live && interval ? getPlanDefinition(plan).displayPriceCents?.[interval] ?? 0 : 0;
+      const monthlyCents = interval === 'year' ? Math.round(amountCents / 12) : amountCents;
+      // Une résiliation demandée ne reviendra pas : elle ne compte plus dans le mensuel.
+      if (!row.stripeCancelAtPeriodEnd) totalMonthlyCents += monthlyCents;
+      const cached = client.guilds.cache.get(row.id);
+      return {
+        guildId: row.id,
+        name: cached?.name ?? row.id,
+        iconUrl: cached?.iconURL({ size: 64, extension: 'png' }) ?? null,
+        plan,
+        planName: getPlanDefinition(plan).name,
+        status: row.stripeSubscriptionStatus ?? null,
+        interval,
+        amountCents,
+        currentPeriodEnd: row.stripeCurrentPeriodEnd?.toISOString() ?? null,
+        cancelAtPeriodEnd: row.stripeCancelAtPeriodEnd,
+        accessExpiresAt: row.accessExpiresAt?.toISOString() ?? null,
+        network: networkOf.get(row.id) ?? null,
+      };
+    });
+
+    guilds.sort((a, b) => a.name.localeCompare(b.name));
+    return c.json({ guilds, totalMonthlyCents });
   });
 
   return router;

@@ -17,6 +17,8 @@ export async function createBackup(payload: {
   includeChannels?: boolean;
   includeEmojis?: boolean;
   includeStickers?: boolean;
+  includeKotbo?: boolean;
+  messagesDays?: number;
 }, guildId = authStore.selectedGuildId) {
   return dashboardRequest('/backups', { method: 'POST', successMessage: m.api_ok_create_backup(), payload, guildId, errorContext: 'API Error (Create Backup):' });
 }

@@ -1,37 +1,37 @@
 <script lang="ts">
-  import { onMount, onDestroy, untrack } from 'svelte';
-  import { RPG_ENCHANTMENTS, RPG_ITEM_RARITIES } from '@kotbo/contracts';
-  import { rpgRarityLabel } from '../lib/rpgRarity';
-  import { router } from 'tinro';
-  import { resolveTabFromUrl, gotoTab } from '../lib/tabRouting';
-  import { pageTabItems } from '../lib/config/pageTabs';
-  import { Tabs, FilterPills, Callout, Button } from '../lib/components/ui';
-  import { unsavedChanges } from '../lib/stores/unsavedChanges.svelte';
-  import { dashboardStore } from '../lib/stores/dashboard.svelte';
-  import { authStore } from '../lib/stores/auth.svelte';
-  import { memberCaseModal } from '../lib/stores/memberCaseModal.svelte';
-  import { confirmDialog } from '../lib/stores/confirmDialog.svelte';
-  import { toast } from '../lib/stores/toast.svelte';
-  import ModulePage from '../lib/components/ModulePage.svelte';
-  import { createAsyncActionState } from '../lib/asyncAction.svelte';
-  import Papicon from '../lib/components/Papicon.svelte';
-  import InlineFeedback from '../lib/components/InlineFeedback.svelte';
-  import ToggleSwitch from '../lib/components/ToggleSwitch.svelte';
-  import Skeleton from '../lib/components/Skeleton.svelte';
-  import LoadingHint from '../lib/components/LoadingHint.svelte';
-import EmojiPicker from '../lib/components/EmojiPicker.svelte';
-import EmojiText from '../lib/components/EmojiText.svelte';
-  import SearchableSelect from '../lib/components/SearchableSelect.svelte';
-  import MultiSelect from '../lib/components/MultiSelect.svelte';
-  import RpgEventsPanel from '../lib/components/economy/RpgEventsPanel.svelte';
-  import RpgFishPanel from '../lib/components/economy/RpgFishPanel.svelte';
-  import RpgDungeonsPanel from '../lib/components/economy/RpgDungeonsPanel.svelte';
-  import RpgTowerPanel from '../lib/components/economy/RpgTowerPanel.svelte';
-  import RpgGuildsPanel from '../lib/components/economy/RpgGuildsPanel.svelte';
-  import ShopPanel from '../lib/components/economy/ShopPanel.svelte';
-  import RpgPlayerInventoryModal from '../lib/components/economy/RpgPlayerInventoryModal.svelte';
-  import { channelDisplayName } from '../lib/channelUtils';
-  import { stripCustomEmoji } from '../lib/emojiParser';
+  import { onMount, onDestroy, untrack } from "svelte";
+  import { RPG_ENCHANTMENTS, RPG_ITEM_RARITIES } from "@kotbo/contracts";
+  import { rpgRarityLabel } from "../lib/rpgRarity";
+  import { router } from "tinro";
+  import { resolveTabFromUrl, gotoTab } from "../lib/tabRouting";
+  import { pageTabItems } from "../lib/config/pageTabs";
+  import { Tabs, FilterPills, Callout, Button } from "../lib/components/ui";
+  import { unsavedChanges } from "../lib/stores/unsavedChanges.svelte";
+  import { dashboardStore } from "../lib/stores/dashboard.svelte";
+  import { authStore } from "../lib/stores/auth.svelte";
+  import { memberCaseModal } from "../lib/stores/memberCaseModal.svelte";
+  import { confirmDialog } from "../lib/stores/confirmDialog.svelte";
+  import { toast } from "../lib/stores/toast.svelte";
+  import ModulePage from "../lib/components/ModulePage.svelte";
+  import { createAsyncActionState } from "../lib/asyncAction.svelte";
+  import Papicon from "../lib/components/Papicon.svelte";
+  import InlineFeedback from "../lib/components/InlineFeedback.svelte";
+  import ToggleSwitch from "../lib/components/ToggleSwitch.svelte";
+  import Skeleton from "../lib/components/Skeleton.svelte";
+  import LoadingHint from "../lib/components/LoadingHint.svelte";
+  import EmojiPicker from "../lib/components/EmojiPicker.svelte";
+  import EmojiText from "../lib/components/EmojiText.svelte";
+  import SearchableSelect from "../lib/components/SearchableSelect.svelte";
+  import MultiSelect from "../lib/components/MultiSelect.svelte";
+  import RpgEventsPanel from "../lib/components/economy/RpgEventsPanel.svelte";
+  import RpgFishPanel from "../lib/components/economy/RpgFishPanel.svelte";
+  import RpgDungeonsPanel from "../lib/components/economy/RpgDungeonsPanel.svelte";
+  import RpgTowerPanel from "../lib/components/economy/RpgTowerPanel.svelte";
+  import RpgGuildsPanel from "../lib/components/economy/RpgGuildsPanel.svelte";
+  import ShopPanel from "../lib/components/economy/ShopPanel.svelte";
+  import RpgPlayerInventoryModal from "../lib/components/economy/RpgPlayerInventoryModal.svelte";
+  import { channelDisplayName } from "../lib/channelUtils";
+  import { stripCustomEmoji } from "../lib/emojiParser";
   import {
     asBestiaryDifficulty,
     BESTIARY_DIFFICULTIES,
@@ -44,7 +44,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
     type BattleSample,
     type BestiaryDifficulty,
     type BestiaryScope,
-  } from '../lib/bestiaryDifficulty';
+  } from "../lib/bestiaryDifficulty";
   import {
     applyRpgBestiaryDifficulty,
     applyRpgShopDifficulty,
@@ -81,9 +81,10 @@ import EmojiText from '../lib/components/EmojiText.svelte';
     deleteRpgTitle,
     grantRpgTitle,
     revokeRpgTitle,
-    resetEconomy
-  } from '../lib/api';
-  import { m } from '../lib/i18n';
+    resetEconomy,
+  } from "../lib/api";
+  import { isDashboardApiError } from "../lib/api/errors";
+  import { m } from "../lib/i18n";
 
   const actionState = createAsyncActionState();
   let loading = $state(false);
@@ -91,6 +92,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
   // defaut : tout paraissait eteint, et activer le module echouait a l'enregistrement sans
   // que rien n'explique pourquoi.
   let loadFailed = $state(false);
+  let accessError = $state<string | null>(null);
 
   // Page publique unifiee des clans : elle vit hors du dashboard connecte, donc rien ne
   // l'atteint depuis le menu. Le lien se pose ici, visible depuis tous les onglets, comme
@@ -99,44 +101,67 @@ import EmojiText from '../lib/components/EmojiText.svelte';
   const publicRpgUrl = $derived(
     authStore.selectedGuildId
       ? `${window.location.origin}/${authStore.selectedGuildId}/clan-rpg`
-      : ''
+      : "",
   );
 
   async function copyPublicRpgUrl() {
     if (!publicRpgUrl) return;
     await navigator.clipboard.writeText(publicRpgUrl);
     publicUrlCopied = true;
-    setTimeout(() => { publicUrlCopied = false; }, 2000);
+    setTimeout(() => {
+      publicUrlCopied = false;
+    }, 2000);
   }
   // Economie et Jeu RPG sont deux pages du menu qui partagent ce composant :
   // l'une porte la monnaie et la boutique, l'autre le jeu. Onze onglets sur
   // une seule barre ne laissaient plus voir ce que la page contenait.
-  const { section = 'economy' }: { section?: 'economy' | 'rpg' } = $props();
-  const ECONOMY_TABS = ['config', 'items', 'boutique', 'blackmarket', 'players'] as const;
-  const RPG_TABS = ['recettes', 'bestiaire', 'donjons', 'tour', 'peche', 'raid', 'quetes', 'titres', 'aventures', 'guildes'] as const;
-  const BASE = $derived(section === 'rpg' ? '/rpg' : '/economy');
-  const DEFAULT_TAB = $derived(section === 'rpg' ? RPG_TABS[0] : ECONOMY_TABS[0]);
+  const { section = "economy" }: { section?: "economy" | "rpg" } = $props();
+  const ECONOMY_TABS = [
+    "config",
+    "items",
+    "boutique",
+    "blackmarket",
+    "players",
+  ] as const;
+  const RPG_TABS = [
+    "recettes",
+    "bestiaire",
+    "donjons",
+    "tour",
+    "peche",
+    "raid",
+    "quetes",
+    "titres",
+    "aventures",
+    "guildes",
+  ] as const;
+  const BASE = $derived(section === "rpg" ? "/rpg" : "/economy");
+  const DEFAULT_TAB = $derived(
+    section === "rpg" ? RPG_TABS[0] : ECONOMY_TABS[0],
+  );
   // Pose par l'effet ci-dessous, avant le premier rendu.
-  let activeTab = $state<string>('');
+  let activeTab = $state<string>("");
 
   $effect.pre(() => {
     const path = $router.path;
-    if (section === 'rpg') {
-      activeTab = resolveTabFromUrl('/rpg', RPG_TABS, 'recettes');
+    if (section === "rpg") {
+      activeTab = resolveTabFromUrl("/rpg", RPG_TABS, "recettes");
       return;
     }
     // Les anciens liens (/economy/bestiaire, favoris compris) menent au jeu.
-    const segment = path.startsWith('/economy/') ? path.slice('/economy/'.length).split('/')[0] : '';
+    const segment = path.startsWith("/economy/")
+      ? path.slice("/economy/".length).split("/")[0]
+      : "";
     if ((RPG_TABS as readonly string[]).includes(segment)) {
       router.goto(`/rpg/${segment}`, true);
       return;
     }
-    activeTab = resolveTabFromUrl('/economy', ECONOMY_TABS, 'config');
+    activeTab = resolveTabFromUrl("/economy", ECONOMY_TABS, "config");
   });
 
   const canManageSettings = $derived(
-    !!dashboardStore.state.featureAccess?.economy?.canConfigure
-      || !!dashboardStore.state.access?.canManageSettings
+    !!dashboardStore.state.featureAccess?.economy?.canConfigure ||
+      !!dashboardStore.state.access?.canManageSettings,
   );
 
   const DEFAULT_CONFIG = {
@@ -144,8 +169,8 @@ import EmojiText from '../lib/components/EmojiText.svelte';
     rpgEnabled: false,
     guildsEnabled: false,
     shopEnabled: false,
-    currencyName: 'KotboCoins',
-    currencyEmoji: '🪙',
+    currencyName: "KotboCoins",
+    currencyEmoji: "🪙",
     currencyIcon: null as string | null,
     dailyRewardMin: 50,
     dailyRewardMax: 150,
@@ -155,7 +180,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
     bossCooldownMin: 2,
     huntEnergyPercent: 150,
     huntCooldownPercent: 200,
-    firstKillAnnounce: 'NONE',
+    firstKillAnnounce: "NONE",
     firstKillChannelId: null as string | null,
     maxEnergy: 100,
     energyRecoveryPerHour: 10,
@@ -171,7 +196,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
     blackMarketMaxQuantity: 3,
     blackMarketDiscountMin: 20,
     blackMarketDiscountMax: 50,
-    blackMarketAnnounce: 'NONE',
+    blackMarketAnnounce: "NONE",
     blackMarketChannelId: null as string | null,
     blackMarketRoleId: null as string | null,
     // Réglages portés par la guilde et non par la config économique : `clansEnabled` est
@@ -179,12 +204,12 @@ import EmojiText from '../lib/components/EmojiText.svelte';
     clansEnabled: false,
     clanPointsFromRpg: false,
     levelingEnabled: false,
-    bossDifficulty: 'NORMAL',
-    monsterDifficulty: 'NORMAL',
-    shopDifficulty: 'NORMAL',
+    bossDifficulty: "NORMAL",
+    monsterDifficulty: "NORMAL",
+    shopDifficulty: "NORMAL",
     raidEnabled: false,
     raidAutoSchedule: true,
-    raidTeamMode: 'CLAN',
+    raidTeamMode: "CLAN",
     raidBossName: null as string | null,
     raidHealthPerMember: 1200,
     raidHealthFloor: 2500,
@@ -199,9 +224,9 @@ import EmojiText from '../lib/components/EmojiText.svelte';
     raidXpReward: 60,
     raidCoinReward: 45,
     raidClanPoints: 6,
-    raidAnnounce: 'CHANNEL',
+    raidAnnounce: "CHANNEL",
     raidChannelId: null as string | null,
-    raidRoleId: null as string | null
+    raidRoleId: null as string | null,
   };
 
   // Configuration state
@@ -214,8 +239,16 @@ import EmojiText from '../lib/components/EmojiText.svelte';
   let itemsLoading = $state(false);
   let editingItem = $state<any>(null); // For Item Modal
 
-  type ItemFilter = 'all' | 'WEAPON' | 'ARMOR' | 'ACCESSORY' | 'POTION' | 'MATERIAL' | 'SCROLL' | 'QUEST';
-  const ITEM_FILTER_LABELS: Record<Exclude<ItemFilter, 'all'>, () => string> = {
+  type ItemFilter =
+    | "all"
+    | "WEAPON"
+    | "ARMOR"
+    | "ACCESSORY"
+    | "POTION"
+    | "MATERIAL"
+    | "SCROLL"
+    | "QUEST";
+  const ITEM_FILTER_LABELS: Record<Exclude<ItemFilter, "all">, () => string> = {
     WEAPON: m.eco_items_filter_weapon,
     ARMOR: m.eco_items_filter_armor,
     ACCESSORY: m.eco_items_filter_accessory,
@@ -224,31 +257,43 @@ import EmojiText from '../lib/components/EmojiText.svelte';
     SCROLL: m.eco_items_filter_scroll,
     QUEST: m.eco_items_filter_quest,
   };
-  let itemFilter = $state<ItemFilter>('all');
+  let itemFilter = $state<ItemFilter>("all");
   // Un type sans aucun objet n'a pas d'onglet : il n'afficherait qu'une liste vide.
   const itemFilters = $derived(
-    (Object.keys(ITEM_FILTER_LABELS) as Exclude<ItemFilter, 'all'>[]).filter((type) => items.some((item) => item.type === type))
+    (Object.keys(ITEM_FILTER_LABELS) as Exclude<ItemFilter, "all">[]).filter(
+      (type) => items.some((item) => item.type === type),
+    ),
   );
   // Retombe sur « Tout » quand le type choisi n'a plus d'objet (dernier supprimé, autre
   // serveur sélectionné) : sinon aucun onglet n'est actif et la grille reste vide.
   const activeItemFilter = $derived<ItemFilter>(
-    itemFilter !== 'all' && itemFilters.includes(itemFilter) ? itemFilter : 'all'
+    itemFilter !== "all" && itemFilters.includes(itemFilter)
+      ? itemFilter
+      : "all",
   );
-  const filteredItems = $derived(activeItemFilter === 'all' ? items : items.filter((item) => item.type === activeItemFilter));
-
+  const filteredItems = $derived(
+    activeItemFilter === "all"
+      ? items
+      : items.filter((item) => item.type === activeItemFilter),
+  );
 
   // Bestiaire (monstres et boss)
   const DROPS_MAX = 8;
   let monsters = $state<any[]>([]);
   let monstersLoading = $state(false);
   let editingMonster = $state<any>(null);
-  let bestiaryFilter = $state<'all' | 'boss' | 'monster'>('boss');
+  let bestiaryFilter = $state<"all" | "boss" | "monster">("boss");
 
   // Renseignes par la liste du bestiaire : taux de victoire observe et palier qu'il suggere.
   const EMPTY_SAMPLE: BattleSample = { battles: 0, wins: 0 };
   let battleStatsDays = $state(30);
-  let battleSamples = $state<Record<BestiaryScope, BattleSample>>({ boss: EMPTY_SAMPLE, monster: EMPTY_SAMPLE });
-  let difficultyAdvice = $state<Record<BestiaryScope, BestiaryDifficulty | null>>({ boss: null, monster: null });
+  let battleSamples = $state<Record<BestiaryScope, BattleSample>>({
+    boss: EMPTY_SAMPLE,
+    monster: EMPTY_SAMPLE,
+  });
+  let difficultyAdvice = $state<
+    Record<BestiaryScope, BestiaryDifficulty | null>
+  >({ boss: null, monster: null });
   let bestiaryFileInput = $state<HTMLInputElement | null>(null);
 
   // Titres RPG
@@ -275,7 +320,9 @@ import EmojiText from '../lib/components/EmojiText.svelte';
 
   // Le bilan détaille déjà la dernière fenêtre : la répéter juste en dessous, en une ligne,
   // ferait lire deux fois le même raid.
-  const pastRaids = $derived(raidHistory.filter((past) => past.id !== raidRecap?.raid?.id));
+  const pastRaids = $derived(
+    raidHistory.filter((past) => past.id !== raidRecap?.raid?.id),
+  );
   let raidLoading = $state(false);
   let editingRaidBoss = $state<any>(null);
 
@@ -283,11 +330,20 @@ import EmojiText from '../lib/components/EmojiText.svelte';
   let players = $state<any[]>([]);
   let playersLoading = $state(false);
   let editingPlayer = $state<any>(null); // For Player Modal
-  let searchQuery = $state('');
+  let searchQuery = $state("");
 
   // Reset component state
-  let resetComponent = $state<'all' | 'profiles' | 'items' | 'config' | 'guilds' | 'bestiary' | 'titles' | null>(null);
-  let resetConfirmInput = $state('');
+  let resetComponent = $state<
+    | "all"
+    | "profiles"
+    | "items"
+    | "config"
+    | "guilds"
+    | "bestiary"
+    | "titles"
+    | null
+  >(null);
+  let resetConfirmInput = $state("");
 
   // La confirmation affichait la cle technique du composant (« profiles », « guilds »).
   const resetComponentLabels = $derived<Record<string, string>>({
@@ -300,49 +356,67 @@ import EmojiText from '../lib/components/EmojiText.svelte';
     titles: m.eco_reset_titles_btn(),
   });
 
-  function triggerReset(component: 'all' | 'profiles' | 'items' | 'config' | 'guilds' | 'bestiary' | 'titles') {
+  function triggerReset(
+    component:
+      | "all"
+      | "profiles"
+      | "items"
+      | "config"
+      | "guilds"
+      | "bestiary"
+      | "titles",
+  ) {
     resetComponent = component;
-    resetConfirmInput = '';
+    resetConfirmInput = "";
   }
 
   // Le mot est compare sans tenir compte de la casse ni des espaces autour : on cherche une
   // intention deliberee, pas une dictee.
   const resetConfirmed = $derived(
-    resetConfirmInput.trim().toUpperCase() === m.eco_reset_confirm_word().toUpperCase()
+    resetConfirmInput.trim().toUpperCase() ===
+      m.eco_reset_confirm_word().toUpperCase(),
   );
 
   async function confirmReset() {
     if (!resetComponent || !resetConfirmed) return;
     const comp = resetComponent;
     resetComponent = null;
-    resetConfirmInput = '';
+    resetConfirmInput = "";
 
-    await actionState.run(async () => {
-      await resetEconomy(comp);
-      // Vider le bestiaire ou la boutique remet aussi leur palier de difficulte a zero :
-      // sans relecture, la page continuerait d'annoncer un palier que plus rien ne porte.
-      if (comp === 'config' || comp === 'all' || comp === 'bestiary' || comp === 'items') {
-        const res = await fetchEconomyConfig();
-        if (res && res.config) {
-          config = res.config;
-          savedConfig = JSON.parse(JSON.stringify(res.config));
+    await actionState.run(
+      async () => {
+        await resetEconomy(comp);
+        // Vider le bestiaire ou la boutique remet aussi leur palier de difficulte a zero :
+        // sans relecture, la page continuerait d'annoncer un palier que plus rien ne porte.
+        if (
+          comp === "config" ||
+          comp === "all" ||
+          comp === "bestiary" ||
+          comp === "items"
+        ) {
+          const res = await fetchEconomyConfig();
+          if (res && res.config) {
+            config = res.config;
+            savedConfig = JSON.parse(JSON.stringify(res.config));
+          }
         }
-      }
-      if (comp === 'items' || comp === 'all') {
-        if (activeTab === 'items') await loadItems();
-      }
-      if (comp === 'bestiary' || comp === 'all') {
-        if (activeTab === 'bestiaire') await loadMonsters();
-      }
-      // Les fiches de monstre citent les titres : la liste en mémoire doit suivre.
-      if (comp === 'titles' || comp === 'all') await loadTitles();
-      if (comp === 'profiles' || comp === 'guilds' || comp === 'all') {
-        // La suppression des guildes RPG detache les joueurs : la colonne du tableau
-        // afficherait encore l'appartenance sans ce rechargement.
-        if (activeTab === 'players') await loadPlayers();
-      }
-      return true;
-    }, { successMessage: m.eco_toast_reset_success() });
+        if (comp === "items" || comp === "all") {
+          if (activeTab === "items") await loadItems();
+        }
+        if (comp === "bestiary" || comp === "all") {
+          if (activeTab === "bestiaire") await loadMonsters();
+        }
+        // Les fiches de monstre citent les titres : la liste en mémoire doit suivre.
+        if (comp === "titles" || comp === "all") await loadTitles();
+        if (comp === "profiles" || comp === "guilds" || comp === "all") {
+          // La suppression des guildes RPG detache les joueurs : la colonne du tableau
+          // afficherait encore l'appartenance sans ce rechargement.
+          if (activeTab === "players") await loadPlayers();
+        }
+        return true;
+      },
+      { successMessage: m.eco_toast_reset_success() },
+    );
   }
 
   // Salons RPG : stockés avec les restrictions de commandes et non dans la configuration
@@ -351,7 +425,8 @@ import EmojiText from '../lib/components/EmojiText.svelte';
   let savedRpgChannelIds = $state<string[]>([]);
   let rpgChannelsDiverged = $state(false);
   const rpgChannelsDirty = $derived(
-    [...rpgChannelIds].sort().join(',') !== [...savedRpgChannelIds].sort().join(',')
+    [...rpgChannelIds].sort().join(",") !==
+      [...savedRpgChannelIds].sort().join(","),
   );
 
   async function loadRpgChannels() {
@@ -363,12 +438,22 @@ import EmojiText from '../lib/components/EmojiText.svelte';
   }
 
   // Jeux d'argent : eux aussi sur les restrictions de commandes, enregistrés sous la même barre.
-  const GAMBLING_GAMES = ['dice', 'roulette', 'rps', 'guess'] as const;
-  const allGamesOpen = () => Object.fromEntries(GAMBLING_GAMES.map((game) => [game, true])) as Record<string, boolean>;
+  const GAMBLING_GAMES = ["dice", "roulette", "rps", "guess"] as const;
+  const allGamesOpen = () =>
+    Object.fromEntries(GAMBLING_GAMES.map((game) => [game, true])) as Record<
+      string,
+      boolean
+    >;
   let gamblingGames = $state<Record<string, boolean>>(allGamesOpen());
   let savedGamblingGames = $state<Record<string, boolean>>(allGamesOpen());
-  const gamblingDirty = $derived(GAMBLING_GAMES.some((game) => gamblingGames[game] !== savedGamblingGames[game]));
-  const allGamblingOpen = $derived(GAMBLING_GAMES.every((game) => gamblingGames[game]));
+  const gamblingDirty = $derived(
+    GAMBLING_GAMES.some(
+      (game) => gamblingGames[game] !== savedGamblingGames[game],
+    ),
+  );
+  const allGamblingOpen = $derived(
+    GAMBLING_GAMES.every((game) => gamblingGames[game]),
+  );
 
   async function loadGamblingGames() {
     const res = await fetchGamblingGames().catch(() => null);
@@ -378,10 +463,16 @@ import EmojiText from '../lib/components/EmojiText.svelte';
   }
 
   function setAllGambling(open: boolean) {
-    gamblingGames = Object.fromEntries(GAMBLING_GAMES.map((game) => [game, open]));
+    gamblingGames = Object.fromEntries(
+      GAMBLING_GAMES.map((game) => [game, open]),
+    );
   }
 
-  const configDirty = $derived(JSON.stringify(config) !== JSON.stringify(savedConfig) || rpgChannelsDirty || gamblingDirty);
+  const configDirty = $derived(
+    JSON.stringify(config) !== JSON.stringify(savedConfig) ||
+      rpgChannelsDirty ||
+      gamblingDirty,
+  );
 
   // Unsaved changes tracker
   $effect(() => {
@@ -389,32 +480,61 @@ import EmojiText from '../lib/components/EmojiText.svelte';
     if (dirty && canManageSettings) {
       untrack(() => {
         unsavedChanges.register({
-          id: 'economy',
+          id: "economy",
           label: m.ecx_unsaved_label(),
           onSave: () => handleSaveConfig(),
           onReset: () => {
             config = JSON.parse(JSON.stringify(savedConfig));
             rpgChannelIds = [...savedRpgChannelIds];
             gamblingGames = { ...savedGamblingGames };
-          }
+          },
         });
       });
     } else if (!dirty) {
       untrack(() => {
-        unsavedChanges.release('economy');
+        unsavedChanges.release("economy");
       });
     }
   });
 
   onDestroy(() => {
-    unsavedChanges.release('economy');
+    unsavedChanges.release("economy");
   });
+
+  const economyModule = $derived(
+    (dashboardStore.state.modules as any[]).find((mod) => mod.id === "economy"),
+  );
+  const economyBlocked = $derived(
+    !!economyModule &&
+      (!!economyModule.lockedByPlan || economyModule.status !== "active"),
+  );
+
+  function isAccessLockError(err: unknown): boolean {
+    if (!isDashboardApiError(err)) return false;
+    return (
+      err.status === 402 ||
+      err.status === 403 ||
+      err.code === "module_disabled" ||
+      err.code === "feature_denied" ||
+      err.code === "plan_required"
+    );
+  }
 
   onMount(async () => {
     loading = true;
     try {
       await dashboardStore.refresh();
-      const [res] = await Promise.all([fetchEconomyConfig(), loadRpgChannels(), loadGamblingGames()]);
+      // Si le module est verrouille par l'offre Gratuite ou eteint, l'API ferme
+      // ses routes (403) et ModulePage affiche deja le bandeau adapte : inutile
+      // de lancer un appel voue a l'echec ni d'afficher une erreur de migration.
+      if (economyBlocked) {
+        return;
+      }
+      const [res] = await Promise.all([
+        fetchEconomyConfig(),
+        loadRpgChannels(),
+        loadGamblingGames(),
+      ]);
       if (res && res.config) {
         config = res.config;
         savedConfig = JSON.parse(JSON.stringify(res.config));
@@ -423,7 +543,14 @@ import EmojiText from '../lib/components/EmojiText.svelte';
       }
     } catch (err) {
       console.error(err);
-      loadFailed = true;
+      if (isAccessLockError(err)) {
+        accessError =
+          isDashboardApiError(err) && err.code !== "module_disabled"
+            ? err.userMessage
+            : null;
+      } else {
+        loadFailed = true;
+      }
     } finally {
       loading = false;
     }
@@ -431,29 +558,30 @@ import EmojiText from '../lib/components/EmojiText.svelte';
 
   // Tab change triggers loaders
   $effect(() => {
-    if (activeTab === 'items') {
+    if (loading || economyBlocked) return;
+    if (activeTab === "items") {
       void loadItems();
-    } else if (activeTab === 'bestiaire') {
+    } else if (activeTab === "bestiaire") {
       // Le catalogue d'objets sert à composer le butin : sans lui, la fiche d'une
       // créature ne pourrait proposer aucun drop.
       void loadItems();
       void loadMonsters();
       // Les titres alimentent les deux recompenses de titre de la fiche.
       void loadTitles();
-    } else if (activeTab === 'titres') {
+    } else if (activeTab === "titres") {
       void loadTitles();
       // La liste des joueurs sert au selecteur d'attribution.
       void loadPlayers();
-    } else if (activeTab === 'raid') {
+    } else if (activeTab === "raid") {
       void loadRaid();
-    } else if (activeTab === 'recettes') {
+    } else if (activeTab === "recettes") {
       // Le catalogue sert à choisir l'objet fabriqué comme ses matériaux : sans lui, la
       // fiche d'une recette n'aurait rien à proposer.
       void loadItems();
       void loadRecipes();
-    } else if (activeTab === 'quetes') {
+    } else if (activeTab === "quetes") {
       void loadQuests();
-    } else if (activeTab === 'players') {
+    } else if (activeTab === "players") {
       void loadPlayers();
     }
   });
@@ -497,7 +625,9 @@ import EmojiText from '../lib/components/EmojiText.svelte';
 
   // Le serveur renvoie `null` tant qu'il n'a pas assez de combats pour conseiller quoi que ce soit.
   function asAdvice(value: unknown): BestiaryDifficulty | null {
-    return BESTIARY_DIFFICULTIES.includes(value as BestiaryDifficulty) ? (value as BestiaryDifficulty) : null;
+    return BESTIARY_DIFFICULTIES.includes(value as BestiaryDifficulty)
+      ? (value as BestiaryDifficulty)
+      : null;
   }
 
   /** Même plafond que la validation du bot : la page ne doit pas proposer un refus. */
@@ -534,7 +664,10 @@ import EmojiText from '../lib/components/EmojiText.svelte';
     for (const item of source) {
       if (!byName.has(item.name) || item.guildId) byName.set(item.name, item);
     }
-    return [...byName.values()].map((item) => ({ id: item.name, name: `${stripCustomEmoji(item.emoji)} ${item.name}` }));
+    return [...byName.values()].map((item) => ({
+      id: item.name,
+      name: `${stripCustomEmoji(item.emoji)} ${item.name}`,
+    }));
   }
 
   // Seuls les matériaux sont proposés, sauf un objet d'un autre type déjà posé sur la
@@ -542,15 +675,21 @@ import EmojiText from '../lib/components/EmojiText.svelte';
   const recipeMaterialOptions = $derived(
     itemNameOptions(
       items
-        .filter((item) => item.type === 'MATERIAL' || editingRecipe?.ingredients.some((ing: any) => ing.itemName === item.name))
-        .sort((a, b) => a.name.localeCompare(b.name))
-    )
+        .filter(
+          (item) =>
+            item.type === "MATERIAL" ||
+            editingRecipe?.ingredients.some(
+              (ing: any) => ing.itemName === item.name,
+            ),
+        )
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    ),
   );
 
   function blankRecipe() {
     return {
-      resultItemId: guildItems[0]?.id ?? '',
-      ingredients: [{ itemName: '', quantity: 1 }],
+      resultItemId: guildItems[0]?.id ?? "",
+      ingredients: [{ itemName: "", quantity: 1 }],
       coinCost: 0,
       levelRequired: 1,
     };
@@ -558,11 +697,16 @@ import EmojiText from '../lib/components/EmojiText.svelte';
 
   function addRecipeIngredient() {
     if (editingRecipe.ingredients.length >= RECIPE_INGREDIENTS_MAX) return;
-    editingRecipe.ingredients = [...editingRecipe.ingredients, { itemName: '', quantity: 1 }];
+    editingRecipe.ingredients = [
+      ...editingRecipe.ingredients,
+      { itemName: "", quantity: 1 },
+    ];
   }
 
   function removeRecipeIngredient(index: number) {
-    editingRecipe.ingredients = editingRecipe.ingredients.filter((_: unknown, i: number) => i !== index);
+    editingRecipe.ingredients = editingRecipe.ingredients.filter(
+      (_: unknown, i: number) => i !== index,
+    );
   }
 
   async function handleSaveRecipe() {
@@ -575,28 +719,34 @@ import EmojiText from '../lib/components/EmojiText.svelte';
       return;
     }
 
-    await actionState.run(async () => {
-      const res = await saveRpgRecipe({
-        id: editingRecipe.id,
-        resultItemId: editingRecipe.resultItemId,
-        ingredients: editingRecipe.ingredients,
-        coinCost: editingRecipe.coinCost,
-        levelRequired: editingRecipe.levelRequired,
-      });
-      if (!res) throw new Error(m.eco_recipe_save_error());
-      editingRecipe = null;
-      await loadRecipes();
-      return true;
-    }, { successMessage: m.eco_recipe_saved() });
+    await actionState.run(
+      async () => {
+        const res = await saveRpgRecipe({
+          id: editingRecipe.id,
+          resultItemId: editingRecipe.resultItemId,
+          ingredients: editingRecipe.ingredients,
+          coinCost: editingRecipe.coinCost,
+          levelRequired: editingRecipe.levelRequired,
+        });
+        if (!res) throw new Error(m.eco_recipe_save_error());
+        editingRecipe = null;
+        await loadRecipes();
+        return true;
+      },
+      { successMessage: m.eco_recipe_saved() },
+    );
   }
 
   async function handleDeleteRecipe(recipeId: string) {
-    await actionState.run(async () => {
-      const res = await deleteRpgRecipe(recipeId);
-      if (!res) throw new Error(m.eco_recipe_delete_error());
-      await loadRecipes();
-      return true;
-    }, { successMessage: m.eco_recipe_deleted() });
+    await actionState.run(
+      async () => {
+        const res = await deleteRpgRecipe(recipeId);
+        if (!res) throw new Error(m.eco_recipe_delete_error());
+        await loadRecipes();
+        return true;
+      },
+      { successMessage: m.eco_recipe_deleted() },
+    );
   }
 
   async function loadTitles() {
@@ -611,7 +761,9 @@ import EmojiText from '../lib/components/EmojiText.svelte';
     }
   }
 
-  const titleOptions = $derived(titles.map((title: any) => ({ id: title.id, name: title.name })));
+  const titleOptions = $derived(
+    titles.map((title: any) => ({ id: title.id, name: title.name })),
+  );
 
   function titleName(titleId: string | null | undefined): string | null {
     if (!titleId) return null;
@@ -624,7 +776,10 @@ import EmojiText from '../lib/components/EmojiText.svelte';
       { label: m.eco_def(), value: title.defenseBonus },
       { label: m.eco_spd(), value: title.speedBonus },
       { label: m.eco_bestiary_health(), value: title.healthBonus },
-      { label: m.eco_title_crit(), value: title.critBonus ? `${title.critBonus} %` : 0 },
+      {
+        label: m.eco_title_crit(),
+        value: title.critBonus ? `${title.critBonus} %` : 0,
+      },
     ]
       .filter((entry) => entry.value)
       .map((entry) => ({ label: entry.label, value: `+${entry.value}` }));
@@ -632,9 +787,9 @@ import EmojiText from '../lib/components/EmojiText.svelte';
 
   function openNewTitle() {
     editingTitle = {
-      name: '',
-      description: '',
-      color: '#fbbf24',
+      name: "",
+      description: "",
+      color: "#fbbf24",
       attackBonus: 0,
       defenseBonus: 0,
       speedBonus: 0,
@@ -674,7 +829,12 @@ import EmojiText from '../lib/components/EmojiText.svelte';
   }
 
   async function handleDeleteTitle(title: any) {
-    if (!(await confirmDialog.danger(m.eco_title_delete_confirm({ name: title.name })))) return;
+    if (
+      !(await confirmDialog.danger(
+        m.eco_title_delete_confirm({ name: title.name }),
+      ))
+    )
+      return;
 
     await actionState.run(async () => {
       await deleteRpgTitle(title.id);
@@ -698,7 +858,15 @@ import EmojiText from '../lib/components/EmojiText.svelte';
   }
 
   async function handleRevokeTitle(title: any, owner: any) {
-    if (!(await confirmDialog.danger(m.eco_title_revoke_confirm({ name: title.name, player: owner.displayName })))) return;
+    if (
+      !(await confirmDialog.danger(
+        m.eco_title_revoke_confirm({
+          name: title.name,
+          player: owner.displayName,
+        }),
+      ))
+    )
+      return;
 
     await actionState.run(async () => {
       await revokeRpgTitle(title.id, owner.userId);
@@ -750,34 +918,66 @@ import EmojiText from '../lib/components/EmojiText.svelte';
    * au-dela d'une poignee, la memoire ne retient plus leur place. Regroupes par
    * famille, on va droit a la bonne.
    */
-  const QUEST_OBJECTIVE_GROUPS: Array<{ label: () => string; objectives: string[] }> = [
-    { label: m.eco_quest_group_combat, objectives: ['MONSTER_KILLS', 'BOSS_KILLS', 'ADVENTURES_COMPLETED'] },
-    { label: m.eco_quest_group_raid, objectives: ['RAID_ASSAULTS', 'RAID_DAMAGE'] },
-    { label: m.eco_quest_group_tower, objectives: ['TOWER_FLOORS', 'TOWER_MONSTER_KILLS', 'TOWER_BOSS_KILLS'] },
-    { label: m.eco_quest_group_gathering, objectives: ['ITEMS_LOOTED', 'FISH_CAUGHT', 'ITEMS_CRAFTED', 'UPGRADES_SUCCEEDED'] },
-    { label: m.eco_quest_group_economy, objectives: ['SHOP_PURCHASES', 'BLACK_MARKET_PURCHASES', 'COINS_SPENT', 'DAILY_CLAIMS'] },
+  const QUEST_OBJECTIVE_GROUPS: Array<{
+    label: () => string;
+    objectives: string[];
+  }> = [
+    {
+      label: m.eco_quest_group_combat,
+      objectives: ["MONSTER_KILLS", "BOSS_KILLS", "ADVENTURES_COMPLETED"],
+    },
+    {
+      label: m.eco_quest_group_raid,
+      objectives: ["RAID_ASSAULTS", "RAID_DAMAGE"],
+    },
+    {
+      label: m.eco_quest_group_tower,
+      objectives: ["TOWER_FLOORS", "TOWER_MONSTER_KILLS", "TOWER_BOSS_KILLS"],
+    },
+    {
+      label: m.eco_quest_group_gathering,
+      objectives: [
+        "ITEMS_LOOTED",
+        "FISH_CAUGHT",
+        "ITEMS_CRAFTED",
+        "UPGRADES_SUCCEEDED",
+      ],
+    },
+    {
+      label: m.eco_quest_group_economy,
+      objectives: [
+        "SHOP_PURCHASES",
+        "BLACK_MARKET_PURCHASES",
+        "COINS_SPENT",
+        "DAILY_CLAIMS",
+      ],
+    },
   ];
 
   /** Les groupes, restreints a ce que l'API propose ; un objectif inconnu tombe dans « Autres ». */
   const questObjectiveGroups = $derived.by(() => {
-    const known = new Set(QUEST_OBJECTIVE_GROUPS.flatMap((group) => group.objectives));
-    const groups = QUEST_OBJECTIVE_GROUPS
-      .map((group) => ({ label: group.label(), objectives: group.objectives.filter((o) => questObjectives.includes(o)) }))
-      .filter((group) => group.objectives.length > 0);
+    const known = new Set(
+      QUEST_OBJECTIVE_GROUPS.flatMap((group) => group.objectives),
+    );
+    const groups = QUEST_OBJECTIVE_GROUPS.map((group) => ({
+      label: group.label(),
+      objectives: group.objectives.filter((o) => questObjectives.includes(o)),
+    })).filter((group) => group.objectives.length > 0);
     const others = questObjectives.filter((o) => !known.has(o));
-    if (others.length > 0) groups.push({ label: m.eco_quest_group_other(), objectives: others });
+    if (others.length > 0)
+      groups.push({ label: m.eco_quest_group_other(), objectives: others });
     return groups;
   });
 
   function blankQuest() {
     return {
-      name: '',
-      description: '',
-      emoji: '📜',
-      objective: questObjectives[0] ?? 'MONSTER_KILLS',
+      name: "",
+      description: "",
+      emoji: "📜",
+      objective: questObjectives[0] ?? "MONSTER_KILLS",
       target: 10,
-      scope: 'MEMBER',
-      teamMode: 'CLAN',
+      scope: "MEMBER",
+      teamMode: "CLAN",
       repeatable: false,
       windowHours: 24,
       rewardCoins: 100,
@@ -802,45 +1002,59 @@ import EmojiText from '../lib/components/EmojiText.svelte';
     }
     // Une quete d'equipe sans module d'equipe ne compterait jamais rien : aucun membre ne
     // pourrait etre rattache a quoi que ce soit. Le serveur refuse la meme combinaison.
-    const teamAvailable = editingQuest.teamMode === 'CLAN' ? config.clansEnabled : config.guildsEnabled;
-    if (editingQuest.scope === 'TEAM' && !teamAvailable) {
+    const teamAvailable =
+      editingQuest.teamMode === "CLAN"
+        ? config.clansEnabled
+        : config.guildsEnabled;
+    if (editingQuest.scope === "TEAM" && !teamAvailable) {
       toast.error(m.eco_quest_team_unavailable());
       return;
     }
 
-    await actionState.run(async () => {
-      const res = await saveRpgQuest({
-        id: editingQuest.id,
-        name: editingQuest.name,
-        description: editingQuest.description,
-        emoji: editingQuest.emoji,
-        objective: editingQuest.objective,
-        target: editingQuest.target,
-        scope: editingQuest.scope,
-        teamMode: editingQuest.teamMode,
-        repeatable: editingQuest.repeatable,
-        windowHours: editingQuest.windowHours,
-        rewardCoins: editingQuest.rewardCoins,
-        rewardXp: editingQuest.rewardXp,
-        rewardClanPoints: editingQuest.rewardClanPoints,
-        enabled: editingQuest.enabled,
-      });
-      if (res && res.quest) {
-        await loadQuests();
-        editingQuest = null;
-      }
-      return true;
-    }, { successMessage: m.eco_quest_toast_saved() });
+    await actionState.run(
+      async () => {
+        const res = await saveRpgQuest({
+          id: editingQuest.id,
+          name: editingQuest.name,
+          description: editingQuest.description,
+          emoji: editingQuest.emoji,
+          objective: editingQuest.objective,
+          target: editingQuest.target,
+          scope: editingQuest.scope,
+          teamMode: editingQuest.teamMode,
+          repeatable: editingQuest.repeatable,
+          windowHours: editingQuest.windowHours,
+          rewardCoins: editingQuest.rewardCoins,
+          rewardXp: editingQuest.rewardXp,
+          rewardClanPoints: editingQuest.rewardClanPoints,
+          enabled: editingQuest.enabled,
+        });
+        if (res && res.quest) {
+          await loadQuests();
+          editingQuest = null;
+        }
+        return true;
+      },
+      { successMessage: m.eco_quest_toast_saved() },
+    );
   }
 
   async function handleDeleteQuest(quest: any) {
-    if (!(await confirmDialog.danger(m.eco_quest_delete_confirm({ name: quest.name })))) return;
+    if (
+      !(await confirmDialog.danger(
+        m.eco_quest_delete_confirm({ name: quest.name }),
+      ))
+    )
+      return;
 
-    await actionState.run(async () => {
-      await deleteRpgQuest(quest.id);
-      await loadQuests();
-      return true;
-    }, { successMessage: m.eco_quest_toast_deleted() });
+    await actionState.run(
+      async () => {
+        await deleteRpgQuest(quest.id);
+        await loadQuests();
+        return true;
+      },
+      { successMessage: m.eco_quest_toast_deleted() },
+    );
   }
 
   async function loadRaid() {
@@ -863,9 +1077,9 @@ import EmojiText from '../lib/components/EmojiText.svelte';
 
   function blankRaidBoss() {
     return {
-      name: '',
-      description: '',
-      emoji: '🐲',
+      name: "",
+      description: "",
+      emoji: "🐲",
       level: 20,
       attack: 60,
       defense: 35,
@@ -880,7 +1094,10 @@ import EmojiText from '../lib/components/EmojiText.svelte';
   }
 
   function openEditRaidBoss(boss: any) {
-    editingRaidBoss = { ...boss, spellIds: (boss.spells ?? []).map((spell: any) => spell.id) };
+    editingRaidBoss = {
+      ...boss,
+      spellIds: (boss.spells ?? []).map((spell: any) => spell.id),
+    };
   }
 
   function toggleRaidSpell(spellId: string) {
@@ -896,78 +1113,107 @@ import EmojiText from '../lib/components/EmojiText.svelte';
       return;
     }
 
-    await actionState.run(async () => {
-      const res = await saveRpgRaidBoss({
-        id: editingRaidBoss.id,
-        name: editingRaidBoss.name,
-        description: editingRaidBoss.description,
-        emoji: editingRaidBoss.emoji,
-        level: editingRaidBoss.level,
-        attack: editingRaidBoss.attack,
-        defense: editingRaidBoss.defense,
-        speed: editingRaidBoss.speed,
-        spellIds: editingRaidBoss.spellIds ?? [],
-        enabled: editingRaidBoss.enabled,
-      });
-      if (res && res.boss) {
-        await loadRaid();
-        editingRaidBoss = null;
-      }
-      return true;
-    }, { successMessage: m.eco_raid_toast_boss_saved() });
+    await actionState.run(
+      async () => {
+        const res = await saveRpgRaidBoss({
+          id: editingRaidBoss.id,
+          name: editingRaidBoss.name,
+          description: editingRaidBoss.description,
+          emoji: editingRaidBoss.emoji,
+          level: editingRaidBoss.level,
+          attack: editingRaidBoss.attack,
+          defense: editingRaidBoss.defense,
+          speed: editingRaidBoss.speed,
+          spellIds: editingRaidBoss.spellIds ?? [],
+          enabled: editingRaidBoss.enabled,
+        });
+        if (res && res.boss) {
+          await loadRaid();
+          editingRaidBoss = null;
+        }
+        return true;
+      },
+      { successMessage: m.eco_raid_toast_boss_saved() },
+    );
   }
 
   async function handleDeleteRaidBoss(boss: any) {
-    if (!(await confirmDialog.danger(m.eco_raid_delete_confirm({ name: boss.name })))) return;
+    if (
+      !(await confirmDialog.danger(
+        m.eco_raid_delete_confirm({ name: boss.name }),
+      ))
+    )
+      return;
 
-    await actionState.run(async () => {
-      await deleteRpgRaidBoss(boss.id);
-      await loadRaid();
-      return true;
-    }, { successMessage: m.eco_raid_toast_boss_deleted() });
+    await actionState.run(
+      async () => {
+        await deleteRpgRaidBoss(boss.id);
+        await loadRaid();
+        return true;
+      },
+      { successMessage: m.eco_raid_toast_boss_deleted() },
+    );
   }
 
   // Un lancement manuel ouvre la fenetre sur-le-champ : il ne se confirme pas, il
   // s'annonce a tout le serveur, et rien ne permet de le reprendre.
   async function handleStartRaid() {
-    if (!canManageSettings || !config.enabled || !config.raidEnabled || configDirty) return;
+    if (
+      !canManageSettings ||
+      !config.enabled ||
+      !config.raidEnabled ||
+      configDirty
+    )
+      return;
 
     const confirmed = await confirmDialog.ask({
       title: m.eco_raid_start_confirm_title(),
-      description: m.eco_raid_start_confirm_desc({ hours: config.raidDurationHours }),
+      description: m.eco_raid_start_confirm_desc({
+        hours: config.raidDurationHours,
+      }),
       confirmLabel: m.eco_raid_start(),
-      variant: 'warning',
+      variant: "warning",
     });
     if (!confirmed) return;
 
-    await actionState.run(async () => {
-      const res = await startRpgRaid();
-      if (!res || !res.success) throw new Error(m.ecx_raid_failed());
-      await loadRaid();
-      return true;
-    }, { successMessage: m.eco_raid_toast_started() });
+    await actionState.run(
+      async () => {
+        const res = await startRpgRaid();
+        if (!res || !res.success) throw new Error(m.ecx_raid_failed());
+        await loadRaid();
+        return true;
+      },
+      { successMessage: m.eco_raid_toast_started() },
+    );
   }
 
   async function handleRestoreRaidBosses() {
-    await actionState.run(async () => {
-      const res = await restoreRpgRaidBosses();
-      if (!res) throw new Error(m.ecx_restore_failed());
-      await loadRaid();
-      if (res.restored === 0) toast.info(m.eco_raid_restore_none());
-      return true;
-    }, { successMessage: m.eco_raid_toast_restored() });
+    await actionState.run(
+      async () => {
+        const res = await restoreRpgRaidBosses();
+        if (!res) throw new Error(m.ecx_restore_failed());
+        await loadRaid();
+        if (res.restored === 0) toast.info(m.eco_raid_restore_none());
+        return true;
+      },
+      { successMessage: m.eco_raid_toast_restored() },
+    );
   }
 
-  const selectableRaidBosses = $derived(raidBosses.filter((boss: any) => boss.enabled));
+  const selectableRaidBosses = $derived(
+    raidBosses.filter((boss: any) => boss.enabled),
+  );
 
   // Un boss fixe puis desactive ne figure plus dans la liste : sans cette option, le
   // selecteur s'affichait vide et rien ne disait que le raid etait retombe sur le tirage
   // au sort. Le catalogue vide, lui, ne dit rien tant qu'il n'a pas fini de charger.
   const unavailableRaidBoss = $derived(
-    !raidLoading
-      && raidBosses.length > 0
-      && config.raidBossName
-      && !selectableRaidBosses.some((boss: any) => boss.name === config.raidBossName)
+    !raidLoading &&
+      raidBosses.length > 0 &&
+      config.raidBossName &&
+      !selectableRaidBosses.some(
+        (boss: any) => boss.name === config.raidBossName,
+      )
       ? config.raidBossName
       : null,
   );
@@ -988,18 +1234,28 @@ import EmojiText from '../lib/components/EmojiText.svelte';
 
   // Points d'équipe : ils vont au clan du serveur ou à la guilde du jeu selon le mode, et
   // c'est le module correspondant qui décide si le champ est saisissable.
-  const raidGuildMode = $derived(config.raidTeamMode === 'RPG_GUILD');
-  const questGuildMode = $derived(editingQuest?.scope === 'TEAM' && editingQuest?.teamMode === 'RPG_GUILD');
+  const raidGuildMode = $derived(config.raidTeamMode === "RPG_GUILD");
+  const questGuildMode = $derived(
+    editingQuest?.scope === "TEAM" && editingQuest?.teamMode === "RPG_GUILD",
+  );
 
   const raidWeekdayLabels = $derived([
-    m.eco_raid_day_sunday(), m.eco_raid_day_monday(), m.eco_raid_day_tuesday(), m.eco_raid_day_wednesday(),
-    m.eco_raid_day_thursday(), m.eco_raid_day_friday(), m.eco_raid_day_saturday(),
+    m.eco_raid_day_sunday(),
+    m.eco_raid_day_monday(),
+    m.eco_raid_day_tuesday(),
+    m.eco_raid_day_wednesday(),
+    m.eco_raid_day_thursday(),
+    m.eco_raid_day_friday(),
+    m.eco_raid_day_saturday(),
   ]);
 
   function raidHealthPreview(members: number): number {
     const floor = Number(config.raidHealthFloor) || 0;
     const cap = Math.max(floor, Number(config.raidHealthCap) || 0);
-    return Math.min(cap, Math.max(floor, members * (Number(config.raidHealthPerMember) || 0)));
+    return Math.min(
+      cap,
+      Math.max(floor, members * (Number(config.raidHealthPerMember) || 0)),
+    );
   }
 
   async function loadPlayers() {
@@ -1024,7 +1280,8 @@ import EmojiText from '../lib/components/EmojiText.svelte';
    * elle est active et proposee en bas de la configuration sinon.
    */
   const economyModuleActive = $derived(
-    (dashboardStore.state.modules as any[]).find((mod) => mod.id === 'economy')?.status === 'active'
+    (dashboardStore.state.modules as any[]).find((mod) => mod.id === "economy")
+      ?.status === "active",
   );
 
   async function setEconomyRunning(running: boolean) {
@@ -1034,19 +1291,24 @@ import EmojiText from '../lib/components/EmojiText.svelte';
         title: m.eco_pause_confirm_title(),
         description: m.eco_pause_confirm_desc(),
         confirmLabel: m.eco_pause_action(),
-        variant: 'warning',
+        variant: "warning",
       });
       if (!confirmed) return;
     }
-    await actionState.run(async () => {
-      // Envoi partiel : le reste du formulaire, peut-etre en cours d'edition,
-      // n'est ni enregistre ni ecrase.
-      const res = await updateEconomyConfig({ enabled: running });
-      if (!res || !res.config) throw new Error(m.eco_pause_error());
-      config.enabled = running;
-      savedConfig.enabled = running;
-      return true;
-    }, { successMessage: running ? m.eco_resumed_toast() : m.eco_paused_toast() });
+    await actionState.run(
+      async () => {
+        // Envoi partiel : le reste du formulaire, peut-etre en cours d'edition,
+        // n'est ni enregistre ni ecrase.
+        const res = await updateEconomyConfig({ enabled: running });
+        if (!res || !res.config) throw new Error(m.eco_pause_error());
+        config.enabled = running;
+        savedConfig.enabled = running;
+        return true;
+      },
+      {
+        successMessage: running ? m.eco_resumed_toast() : m.eco_paused_toast(),
+      },
+    );
   }
 
   async function handleSaveConfig(): Promise<boolean> {
@@ -1061,21 +1323,24 @@ import EmojiText from '../lib/components/EmojiText.svelte';
     }
     // Le serveur refuse déjà ces combinaisons ; les intercepter ici évite un aller-retour
     // et une erreur brute pour ce qui reste une case oubliée.
-    if (config.blackMarketAnnounce !== 'NONE' && !config.blackMarketChannelId) {
+    if (config.blackMarketAnnounce !== "NONE" && !config.blackMarketChannelId) {
       toast.error(m.eco_toast_bm_channel_required());
       return false;
     }
-    if (config.blackMarketAnnounce === 'CHANNEL_ROLE' && !config.blackMarketRoleId) {
+    if (
+      config.blackMarketAnnounce === "CHANNEL_ROLE" &&
+      !config.blackMarketRoleId
+    ) {
       toast.error(m.eco_toast_bm_role_required());
       return false;
     }
-    if (config.firstKillAnnounce !== 'NONE' && !config.firstKillChannelId) {
+    if (config.firstKillAnnounce !== "NONE" && !config.firstKillChannelId) {
       toast.error(m.eco_toast_first_kill_channel_required());
       return false;
     }
     // Le raid se joue depuis le bouton de son annonce : sans annonce ni salon, la fenetre
     // s'ouvre et se referme sans que personne n'ait pu frapper.
-    if (config.raidEnabled && config.raidAnnounce === 'NONE') {
+    if (config.raidEnabled && config.raidAnnounce === "NONE") {
       toast.error(m.eco_toast_raid_announce_required());
       return false;
     }
@@ -1083,51 +1348,61 @@ import EmojiText from '../lib/components/EmojiText.svelte';
       toast.error(m.eco_toast_raid_channel_required());
       return false;
     }
-    if (config.raidEnabled && config.raidAnnounce === 'CHANNEL_ROLE' && !config.raidRoleId) {
+    if (
+      config.raidEnabled &&
+      config.raidAnnounce === "CHANNEL_ROLE" &&
+      !config.raidRoleId
+    ) {
       toast.error(m.eco_toast_raid_role_required());
       return false;
     }
     // Un raid ne peut pas opposer des equipes que le serveur n'a pas : le bot refuse la
     // meme combinaison, autant la dire ici plutot que de faire echouer l'enregistrement.
-    if (config.raidEnabled && !raidTeamModeAvailable[config.raidTeamMode as 'CLAN' | 'RPG_GUILD']) {
+    if (
+      config.raidEnabled &&
+      !raidTeamModeAvailable[config.raidTeamMode as "CLAN" | "RPG_GUILD"]
+    ) {
       toast.error(m.eco_toast_raid_team_mode_off());
       return false;
     }
 
     let success = false;
-    await actionState.run(async () => {
-      if (JSON.stringify(config) !== JSON.stringify(savedConfig)) {
-        const res = await updateEconomyConfig(config);
-        if (!res || !res.config) throw new Error(m.ecx_save_config_failed());
-        config = res.config;
-        savedConfig = JSON.parse(JSON.stringify(res.config));
-      }
-      if (rpgChannelsDirty) {
-        const res = await updateRpgChannels(rpgChannelIds);
-        if (!res) throw new Error(m.ecx_save_channels_failed());
-        rpgChannelIds = [...res.channelIds];
-        savedRpgChannelIds = [...res.channelIds];
-        rpgChannelsDiverged = res.diverged;
-      }
-      if (gamblingDirty) {
-        const res = await updateGamblingGames(gamblingGames);
-        if (!res?.games) throw new Error(m.ecx_save_games_failed());
-        gamblingGames = { ...res.games };
-        savedGamblingGames = { ...res.games };
-      }
-      success = true;
-      return true;
-    }, { successMessage: m.eco_toast_config_saved() });
+    await actionState.run(
+      async () => {
+        if (JSON.stringify(config) !== JSON.stringify(savedConfig)) {
+          const res = await updateEconomyConfig(config);
+          if (!res || !res.config) throw new Error(m.ecx_save_config_failed());
+          config = res.config;
+          savedConfig = JSON.parse(JSON.stringify(res.config));
+        }
+        if (rpgChannelsDirty) {
+          const res = await updateRpgChannels(rpgChannelIds);
+          if (!res) throw new Error(m.ecx_save_channels_failed());
+          rpgChannelIds = [...res.channelIds];
+          savedRpgChannelIds = [...res.channelIds];
+          rpgChannelsDiverged = res.diverged;
+        }
+        if (gamblingDirty) {
+          const res = await updateGamblingGames(gamblingGames);
+          if (!res?.games) throw new Error(m.ecx_save_games_failed());
+          gamblingGames = { ...res.games };
+          savedGamblingGames = { ...res.games };
+        }
+        success = true;
+        return true;
+      },
+      { successMessage: m.eco_toast_config_saved() },
+    );
     return success;
   }
 
   // Shop Item CRUD actions
   function openNewItem() {
     editingItem = {
-      name: '',
-      description: '',
-      emoji: '📦',
-      type: 'POTION',
+      name: "",
+      description: "",
+      emoji: "📦",
+      type: "POTION",
       atkBonus: 0,
       defBonus: 0,
       spdBonus: 0,
@@ -1137,11 +1412,11 @@ import EmojiText from '../lib/components/EmojiText.svelte';
       levelXpReward: 0,
       clanPointsReward: 0,
       raidAssaultBonus: 0,
-      rarity: 'COMMON',
+      rarity: "COMMON",
       levelRequired: 0,
       price: 10,
       purchasable: true,
-      salvageable: true
+      salvageable: true,
     };
   }
 
@@ -1152,40 +1427,65 @@ import EmojiText from '../lib/components/EmojiText.svelte';
   async function handleSaveItem() {
     // La description part dans le menu déroulant de la boutique Discord, qui refuse une
     // option sans description : sans elle, la boutique entière devient inaccessible.
-    if (!editingItem.name?.trim() || !editingItem.description?.trim() || !editingItem.type || editingItem.price === undefined) {
+    if (
+      !editingItem.name?.trim() ||
+      !editingItem.description?.trim() ||
+      !editingItem.type ||
+      editingItem.price === undefined
+    ) {
       toast.error(m.eco_toast_missing_fields());
       return;
     }
     // La route refuse elle aussi : le dire ici evite un aller-retour pour un
     // oubli que l'ecran voit tout de suite.
-    if (editingItem.type === 'SCROLL' && !editingItem.enchantId) {
+    if (editingItem.type === "SCROLL" && !editingItem.enchantId) {
       toast.error(m.eco_item_enchant_required());
       return;
     }
 
-    await actionState.run(async () => {
-      const res = await saveRpgItem(editingItem);
-      if (res && res.item) {
-        await loadItems();
-        editingItem = null;
-      }
-      return true;
-    }, { successMessage: m.eco_toast_item_saved() });
+    await actionState.run(
+      async () => {
+        const res = await saveRpgItem(editingItem);
+        if (res && res.item) {
+          await loadItems();
+          editingItem = null;
+        }
+        return true;
+      },
+      { successMessage: m.eco_toast_item_saved() },
+    );
   }
 
   async function handleDeleteItem(itemId: string) {
     if (!(await confirmDialog.danger(m.eco_delete_item_confirm()))) return;
 
-    await actionState.run(async () => {
-      await deleteRpgItem(itemId);
-      await loadItems();
-      return true;
-    }, { successMessage: m.eco_toast_item_deleted() });
+    await actionState.run(
+      async () => {
+        await deleteRpgItem(itemId);
+        await loadItems();
+        return true;
+      },
+      { successMessage: m.eco_toast_item_deleted() },
+    );
   }
 
   // Bestiaire CRUD actions
-  const BLANK_BOSS_STATS = { health: 300, attack: 30, defense: 18, speed: 10, xpReward: 200, coinReward: 150 };
-  const BLANK_MONSTER_STATS = { health: 40, attack: 8, defense: 4, speed: 5, xpReward: 20, coinReward: 10 };
+  const BLANK_BOSS_STATS = {
+    health: 300,
+    attack: 30,
+    defense: 18,
+    speed: 10,
+    xpReward: 200,
+    coinReward: 150,
+  };
+  const BLANK_MONSTER_STATS = {
+    health: 40,
+    attack: 8,
+    defense: 4,
+    speed: 5,
+    xpReward: 20,
+    coinReward: 10,
+  };
 
   // Les statistiques proposees suivent le palier du serveur : une creature creee apres
   // coup au palier normal detonnerait au milieu d'un bestiaire deja reecrit.
@@ -1198,9 +1498,9 @@ import EmojiText from '../lib/components/EmojiText.svelte';
     );
 
     return {
-      name: '',
-      description: '',
-      emoji: isBoss ? '👑' : '👹',
+      name: "",
+      description: "",
+      emoji: isBoss ? "👑" : "👹",
       level,
       ...stats,
       drops: [] as any[],
@@ -1216,8 +1516,8 @@ import EmojiText from '../lib/components/EmojiText.svelte';
       winTitleId: null as string | null,
       firstKillOn: false,
       enabled: true,
-      scope: 'GUILD',
-      overridesGlobal: false
+      scope: "GUILD",
+      overridesGlobal: false,
     };
   }
 
@@ -1230,15 +1530,19 @@ import EmojiText from '../lib/components/EmojiText.svelte';
   function openEditMonster(monster: any) {
     editingMonster = {
       ...monster,
-      firstKillOn: monster.firstKillCoinReward > 0 || monster.firstKillXpReward > 0
-        || monster.firstKillClanPoints > 0 || Boolean(monster.firstKillItemName) || Boolean(monster.firstKillRoleId)
-        || Boolean(monster.firstKillTitleId),
+      firstKillOn:
+        monster.firstKillCoinReward > 0 ||
+        monster.firstKillXpReward > 0 ||
+        monster.firstKillClanPoints > 0 ||
+        Boolean(monster.firstKillItemName) ||
+        Boolean(monster.firstKillRoleId) ||
+        Boolean(monster.firstKillTitleId),
       drops: (monster.drops ?? []).map((drop: any) => ({
         itemName: drop.itemName,
-        emoji: drop.emoji ?? '📦',
+        emoji: drop.emoji ?? "📦",
         chancePercent: Math.round((drop.chance ?? 0) * 100),
-        coinBonus: drop.coinBonus ?? 0
-      }))
+        coinBonus: drop.coinBonus ?? 0,
+      })),
     };
   }
 
@@ -1247,16 +1551,21 @@ import EmojiText from '../lib/components/EmojiText.svelte';
       toast.error(m.eco_bestiary_drops_max({ max: DROPS_MAX }));
       return;
     }
-    editingMonster.drops = [...editingMonster.drops, { itemName: '', emoji: '📦', chancePercent: 25, coinBonus: 0 }];
+    editingMonster.drops = [
+      ...editingMonster.drops,
+      { itemName: "", emoji: "📦", chancePercent: 25, coinBonus: 0 },
+    ];
   }
 
   function removeDrop(index: number) {
-    editingMonster.drops = editingMonster.drops.filter((_: any, i: number) => i !== index);
+    editingMonster.drops = editingMonster.drops.filter(
+      (_: any, i: number) => i !== index,
+    );
   }
 
   function onDropItemChange(index: number, itemName: string | null) {
     const picked = items.find((item) => item.name === itemName);
-    editingMonster.drops[index].itemName = itemName ?? '';
+    editingMonster.drops[index].itemName = itemName ?? "";
     if (picked) editingMonster.drops[index].emoji = picked.emoji;
   }
 
@@ -1282,12 +1591,24 @@ import EmojiText from '../lib/components/EmojiText.svelte';
       bossRespawnHours: editingMonster.bossRespawnHours,
       clanPoints: editingMonster.clanPoints ?? 0,
       // Décocher la section retire la prime ; le record du premier vainqueur, lui, reste.
-      firstKillCoinReward: editingMonster.firstKillOn ? Number(editingMonster.firstKillCoinReward) || 0 : 0,
-      firstKillXpReward: editingMonster.firstKillOn ? Number(editingMonster.firstKillXpReward) || 0 : 0,
-      firstKillClanPoints: editingMonster.firstKillOn ? Number(editingMonster.firstKillClanPoints) || 0 : 0,
-      firstKillItemName: editingMonster.firstKillOn ? editingMonster.firstKillItemName || null : null,
-      firstKillRoleId: editingMonster.firstKillOn ? editingMonster.firstKillRoleId || null : null,
-      firstKillTitleId: editingMonster.firstKillOn ? editingMonster.firstKillTitleId || null : null,
+      firstKillCoinReward: editingMonster.firstKillOn
+        ? Number(editingMonster.firstKillCoinReward) || 0
+        : 0,
+      firstKillXpReward: editingMonster.firstKillOn
+        ? Number(editingMonster.firstKillXpReward) || 0
+        : 0,
+      firstKillClanPoints: editingMonster.firstKillOn
+        ? Number(editingMonster.firstKillClanPoints) || 0
+        : 0,
+      firstKillItemName: editingMonster.firstKillOn
+        ? editingMonster.firstKillItemName || null
+        : null,
+      firstKillRoleId: editingMonster.firstKillOn
+        ? editingMonster.firstKillRoleId || null
+        : null,
+      firstKillTitleId: editingMonster.firstKillOn
+        ? editingMonster.firstKillTitleId || null
+        : null,
       winTitleId: editingMonster.winTitleId || null,
       enabled: editingMonster.enabled,
       drops: editingMonster.drops
@@ -1295,27 +1616,38 @@ import EmojiText from '../lib/components/EmojiText.svelte';
         .map((drop: any) => ({
           itemName: drop.itemName,
           emoji: drop.emoji,
-          chance: Math.min(100, Math.max(1, Number(drop.chancePercent) || 0)) / 100,
-          coinBonus: Number(drop.coinBonus) || 0
-        }))
+          chance:
+            Math.min(100, Math.max(1, Number(drop.chancePercent) || 0)) / 100,
+          coinBonus: Number(drop.coinBonus) || 0,
+        })),
     };
 
-    await actionState.run(async () => {
-      const res = await saveRpgMonster(payload);
-      if (res && res.monster) {
-        await loadMonsters();
-        editingMonster = null;
-      }
-      return true;
-    }, { successMessage: m.eco_toast_monster_saved() });
+    await actionState.run(
+      async () => {
+        const res = await saveRpgMonster(payload);
+        if (res && res.monster) {
+          await loadMonsters();
+          editingMonster = null;
+        }
+        return true;
+      },
+      { successMessage: m.eco_toast_monster_saved() },
+    );
   }
 
   async function handleToggleMonster(monster: any, enabled: boolean) {
-    await actionState.run(async () => {
-      await setRpgMonsterEnabled(monster.id, enabled);
-      await loadMonsters();
-      return true;
-    }, { successMessage: enabled ? m.eco_toast_monster_enabled() : m.eco_toast_monster_disabled() });
+    await actionState.run(
+      async () => {
+        await setRpgMonsterEnabled(monster.id, enabled);
+        await loadMonsters();
+        return true;
+      },
+      {
+        successMessage: enabled
+          ? m.eco_toast_monster_enabled()
+          : m.eco_toast_monster_disabled(),
+      },
+    );
   }
 
   async function handleDeleteMonster(monster: any) {
@@ -1323,19 +1655,28 @@ import EmojiText from '../lib/components/EmojiText.svelte';
     const confirmed = await confirmDialog.danger(
       restoring
         ? m.eco_bestiary_reset_confirm({ name: monster.name })
-        : m.eco_bestiary_delete_confirm({ name: monster.name })
+        : m.eco_bestiary_delete_confirm({ name: monster.name }),
     );
     if (!confirmed) return;
 
-    await actionState.run(async () => {
-      await deleteRpgMonster(monster.id);
-      await loadMonsters();
-      return true;
-    }, { successMessage: restoring ? m.eco_toast_monster_restored() : m.eco_toast_monster_deleted() });
+    await actionState.run(
+      async () => {
+        await deleteRpgMonster(monster.id);
+        await loadMonsters();
+        return true;
+      },
+      {
+        successMessage: restoring
+          ? m.eco_toast_monster_restored()
+          : m.eco_toast_monster_deleted(),
+      },
+    );
   }
 
   const bossDifficulty = $derived(asBestiaryDifficulty(config.bossDifficulty));
-  const monsterDifficulty = $derived(asBestiaryDifficulty(config.monsterDifficulty));
+  const monsterDifficulty = $derived(
+    asBestiaryDifficulty(config.monsterDifficulty),
+  );
   const shopDifficulty = $derived(asBestiaryDifficulty(config.shopDifficulty));
 
   const DIFFICULTY_LABELS: Record<BestiaryDifficulty, () => string> = {
@@ -1355,17 +1696,22 @@ import EmojiText from '../lib/components/EmojiText.svelte';
   function previewSample<T>(rows: T[], max = 3): T[] {
     if (rows.length <= max) return rows;
     const step = (rows.length - 1) / (max - 1);
-    return Array.from({ length: max }, (_, index) => rows[Math.round(index * step)]);
+    return Array.from(
+      { length: max },
+      (_, index) => rows[Math.round(index * step)],
+    );
   }
 
   function describeStatPreview(rows: any[]): string {
     return previewSample(rows)
-      .map((row) => m.eco_difficulty_preview_row({
-        name: row.name,
-        before: row.before.health,
-        after: row.after.health,
-      }))
-      .join(' · ');
+      .map((row) =>
+        m.eco_difficulty_preview_row({
+          name: row.name,
+          before: row.before.health,
+          after: row.after.health,
+        }),
+      )
+      .join(" · ");
   }
 
   // L'essai a blanc ne passe pas par `actionState` : celui-ci ne rend qu'un booleen, et c'est
@@ -1374,20 +1720,30 @@ import EmojiText from '../lib/components/EmojiText.svelte';
     try {
       return await request();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : m.eco_difficulty_preview_failed());
+      toast.error(
+        err instanceof Error ? err.message : m.eco_difficulty_preview_failed(),
+      );
       return null;
     }
   }
 
   // Les paliers sont independants : appliquer « Difficile » aux boss ne dit rien du bestiaire
   // courant ni des prix, et l'inverse est vrai aussi.
-  async function handleApplyDifficulty(scope: BestiaryScope, difficulty: BestiaryDifficulty) {
+  async function handleApplyDifficulty(
+    scope: BestiaryScope,
+    difficulty: BestiaryDifficulty,
+  ) {
     if (!canManageSettings) return;
-    const current = scope === 'boss' ? bossDifficulty : monsterDifficulty;
+    const current = scope === "boss" ? bossDifficulty : monsterDifficulty;
     if (current === difficulty) return;
 
-    const scopeLabel = scope === 'boss' ? m.eco_bestiary_filter_boss() : m.eco_bestiary_filter_monster();
-    const dry = await runPreview(() => applyRpgBestiaryDifficulty(scope, difficulty, { preview: true }));
+    const scopeLabel =
+      scope === "boss"
+        ? m.eco_bestiary_filter_boss()
+        : m.eco_bestiary_filter_monster();
+    const dry = await runPreview(() =>
+      applyRpgBestiaryDifficulty(scope, difficulty, { preview: true }),
+    );
     if (!dry) return;
 
     // Un palier qui ne change aucune fiche n'a rien a faire confirmer : il n'y a que la
@@ -1397,50 +1753,72 @@ import EmojiText from '../lib/components/EmojiText.svelte';
         m.eco_difficulty_confirm_count({ count: dry.updated }),
         describeStatPreview(dry.preview ?? []),
       ];
-      if (dry.protectedDrops > 0) details.push(m.eco_difficulty_protected_drops({ count: dry.protectedDrops }));
+      if (dry.protectedDrops > 0)
+        details.push(
+          m.eco_difficulty_protected_drops({ count: dry.protectedDrops }),
+        );
 
       const confirmed = await confirmDialog.ask({
         title: m.eco_bestiary_difficulty_confirm_title({
           difficulty: DIFFICULTY_LABELS[difficulty]().toLowerCase(),
           scope: scopeLabel.toLowerCase(),
         }),
-        description: `${m.eco_bestiary_difficulty_confirm_desc()} ${details.join(' ')}`,
+        description: `${m.eco_bestiary_difficulty_confirm_desc()} ${details.join(" ")}`,
         confirmLabel: m.eco_bestiary_difficulty_confirm_apply(),
-        variant: 'warning',
+        variant: "warning",
       });
       if (!confirmed) return;
     }
 
-    await actionState.run(async () => {
-      const res = await applyRpgBestiaryDifficulty(scope, difficulty);
-      if (!res || !res.success) throw new Error(m.ecx_difficulty_failed());
-      rememberDifficulty(scope === 'boss' ? 'bossDifficulty' : 'monsterDifficulty', difficulty);
-      await loadMonsters();
-      return true;
-    }, { successMessage: m.eco_toast_difficulty_applied() });
+    await actionState.run(
+      async () => {
+        const res = await applyRpgBestiaryDifficulty(scope, difficulty);
+        if (!res || !res.success) throw new Error(m.ecx_difficulty_failed());
+        rememberDifficulty(
+          scope === "boss" ? "bossDifficulty" : "monsterDifficulty",
+          difficulty,
+        );
+        await loadMonsters();
+        return true;
+      },
+      { successMessage: m.eco_toast_difficulty_applied() },
+    );
   }
 
   async function handleApplyShopDifficulty(difficulty: BestiaryDifficulty) {
     if (!canManageSettings) return;
     if (shopDifficulty === difficulty) return;
 
-    const dry = await runPreview(() => applyRpgShopDifficulty(difficulty, { preview: true }));
+    const dry = await runPreview(() =>
+      applyRpgShopDifficulty(difficulty, { preview: true }),
+    );
     if (!dry) return;
 
     if (dry.updated > 0) {
       const details = [
         m.eco_shop_difficulty_confirm_count({ count: dry.updated }),
         previewSample(dry.preview ?? [])
-          .map((row: any) => m.eco_difficulty_preview_price({ name: row.name, before: row.before, after: row.after }))
-          .join(' · '),
+          .map((row: any) =>
+            m.eco_difficulty_preview_price({
+              name: row.name,
+              before: row.before,
+              after: row.after,
+            }),
+          )
+          .join(" · "),
       ];
-      if (dry.protectedItems > 0) details.push(m.eco_difficulty_protected_items({ count: dry.protectedItems }));
+      if (dry.protectedItems > 0)
+        details.push(
+          m.eco_difficulty_protected_items({ count: dry.protectedItems }),
+        );
 
       const confirmed = await confirmDialog.ask({
-        title: m.eco_shop_difficulty_confirm_title({ difficulty: DIFFICULTY_LABELS[difficulty]().toLowerCase() }),
-        description: `${m.eco_shop_difficulty_confirm_desc()} ${details.join(' ')}`,
+        title: m.eco_shop_difficulty_confirm_title({
+          difficulty: DIFFICULTY_LABELS[difficulty]().toLowerCase(),
+        }),
+        description: `${m.eco_shop_difficulty_confirm_desc()} ${details.join(" ")}`,
         confirmLabel: m.eco_bestiary_difficulty_confirm_apply(),
-        variant: 'warning',
+        variant: "warning",
       });
       if (!confirmed) return;
     }
@@ -1450,21 +1828,29 @@ import EmojiText from '../lib/components/EmojiText.svelte';
     // peut rien y faire. Le dire vaut mieux qu'un succes sans effet visible.
     const nothingMoved = dry.updated === 0;
     const successMessage = nothingMoved
-      ? m.eco_shop_difficulty_toast_catalog_only({ count: dry.catalogItems ?? 0 })
+      ? m.eco_shop_difficulty_toast_catalog_only({
+          count: dry.catalogItems ?? 0,
+        })
       : m.eco_toast_difficulty_applied();
 
-    await actionState.run(async () => {
-      const res = await applyRpgShopDifficulty(difficulty);
-      if (!res || !res.success) throw new Error(m.ecx_difficulty_failed());
-      rememberDifficulty('shopDifficulty', difficulty);
-      await loadItems();
-      return true;
-    }, { successMessage });
+    await actionState.run(
+      async () => {
+        const res = await applyRpgShopDifficulty(difficulty);
+        if (!res || !res.success) throw new Error(m.ecx_difficulty_failed());
+        rememberDifficulty("shopDifficulty", difficulty);
+        await loadItems();
+        return true;
+      },
+      { successMessage },
+    );
   }
 
   // Le palier est ecrit par une route dediee, hors du formulaire de configuration : sans cette
   // mise a jour des deux cotes, la page se croirait modifiee.
-  function rememberDifficulty(field: 'bossDifficulty' | 'monsterDifficulty' | 'shopDifficulty', value: BestiaryDifficulty) {
+  function rememberDifficulty(
+    field: "bossDifficulty" | "monsterDifficulty" | "shopDifficulty",
+    value: BestiaryDifficulty,
+  ) {
     config[field] = value;
     savedConfig[field] = value;
   }
@@ -1472,9 +1858,11 @@ import EmojiText from '../lib/components/EmojiText.svelte';
   async function handleExportBestiary() {
     const data = await runPreview(() => exportRpgBestiary());
     if (data) {
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const blob = new Blob([JSON.stringify(data, null, 2)], {
+        type: "application/json",
+      });
       const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
+      const link = document.createElement("a");
       link.href = url;
       link.download = `bestiaire-${new Date().toISOString().slice(0, 10)}.json`;
       document.body.appendChild(link);
@@ -1489,7 +1877,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
     const file = input.files?.[0];
     // Le champ est remis a zero tout de suite : sans ca, reimporter le meme fichier apres
     // correction ne declenche plus rien, le navigateur n'y voyant aucun changement.
-    input.value = '';
+    input.value = "";
     if (!file) return;
 
     let payload: unknown;
@@ -1504,29 +1892,38 @@ import EmojiText from '../lib/components/EmojiText.svelte';
       title: m.eco_bestiary_import_confirm_title(),
       description: m.eco_bestiary_import_confirm_desc(),
       confirmLabel: m.eco_bestiary_import_confirm_apply(),
-      variant: 'warning',
+      variant: "warning",
     });
     if (!confirmed) return;
 
-    await actionState.run(async () => {
-      const res = await importRpgBestiary(payload);
-      if (!res || !res.success) throw new Error(m.ecx_bestiary_import_failed());
-      await loadMonsters();
-      if (res.droppedLoot > 0) toast.warning(m.eco_bestiary_import_dropped_loot({ count: res.droppedLoot }));
-      return true;
-    }, { successMessage: m.eco_bestiary_import_done() });
+    await actionState.run(
+      async () => {
+        const res = await importRpgBestiary(payload);
+        if (!res || !res.success)
+          throw new Error(m.ecx_bestiary_import_failed());
+        await loadMonsters();
+        if (res.droppedLoot > 0)
+          toast.warning(
+            m.eco_bestiary_import_dropped_loot({ count: res.droppedLoot }),
+          );
+        return true;
+      },
+      { successMessage: m.eco_bestiary_import_done() },
+    );
   }
 
-  const difficultyRows = $derived<Array<{
-    scope: BestiaryScope;
-    label: string;
-    current: BestiaryDifficulty;
-    advice: BestiaryDifficulty | null;
-    adviceLabel: string;
-    sample: BattleSample;
-  }>>([
+  const difficultyRows = $derived<
+    Array<{
+      scope: BestiaryScope;
+      label: string;
+      current: BestiaryDifficulty;
+      advice: BestiaryDifficulty | null;
+      adviceLabel: string;
+      sample: BattleSample;
+    }>
+  >([
     {
-      scope: 'boss',
+      scope: "boss",
       label: m.eco_bestiary_filter_boss(),
       current: bossDifficulty,
       advice: difficultyAdvice.boss,
@@ -1534,23 +1931,24 @@ import EmojiText from '../lib/components/EmojiText.svelte';
       sample: battleSamples.boss,
     },
     {
-      scope: 'monster',
+      scope: "monster",
       label: m.eco_bestiary_filter_monster(),
       current: monsterDifficulty,
       advice: difficultyAdvice.monster,
-      adviceLabel: DIFFICULTY_LABELS[difficultyAdvice.monster ?? monsterDifficulty](),
+      adviceLabel:
+        DIFFICULTY_LABELS[difficultyAdvice.monster ?? monsterDifficulty](),
       sample: battleSamples.monster,
     },
   ]);
 
   const filteredMonsters = $derived(
     monsters.filter((monster) =>
-      bestiaryFilter === 'all'
+      bestiaryFilter === "all"
         ? true
-        : bestiaryFilter === 'boss'
+        : bestiaryFilter === "boss"
           ? monster.isBoss
-          : !monster.isBoss
-    )
+          : !monster.isBoss,
+    ),
   );
 
   const dropItemOptions = $derived(itemNameOptions(items));
@@ -1569,29 +1967,34 @@ import EmojiText from '../lib/components/EmojiText.svelte';
   }
 
   async function handleSavePlayer() {
-    await actionState.run(async () => {
-      const res = await updateRpgPlayer(editingPlayer.userId, {
-        balance: editingPlayer.balance,
-        level: editingPlayer.level,
-        xp: editingPlayer.xp,
-        health: editingPlayer.health,
-        energy: editingPlayer.energy,
-        attack: editingPlayer.attack,
-        defense: editingPlayer.defense,
-        speed: editingPlayer.speed,
-        maxHealth: editingPlayer.maxHealth,
-        statPoints: editingPlayer.statPoints,
-        skillPoints: editingPlayer.skillPoints
-      });
-      if (res && res.player) {
-        await loadPlayers();
-        editingPlayer = null;
-      }
-      return true;
-    }, { successMessage: m.eco_toast_player_saved() });
+    await actionState.run(
+      async () => {
+        const res = await updateRpgPlayer(editingPlayer.userId, {
+          balance: editingPlayer.balance,
+          level: editingPlayer.level,
+          xp: editingPlayer.xp,
+          health: editingPlayer.health,
+          energy: editingPlayer.energy,
+          attack: editingPlayer.attack,
+          defense: editingPlayer.defense,
+          speed: editingPlayer.speed,
+          maxHealth: editingPlayer.maxHealth,
+          statPoints: editingPlayer.statPoints,
+          skillPoints: editingPlayer.skillPoints,
+        });
+        if (res && res.player) {
+          await loadPlayers();
+          editingPlayer = null;
+        }
+        return true;
+      },
+      { successMessage: m.eco_toast_player_saved() },
+    );
   }
 
-  const availableChannels = $derived(dashboardStore.state.discordChannels || []);
+  const availableChannels = $derived(
+    dashboardStore.state.discordChannels || [],
+  );
   const availableRoles = $derived(dashboardStore.state.discordRoles || []);
 
   // Rang calculé sur la liste complète, ex aequo compris comme sur la page publique :
@@ -1610,16 +2013,26 @@ import EmojiText from '../lib/components/EmojiText.svelte';
   });
 
   const filteredPlayers = $derived(
-    players.filter(p => 
-      p.userId.includes(searchQuery) || 
-      (p.username && p.username.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (p.displayName && p.displayName.toLowerCase().includes(searchQuery.toLowerCase()))
-    )
+    players.filter(
+      (p) =>
+        p.userId.includes(searchQuery) ||
+        (p.username &&
+          p.username.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (p.displayName &&
+          p.displayName.toLowerCase().includes(searchQuery.toLowerCase())),
+    ),
   );
 
   /** Clic sur un membre du classement : sa fiche, seulement pour qui a accès à « Membres ». */
-  function openMember(member: { userId: string; displayName?: string | null; username?: string | null }) {
-    void memberCaseModal.show(member.userId, member.displayName || member.username || member.userId);
+  function openMember(member: {
+    userId: string;
+    displayName?: string | null;
+    username?: string | null;
+  }) {
+    void memberCaseModal.show(
+      member.userId,
+      member.displayName || member.username || member.userId,
+    );
   }
 </script>
 
@@ -1628,25 +2041,29 @@ import EmojiText from '../lib/components/EmojiText.svelte';
      Sans lui, la garde d'API refusait chaque appel sans que rien ne dise pourquoi, et
      aucun chemin ne permettait de rallumer le module depuis ici. -->
 <ModulePage
-  title={section === 'rpg' ? m.rpg_page_title() : m.eco_page_title()}
-  description={section === 'rpg' ? m.rpg_page_desc() : m.eco_page_desc()}
-  icon={section === 'rpg' ? 'sword' : 'coins'}
+  title={section === "rpg" ? m.rpg_page_title() : m.eco_page_title()}
+  description={section === "rpg" ? m.rpg_page_desc() : m.eco_page_desc()}
+  icon={section === "rpg" ? "sword" : "coins"}
   featureKey="economy"
 >
   {#snippet actions()}
     {#if !loading}
-      {#if section === 'economy'}
-      <button
-        type="button"
-        onclick={() => router.goto('/economy-setup')}
-        class="group flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold bg-primary text-on-primary shadow-md shadow-primary/20 hover:bg-primary/90 hover:shadow-lg hover:shadow-primary/25 transition-all"
-      >
-        <Papicon icon="Sparkles" size={15} />
-        {m.eco_quick_setup_title()}
-        <Papicon icon="ChevronRight" size={14} class="transition-transform group-hover:translate-x-0.5" />
-      </button>
+      {#if section === "economy"}
+        <button
+          type="button"
+          onclick={() => router.goto("/economy-setup")}
+          class="group flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-bold bg-primary text-on-primary shadow-md shadow-primary/20 hover:bg-primary/90 hover:shadow-lg hover:shadow-primary/25 transition-all"
+        >
+          <Papicon icon="Sparkles" size={15} />
+          {m.eco_quick_setup_title()}
+          <Papicon
+            icon="ChevronRight"
+            size={14}
+            class="transition-transform group-hover:translate-x-0.5"
+          />
+        </button>
       {/if}
-      {#if publicRpgUrl && section === 'rpg'}
+      {#if publicRpgUrl && section === "rpg"}
         <a
           href={publicRpgUrl}
           target="_blank"
@@ -1662,9 +2079,11 @@ import EmojiText from '../lib/components/EmojiText.svelte';
           onclick={copyPublicRpgUrl}
           title={m.eco_public_page_copy()}
           aria-label={m.eco_public_page_copy()}
-          class="flex items-center gap-2 px-3 py-2.5 rounded-lg text-xs font-bold transition-all {publicUrlCopied ? 'bg-success/15 text-success border border-success/20' : 'bg-surface-container-high/40 text-on-surface-variant border border-outline-variant/10 hover:bg-surface-container-high/60'}"
+          class="flex items-center gap-2 px-3 py-2.5 rounded-lg text-xs font-bold transition-all {publicUrlCopied
+            ? 'bg-success/15 text-success border border-success/20'
+            : 'bg-surface-container-high/40 text-on-surface-variant border border-outline-variant/10 hover:bg-surface-container-high/60'}"
         >
-          <Papicon icon={publicUrlCopied ? 'Check' : 'Link'} size={15} />
+          <Papicon icon={publicUrlCopied ? "Check" : "Link"} size={15} />
         </button>
       {/if}
     {/if}
@@ -1680,7 +2099,13 @@ import EmojiText from '../lib/components/EmojiText.svelte';
       {m.eco_paused_desc()}
       {#snippet actions()}
         {#if canManageSettings}
-          <Button variant="primary" size="sm" icon="Play" loading={actionState.state.loading} onclick={() => setEconomyRunning(true)}>
+          <Button
+            variant="primary"
+            size="sm"
+            icon="Play"
+            loading={actionState.state.loading}
+            onclick={() => setEconomyRunning(true)}
+          >
             {m.eco_paused_action()}
           </Button>
         {/if}
@@ -1688,14 +2113,22 @@ import EmojiText from '../lib/components/EmojiText.svelte';
     </Callout>
   {/if}
 
-  {#if loadFailed}
-    <p class="text-xs text-warning/90 bg-warning/5 border border-warning/20 rounded-lg px-4 py-3 leading-relaxed">
+  {#if accessError}
+    <p
+      class="text-xs text-on-surface-variant bg-surface-container-high/30 border border-outline-variant/10 rounded-lg px-4 py-3 leading-relaxed"
+    >
+      {accessError}
+    </p>
+  {:else if loadFailed}
+    <p
+      class="text-xs text-warning/90 bg-warning/5 border border-warning/20 rounded-lg px-4 py-3 leading-relaxed"
+    >
       {m.eco_config_load_failed()}
     </p>
   {/if}
 
   <Tabs
-    label={section === 'rpg' ? m.rpg_page_title() : m.eco_page_title()}
+    label={section === "rpg" ? m.rpg_page_title() : m.eco_page_title()}
     tabs={pageTabItems(BASE)}
     active={activeTab}
     onchange={(id) => gotoTab(BASE, id, DEFAULT_TAB)}
@@ -1708,93 +2141,174 @@ import EmojiText from '../lib/components/EmojiText.svelte';
     </div>
   {:else}
     <!-- Tab 1: Configuration -->
-    {#if activeTab === 'config'}
+    {#if activeTab === "config"}
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <!-- Activation settings -->
-        <div class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6 h-fit">
-          <h3 class="text-lg font-semibold border-b border-outline-variant/15 pb-4">{m.eco_activation_title()}</h3>
-          
+        <div
+          class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6 h-fit"
+        >
+          <h3
+            class="text-lg font-semibold border-b border-outline-variant/15 pb-4"
+          >
+            {m.eco_activation_title()}
+          </h3>
+
           <div class="space-y-4">
             <!-- RPG Toggle -->
-            <div class="flex items-center justify-between py-2 border-b border-outline-variant/5">
+            <div
+              class="flex items-center justify-between py-2 border-b border-outline-variant/5"
+            >
               <div>
                 <h4 class="text-sm font-bold">{m.eco_rpg_toggle_title()}</h4>
-                <p class="text-xs text-on-surface-variant mt-0.5">{m.eco_rpg_toggle_desc()}</p>
+                <p class="text-xs text-on-surface-variant mt-0.5">
+                  {m.eco_rpg_toggle_desc()}
+                </p>
               </div>
-              <ToggleSwitch checked={config.rpgEnabled} onToggle={(v: boolean) => config.rpgEnabled = v} disabled={!canManageSettings} />
+              <ToggleSwitch
+                checked={config.rpgEnabled}
+                onToggle={(v: boolean) => (config.rpgEnabled = v)}
+                disabled={!canManageSettings}
+              />
             </div>
 
             <!-- Shop Toggle -->
-            <div class="flex items-center justify-between py-2 border-b border-outline-variant/5">
+            <div
+              class="flex items-center justify-between py-2 border-b border-outline-variant/5"
+            >
               <div>
                 <h4 class="text-sm font-bold">{m.eco_shop_toggle_title()}</h4>
-                <p class="text-xs text-on-surface-variant mt-0.5">{m.eco_shop_toggle_desc()}</p>
+                <p class="text-xs text-on-surface-variant mt-0.5">
+                  {m.eco_shop_toggle_desc()}
+                </p>
               </div>
-              <ToggleSwitch checked={config.shopEnabled} onToggle={(v: boolean) => config.shopEnabled = v} disabled={!canManageSettings} />
+              <ToggleSwitch
+                checked={config.shopEnabled}
+                onToggle={(v: boolean) => (config.shopEnabled = v)}
+                disabled={!canManageSettings}
+              />
             </div>
 
             <!-- Guilds Toggle -->
             <div class="flex items-center justify-between py-2">
               <div>
                 <h4 class="text-sm font-bold">{m.eco_guilds_toggle_title()}</h4>
-                <p class="text-xs text-on-surface-variant mt-0.5">{m.eco_guilds_toggle_desc()}</p>
+                <p class="text-xs text-on-surface-variant mt-0.5">
+                  {m.eco_guilds_toggle_desc()}
+                </p>
               </div>
-              <ToggleSwitch checked={config.guildsEnabled} onToggle={(v: boolean) => config.guildsEnabled = v} disabled={!canManageSettings} />
+              <ToggleSwitch
+                checked={config.guildsEnabled}
+                onToggle={(v: boolean) => (config.guildsEnabled = v)}
+                disabled={!canManageSettings}
+              />
             </div>
 
             <div class="space-y-2 pt-4 border-t border-outline-variant/5">
               <div>
-                <label for="rpgChannels" class="text-sm font-bold">{m.eco_rpg_channels_title()}</label>
-                <p class="text-xs text-on-surface-variant mt-0.5">{m.eco_rpg_channels_desc()}</p>
+                <label for="rpgChannels" class="text-sm font-bold"
+                  >{m.eco_rpg_channels_title()}</label
+                >
+                <p class="text-xs text-on-surface-variant mt-0.5">
+                  {m.eco_rpg_channels_desc()}
+                </p>
               </div>
               <MultiSelect
                 id="rpgChannels"
                 bind:values={rpgChannelIds}
-                options={availableChannels.map((c: any) => ({ id: c.id, name: channelDisplayName(c) }))}
+                options={availableChannels.map((c: any) => ({
+                  id: c.id,
+                  name: channelDisplayName(c),
+                }))}
                 disabled={!canManageSettings || !config.rpgEnabled}
               />
               {#if rpgChannelsDiverged}
-                <p class="text-2xs text-warning/90 leading-relaxed">{m.eco_rpg_channels_diverged()}</p>
+                <p class="text-2xs text-warning/90 leading-relaxed">
+                  {m.eco_rpg_channels_diverged()}
+                </p>
               {/if}
             </div>
           </div>
         </div>
 
         <!-- Details config -->
-        <div class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6">
-          <h3 class="text-lg font-semibold border-b border-outline-variant/15 pb-4">{m.eco_settings_title()}</h3>
-          
+        <div
+          class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6"
+        >
+          <h3
+            class="text-lg font-semibold border-b border-outline-variant/15 pb-4"
+          >
+            {m.eco_settings_title()}
+          </h3>
+
           <div class="grid grid-cols-2 gap-4">
             <div class="space-y-1.5">
-              <label for="curName" class="text-xs font-semibold text-on-surface-variant">{m.eco_currency_name()}</label>
-              <input id="curName" type="text" bind:value={config.currencyName} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
+              <label
+                for="curName"
+                class="text-xs font-semibold text-on-surface-variant"
+                >{m.eco_currency_name()}</label
+              >
+              <input
+                id="curName"
+                type="text"
+                bind:value={config.currencyName}
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!canManageSettings}
+              />
             </div>
 
             <div class="space-y-1.5">
-              <label for="curEmoji" class="text-xs font-semibold text-on-surface-variant">{m.eco_currency_emoji()}</label>
+              <label
+                for="curEmoji"
+                class="text-xs font-semibold text-on-surface-variant"
+                >{m.eco_currency_emoji()}</label
+              >
               <div class="flex gap-2">
-                <input id="curEmoji" type="text" bind:value={config.currencyEmoji} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
-                <EmojiPicker bind:value={config.currencyEmoji} disabled={!canManageSettings} />
+                <input
+                  id="curEmoji"
+                  type="text"
+                  bind:value={config.currencyEmoji}
+                  class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={!canManageSettings}
+                />
+                <EmojiPicker
+                  bind:value={config.currencyEmoji}
+                  disabled={!canManageSettings}
+                />
               </div>
             </div>
 
             <!-- Currency Image Upload -->
-            <div class="col-span-2 space-y-2 pt-2 border-t border-outline-variant/10">
-              <span class="text-xs font-semibold text-on-surface-variant ml-2 block">{m.eco_currency_icon()}</span>
-              <div class="flex items-center gap-4 bg-surface-container-high/20 p-4 rounded-lg border border-outline-variant/10">
+            <div
+              class="col-span-2 space-y-2 pt-2 border-t border-outline-variant/10"
+            >
+              <span
+                class="text-xs font-semibold text-on-surface-variant ml-2 block"
+                >{m.eco_currency_icon()}</span
+              >
+              <div
+                class="flex items-center gap-4 bg-surface-container-high/20 p-4 rounded-lg border border-outline-variant/10"
+              >
                 {#if config.currencyIcon}
                   <!-- L'overflow-hidden qui arrondit l'apercu vit sur le cadre
                        interieur : porte par ce conteneur, il rognait la croix
                        posee en -top-1 -right-1, qui semblait alors faire partie
                        de l'image. -->
                   <div class="relative w-12 h-12 shrink-0">
-                    <div class="w-full h-full rounded-xl bg-surface-container overflow-hidden border border-outline-variant/20 flex items-center justify-center">
-                      <img src={config.currencyIcon} alt="Icone" class="w-full h-full object-contain" />
+                    <div
+                      class="w-full h-full rounded-xl bg-surface-container overflow-hidden border border-outline-variant/20 flex items-center justify-center"
+                    >
+                      <img
+                        src={config.currencyIcon}
+                        alt="Icone"
+                        class="w-full h-full object-contain"
+                      />
                     </div>
                     {#if canManageSettings}
                       <button
                         type="button"
-                        onclick={() => { config.currencyIcon = null; }}
+                        onclick={() => {
+                          config.currencyIcon = null;
+                        }}
                         class="absolute -top-1.5 -right-1.5 bg-red-500 hover:bg-red-600 text-white w-5 h-5 rounded-full flex items-center justify-center shadow-sm ring-2 ring-surface-container-high transition-colors"
                         title={m.common_delete()}
                         aria-label={m.common_delete()}
@@ -1804,7 +2318,9 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                     {/if}
                   </div>
                 {:else}
-                  <div class="w-12 h-12 rounded-xl bg-surface-container/60 border-2 border-dashed border-outline-variant/25 flex items-center justify-center text-on-surface-variant/30 text-2xs font-semibold shrink-0">
+                  <div
+                    class="w-12 h-12 rounded-xl bg-surface-container/60 border-2 border-dashed border-outline-variant/25 flex items-center justify-center text-on-surface-variant/30 text-2xs font-semibold shrink-0"
+                  >
                     {m.eco_no_icon()}
                   </div>
                 {/if}
@@ -1817,12 +2333,13 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                       accept="image/*"
                       class="hidden"
                       onchange={(e: Event) => {
-                        const file = (e.currentTarget as HTMLInputElement).files?.[0];
+                        const file = (e.currentTarget as HTMLInputElement)
+                          .files?.[0];
                         if (file) {
                           const reader = new FileReader();
                           reader.onload = (event) => {
                             const res = event.target?.result;
-                            if (typeof res === 'string') {
+                            if (typeof res === "string") {
                               config.currencyIcon = res;
                             }
                           };
@@ -1832,47 +2349,114 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                     />
                     <button
                       type="button"
-                      onclick={() => document.getElementById('currencyIconUpload')?.click()}
+                      onclick={() =>
+                        document.getElementById("currencyIconUpload")?.click()}
                       class="px-4 py-2 bg-secondary text-on-secondary hover:scale-102 active:scale-98 transition-all text-xs font-bold rounded-xl shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {config.currencyIcon ? m.eco_change_icon() : m.eco_upload_icon()}
+                      {config.currencyIcon
+                        ? m.eco_change_icon()
+                        : m.eco_upload_icon()}
                     </button>
-                    <p class="text-2xs text-on-surface-variant/40 leading-none">{m.eco_icon_hint()}</p>
+                    <p class="text-2xs text-on-surface-variant/40 leading-none">
+                      {m.eco_icon_hint()}
+                    </p>
                   </div>
                 {:else}
-                  <p class="text-xs text-on-surface-variant/40 italic">{m.eco_readonly()}</p>
+                  <p class="text-xs text-on-surface-variant/40 italic">
+                    {m.eco_readonly()}
+                  </p>
                 {/if}
               </div>
             </div>
 
             <div class="space-y-1.5">
-              <label for="dailyMin" class="text-xs font-semibold text-on-surface-variant">{m.eco_daily_min()}</label>
-              <input id="dailyMin" type="number" bind:value={config.dailyRewardMin} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
+              <label
+                for="dailyMin"
+                class="text-xs font-semibold text-on-surface-variant"
+                >{m.eco_daily_min()}</label
+              >
+              <input
+                id="dailyMin"
+                type="number"
+                bind:value={config.dailyRewardMin}
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!canManageSettings}
+              />
             </div>
 
             <div class="space-y-1.5">
-              <label for="dailyMax" class="text-xs font-semibold text-on-surface-variant">{m.eco_daily_max()}</label>
-              <input id="dailyMax" type="number" bind:value={config.dailyRewardMax} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
+              <label
+                for="dailyMax"
+                class="text-xs font-semibold text-on-surface-variant"
+                >{m.eco_daily_max()}</label
+              >
+              <input
+                id="dailyMax"
+                type="number"
+                bind:value={config.dailyRewardMax}
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!canManageSettings}
+              />
             </div>
 
             <div class="space-y-1.5">
-              <label for="dailyCd" class="text-xs font-semibold text-on-surface-variant">{m.eco_daily_cd()}</label>
-              <input id="dailyCd" type="number" bind:value={config.dailyCooldownHour} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
+              <label
+                for="dailyCd"
+                class="text-xs font-semibold text-on-surface-variant"
+                >{m.eco_daily_cd()}</label
+              >
+              <input
+                id="dailyCd"
+                type="number"
+                bind:value={config.dailyCooldownHour}
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!canManageSettings}
+              />
             </div>
 
             <div class="space-y-1.5">
-              <label for="advCd" class="text-xs font-semibold text-on-surface-variant">{m.eco_adv_cd()}</label>
-              <input id="advCd" type="number" bind:value={config.adventureCooldownMin} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
+              <label
+                for="advCd"
+                class="text-xs font-semibold text-on-surface-variant"
+                >{m.eco_adv_cd()}</label
+              >
+              <input
+                id="advCd"
+                type="number"
+                bind:value={config.adventureCooldownMin}
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!canManageSettings}
+              />
             </div>
 
             <div class="space-y-1.5">
-              <label for="maxEnergy" class="text-xs font-semibold text-on-surface-variant">{m.eco_max_energy()}</label>
-              <input id="maxEnergy" type="number" bind:value={config.maxEnergy} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
+              <label
+                for="maxEnergy"
+                class="text-xs font-semibold text-on-surface-variant"
+                >{m.eco_max_energy()}</label
+              >
+              <input
+                id="maxEnergy"
+                type="number"
+                bind:value={config.maxEnergy}
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!canManageSettings}
+              />
             </div>
 
             <div class="space-y-1.5">
-              <label for="energyRecovery" class="text-xs font-semibold text-on-surface-variant">{m.eco_energy_recovery()}</label>
-              <input id="energyRecovery" type="number" bind:value={config.energyRecoveryPerHour} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
+              <label
+                for="energyRecovery"
+                class="text-xs font-semibold text-on-surface-variant"
+                >{m.eco_energy_recovery()}</label
+              >
+              <input
+                id="energyRecovery"
+                type="number"
+                bind:value={config.energyRecoveryPerHour}
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!canManageSettings}
+              />
             </div>
           </div>
         </div>
@@ -1880,17 +2464,25 @@ import EmojiText from '../lib/components/EmojiText.svelte';
         <!-- Les quatre plafonds que le bot applique deja aux jeux d'argent et
              aux transferts : ils vivaient en base sans aucun ecran pour les
              regler. -->
-        <div class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6 h-fit">
+        <div
+          class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6 h-fit"
+        >
           <div class="border-b border-outline-variant/15 pb-4">
             <h3 class="text-lg font-semibold">{m.eco_limits_title()}</h3>
-            <p class="text-xs text-on-surface-variant mt-1">{m.eco_limits_desc()}</p>
+            <p class="text-xs text-on-surface-variant mt-1">
+              {m.eco_limits_desc()}
+            </p>
           </div>
 
           <div class="space-y-3">
             <div class="flex items-center justify-between gap-4">
               <div>
                 <h4 class="text-sm font-bold">{m.eco_gambling_title()}</h4>
-                <p class="text-xs text-on-surface-variant mt-0.5 leading-relaxed">{m.eco_gambling_desc()}</p>
+                <p
+                  class="text-xs text-on-surface-variant mt-0.5 leading-relaxed"
+                >
+                  {m.eco_gambling_desc()}
+                </p>
               </div>
               <ToggleSwitch
                 checked={allGamblingOpen}
@@ -1901,20 +2493,27 @@ import EmojiText from '../lib/components/EmojiText.svelte';
             </div>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {#each GAMBLING_GAMES as game (game)}
-                <div class="flex items-center justify-between gap-3 bg-surface-container-high/30 border border-outline-variant/10 rounded-lg px-3 py-2">
+                <div
+                  class="flex items-center justify-between gap-3 bg-surface-container-high/30 border border-outline-variant/10 rounded-lg px-3 py-2"
+                >
                   <div class="min-w-0">
                     <code class="text-xs font-semibold">/{game}</code>
-                    <span class="text-2xs text-on-surface-variant ml-1.5">{
-                      game === 'dice' ? m.eco_gambling_dice()
-                        : game === 'roulette' ? m.eco_gambling_roulette()
-                          : game === 'rps' ? m.eco_gambling_rps()
-                            : m.eco_gambling_guess()
-                    }</span>
+                    <span class="text-2xs text-on-surface-variant ml-1.5"
+                      >{game === "dice"
+                        ? m.eco_gambling_dice()
+                        : game === "roulette"
+                          ? m.eco_gambling_roulette()
+                          : game === "rps"
+                            ? m.eco_gambling_rps()
+                            : m.eco_gambling_guess()}</span
+                    >
                   </div>
                   <ToggleSwitch
                     checked={gamblingGames[game]}
                     ariaLabel={`/${game}`}
-                    onToggle={(open: boolean) => { gamblingGames = { ...gamblingGames, [game]: open }; }}
+                    onToggle={(open: boolean) => {
+                      gamblingGames = { ...gamblingGames, [game]: open };
+                    }}
                     disabled={!canManageSettings}
                   />
                 </div>
@@ -1924,89 +2523,237 @@ import EmojiText from '../lib/components/EmojiText.svelte';
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div class="space-y-1.5">
-              <label for="maxBet" class="text-xs font-semibold text-on-surface-variant">{m.eco_max_bet()}</label>
-              <input id="maxBet" type="number" min="1" bind:value={config.maxBetAmount} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
-              <p class="text-2xs text-on-surface-variant/40">{m.eco_max_bet_hint()}</p>
+              <label
+                for="maxBet"
+                class="text-xs font-semibold text-on-surface-variant"
+                >{m.eco_max_bet()}</label
+              >
+              <input
+                id="maxBet"
+                type="number"
+                min="1"
+                bind:value={config.maxBetAmount}
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!canManageSettings}
+              />
+              <p class="text-2xs text-on-surface-variant/40">
+                {m.eco_max_bet_hint()}
+              </p>
             </div>
 
             <div class="space-y-1.5">
-              <label for="maxDailyBets" class="text-xs font-semibold text-on-surface-variant">{m.eco_max_daily_bets()}</label>
-              <input id="maxDailyBets" type="number" min="0" bind:value={config.maxDailyBets} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
-              <p class="text-2xs text-on-surface-variant/40">{m.eco_max_daily_bets_hint()}</p>
+              <label
+                for="maxDailyBets"
+                class="text-xs font-semibold text-on-surface-variant"
+                >{m.eco_max_daily_bets()}</label
+              >
+              <input
+                id="maxDailyBets"
+                type="number"
+                min="0"
+                bind:value={config.maxDailyBets}
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!canManageSettings}
+              />
+              <p class="text-2xs text-on-surface-variant/40">
+                {m.eco_max_daily_bets_hint()}
+              </p>
             </div>
 
             <div class="space-y-1.5">
-              <label for="maxTransfer" class="text-xs font-semibold text-on-surface-variant">{m.eco_max_transfer()}</label>
-              <input id="maxTransfer" type="number" min="1" bind:value={config.maxTransferAmount} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
-              <p class="text-2xs text-on-surface-variant/40">{m.eco_max_transfer_hint()}</p>
+              <label
+                for="maxTransfer"
+                class="text-xs font-semibold text-on-surface-variant"
+                >{m.eco_max_transfer()}</label
+              >
+              <input
+                id="maxTransfer"
+                type="number"
+                min="1"
+                bind:value={config.maxTransferAmount}
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!canManageSettings}
+              />
+              <p class="text-2xs text-on-surface-variant/40">
+                {m.eco_max_transfer_hint()}
+              </p>
             </div>
 
             <div class="space-y-1.5">
-              <label for="transferCd" class="text-xs font-semibold text-on-surface-variant">{m.eco_transfer_cd()}</label>
-              <input id="transferCd" type="number" min="0" bind:value={config.transferCooldownMin} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
+              <label
+                for="transferCd"
+                class="text-xs font-semibold text-on-surface-variant"
+                >{m.eco_transfer_cd()}</label
+              >
+              <input
+                id="transferCd"
+                type="number"
+                min="0"
+                bind:value={config.transferCooldownMin}
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!canManageSettings}
+              />
             </div>
 
             <div class="space-y-1.5">
-              <label for="marketTax" class="text-xs font-semibold text-on-surface-variant">{m.eco_market_tax()}</label>
-              <input id="marketTax" type="number" min="0" max="50" bind:value={config.marketplaceTaxPercent} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
-              <p class="text-2xs text-on-surface-variant/40">{m.eco_market_tax_hint()}</p>
+              <label
+                for="marketTax"
+                class="text-xs font-semibold text-on-surface-variant"
+                >{m.eco_market_tax()}</label
+              >
+              <input
+                id="marketTax"
+                type="number"
+                min="0"
+                max="50"
+                bind:value={config.marketplaceTaxPercent}
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!canManageSettings}
+              />
+              <p class="text-2xs text-on-surface-variant/40">
+                {m.eco_market_tax_hint()}
+              </p>
             </div>
           </div>
         </div>
 
-        <div class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6 h-fit">
+        <div
+          class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6 h-fit"
+        >
           <div class="border-b border-outline-variant/15 pb-4">
             <h3 class="text-lg font-semibold">{m.eco_fight_timers_title()}</h3>
-            <p class="text-xs text-on-surface-variant mt-1">{m.eco_fight_timers_desc()}</p>
+            <p class="text-xs text-on-surface-variant mt-1">
+              {m.eco_fight_timers_desc()}
+            </p>
           </div>
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
             <div class="space-y-1.5">
-              <label for="fightCd" class="text-xs font-semibold text-on-surface-variant">{m.eco_fight_cd()}</label>
-              <input id="fightCd" type="number" min="0" max="3600" bind:value={config.fightCooldownSec} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
-              <p class="text-2xs text-on-surface-variant/40">{m.eco_fight_cd_hint()}</p>
+              <label
+                for="fightCd"
+                class="text-xs font-semibold text-on-surface-variant"
+                >{m.eco_fight_cd()}</label
+              >
+              <input
+                id="fightCd"
+                type="number"
+                min="0"
+                max="3600"
+                bind:value={config.fightCooldownSec}
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!canManageSettings}
+              />
+              <p class="text-2xs text-on-surface-variant/40">
+                {m.eco_fight_cd_hint()}
+              </p>
             </div>
 
             <div class="space-y-1.5">
-              <label for="bossCd" class="text-xs font-semibold text-on-surface-variant">{m.eco_boss_cd()}</label>
-              <input id="bossCd" type="number" min="0" max="1440" bind:value={config.bossCooldownMin} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
-              <p class="text-2xs text-on-surface-variant/40">{m.eco_boss_cd_hint()}</p>
+              <label
+                for="bossCd"
+                class="text-xs font-semibold text-on-surface-variant"
+                >{m.eco_boss_cd()}</label
+              >
+              <input
+                id="bossCd"
+                type="number"
+                min="0"
+                max="1440"
+                bind:value={config.bossCooldownMin}
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!canManageSettings}
+              />
+              <p class="text-2xs text-on-surface-variant/40">
+                {m.eco_boss_cd_hint()}
+              </p>
             </div>
 
             <div class="space-y-1.5">
-              <label for="huntEnergy" class="text-xs font-semibold text-on-surface-variant">{m.eco_hunt_energy()}</label>
-              <input id="huntEnergy" type="number" min="100" max="500" bind:value={config.huntEnergyPercent} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
-              <p class="text-2xs text-on-surface-variant/40">{m.eco_hunt_energy_hint()}</p>
+              <label
+                for="huntEnergy"
+                class="text-xs font-semibold text-on-surface-variant"
+                >{m.eco_hunt_energy()}</label
+              >
+              <input
+                id="huntEnergy"
+                type="number"
+                min="100"
+                max="500"
+                bind:value={config.huntEnergyPercent}
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!canManageSettings}
+              />
+              <p class="text-2xs text-on-surface-variant/40">
+                {m.eco_hunt_energy_hint()}
+              </p>
             </div>
 
             <div class="space-y-1.5">
-              <label for="huntCd" class="text-xs font-semibold text-on-surface-variant">{m.eco_hunt_cd()}</label>
-              <input id="huntCd" type="number" min="100" max="1000" bind:value={config.huntCooldownPercent} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings} />
-              <p class="text-2xs text-on-surface-variant/40">{m.eco_hunt_cd_hint()}</p>
+              <label
+                for="huntCd"
+                class="text-xs font-semibold text-on-surface-variant"
+                >{m.eco_hunt_cd()}</label
+              >
+              <input
+                id="huntCd"
+                type="number"
+                min="100"
+                max="1000"
+                bind:value={config.huntCooldownPercent}
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!canManageSettings}
+              />
+              <p class="text-2xs text-on-surface-variant/40">
+                {m.eco_hunt_cd_hint()}
+              </p>
             </div>
           </div>
 
           <div class="space-y-4 pt-4 border-t border-outline-variant/10">
             <div>
-              <h4 class="text-sm font-bold">{m.eco_first_kill_announce_title()}</h4>
-              <p class="text-xs text-on-surface-variant mt-0.5">{m.eco_first_kill_announce_desc()}</p>
+              <h4 class="text-sm font-bold">
+                {m.eco_first_kill_announce_title()}
+              </h4>
+              <p class="text-xs text-on-surface-variant mt-0.5">
+                {m.eco_first_kill_announce_desc()}
+              </p>
             </div>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
               <div class="space-y-1.5">
-                <label for="firstKillAnnounce" class="text-xs font-semibold text-on-surface-variant">{m.eco_bm_announce_mode()}</label>
-                <select id="firstKillAnnounce" bind:value={config.firstKillAnnounce} disabled={!canManageSettings} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50">
-                  <option value="NONE">{m.eco_first_kill_announce_none()}</option>
-                  <option value="BOSSES">{m.eco_first_kill_announce_bosses()}</option>
+                <label
+                  for="firstKillAnnounce"
+                  class="text-xs font-semibold text-on-surface-variant"
+                  >{m.eco_bm_announce_mode()}</label
+                >
+                <select
+                  id="firstKillAnnounce"
+                  bind:value={config.firstKillAnnounce}
+                  disabled={!canManageSettings}
+                  class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
+                >
+                  <option value="NONE"
+                    >{m.eco_first_kill_announce_none()}</option
+                  >
+                  <option value="BOSSES"
+                    >{m.eco_first_kill_announce_bosses()}</option
+                  >
                   <option value="ALL">{m.eco_first_kill_announce_all()}</option>
                 </select>
               </div>
-              {#if config.firstKillAnnounce !== 'NONE'}
+              {#if config.firstKillAnnounce !== "NONE"}
                 <div class="space-y-1.5">
-                  <label for="firstKillChannel" class="text-xs font-semibold text-on-surface-variant">{m.eco_bm_announce_channel_label()}</label>
+                  <label
+                    for="firstKillChannel"
+                    class="text-xs font-semibold text-on-surface-variant"
+                    >{m.eco_bm_announce_channel_label()}</label
+                  >
                   <SearchableSelect
                     id="firstKillChannel"
                     bind:value={config.firstKillChannelId}
-                    options={availableChannels.map((c: any) => ({ id: c.id, name: channelDisplayName(c) }))}
+                    options={availableChannels.map((c: any) => ({
+                      id: c.id,
+                      name: channelDisplayName(c),
+                    }))}
                     placeholder={m.eco_bm_select_channel()}
                     className="w-full"
                   />
@@ -2022,90 +2769,149 @@ import EmojiText from '../lib/components/EmojiText.svelte';
         {#if canManageSettings}
           <div class="col-span-1 lg:col-span-2 space-y-4">
             {#if config.enabled}
-              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-1">
+              <div
+                class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-1"
+              >
                 <div>
-                  <p class="text-sm font-medium text-on-surface">{m.eco_pause_title()}</p>
-                  <p class="text-xs text-on-surface-variant mt-0.5">{m.eco_pause_desc()}</p>
+                  <p class="text-sm font-medium text-on-surface">
+                    {m.eco_pause_title()}
+                  </p>
+                  <p class="text-xs text-on-surface-variant mt-0.5">
+                    {m.eco_pause_desc()}
+                  </p>
                 </div>
-                <Button variant="secondary" size="sm" icon="Pause" class="shrink-0" onclick={() => setEconomyRunning(false)}>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon="Pause"
+                  class="shrink-0"
+                  onclick={() => setEconomyRunning(false)}
+                >
                   {m.eco_pause_action()}
                 </Button>
               </div>
             {/if}
 
             <details class="group rounded-xl border border-error/20 bg-error/5">
-              <summary class="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 [&::-webkit-details-marker]:hidden">
+              <summary
+                class="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 [&::-webkit-details-marker]:hidden"
+              >
                 <span class="min-w-0">
-                  <span class="flex items-center gap-2 text-sm font-semibold text-error">
+                  <span
+                    class="flex items-center gap-2 text-sm font-semibold text-error"
+                  >
                     <Papicon icon="alert-triangle" size={16} />
                     {m.eco_reset_section_title()}
                   </span>
-                  <span class="block text-xs text-on-surface-variant mt-0.5">{m.eco_reset_section_desc()}</span>
+                  <span class="block text-xs text-on-surface-variant mt-0.5"
+                    >{m.eco_reset_section_desc()}</span
+                  >
                 </span>
-                <Papicon icon="chevron-down" size={18} class="shrink-0 text-on-surface-variant transition-transform group-open:rotate-180" />
+                <Papicon
+                  icon="chevron-down"
+                  size={18}
+                  class="shrink-0 text-on-surface-variant transition-transform group-open:rotate-180"
+                />
               </summary>
-              <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 px-5 pb-5">
+              <div
+                class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 px-5 pb-5"
+              >
                 <button
                   type="button"
-                  onclick={() => triggerReset('profiles')}
+                  onclick={() => triggerReset("profiles")}
                   class="px-5 py-4 bg-error/10 hover:bg-error/20 text-on-error-container text-xs font-bold rounded-lg transition-all border border-error/20 flex flex-col items-center justify-center text-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <span class="font-semibold flex items-center gap-1.5"><Papicon icon="users" size={14} /> {m.eco_reset_players_btn()}</span>
-                  <span class="text-2xs text-on-surface-variant font-normal">{m.eco_reset_players_desc()}</span>
+                  <span class="font-semibold flex items-center gap-1.5"
+                    ><Papicon icon="users" size={14} />
+                    {m.eco_reset_players_btn()}</span
+                  >
+                  <span class="text-2xs text-on-surface-variant font-normal"
+                    >{m.eco_reset_players_desc()}</span
+                  >
                 </button>
 
                 <button
                   type="button"
-                  onclick={() => triggerReset('items')}
+                  onclick={() => triggerReset("items")}
                   class="px-5 py-4 bg-error/10 hover:bg-error/20 text-on-error-container text-xs font-bold rounded-lg transition-all border border-error/20 flex flex-col items-center justify-center text-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <span class="font-semibold flex items-center gap-1.5"><Papicon icon="package" size={14} /> {m.eco_reset_items_btn()}</span>
-                  <span class="text-2xs text-on-surface-variant font-normal">{m.eco_reset_items_desc()}</span>
+                  <span class="font-semibold flex items-center gap-1.5"
+                    ><Papicon icon="package" size={14} />
+                    {m.eco_reset_items_btn()}</span
+                  >
+                  <span class="text-2xs text-on-surface-variant font-normal"
+                    >{m.eco_reset_items_desc()}</span
+                  >
                 </button>
 
                 <button
                   type="button"
-                  onclick={() => triggerReset('bestiary')}
+                  onclick={() => triggerReset("bestiary")}
                   class="px-5 py-4 bg-error/10 hover:bg-error/20 text-on-error-container text-xs font-bold rounded-lg transition-all border border-error/20 flex flex-col items-center justify-center text-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <span class="font-semibold flex items-center gap-1.5"><Papicon icon="ghost" size={14} /> {m.eco_reset_bestiary_btn()}</span>
-                  <span class="text-2xs text-on-surface-variant font-normal">{m.eco_reset_bestiary_desc()}</span>
+                  <span class="font-semibold flex items-center gap-1.5"
+                    ><Papicon icon="ghost" size={14} />
+                    {m.eco_reset_bestiary_btn()}</span
+                  >
+                  <span class="text-2xs text-on-surface-variant font-normal"
+                    >{m.eco_reset_bestiary_desc()}</span
+                  >
                 </button>
 
                 <button
                   type="button"
-                  onclick={() => triggerReset('guilds')}
+                  onclick={() => triggerReset("guilds")}
                   class="px-5 py-4 bg-error/10 hover:bg-error/20 text-on-error-container text-xs font-bold rounded-lg transition-all border border-error/20 flex flex-col items-center justify-center text-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <span class="font-semibold flex items-center gap-1.5"><Papicon icon="shield" size={14} /> {m.eco_reset_guilds_btn()}</span>
-                  <span class="text-2xs text-on-surface-variant font-normal">{m.eco_reset_guilds_desc()}</span>
+                  <span class="font-semibold flex items-center gap-1.5"
+                    ><Papicon icon="shield" size={14} />
+                    {m.eco_reset_guilds_btn()}</span
+                  >
+                  <span class="text-2xs text-on-surface-variant font-normal"
+                    >{m.eco_reset_guilds_desc()}</span
+                  >
                 </button>
 
                 <button
                   type="button"
-                  onclick={() => triggerReset('titles')}
+                  onclick={() => triggerReset("titles")}
                   class="px-5 py-4 bg-error/10 hover:bg-error/20 text-on-error-container text-xs font-bold rounded-lg transition-all border border-error/20 flex flex-col items-center justify-center text-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <span class="font-semibold flex items-center gap-1.5"><Papicon icon="award" size={14} /> {m.eco_reset_titles_btn()}</span>
-                  <span class="text-2xs text-on-surface-variant font-normal">{m.eco_reset_titles_desc()}</span>
+                  <span class="font-semibold flex items-center gap-1.5"
+                    ><Papicon icon="award" size={14} />
+                    {m.eco_reset_titles_btn()}</span
+                  >
+                  <span class="text-2xs text-on-surface-variant font-normal"
+                    >{m.eco_reset_titles_desc()}</span
+                  >
                 </button>
 
                 <button
                   type="button"
-                  onclick={() => triggerReset('config')}
+                  onclick={() => triggerReset("config")}
                   class="px-5 py-4 bg-error/10 hover:bg-error/20 text-on-error-container text-xs font-bold rounded-lg transition-all border border-error/20 flex flex-col items-center justify-center text-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <span class="font-semibold flex items-center gap-1.5"><Papicon icon="settings" size={14} /> {m.eco_reset_config_btn()}</span>
-                  <span class="text-2xs text-on-surface-variant font-normal">{m.eco_reset_config_desc()}</span>
+                  <span class="font-semibold flex items-center gap-1.5"
+                    ><Papicon icon="settings" size={14} />
+                    {m.eco_reset_config_btn()}</span
+                  >
+                  <span class="text-2xs text-on-surface-variant font-normal"
+                    >{m.eco_reset_config_desc()}</span
+                  >
                 </button>
 
                 <button
                   type="button"
-                  onclick={() => triggerReset('all')}
+                  onclick={() => triggerReset("all")}
                   class="px-5 py-4 bg-error text-on-error hover:bg-error-hover text-xs font-bold rounded-lg shadow-lg transition-all flex flex-col items-center justify-center text-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <span class="font-semibold flex items-center gap-1.5"><Papicon icon="alert-triangle" size={14} /> {m.eco_reset_all_btn()}</span>
-                  <span class="text-2xs text-on-error/80 font-normal">{m.eco_reset_all_desc()}</span>
+                  <span class="font-semibold flex items-center gap-1.5"
+                    ><Papicon icon="alert-triangle" size={14} />
+                    {m.eco_reset_all_btn()}</span
+                  >
+                  <span class="text-2xs text-on-error/80 font-normal"
+                    >{m.eco_reset_all_desc()}</span
+                  >
                 </button>
               </div>
             </details>
@@ -2115,13 +2921,17 @@ import EmojiText from '../lib/components/EmojiText.svelte';
     {/if}
 
     <!-- Tab 2: Shop Items -->
-    {#if activeTab === 'items'}
-      <div class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6">
-        <div class="flex items-center justify-between border-b border-outline-variant/15 pb-4">
+    {#if activeTab === "items"}
+      <div
+        class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6"
+      >
+        <div
+          class="flex items-center justify-between border-b border-outline-variant/15 pb-4"
+        >
           <h3 class="text-lg font-semibold">{m.eco_shop_title()}</h3>
           {#if canManageSettings}
-            <button 
-              type="button" 
+            <button
+              type="button"
               onclick={openNewItem}
               class="px-4 py-2 bg-primary hover:bg-primary-hover text-on-primary text-body-sm font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
             >
@@ -2131,14 +2941,20 @@ import EmojiText from '../lib/components/EmojiText.svelte';
           {/if}
         </div>
 
-        <div class="bg-surface-container-high/30 border border-outline-variant/10 rounded-xl px-5 py-4 space-y-3">
+        <div
+          class="bg-surface-container-high/30 border border-outline-variant/10 rounded-xl px-5 py-4 space-y-3"
+        >
           <div class="flex flex-wrap items-center justify-between gap-2">
             <div>
               <h4 class="text-sm font-bold">{m.eco_shop_difficulty_title()}</h4>
-              <p class="text-xs text-on-surface-variant mt-0.5 leading-relaxed">{m.eco_shop_difficulty_desc()}</p>
+              <p class="text-xs text-on-surface-variant mt-0.5 leading-relaxed">
+                {m.eco_shop_difficulty_desc()}
+              </p>
             </div>
             <span class="text-2xs text-on-surface-variant">
-              {m.eco_bestiary_difficulty_current({ difficulty: DIFFICULTY_LABELS[shopDifficulty]() })}
+              {m.eco_bestiary_difficulty_current({
+                difficulty: DIFFICULTY_LABELS[shopDifficulty](),
+              })}
             </span>
           </div>
 
@@ -2150,99 +2966,215 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                 onclick={() => handleApplyShopDifficulty(level)}
                 disabled={!canManageSettings}
                 aria-pressed={selected}
-                class="text-left p-4 rounded-xl border transition-all disabled:opacity-50 disabled:cursor-not-allowed {selected ? 'bg-primary/8 border-primary/50' : 'bg-surface-container-low/30 border-outline-variant/10 hover:border-outline-variant/30 hover:bg-surface-container-high/20'}"
+                class="text-left p-4 rounded-xl border transition-all disabled:opacity-50 disabled:cursor-not-allowed {selected
+                  ? 'bg-primary/8 border-primary/50'
+                  : 'bg-surface-container-low/30 border-outline-variant/10 hover:border-outline-variant/30 hover:bg-surface-container-high/20'}"
               >
                 <div class="flex items-center gap-2">
-                  <Papicon icon={BESTIARY_DIFFICULTY_ICONS[level]} size={14} class={selected ? 'text-primary' : 'text-on-surface-variant'} />
-                  <span class="text-body-sm font-semibold">{DIFFICULTY_LABELS[level]()}</span>
+                  <Papicon
+                    icon={BESTIARY_DIFFICULTY_ICONS[level]}
+                    size={14}
+                    class={selected
+                      ? "text-primary"
+                      : "text-on-surface-variant"}
+                  />
+                  <span class="text-body-sm font-semibold"
+                    >{DIFFICULTY_LABELS[level]()}</span
+                  >
                   {#if selected}
-                    <span class="ml-auto text-xs font-semibold px-2 py-0.5 rounded-lg bg-primary/15 text-primary">
+                    <span
+                      class="ml-auto text-xs font-semibold px-2 py-0.5 rounded-lg bg-primary/15 text-primary"
+                    >
                       {m.eco_bestiary_difficulty_active()}
                     </span>
                   {/if}
                 </div>
                 <p class="text-2xs text-on-surface-variant mt-2">
-                  {#if isDifficultyNeutral(level, ['itemPrice'])}
+                  {#if isDifficultyNeutral(level, ["itemPrice"])}
                     {m.eco_difficulty_untouched_prices()}
                   {:else}
-                    {m.eco_shop_difficulty_price({ delta: formatDifficultyDelta(level, 'itemPrice') })}
+                    {m.eco_shop_difficulty_price({
+                      delta: formatDifficultyDelta(level, "itemPrice"),
+                    })}
                   {/if}
                 </p>
               </button>
             {/each}
           </div>
 
-          <p class="text-2xs text-on-surface-variant leading-relaxed">{m.eco_shop_difficulty_scope_hint()}</p>
+          <p class="text-2xs text-on-surface-variant leading-relaxed">
+            {m.eco_shop_difficulty_scope_hint()}
+          </p>
         </div>
 
         <FilterPills
           label={m.eco_tab_items()}
-          options={[{ value: 'all' as ItemFilter, label: m.eco_bestiary_filter_all() }, ...itemFilters.map((type) => ({ value: type, label: ITEM_FILTER_LABELS[type]() }))]}
+          options={[
+            { value: "all" as ItemFilter, label: m.eco_bestiary_filter_all() },
+            ...itemFilters.map((type) => ({
+              value: type,
+              label: ITEM_FILTER_LABELS[type](),
+            })),
+          ]}
           value={activeItemFilter}
-          onchange={(value) => itemFilter = value}
+          onchange={(value) => (itemFilter = value)}
         />
 
         {#if itemsLoading}
           <div class="flex items-center justify-center py-12">
-            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            <div
+              class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"
+            ></div>
           </div>
         {:else}
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {#each filteredItems as item}
-              <div class="bg-surface-container-high/30 border border-outline-variant/10 p-6 rounded-xl relative group flex flex-col justify-between">
+              <div
+                class="bg-surface-container-high/30 border border-outline-variant/10 p-6 rounded-xl relative group flex flex-col justify-between"
+              >
                 <div class="space-y-3">
                   <div class="flex items-center gap-3">
-                    <EmojiText value={item.emoji} size="1.125rem" class="text-lg" />
+                    <EmojiText
+                      value={item.emoji}
+                      size="1.125rem"
+                      class="text-lg"
+                    />
                     <div>
-                      <h4 class="font-semibold text-base leading-none">{item.name}</h4>
-                      <span class="text-xs font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded-full inline-block mt-1">{item.type}</span>
+                      <h4 class="font-semibold text-base leading-none">
+                        {item.name}
+                      </h4>
+                      <span
+                        class="text-xs font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded-full inline-block mt-1"
+                        >{item.type}</span
+                      >
                     </div>
                   </div>
-                  <p class="text-xs text-on-surface-variant leading-relaxed">{item.description}</p>
-                  
+                  <p class="text-xs text-on-surface-variant leading-relaxed">
+                    {item.description}
+                  </p>
+
                   <!-- Stat bonuses summary -->
                   <div class="flex flex-wrap gap-1.5 text-2xs font-bold">
-                    {#if item.atkBonus} <span class="bg-error/10 text-on-error-container px-2 py-0.5 rounded-lg flex items-center gap-1"><Papicon icon="zap" size={10} /> ATK +{item.atkBonus}</span> {/if}
-                    {#if item.defBonus} <span class="bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded-lg flex items-center gap-1"><Papicon icon="shield" size={10} /> DEF +{item.defBonus}</span> {/if}
-                    {#if item.spdBonus} <span class="bg-warning/10 text-on-warning-container px-2 py-0.5 rounded-lg flex items-center gap-1"><Papicon icon="activity" size={10} /> SPD +{item.spdBonus}</span> {/if}
-                    {#if item.hpBonus} <span class="bg-error/10 text-on-error-container px-2 py-0.5 rounded-lg flex items-center gap-1"><Papicon icon="heart" size={10} /> {m.eco_item_hp_bonus_badge({ hp: item.hpBonus })}</span> {/if}
-                    {#if item.levelRequired > 0} <span class="bg-outline-variant/15 text-on-surface-variant/80 px-2 py-0.5 rounded-lg">{m.eco_item_level_badge({ level: item.levelRequired })}</span> {/if}
-                    {#if item.rarity && item.rarity !== 'COMMON'} <span class="bg-violet-500/10 text-violet-400 px-2 py-0.5 rounded-lg">{rpgRarityLabel(item.rarity)}</span> {/if}
-                    {#if item.purchasable === false} <span class="bg-outline-variant/15 text-on-surface-variant px-2 py-0.5 rounded-lg">{m.eco_item_not_sold_badge()}</span> {/if}
-                    {#if item.hpRestore} <span class="bg-success/10 text-on-success-container px-2 py-0.5 rounded-lg flex items-center gap-1"><Papicon icon="heart" size={10} /> HP +{item.hpRestore}</span> {/if}
-                    {#if item.energyRestore} <span class="bg-purple-500/10 text-purple-400 px-2 py-0.5 rounded-lg flex items-center gap-1"><Papicon icon="zap" size={10} /> ÉNERGIE +{item.energyRestore}</span> {/if}
-                    {#if item.levelXpReward} <span class="bg-sky-500/10 text-sky-400 px-2 py-0.5 rounded-lg flex items-center gap-1"><Papicon icon="star" size={10} /> XP +{item.levelXpReward}</span> {/if}
-                    {#if item.clanPointsReward} <span class="bg-fuchsia-500/10 text-fuchsia-400 px-2 py-0.5 rounded-lg flex items-center gap-1"><Papicon icon="flag" size={10} /> {m.eco_item_clan_points_badge({ points: item.clanPointsReward })}</span> {/if}
-                    {#if item.raidAssaultBonus} <span class="bg-error/10 text-on-error-container px-2 py-0.5 rounded-lg flex items-center gap-1"><Papicon icon="Crown" size={10} /> {m.eco_item_raid_assaults_badge({ assaults: item.raidAssaultBonus })}</span> {/if}
+                    {#if item.atkBonus}
+                      <span
+                        class="bg-error/10 text-on-error-container px-2 py-0.5 rounded-lg flex items-center gap-1"
+                        ><Papicon icon="zap" size={10} /> ATK +{item.atkBonus}</span
+                      >
+                    {/if}
+                    {#if item.defBonus}
+                      <span
+                        class="bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded-lg flex items-center gap-1"
+                        ><Papicon icon="shield" size={10} /> DEF +{item.defBonus}</span
+                      >
+                    {/if}
+                    {#if item.spdBonus}
+                      <span
+                        class="bg-warning/10 text-on-warning-container px-2 py-0.5 rounded-lg flex items-center gap-1"
+                        ><Papicon icon="activity" size={10} /> SPD +{item.spdBonus}</span
+                      >
+                    {/if}
+                    {#if item.hpBonus}
+                      <span
+                        class="bg-error/10 text-on-error-container px-2 py-0.5 rounded-lg flex items-center gap-1"
+                        ><Papicon icon="heart" size={10} />
+                        {m.eco_item_hp_bonus_badge({ hp: item.hpBonus })}</span
+                      >
+                    {/if}
+                    {#if item.levelRequired > 0}
+                      <span
+                        class="bg-outline-variant/15 text-on-surface-variant/80 px-2 py-0.5 rounded-lg"
+                        >{m.eco_item_level_badge({
+                          level: item.levelRequired,
+                        })}</span
+                      >
+                    {/if}
+                    {#if item.rarity && item.rarity !== "COMMON"}
+                      <span
+                        class="bg-violet-500/10 text-violet-400 px-2 py-0.5 rounded-lg"
+                        >{rpgRarityLabel(item.rarity)}</span
+                      >
+                    {/if}
+                    {#if item.purchasable === false}
+                      <span
+                        class="bg-outline-variant/15 text-on-surface-variant px-2 py-0.5 rounded-lg"
+                        >{m.eco_item_not_sold_badge()}</span
+                      >
+                    {/if}
+                    {#if item.hpRestore}
+                      <span
+                        class="bg-success/10 text-on-success-container px-2 py-0.5 rounded-lg flex items-center gap-1"
+                        ><Papicon icon="heart" size={10} /> HP +{item.hpRestore}</span
+                      >
+                    {/if}
+                    {#if item.energyRestore}
+                      <span
+                        class="bg-purple-500/10 text-purple-400 px-2 py-0.5 rounded-lg flex items-center gap-1"
+                        ><Papicon icon="zap" size={10} /> ÉNERGIE +{item.energyRestore}</span
+                      >
+                    {/if}
+                    {#if item.levelXpReward}
+                      <span
+                        class="bg-sky-500/10 text-sky-400 px-2 py-0.5 rounded-lg flex items-center gap-1"
+                        ><Papicon icon="star" size={10} /> XP +{item.levelXpReward}</span
+                      >
+                    {/if}
+                    {#if item.clanPointsReward}
+                      <span
+                        class="bg-fuchsia-500/10 text-fuchsia-400 px-2 py-0.5 rounded-lg flex items-center gap-1"
+                        ><Papicon icon="flag" size={10} />
+                        {m.eco_item_clan_points_badge({
+                          points: item.clanPointsReward,
+                        })}</span
+                      >
+                    {/if}
+                    {#if item.raidAssaultBonus}
+                      <span
+                        class="bg-error/10 text-on-error-container px-2 py-0.5 rounded-lg flex items-center gap-1"
+                        ><Papicon icon="Crown" size={10} />
+                        {m.eco_item_raid_assaults_badge({
+                          assaults: item.raidAssaultBonus,
+                        })}</span
+                      >
+                    {/if}
                   </div>
 
                   {#if (item.levelXpReward && !config.levelingEnabled) || (item.clanPointsReward && !(config.clansEnabled && config.clanPointsFromRpg)) || (item.raidAssaultBonus && !config.raidEnabled)}
-                    <p class="text-2xs text-warning/90 leading-relaxed">{m.eco_item_module_locked_warning()}</p>
+                    <p class="text-2xs text-warning/90 leading-relaxed">
+                      {m.eco_item_module_locked_warning()}
+                    </p>
                   {/if}
                 </div>
 
-                <div class="mt-6 border-t border-outline-variant/5 pt-4 flex items-center justify-between">
-                  <span class="text-sm font-bold text-on-surface flex items-center gap-1.5">
+                <div
+                  class="mt-6 border-t border-outline-variant/5 pt-4 flex items-center justify-between"
+                >
+                  <span
+                    class="text-sm font-bold text-on-surface flex items-center gap-1.5"
+                  >
                     {#if config.currencyIcon}
-                      <img src={config.currencyIcon} alt={config.currencyName} class="w-4 h-4 object-contain inline-block" />
+                      <img
+                        src={config.currencyIcon}
+                        alt={config.currencyName}
+                        class="w-4 h-4 object-contain inline-block"
+                      />
                     {:else}
                       <EmojiText value={config.currencyEmoji} />
                     {/if}
                     <span>{item.price} {config.currencyName}</span>
                   </span>
-                  
+
                   {#if canManageSettings && item.guildId}
                     <div class="flex gap-2">
-                      <button 
-                        type="button" 
+                      <button
+                        type="button"
                         onclick={() => openEditItem(item)}
                         class="p-2 bg-outline-variant/10 hover:bg-outline-variant/20 rounded-lg text-xs disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
                         title={m.eco_btn_edit()}
                       >
                         <Papicon icon="edit" size={14} />
                       </button>
-                      <button 
-                        type="button" 
+                      <button
+                        type="button"
                         onclick={() => handleDeleteItem(item.id)}
                         class="p-2 bg-error/10 hover:bg-error/25 rounded-lg text-xs disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
                         title={m.fb_delete()}
@@ -2251,12 +3183,17 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                       </button>
                     </div>
                   {:else}
-                    <span class="text-2xs font-bold text-on-surface-variant/40 italic">{m.eco_global_readonly()}</span>
+                    <span
+                      class="text-2xs font-bold text-on-surface-variant/40 italic"
+                      >{m.eco_global_readonly()}</span
+                    >
                   {/if}
                 </div>
               </div>
             {:else}
-              <p class="text-xs text-on-surface-variant italic py-6">{m.eco_no_items()}</p>
+              <p class="text-xs text-on-surface-variant italic py-6">
+                {m.eco_no_items()}
+              </p>
             {/each}
           </div>
         {/if}
@@ -2264,12 +3201,18 @@ import EmojiText from '../lib/components/EmojiText.svelte';
     {/if}
 
     <!-- Tab 3: Bestiaire (boss et monstres) -->
-    {#if activeTab === 'bestiaire'}
-      <div class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6">
-        <div class="flex flex-wrap items-start justify-between gap-4 border-b border-outline-variant/15 pb-4">
+    {#if activeTab === "bestiaire"}
+      <div
+        class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6"
+      >
+        <div
+          class="flex flex-wrap items-start justify-between gap-4 border-b border-outline-variant/15 pb-4"
+        >
           <div class="max-w-2xl">
             <h3 class="text-lg font-semibold">{m.eco_bestiary_title()}</h3>
-            <p class="text-xs text-on-surface-variant mt-1 leading-relaxed">{m.eco_bestiary_desc()}</p>
+            <p class="text-xs text-on-surface-variant mt-1 leading-relaxed">
+              {m.eco_bestiary_desc()}
+            </p>
           </div>
           {#if canManageSettings}
             <div class="flex gap-2">
@@ -2319,14 +3262,20 @@ import EmojiText from '../lib/components/EmojiText.svelte';
         </div>
 
         {#if config.clansEnabled}
-          <div class="flex items-center justify-between gap-4 bg-surface-container-high/30 border border-outline-variant/10 rounded-xl px-5 py-4">
+          <div
+            class="flex items-center justify-between gap-4 bg-surface-container-high/30 border border-outline-variant/10 rounded-xl px-5 py-4"
+          >
             <div>
-              <h4 class="text-sm font-bold">{m.eco_bestiary_clan_bridge_title()}</h4>
-              <p class="text-xs text-on-surface-variant mt-0.5 leading-relaxed">{m.eco_bestiary_clan_bridge_desc()}</p>
+              <h4 class="text-sm font-bold">
+                {m.eco_bestiary_clan_bridge_title()}
+              </h4>
+              <p class="text-xs text-on-surface-variant mt-0.5 leading-relaxed">
+                {m.eco_bestiary_clan_bridge_desc()}
+              </p>
             </div>
             <ToggleSwitch
               checked={config.clanPointsFromRpg}
-              onToggle={(v: boolean) => config.clanPointsFromRpg = v}
+              onToggle={(v: boolean) => (config.clanPointsFromRpg = v)}
               disabled={!canManageSettings}
             />
           </div>
@@ -2334,23 +3283,38 @@ import EmojiText from '../lib/components/EmojiText.svelte';
 
         <div class="space-y-4">
           <div class="max-w-3xl">
-            <h4 class="text-sm font-bold">{m.eco_bestiary_difficulty_title()}</h4>
-            <p class="text-xs text-on-surface-variant mt-0.5 leading-relaxed">{m.eco_bestiary_difficulty_desc()}</p>
+            <h4 class="text-sm font-bold">
+              {m.eco_bestiary_difficulty_title()}
+            </h4>
+            <p class="text-xs text-on-surface-variant mt-0.5 leading-relaxed">
+              {m.eco_bestiary_difficulty_desc()}
+            </p>
           </div>
 
           {#each difficultyRows as row (row.scope)}
             {@const rate = winRate(row.sample)}
-            <div class="bg-surface-container-high/30 border border-outline-variant/10 rounded-xl px-5 py-4 space-y-3">
+            <div
+              class="bg-surface-container-high/30 border border-outline-variant/10 rounded-xl px-5 py-4 space-y-3"
+            >
               <div class="flex flex-wrap items-center justify-between gap-2">
-                <span class="text-xs font-semibold text-on-surface-variant">{row.label}</span>
+                <span class="text-xs font-semibold text-on-surface-variant"
+                  >{row.label}</span
+                >
                 <span class="text-2xs text-on-surface-variant">
-                  {m.eco_bestiary_difficulty_current({ difficulty: DIFFICULTY_LABELS[row.current]() })}
+                  {m.eco_bestiary_difficulty_current({
+                    difficulty: DIFFICULTY_LABELS[row.current](),
+                  })}
                 </span>
               </div>
 
               <!-- Le palier conseille sort des combats deja livres : c'est la seule mesure
                    qui dise si le bestiaire est trop tendre ou trop dur pour ce serveur. -->
-              <p class="text-2xs leading-relaxed {row.advice && row.advice !== row.current ? 'text-primary/80' : 'text-on-surface-variant'}">
+              <p
+                class="text-2xs leading-relaxed {row.advice &&
+                row.advice !== row.current
+                  ? 'text-primary/80'
+                  : 'text-on-surface-variant'}"
+              >
                 <!-- Le conseil se tait tant que le serveur n'a pas livre assez de combats :
                      cinq victoires d'affilee ne disent rien de l'equilibrage. -->
                 {#if row.advice === null}
@@ -2363,7 +3327,11 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                     difficulty: row.adviceLabel.toLowerCase(),
                   })}
                 {:else}
-                  {m.eco_difficulty_advice_ok({ rate: rate ?? 0, battles: row.sample.battles, days: battleStatsDays })}
+                  {m.eco_difficulty_advice_ok({
+                    rate: rate ?? 0,
+                    battles: row.sample.battles,
+                    days: battleStatsDays,
+                  })}
                 {/if}
               </p>
 
@@ -2375,36 +3343,89 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                     onclick={() => handleApplyDifficulty(row.scope, level)}
                     disabled={!canManageSettings}
                     aria-pressed={selected}
-                    class="text-left p-4 rounded-xl border transition-all disabled:opacity-50 disabled:cursor-not-allowed {selected ? 'bg-primary/8 border-primary/50' : 'bg-surface-container-low/30 border-outline-variant/10 hover:border-outline-variant/30 hover:bg-surface-container-high/20'}"
+                    class="text-left p-4 rounded-xl border transition-all disabled:opacity-50 disabled:cursor-not-allowed {selected
+                      ? 'bg-primary/8 border-primary/50'
+                      : 'bg-surface-container-low/30 border-outline-variant/10 hover:border-outline-variant/30 hover:bg-surface-container-high/20'}"
                   >
                     <div class="flex items-center gap-2">
-                      <Papicon icon={BESTIARY_DIFFICULTY_ICONS[level]} size={14} class={selected ? 'text-primary' : 'text-on-surface-variant'} />
-                      <span class="text-body-sm font-semibold">{DIFFICULTY_LABELS[level]()}</span>
+                      <Papicon
+                        icon={BESTIARY_DIFFICULTY_ICONS[level]}
+                        size={14}
+                        class={selected
+                          ? "text-primary"
+                          : "text-on-surface-variant"}
+                      />
+                      <span class="text-body-sm font-semibold"
+                        >{DIFFICULTY_LABELS[level]()}</span
+                      >
                       {#if selected}
-                        <span class="ml-auto text-xs font-semibold px-2 py-0.5 rounded-lg bg-primary/15 text-primary">
+                        <span
+                          class="ml-auto text-xs font-semibold px-2 py-0.5 rounded-lg bg-primary/15 text-primary"
+                        >
                           {m.eco_bestiary_difficulty_active()}
                         </span>
                       {:else if row.advice === level}
-                        <span class="ml-auto text-xs font-semibold px-2 py-0.5 rounded-lg border border-primary/30 text-primary/80">
+                        <span
+                          class="ml-auto text-xs font-semibold px-2 py-0.5 rounded-lg border border-primary/30 text-primary/80"
+                        >
                           {m.eco_difficulty_advised()}
                         </span>
                       {/if}
                     </div>
-                    <p class="text-2xs text-on-surface-variant mt-2 leading-relaxed">{DIFFICULTY_DESCRIPTIONS[level]()}</p>
-                    {#if isDifficultyNeutral(level, ['health', 'attack', 'defense', 'xpReward', 'dropChance', 'bossRespawnHours'])}
-                      <p class="mt-3 text-2xs font-bold text-on-surface-variant flex items-center gap-1.5">
-                        <Papicon icon="Check" size={11} class="text-success/80" />
+                    <p
+                      class="text-2xs text-on-surface-variant mt-2 leading-relaxed"
+                    >
+                      {DIFFICULTY_DESCRIPTIONS[level]()}
+                    </p>
+                    {#if isDifficultyNeutral( level, ["health", "attack", "defense", "xpReward", "dropChance", "bossRespawnHours"], )}
+                      <p
+                        class="mt-3 text-2xs font-bold text-on-surface-variant flex items-center gap-1.5"
+                      >
+                        <Papicon
+                          icon="Check"
+                          size={11}
+                          class="text-success/80"
+                        />
                         {m.eco_difficulty_untouched_stats()}
                       </p>
                     {:else}
-                      <div class="flex flex-wrap gap-1.5 mt-3 text-2xs font-bold text-on-surface-variant">
-                        <span class="bg-outline-variant/10 px-2 py-0.5 rounded-lg">{m.eco_bestiary_difficulty_stat_health()} {formatDifficultyDelta(level, 'health')}</span>
-                        <span class="bg-outline-variant/10 px-2 py-0.5 rounded-lg">{m.eco_bestiary_difficulty_stat_attack()} {formatDifficultyDelta(level, 'attack')}</span>
-                        <span class="bg-outline-variant/10 px-2 py-0.5 rounded-lg">{m.eco_bestiary_difficulty_stat_defense()} {formatDifficultyDelta(level, 'defense')}</span>
-                        <span class="bg-outline-variant/10 px-2 py-0.5 rounded-lg">{m.eco_bestiary_difficulty_stat_rewards()} {formatDifficultyDelta(level, 'xpReward')}</span>
-                        <span class="bg-outline-variant/10 px-2 py-0.5 rounded-lg">{m.eco_bestiary_difficulty_stat_drops()} {formatDifficultyDelta(level, 'dropChance')}</span>
-                        {#if row.scope === 'boss'}
-                          <span class="bg-outline-variant/10 px-2 py-0.5 rounded-lg">{m.eco_bestiary_difficulty_stat_respawn()} {formatDifficultyDelta(level, 'bossRespawnHours')}</span>
+                      <div
+                        class="flex flex-wrap gap-1.5 mt-3 text-2xs font-bold text-on-surface-variant"
+                      >
+                        <span
+                          class="bg-outline-variant/10 px-2 py-0.5 rounded-lg"
+                          >{m.eco_bestiary_difficulty_stat_health()}
+                          {formatDifficultyDelta(level, "health")}</span
+                        >
+                        <span
+                          class="bg-outline-variant/10 px-2 py-0.5 rounded-lg"
+                          >{m.eco_bestiary_difficulty_stat_attack()}
+                          {formatDifficultyDelta(level, "attack")}</span
+                        >
+                        <span
+                          class="bg-outline-variant/10 px-2 py-0.5 rounded-lg"
+                          >{m.eco_bestiary_difficulty_stat_defense()}
+                          {formatDifficultyDelta(level, "defense")}</span
+                        >
+                        <span
+                          class="bg-outline-variant/10 px-2 py-0.5 rounded-lg"
+                          >{m.eco_bestiary_difficulty_stat_rewards()}
+                          {formatDifficultyDelta(level, "xpReward")}</span
+                        >
+                        <span
+                          class="bg-outline-variant/10 px-2 py-0.5 rounded-lg"
+                          >{m.eco_bestiary_difficulty_stat_drops()}
+                          {formatDifficultyDelta(level, "dropChance")}</span
+                        >
+                        {#if row.scope === "boss"}
+                          <span
+                            class="bg-outline-variant/10 px-2 py-0.5 rounded-lg"
+                            >{m.eco_bestiary_difficulty_stat_respawn()}
+                            {formatDifficultyDelta(
+                              level,
+                              "bossRespawnHours",
+                            )}</span
+                          >
                         {/if}
                       </div>
                     {/if}
@@ -2413,7 +3434,9 @@ import EmojiText from '../lib/components/EmojiText.svelte';
               </div>
 
               <p class="text-2xs text-on-surface-variant leading-relaxed">
-                {m.eco_difficulty_level_hint({ floor: Math.round(LEVEL_WEIGHT_FLOOR * 100) })}
+                {m.eco_difficulty_level_hint({
+                  floor: Math.round(LEVEL_WEIGHT_FLOOR * 100),
+                })}
                 {m.eco_difficulty_protected_hint()}
               </p>
             </div>
@@ -2423,136 +3446,258 @@ import EmojiText from '../lib/components/EmojiText.svelte';
         <FilterPills
           label={m.eco_bestiary_filter_all()}
           options={[
-            { value: 'boss', label: m.eco_bestiary_filter_boss() },
-            { value: 'monster', label: m.eco_bestiary_filter_monster() },
-            { value: 'all', label: m.eco_bestiary_filter_all() },
+            { value: "boss", label: m.eco_bestiary_filter_boss() },
+            { value: "monster", label: m.eco_bestiary_filter_monster() },
+            { value: "all", label: m.eco_bestiary_filter_all() },
           ]}
           value={bestiaryFilter}
-          onchange={(value) => bestiaryFilter = value}
+          onchange={(value) => (bestiaryFilter = value)}
         />
 
         {#if monstersLoading}
           <div class="flex items-center justify-center py-12">
-            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            <div
+              class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"
+            ></div>
           </div>
         {:else}
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {#each filteredMonsters as monster (monster.id)}
-              <div class="bg-surface-container-high/30 border border-outline-variant/10 p-6 rounded-xl flex flex-col justify-between {monster.enabled ? '' : 'opacity-50'}">
+              <div
+                class="bg-surface-container-high/30 border border-outline-variant/10 p-6 rounded-xl flex flex-col justify-between {monster.enabled
+                  ? ''
+                  : 'opacity-50'}"
+              >
                 <div class="space-y-3">
                   <div class="flex items-start gap-3">
-                    <EmojiText value={monster.emoji} size="1.125rem" class="text-lg" />
+                    <EmojiText
+                      value={monster.emoji}
+                      size="1.125rem"
+                      class="text-lg"
+                    />
                     <div class="min-w-0">
-                      <h4 class="font-semibold text-base leading-tight break-words">{monster.name}</h4>
+                      <h4
+                        class="font-semibold text-base leading-tight break-words"
+                      >
+                        {monster.name}
+                      </h4>
                       <div class="flex flex-wrap gap-1 mt-1.5">
-                        <span class="text-xs font-semibold text-on-surface-variant bg-outline-variant/10 px-2 py-0.5 rounded-full">{m.eco_rpg_level()} {monster.level}</span>
+                        <span
+                          class="text-xs font-semibold text-on-surface-variant bg-outline-variant/10 px-2 py-0.5 rounded-full"
+                          >{m.eco_rpg_level()} {monster.level}</span
+                        >
                         {#if monster.isBoss}
-                          <span class="text-xs font-semibold text-on-warning-container bg-warning/10 px-2 py-0.5 rounded-full">{m.eco_bestiary_badge_boss()}</span>
+                          <span
+                            class="text-xs font-semibold text-on-warning-container bg-warning/10 px-2 py-0.5 rounded-full"
+                            >{m.eco_bestiary_badge_boss()}</span
+                          >
                         {/if}
-                        {#if monster.scope === 'GLOBAL'}
-                          <span class="text-xs font-semibold text-on-surface-variant bg-outline-variant/10 px-2 py-0.5 rounded-full">{m.eco_bestiary_badge_default()}</span>
+                        {#if monster.scope === "GLOBAL"}
+                          <span
+                            class="text-xs font-semibold text-on-surface-variant bg-outline-variant/10 px-2 py-0.5 rounded-full"
+                            >{m.eco_bestiary_badge_default()}</span
+                          >
                         {:else if monster.overridesGlobal}
-                          <span class="text-xs font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded-full">{m.eco_bestiary_badge_custom()}</span>
+                          <span
+                            class="text-xs font-semibold text-primary bg-primary/10 px-2 py-0.5 rounded-full"
+                            >{m.eco_bestiary_badge_custom()}</span
+                          >
                         {:else}
-                          <span class="text-xs font-semibold text-on-success-container bg-success/10 px-2 py-0.5 rounded-full">{m.eco_bestiary_badge_local()}</span>
+                          <span
+                            class="text-xs font-semibold text-on-success-container bg-success/10 px-2 py-0.5 rounded-full"
+                            >{m.eco_bestiary_badge_local()}</span
+                          >
                         {/if}
                         {#if !monster.enabled}
-                          <span class="text-xs font-semibold text-on-error-container bg-error/10 px-2 py-0.5 rounded-full">{m.eco_bestiary_badge_disabled()}</span>
+                          <span
+                            class="text-xs font-semibold text-on-error-container bg-error/10 px-2 py-0.5 rounded-full"
+                            >{m.eco_bestiary_badge_disabled()}</span
+                          >
                         {/if}
                         <!-- Une fiche qui ne correspond plus au palier annonce a ete reglee a la
                              main : le prochain clic passera dessus comme sur les autres. -->
                         {#if monster.offDifficulty}
-                          <span class="text-xs font-semibold text-tertiary bg-tertiary/10 px-2 py-0.5 rounded-full" title={m.eco_bestiary_badge_tuned_hint()}>{m.eco_bestiary_badge_tuned()}</span>
+                          <span
+                            class="text-xs font-semibold text-tertiary bg-tertiary/10 px-2 py-0.5 rounded-full"
+                            title={m.eco_bestiary_badge_tuned_hint()}
+                            >{m.eco_bestiary_badge_tuned()}</span
+                          >
                         {/if}
                       </div>
                     </div>
                   </div>
 
-                  <p class="text-xs text-on-surface-variant leading-relaxed">{monster.description}</p>
+                  <p class="text-xs text-on-surface-variant leading-relaxed">
+                    {monster.description}
+                  </p>
 
                   <div class="flex flex-wrap gap-1.5 text-2xs font-bold">
-                    <span class="bg-success/10 text-on-success-container px-2 py-0.5 rounded-lg flex items-center gap-1"><Papicon icon="heart" size={10} /> {monster.health}</span>
-                    <span class="bg-error/10 text-on-error-container px-2 py-0.5 rounded-lg flex items-center gap-1"><Papicon icon="zap" size={10} /> {monster.attack}</span>
-                    <span class="bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded-lg flex items-center gap-1"><Papicon icon="shield" size={10} /> {monster.defense}</span>
-                    <span class="bg-warning/10 text-on-warning-container px-2 py-0.5 rounded-lg flex items-center gap-1"><Papicon icon="activity" size={10} /> {monster.speed}</span>
+                    <span
+                      class="bg-success/10 text-on-success-container px-2 py-0.5 rounded-lg flex items-center gap-1"
+                      ><Papicon icon="heart" size={10} /> {monster.health}</span
+                    >
+                    <span
+                      class="bg-error/10 text-on-error-container px-2 py-0.5 rounded-lg flex items-center gap-1"
+                      ><Papicon icon="zap" size={10} /> {monster.attack}</span
+                    >
+                    <span
+                      class="bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded-lg flex items-center gap-1"
+                      ><Papicon icon="shield" size={10} />
+                      {monster.defense}</span
+                    >
+                    <span
+                      class="bg-warning/10 text-on-warning-container px-2 py-0.5 rounded-lg flex items-center gap-1"
+                      ><Papicon icon="activity" size={10} />
+                      {monster.speed}</span
+                    >
                   </div>
 
-                  <div class="text-2xs text-on-surface-variant flex flex-wrap gap-3">
+                  <div
+                    class="text-2xs text-on-surface-variant flex flex-wrap gap-3"
+                  >
                     <span>{m.eco_xp()} +{monster.xpReward}</span>
-                    <span><EmojiText value={config.currencyEmoji} /> +{monster.coinReward}</span>
+                    <span
+                      ><EmojiText value={config.currencyEmoji} /> +{monster.coinReward}</span
+                    >
                     {#if monster.isBoss && monster.bossRespawnHours}
-                      <span>{m.eco_bestiary_respawn({ hours: monster.bossRespawnHours })}</span>
+                      <span
+                        >{m.eco_bestiary_respawn({
+                          hours: monster.bossRespawnHours,
+                        })}</span
+                      >
                     {/if}
                     {#if monster.clanPoints > 0 && (raidGuildMode ? config.guildsEnabled : config.clansEnabled)}
-                      <span class="{raidGuildMode || config.clanPointsFromRpg ? '' : 'line-through opacity-60'}">
+                      <span
+                        class={raidGuildMode || config.clanPointsFromRpg
+                          ? ""
+                          : "line-through opacity-60"}
+                      >
                         {raidGuildMode
-                          ? m.eco_quest_guild_xp_short({ points: monster.clanPoints })
-                          : m.eco_bestiary_clan_points_short({ points: monster.clanPoints })}
+                          ? m.eco_quest_guild_xp_short({
+                              points: monster.clanPoints,
+                            })
+                          : m.eco_bestiary_clan_points_short({
+                              points: monster.clanPoints,
+                            })}
                       </span>
                     {/if}
                     {#if titleName(monster.winTitleId)}
-                      <span class="flex items-center gap-1"><Papicon icon="crown" size={11} /> {titleName(monster.winTitleId)}</span>
+                      <span class="flex items-center gap-1"
+                        ><Papicon icon="crown" size={11} />
+                        {titleName(monster.winTitleId)}</span
+                      >
                     {/if}
                     {#if monster.firstKill}
-                      <span class="flex items-center gap-1" title={m.eco_bestiary_first_kill_hint({ date: new Date(monster.firstKill.at).toLocaleDateString() })}>
-                        <Papicon icon="award" size={11} /> {monster.firstKill.displayName ?? monster.firstKill.userId}
+                      <span
+                        class="flex items-center gap-1"
+                        title={m.eco_bestiary_first_kill_hint({
+                          date: new Date(
+                            monster.firstKill.at,
+                          ).toLocaleDateString(),
+                        })}
+                      >
+                        <Papicon icon="award" size={11} />
+                        {monster.firstKill.displayName ??
+                          monster.firstKill.userId}
                       </span>
                     {:else if monster.firstKillCoinReward > 0 || monster.firstKillXpReward > 0 || monster.firstKillClanPoints > 0 || monster.firstKillItemName || monster.firstKillRoleId || monster.firstKillTitleId}
-                      <span class="flex items-center gap-1"><Papicon icon="award" size={11} /> {m.eco_bestiary_first_kill_open()}</span>
+                      <span class="flex items-center gap-1"
+                        ><Papicon icon="award" size={11} />
+                        {m.eco_bestiary_first_kill_open()}</span
+                      >
                     {/if}
                     {#if monster.battles?.battles > 0}
-                      <span title={m.eco_bestiary_winrate_hint({ days: battleStatsDays })}>
-                        {m.eco_bestiary_winrate({ rate: winRate(monster.battles) ?? 0, battles: monster.battles.battles })}
+                      <span
+                        title={m.eco_bestiary_winrate_hint({
+                          days: battleStatsDays,
+                        })}
+                      >
+                        {m.eco_bestiary_winrate({
+                          rate: winRate(monster.battles) ?? 0,
+                          battles: monster.battles.battles,
+                        })}
                       </span>
                     {/if}
                   </div>
 
                   <div class="border-t border-outline-variant/5 pt-3 space-y-1">
-                    <span class="text-xs font-semibold text-on-surface-variant">{m.eco_bestiary_drops_label()}</span>
+                    <span class="text-xs font-semibold text-on-surface-variant"
+                      >{m.eco_bestiary_drops_label()}</span
+                    >
                     {#each monster.drops ?? [] as drop}
-                      <div class="text-2xs text-on-surface-variant/80 flex items-center justify-between gap-2">
-                        <span class="truncate"><EmojiText value={drop.emoji} /> {drop.itemName}</span>
-                        <span class="font-bold shrink-0">{Math.round(drop.chance * 100)} %{drop.coinBonus ? ` +${drop.coinBonus}` : ''}</span>
+                      <div
+                        class="text-2xs text-on-surface-variant/80 flex items-center justify-between gap-2"
+                      >
+                        <span class="truncate"
+                          ><EmojiText value={drop.emoji} />
+                          {drop.itemName}</span
+                        >
+                        <span class="font-bold shrink-0"
+                          >{Math.round(drop.chance * 100)} %{drop.coinBonus
+                            ? ` +${drop.coinBonus}`
+                            : ""}</span
+                        >
                       </div>
                     {:else}
-                      <p class="text-2xs text-on-surface-variant/40 italic">{m.eco_bestiary_no_drops()}</p>
+                      <p class="text-2xs text-on-surface-variant/40 italic">
+                        {m.eco_bestiary_no_drops()}
+                      </p>
                     {/each}
                   </div>
                 </div>
 
                 {#if canManageSettings}
-                  <div class="mt-6 border-t border-outline-variant/5 pt-4 flex items-center gap-2">
+                  <div
+                    class="mt-6 border-t border-outline-variant/5 pt-4 flex items-center gap-2"
+                  >
                     <button
                       type="button"
                       onclick={() => openEditMonster(monster)}
                       class="flex-1 px-3 py-2 bg-outline-variant/10 hover:bg-outline-variant/20 rounded-lg text-2xs font-bold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
                     >
                       <Papicon icon="edit" size={13} />
-                      {monster.scope === 'GLOBAL' ? m.eco_bestiary_btn_customize() : m.eco_btn_edit()}
+                      {monster.scope === "GLOBAL"
+                        ? m.eco_bestiary_btn_customize()
+                        : m.eco_btn_edit()}
                     </button>
                     <button
                       type="button"
-                      onclick={() => handleToggleMonster(monster, !monster.enabled)}
+                      onclick={() =>
+                        handleToggleMonster(monster, !monster.enabled)}
                       class="p-2 bg-outline-variant/10 hover:bg-outline-variant/20 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-                      title={monster.enabled ? m.eco_bestiary_btn_disable() : m.eco_bestiary_btn_enable()}
+                      title={monster.enabled
+                        ? m.eco_bestiary_btn_disable()
+                        : m.eco_bestiary_btn_enable()}
                     >
-                      <Papicon icon={monster.enabled ? 'ban' : 'power'} size={14} />
+                      <Papicon
+                        icon={monster.enabled ? "ban" : "power"}
+                        size={14}
+                      />
                     </button>
-                    {#if monster.scope === 'GUILD'}
+                    {#if monster.scope === "GUILD"}
                       <button
                         type="button"
                         onclick={() => handleDeleteMonster(monster)}
                         class="p-2 bg-error/10 hover:bg-error/25 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-                        title={monster.overridesGlobal ? m.eco_bestiary_btn_reset() : m.fb_delete()}
+                        title={monster.overridesGlobal
+                          ? m.eco_bestiary_btn_reset()
+                          : m.fb_delete()}
                       >
-                        <Papicon icon={monster.overridesGlobal ? 'rotate-ccw' : 'trash'} size={14} />
+                        <Papicon
+                          icon={monster.overridesGlobal
+                            ? "rotate-ccw"
+                            : "trash"}
+                          size={14}
+                        />
                       </button>
                     {/if}
                   </div>
                 {/if}
               </div>
             {:else}
-              <p class="text-xs text-on-surface-variant italic py-6">{m.eco_bestiary_empty()}</p>
+              <p class="text-xs text-on-surface-variant italic py-6">
+                {m.eco_bestiary_empty()}
+              </p>
             {/each}
           </div>
         {/if}
@@ -2561,16 +3706,20 @@ import EmojiText from '../lib/components/EmojiText.svelte';
 
     <!-- Tab 4: Marché noir -->
     <!-- Tab : Quetes RPG -->
-    {#if activeTab === 'recettes'}
+    {#if activeTab === "recettes"}
       <div class="space-y-4">
         <div class="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h3 class="text-lg font-semibold">{m.eco_recipes_title()}</h3>
-            <p class="text-xs text-on-surface-variant mt-0.5 leading-relaxed max-w-2xl">{m.eco_recipes_desc()}</p>
+            <p
+              class="text-xs text-on-surface-variant mt-0.5 leading-relaxed max-w-2xl"
+            >
+              {m.eco_recipes_desc()}
+            </p>
           </div>
           <button
             type="button"
-            onclick={() => editingRecipe = blankRecipe()}
+            onclick={() => (editingRecipe = blankRecipe())}
             disabled={!canManageSettings || guildItems.length === 0}
             class="px-4 py-2.5 rounded-lg bg-primary text-on-primary text-body-sm font-semibold disabled:opacity-50"
           >
@@ -2581,25 +3730,37 @@ import EmojiText from '../lib/components/EmojiText.svelte';
         {#if recipesLoading}
           <Skeleton height="180px" radius="0.75rem" />
         {:else if recipes.length === 0}
-          <p class="text-sm text-on-surface-variant italic py-8 text-center">{m.eco_recipes_empty()}</p>
+          <p class="text-sm text-on-surface-variant italic py-8 text-center">
+            {m.eco_recipes_empty()}
+          </p>
         {:else}
           <div class="space-y-2">
             {#each recipes as recipe (recipe.id)}
-              <div class="bg-surface-container-high/30 border border-outline-variant/10 rounded-xl px-5 py-4 flex flex-wrap items-center gap-4">
+              <div
+                class="bg-surface-container-high/30 border border-outline-variant/10 rounded-xl px-5 py-4 flex flex-wrap items-center gap-4"
+              >
                 <div class="flex-1 min-w-0">
                   <p class="text-body-sm font-semibold flex items-center gap-2">
-                    <EmojiText value={recipe.resultItem.emoji} /> {recipe.resultItem.name}
+                    <EmojiText value={recipe.resultItem.emoji} />
+                    {recipe.resultItem.name}
                     {#if !recipe.editable}
-                      <span class="text-xs font-semibold px-2 py-0.5 rounded-lg border border-outline-variant/20 text-on-surface-variant">
+                      <span
+                        class="text-xs font-semibold px-2 py-0.5 rounded-lg border border-outline-variant/20 text-on-surface-variant"
+                      >
                         {m.eco_recipe_shipped()}
                       </span>
                     {/if}
                   </p>
                   <p class="text-2xs text-on-surface-variant mt-1">
-                    {recipe.ingredients.map((ing: any) => `${ing.quantity} × ${ing.itemName}`).join(' + ')}
+                    {recipe.ingredients
+                      .map((ing: any) => `${ing.quantity} × ${ing.itemName}`)
+                      .join(" + ")}
                   </p>
                   <p class="text-2xs text-on-surface-variant mt-0.5">
-                    {m.eco_recipe_line({ level: recipe.levelRequired, cost: recipe.coinCost })}
+                    {m.eco_recipe_line({
+                      level: recipe.levelRequired,
+                      cost: recipe.coinCost,
+                    })}
                   </p>
                 </div>
 
@@ -2607,7 +3768,13 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                   <div class="flex gap-2 shrink-0">
                     <button
                       type="button"
-                      onclick={() => editingRecipe = { ...recipe, ingredients: recipe.ingredients.map((ing: any) => ({ ...ing })) }}
+                      onclick={() =>
+                        (editingRecipe = {
+                          ...recipe,
+                          ingredients: recipe.ingredients.map((ing: any) => ({
+                            ...ing,
+                          })),
+                        })}
                       class="px-3 py-1.5 rounded-lg border border-outline-variant/20 text-2xs font-medium hover:border-outline-variant/40"
                     >
                       {m.eco_btn_edit()}
@@ -2626,19 +3793,31 @@ import EmojiText from '../lib/components/EmojiText.svelte';
           </div>
         {/if}
 
-        <p class="text-2xs text-on-surface-variant leading-relaxed">{m.eco_recipe_shipped_hint()}</p>
+        <p class="text-2xs text-on-surface-variant leading-relaxed">
+          {m.eco_recipe_shipped_hint()}
+        </p>
       </div>
     {/if}
 
-    {#if activeTab === 'titres'}
-      <div class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6">
-        <div class="flex flex-wrap items-start justify-between gap-4 border-b border-outline-variant/15 pb-4">
+    {#if activeTab === "titres"}
+      <div
+        class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6"
+      >
+        <div
+          class="flex flex-wrap items-start justify-between gap-4 border-b border-outline-variant/15 pb-4"
+        >
           <div class="max-w-2xl">
             <h3 class="text-lg font-semibold">{m.eco_titles_title()}</h3>
-            <p class="text-xs text-on-surface-variant mt-1 leading-relaxed">{m.eco_titles_desc()}</p>
+            <p class="text-xs text-on-surface-variant mt-1 leading-relaxed">
+              {m.eco_titles_desc()}
+            </p>
           </div>
           {#if canManageSettings}
-            <button type="button" onclick={openNewTitle} class="px-4 py-2 bg-primary hover:bg-primary-hover text-on-primary text-body-sm font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5">
+            <button
+              type="button"
+              onclick={openNewTitle}
+              class="px-4 py-2 bg-primary hover:bg-primary-hover text-on-primary text-body-sm font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+            >
               <Papicon icon="plus" size={14} />
               {m.eco_title_create()}
             </button>
@@ -2647,37 +3826,68 @@ import EmojiText from '../lib/components/EmojiText.svelte';
 
         {#if titlesLoading}
           <div class="flex items-center justify-center py-12">
-            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            <div
+              class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"
+            ></div>
           </div>
         {:else if titles.length === 0}
-          <p class="text-xs text-on-surface-variant italic text-center py-8">{m.eco_titles_empty()}</p>
+          <p class="text-xs text-on-surface-variant italic text-center py-8">
+            {m.eco_titles_empty()}
+          </p>
         {:else}
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {#each titles as title (title.id)}
-              {@const ownerIds = new Set(title.owners.map((owner: any) => owner.userId))}
-              <div class="bg-surface-container-high/30 border border-outline-variant/10 p-6 rounded-xl flex flex-col justify-between">
+              {@const ownerIds = new Set(
+                title.owners.map((owner: any) => owner.userId),
+              )}
+              <div
+                class="bg-surface-container-high/30 border border-outline-variant/10 p-6 rounded-xl flex flex-col justify-between"
+              >
                 <div class="space-y-3">
-                  <h4 class="font-semibold text-base leading-tight break-words" style="color: {title.color}">{title.name}</h4>
+                  <h4
+                    class="font-semibold text-base leading-tight break-words"
+                    style="color: {title.color}"
+                  >
+                    {title.name}
+                  </h4>
                   {#if title.description}
-                    <p class="text-xs text-on-surface-variant leading-relaxed">{title.description}</p>
+                    <p class="text-xs text-on-surface-variant leading-relaxed">
+                      {title.description}
+                    </p>
                   {/if}
 
                   <div class="flex flex-wrap gap-1.5 text-2xs font-bold">
                     {#each titleBonusBadges(title) as badge}
-                      <span class="bg-primary/10 text-primary px-2 py-0.5 rounded-lg">{badge.label} {badge.value}</span>
+                      <span
+                        class="bg-primary/10 text-primary px-2 py-0.5 rounded-lg"
+                        >{badge.label} {badge.value}</span
+                      >
                     {:else}
-                      <span class="text-on-surface-variant italic font-normal">{m.eco_title_no_bonus()}</span>
+                      <span class="text-on-surface-variant italic font-normal"
+                        >{m.eco_title_no_bonus()}</span
+                      >
                     {/each}
                   </div>
 
                   <div class="border-t border-outline-variant/5 pt-3 space-y-2">
-                    <span class="text-xs font-semibold text-on-surface-variant">{m.eco_title_owners({ count: title.owners.length })}</span>
+                    <span class="text-xs font-semibold text-on-surface-variant"
+                      >{m.eco_title_owners({
+                        count: title.owners.length,
+                      })}</span
+                    >
                     <div class="flex flex-wrap gap-1.5">
                       {#each title.owners as owner (owner.userId)}
-                        <span class="text-2xs bg-outline-variant/10 rounded-lg pl-2 pr-1 py-0.5 flex items-center gap-1">
+                        <span
+                          class="text-2xs bg-outline-variant/10 rounded-lg pl-2 pr-1 py-0.5 flex items-center gap-1"
+                        >
                           {owner.displayName}
                           {#if canManageSettings}
-                            <button type="button" onclick={() => handleRevokeTitle(title, owner)} class="p-0.5 rounded hover:bg-error/20 text-error" title={m.eco_title_revoke()}>
+                            <button
+                              type="button"
+                              onclick={() => handleRevokeTitle(title, owner)}
+                              class="p-0.5 rounded hover:bg-error/20 text-error"
+                              title={m.eco_title_revoke()}
+                            >
                               <Papicon icon="x" size={10} />
                             </button>
                           {/if}
@@ -2689,13 +3899,27 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                       <div class="flex items-center gap-2">
                         <SearchableSelect
                           value={titleGrantPick[title.id] ?? null}
-                          options={players.filter((player: any) => !ownerIds.has(player.userId)).map((player: any) => ({ id: player.userId, name: player.displayName }))}
+                          options={players
+                            .filter(
+                              (player: any) => !ownerIds.has(player.userId),
+                            )
+                            .map((player: any) => ({
+                              id: player.userId,
+                              name: player.displayName,
+                            }))}
                           placeholder={m.eco_title_grant_placeholder()}
                           clearable={true}
                           className="flex-1 min-w-0"
-                          on:change={(e: any) => titleGrantPick[title.id] = e.detail?.value ?? null}
+                          on:change={(e: any) =>
+                            (titleGrantPick[title.id] =
+                              e.detail?.value ?? null)}
                         />
-                        <button type="button" onclick={() => handleGrantTitle(title)} disabled={!titleGrantPick[title.id]} class="px-3 py-2 bg-primary/10 hover:bg-primary/20 text-primary rounded-lg text-2xs font-bold disabled:opacity-50 shrink-0">
+                        <button
+                          type="button"
+                          onclick={() => handleGrantTitle(title)}
+                          disabled={!titleGrantPick[title.id]}
+                          class="px-3 py-2 bg-primary/10 hover:bg-primary/20 text-primary rounded-lg text-2xs font-bold disabled:opacity-50 shrink-0"
+                        >
                           {m.eco_title_grant()}
                         </button>
                       </div>
@@ -2704,12 +3928,22 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                 </div>
 
                 {#if canManageSettings}
-                  <div class="mt-6 border-t border-outline-variant/5 pt-4 flex items-center gap-2">
-                    <button type="button" onclick={() => openEditTitle(title)} class="flex-1 px-3 py-2 bg-outline-variant/10 hover:bg-outline-variant/20 rounded-lg text-2xs font-bold disabled:opacity-50 flex items-center justify-center gap-1.5">
+                  <div
+                    class="mt-6 border-t border-outline-variant/5 pt-4 flex items-center gap-2"
+                  >
+                    <button
+                      type="button"
+                      onclick={() => openEditTitle(title)}
+                      class="flex-1 px-3 py-2 bg-outline-variant/10 hover:bg-outline-variant/20 rounded-lg text-2xs font-bold disabled:opacity-50 flex items-center justify-center gap-1.5"
+                    >
                       <Papicon icon="edit" size={12} />
                       {m.eco_bestiary_btn_customize()}
                     </button>
-                    <button type="button" onclick={() => handleDeleteTitle(title)} class="px-3 py-2 bg-error/10 hover:bg-error/20 text-on-error-container rounded-lg text-2xs font-bold disabled:opacity-50">
+                    <button
+                      type="button"
+                      onclick={() => handleDeleteTitle(title)}
+                      class="px-3 py-2 bg-error/10 hover:bg-error/20 text-on-error-container rounded-lg text-2xs font-bold disabled:opacity-50"
+                    >
                       <Papicon icon="trash" size={12} />
                     </button>
                   </div>
@@ -2721,15 +3955,25 @@ import EmojiText from '../lib/components/EmojiText.svelte';
       </div>
     {/if}
 
-    {#if activeTab === 'quetes'}
-      <div class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6">
-        <div class="flex flex-wrap items-start justify-between gap-4 border-b border-outline-variant/15 pb-4">
+    {#if activeTab === "quetes"}
+      <div
+        class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6"
+      >
+        <div
+          class="flex flex-wrap items-start justify-between gap-4 border-b border-outline-variant/15 pb-4"
+        >
           <div class="max-w-2xl">
             <h3 class="text-lg font-semibold">{m.eco_quests_title()}</h3>
-            <p class="text-xs text-on-surface-variant mt-1 leading-relaxed">{m.eco_quests_desc()}</p>
+            <p class="text-xs text-on-surface-variant mt-1 leading-relaxed">
+              {m.eco_quests_desc()}
+            </p>
           </div>
           {#if canManageSettings}
-            <button type="button" onclick={openNewQuest} class="px-4 py-2 bg-primary hover:bg-primary-hover text-on-primary text-body-sm font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5">
+            <button
+              type="button"
+              onclick={openNewQuest}
+              class="px-4 py-2 bg-primary hover:bg-primary-hover text-on-primary text-body-sm font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+            >
               <Papicon icon="plus" size={14} />
               {m.eco_quest_create()}
             </button>
@@ -2737,83 +3981,154 @@ import EmojiText from '../lib/components/EmojiText.svelte';
         </div>
 
         {#if !config.clansEnabled}
-          <p class="text-2xs text-warning/80 bg-warning/5 border border-warning/20 rounded-lg px-4 py-3 leading-relaxed">
+          <p
+            class="text-2xs text-warning/80 bg-warning/5 border border-warning/20 rounded-lg px-4 py-3 leading-relaxed"
+          >
             {m.eco_quests_clans_off()}
           </p>
         {/if}
 
         {#if questsLoading}
           <div class="flex items-center justify-center py-12">
-            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            <div
+              class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"
+            ></div>
           </div>
         {:else}
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {#each quests as quest (quest.id)}
-              <div class="bg-surface-container-high/30 border border-outline-variant/10 p-6 rounded-xl flex flex-col justify-between {quest.enabled ? '' : 'opacity-50'}">
+              <div
+                class="bg-surface-container-high/30 border border-outline-variant/10 p-6 rounded-xl flex flex-col justify-between {quest.enabled
+                  ? ''
+                  : 'opacity-50'}"
+              >
                 <div class="space-y-3">
                   <div class="flex items-start gap-3">
-                    <EmojiText value={quest.emoji} size="1.125rem" class="text-lg" />
+                    <EmojiText
+                      value={quest.emoji}
+                      size="1.125rem"
+                      class="text-lg"
+                    />
                     <div class="min-w-0">
-                      <h4 class="font-semibold text-base leading-tight break-words">{quest.name}</h4>
+                      <h4
+                        class="font-semibold text-base leading-tight break-words"
+                      >
+                        {quest.name}
+                      </h4>
                       <div class="flex flex-wrap gap-1 mt-1.5">
-                        <span class="text-2xs font-bold uppercase tracking-widest px-2 py-0.5 rounded-full {quest.scope === 'TEAM' ? 'text-tertiary bg-tertiary/10' : 'text-on-surface-variant bg-outline-variant/10'}">
-                          {quest.scope === 'TEAM' ? m.eco_quest_scope_team() : m.eco_quest_scope_member()}
+                        <span
+                          class="text-2xs font-bold uppercase tracking-widest px-2 py-0.5 rounded-full {quest.scope ===
+                          'TEAM'
+                            ? 'text-tertiary bg-tertiary/10'
+                            : 'text-on-surface-variant bg-outline-variant/10'}"
+                        >
+                          {quest.scope === "TEAM"
+                            ? m.eco_quest_scope_team()
+                            : m.eco_quest_scope_member()}
                         </span>
-                        {#if quest.scope === 'TEAM'}
-                          <span class="text-xs font-semibold text-on-surface-variant bg-outline-variant/10 px-2 py-0.5 rounded-full">
-                            {quest.teamMode === 'CLAN' ? m.eco_raid_mode_clan() : m.eco_raid_mode_guild()}
+                        {#if quest.scope === "TEAM"}
+                          <span
+                            class="text-xs font-semibold text-on-surface-variant bg-outline-variant/10 px-2 py-0.5 rounded-full"
+                          >
+                            {quest.teamMode === "CLAN"
+                              ? m.eco_raid_mode_clan()
+                              : m.eco_raid_mode_guild()}
                           </span>
                         {/if}
                         {#if quest.repeatable}
-                          <span class="text-xs font-semibold text-tertiary bg-tertiary/10 px-2 py-0.5 rounded-full">{m.eco_quest_badge_repeatable()}</span>
+                          <span
+                            class="text-xs font-semibold text-tertiary bg-tertiary/10 px-2 py-0.5 rounded-full"
+                            >{m.eco_quest_badge_repeatable()}</span
+                          >
                         {/if}
                         {#if !quest.enabled}
-                          <span class="text-xs font-semibold text-on-error-container bg-error/10 px-2 py-0.5 rounded-full">{m.eco_bestiary_badge_disabled()}</span>
+                          <span
+                            class="text-xs font-semibold text-on-error-container bg-error/10 px-2 py-0.5 rounded-full"
+                            >{m.eco_bestiary_badge_disabled()}</span
+                          >
                         {/if}
                       </div>
                     </div>
                   </div>
 
-                  <p class="text-xs text-on-surface-variant leading-relaxed">{quest.description}</p>
-
-                  <p class="text-body-sm font-semibold">
-                    {m.eco_quest_goal({ target: quest.target, objective: questObjectiveLabel(quest.objective), hours: quest.windowHours })}
+                  <p class="text-xs text-on-surface-variant leading-relaxed">
+                    {quest.description}
                   </p>
 
-                  <div class="text-2xs text-on-surface-variant flex flex-wrap gap-3">
-                    {#if quest.rewardXp > 0}<span>{m.eco_xp()} +{quest.rewardXp}</span>{/if}
-                    {#if quest.rewardCoins > 0}<span><EmojiText value={config.currencyEmoji} /> +{quest.rewardCoins}</span>{/if}
+                  <p class="text-body-sm font-semibold">
+                    {m.eco_quest_goal({
+                      target: quest.target,
+                      objective: questObjectiveLabel(quest.objective),
+                      hours: quest.windowHours,
+                    })}
+                  </p>
+
+                  <div
+                    class="text-2xs text-on-surface-variant flex flex-wrap gap-3"
+                  >
+                    {#if quest.rewardXp > 0}<span
+                        >{m.eco_xp()} +{quest.rewardXp}</span
+                      >{/if}
+                    {#if quest.rewardCoins > 0}<span
+                        ><EmojiText value={config.currencyEmoji} /> +{quest.rewardCoins}</span
+                      >{/if}
                     {#if quest.rewardClanPoints > 0}
-                      {@const toGuild = quest.scope === 'TEAM' && quest.teamMode === 'RPG_GUILD'}
-                      <span class="{(toGuild ? config.guildsEnabled : config.clansEnabled) ? '' : 'line-through opacity-60'}">
+                      {@const toGuild =
+                        quest.scope === "TEAM" &&
+                        quest.teamMode === "RPG_GUILD"}
+                      <span
+                        class={(
+                          toGuild ? config.guildsEnabled : config.clansEnabled
+                        )
+                          ? ""
+                          : "line-through opacity-60"}
+                      >
                         {toGuild
-                          ? m.eco_quest_guild_xp_short({ points: quest.rewardClanPoints })
-                          : m.eco_bestiary_clan_points_short({ points: quest.rewardClanPoints })}
+                          ? m.eco_quest_guild_xp_short({
+                              points: quest.rewardClanPoints,
+                            })
+                          : m.eco_bestiary_clan_points_short({
+                              points: quest.rewardClanPoints,
+                            })}
                       </span>
                     {/if}
                   </div>
 
                   {#if quest.windowEndsAt}
                     <p class="text-2xs text-on-surface-variant">
-                      {m.eco_quest_window_ends({ date: new Date(quest.windowEndsAt).toLocaleString() })}
+                      {m.eco_quest_window_ends({
+                        date: new Date(quest.windowEndsAt).toLocaleString(),
+                      })}
                     </p>
                   {/if}
                 </div>
 
                 {#if canManageSettings}
-                  <div class="mt-6 border-t border-outline-variant/5 pt-4 flex items-center gap-2">
-                    <button type="button" onclick={() => openEditQuest(quest)} class="flex-1 px-3 py-2 bg-outline-variant/10 hover:bg-outline-variant/20 rounded-lg text-2xs font-bold disabled:opacity-50 flex items-center justify-center gap-1.5">
+                  <div
+                    class="mt-6 border-t border-outline-variant/5 pt-4 flex items-center gap-2"
+                  >
+                    <button
+                      type="button"
+                      onclick={() => openEditQuest(quest)}
+                      class="flex-1 px-3 py-2 bg-outline-variant/10 hover:bg-outline-variant/20 rounded-lg text-2xs font-bold disabled:opacity-50 flex items-center justify-center gap-1.5"
+                    >
                       <Papicon icon="edit" size={12} />
                       {m.eco_bestiary_btn_customize()}
                     </button>
-                    <button type="button" onclick={() => handleDeleteQuest(quest)} class="px-3 py-2 bg-error/10 hover:bg-error/20 text-on-error-container rounded-lg text-2xs font-bold disabled:opacity-50">
+                    <button
+                      type="button"
+                      onclick={() => handleDeleteQuest(quest)}
+                      class="px-3 py-2 bg-error/10 hover:bg-error/20 text-on-error-container rounded-lg text-2xs font-bold disabled:opacity-50"
+                    >
                       <Papicon icon="trash" size={12} />
                     </button>
                   </div>
                 {/if}
               </div>
             {:else}
-              <p class="text-xs text-on-surface-variant italic py-6">{m.eco_quests_empty()}</p>
+              <p class="text-xs text-on-surface-variant italic py-6">
+                {m.eco_quests_empty()}
+              </p>
             {/each}
           </div>
         {/if}
@@ -2821,21 +4136,29 @@ import EmojiText from '../lib/components/EmojiText.svelte';
     {/if}
 
     <!-- Tab 4: Raid hebdomadaire -->
-    {#if activeTab === 'raid'}
-      <div class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6">
+    {#if activeTab === "raid"}
+      <div
+        class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6"
+      >
         <div class="border-b border-outline-variant/15 pb-4 max-w-3xl">
           <h3 class="text-lg font-semibold">{m.eco_raid_title()}</h3>
-          <p class="text-xs text-on-surface-variant mt-1 leading-relaxed">{m.eco_raid_desc()}</p>
+          <p class="text-xs text-on-surface-variant mt-1 leading-relaxed">
+            {m.eco_raid_desc()}
+          </p>
         </div>
 
-        <div class="flex items-center justify-between gap-4 bg-surface-container-high/30 border border-outline-variant/10 rounded-xl px-5 py-4">
+        <div
+          class="flex items-center justify-between gap-4 bg-surface-container-high/30 border border-outline-variant/10 rounded-xl px-5 py-4"
+        >
           <div>
             <h4 class="text-sm font-bold">{m.eco_raid_toggle_title()}</h4>
-            <p class="text-xs text-on-surface-variant mt-0.5 leading-relaxed">{m.eco_raid_toggle_desc()}</p>
+            <p class="text-xs text-on-surface-variant mt-0.5 leading-relaxed">
+              {m.eco_raid_toggle_desc()}
+            </p>
           </div>
           <ToggleSwitch
             checked={config.raidEnabled}
-            onToggle={(v: boolean) => config.raidEnabled = v}
+            onToggle={(v: boolean) => (config.raidEnabled = v)}
             disabled={!canManageSettings}
           />
         </div>
@@ -2843,27 +4166,41 @@ import EmojiText from '../lib/components/EmojiText.svelte';
         <!-- Les deux modes ne se valent pas : le clan du serveur porte les points, les
              saisons et le classement, la guilde RPG n'est qu'une equipe de jeu. -->
         <div class="space-y-3">
-          <h4 class="text-xs font-semibold text-on-surface-variant">{m.eco_raid_team_mode_title()}</h4>
+          <h4 class="text-xs font-semibold text-on-surface-variant">
+            {m.eco_raid_team_mode_title()}
+          </h4>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {#each [{ id: 'CLAN', name: m.eco_raid_mode_clan(), desc: m.eco_raid_mode_clan_desc(), off: m.eco_raid_mode_clan_off() }, { id: 'RPG_GUILD', name: m.eco_raid_mode_guild(), desc: m.eco_raid_mode_guild_desc(), off: m.eco_raid_mode_guild_off() }] as mode (mode.id)}
-              {@const available = raidTeamModeAvailable[mode.id as 'CLAN' | 'RPG_GUILD']}
+            {#each [{ id: "CLAN", name: m.eco_raid_mode_clan(), desc: m.eco_raid_mode_clan_desc(), off: m.eco_raid_mode_clan_off() }, { id: "RPG_GUILD", name: m.eco_raid_mode_guild(), desc: m.eco_raid_mode_guild_desc(), off: m.eco_raid_mode_guild_off() }] as mode (mode.id)}
+              {@const available =
+                raidTeamModeAvailable[mode.id as "CLAN" | "RPG_GUILD"]}
               {@const selected = config.raidTeamMode === mode.id}
               <button
                 type="button"
-                onclick={() => config.raidTeamMode = mode.id}
+                onclick={() => (config.raidTeamMode = mode.id)}
                 disabled={!canManageSettings || !available}
                 aria-pressed={selected}
-                class="text-left p-4 rounded-xl border transition-all disabled:opacity-50 disabled:cursor-not-allowed {selected ? 'bg-primary/8 border-primary/50' : 'bg-surface-container-low/30 border-outline-variant/10 hover:border-outline-variant/30'}"
+                class="text-left p-4 rounded-xl border transition-all disabled:opacity-50 disabled:cursor-not-allowed {selected
+                  ? 'bg-primary/8 border-primary/50'
+                  : 'bg-surface-container-low/30 border-outline-variant/10 hover:border-outline-variant/30'}"
               >
                 <div class="flex items-center gap-2">
                   <span class="text-body-sm font-semibold">{mode.name}</span>
-                  {#if mode.id === 'CLAN'}
-                    <span class="text-xs font-semibold px-2 py-0.5 rounded-lg border border-primary/30 text-primary/80">{m.eco_raid_mode_recommended()}</span>
+                  {#if mode.id === "CLAN"}
+                    <span
+                      class="text-xs font-semibold px-2 py-0.5 rounded-lg border border-primary/30 text-primary/80"
+                      >{m.eco_raid_mode_recommended()}</span
+                    >
                   {/if}
                 </div>
-                <p class="text-2xs text-on-surface-variant mt-2 leading-relaxed">{mode.desc}</p>
+                <p
+                  class="text-2xs text-on-surface-variant mt-2 leading-relaxed"
+                >
+                  {mode.desc}
+                </p>
                 {#if !available}
-                  <p class="text-2xs text-warning/80 mt-2 leading-relaxed">{mode.off}</p>
+                  <p class="text-2xs text-warning/80 mt-2 leading-relaxed">
+                    {mode.off}
+                  </p>
                 {/if}
               </button>
             {/each}
@@ -2871,19 +4208,31 @@ import EmojiText from '../lib/components/EmojiText.svelte';
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div class="space-y-4 bg-surface-container-high/20 border border-outline-variant/10 rounded-xl p-5">
-            <h4 class="text-xs font-semibold text-on-surface-variant">{m.eco_raid_window_title()}</h4>
+          <div
+            class="space-y-4 bg-surface-container-high/20 border border-outline-variant/10 rounded-xl p-5"
+          >
+            <h4 class="text-xs font-semibold text-on-surface-variant">
+              {m.eco_raid_window_title()}
+            </h4>
 
             <!-- Un serveur peut preferer lancer son raid quand son equipe est la, plutot
                  qu'a heure fixe. Le jour et l'heure n'ont alors plus d'objet. -->
-            <div class="flex items-center justify-between gap-4 bg-surface-container-high/30 border border-outline-variant/10 rounded-lg px-4 py-3">
+            <div
+              class="flex items-center justify-between gap-4 bg-surface-container-high/30 border border-outline-variant/10 rounded-lg px-4 py-3"
+            >
               <div>
-                <h5 class="text-body-sm font-semibold">{m.eco_raid_auto_title()}</h5>
-                <p class="text-2xs text-on-surface-variant mt-0.5 leading-relaxed">{m.eco_raid_auto_desc()}</p>
+                <h5 class="text-body-sm font-semibold">
+                  {m.eco_raid_auto_title()}
+                </h5>
+                <p
+                  class="text-2xs text-on-surface-variant mt-0.5 leading-relaxed"
+                >
+                  {m.eco_raid_auto_desc()}
+                </p>
               </div>
               <ToggleSwitch
                 checked={config.raidAutoSchedule}
-                onToggle={(v: boolean) => config.raidAutoSchedule = v}
+                onToggle={(v: boolean) => (config.raidAutoSchedule = v)}
                 disabled={!canManageSettings || !config.raidEnabled}
               />
             </div>
@@ -2895,86 +4244,230 @@ import EmojiText from '../lib/components/EmojiText.svelte';
               <button
                 type="button"
                 onclick={handleStartRaid}
-                disabled={!canManageSettings || !config.enabled || !config.raidEnabled || !!raidState?.open || configDirty}
+                disabled={!canManageSettings ||
+                  !config.enabled ||
+                  !config.raidEnabled ||
+                  !!raidState?.open ||
+                  configDirty}
                 class="w-full px-4 py-3 bg-primary hover:bg-primary-hover text-on-primary text-body-sm font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 <Papicon icon="Sparkles" size={15} />
-                {raidState?.open ? m.eco_raid_start_running() : m.eco_raid_start()}
+                {raidState?.open
+                  ? m.eco_raid_start_running()
+                  : m.eco_raid_start()}
               </button>
               <p class="text-2xs text-on-surface-variant leading-relaxed">
-                {!config.enabled ? m.eco_paused_title() : configDirty ? m.eco_raid_start_unsaved() : m.eco_raid_start_hint()}
+                {!config.enabled
+                  ? m.eco_paused_title()
+                  : configDirty
+                    ? m.eco_raid_start_unsaved()
+                    : m.eco_raid_start_hint()}
               </p>
             {/if}
 
-            <div class="grid grid-cols-2 gap-3 {config.raidAutoSchedule ? '' : 'opacity-50'}">
+            <div
+              class="grid grid-cols-2 gap-3 {config.raidAutoSchedule
+                ? ''
+                : 'opacity-50'}"
+            >
               <div class="space-y-1.5">
-                <label for="raidWeekday" class="text-xs font-semibold text-on-surface-variant">{m.eco_raid_weekday()}</label>
-                <select id="raidWeekday" bind:value={config.raidWeekday} disabled={!canManageSettings || !config.raidEnabled || !config.raidAutoSchedule} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50">
+                <label
+                  for="raidWeekday"
+                  class="text-xs font-semibold text-on-surface-variant"
+                  >{m.eco_raid_weekday()}</label
+                >
+                <select
+                  id="raidWeekday"
+                  bind:value={config.raidWeekday}
+                  disabled={!canManageSettings ||
+                    !config.raidEnabled ||
+                    !config.raidAutoSchedule}
+                  class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
+                >
                   {#each raidWeekdayLabels as label, index (label)}
                     <option value={index}>{label}</option>
                   {/each}
                 </select>
               </div>
               <div class="space-y-1.5">
-                <label for="raidHour" class="text-xs font-semibold text-on-surface-variant">{m.eco_raid_hour()}</label>
-                <input id="raidHour" type="number" min="0" max="23" bind:value={config.raidHour} disabled={!canManageSettings || !config.raidEnabled || !config.raidAutoSchedule} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50" />
+                <label
+                  for="raidHour"
+                  class="text-xs font-semibold text-on-surface-variant"
+                  >{m.eco_raid_hour()}</label
+                >
+                <input
+                  id="raidHour"
+                  type="number"
+                  min="0"
+                  max="23"
+                  bind:value={config.raidHour}
+                  disabled={!canManageSettings ||
+                    !config.raidEnabled ||
+                    !config.raidAutoSchedule}
+                  class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
+                />
               </div>
             </div>
 
             <div class="space-y-1.5">
-              <label for="raidDuration" class="text-xs font-semibold text-on-surface-variant">{m.eco_raid_duration()}</label>
-              <input id="raidDuration" type="number" min="1" max="168" bind:value={config.raidDurationHours} disabled={!canManageSettings || !config.raidEnabled} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50" />
-              <p class="text-2xs text-on-surface-variant">{m.eco_raid_window_hint()}</p>
+              <label
+                for="raidDuration"
+                class="text-xs font-semibold text-on-surface-variant"
+                >{m.eco_raid_duration()}</label
+              >
+              <input
+                id="raidDuration"
+                type="number"
+                min="1"
+                max="168"
+                bind:value={config.raidDurationHours}
+                disabled={!canManageSettings || !config.raidEnabled}
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
+              />
+              <p class="text-2xs text-on-surface-variant">
+                {m.eco_raid_window_hint()}
+              </p>
             </div>
 
             <div class="space-y-1.5">
-              <label for="raidBoss" class="text-xs font-semibold text-on-surface-variant">{m.eco_raid_boss_choice()}</label>
-              <select id="raidBoss" bind:value={config.raidBossName} disabled={!canManageSettings || !config.raidEnabled} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50">
+              <label
+                for="raidBoss"
+                class="text-xs font-semibold text-on-surface-variant"
+                >{m.eco_raid_boss_choice()}</label
+              >
+              <select
+                id="raidBoss"
+                bind:value={config.raidBossName}
+                disabled={!canManageSettings || !config.raidEnabled}
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
+              >
                 <option value={null}>{m.eco_raid_boss_random()}</option>
                 {#each selectableRaidBosses as boss (boss.id)}
                   <option value={boss.name}>{bossOptionLabel(boss)}</option>
                 {/each}
                 {#if unavailableRaidBoss}
-                  <option value={unavailableRaidBoss}>{m.eco_raid_boss_unavailable({ name: unavailableRaidBoss })}</option>
+                  <option value={unavailableRaidBoss}
+                    >{m.eco_raid_boss_unavailable({
+                      name: unavailableRaidBoss,
+                    })}</option
+                  >
                 {/if}
               </select>
             </div>
           </div>
 
-          <div class="space-y-4 bg-surface-container-high/20 border border-outline-variant/10 rounded-xl p-5">
-            <h4 class="text-xs font-semibold text-on-surface-variant">{m.eco_raid_balance_title()}</h4>
+          <div
+            class="space-y-4 bg-surface-container-high/20 border border-outline-variant/10 rounded-xl p-5"
+          >
+            <h4 class="text-xs font-semibold text-on-surface-variant">
+              {m.eco_raid_balance_title()}
+            </h4>
 
             <div class="grid grid-cols-2 gap-3">
               <div class="space-y-1.5">
-                <label for="raidPerMember" class="text-xs font-semibold text-on-surface-variant">{m.eco_raid_health_per_member()}</label>
-                <input id="raidPerMember" type="number" min="100" max="10000000" bind:value={config.raidHealthPerMember} disabled={!canManageSettings || !config.raidEnabled} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50" />
+                <label
+                  for="raidPerMember"
+                  class="text-xs font-semibold text-on-surface-variant"
+                  >{m.eco_raid_health_per_member()}</label
+                >
+                <input
+                  id="raidPerMember"
+                  type="number"
+                  min="100"
+                  max="10000000"
+                  bind:value={config.raidHealthPerMember}
+                  disabled={!canManageSettings || !config.raidEnabled}
+                  class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
+                />
               </div>
               <div class="space-y-1.5">
-                <label for="raidAssaults" class="text-xs font-semibold text-on-surface-variant">{m.eco_raid_assaults()}</label>
-                <input id="raidAssaults" type="number" min="1" max="20" bind:value={config.raidAssaultsPerMember} disabled={!canManageSettings || !config.raidEnabled} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50" />
+                <label
+                  for="raidAssaults"
+                  class="text-xs font-semibold text-on-surface-variant"
+                  >{m.eco_raid_assaults()}</label
+                >
+                <input
+                  id="raidAssaults"
+                  type="number"
+                  min="1"
+                  max="20"
+                  bind:value={config.raidAssaultsPerMember}
+                  disabled={!canManageSettings || !config.raidEnabled}
+                  class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
+                />
               </div>
               <div class="space-y-1.5">
-                <label for="raidBoughtAssaults" class="text-xs font-semibold text-on-surface-variant">{m.eco_raid_bought_assaults()}</label>
-                <input id="raidBoughtAssaults" type="number" min="0" max="20" bind:value={config.raidBoughtAssaultsMax} disabled={!canManageSettings || !config.raidEnabled} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50" />
-                <p class="text-2xs text-on-surface-variant">{m.eco_raid_bought_assaults_hint()}</p>
+                <label
+                  for="raidBoughtAssaults"
+                  class="text-xs font-semibold text-on-surface-variant"
+                  >{m.eco_raid_bought_assaults()}</label
+                >
+                <input
+                  id="raidBoughtAssaults"
+                  type="number"
+                  min="0"
+                  max="20"
+                  bind:value={config.raidBoughtAssaultsMax}
+                  disabled={!canManageSettings || !config.raidEnabled}
+                  class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
+                />
+                <p class="text-2xs text-on-surface-variant">
+                  {m.eco_raid_bought_assaults_hint()}
+                </p>
               </div>
               <div class="space-y-1.5">
-                <label for="raidFloor" class="text-xs font-semibold text-on-surface-variant">{m.eco_raid_health_floor()}</label>
-                <input id="raidFloor" type="number" min="500" bind:value={config.raidHealthFloor} disabled={!canManageSettings || !config.raidEnabled} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50" />
+                <label
+                  for="raidFloor"
+                  class="text-xs font-semibold text-on-surface-variant"
+                  >{m.eco_raid_health_floor()}</label
+                >
+                <input
+                  id="raidFloor"
+                  type="number"
+                  min="500"
+                  bind:value={config.raidHealthFloor}
+                  disabled={!canManageSettings || !config.raidEnabled}
+                  class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
+                />
               </div>
               <div class="space-y-1.5">
-                <label for="raidCap" class="text-xs font-semibold text-on-surface-variant">{m.eco_raid_health_cap()}</label>
-                <input id="raidCap" type="number" min="500" bind:value={config.raidHealthCap} disabled={!canManageSettings || !config.raidEnabled} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50" />
+                <label
+                  for="raidCap"
+                  class="text-xs font-semibold text-on-surface-variant"
+                  >{m.eco_raid_health_cap()}</label
+                >
+                <input
+                  id="raidCap"
+                  type="number"
+                  min="500"
+                  bind:value={config.raidHealthCap}
+                  disabled={!canManageSettings || !config.raidEnabled}
+                  class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
+                />
               </div>
               <div class="space-y-1.5 col-span-2">
-                <label for="raidEnergy" class="text-xs font-semibold text-on-surface-variant">{m.eco_raid_energy()}</label>
-                <input id="raidEnergy" type="number" min="0" max="100" bind:value={config.raidEnergyCost} disabled={!canManageSettings || !config.raidEnabled} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50" />
+                <label
+                  for="raidEnergy"
+                  class="text-xs font-semibold text-on-surface-variant"
+                  >{m.eco_raid_energy()}</label
+                >
+                <input
+                  id="raidEnergy"
+                  type="number"
+                  min="0"
+                  max="100"
+                  bind:value={config.raidEnergyCost}
+                  disabled={!canManageSettings || !config.raidEnabled}
+                  class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
+                />
               </div>
             </div>
 
             <!-- Une reserve ne se juge pas sur son chiffre mais sur ce qu'elle donne pour
                  une equipe reelle : trois joueurs d'un cote, vingt de l'autre. -->
-            <div class="text-2xs text-on-surface-variant bg-surface-container-high/30 border border-outline-variant/5 rounded-lg px-3 py-2 leading-relaxed">
+            <div
+              class="text-2xs text-on-surface-variant bg-surface-container-high/30 border border-outline-variant/5 rounded-lg px-3 py-2 leading-relaxed"
+            >
               {m.eco_raid_health_preview({
                 small: raidHealthPreview(3).toLocaleString(),
                 large: raidHealthPreview(20).toLocaleString(),
@@ -2984,67 +4477,165 @@ import EmojiText from '../lib/components/EmojiText.svelte';
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div class="space-y-4 bg-surface-container-high/20 border border-outline-variant/10 rounded-xl p-5">
-            <h4 class="text-xs font-semibold text-on-surface-variant">{m.eco_raid_rewards_title()}</h4>
-            <p class="text-2xs text-on-surface-variant leading-relaxed">{m.eco_raid_rewards_hint()}</p>
+          <div
+            class="space-y-4 bg-surface-container-high/20 border border-outline-variant/10 rounded-xl p-5"
+          >
+            <h4 class="text-xs font-semibold text-on-surface-variant">
+              {m.eco_raid_rewards_title()}
+            </h4>
+            <p class="text-2xs text-on-surface-variant leading-relaxed">
+              {m.eco_raid_rewards_hint()}
+            </p>
 
             <div class="grid grid-cols-2 gap-3">
               <div class="space-y-1.5">
-                <label for="raidXp" class="text-xs font-semibold text-on-surface-variant">{m.eco_raid_reward_xp()}</label>
-                <input id="raidXp" type="number" min="0" bind:value={config.raidXpReward} disabled={!canManageSettings || !config.raidEnabled} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50" />
+                <label
+                  for="raidXp"
+                  class="text-xs font-semibold text-on-surface-variant"
+                  >{m.eco_raid_reward_xp()}</label
+                >
+                <input
+                  id="raidXp"
+                  type="number"
+                  min="0"
+                  bind:value={config.raidXpReward}
+                  disabled={!canManageSettings || !config.raidEnabled}
+                  class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
+                />
               </div>
               <div class="space-y-1.5">
-                <label for="raidCoins" class="text-xs font-semibold text-on-surface-variant">{m.eco_raid_reward_coins({ currency: config.currencyName })}</label>
-                <input id="raidCoins" type="number" min="0" bind:value={config.raidCoinReward} disabled={!canManageSettings || !config.raidEnabled} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50" />
+                <label
+                  for="raidCoins"
+                  class="text-xs font-semibold text-on-surface-variant"
+                  >{m.eco_raid_reward_coins({
+                    currency: config.currencyName,
+                  })}</label
+                >
+                <input
+                  id="raidCoins"
+                  type="number"
+                  min="0"
+                  bind:value={config.raidCoinReward}
+                  disabled={!canManageSettings || !config.raidEnabled}
+                  class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
+                />
               </div>
               <!-- Le meme reglage credite le clan ou la guilde du jeu selon le mode : ce
                    qui change, c'est qui encaisse au bout, pas le montant a saisir. -->
               <div class="space-y-1.5 col-span-2">
-                <label for="raidPoints" class="text-xs font-semibold text-on-surface-variant">{raidGuildMode ? m.eco_raid_reward_guild_xp() : m.eco_raid_reward_points()}</label>
-                <input id="raidPoints" type="number" min="0" bind:value={config.raidClanPoints} disabled={!canManageSettings || !config.raidEnabled || !(raidGuildMode ? config.guildsEnabled : config.clansEnabled)} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50" />
-                <p class="text-2xs text-on-surface-variant">{raidGuildMode ? m.eco_raid_reward_guild_xp_hint() : m.eco_raid_reward_points_hint()}</p>
+                <label
+                  for="raidPoints"
+                  class="text-xs font-semibold text-on-surface-variant"
+                  >{raidGuildMode
+                    ? m.eco_raid_reward_guild_xp()
+                    : m.eco_raid_reward_points()}</label
+                >
+                <input
+                  id="raidPoints"
+                  type="number"
+                  min="0"
+                  bind:value={config.raidClanPoints}
+                  disabled={!canManageSettings ||
+                    !config.raidEnabled ||
+                    !(raidGuildMode
+                      ? config.guildsEnabled
+                      : config.clansEnabled)}
+                  class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
+                />
+                <p class="text-2xs text-on-surface-variant">
+                  {raidGuildMode
+                    ? m.eco_raid_reward_guild_xp_hint()
+                    : m.eco_raid_reward_points_hint()}
+                </p>
               </div>
               <div class="space-y-1.5 col-span-2">
-                <label for="raidConsolation" class="text-xs font-semibold text-on-surface-variant">{m.eco_raid_consolation()}</label>
-                <input id="raidConsolation" type="number" min="0" max="100" bind:value={config.raidConsolationShare} disabled={!canManageSettings || !config.raidEnabled} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50" />
-                <p class="text-2xs text-on-surface-variant">{m.eco_raid_consolation_hint()}</p>
+                <label
+                  for="raidConsolation"
+                  class="text-xs font-semibold text-on-surface-variant"
+                  >{m.eco_raid_consolation()}</label
+                >
+                <input
+                  id="raidConsolation"
+                  type="number"
+                  min="0"
+                  max="100"
+                  bind:value={config.raidConsolationShare}
+                  disabled={!canManageSettings || !config.raidEnabled}
+                  class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
+                />
+                <p class="text-2xs text-on-surface-variant">
+                  {m.eco_raid_consolation_hint()}
+                </p>
               </div>
             </div>
           </div>
 
-          <div class="space-y-4 bg-surface-container-high/20 border border-outline-variant/10 rounded-xl p-5">
-            <h4 class="text-xs font-semibold text-on-surface-variant">{m.eco_raid_announce_title()}</h4>
-            <p class="text-2xs text-on-surface-variant leading-relaxed">{m.eco_raid_announce_hint()}</p>
+          <div
+            class="space-y-4 bg-surface-container-high/20 border border-outline-variant/10 rounded-xl p-5"
+          >
+            <h4 class="text-xs font-semibold text-on-surface-variant">
+              {m.eco_raid_announce_title()}
+            </h4>
+            <p class="text-2xs text-on-surface-variant leading-relaxed">
+              {m.eco_raid_announce_hint()}
+            </p>
 
             <div class="space-y-1.5">
-              <label for="raidAnnounce" class="text-xs font-semibold text-on-surface-variant">{m.eco_bm_announce_mode()}</label>
-              <select id="raidAnnounce" bind:value={config.raidAnnounce} disabled={!canManageSettings || !config.raidEnabled} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50">
-                <option value="NONE" disabled={config.raidEnabled}>{m.eco_raid_announce_none()}</option>
+              <label
+                for="raidAnnounce"
+                class="text-xs font-semibold text-on-surface-variant"
+                >{m.eco_bm_announce_mode()}</label
+              >
+              <select
+                id="raidAnnounce"
+                bind:value={config.raidAnnounce}
+                disabled={!canManageSettings || !config.raidEnabled}
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
+              >
+                <option value="NONE" disabled={config.raidEnabled}
+                  >{m.eco_raid_announce_none()}</option
+                >
                 <option value="CHANNEL">{m.eco_bm_announce_channel()}</option>
-                <option value="CHANNEL_ROLE">{m.eco_bm_announce_channel_role()}</option>
+                <option value="CHANNEL_ROLE"
+                  >{m.eco_bm_announce_channel_role()}</option
+                >
               </select>
             </div>
 
-            {#if config.raidAnnounce !== 'NONE'}
+            {#if config.raidAnnounce !== "NONE"}
               <div class="space-y-1.5">
-                <label for="raidChannel" class="text-xs font-semibold text-on-surface-variant">{m.eco_bm_announce_channel_label()}</label>
+                <label
+                  for="raidChannel"
+                  class="text-xs font-semibold text-on-surface-variant"
+                  >{m.eco_bm_announce_channel_label()}</label
+                >
                 <SearchableSelect
                   id="raidChannel"
                   bind:value={config.raidChannelId}
-                  options={availableChannels.map((c: any) => ({ id: c.id, name: channelDisplayName(c) }))}
+                  options={availableChannels.map((c: any) => ({
+                    id: c.id,
+                    name: channelDisplayName(c),
+                  }))}
                   placeholder={m.eco_bm_select_channel()}
                   className="w-full"
                 />
               </div>
             {/if}
 
-            {#if config.raidAnnounce === 'CHANNEL_ROLE'}
+            {#if config.raidAnnounce === "CHANNEL_ROLE"}
               <div class="space-y-1.5">
-                <label for="raidRole" class="text-xs font-semibold text-on-surface-variant">{m.eco_bm_announce_role_label()}</label>
+                <label
+                  for="raidRole"
+                  class="text-xs font-semibold text-on-surface-variant"
+                  >{m.eco_bm_announce_role_label()}</label
+                >
                 <SearchableSelect
                   id="raidRole"
                   bind:value={config.raidRoleId}
-                  options={availableRoles.map((r: any) => ({ id: r.id, name: `@${r.name}` }))}
+                  options={availableRoles.map((r: any) => ({
+                    id: r.id,
+                    name: `@${r.name}`,
+                  }))}
                   placeholder={m.eco_bm_select_role()}
                   className="w-full"
                 />
@@ -3054,8 +4645,13 @@ import EmojiText from '../lib/components/EmojiText.svelte';
         </div>
 
         {#if raidState?.open}
-          <div class="bg-surface-container-high/30 border border-outline-variant/10 rounded-xl px-5 py-4 space-y-3">
-            <h4 class="text-sm font-bold"><EmojiText value={raidState.open.bossEmoji} /> {m.eco_raid_live_title({ boss: raidState.open.bossName })}</h4>
+          <div
+            class="bg-surface-container-high/30 border border-outline-variant/10 rounded-xl px-5 py-4 space-y-3"
+          >
+            <h4 class="text-sm font-bold">
+              <EmojiText value={raidState.open.bossEmoji} />
+              {m.eco_raid_live_title({ boss: raidState.open.bossName })}
+            </h4>
             {#each raidState.teams ?? [] as team (team.id)}
               <div class="flex items-center justify-between gap-3 text-xs">
                 <span class="font-semibold truncate">{team.teamName}</span>
@@ -3066,12 +4662,16 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                 </span>
               </div>
             {:else}
-              <p class="text-2xs text-on-surface-variant italic">{m.eco_raid_live_no_team()}</p>
+              <p class="text-2xs text-on-surface-variant italic">
+                {m.eco_raid_live_no_team()}
+              </p>
             {/each}
           </div>
         {:else if raidState?.nextOpensAt && config.raidAutoSchedule}
           <p class="text-2xs text-on-surface-variant">
-            {m.eco_raid_next_opening({ date: new Date(raidState.nextOpensAt).toLocaleString() })}
+            {m.eco_raid_next_opening({
+              date: new Date(raidState.nextOpensAt).toLocaleString(),
+            })}
           </p>
         {/if}
 
@@ -3080,19 +4680,33 @@ import EmojiText from '../lib/components/EmojiText.svelte';
         <!-- L'historique ne perime pas : sans lui, l'onglet se vidait des que le bilan
              expirait et ne disait plus rien des semaines passees. -->
         {#if pastRaids.length > 0}
-          <div class="bg-surface-container-high/20 border border-outline-variant/10 rounded-xl px-5 py-4 space-y-2">
-            <h4 class="text-xs font-semibold text-on-surface-variant">{m.eco_raid_history_title()}</h4>
+          <div
+            class="bg-surface-container-high/20 border border-outline-variant/10 rounded-xl px-5 py-4 space-y-2"
+          >
+            <h4 class="text-xs font-semibold text-on-surface-variant">
+              {m.eco_raid_history_title()}
+            </h4>
             {#each pastRaids as past (past.id)}
-              {@const downed = past.teams.filter((team: any) => team.defeated).length}
-              <div class="flex flex-wrap items-baseline justify-between gap-2 text-xs border-b border-outline-variant/10 last:border-0 py-1.5">
-                <span class="font-semibold truncate"><EmojiText value={past.bossEmoji} /> {past.bossName}</span>
+              {@const downed = past.teams.filter(
+                (team: any) => team.defeated,
+              ).length}
+              <div
+                class="flex flex-wrap items-baseline justify-between gap-2 text-xs border-b border-outline-variant/10 last:border-0 py-1.5"
+              >
+                <span class="font-semibold truncate"
+                  ><EmojiText value={past.bossEmoji} /> {past.bossName}</span
+                >
                 <span class="text-on-surface-variant text-2xs">
                   {m.eco_raid_history_line({
-                    date: new Date(past.resolvedAt ?? past.opensAt).toLocaleDateString(),
+                    date: new Date(
+                      past.resolvedAt ?? past.opensAt,
+                    ).toLocaleDateString(),
                     teams: past.teams.length,
                   })}
                   ·
-                  {downed > 0 ? m.eco_raid_history_downed({ count: downed }) : m.eco_raid_history_survived()}
+                  {downed > 0
+                    ? m.eco_raid_history_downed({ count: downed })
+                    : m.eco_raid_history_survived()}
                 </span>
               </div>
             {/each}
@@ -3100,23 +4714,42 @@ import EmojiText from '../lib/components/EmojiText.svelte';
         {/if}
 
         {#if raidRecap}
-          <div class="bg-surface-container-high/30 border border-outline-variant/10 rounded-xl px-5 py-4 space-y-4">
+          <div
+            class="bg-surface-container-high/30 border border-outline-variant/10 rounded-xl px-5 py-4 space-y-4"
+          >
             <div>
-              <h4 class="text-sm font-bold"><EmojiText value={raidRecap.raid.bossEmoji} /> {m.eco_raid_recap_title({ boss: raidRecap.raid.bossName })}</h4>
+              <h4 class="text-sm font-bold">
+                <EmojiText value={raidRecap.raid.bossEmoji} />
+                {m.eco_raid_recap_title({ boss: raidRecap.raid.bossName })}
+              </h4>
               <p class="text-2xs text-on-surface-variant mt-0.5">
-                {m.eco_raid_recap_closed({ date: new Date(raidRecap.raid.resolvedAt).toLocaleString() })}
+                {m.eco_raid_recap_closed({
+                  date: new Date(raidRecap.raid.resolvedAt).toLocaleString(),
+                })}
               </p>
             </div>
 
             <div class="space-y-1.5">
-              <h5 class="text-xs font-semibold text-on-surface-variant">{m.eco_raid_recap_teams()}</h5>
+              <h5 class="text-xs font-semibold text-on-surface-variant">
+                {m.eco_raid_recap_teams()}
+              </h5>
               {#each raidRecap.teams as team (team.id)}
                 <div class="flex items-center justify-between gap-3 text-xs">
-                  <span class="font-semibold truncate flex items-center gap-1.5">
+                  <span
+                    class="font-semibold truncate flex items-center gap-1.5"
+                  >
                     {#if team.defeatedAt}
-                      <Papicon icon="Trophy" size={12} class="text-success shrink-0" />
+                      <Papicon
+                        icon="Trophy"
+                        size={12}
+                        class="text-success shrink-0"
+                      />
                     {:else}
-                      <Papicon icon="Shield" size={12} class="text-on-surface-variant/40 shrink-0" />
+                      <Papicon
+                        icon="Shield"
+                        size={12}
+                        class="text-on-surface-variant/40 shrink-0"
+                      />
                     {/if}
                     {team.teamName}
                   </span>
@@ -3127,18 +4760,25 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                   </span>
                 </div>
               {:else}
-                <p class="text-2xs text-on-surface-variant italic">{m.eco_raid_live_no_team()}</p>
+                <p class="text-2xs text-on-surface-variant italic">
+                  {m.eco_raid_live_no_team()}
+                </p>
               {/each}
             </div>
 
             {#if raidRecap.strikers.length > 0}
               <div class="space-y-1.5">
-                <h5 class="text-xs font-semibold text-on-surface-variant">{m.eco_raid_recap_strikers()}</h5>
+                <h5 class="text-xs font-semibold text-on-surface-variant">
+                  {m.eco_raid_recap_strikers()}
+                </h5>
                 {#each raidRecap.strikers as striker, i (striker.userId)}
                   <div class="flex items-center justify-between gap-3 text-xs">
                     <span class="truncate">{i + 1}. {striker.displayName}</span>
                     <span class="text-on-surface-variant shrink-0">
-                      {m.eco_raid_recap_damage({ damage: striker.damage.toLocaleString(), assaults: striker.assaults })}
+                      {m.eco_raid_recap_damage({
+                        damage: striker.damage.toLocaleString(),
+                        assaults: striker.assaults,
+                      })}
                     </span>
                   </div>
                 {/each}
@@ -3151,15 +4791,26 @@ import EmojiText from '../lib/components/EmojiText.svelte';
           <div class="flex flex-wrap items-start justify-between gap-4">
             <div class="max-w-2xl">
               <h4 class="text-sm font-bold">{m.eco_raid_bosses_title()}</h4>
-              <p class="text-xs text-on-surface-variant mt-0.5 leading-relaxed">{m.eco_raid_bosses_desc()}</p>
+              <p class="text-xs text-on-surface-variant mt-0.5 leading-relaxed">
+                {m.eco_raid_bosses_desc()}
+              </p>
             </div>
             {#if canManageSettings}
               <div class="flex gap-2">
-                <button type="button" onclick={openNewRaidBoss} class="px-4 py-2 bg-primary hover:bg-primary-hover text-on-primary text-body-sm font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onclick={openNewRaidBoss}
+                  class="px-4 py-2 bg-primary hover:bg-primary-hover text-on-primary text-body-sm font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                >
                   <Papicon icon="plus" size={14} />
                   {m.eco_raid_boss_create()}
                 </button>
-                <button type="button" onclick={handleRestoreRaidBosses} class="px-4 py-2 bg-outline-variant/10 hover:bg-outline-variant/20 text-body-sm font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5" title={m.eco_raid_restore_hint()}>
+                <button
+                  type="button"
+                  onclick={handleRestoreRaidBosses}
+                  class="px-4 py-2 bg-outline-variant/10 hover:bg-outline-variant/20 text-body-sm font-medium rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                  title={m.eco_raid_restore_hint()}
+                >
                   <Papicon icon="refresh" size={14} />
                   {m.eco_raid_restore()}
                 </button>
@@ -3169,61 +4820,119 @@ import EmojiText from '../lib/components/EmojiText.svelte';
 
           {#if raidLoading}
             <div class="flex items-center justify-center py-12">
-              <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              <div
+                class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"
+              ></div>
             </div>
           {:else}
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {#each raidBosses as boss (boss.id)}
-                <div class="bg-surface-container-high/30 border border-outline-variant/10 p-6 rounded-xl flex flex-col justify-between {boss.enabled ? '' : 'opacity-50'}">
+                <div
+                  class="bg-surface-container-high/30 border border-outline-variant/10 p-6 rounded-xl flex flex-col justify-between {boss.enabled
+                    ? ''
+                    : 'opacity-50'}"
+                >
                   <div class="space-y-3">
                     <div class="flex items-start gap-3">
-                      <EmojiText value={boss.emoji} size="1.125rem" class="text-lg" />
+                      <EmojiText
+                        value={boss.emoji}
+                        size="1.125rem"
+                        class="text-lg"
+                      />
                       <div class="min-w-0">
-                        <h4 class="font-semibold text-base leading-tight break-words">{boss.name}</h4>
+                        <h4
+                          class="font-semibold text-base leading-tight break-words"
+                        >
+                          {boss.name}
+                        </h4>
                         <div class="flex flex-wrap gap-1 mt-1.5">
-                          <span class="text-xs font-semibold text-on-surface-variant bg-outline-variant/10 px-2 py-0.5 rounded-full">{m.eco_rpg_level()} {boss.level}</span>
+                          <span
+                            class="text-xs font-semibold text-on-surface-variant bg-outline-variant/10 px-2 py-0.5 rounded-full"
+                            >{m.eco_rpg_level()} {boss.level}</span
+                          >
                           {#if !boss.enabled}
-                            <span class="text-xs font-semibold text-on-error-container bg-error/10 px-2 py-0.5 rounded-full">{m.eco_bestiary_badge_disabled()}</span>
+                            <span
+                              class="text-xs font-semibold text-on-error-container bg-error/10 px-2 py-0.5 rounded-full"
+                              >{m.eco_bestiary_badge_disabled()}</span
+                            >
                           {/if}
                         </div>
                       </div>
                     </div>
 
-                    <p class="text-xs text-on-surface-variant leading-relaxed">{boss.description}</p>
+                    <p class="text-xs text-on-surface-variant leading-relaxed">
+                      {boss.description}
+                    </p>
 
                     <div class="flex flex-wrap gap-1.5 text-2xs font-bold">
-                      <span class="bg-error/10 text-on-error-container px-2 py-0.5 rounded-lg flex items-center gap-1"><Papicon icon="zap" size={10} /> {boss.attack}</span>
-                      <span class="bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded-lg flex items-center gap-1"><Papicon icon="shield" size={10} /> {boss.defense}</span>
-                      <span class="bg-warning/10 text-on-warning-container px-2 py-0.5 rounded-lg flex items-center gap-1"><Papicon icon="activity" size={10} /> {boss.speed}</span>
+                      <span
+                        class="bg-error/10 text-on-error-container px-2 py-0.5 rounded-lg flex items-center gap-1"
+                        ><Papicon icon="zap" size={10} /> {boss.attack}</span
+                      >
+                      <span
+                        class="bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded-lg flex items-center gap-1"
+                        ><Papicon icon="shield" size={10} />
+                        {boss.defense}</span
+                      >
+                      <span
+                        class="bg-warning/10 text-on-warning-container px-2 py-0.5 rounded-lg flex items-center gap-1"
+                        ><Papicon icon="activity" size={10} />
+                        {boss.speed}</span
+                      >
                     </div>
 
-                    <div class="border-t border-outline-variant/5 pt-3 space-y-1">
-                      <span class="text-xs font-semibold text-on-surface-variant">{m.eco_raid_spells_label()}</span>
+                    <div
+                      class="border-t border-outline-variant/5 pt-3 space-y-1"
+                    >
+                      <span
+                        class="text-xs font-semibold text-on-surface-variant"
+                        >{m.eco_raid_spells_label()}</span
+                      >
                       {#each boss.spells ?? [] as spell (spell.id)}
-                        <p class="text-2xs text-on-surface-variant/80 flex items-center gap-1.5">
-                          <Papicon icon={spell.icon} size={11} class="text-on-surface-variant" />
+                        <p
+                          class="text-2xs text-on-surface-variant/80 flex items-center gap-1.5"
+                        >
+                          <Papicon
+                            icon={spell.icon}
+                            size={11}
+                            class="text-on-surface-variant"
+                          />
                           {spell.name}
                         </p>
                       {:else}
-                        <p class="text-2xs text-on-surface-variant/40 italic">{m.eco_raid_no_spell()}</p>
+                        <p class="text-2xs text-on-surface-variant/40 italic">
+                          {m.eco_raid_no_spell()}
+                        </p>
                       {/each}
                     </div>
                   </div>
 
                   {#if canManageSettings}
-                    <div class="mt-6 border-t border-outline-variant/5 pt-4 flex items-center gap-2">
-                      <button type="button" onclick={() => openEditRaidBoss(boss)} class="flex-1 px-3 py-2 bg-outline-variant/10 hover:bg-outline-variant/20 rounded-lg text-2xs font-bold disabled:opacity-50 flex items-center justify-center gap-1.5">
+                    <div
+                      class="mt-6 border-t border-outline-variant/5 pt-4 flex items-center gap-2"
+                    >
+                      <button
+                        type="button"
+                        onclick={() => openEditRaidBoss(boss)}
+                        class="flex-1 px-3 py-2 bg-outline-variant/10 hover:bg-outline-variant/20 rounded-lg text-2xs font-bold disabled:opacity-50 flex items-center justify-center gap-1.5"
+                      >
                         <Papicon icon="edit" size={12} />
                         {m.eco_bestiary_btn_customize()}
                       </button>
-                      <button type="button" onclick={() => handleDeleteRaidBoss(boss)} class="px-3 py-2 bg-error/10 hover:bg-error/20 text-on-error-container rounded-lg text-2xs font-bold disabled:opacity-50">
+                      <button
+                        type="button"
+                        onclick={() => handleDeleteRaidBoss(boss)}
+                        class="px-3 py-2 bg-error/10 hover:bg-error/20 text-on-error-container rounded-lg text-2xs font-bold disabled:opacity-50"
+                      >
                         <Papicon icon="trash" size={12} />
                       </button>
                     </div>
                   {/if}
                 </div>
               {:else}
-                <p class="text-xs text-on-surface-variant italic py-6">{m.eco_raid_no_boss()}</p>
+                <p class="text-xs text-on-surface-variant italic py-6">
+                  {m.eco_raid_no_boss()}
+                </p>
               {/each}
             </div>
           {/if}
@@ -3231,103 +4940,228 @@ import EmojiText from '../lib/components/EmojiText.svelte';
       </div>
     {/if}
 
-    {#if activeTab === 'blackmarket'}
+    {#if activeTab === "blackmarket"}
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <div class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6 h-fit">
+        <div
+          class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6 h-fit"
+        >
           <div class="border-b border-outline-variant/15 pb-4">
             <h3 class="text-lg font-semibold">{m.eco_bm_title()}</h3>
-            <p class="text-xs text-on-surface-variant mt-1">{m.eco_bm_desc()}</p>
+            <p class="text-xs text-on-surface-variant mt-1">
+              {m.eco_bm_desc()}
+            </p>
           </div>
 
           <div class="flex items-center justify-between py-2">
             <div>
               <h4 class="text-sm font-bold">{m.eco_bm_toggle_title()}</h4>
-              <p class="text-xs text-on-surface-variant mt-0.5">{m.eco_bm_toggle_desc()}</p>
+              <p class="text-xs text-on-surface-variant mt-0.5">
+                {m.eco_bm_toggle_desc()}
+              </p>
             </div>
             <ToggleSwitch
               checked={config.blackMarketEnabled}
-              onToggle={(v: boolean) => config.blackMarketEnabled = v}
+              onToggle={(v: boolean) => (config.blackMarketEnabled = v)}
               disabled={!canManageSettings || !config.shopEnabled}
             />
           </div>
 
           {#if !config.shopEnabled}
-            <p class="text-xs text-on-surface-variant bg-surface-container-high/30 border border-outline-variant/10 rounded-lg px-4 py-3">
+            <p
+              class="text-xs text-on-surface-variant bg-surface-container-high/30 border border-outline-variant/10 rounded-lg px-4 py-3"
+            >
               {m.eco_bm_requires_shop()}
             </p>
           {/if}
 
-          <div class="space-y-4 pt-2 border-t border-outline-variant/10 transition-opacity duration-300 {!config.blackMarketEnabled ? 'opacity-60' : ''}">
-            <h4 class="text-xs font-semibold text-on-surface-variant">{m.eco_bm_rhythm_title()}</h4>
+          <div
+            class="space-y-4 pt-2 border-t border-outline-variant/10 transition-opacity duration-300 {!config.blackMarketEnabled
+              ? 'opacity-60'
+              : ''}"
+          >
+            <h4 class="text-xs font-semibold text-on-surface-variant">
+              {m.eco_bm_rhythm_title()}
+            </h4>
             <div class="grid grid-cols-2 gap-4">
               <div class="space-y-1.5">
-                <label for="bmInterval" class="text-xs font-semibold text-on-surface-variant">{m.eco_bm_interval()}</label>
-                <input id="bmInterval" type="number" min="1" max="365" bind:value={config.blackMarketIntervalDays} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings || !config.blackMarketEnabled} />
-                <p class="text-2xs text-on-surface-variant/40">{m.eco_bm_interval_hint()}</p>
+                <label
+                  for="bmInterval"
+                  class="text-xs font-semibold text-on-surface-variant"
+                  >{m.eco_bm_interval()}</label
+                >
+                <input
+                  id="bmInterval"
+                  type="number"
+                  min="1"
+                  max="365"
+                  bind:value={config.blackMarketIntervalDays}
+                  class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={!canManageSettings || !config.blackMarketEnabled}
+                />
+                <p class="text-2xs text-on-surface-variant/40">
+                  {m.eco_bm_interval_hint()}
+                </p>
               </div>
               <div class="space-y-1.5">
-                <label for="bmDuration" class="text-xs font-semibold text-on-surface-variant">{m.eco_bm_duration()}</label>
-                <input id="bmDuration" type="number" min="15" max="1440" bind:value={config.blackMarketDurationMin} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings || !config.blackMarketEnabled} />
-                <p class="text-2xs text-on-surface-variant/40">{m.eco_bm_duration_hint()}</p>
+                <label
+                  for="bmDuration"
+                  class="text-xs font-semibold text-on-surface-variant"
+                  >{m.eco_bm_duration()}</label
+                >
+                <input
+                  id="bmDuration"
+                  type="number"
+                  min="15"
+                  max="1440"
+                  bind:value={config.blackMarketDurationMin}
+                  class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={!canManageSettings || !config.blackMarketEnabled}
+                />
+                <p class="text-2xs text-on-surface-variant/40">
+                  {m.eco_bm_duration_hint()}
+                </p>
               </div>
             </div>
           </div>
         </div>
 
-        <div class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6 h-fit transition-opacity duration-300 {!config.blackMarketEnabled ? 'opacity-60' : ''}">
-          <h3 class="text-lg font-semibold border-b border-outline-variant/15 pb-4">{m.eco_bm_offers_title()}</h3>
+        <div
+          class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6 h-fit transition-opacity duration-300 {!config.blackMarketEnabled
+            ? 'opacity-60'
+            : ''}"
+        >
+          <h3
+            class="text-lg font-semibold border-b border-outline-variant/15 pb-4"
+          >
+            {m.eco_bm_offers_title()}
+          </h3>
 
           <div class="grid grid-cols-2 gap-4">
             <div class="space-y-1.5">
-              <label for="bmOfferCount" class="text-xs font-semibold text-on-surface-variant">{m.eco_bm_offer_count()}</label>
-              <input id="bmOfferCount" type="number" min="1" max="25" bind:value={config.blackMarketOfferCount} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings || !config.blackMarketEnabled} />
+              <label
+                for="bmOfferCount"
+                class="text-xs font-semibold text-on-surface-variant"
+                >{m.eco_bm_offer_count()}</label
+              >
+              <input
+                id="bmOfferCount"
+                type="number"
+                min="1"
+                max="25"
+                bind:value={config.blackMarketOfferCount}
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!canManageSettings || !config.blackMarketEnabled}
+              />
             </div>
             <div class="space-y-1.5">
-              <label for="bmMaxQty" class="text-xs font-semibold text-on-surface-variant">{m.eco_bm_max_quantity()}</label>
-              <input id="bmMaxQty" type="number" min="1" max="99" bind:value={config.blackMarketMaxQuantity} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings || !config.blackMarketEnabled} />
+              <label
+                for="bmMaxQty"
+                class="text-xs font-semibold text-on-surface-variant"
+                >{m.eco_bm_max_quantity()}</label
+              >
+              <input
+                id="bmMaxQty"
+                type="number"
+                min="1"
+                max="99"
+                bind:value={config.blackMarketMaxQuantity}
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!canManageSettings || !config.blackMarketEnabled}
+              />
             </div>
             <div class="space-y-1.5">
-              <label for="bmDiscountMin" class="text-xs font-semibold text-on-surface-variant">{m.eco_bm_discount_min()}</label>
-              <input id="bmDiscountMin" type="number" min="1" max="90" bind:value={config.blackMarketDiscountMin} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings || !config.blackMarketEnabled} />
+              <label
+                for="bmDiscountMin"
+                class="text-xs font-semibold text-on-surface-variant"
+                >{m.eco_bm_discount_min()}</label
+              >
+              <input
+                id="bmDiscountMin"
+                type="number"
+                min="1"
+                max="90"
+                bind:value={config.blackMarketDiscountMin}
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!canManageSettings || !config.blackMarketEnabled}
+              />
             </div>
             <div class="space-y-1.5">
-              <label for="bmDiscountMax" class="text-xs font-semibold text-on-surface-variant">{m.eco_bm_discount_max()}</label>
-              <input id="bmDiscountMax" type="number" min="1" max="90" bind:value={config.blackMarketDiscountMax} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings || !config.blackMarketEnabled} />
+              <label
+                for="bmDiscountMax"
+                class="text-xs font-semibold text-on-surface-variant"
+                >{m.eco_bm_discount_max()}</label
+              >
+              <input
+                id="bmDiscountMax"
+                type="number"
+                min="1"
+                max="90"
+                bind:value={config.blackMarketDiscountMax}
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!canManageSettings || !config.blackMarketEnabled}
+              />
             </div>
           </div>
 
           <div class="space-y-4 pt-2 border-t border-outline-variant/10">
-            <h4 class="text-xs font-semibold text-on-surface-variant">{m.eco_bm_announce_title()}</h4>
+            <h4 class="text-xs font-semibold text-on-surface-variant">
+              {m.eco_bm_announce_title()}
+            </h4>
 
             <div class="space-y-1.5">
-              <label for="bmAnnounce" class="text-xs font-semibold text-on-surface-variant">{m.eco_bm_announce_mode()}</label>
-              <select id="bmAnnounce" bind:value={config.blackMarketAnnounce} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed" disabled={!canManageSettings || !config.blackMarketEnabled}>
+              <label
+                for="bmAnnounce"
+                class="text-xs font-semibold text-on-surface-variant"
+                >{m.eco_bm_announce_mode()}</label
+              >
+              <select
+                id="bmAnnounce"
+                bind:value={config.blackMarketAnnounce}
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-3 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!canManageSettings || !config.blackMarketEnabled}
+              >
                 <option value="NONE">{m.eco_bm_announce_none()}</option>
                 <option value="CHANNEL">{m.eco_bm_announce_channel()}</option>
-                <option value="CHANNEL_ROLE">{m.eco_bm_announce_channel_role()}</option>
+                <option value="CHANNEL_ROLE"
+                  >{m.eco_bm_announce_channel_role()}</option
+                >
               </select>
             </div>
 
-            {#if config.blackMarketAnnounce !== 'NONE'}
+            {#if config.blackMarketAnnounce !== "NONE"}
               <div class="space-y-1.5">
-                <label for="bmChannel" class="text-xs font-semibold text-on-surface-variant">{m.eco_bm_announce_channel_label()}</label>
+                <label
+                  for="bmChannel"
+                  class="text-xs font-semibold text-on-surface-variant"
+                  >{m.eco_bm_announce_channel_label()}</label
+                >
                 <SearchableSelect
                   id="bmChannel"
                   bind:value={config.blackMarketChannelId}
-                  options={availableChannels.map((c: any) => ({ id: c.id, name: channelDisplayName(c) }))}
+                  options={availableChannels.map((c: any) => ({
+                    id: c.id,
+                    name: channelDisplayName(c),
+                  }))}
                   placeholder={m.eco_bm_select_channel()}
                   className="w-full"
                 />
               </div>
             {/if}
 
-            {#if config.blackMarketAnnounce === 'CHANNEL_ROLE'}
+            {#if config.blackMarketAnnounce === "CHANNEL_ROLE"}
               <div class="space-y-1.5">
-                <label for="bmRole" class="text-xs font-semibold text-on-surface-variant">{m.eco_bm_announce_role_label()}</label>
+                <label
+                  for="bmRole"
+                  class="text-xs font-semibold text-on-surface-variant"
+                  >{m.eco_bm_announce_role_label()}</label
+                >
                 <SearchableSelect
                   id="bmRole"
                   bind:value={config.blackMarketRoleId}
-                  options={availableRoles.map((r: any) => ({ id: r.id, name: `@${r.name}` }))}
+                  options={availableRoles.map((r: any) => ({
+                    id: r.id,
+                    name: `@${r.name}`,
+                  }))}
                   placeholder={m.eco_bm_select_role()}
                   className="w-full"
                 />
@@ -3339,39 +5173,58 @@ import EmojiText from '../lib/components/EmojiText.svelte';
     {/if}
 
     <!-- Tab 4: Players list & Leaderboard -->
-    {#if activeTab === 'peche'}
-      <RpgFishPanel canManage={canManageSettings} currencyName={config.currencyName} />
+    {#if activeTab === "peche"}
+      <RpgFishPanel
+        canManage={canManageSettings}
+        currencyName={config.currencyName}
+      />
     {/if}
 
-    {#if activeTab === 'donjons'}
-      <RpgDungeonsPanel canManage={canManageSettings} currencyName={config.currencyName} />
+    {#if activeTab === "donjons"}
+      <RpgDungeonsPanel
+        canManage={canManageSettings}
+        currencyName={config.currencyName}
+      />
     {/if}
 
-    {#if activeTab === 'tour'}
-      <RpgTowerPanel canManage={canManageSettings} currencyName={config.currencyName} />
+    {#if activeTab === "tour"}
+      <RpgTowerPanel
+        canManage={canManageSettings}
+        currencyName={config.currencyName}
+      />
     {/if}
 
-    {#if activeTab === 'aventures'}
+    {#if activeTab === "aventures"}
       <RpgEventsPanel canManage={canManageSettings} />
     {/if}
 
-    {#if activeTab === 'guildes'}
-      <RpgGuildsPanel canManage={canManageSettings} currencyName={config.currencyName} />
+    {#if activeTab === "guildes"}
+      <RpgGuildsPanel
+        canManage={canManageSettings}
+        currencyName={config.currencyName}
+      />
     {/if}
 
-    {#if activeTab === 'boutique' && authStore.selectedGuildId}
+    {#if activeTab === "boutique" && authStore.selectedGuildId}
       <ShopPanel guildId={authStore.selectedGuildId} />
     {/if}
 
-    {#if activeTab === 'players'}
-      <div class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6">
-        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-outline-variant/15 pb-4">
+    {#if activeTab === "players"}
+      <div
+        class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6"
+      >
+        <div
+          class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-outline-variant/15 pb-4"
+        >
           <h3 class="text-lg font-semibold">{m.eco_players_title()}</h3>
-          
-          <div class="flex flex-col sm:flex-row sm:items-center gap-2 w-full md:w-auto">
-            <input aria-label={m.eco_search_players_ph()} 
-              type="search" 
-              placeholder={m.eco_search_players_ph()} 
+
+          <div
+            class="flex flex-col sm:flex-row sm:items-center gap-2 w-full md:w-auto"
+          >
+            <input
+              aria-label={m.eco_search_players_ph()}
+              type="search"
+              placeholder={m.eco_search_players_ph()}
               bind:value={searchQuery}
               class="bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary w-full md:w-64"
             />
@@ -3379,7 +5232,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
             {#if canManageSettings}
               <button
                 type="button"
-                onclick={() => triggerReset('profiles')}
+                onclick={() => triggerReset("profiles")}
                 disabled={players.length === 0}
                 title={m.eco_players_reset_all_hint()}
                 class="px-4 py-2.5 bg-error/10 hover:bg-error/20 text-on-error-container text-2xs font-bold rounded-lg border border-error/20 transition-all flex items-center justify-center gap-1.5 whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
@@ -3393,13 +5246,17 @@ import EmojiText from '../lib/components/EmojiText.svelte';
 
         {#if playersLoading}
           <div class="flex items-center justify-center py-12">
-            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            <div
+              class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"
+            ></div>
           </div>
         {:else}
           <div class="overflow-x-auto">
             <table class="w-full text-left border-collapse text-xs">
               <thead>
-                <tr class="border-b border-outline-variant/10 text-on-surface-variant/55 font-semibold text-xs">
+                <tr
+                  class="border-b border-outline-variant/10 text-on-surface-variant/55 font-semibold text-xs"
+                >
                   <th class="py-4 px-4">{m.eco_col_rank()}</th>
                   <th class="py-4 px-4">{m.eco_col_player()}</th>
                   <th class="py-4 px-4">{m.eco_col_balance()}</th>
@@ -3413,120 +5270,228 @@ import EmojiText from '../lib/components/EmojiText.svelte';
               </thead>
               <tbody>
                 {#each filteredPlayers as player (player.userId)}
-                  <tr class="border-b border-outline-variant/5 hover:bg-surface-container-high/10 transition-colors">
-                    <td class="py-4 px-4 font-bold">#{playerRanks.get(player.userId)}</td>
+                  <tr
+                    class="border-b border-outline-variant/5 hover:bg-surface-container-high/10 transition-colors"
+                  >
+                    <td class="py-4 px-4 font-bold"
+                      >#{playerRanks.get(player.userId)}</td
+                    >
                     <td class="py-4 px-4 flex items-center gap-3">
                       <!-- Avatar : doublon du pseudo pour la souris, hors du parcours clavier -->
-                      <button type="button" tabindex="-1" aria-hidden="true" class="shrink-0" disabled={!memberCaseModal.canOpen} onclick={() => openMember(player)}>
+                      <button
+                        type="button"
+                        tabindex="-1"
+                        aria-hidden="true"
+                        class="shrink-0"
+                        disabled={!memberCaseModal.canOpen}
+                        onclick={() => openMember(player)}
+                      >
                         {#if player.avatarUrl}
-                          <img src={player.avatarUrl} alt="" class="w-8 h-8 rounded-full border border-outline-variant/20" />
+                          <img
+                            src={player.avatarUrl}
+                            alt=""
+                            class="w-8 h-8 rounded-full border border-outline-variant/20"
+                          />
                         {:else}
-                          <div class="w-8 h-8 rounded-full bg-primary/20 text-primary flex items-center justify-center font-bold">U</div>
+                          <div
+                            class="w-8 h-8 rounded-full bg-primary/20 text-primary flex items-center justify-center font-bold"
+                          >
+                            U
+                          </div>
                         {/if}
                       </button>
                       <div>
-                        <button type="button" class="block text-left font-semibold text-sm enabled:hover:text-primary transition-colors" disabled={!memberCaseModal.canOpen} onclick={() => openMember(player)}>{player.displayName || player.username}</button>
-                        <div class="text-2xs text-on-surface-variant/40 font-mono mt-0.5">{player.userId}</div>
+                        <button
+                          type="button"
+                          class="block text-left font-semibold text-sm enabled:hover:text-primary transition-colors"
+                          disabled={!memberCaseModal.canOpen}
+                          onclick={() => openMember(player)}
+                          >{player.displayName || player.username}</button
+                        >
+                        <div
+                          class="text-2xs text-on-surface-variant/40 font-mono mt-0.5"
+                        >
+                          {player.userId}
+                        </div>
                         <!-- Bento mini-stats -->
-                        <div class="flex items-center gap-2 mt-1 text-2xs font-bold text-on-surface-variant">
-                          <span class="bg-error/5 text-on-error-container px-1.5 py-0.5 rounded">⚔️ {player.attack} ATK</span>
-                          <span class="bg-blue-500/5 text-blue-400 px-1.5 py-0.5 rounded">🛡️ {player.defense} DEF</span>
-                          <span class="bg-warning/5 text-on-warning-container px-1.5 py-0.5 rounded">⚡ {player.speed} SPD</span>
+                        <div
+                          class="flex items-center gap-2 mt-1 text-2xs font-bold text-on-surface-variant"
+                        >
+                          <span
+                            class="bg-error/5 text-on-error-container px-1.5 py-0.5 rounded"
+                            >⚔️ {player.attack} ATK</span
+                          >
+                          <span
+                            class="bg-blue-500/5 text-blue-400 px-1.5 py-0.5 rounded"
+                            >🛡️ {player.defense} DEF</span
+                          >
+                          <span
+                            class="bg-warning/5 text-on-warning-container px-1.5 py-0.5 rounded"
+                            >⚡ {player.speed} SPD</span
+                          >
                         </div>
                       </div>
                     </td>
                     <td class="py-4 px-4 font-bold text-on-surface">
                       <div class="flex items-center gap-1.5">
                         {#if config.currencyIcon}
-                          <img src={config.currencyIcon} alt={config.currencyName} class="w-4 h-4 object-contain inline-block" />
+                          <img
+                            src={config.currencyIcon}
+                            alt={config.currencyName}
+                            class="w-4 h-4 object-contain inline-block"
+                          />
                         {:else}
                           <EmojiText value={config.currencyEmoji} />
                         {/if}
                         <span>{player.balance} {config.currencyName}</span>
                       </div>
-                      <div class="text-2xs text-on-surface-variant mt-0.5 font-normal">{m.eco_player_level_xp({ level: player.level, xp: player.xp })}</div>
+                      <div
+                        class="text-2xs text-on-surface-variant mt-0.5 font-normal"
+                      >
+                        {m.eco_player_level_xp({
+                          level: player.level,
+                          xp: player.xp,
+                        })}
+                      </div>
                     </td>
                     <td class="py-4 px-4">
                       <!-- Equipment display -->
                       <div class="space-y-1.5">
                         {#if player.weapon}
-                          <div class="flex items-center gap-1.5 text-2xs bg-primary/10 text-primary px-2 py-0.5 rounded-lg w-fit font-bold">
-                            <EmojiText value={player.weapon.emoji || '⚔️'} />
-                            <span class="truncate max-w-[120px]">{player.weapon.name} (+{player.weapon.atkBonus} ATK)</span>
+                          <div
+                            class="flex items-center gap-1.5 text-2xs bg-primary/10 text-primary px-2 py-0.5 rounded-lg w-fit font-bold"
+                          >
+                            <EmojiText value={player.weapon.emoji || "⚔️"} />
+                            <span class="truncate max-w-[120px]"
+                              >{player.weapon.name} (+{player.weapon.atkBonus} ATK)</span
+                            >
                           </div>
                         {:else}
-                          <div class="text-2xs text-on-surface-variant/30 italic">{m.eco_no_weapon()}</div>
+                          <div
+                            class="text-2xs text-on-surface-variant/30 italic"
+                          >
+                            {m.eco_no_weapon()}
+                          </div>
                         {/if}
 
                         {#if player.armor}
-                          <div class="flex items-center gap-1.5 text-2xs bg-success/10 text-on-success-container px-2 py-0.5 rounded-lg w-fit font-bold">
-                            <EmojiText value={player.armor.emoji || '🛡️'} />
-                            <span class="truncate max-w-[120px]">{player.armor.name} (+{player.armor.defBonus} DEF)</span>
+                          <div
+                            class="flex items-center gap-1.5 text-2xs bg-success/10 text-on-success-container px-2 py-0.5 rounded-lg w-fit font-bold"
+                          >
+                            <EmojiText value={player.armor.emoji || "🛡️"} />
+                            <span class="truncate max-w-[120px]"
+                              >{player.armor.name} (+{player.armor.defBonus} DEF)</span
+                            >
                           </div>
                         {:else}
-                          <div class="text-2xs text-on-surface-variant/30 italic">{m.eco_no_armor()}</div>
+                          <div
+                            class="text-2xs text-on-surface-variant/30 italic"
+                          >
+                            {m.eco_no_armor()}
+                          </div>
                         {/if}
 
                         {#each player.accessories ?? [] as accessory}
-                          <div class="flex items-center gap-1.5 text-2xs bg-violet-500/10 text-violet-400 px-2 py-0.5 rounded-lg w-fit font-bold">
-                            <EmojiText value={accessory.emoji || '💍'} />
-                            <span class="truncate max-w-[120px]">{accessory.name}</span>
+                          <div
+                            class="flex items-center gap-1.5 text-2xs bg-violet-500/10 text-violet-400 px-2 py-0.5 rounded-lg w-fit font-bold"
+                          >
+                            <EmojiText value={accessory.emoji || "💍"} />
+                            <span class="truncate max-w-[120px]"
+                              >{accessory.name}</span
+                            >
                           </div>
                         {/each}
 
-                        <div class="text-2xs text-on-surface-variant">{m.eco_player_bag_size({ count: player.bagSize ?? 0 })}</div>
+                        <div class="text-2xs text-on-surface-variant">
+                          {m.eco_player_bag_size({
+                            count: player.bagSize ?? 0,
+                          })}
+                        </div>
                       </div>
                     </td>
                     <td class="py-4 px-4">
                       <div class="flex items-center gap-2">
-                        <div class="w-20 bg-surface-container-high rounded-full h-2">
-                          <div class="bg-red-500 h-2 rounded-full" style="width: {Math.round((player.health / player.maxHealth) * 100)}%"></div>
+                        <div
+                          class="w-20 bg-surface-container-high rounded-full h-2"
+                        >
+                          <div
+                            class="bg-red-500 h-2 rounded-full"
+                            style="width: {Math.round(
+                              (player.health / player.maxHealth) * 100,
+                            )}%"
+                          ></div>
                         </div>
-                        <span class="font-bold">{player.health} / {player.maxHealth} HP</span>
+                        <span class="font-bold"
+                          >{player.health} / {player.maxHealth} HP</span
+                        >
                       </div>
                       <div class="flex items-center gap-2 mt-1.5">
-                        <div class="w-20 bg-surface-container-high rounded-full h-2">
-                          <div class="bg-purple-500 h-2 rounded-full" style="width: {player.energy}%"></div>
+                        <div
+                          class="w-20 bg-surface-container-high rounded-full h-2"
+                        >
+                          <div
+                            class="bg-purple-500 h-2 rounded-full"
+                            style="width: {player.energy}%"
+                          ></div>
                         </div>
-                        <span class="font-bold text-on-surface-variant">{player.energy}{m.eco_energy_unit()}</span>
+                        <span class="font-bold text-on-surface-variant"
+                          >{player.energy}{m.eco_energy_unit()}</span
+                        >
                       </div>
                     </td>
                     <td class="py-4 px-4 space-y-1">
                       <!-- Location -->
-                      <div class="font-semibold text-on-surface flex items-center gap-1">
+                      <div
+                        class="font-semibold text-on-surface flex items-center gap-1"
+                      >
                         {#if player.isTraveling}
                           <span>{m.eco_traveling_to()}</span>
-                          <span class="text-primary font-bold">{player.travelDestination}</span>
+                          <span class="text-primary font-bold"
+                            >{player.travelDestination}</span
+                          >
                         {:else}
                           <span>{m.eco_location_at()}</span>
-                          <span class="text-success font-bold">{player.travelDestination || m.eco_wild_lands()}</span>
+                          <span class="text-success font-bold"
+                            >{player.travelDestination ||
+                              m.eco_wild_lands()}</span
+                          >
                         {/if}
                       </div>
                       <!-- Guild -->
                       <div class="text-2xs text-on-surface-variant font-medium">
                         {#if player.rpgGuild}
-                          <span>{m.eco_alliance()} <strong><EmojiText value={player.rpgGuild.emoji} /> {player.rpgGuild.name}</strong></span>
+                          <span
+                            >{m.eco_alliance()}
+                            <strong
+                              ><EmojiText value={player.rpgGuild.emoji} />
+                              {player.rpgGuild.name}</strong
+                            ></span
+                          >
                         {:else}
-                          <span class="italic text-on-surface-variant/30">{m.eco_no_guild()}</span>
+                          <span class="italic text-on-surface-variant/30"
+                            >{m.eco_no_guild()}</span
+                          >
                         {/if}
                       </div>
                     </td>
                     {#if canManageSettings}
                       <td class="py-4 px-4 text-right">
                         <div class="flex flex-col items-end gap-1.5">
-                          <button 
-                             type="button" 
-                             onclick={() => openEditPlayer(player)}
-                             class="px-3 py-1.5 bg-outline-variant/10 hover:bg-outline-variant/25 text-xs font-bold rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 w-fit"
+                          <button
+                            type="button"
+                            onclick={() => openEditPlayer(player)}
+                            class="px-3 py-1.5 bg-outline-variant/10 hover:bg-outline-variant/25 text-xs font-bold rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 w-fit"
                           >
-                            <Papicon icon="edit" size={12} /> {m.eco_btn_edit()}
+                            <Papicon icon="edit" size={12} />
+                            {m.eco_btn_edit()}
                           </button>
                           <button
-                             type="button"
-                             onclick={() => openInventory(player)}
-                             class="px-3 py-1.5 bg-outline-variant/10 hover:bg-outline-variant/25 text-xs font-bold rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 w-fit"
+                            type="button"
+                            onclick={() => openInventory(player)}
+                            class="px-3 py-1.5 bg-outline-variant/10 hover:bg-outline-variant/25 text-xs font-bold rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 w-fit"
                           >
-                            <Papicon icon="package" size={12} /> {m.eco_inventory_btn()}
+                            <Papicon icon="package" size={12} />
+                            {m.eco_inventory_btn()}
                           </button>
                         </div>
                       </td>
@@ -3534,7 +5499,11 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                   </tr>
                 {:else}
                   <tr>
-                    <td colspan="7" class="text-center py-8 text-on-surface-variant italic">{m.eco_no_players()}</td>
+                    <td
+                      colspan="7"
+                      class="text-center py-8 text-on-surface-variant italic"
+                      >{m.eco_no_players()}</td
+                    >
                   </tr>
                 {/each}
               </tbody>
@@ -3550,54 +5519,123 @@ import EmojiText from '../lib/components/EmojiText.svelte';
 {#if editingItem}
   <!-- Tant que l'admin n'a pas tranché, un objet qui vend une récompense de module reste
        hors du marché noir : c'est la valeur que le serveur appliquera aussi. -->
-  {@const blackMarketChecked = editingItem.blackMarketEligible
-    ?? !((editingItem.levelXpReward ?? 0) > 0 || (editingItem.clanPointsReward ?? 0) > 0 || (editingItem.raidAssaultBonus ?? 0) > 0)}
+  {@const blackMarketChecked =
+    editingItem.blackMarketEligible ??
+    !(
+      (editingItem.levelXpReward ?? 0) > 0 ||
+      (editingItem.clanPointsReward ?? 0) > 0 ||
+      (editingItem.raidAssaultBonus ?? 0) > 0
+    )}
   {#snippet hpBonusField()}
     <div class="space-y-1">
-      <label for="itemHpBonus" class="text-xs font-semibold text-on-surface-variant">{m.eco_hp_bonus()}</label>
-      <input id="itemHpBonus" type="number" min="0" bind:value={editingItem.hpBonus} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+      <label
+        for="itemHpBonus"
+        class="text-xs font-semibold text-on-surface-variant"
+        >{m.eco_hp_bonus()}</label
+      >
+      <input
+        id="itemHpBonus"
+        type="number"
+        min="0"
+        bind:value={editingItem.hpBonus}
+        class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+      />
     </div>
   {/snippet}
-  <div class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-    <div class="bg-surface-container rounded-xl border border-outline-variant/30 p-8 w-full max-w-lg space-y-6 max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200">
-      <h3 class="text-xl font-semibold">{editingItem.id ? m.eco_modal_edit_item() : m.eco_modal_create_item()}</h3>
-      
+  <div
+    class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
+  >
+    <div
+      class="bg-surface-container rounded-xl border border-outline-variant/30 p-8 w-full max-w-lg space-y-6 max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200"
+    >
+      <h3 class="text-xl font-semibold">
+        {editingItem.id ? m.eco_modal_edit_item() : m.eco_modal_create_item()}
+      </h3>
+
       <div class="space-y-4">
         <div class="grid grid-cols-3 gap-3">
           <div class="col-span-2 space-y-1">
-            <label for="itemName" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_item_name()}</label>
-            <input id="itemName" type="text" bind:value={editingItem.name} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+            <label
+              for="itemName"
+              class="text-xs font-semibold text-on-surface-variant ml-2"
+              >{m.eco_item_name()}</label
+            >
+            <input
+              id="itemName"
+              type="text"
+              bind:value={editingItem.name}
+              class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            />
           </div>
           <div class="space-y-1">
-            <label for="itemEmoji" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_item_emoji()}</label>
+            <label
+              for="itemEmoji"
+              class="text-xs font-semibold text-on-surface-variant ml-2"
+              >{m.eco_item_emoji()}</label
+            >
             <div class="flex gap-2">
-              <input id="itemEmoji" type="text" bind:value={editingItem.emoji} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+              <input
+                id="itemEmoji"
+                type="text"
+                bind:value={editingItem.emoji}
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              />
               <EmojiPicker bind:value={editingItem.emoji} />
             </div>
           </div>
         </div>
 
         <div class="space-y-1">
-          <label for="itemDesc" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_item_desc()}</label>
-          <textarea id="itemDesc" bind:value={editingItem.description} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary h-16 resize-none"></textarea>
+          <label
+            for="itemDesc"
+            class="text-xs font-semibold text-on-surface-variant ml-2"
+            >{m.eco_item_desc()}</label
+          >
+          <textarea
+            id="itemDesc"
+            bind:value={editingItem.description}
+            class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary h-16 resize-none"
+          ></textarea>
         </div>
 
         <div class="grid grid-cols-2 gap-3">
           <div class="space-y-1">
-            <label for="itemType" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_item_type()}</label>
-            <select id="itemType" bind:value={editingItem.type} class="w-full bg-surface-container-high/45 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary text-on-surface">
+            <label
+              for="itemType"
+              class="text-xs font-semibold text-on-surface-variant ml-2"
+              >{m.eco_item_type()}</label
+            >
+            <select
+              id="itemType"
+              bind:value={editingItem.type}
+              class="w-full bg-surface-container-high/45 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary text-on-surface"
+            >
               <option value="WEAPON">🗡️ WEAPON ({m.ecx_item_weapon()})</option>
               <option value="ARMOR">🦺 ARMOR ({m.ecx_item_armor()})</option>
-              <option value="ACCESSORY">💍 ACCESSORY ({m.ecx_item_accessory()})</option>
+              <option value="ACCESSORY"
+                >💍 ACCESSORY ({m.ecx_item_accessory()})</option
+              >
               <option value="POTION">🧪 POTION ({m.ecx_item_potion()})</option>
-              <option value="MATERIAL">⚒️ MATERIAL ({m.ecx_item_material()})</option>
+              <option value="MATERIAL"
+                >⚒️ MATERIAL ({m.ecx_item_material()})</option
+              >
               <option value="SCROLL">🔮 SCROLL ({m.ecx_item_scroll()})</option>
               <option value="QUEST">🔑 QUEST ({m.ecx_item_quest()})</option>
             </select>
           </div>
           <div class="space-y-1">
-            <label for="itemPrice" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_item_price({ currency: config.currencyName })}</label>
-            <input id="itemPrice" type="number" min="0" bind:value={editingItem.price} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+            <label
+              for="itemPrice"
+              class="text-xs font-semibold text-on-surface-variant ml-2"
+              >{m.eco_item_price({ currency: config.currencyName })}</label
+            >
+            <input
+              id="itemPrice"
+              type="number"
+              min="0"
+              bind:value={editingItem.price}
+              class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            />
           </div>
         </div>
 
@@ -3607,79 +5645,169 @@ import EmojiText from '../lib/components/EmojiText.svelte';
              et sans exigence de niveau. -->
         <div class="grid grid-cols-2 gap-3">
           <div class="space-y-1">
-            <label for="itemRarity" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_item_rarity()}</label>
-            <select id="itemRarity" bind:value={editingItem.rarity} class="w-full bg-surface-container-high/45 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary text-on-surface">
+            <label
+              for="itemRarity"
+              class="text-xs font-semibold text-on-surface-variant ml-2"
+              >{m.eco_item_rarity()}</label
+            >
+            <select
+              id="itemRarity"
+              bind:value={editingItem.rarity}
+              class="w-full bg-surface-container-high/45 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary text-on-surface"
+            >
               {#each RPG_ITEM_RARITIES as rarity (rarity)}
                 <option value={rarity}>{rpgRarityLabel(rarity)}</option>
               {/each}
             </select>
           </div>
           <div class="space-y-1">
-            <label for="itemLevel" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_item_level_required()}</label>
-            <input id="itemLevel" type="number" min="0" bind:value={editingItem.levelRequired} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+            <label
+              for="itemLevel"
+              class="text-xs font-semibold text-on-surface-variant ml-2"
+              >{m.eco_item_level_required()}</label
+            >
+            <input
+              id="itemLevel"
+              type="number"
+              min="0"
+              bind:value={editingItem.levelRequired}
+              class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            />
           </div>
         </div>
 
-        <div class="flex items-center justify-between gap-4 bg-surface-container-high/30 border border-outline-variant/10 rounded-lg px-4 py-3">
+        <div
+          class="flex items-center justify-between gap-4 bg-surface-container-high/30 border border-outline-variant/10 rounded-lg px-4 py-3"
+        >
           <div>
             <p class="text-xs font-bold">{m.eco_item_purchasable()}</p>
-            <p class="text-2xs text-on-surface-variant mt-0.5 leading-relaxed">{m.eco_item_purchasable_hint()}</p>
+            <p class="text-2xs text-on-surface-variant mt-0.5 leading-relaxed">
+              {m.eco_item_purchasable_hint()}
+            </p>
           </div>
           <ToggleSwitch
             checked={editingItem.purchasable ?? true}
-            onToggle={(v: boolean) => editingItem.purchasable = v}
+            onToggle={(v: boolean) => (editingItem.purchasable = v)}
           />
         </div>
 
         <!-- Dynamic inputs depending on item type -->
-        <fieldset class="border border-outline-variant/10 p-4 rounded-lg space-y-3">
-          <legend class="text-xs font-semibold text-on-surface-variant px-2">{m.eco_stats_effects()}</legend>
-          {#if editingItem.type === 'WEAPON'}
+        <fieldset
+          class="border border-outline-variant/10 p-4 rounded-lg space-y-3"
+        >
+          <legend class="text-xs font-semibold text-on-surface-variant px-2"
+            >{m.eco_stats_effects()}</legend
+          >
+          {#if editingItem.type === "WEAPON"}
             <div class="space-y-1">
-              <label for="itemAtk" class="text-xs font-semibold text-on-surface-variant">{m.eco_atk_bonus()}</label>
-              <input id="itemAtk" type="number" min="0" bind:value={editingItem.atkBonus} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+              <label
+                for="itemAtk"
+                class="text-xs font-semibold text-on-surface-variant"
+                >{m.eco_atk_bonus()}</label
+              >
+              <input
+                id="itemAtk"
+                type="number"
+                min="0"
+                bind:value={editingItem.atkBonus}
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              />
             </div>
             {@render hpBonusField()}
-          {:else if editingItem.type === 'ARMOR'}
+          {:else if editingItem.type === "ARMOR"}
             <div class="space-y-1">
-              <label for="itemDef" class="text-xs font-semibold text-on-surface-variant">{m.eco_def_bonus()}</label>
-              <input id="itemDef" type="number" min="0" bind:value={editingItem.defBonus} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+              <label
+                for="itemDef"
+                class="text-xs font-semibold text-on-surface-variant"
+                >{m.eco_def_bonus()}</label
+              >
+              <input
+                id="itemDef"
+                type="number"
+                min="0"
+                bind:value={editingItem.defBonus}
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              />
             </div>
             {@render hpBonusField()}
-          {:else if editingItem.type === 'ACCESSORY'}
+          {:else if editingItem.type === "ACCESSORY"}
             <!-- Un accessoire porte les trois bonus a la fois : c'est ce qui le
                  distingue de l'arme et de l'armure, qui n'en portent qu'un. -->
             <div class="grid grid-cols-3 gap-3">
               <div class="space-y-1">
-                <label for="itemAccAtk" class="text-xs font-semibold text-on-surface-variant">{m.eco_atk_bonus()}</label>
-                <input id="itemAccAtk" type="number" bind:value={editingItem.atkBonus} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+                <label
+                  for="itemAccAtk"
+                  class="text-xs font-semibold text-on-surface-variant"
+                  >{m.eco_atk_bonus()}</label
+                >
+                <input
+                  id="itemAccAtk"
+                  type="number"
+                  bind:value={editingItem.atkBonus}
+                  class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                />
               </div>
               <div class="space-y-1">
-                <label for="itemAccDef" class="text-xs font-semibold text-on-surface-variant">{m.eco_def_bonus()}</label>
-                <input id="itemAccDef" type="number" bind:value={editingItem.defBonus} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+                <label
+                  for="itemAccDef"
+                  class="text-xs font-semibold text-on-surface-variant"
+                  >{m.eco_def_bonus()}</label
+                >
+                <input
+                  id="itemAccDef"
+                  type="number"
+                  bind:value={editingItem.defBonus}
+                  class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                />
               </div>
               <div class="space-y-1">
-                <label for="itemAccSpd" class="text-xs font-semibold text-on-surface-variant">{m.eco_spd_bonus()}</label>
-                <input id="itemAccSpd" type="number" bind:value={editingItem.spdBonus} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+                <label
+                  for="itemAccSpd"
+                  class="text-xs font-semibold text-on-surface-variant"
+                  >{m.eco_spd_bonus()}</label
+                >
+                <input
+                  id="itemAccSpd"
+                  type="number"
+                  bind:value={editingItem.spdBonus}
+                  class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                />
               </div>
             </div>
             {@render hpBonusField()}
-          {:else if editingItem.type === 'SCROLL'}
+          {:else if editingItem.type === "SCROLL"}
             <!-- Un parchemin ne vaut que par l'enchantement qu'il pose : sans lui
                  l'objet s'achete, se consomme, et ne fait rien. -->
-            {@const enchantment = RPG_ENCHANTMENTS.find((entry) => entry.id === editingItem.enchantId) ?? null}
+            {@const enchantment =
+              RPG_ENCHANTMENTS.find(
+                (entry) => entry.id === editingItem.enchantId,
+              ) ?? null}
             <div class="grid grid-cols-2 gap-3">
               <div class="space-y-1">
-                <label for="itemEnchant" class="text-xs font-semibold text-on-surface-variant">{m.eco_item_enchant()}</label>
-                <select id="itemEnchant" bind:value={editingItem.enchantId} class="w-full bg-surface-container-high/45 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary text-on-surface">
+                <label
+                  for="itemEnchant"
+                  class="text-xs font-semibold text-on-surface-variant"
+                  >{m.eco_item_enchant()}</label
+                >
+                <select
+                  id="itemEnchant"
+                  bind:value={editingItem.enchantId}
+                  class="w-full bg-surface-container-high/45 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary text-on-surface"
+                >
                   <option value={null}>{m.eco_item_enchant_none()}</option>
                   {#each RPG_ENCHANTMENTS as entry (entry.id)}
-                    <option value={entry.id}>{stripCustomEmoji(entry.emoji)} {entry.name}</option>
+                    <option value={entry.id}
+                      >{stripCustomEmoji(entry.emoji)} {entry.name}</option
+                    >
                   {/each}
                 </select>
               </div>
               <div class="space-y-1">
-                <label for="itemEnchantTier" class="text-xs font-semibold text-on-surface-variant">{m.eco_item_enchant_tier()}</label>
+                <label
+                  for="itemEnchantTier"
+                  class="text-xs font-semibold text-on-surface-variant"
+                  >{m.eco_item_enchant_tier()}</label
+                >
                 <input
                   id="itemEnchantTier"
                   type="number"
@@ -3690,42 +5818,96 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                   class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-40"
                 />
                 {#if enchantment}
-                  <p class="text-2xs text-on-surface-variant leading-relaxed mt-1">{m.eco_item_enchant_tier_hint({ max: enchantment.maxTier })}</p>
+                  <p
+                    class="text-2xs text-on-surface-variant leading-relaxed mt-1"
+                  >
+                    {m.eco_item_enchant_tier_hint({ max: enchantment.maxTier })}
+                  </p>
                 {/if}
               </div>
             </div>
             {#if enchantment}
-              <p class="text-2xs text-on-surface-variant leading-relaxed">{enchantment.description}</p>
-              <p class="text-2xs text-on-surface-variant">{m.eco_item_enchant_slots({ slots: enchantment.slots.join(', ') })}</p>
+              <p class="text-2xs text-on-surface-variant leading-relaxed">
+                {enchantment.description}
+              </p>
+              <p class="text-2xs text-on-surface-variant">
+                {m.eco_item_enchant_slots({
+                  slots: enchantment.slots.join(", "),
+                })}
+              </p>
             {/if}
-          {:else if editingItem.type === 'POTION'}
+          {:else if editingItem.type === "POTION"}
             <div class="grid grid-cols-2 gap-3">
               <div class="space-y-1">
-                <label for="itemHp" class="text-xs font-semibold text-on-surface-variant">{m.eco_hp_heal()}</label>
-                <input id="itemHp" type="number" bind:value={editingItem.hpRestore} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+                <label
+                  for="itemHp"
+                  class="text-xs font-semibold text-on-surface-variant"
+                  >{m.eco_hp_heal()}</label
+                >
+                <input
+                  id="itemHp"
+                  type="number"
+                  bind:value={editingItem.hpRestore}
+                  class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                />
               </div>
               <div class="space-y-1">
-                <label for="itemEnergy" class="text-xs font-semibold text-on-surface-variant">{m.eco_energy_heal()}</label>
-                <input id="itemEnergy" type="number" bind:value={editingItem.energyRestore} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+                <label
+                  for="itemEnergy"
+                  class="text-xs font-semibold text-on-surface-variant"
+                  >{m.eco_energy_heal()}</label
+                >
+                <input
+                  id="itemEnergy"
+                  type="number"
+                  bind:value={editingItem.energyRestore}
+                  class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                />
               </div>
             </div>
 
             {#if config.levelingEnabled || config.clansEnabled}
               <div class="border-t border-outline-variant/10 pt-3 space-y-3">
-                <p class="text-2xs text-on-surface-variant leading-relaxed">{m.eco_item_module_rewards_desc()}</p>
+                <p class="text-2xs text-on-surface-variant leading-relaxed">
+                  {m.eco_item_module_rewards_desc()}
+                </p>
                 <div class="grid grid-cols-2 gap-3">
                   {#if config.levelingEnabled}
                     <div class="space-y-1">
-                      <label for="itemLevelXp" class="text-xs font-semibold text-on-surface-variant">{m.eco_item_level_xp_reward()}</label>
-                      <input id="itemLevelXp" type="number" min="0" bind:value={editingItem.levelXpReward} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+                      <label
+                        for="itemLevelXp"
+                        class="text-xs font-semibold text-on-surface-variant"
+                        >{m.eco_item_level_xp_reward()}</label
+                      >
+                      <input
+                        id="itemLevelXp"
+                        type="number"
+                        min="0"
+                        bind:value={editingItem.levelXpReward}
+                        class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                      />
                     </div>
                   {/if}
                   {#if config.clansEnabled}
                     <div class="space-y-1">
-                      <label for="itemClanPoints" class="text-xs font-semibold text-on-surface-variant">{m.eco_item_clan_points_reward()}</label>
-                      <input id="itemClanPoints" type="number" min="0" bind:value={editingItem.clanPointsReward} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+                      <label
+                        for="itemClanPoints"
+                        class="text-xs font-semibold text-on-surface-variant"
+                        >{m.eco_item_clan_points_reward()}</label
+                      >
+                      <input
+                        id="itemClanPoints"
+                        type="number"
+                        min="0"
+                        bind:value={editingItem.clanPointsReward}
+                        class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                      />
                       {#if !config.clanPointsFromRpg}
-                        <p class="text-2xs text-on-surface-variant leading-relaxed mt-1">{m.eco_item_clan_points_bridge_off()}</p>
+                        <p
+                          class="text-2xs text-on-surface-variant leading-relaxed mt-1"
+                        >
+                          {m.eco_item_clan_points_bridge_off()}
+                        </p>
                       {/if}
                     </div>
                   {/if}
@@ -3733,52 +5915,80 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                        ne rendrait rien et sortirait de la vente. -->
                   {#if config.raidEnabled}
                     <div class="space-y-1">
-                      <label for="itemRaidAssaults" class="text-xs font-semibold text-on-surface-variant">{m.eco_item_raid_assaults()}</label>
-                      <input id="itemRaidAssaults" type="number" min="0" bind:value={editingItem.raidAssaultBonus} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
-                      <p class="text-2xs text-on-surface-variant leading-relaxed mt-1">{m.eco_item_raid_assaults_hint({ max: config.raidBoughtAssaultsMax })}</p>
+                      <label
+                        for="itemRaidAssaults"
+                        class="text-xs font-semibold text-on-surface-variant"
+                        >{m.eco_item_raid_assaults()}</label
+                      >
+                      <input
+                        id="itemRaidAssaults"
+                        type="number"
+                        min="0"
+                        bind:value={editingItem.raidAssaultBonus}
+                        class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                      />
+                      <p
+                        class="text-2xs text-on-surface-variant leading-relaxed mt-1"
+                      >
+                        {m.eco_item_raid_assaults_hint({
+                          max: config.raidBoughtAssaultsMax,
+                        })}
+                      </p>
                     </div>
                   {/if}
                 </div>
               </div>
             {/if}
           {:else}
-            <p class="text-xs text-on-surface-variant italic text-center py-2">{m.eco_no_attrs_needed()}</p>
+            <p class="text-xs text-on-surface-variant italic text-center py-2">
+              {m.eco_no_attrs_needed()}
+            </p>
           {/if}
         </fieldset>
 
-        <div class="flex items-center justify-between gap-4 border border-outline-variant/10 p-4 rounded-lg">
+        <div
+          class="flex items-center justify-between gap-4 border border-outline-variant/10 p-4 rounded-lg"
+        >
           <div>
             <h4 class="text-sm font-bold">{m.eco_item_black_market_title()}</h4>
-            <p class="text-xs text-on-surface-variant mt-0.5 leading-relaxed">{m.eco_item_black_market_desc()}</p>
+            <p class="text-xs text-on-surface-variant mt-0.5 leading-relaxed">
+              {m.eco_item_black_market_desc()}
+            </p>
           </div>
           <ToggleSwitch
             checked={blackMarketChecked}
-            onToggle={(v: boolean) => editingItem.blackMarketEligible = v}
+            onToggle={(v: boolean) => (editingItem.blackMarketEligible = v)}
           />
         </div>
 
-        <div class="flex items-center justify-between gap-4 border border-outline-variant/10 p-4 rounded-lg">
+        <div
+          class="flex items-center justify-between gap-4 border border-outline-variant/10 p-4 rounded-lg"
+        >
           <div>
             <h4 class="text-sm font-bold">{m.eco_item_salvageable_title()}</h4>
-            <p class="text-xs text-on-surface-variant mt-0.5 leading-relaxed">{m.eco_item_salvageable_desc()}</p>
+            <p class="text-xs text-on-surface-variant mt-0.5 leading-relaxed">
+              {m.eco_item_salvageable_desc()}
+            </p>
           </div>
           <ToggleSwitch
             checked={editingItem.salvageable ?? true}
-            onToggle={(v: boolean) => editingItem.salvageable = v}
+            onToggle={(v: boolean) => (editingItem.salvageable = v)}
           />
         </div>
       </div>
 
-      <div class="flex justify-end gap-3 pt-4 border-t border-outline-variant/10">
-        <button 
-          type="button" 
-          onclick={() => editingItem = null}
+      <div
+        class="flex justify-end gap-3 pt-4 border-t border-outline-variant/10"
+      >
+        <button
+          type="button"
+          onclick={() => (editingItem = null)}
           class="px-5 py-2.5 bg-outline-variant/10 hover:bg-outline-variant/20 rounded-xl text-xs font-bold transition-all"
         >
           {m.eco_btn_cancel()}
         </button>
-        <button 
-          type="button" 
+        <button
+          type="button"
           onclick={handleSaveItem}
           class="px-4 py-2 bg-primary hover:bg-primary-hover text-on-primary text-body-sm font-medium rounded-lg transition-all"
         >
@@ -3791,66 +6001,178 @@ import EmojiText from '../lib/components/EmojiText.svelte';
 
 <!-- MONSTER / BOSS MODAL EDITOR -->
 {#if editingMonster}
-  {@const nameLocked = editingMonster.scope === 'GLOBAL' || editingMonster.overridesGlobal}
-  <div class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-    <div class="bg-surface-container rounded-xl border border-outline-variant/30 p-8 w-full max-w-2xl space-y-6 max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200">
+  {@const nameLocked =
+    editingMonster.scope === "GLOBAL" || editingMonster.overridesGlobal}
+  <div
+    class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
+  >
+    <div
+      class="bg-surface-container rounded-xl border border-outline-variant/30 p-8 w-full max-w-2xl space-y-6 max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200"
+    >
       <h3 class="text-xl font-semibold">
-        {editingMonster.id ? m.eco_bestiary_modal_edit({ name: editingMonster.name }) : m.eco_bestiary_modal_create()}
+        {editingMonster.id
+          ? m.eco_bestiary_modal_edit({ name: editingMonster.name })
+          : m.eco_bestiary_modal_create()}
       </h3>
 
       <div class="space-y-4">
         <div class="grid grid-cols-3 gap-3">
           <div class="col-span-2 space-y-1">
-            <label for="monsterName" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_bestiary_name()}</label>
-            <input id="monsterName" type="text" bind:value={editingMonster.name} disabled={nameLocked} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60" />
+            <label
+              for="monsterName"
+              class="text-xs font-semibold text-on-surface-variant ml-2"
+              >{m.eco_bestiary_name()}</label
+            >
+            <input
+              id="monsterName"
+              type="text"
+              bind:value={editingMonster.name}
+              disabled={nameLocked}
+              class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60"
+            />
             {#if nameLocked}
-              <p class="text-2xs text-on-surface-variant leading-relaxed ml-2 mt-1">{m.eco_bestiary_name_locked()}</p>
+              <p
+                class="text-2xs text-on-surface-variant leading-relaxed ml-2 mt-1"
+              >
+                {m.eco_bestiary_name_locked()}
+              </p>
             {/if}
           </div>
           <div class="space-y-1">
-            <label for="monsterEmoji" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_bestiary_emoji()}</label>
+            <label
+              for="monsterEmoji"
+              class="text-xs font-semibold text-on-surface-variant ml-2"
+              >{m.eco_bestiary_emoji()}</label
+            >
             <div class="flex gap-2">
-              <input id="monsterEmoji" type="text" bind:value={editingMonster.emoji} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+              <input
+                id="monsterEmoji"
+                type="text"
+                bind:value={editingMonster.emoji}
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              />
               <EmojiPicker bind:value={editingMonster.emoji} />
             </div>
           </div>
         </div>
 
         <div class="space-y-1">
-          <label for="monsterDesc" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_bestiary_desc_field()}</label>
-          <textarea id="monsterDesc" bind:value={editingMonster.description} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary h-16 resize-none"></textarea>
+          <label
+            for="monsterDesc"
+            class="text-xs font-semibold text-on-surface-variant ml-2"
+            >{m.eco_bestiary_desc_field()}</label
+          >
+          <textarea
+            id="monsterDesc"
+            bind:value={editingMonster.description}
+            class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary h-16 resize-none"
+          ></textarea>
         </div>
 
         <fieldset class="border border-outline-variant/10 p-4 rounded-lg">
-          <legend class="text-xs font-semibold text-on-surface-variant px-2">{m.eco_stats_effects()}</legend>
+          <legend class="text-xs font-semibold text-on-surface-variant px-2"
+            >{m.eco_stats_effects()}</legend
+          >
           <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
             <div class="space-y-1">
-              <label for="monsterLevel" class="text-xs font-semibold text-on-surface-variant">{m.eco_bestiary_level()}</label>
-              <input id="monsterLevel" type="number" min="1" bind:value={editingMonster.level} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+              <label
+                for="monsterLevel"
+                class="text-xs font-semibold text-on-surface-variant"
+                >{m.eco_bestiary_level()}</label
+              >
+              <input
+                id="monsterLevel"
+                type="number"
+                min="1"
+                bind:value={editingMonster.level}
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              />
             </div>
             <div class="space-y-1">
-              <label for="monsterHp" class="text-xs font-semibold text-on-surface-variant">{m.eco_bestiary_health()}</label>
-              <input id="monsterHp" type="number" min="1" bind:value={editingMonster.health} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+              <label
+                for="monsterHp"
+                class="text-xs font-semibold text-on-surface-variant"
+                >{m.eco_bestiary_health()}</label
+              >
+              <input
+                id="monsterHp"
+                type="number"
+                min="1"
+                bind:value={editingMonster.health}
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              />
             </div>
             <div class="space-y-1">
-              <label for="monsterAtk" class="text-xs font-semibold text-on-surface-variant">{m.eco_atk()}</label>
-              <input id="monsterAtk" type="number" min="0" bind:value={editingMonster.attack} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+              <label
+                for="monsterAtk"
+                class="text-xs font-semibold text-on-surface-variant"
+                >{m.eco_atk()}</label
+              >
+              <input
+                id="monsterAtk"
+                type="number"
+                min="0"
+                bind:value={editingMonster.attack}
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              />
             </div>
             <div class="space-y-1">
-              <label for="monsterDef" class="text-xs font-semibold text-on-surface-variant">{m.eco_def()}</label>
-              <input id="monsterDef" type="number" min="0" bind:value={editingMonster.defense} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+              <label
+                for="monsterDef"
+                class="text-xs font-semibold text-on-surface-variant"
+                >{m.eco_def()}</label
+              >
+              <input
+                id="monsterDef"
+                type="number"
+                min="0"
+                bind:value={editingMonster.defense}
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              />
             </div>
             <div class="space-y-1">
-              <label for="monsterSpd" class="text-xs font-semibold text-on-surface-variant">{m.eco_spd()}</label>
-              <input id="monsterSpd" type="number" min="0" bind:value={editingMonster.speed} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+              <label
+                for="monsterSpd"
+                class="text-xs font-semibold text-on-surface-variant"
+                >{m.eco_spd()}</label
+              >
+              <input
+                id="monsterSpd"
+                type="number"
+                min="0"
+                bind:value={editingMonster.speed}
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              />
             </div>
             <div class="space-y-1">
-              <label for="monsterXp" class="text-xs font-semibold text-on-surface-variant">{m.eco_bestiary_xp_reward()}</label>
-              <input id="monsterXp" type="number" min="0" bind:value={editingMonster.xpReward} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+              <label
+                for="monsterXp"
+                class="text-xs font-semibold text-on-surface-variant"
+                >{m.eco_bestiary_xp_reward()}</label
+              >
+              <input
+                id="monsterXp"
+                type="number"
+                min="0"
+                bind:value={editingMonster.xpReward}
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              />
             </div>
             <div class="space-y-1 col-span-2 md:col-span-3">
-              <label for="monsterCoins" class="text-xs font-semibold text-on-surface-variant">{m.eco_bestiary_coin_reward({ currency: config.currencyName })}</label>
-              <input id="monsterCoins" type="number" min="0" bind:value={editingMonster.coinReward} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+              <label
+                for="monsterCoins"
+                class="text-xs font-semibold text-on-surface-variant"
+                >{m.eco_bestiary_coin_reward({
+                  currency: config.currencyName,
+                })}</label
+              >
+              <input
+                id="monsterCoins"
+                type="number"
+                min="0"
+                bind:value={editingMonster.coinReward}
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              />
             </div>
           </div>
         </fieldset>
@@ -3858,22 +6180,39 @@ import EmojiText from '../lib/components/EmojiText.svelte';
         <div class="space-y-3 border border-outline-variant/10 p-4 rounded-lg">
           <div class="flex items-center justify-between">
             <div>
-              <h4 class="text-sm font-bold">{m.eco_bestiary_is_boss_title()}</h4>
-              <p class="text-xs text-on-surface-variant mt-0.5">{m.eco_bestiary_is_boss_desc()}</p>
+              <h4 class="text-sm font-bold">
+                {m.eco_bestiary_is_boss_title()}
+              </h4>
+              <p class="text-xs text-on-surface-variant mt-0.5">
+                {m.eco_bestiary_is_boss_desc()}
+              </p>
             </div>
             <ToggleSwitch
               checked={editingMonster.isBoss}
               onToggle={(v: boolean) => {
                 editingMonster.isBoss = v;
-                editingMonster.bossRespawnHours = v ? (editingMonster.bossRespawnHours ?? 2) : null;
+                editingMonster.bossRespawnHours = v
+                  ? (editingMonster.bossRespawnHours ?? 2)
+                  : null;
               }}
             />
           </div>
 
           {#if editingMonster.isBoss}
             <div class="space-y-1">
-              <label for="monsterRespawn" class="text-xs font-semibold text-on-surface-variant">{m.eco_bestiary_respawn_hours()}</label>
-              <input id="monsterRespawn" type="number" min="1" max="720" bind:value={editingMonster.bossRespawnHours} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+              <label
+                for="monsterRespawn"
+                class="text-xs font-semibold text-on-surface-variant"
+                >{m.eco_bestiary_respawn_hours()}</label
+              >
+              <input
+                id="monsterRespawn"
+                type="number"
+                min="1"
+                max="720"
+                bind:value={editingMonster.bossRespawnHours}
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              />
             </div>
           {/if}
 
@@ -3881,45 +6220,79 @@ import EmojiText from '../lib/components/EmojiText.svelte';
                en guildes RPG : le champ suit le module qui l'encaissera. -->
           {#if raidGuildMode ? config.guildsEnabled : config.clansEnabled}
             <div class="space-y-1 pt-2 border-t border-outline-variant/5">
-              <label for="monsterClanPoints" class="text-xs font-semibold text-on-surface-variant">{raidGuildMode ? m.eco_raid_reward_guild_xp() : m.eco_bestiary_clan_points()}</label>
-              <input id="monsterClanPoints" type="number" min="0" bind:value={editingMonster.clanPoints} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+              <label
+                for="monsterClanPoints"
+                class="text-xs font-semibold text-on-surface-variant"
+                >{raidGuildMode
+                  ? m.eco_raid_reward_guild_xp()
+                  : m.eco_bestiary_clan_points()}</label
+              >
+              <input
+                id="monsterClanPoints"
+                type="number"
+                min="0"
+                bind:value={editingMonster.clanPoints}
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              />
               <p class="text-2xs text-on-surface-variant leading-relaxed mt-1">
                 {#if raidGuildMode}
                   {m.eco_bestiary_guild_xp_hint()}
                 {:else}
-                  {config.clanPointsFromRpg ? m.eco_bestiary_clan_points_hint() : m.eco_bestiary_clan_points_off()}
+                  {config.clanPointsFromRpg
+                    ? m.eco_bestiary_clan_points_hint()
+                    : m.eco_bestiary_clan_points_off()}
                 {/if}
               </p>
             </div>
           {/if}
 
           <div class="space-y-1 pt-2 border-t border-outline-variant/5">
-            <span class="text-xs font-semibold text-on-surface-variant">{m.eco_bestiary_win_title()}</span>
+            <span class="text-xs font-semibold text-on-surface-variant"
+              >{m.eco_bestiary_win_title()}</span
+            >
             <SearchableSelect
               value={editingMonster.winTitleId || null}
               options={titleOptions}
-              placeholder={titles.length > 0 ? m.eco_bestiary_title_none() : m.eco_bestiary_title_empty()}
+              placeholder={titles.length > 0
+                ? m.eco_bestiary_title_none()
+                : m.eco_bestiary_title_empty()}
               clearable={true}
               className="w-full"
-              on:change={(e: any) => editingMonster.winTitleId = e.detail?.value ?? null}
+              on:change={(e: any) =>
+                (editingMonster.winTitleId = e.detail?.value ?? null)}
             />
-            <p class="text-2xs text-on-surface-variant leading-relaxed mt-1">{m.eco_bestiary_win_title_hint()}</p>
+            <p class="text-2xs text-on-surface-variant leading-relaxed mt-1">
+              {m.eco_bestiary_win_title_hint()}
+            </p>
           </div>
 
           <div class="space-y-3 pt-2 border-t border-outline-variant/5">
             <div class="flex items-center justify-between">
               <div>
-                <h4 class="text-sm font-bold">{m.eco_bestiary_first_kill_title()}</h4>
-                <p class="text-xs text-on-surface-variant mt-0.5">{m.eco_bestiary_first_kill_desc()}</p>
+                <h4 class="text-sm font-bold">
+                  {m.eco_bestiary_first_kill_title()}
+                </h4>
+                <p class="text-xs text-on-surface-variant mt-0.5">
+                  {m.eco_bestiary_first_kill_desc()}
+                </p>
               </div>
-              <ToggleSwitch checked={editingMonster.firstKillOn} onToggle={(v: boolean) => editingMonster.firstKillOn = v} />
+              <ToggleSwitch
+                checked={editingMonster.firstKillOn}
+                onToggle={(v: boolean) => (editingMonster.firstKillOn = v)}
+              />
             </div>
 
             {#if editingMonster.firstKill}
-              <p class="text-xs bg-warning/10 text-on-warning-container rounded-lg px-3 py-2">
+              <p
+                class="text-xs bg-warning/10 text-on-warning-container rounded-lg px-3 py-2"
+              >
                 {m.eco_bestiary_first_kill_holder({
-                  name: editingMonster.firstKill.displayName ?? editingMonster.firstKill.userId,
-                  date: new Date(editingMonster.firstKill.at).toLocaleDateString()
+                  name:
+                    editingMonster.firstKill.displayName ??
+                    editingMonster.firstKill.userId,
+                  date: new Date(
+                    editingMonster.firstKill.at,
+                  ).toLocaleDateString(),
                 })}
               </p>
             {/if}
@@ -3927,90 +6300,184 @@ import EmojiText from '../lib/components/EmojiText.svelte';
             {#if editingMonster.firstKillOn}
               <div class="grid grid-cols-2 gap-3">
                 <div class="space-y-1">
-                  <label for="monsterFirstKillCoins" class="text-xs font-semibold text-on-surface-variant">{m.eco_bestiary_coin_reward({ currency: config.currencyName })}</label>
-                  <input id="monsterFirstKillCoins" type="number" min="0" bind:value={editingMonster.firstKillCoinReward} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+                  <label
+                    for="monsterFirstKillCoins"
+                    class="text-xs font-semibold text-on-surface-variant"
+                    >{m.eco_bestiary_coin_reward({
+                      currency: config.currencyName,
+                    })}</label
+                  >
+                  <input
+                    id="monsterFirstKillCoins"
+                    type="number"
+                    min="0"
+                    bind:value={editingMonster.firstKillCoinReward}
+                    class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  />
                 </div>
                 <div class="space-y-1">
-                  <label for="monsterFirstKillXp" class="text-xs font-semibold text-on-surface-variant">{m.eco_bestiary_xp_reward()}</label>
-                  <input id="monsterFirstKillXp" type="number" min="0" bind:value={editingMonster.firstKillXpReward} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+                  <label
+                    for="monsterFirstKillXp"
+                    class="text-xs font-semibold text-on-surface-variant"
+                    >{m.eco_bestiary_xp_reward()}</label
+                  >
+                  <input
+                    id="monsterFirstKillXp"
+                    type="number"
+                    min="0"
+                    bind:value={editingMonster.firstKillXpReward}
+                    class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  />
                 </div>
                 {#if raidGuildMode ? config.guildsEnabled : config.clansEnabled}
                   <div class="col-span-2 space-y-1">
-                    <label for="monsterFirstKillClan" class="text-xs font-semibold text-on-surface-variant">{raidGuildMode ? m.eco_raid_reward_guild_xp() : m.eco_bestiary_clan_points()}</label>
-                    <input id="monsterFirstKillClan" type="number" min="0" bind:value={editingMonster.firstKillClanPoints} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+                    <label
+                      for="monsterFirstKillClan"
+                      class="text-xs font-semibold text-on-surface-variant"
+                      >{raidGuildMode
+                        ? m.eco_raid_reward_guild_xp()
+                        : m.eco_bestiary_clan_points()}</label
+                    >
+                    <input
+                      id="monsterFirstKillClan"
+                      type="number"
+                      min="0"
+                      bind:value={editingMonster.firstKillClanPoints}
+                      class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    />
                   </div>
                 {/if}
                 <div class="col-span-2 space-y-1">
-                  <span class="text-xs font-semibold text-on-surface-variant">{m.eco_bestiary_first_kill_item()}</span>
+                  <span class="text-xs font-semibold text-on-surface-variant"
+                    >{m.eco_bestiary_first_kill_item()}</span
+                  >
                   <SearchableSelect
                     value={editingMonster.firstKillItemName || null}
                     options={dropItemOptions}
                     placeholder={m.eco_bestiary_first_kill_item_none()}
                     clearable={true}
                     className="w-full"
-                    on:change={(e: any) => editingMonster.firstKillItemName = e.detail?.value ?? null}
+                    on:change={(e: any) =>
+                      (editingMonster.firstKillItemName =
+                        e.detail?.value ?? null)}
                   />
                 </div>
                 <div class="col-span-2 space-y-1">
-                  <span class="text-xs font-semibold text-on-surface-variant">{m.eco_bestiary_first_kill_role()}</span>
+                  <span class="text-xs font-semibold text-on-surface-variant"
+                    >{m.eco_bestiary_first_kill_role()}</span
+                  >
                   <SearchableSelect
                     value={editingMonster.firstKillRoleId || null}
-                    options={availableRoles.map((r: any) => ({ id: r.id, name: `@${r.name}` }))}
+                    options={availableRoles.map((r: any) => ({
+                      id: r.id,
+                      name: `@${r.name}`,
+                    }))}
                     placeholder={m.eco_bestiary_first_kill_role_none()}
                     clearable={true}
                     className="w-full"
-                    on:change={(e: any) => editingMonster.firstKillRoleId = e.detail?.value ?? null}
+                    on:change={(e: any) =>
+                      (editingMonster.firstKillRoleId =
+                        e.detail?.value ?? null)}
                   />
-                  <p class="text-2xs text-on-surface-variant leading-relaxed mt-1">{m.eco_bestiary_first_kill_role_hint()}</p>
+                  <p
+                    class="text-2xs text-on-surface-variant leading-relaxed mt-1"
+                  >
+                    {m.eco_bestiary_first_kill_role_hint()}
+                  </p>
                 </div>
                 <div class="col-span-2 space-y-1">
-                  <span class="text-xs font-semibold text-on-surface-variant">{m.eco_bestiary_first_kill_title_reward()}</span>
+                  <span class="text-xs font-semibold text-on-surface-variant"
+                    >{m.eco_bestiary_first_kill_title_reward()}</span
+                  >
                   <SearchableSelect
                     value={editingMonster.firstKillTitleId || null}
                     options={titleOptions}
-                    placeholder={titles.length > 0 ? m.eco_bestiary_title_none() : m.eco_bestiary_title_empty()}
+                    placeholder={titles.length > 0
+                      ? m.eco_bestiary_title_none()
+                      : m.eco_bestiary_title_empty()}
                     clearable={true}
                     className="w-full"
-                    on:change={(e: any) => editingMonster.firstKillTitleId = e.detail?.value ?? null}
+                    on:change={(e: any) =>
+                      (editingMonster.firstKillTitleId =
+                        e.detail?.value ?? null)}
                   />
                 </div>
               </div>
             {/if}
           </div>
 
-          <div class="flex items-center justify-between pt-2 border-t border-outline-variant/5">
+          <div
+            class="flex items-center justify-between pt-2 border-t border-outline-variant/5"
+          >
             <div>
-              <h4 class="text-sm font-bold">{m.eco_bestiary_enabled_title()}</h4>
-              <p class="text-xs text-on-surface-variant mt-0.5">{m.eco_bestiary_enabled_desc()}</p>
+              <h4 class="text-sm font-bold">
+                {m.eco_bestiary_enabled_title()}
+              </h4>
+              <p class="text-xs text-on-surface-variant mt-0.5">
+                {m.eco_bestiary_enabled_desc()}
+              </p>
             </div>
-            <ToggleSwitch checked={editingMonster.enabled} onToggle={(v: boolean) => editingMonster.enabled = v} />
+            <ToggleSwitch
+              checked={editingMonster.enabled}
+              onToggle={(v: boolean) => (editingMonster.enabled = v)}
+            />
           </div>
         </div>
 
-        <fieldset class="border border-outline-variant/10 p-4 rounded-lg space-y-3">
-          <legend class="text-xs font-semibold text-on-surface-variant px-2">{m.eco_bestiary_drops_title()}</legend>
-          <p class="text-2xs text-on-surface-variant leading-relaxed">{m.eco_bestiary_drops_desc()}</p>
+        <fieldset
+          class="border border-outline-variant/10 p-4 rounded-lg space-y-3"
+        >
+          <legend class="text-xs font-semibold text-on-surface-variant px-2"
+            >{m.eco_bestiary_drops_title()}</legend
+          >
+          <p class="text-2xs text-on-surface-variant leading-relaxed">
+            {m.eco_bestiary_drops_desc()}
+          </p>
 
           {#each editingMonster.drops as drop, index}
             <div class="grid grid-cols-12 gap-2 items-end">
               <div class="col-span-6 space-y-1">
-                <span class="text-xs font-semibold text-on-surface-variant">{m.eco_bestiary_drop_item()}</span>
+                <span class="text-xs font-semibold text-on-surface-variant"
+                  >{m.eco_bestiary_drop_item()}</span
+                >
                 <SearchableSelect
                   value={drop.itemName || null}
                   options={dropItemOptions}
                   placeholder={m.eco_bestiary_drop_select()}
                   clearable={false}
                   className="w-full"
-                  on:change={(e: any) => onDropItemChange(index, e.detail?.value ?? null)}
+                  on:change={(e: any) =>
+                    onDropItemChange(index, e.detail?.value ?? null)}
                 />
               </div>
               <div class="col-span-3 space-y-1">
-                <label for="drop-chance-{index}" class="text-xs font-semibold text-on-surface-variant">{m.eco_bestiary_drop_chance()}</label>
-                <input id="drop-chance-{index}" type="number" min="1" max="100" bind:value={drop.chancePercent} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+                <label
+                  for="drop-chance-{index}"
+                  class="text-xs font-semibold text-on-surface-variant"
+                  >{m.eco_bestiary_drop_chance()}</label
+                >
+                <input
+                  id="drop-chance-{index}"
+                  type="number"
+                  min="1"
+                  max="100"
+                  bind:value={drop.chancePercent}
+                  class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                />
               </div>
               <div class="col-span-2 space-y-1">
-                <label for="drop-bonus-{index}" class="text-xs font-semibold text-on-surface-variant">{m.eco_bestiary_drop_bonus()}</label>
-                <input id="drop-bonus-{index}" type="number" min="0" bind:value={drop.coinBonus} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+                <label
+                  for="drop-bonus-{index}"
+                  class="text-xs font-semibold text-on-surface-variant"
+                  >{m.eco_bestiary_drop_bonus()}</label
+                >
+                <input
+                  id="drop-bonus-{index}"
+                  type="number"
+                  min="0"
+                  bind:value={drop.coinBonus}
+                  class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                />
               </div>
               <button
                 type="button"
@@ -4022,7 +6489,9 @@ import EmojiText from '../lib/components/EmojiText.svelte';
               </button>
             </div>
           {:else}
-            <p class="text-2xs text-on-surface-variant/40 italic">{m.eco_bestiary_drops_empty()}</p>
+            <p class="text-2xs text-on-surface-variant/40 italic">
+              {m.eco_bestiary_drops_empty()}
+            </p>
           {/each}
 
           <button
@@ -4037,10 +6506,12 @@ import EmojiText from '../lib/components/EmojiText.svelte';
         </fieldset>
       </div>
 
-      <div class="flex justify-end gap-3 pt-4 border-t border-outline-variant/10">
+      <div
+        class="flex justify-end gap-3 pt-4 border-t border-outline-variant/10"
+      >
         <button
           type="button"
-          onclick={() => editingMonster = null}
+          onclick={() => (editingMonster = null)}
           class="px-5 py-2.5 bg-outline-variant/10 hover:bg-outline-variant/20 rounded-xl text-xs font-bold transition-all"
         >
           {m.eco_btn_cancel()}
@@ -4059,63 +6530,175 @@ import EmojiText from '../lib/components/EmojiText.svelte';
 
 <!-- FICHE D'UN TITRE -->
 {#if editingTitle}
-  <div class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-    <div class="bg-surface-container rounded-xl border border-outline-variant/30 p-8 w-full max-w-lg space-y-6 max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200">
-      <h3 class="text-xl font-semibold">{editingTitle.id ? m.eco_title_modal_edit() : m.eco_title_modal_create()}</h3>
+  <div
+    class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
+  >
+    <div
+      class="bg-surface-container rounded-xl border border-outline-variant/30 p-8 w-full max-w-lg space-y-6 max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200"
+    >
+      <h3 class="text-xl font-semibold">
+        {editingTitle.id
+          ? m.eco_title_modal_edit()
+          : m.eco_title_modal_create()}
+      </h3>
 
       <div class="space-y-4">
         <div class="grid grid-cols-4 gap-3">
           <div class="col-span-3 space-y-1">
-            <label for="titleName" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_title_name()}</label>
-            <input id="titleName" type="text" maxlength="24" bind:value={editingTitle.name} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
-            <p class="text-2xs text-on-surface-variant ml-2">{m.eco_title_name_hint({ count: editingTitle.name?.length ?? 0 })}</p>
+            <label
+              for="titleName"
+              class="text-xs font-semibold text-on-surface-variant ml-2"
+              >{m.eco_title_name()}</label
+            >
+            <input
+              id="titleName"
+              type="text"
+              maxlength="24"
+              bind:value={editingTitle.name}
+              class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            />
+            <p class="text-2xs text-on-surface-variant ml-2">
+              {m.eco_title_name_hint({ count: editingTitle.name?.length ?? 0 })}
+            </p>
           </div>
           <div class="space-y-1">
-            <label for="titleColor" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_title_color()}</label>
-            <input id="titleColor" type="color" bind:value={editingTitle.color} class="w-full h-[38px] bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-1 cursor-pointer" />
+            <label
+              for="titleColor"
+              class="text-xs font-semibold text-on-surface-variant ml-2"
+              >{m.eco_title_color()}</label
+            >
+            <input
+              id="titleColor"
+              type="color"
+              bind:value={editingTitle.color}
+              class="w-full h-[38px] bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-1 cursor-pointer"
+            />
           </div>
         </div>
 
         <div class="space-y-1">
-          <label for="titleDesc" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_bestiary_desc_field()}</label>
-          <textarea id="titleDesc" maxlength="200" bind:value={editingTitle.description} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary h-16 resize-none"></textarea>
+          <label
+            for="titleDesc"
+            class="text-xs font-semibold text-on-surface-variant ml-2"
+            >{m.eco_bestiary_desc_field()}</label
+          >
+          <textarea
+            id="titleDesc"
+            maxlength="200"
+            bind:value={editingTitle.description}
+            class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary h-16 resize-none"
+          ></textarea>
         </div>
 
-        <p class="text-center text-sm font-bold bg-[#161221] rounded-lg py-3" style="color: {editingTitle.color}">{editingTitle.name || m.eco_title_name()}</p>
+        <p
+          class="text-center text-sm font-bold bg-[#161221] rounded-lg py-3"
+          style="color: {editingTitle.color}"
+        >
+          {editingTitle.name || m.eco_title_name()}
+        </p>
 
         <fieldset class="border border-outline-variant/10 p-4 rounded-lg">
-          <legend class="text-xs font-semibold text-on-surface-variant px-2">{m.eco_title_bonuses()}</legend>
-          <p class="text-2xs text-on-surface-variant leading-relaxed mb-3">{m.eco_title_bonuses_hint()}</p>
+          <legend class="text-xs font-semibold text-on-surface-variant px-2"
+            >{m.eco_title_bonuses()}</legend
+          >
+          <p class="text-2xs text-on-surface-variant leading-relaxed mb-3">
+            {m.eco_title_bonuses_hint()}
+          </p>
           <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
             <div class="space-y-1">
-              <label for="titleAtk" class="text-xs font-semibold text-on-surface-variant">{m.eco_atk()}</label>
-              <input id="titleAtk" type="number" min="0" max="1000" bind:value={editingTitle.attackBonus} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+              <label
+                for="titleAtk"
+                class="text-xs font-semibold text-on-surface-variant"
+                >{m.eco_atk()}</label
+              >
+              <input
+                id="titleAtk"
+                type="number"
+                min="0"
+                max="1000"
+                bind:value={editingTitle.attackBonus}
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              />
             </div>
             <div class="space-y-1">
-              <label for="titleDef" class="text-xs font-semibold text-on-surface-variant">{m.eco_def()}</label>
-              <input id="titleDef" type="number" min="0" max="1000" bind:value={editingTitle.defenseBonus} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+              <label
+                for="titleDef"
+                class="text-xs font-semibold text-on-surface-variant"
+                >{m.eco_def()}</label
+              >
+              <input
+                id="titleDef"
+                type="number"
+                min="0"
+                max="1000"
+                bind:value={editingTitle.defenseBonus}
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              />
             </div>
             <div class="space-y-1">
-              <label for="titleSpd" class="text-xs font-semibold text-on-surface-variant">{m.eco_spd()}</label>
-              <input id="titleSpd" type="number" min="0" max="1000" bind:value={editingTitle.speedBonus} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+              <label
+                for="titleSpd"
+                class="text-xs font-semibold text-on-surface-variant"
+                >{m.eco_spd()}</label
+              >
+              <input
+                id="titleSpd"
+                type="number"
+                min="0"
+                max="1000"
+                bind:value={editingTitle.speedBonus}
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              />
             </div>
             <div class="space-y-1">
-              <label for="titleHp" class="text-xs font-semibold text-on-surface-variant">{m.eco_bestiary_health()}</label>
-              <input id="titleHp" type="number" min="0" max="10000" bind:value={editingTitle.healthBonus} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+              <label
+                for="titleHp"
+                class="text-xs font-semibold text-on-surface-variant"
+                >{m.eco_bestiary_health()}</label
+              >
+              <input
+                id="titleHp"
+                type="number"
+                min="0"
+                max="10000"
+                bind:value={editingTitle.healthBonus}
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              />
             </div>
             <div class="space-y-1">
-              <label for="titleCrit" class="text-xs font-semibold text-on-surface-variant">{m.eco_title_crit()} (%)</label>
-              <input id="titleCrit" type="number" min="0" max="25" bind:value={editingTitle.critBonus} class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+              <label
+                for="titleCrit"
+                class="text-xs font-semibold text-on-surface-variant"
+                >{m.eco_title_crit()} (%)</label
+              >
+              <input
+                id="titleCrit"
+                type="number"
+                min="0"
+                max="25"
+                bind:value={editingTitle.critBonus}
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-xl px-3 py-2 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              />
             </div>
           </div>
         </fieldset>
       </div>
 
-      <div class="flex justify-end gap-3 pt-4 border-t border-outline-variant/10">
-        <button type="button" onclick={() => editingTitle = null} class="px-5 py-2.5 bg-outline-variant/10 hover:bg-outline-variant/20 rounded-xl text-xs font-bold transition-all">
+      <div
+        class="flex justify-end gap-3 pt-4 border-t border-outline-variant/10"
+      >
+        <button
+          type="button"
+          onclick={() => (editingTitle = null)}
+          class="px-5 py-2.5 bg-outline-variant/10 hover:bg-outline-variant/20 rounded-xl text-xs font-bold transition-all"
+        >
           {m.eco_btn_cancel()}
         </button>
-        <button type="button" onclick={handleSaveTitle} class="px-4 py-2 bg-primary hover:bg-primary-hover text-on-primary text-body-sm font-medium rounded-lg transition-all">
+        <button
+          type="button"
+          onclick={handleSaveTitle}
+          class="px-4 py-2 bg-primary hover:bg-primary-hover text-on-primary text-body-sm font-medium rounded-lg transition-all"
+        >
           {m.eco_btn_save()}
         </button>
       </div>
@@ -4126,26 +6709,45 @@ import EmojiText from '../lib/components/EmojiText.svelte';
 <!-- QUEST MODAL EDITOR -->
 <!-- FICHE D'UNE RECETTE -->
 {#if editingRecipe}
-  <div class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-    <div class="bg-surface-container rounded-xl border border-outline-variant/30 p-8 w-full max-w-lg space-y-5 max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200">
-      <h3 class="text-xl font-semibold">{editingRecipe.id ? m.eco_btn_edit() : m.eco_recipe_new()}</h3>
+  <div
+    class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
+  >
+    <div
+      class="bg-surface-container rounded-xl border border-outline-variant/30 p-8 w-full max-w-lg space-y-5 max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200"
+    >
+      <h3 class="text-xl font-semibold">
+        {editingRecipe.id ? m.eco_btn_edit() : m.eco_recipe_new()}
+      </h3>
 
       <div class="space-y-1">
-        <label for="recipeResult" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_recipe_result()}</label>
-        <select id="recipeResult" bind:value={editingRecipe.resultItemId} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+        <label
+          for="recipeResult"
+          class="text-xs font-semibold text-on-surface-variant ml-2"
+          >{m.eco_recipe_result()}</label
+        >
+        <select
+          id="recipeResult"
+          bind:value={editingRecipe.resultItemId}
+          class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+        >
           {#each guildItems as item (item.id)}
-            <option value={item.id}>{stripCustomEmoji(item.emoji)} {item.name}</option>
+            <option value={item.id}
+              >{stripCustomEmoji(item.emoji)} {item.name}</option
+            >
           {/each}
         </select>
       </div>
 
       <div class="space-y-2">
         <div class="flex items-center justify-between">
-          <span class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_recipe_materials()}</span>
+          <span class="text-xs font-semibold text-on-surface-variant ml-2"
+            >{m.eco_recipe_materials()}</span
+          >
           <button
             type="button"
             onclick={addRecipeIngredient}
-            disabled={editingRecipe.ingredients.length >= RECIPE_INGREDIENTS_MAX}
+            disabled={editingRecipe.ingredients.length >=
+              RECIPE_INGREDIENTS_MAX}
             class="text-2xs font-medium px-3 py-1.5 rounded-lg border border-outline-variant/20 hover:border-outline-variant/40 disabled:opacity-40"
           >
             {m.eco_recipe_add_material()}
@@ -4161,9 +6763,16 @@ import EmojiText from '../lib/components/EmojiText.svelte';
               clearable={false}
               showId={false}
               className="flex-1 min-w-0"
-              on:change={(e: any) => ingredient.itemName = e.detail?.value ?? ''}
+              on:change={(e: any) =>
+                (ingredient.itemName = e.detail?.value ?? "")}
             />
-            <input aria-label={m.eco_inventory_quantity()} type="number" min="1" bind:value={ingredient.quantity} class="w-20 bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-2 text-xs text-right focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+            <input
+              aria-label={m.eco_inventory_quantity()}
+              type="number"
+              min="1"
+              bind:value={ingredient.quantity}
+              class="w-20 bg-surface-container-high/40 border border-field-border rounded-lg px-3 py-2 text-xs text-right focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            />
             <button
               type="button"
               onclick={() => removeRecipeIngredient(index)}
@@ -4178,20 +6787,49 @@ import EmojiText from '../lib/components/EmojiText.svelte';
 
       <div class="grid grid-cols-2 gap-3">
         <div class="space-y-1">
-          <label for="recipeCost" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_recipe_coin_cost()}</label>
-          <input id="recipeCost" type="number" min="0" bind:value={editingRecipe.coinCost} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+          <label
+            for="recipeCost"
+            class="text-xs font-semibold text-on-surface-variant ml-2"
+            >{m.eco_recipe_coin_cost()}</label
+          >
+          <input
+            id="recipeCost"
+            type="number"
+            min="0"
+            bind:value={editingRecipe.coinCost}
+            class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          />
         </div>
         <div class="space-y-1">
-          <label for="recipeLevel" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_recipe_level()}</label>
-          <input id="recipeLevel" type="number" min="1" max="100" bind:value={editingRecipe.levelRequired} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+          <label
+            for="recipeLevel"
+            class="text-xs font-semibold text-on-surface-variant ml-2"
+            >{m.eco_recipe_level()}</label
+          >
+          <input
+            id="recipeLevel"
+            type="number"
+            min="1"
+            max="100"
+            bind:value={editingRecipe.levelRequired}
+            class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          />
         </div>
       </div>
 
       <div class="flex gap-3 pt-2">
-        <button type="button" onclick={() => editingRecipe = null} class="flex-1 px-4 py-3 bg-outline-variant/10 hover:bg-outline-variant/20 rounded-lg text-body-sm font-medium transition-all">
+        <button
+          type="button"
+          onclick={() => (editingRecipe = null)}
+          class="flex-1 px-4 py-3 bg-outline-variant/10 hover:bg-outline-variant/20 rounded-lg text-body-sm font-medium transition-all"
+        >
           {m.eco_btn_cancel()}
         </button>
-        <button type="button" onclick={handleSaveRecipe} class="flex-1 px-4 py-3 bg-primary text-on-primary rounded-lg text-body-sm font-semibold">
+        <button
+          type="button"
+          onclick={handleSaveRecipe}
+          class="flex-1 px-4 py-3 bg-primary text-on-primary rounded-lg text-body-sm font-semibold"
+        >
           {m.eco_btn_save()}
         </button>
       </div>
@@ -4200,133 +6838,280 @@ import EmojiText from '../lib/components/EmojiText.svelte';
 {/if}
 
 {#if editingQuest}
-  <div class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-    <div class="bg-surface-container rounded-xl border border-outline-variant/30 p-8 w-full max-w-2xl space-y-6 max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200">
+  <div
+    class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
+  >
+    <div
+      class="bg-surface-container rounded-xl border border-outline-variant/30 p-8 w-full max-w-2xl space-y-6 max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200"
+    >
       <h3 class="text-xl font-semibold">
-        {editingQuest.id ? m.eco_quest_modal_edit({ name: editingQuest.name }) : m.eco_quest_modal_create()}
+        {editingQuest.id
+          ? m.eco_quest_modal_edit({ name: editingQuest.name })
+          : m.eco_quest_modal_create()}
       </h3>
 
       <div class="space-y-4">
         <div class="grid grid-cols-3 gap-3">
           <div class="col-span-2 space-y-1">
-            <label for="questName" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_bestiary_name()}</label>
-            <input id="questName" type="text" bind:value={editingQuest.name} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+            <label
+              for="questName"
+              class="text-xs font-semibold text-on-surface-variant ml-2"
+              >{m.eco_bestiary_name()}</label
+            >
+            <input
+              id="questName"
+              type="text"
+              bind:value={editingQuest.name}
+              class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            />
           </div>
           <div class="space-y-1">
-            <label for="questEmoji" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_bestiary_emoji()}</label>
+            <label
+              for="questEmoji"
+              class="text-xs font-semibold text-on-surface-variant ml-2"
+              >{m.eco_bestiary_emoji()}</label
+            >
             <div class="flex gap-2">
-              <input id="questEmoji" type="text" bind:value={editingQuest.emoji} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+              <input
+                id="questEmoji"
+                type="text"
+                bind:value={editingQuest.emoji}
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              />
               <EmojiPicker bind:value={editingQuest.emoji} />
             </div>
           </div>
         </div>
 
         <div class="space-y-1">
-          <label for="questDesc" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_bestiary_desc_field()}</label>
-          <textarea id="questDesc" rows="2" bind:value={editingQuest.description} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary resize-none"></textarea>
+          <label
+            for="questDesc"
+            class="text-xs font-semibold text-on-surface-variant ml-2"
+            >{m.eco_bestiary_desc_field()}</label
+          >
+          <textarea
+            id="questDesc"
+            rows="2"
+            bind:value={editingQuest.description}
+            class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary resize-none"
+          ></textarea>
         </div>
 
         <!-- Une quete personnelle se compte par membre et se reclame ; une quete d'equipe
              additionne tout un clan sur la meme fenetre et se paie d'elle-meme. -->
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {#each [{ id: 'MEMBER', name: m.eco_quest_scope_member(), desc: m.eco_quest_scope_member_desc() }, { id: 'TEAM', name: m.eco_quest_scope_team(), desc: m.eco_quest_scope_team_desc() }] as scope (scope.id)}
+          {#each [{ id: "MEMBER", name: m.eco_quest_scope_member(), desc: m.eco_quest_scope_member_desc() }, { id: "TEAM", name: m.eco_quest_scope_team(), desc: m.eco_quest_scope_team_desc() }] as scope (scope.id)}
             {@const selected = editingQuest.scope === scope.id}
             <button
               type="button"
-              onclick={() => editingQuest.scope = scope.id}
+              onclick={() => (editingQuest.scope = scope.id)}
               aria-pressed={selected}
-              class="text-left p-4 rounded-lg border transition-all {selected ? 'bg-primary/8 border-primary/50' : 'bg-surface-container-high/30 border-outline-variant/10 hover:border-outline-variant/30'}"
+              class="text-left p-4 rounded-lg border transition-all {selected
+                ? 'bg-primary/8 border-primary/50'
+                : 'bg-surface-container-high/30 border-outline-variant/10 hover:border-outline-variant/30'}"
             >
               <span class="text-body-sm font-semibold">{scope.name}</span>
-              <p class="text-2xs text-on-surface-variant mt-1 leading-relaxed">{scope.desc}</p>
+              <p class="text-2xs text-on-surface-variant mt-1 leading-relaxed">
+                {scope.desc}
+              </p>
             </button>
           {/each}
         </div>
 
-        {#if editingQuest.scope === 'TEAM'}
+        {#if editingQuest.scope === "TEAM"}
           <div class="space-y-1">
-            <label for="questTeamMode" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_raid_team_mode_title()}</label>
-            <select id="questTeamMode" bind:value={editingQuest.teamMode} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary">
-              <option value="CLAN" disabled={!config.clansEnabled}>{m.eco_raid_mode_clan()}</option>
-              <option value="RPG_GUILD" disabled={!config.guildsEnabled}>{m.eco_raid_mode_guild()}</option>
+            <label
+              for="questTeamMode"
+              class="text-xs font-semibold text-on-surface-variant ml-2"
+              >{m.eco_raid_team_mode_title()}</label
+            >
+            <select
+              id="questTeamMode"
+              bind:value={editingQuest.teamMode}
+              class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            >
+              <option value="CLAN" disabled={!config.clansEnabled}
+                >{m.eco_raid_mode_clan()}</option
+              >
+              <option value="RPG_GUILD" disabled={!config.guildsEnabled}
+                >{m.eco_raid_mode_guild()}</option
+              >
             </select>
           </div>
         {/if}
 
         <div class="grid grid-cols-3 gap-3">
           <div class="space-y-1">
-            <label for="questObjective" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_quest_objective()}</label>
-            <select id="questObjective" bind:value={editingQuest.objective} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+            <label
+              for="questObjective"
+              class="text-xs font-semibold text-on-surface-variant ml-2"
+              >{m.eco_quest_objective()}</label
+            >
+            <select
+              id="questObjective"
+              bind:value={editingQuest.objective}
+              class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            >
               {#each questObjectiveGroups as group (group.label)}
                 <optgroup label={group.label}>
                   {#each group.objectives as objective (objective)}
-                    <option value={objective}>{questObjectiveLabel(objective)}</option>
+                    <option value={objective}
+                      >{questObjectiveLabel(objective)}</option
+                    >
                   {/each}
                 </optgroup>
               {/each}
             </select>
           </div>
           <div class="space-y-1">
-            <label for="questTarget" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_quest_target()}</label>
-            <input id="questTarget" type="number" min="1" bind:value={editingQuest.target} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+            <label
+              for="questTarget"
+              class="text-xs font-semibold text-on-surface-variant ml-2"
+              >{m.eco_quest_target()}</label
+            >
+            <input
+              id="questTarget"
+              type="number"
+              min="1"
+              bind:value={editingQuest.target}
+              class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            />
           </div>
           <div class="space-y-1">
-            <label for="questWindow" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_quest_window()}</label>
-            <input id="questWindow" type="number" min="1" max="720" bind:value={editingQuest.windowHours} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+            <label
+              for="questWindow"
+              class="text-xs font-semibold text-on-surface-variant ml-2"
+              >{m.eco_quest_window()}</label
+            >
+            <input
+              id="questWindow"
+              type="number"
+              min="1"
+              max="720"
+              bind:value={editingQuest.windowHours}
+              class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            />
           </div>
         </div>
-        <p class="text-2xs text-on-surface-variant leading-relaxed ml-2">{m.eco_quest_window_hint()}</p>
+        <p class="text-2xs text-on-surface-variant leading-relaxed ml-2">
+          {m.eco_quest_window_hint()}
+        </p>
 
         <div class="grid grid-cols-3 gap-3">
           <div class="space-y-1">
-            <label for="questXp" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_xp()}</label>
-            <input id="questXp" type="number" min="0" bind:value={editingQuest.rewardXp} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+            <label
+              for="questXp"
+              class="text-xs font-semibold text-on-surface-variant ml-2"
+              >{m.eco_xp()}</label
+            >
+            <input
+              id="questXp"
+              type="number"
+              min="0"
+              bind:value={editingQuest.rewardXp}
+              class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            />
           </div>
           <div class="space-y-1">
-            <label for="questCoins" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_bestiary_coin_reward({ currency: config.currencyName })}</label>
-            <input id="questCoins" type="number" min="0" bind:value={editingQuest.rewardCoins} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+            <label
+              for="questCoins"
+              class="text-xs font-semibold text-on-surface-variant ml-2"
+              >{m.eco_bestiary_coin_reward({
+                currency: config.currencyName,
+              })}</label
+            >
+            <input
+              id="questCoins"
+              type="number"
+              min="0"
+              bind:value={editingQuest.rewardCoins}
+              class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            />
           </div>
           <!-- Une quete personnelle credite le clan de celui qui la termine, comme le fait
                deja un monstre vaincu ; une quete d'equipe credite l'equipe, clan ou guilde
                du jeu selon le mode choisi juste au-dessus. -->
           <div class="space-y-1">
-            <label for="questPoints" class="text-xs font-semibold text-on-surface-variant ml-2">{questGuildMode ? m.eco_raid_reward_guild_xp() : m.eco_raid_reward_points()}</label>
-            <input id="questPoints" type="number" min="0" bind:value={editingQuest.rewardClanPoints} disabled={!(questGuildMode ? config.guildsEnabled : config.clansEnabled)} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50" />
+            <label
+              for="questPoints"
+              class="text-xs font-semibold text-on-surface-variant ml-2"
+              >{questGuildMode
+                ? m.eco_raid_reward_guild_xp()
+                : m.eco_raid_reward_points()}</label
+            >
+            <input
+              id="questPoints"
+              type="number"
+              min="0"
+              bind:value={editingQuest.rewardClanPoints}
+              disabled={!(questGuildMode
+                ? config.guildsEnabled
+                : config.clansEnabled)}
+              class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
+            />
           </div>
         </div>
         <p class="text-2xs text-on-surface-variant leading-relaxed ml-2">
-          {editingQuest.scope === 'TEAM' ? m.eco_quest_rewards_team_hint() : m.eco_quest_rewards_member_hint()}
-          {#if editingQuest.rewardClanPoints > 0 && !(editingQuest.scope === 'TEAM' && editingQuest.teamMode === 'RPG_GUILD')}
-            {' '}{m.eco_quest_rewards_bridge_hint()}
+          {editingQuest.scope === "TEAM"
+            ? m.eco_quest_rewards_team_hint()
+            : m.eco_quest_rewards_member_hint()}
+          {#if editingQuest.rewardClanPoints > 0 && !(editingQuest.scope === "TEAM" && editingQuest.teamMode === "RPG_GUILD")}
+            {" "}{m.eco_quest_rewards_bridge_hint()}
           {/if}
         </p>
 
         <!-- La repetition ne concerne que la portee personnelle : une quete d'equipe se paie
              deja d'elle-meme a chaque completion, sans verrou de journee. -->
-        {#if editingQuest.scope === 'MEMBER'}
-          <div class="flex items-center justify-between gap-4 bg-surface-container-high/30 border border-outline-variant/10 rounded-xl px-5 py-4">
+        {#if editingQuest.scope === "MEMBER"}
+          <div
+            class="flex items-center justify-between gap-4 bg-surface-container-high/30 border border-outline-variant/10 rounded-xl px-5 py-4"
+          >
             <div>
-              <h4 class="text-sm font-bold">{m.eco_quest_repeatable_title()}</h4>
-              <p class="text-xs text-on-surface-variant mt-0.5">{editingQuest.repeatable ? m.eco_quest_repeatable_on_desc() : m.eco_quest_repeatable_off_desc()}</p>
+              <h4 class="text-sm font-bold">
+                {m.eco_quest_repeatable_title()}
+              </h4>
+              <p class="text-xs text-on-surface-variant mt-0.5">
+                {editingQuest.repeatable
+                  ? m.eco_quest_repeatable_on_desc()
+                  : m.eco_quest_repeatable_off_desc()}
+              </p>
             </div>
-            <ToggleSwitch checked={editingQuest.repeatable} onToggle={(v: boolean) => editingQuest.repeatable = v} />
+            <ToggleSwitch
+              checked={editingQuest.repeatable}
+              onToggle={(v: boolean) => (editingQuest.repeatable = v)}
+            />
           </div>
         {/if}
 
-        <div class="flex items-center justify-between gap-4 bg-surface-container-high/30 border border-outline-variant/10 rounded-xl px-5 py-4">
+        <div
+          class="flex items-center justify-between gap-4 bg-surface-container-high/30 border border-outline-variant/10 rounded-xl px-5 py-4"
+        >
           <div>
             <h4 class="text-sm font-bold">{m.eco_bestiary_enabled_title()}</h4>
-            <p class="text-xs text-on-surface-variant mt-0.5">{m.eco_quest_enabled_desc()}</p>
+            <p class="text-xs text-on-surface-variant mt-0.5">
+              {m.eco_quest_enabled_desc()}
+            </p>
           </div>
-          <ToggleSwitch checked={editingQuest.enabled} onToggle={(v: boolean) => editingQuest.enabled = v} />
+          <ToggleSwitch
+            checked={editingQuest.enabled}
+            onToggle={(v: boolean) => (editingQuest.enabled = v)}
+          />
         </div>
       </div>
 
       <div class="flex gap-3 pt-2">
-        <button type="button" onclick={() => editingQuest = null} class="flex-1 px-4 py-3 bg-outline-variant/10 hover:bg-outline-variant/20 rounded-lg text-body-sm font-medium transition-all">
+        <button
+          type="button"
+          onclick={() => (editingQuest = null)}
+          class="flex-1 px-4 py-3 bg-outline-variant/10 hover:bg-outline-variant/20 rounded-lg text-body-sm font-medium transition-all"
+        >
           {m.eco_btn_cancel()}
         </button>
-        <button type="button" onclick={handleSaveQuest} class="flex-1 px-4 py-3 bg-primary hover:bg-primary-hover text-on-primary rounded-lg text-body-sm font-medium transition-all">
+        <button
+          type="button"
+          onclick={handleSaveQuest}
+          class="flex-1 px-4 py-3 bg-primary hover:bg-primary-hover text-on-primary rounded-lg text-body-sm font-medium transition-all"
+        >
           {m.eco_btn_save()}
         </button>
       </div>
@@ -4336,48 +7121,121 @@ import EmojiText from '../lib/components/EmojiText.svelte';
 
 <!-- RAID BOSS MODAL EDITOR -->
 {#if editingRaidBoss}
-  <div class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-    <div class="bg-surface-container rounded-xl border border-outline-variant/30 p-8 w-full max-w-2xl space-y-6 max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200">
+  <div
+    class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
+  >
+    <div
+      class="bg-surface-container rounded-xl border border-outline-variant/30 p-8 w-full max-w-2xl space-y-6 max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200"
+    >
       <h3 class="text-xl font-semibold">
-        {editingRaidBoss.id ? m.eco_raid_modal_edit({ name: editingRaidBoss.name }) : m.eco_raid_modal_create()}
+        {editingRaidBoss.id
+          ? m.eco_raid_modal_edit({ name: editingRaidBoss.name })
+          : m.eco_raid_modal_create()}
       </h3>
 
       <div class="space-y-4">
         <div class="grid grid-cols-3 gap-3">
           <div class="col-span-2 space-y-1">
-            <label for="raidBossName" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_bestiary_name()}</label>
-            <input id="raidBossName" type="text" bind:value={editingRaidBoss.name} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+            <label
+              for="raidBossName"
+              class="text-xs font-semibold text-on-surface-variant ml-2"
+              >{m.eco_bestiary_name()}</label
+            >
+            <input
+              id="raidBossName"
+              type="text"
+              bind:value={editingRaidBoss.name}
+              class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            />
           </div>
           <div class="space-y-1">
-            <label for="raidBossEmoji" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_bestiary_emoji()}</label>
+            <label
+              for="raidBossEmoji"
+              class="text-xs font-semibold text-on-surface-variant ml-2"
+              >{m.eco_bestiary_emoji()}</label
+            >
             <div class="flex gap-2">
-              <input id="raidBossEmoji" type="text" bind:value={editingRaidBoss.emoji} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+              <input
+                id="raidBossEmoji"
+                type="text"
+                bind:value={editingRaidBoss.emoji}
+                class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              />
               <EmojiPicker bind:value={editingRaidBoss.emoji} />
             </div>
           </div>
         </div>
 
         <div class="space-y-1">
-          <label for="raidBossDesc" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_bestiary_desc_field()}</label>
-          <textarea id="raidBossDesc" rows="2" bind:value={editingRaidBoss.description} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary resize-none"></textarea>
+          <label
+            for="raidBossDesc"
+            class="text-xs font-semibold text-on-surface-variant ml-2"
+            >{m.eco_bestiary_desc_field()}</label
+          >
+          <textarea
+            id="raidBossDesc"
+            rows="2"
+            bind:value={editingRaidBoss.description}
+            class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary resize-none"
+          ></textarea>
         </div>
 
         <div class="grid grid-cols-4 gap-3">
           <div class="space-y-1">
-            <label for="raidBossLevel" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_bestiary_level()}</label>
-            <input id="raidBossLevel" type="number" min="1" bind:value={editingRaidBoss.level} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+            <label
+              for="raidBossLevel"
+              class="text-xs font-semibold text-on-surface-variant ml-2"
+              >{m.eco_bestiary_level()}</label
+            >
+            <input
+              id="raidBossLevel"
+              type="number"
+              min="1"
+              bind:value={editingRaidBoss.level}
+              class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            />
           </div>
           <div class="space-y-1">
-            <label for="raidBossAtk" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_atk()}</label>
-            <input id="raidBossAtk" type="number" min="1" bind:value={editingRaidBoss.attack} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+            <label
+              for="raidBossAtk"
+              class="text-xs font-semibold text-on-surface-variant ml-2"
+              >{m.eco_atk()}</label
+            >
+            <input
+              id="raidBossAtk"
+              type="number"
+              min="1"
+              bind:value={editingRaidBoss.attack}
+              class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            />
           </div>
           <div class="space-y-1">
-            <label for="raidBossDef" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_def()}</label>
-            <input id="raidBossDef" type="number" min="1" bind:value={editingRaidBoss.defense} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+            <label
+              for="raidBossDef"
+              class="text-xs font-semibold text-on-surface-variant ml-2"
+              >{m.eco_def()}</label
+            >
+            <input
+              id="raidBossDef"
+              type="number"
+              min="1"
+              bind:value={editingRaidBoss.defense}
+              class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            />
           </div>
           <div class="space-y-1">
-            <label for="raidBossSpd" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_spd()}</label>
-            <input id="raidBossSpd" type="number" min="1" bind:value={editingRaidBoss.speed} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+            <label
+              for="raidBossSpd"
+              class="text-xs font-semibold text-on-surface-variant ml-2"
+              >{m.eco_spd()}</label
+            >
+            <input
+              id="raidBossSpd"
+              type="number"
+              min="1"
+              bind:value={editingRaidBoss.speed}
+              class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            />
           </div>
         </div>
 
@@ -4387,48 +7245,83 @@ import EmojiText from '../lib/components/EmojiText.svelte';
         <div class="space-y-2">
           <div>
             <h4 class="text-sm font-bold">{m.eco_raid_spells_title()}</h4>
-            <p class="text-2xs text-on-surface-variant mt-0.5 leading-relaxed">{m.eco_raid_spells_desc()}</p>
+            <p class="text-2xs text-on-surface-variant mt-0.5 leading-relaxed">
+              {m.eco_raid_spells_desc()}
+            </p>
           </div>
 
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {#each raidSpells as spell (spell.id)}
-              {@const chosen = (editingRaidBoss.spellIds ?? []).includes(spell.id)}
+              {@const chosen = (editingRaidBoss.spellIds ?? []).includes(
+                spell.id,
+              )}
               <button
                 type="button"
                 onclick={() => toggleRaidSpell(spell.id)}
                 aria-pressed={chosen}
-                class="text-left p-3 rounded-lg border transition-all {chosen ? 'bg-primary/8 border-primary/50' : 'bg-surface-container-high/30 border-outline-variant/10 hover:border-outline-variant/30'}"
+                class="text-left p-3 rounded-lg border transition-all {chosen
+                  ? 'bg-primary/8 border-primary/50'
+                  : 'bg-surface-container-high/30 border-outline-variant/10 hover:border-outline-variant/30'}"
               >
                 <div class="flex items-center gap-2">
-                  <Papicon icon={spell.icon} size={14} class={chosen ? 'text-primary' : 'text-on-surface-variant'} />
+                  <Papicon
+                    icon={spell.icon}
+                    size={14}
+                    class={chosen ? "text-primary" : "text-on-surface-variant"}
+                  />
                   <span class="text-xs font-semibold">{spell.name}</span>
                   {#if spell.triggerBelowHealth !== undefined && spell.triggerBelowHealth !== null}
-                    <span class="ml-auto text-xs font-semibold text-on-warning-container bg-warning/10 px-1.5 py-0.5 rounded">
-                      {m.eco_raid_spell_phase({ percent: Math.round(spell.triggerBelowHealth * 100) })}
+                    <span
+                      class="ml-auto text-xs font-semibold text-on-warning-container bg-warning/10 px-1.5 py-0.5 rounded"
+                    >
+                      {m.eco_raid_spell_phase({
+                        percent: Math.round(spell.triggerBelowHealth * 100),
+                      })}
                     </span>
                   {/if}
                 </div>
-                <p class="text-2xs text-on-surface-variant mt-1 leading-relaxed">{spell.description}</p>
-                <p class="text-2xs text-on-surface-variant/40 mt-1">{m.eco_raid_spell_cooldown({ turns: spell.cooldownTurns })}</p>
+                <p
+                  class="text-2xs text-on-surface-variant mt-1 leading-relaxed"
+                >
+                  {spell.description}
+                </p>
+                <p class="text-2xs text-on-surface-variant/40 mt-1">
+                  {m.eco_raid_spell_cooldown({ turns: spell.cooldownTurns })}
+                </p>
               </button>
             {/each}
           </div>
         </div>
 
-        <div class="flex items-center justify-between gap-4 bg-surface-container-high/30 border border-outline-variant/10 rounded-xl px-5 py-4">
+        <div
+          class="flex items-center justify-between gap-4 bg-surface-container-high/30 border border-outline-variant/10 rounded-xl px-5 py-4"
+        >
           <div>
             <h4 class="text-sm font-bold">{m.eco_bestiary_enabled_title()}</h4>
-            <p class="text-xs text-on-surface-variant mt-0.5">{m.eco_raid_enabled_desc()}</p>
+            <p class="text-xs text-on-surface-variant mt-0.5">
+              {m.eco_raid_enabled_desc()}
+            </p>
           </div>
-          <ToggleSwitch checked={editingRaidBoss.enabled} onToggle={(v: boolean) => editingRaidBoss.enabled = v} />
+          <ToggleSwitch
+            checked={editingRaidBoss.enabled}
+            onToggle={(v: boolean) => (editingRaidBoss.enabled = v)}
+          />
         </div>
       </div>
 
       <div class="flex gap-3 pt-2">
-        <button type="button" onclick={() => editingRaidBoss = null} class="flex-1 px-4 py-3 bg-outline-variant/10 hover:bg-outline-variant/20 rounded-lg text-body-sm font-medium transition-all">
+        <button
+          type="button"
+          onclick={() => (editingRaidBoss = null)}
+          class="flex-1 px-4 py-3 bg-outline-variant/10 hover:bg-outline-variant/20 rounded-lg text-body-sm font-medium transition-all"
+        >
           {m.eco_btn_cancel()}
         </button>
-        <button type="button" onclick={handleSaveRaidBoss} class="flex-1 px-4 py-3 bg-primary hover:bg-primary-hover text-on-primary rounded-lg text-body-sm font-medium transition-all">
+        <button
+          type="button"
+          onclick={handleSaveRaidBoss}
+          class="flex-1 px-4 py-3 bg-primary hover:bg-primary-hover text-on-primary rounded-lg text-body-sm font-medium transition-all"
+        >
           {m.eco_btn_save()}
         </button>
       </div>
@@ -4438,78 +7331,192 @@ import EmojiText from '../lib/components/EmojiText.svelte';
 
 <!-- PLAYER MODAL EDITOR -->
 {#if editingPlayer}
-  <div class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-    <div class="bg-surface-container rounded-xl border border-outline-variant/30 p-8 w-full max-w-lg space-y-6 max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200">
-      <h3 class="text-xl font-semibold">{m.eco_modal_edit_player({ name: editingPlayer.displayName || editingPlayer.username })}</h3>
-      
+  <div
+    class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
+  >
+    <div
+      class="bg-surface-container rounded-xl border border-outline-variant/30 p-8 w-full max-w-lg space-y-6 max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200"
+    >
+      <h3 class="text-xl font-semibold">
+        {m.eco_modal_edit_player({
+          name: editingPlayer.displayName || editingPlayer.username,
+        })}
+      </h3>
+
       <div class="grid grid-cols-2 gap-4">
         <div class="space-y-1">
-          <label for="pBalance" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_balance_currency({ currency: config.currencyName })}</label>
-          <input id="pBalance" type="number" bind:value={editingPlayer.balance} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+          <label
+            for="pBalance"
+            class="text-xs font-semibold text-on-surface-variant ml-2"
+            >{m.eco_balance_currency({ currency: config.currencyName })}</label
+          >
+          <input
+            id="pBalance"
+            type="number"
+            bind:value={editingPlayer.balance}
+            class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          />
         </div>
 
         <div class="space-y-1">
-          <label for="pLevel" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_rpg_level()}</label>
-          <input id="pLevel" type="number" bind:value={editingPlayer.level} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+          <label
+            for="pLevel"
+            class="text-xs font-semibold text-on-surface-variant ml-2"
+            >{m.eco_rpg_level()}</label
+          >
+          <input
+            id="pLevel"
+            type="number"
+            bind:value={editingPlayer.level}
+            class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          />
         </div>
 
         <div class="space-y-1">
-          <label for="pXp" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_xp()}</label>
-          <input id="pXp" type="number" bind:value={editingPlayer.xp} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+          <label
+            for="pXp"
+            class="text-xs font-semibold text-on-surface-variant ml-2"
+            >{m.eco_xp()}</label
+          >
+          <input
+            id="pXp"
+            type="number"
+            bind:value={editingPlayer.xp}
+            class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          />
         </div>
 
         <div class="space-y-1">
-          <label for="pHp" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_hp()}</label>
-          <input id="pHp" type="number" bind:value={editingPlayer.health} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+          <label
+            for="pHp"
+            class="text-xs font-semibold text-on-surface-variant ml-2"
+            >{m.eco_hp()}</label
+          >
+          <input
+            id="pHp"
+            type="number"
+            bind:value={editingPlayer.health}
+            class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          />
         </div>
 
         <div class="space-y-1">
-          <label for="pEnergy" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_energy_pct()}</label>
-          <input id="pEnergy" type="number" bind:value={editingPlayer.energy} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+          <label
+            for="pEnergy"
+            class="text-xs font-semibold text-on-surface-variant ml-2"
+            >{m.eco_energy_pct()}</label
+          >
+          <input
+            id="pEnergy"
+            type="number"
+            bind:value={editingPlayer.energy}
+            class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          />
         </div>
 
         <div class="space-y-1">
-          <label for="pAtk" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_atk()}</label>
-          <input id="pAtk" type="number" bind:value={editingPlayer.attack} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+          <label
+            for="pAtk"
+            class="text-xs font-semibold text-on-surface-variant ml-2"
+            >{m.eco_atk()}</label
+          >
+          <input
+            id="pAtk"
+            type="number"
+            bind:value={editingPlayer.attack}
+            class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          />
         </div>
 
         <div class="space-y-1">
-          <label for="pDef" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_def()}</label>
-          <input id="pDef" type="number" bind:value={editingPlayer.defense} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+          <label
+            for="pDef"
+            class="text-xs font-semibold text-on-surface-variant ml-2"
+            >{m.eco_def()}</label
+          >
+          <input
+            id="pDef"
+            type="number"
+            bind:value={editingPlayer.defense}
+            class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          />
         </div>
 
         <div class="space-y-1">
-          <label for="pSpd" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_spd()}</label>
-          <input id="pSpd" type="number" bind:value={editingPlayer.speed} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+          <label
+            for="pSpd"
+            class="text-xs font-semibold text-on-surface-variant ml-2"
+            >{m.eco_spd()}</label
+          >
+          <input
+            id="pSpd"
+            type="number"
+            bind:value={editingPlayer.speed}
+            class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          />
         </div>
 
         <div class="space-y-1">
-          <label for="pMaxHp" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_max_hp()}</label>
-          <input id="pMaxHp" type="number" min="1" bind:value={editingPlayer.maxHealth} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+          <label
+            for="pMaxHp"
+            class="text-xs font-semibold text-on-surface-variant ml-2"
+            >{m.eco_max_hp()}</label
+          >
+          <input
+            id="pMaxHp"
+            type="number"
+            min="1"
+            bind:value={editingPlayer.maxHealth}
+            class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          />
         </div>
 
         <div class="space-y-1">
-          <label for="pStatPoints" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_stat_points()}</label>
-          <input id="pStatPoints" type="number" min="0" bind:value={editingPlayer.statPoints} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+          <label
+            for="pStatPoints"
+            class="text-xs font-semibold text-on-surface-variant ml-2"
+            >{m.eco_stat_points()}</label
+          >
+          <input
+            id="pStatPoints"
+            type="number"
+            min="0"
+            bind:value={editingPlayer.statPoints}
+            class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          />
         </div>
 
         <div class="space-y-1">
-          <label for="pSkillPoints" class="text-xs font-semibold text-on-surface-variant ml-2">{m.eco_skill_points()}</label>
-          <input id="pSkillPoints" type="number" min="0" bind:value={editingPlayer.skillPoints} class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary" />
+          <label
+            for="pSkillPoints"
+            class="text-xs font-semibold text-on-surface-variant ml-2"
+            >{m.eco_skill_points()}</label
+          >
+          <input
+            id="pSkillPoints"
+            type="number"
+            min="0"
+            bind:value={editingPlayer.skillPoints}
+            class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          />
         </div>
       </div>
-      <p class="text-2xs text-on-surface-variant leading-relaxed">{m.eco_player_base_stats_hint()}</p>
+      <p class="text-2xs text-on-surface-variant leading-relaxed">
+        {m.eco_player_base_stats_hint()}
+      </p>
 
-      <div class="flex justify-end gap-3 pt-4 border-t border-outline-variant/10">
-        <button 
-          type="button" 
-          onclick={() => editingPlayer = null}
+      <div
+        class="flex justify-end gap-3 pt-4 border-t border-outline-variant/10"
+      >
+        <button
+          type="button"
+          onclick={() => (editingPlayer = null)}
           class="px-5 py-2.5 bg-outline-variant/10 hover:bg-outline-variant/20 rounded-xl text-xs font-bold transition-all"
         >
           {m.eco_btn_cancel()}
         </button>
-        <button 
-          type="button" 
+        <button
+          type="button"
           onclick={handleSavePlayer}
           class="px-4 py-2 bg-primary hover:bg-primary-hover text-on-primary text-body-sm font-medium rounded-lg transition-all"
         >
@@ -4525,27 +7532,42 @@ import EmojiText from '../lib/components/EmojiText.svelte';
     player={inventoryPlayer}
     catalog={items}
     canManage={canManageSettings}
-    onClose={() => inventoryPlayer = null}
+    onClose={() => (inventoryPlayer = null)}
     onChanged={() => void loadPlayers()}
   />
 {/if}
 
 <!-- RESET CONFIRMATION MODAL -->
 {#if resetComponent}
-  <div class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-    <div class="bg-surface-container rounded-xl border border-outline-variant/30 p-8 w-full max-w-md space-y-6 max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200">
+  <div
+    class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
+  >
+    <div
+      class="bg-surface-container rounded-xl border border-outline-variant/30 p-8 w-full max-w-md space-y-6 max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200"
+    >
       <div class="text-center space-y-3 flex flex-col items-center">
-        <div class="w-16 h-16 bg-error/10 text-on-error-container rounded-full flex items-center justify-center mb-2">
+        <div
+          class="w-16 h-16 bg-error/10 text-on-error-container rounded-full flex items-center justify-center mb-2"
+        >
           <Papicon icon="alert-triangle" size={32} />
         </div>
-        <h3 class="text-xl font-semibold text-error">{m.eco_reset_modal_title()}</h3>
-        <p class="text-xs text-on-surface-variant/80 leading-relaxed text-center">
-          {m.eco_reset_modal_desc({ component: resetComponentLabels[resetComponent] ?? resetComponent })}
+        <h3 class="text-xl font-semibold text-error">
+          {m.eco_reset_modal_title()}
+        </h3>
+        <p
+          class="text-xs text-on-surface-variant/80 leading-relaxed text-center"
+        >
+          {m.eco_reset_modal_desc({
+            component: resetComponentLabels[resetComponent] ?? resetComponent,
+          })}
         </p>
       </div>
 
       <div class="space-y-1.5">
-        <label for="resetConfirmWord" class="text-xs font-semibold text-on-surface-variant ml-1">
+        <label
+          for="resetConfirmWord"
+          class="text-xs font-semibold text-on-surface-variant ml-1"
+        >
           {m.eco_reset_confirm_label({ word: m.eco_reset_confirm_word() })}
         </label>
         <input
@@ -4554,7 +7576,9 @@ import EmojiText from '../lib/components/EmojiText.svelte';
           bind:value={resetConfirmInput}
           placeholder={m.eco_reset_confirm_word()}
           autocomplete="off"
-          onkeydown={(e: KeyboardEvent) => { if (e.key === 'Enter' && resetConfirmed) confirmReset(); }}
+          onkeydown={(e: KeyboardEvent) => {
+            if (e.key === "Enter" && resetConfirmed) confirmReset();
+          }}
           class="w-full bg-surface-container-high/40 border border-field-border rounded-lg px-4 py-2.5 text-sm font-semibold text-center focus:outline-none focus:ring-2 focus:ring-error/30 transition-all"
         />
       </div>
@@ -4562,7 +7586,7 @@ import EmojiText from '../lib/components/EmojiText.svelte';
       <div class="flex justify-center gap-3 pt-2">
         <button
           type="button"
-          onclick={() => resetComponent = null}
+          onclick={() => (resetComponent = null)}
           class="px-5 py-2.5 bg-outline-variant/10 hover:bg-outline-variant/20 rounded-xl text-xs font-bold transition-all"
         >
           {m.eco_btn_cancel()}

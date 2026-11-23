@@ -27,6 +27,7 @@ import {
   refreshActiveGiveaways,
   rerollGiveaway,
 } from '../../../services/features/giveawayService.js';
+import { normalizeConditions, type GiveawayCondition } from '../../../services/features/giveawayConditions.js';
 import {
   canManageGiveaways,
   getGiveawayConfig,
@@ -1412,6 +1413,8 @@ export function createGeneralistModulesRouter(client: Client) {
         channelId?: string;
         styleOverrides?: unknown;
         ignoreBonuses?: boolean;
+        conditions?: unknown;
+        createDiscordEvent?: boolean;
         rpgXp?: number;
         rpgCoins?: number;
         rpgItemId?: string;
@@ -1436,6 +1439,18 @@ export function createGeneralistModulesRouter(client: Client) {
 
       const styleOverrides = normalizeAppearancePatch(body.styleOverrides);
 
+      // Absent : le concours reprend le filtre du serveur. Une condition
+      // invalide est refusée plutôt qu'écartée, sinon le concours s'ouvrirait
+      // plus large que ce que l'écran annonce.
+      let conditions: GiveawayCondition[] | undefined;
+      if (body.conditions !== undefined && body.conditions !== null) {
+        const normalized = normalizeConditions(body.conditions);
+        if (normalized.rejected > 0) {
+          return send(c, { error: `${normalized.rejected} condition(s) invalide(s)` }, 400);
+        }
+        conditions = normalized.conditions;
+      }
+
       const giveaway = await createGiveaway(
         client,
         guildId,
@@ -1450,7 +1465,9 @@ export function createGeneralistModulesRouter(client: Client) {
         body.needValidation === true,
         user.userId,
         styleOverrides,
-        body.ignoreBonuses === true
+        body.ignoreBonuses === true,
+        body.createDiscordEvent === true,
+        conditions
       );
 
       // Même forme que le GET : la page insère le concours en tête de liste
@@ -2400,6 +2417,8 @@ export function createGeneralistModulesRouter(client: Client) {
         linksEnabled?: boolean;
         linksAction?: string;
         linksWhitelist?: string[];
+        linksLevel?: number;
+        discordRulesWarn?: boolean;
         capsEnabled?: boolean;
         capsThresholdPercent?: number;
         capsMinLength?: number;
@@ -2536,6 +2555,8 @@ export function createGeneralistModulesRouter(client: Client) {
         linksEnabled: body.linksEnabled,
         linksAction: body.linksAction,
         linksWhitelist: body.linksWhitelist,
+        linksLevel: clampInt(body.linksLevel, 0, 2),
+        discordRulesWarn: body.discordRulesWarn,
         capsEnabled: body.capsEnabled,
         capsThresholdPercent: body.capsThresholdPercent,
         capsMinLength: body.capsMinLength,
@@ -2593,6 +2614,8 @@ export function createGeneralistModulesRouter(client: Client) {
           linksEnabled: body.linksEnabled ?? false,
           linksAction: body.linksAction ?? 'DELETE_AND_WARN',
           linksWhitelist: body.linksWhitelist ?? [],
+          linksLevel: clampInt(body.linksLevel, 0, 2) ?? 1,
+          discordRulesWarn: body.discordRulesWarn ?? false,
           capsEnabled: body.capsEnabled ?? false,
           capsThresholdPercent: body.capsThresholdPercent ?? 80,
           capsMinLength: body.capsMinLength ?? 10,

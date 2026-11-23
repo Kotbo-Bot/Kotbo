@@ -9,7 +9,7 @@ import { describe, expect, mock, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { getModuleDefinition } from '@kotbo/contracts';
-import { mcpToolModule, withModuleGate } from '../../api/mcp/toolModules.js';
+import { mcpToolModule, mcpToolRight, withKeyAccessGate, withModuleGate, type McpKeyRight, type McpKeyRule } from '../../api/mcp/toolModules.js';
 
 /** Noms réellement enregistrés, lus dans les sources des outils. */
 function registeredToolNames(): string[] {
@@ -104,5 +104,46 @@ describe('garde d\'un outil MCP', () => {
 
   test('outil sans module : le gestionnaire est rendu tel quel', () => {
     expect(withModuleGate('send_message', handler, async () => false)).toBe(handler);
+  });
+});
+
+describe('droits d\'une clé MCP par module', () => {
+  const handler = mock(async () => ({ content: [{ type: 'text' as const, text: 'ok' }] }));
+  const rule = (featureKey: string, over: Partial<McpKeyRule> = {}): McpKeyRule => ({
+    featureKey, canView: false, canModerate: false, canConfigure: false, canDelete: false, ...over,
+  });
+
+  test.each<[string, McpKeyRight]>([
+    ['get_tickets', 'canView'],
+    ['reply_ticket', 'canModerate'],
+    ['update_ticket_system_config', 'canConfigure'],
+    ['delete_ticket_macro', 'canDelete'],
+  ])('%s demande %s', (name, right) => {
+    expect(mcpToolRight(name)).toBe(right);
+  });
+
+  test('clé sans règle : permissions globales, rien n\'est filtré', async () => {
+    handler.mockClear();
+    await withKeyAccessGate('reply_ticket', handler, async () => [])({});
+    expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  test('clé avec règles : droit coché passe, droit manquant refuse', async () => {
+    handler.mockClear();
+    const rules = [rule('tickets', { canView: true })];
+    await withKeyAccessGate('get_tickets', handler, async () => rules)({});
+    expect(handler).toHaveBeenCalledTimes(1);
+
+    const refused = await withKeyAccessGate('reply_ticket', handler, async () => rules)({});
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(refused.isError).toBe(true);
+  });
+
+  test('clé avec règles : un module sans règle est fermé, un outil sans module reste ouvert', async () => {
+    handler.mockClear();
+    const rules = [rule('tickets', { canView: true })];
+    const refused = await withKeyAccessGate('get_giveaways', handler, async () => rules)({});
+    expect(refused.isError).toBe(true);
+    expect(withKeyAccessGate('send_message', handler, async () => rules)).toBe(handler);
   });
 });

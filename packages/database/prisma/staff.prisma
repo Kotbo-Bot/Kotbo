@@ -39,6 +39,10 @@ model StaffMember {
 
   isTutor Boolean @default(false)
 
+  // Habilitations à deux niveaux (général 0..5 + par pôle)
+  generalClearance Int  @default(0)
+  poleClearances   Json @default("{}")
+
   // Version du lien d'abonnement iCal : l'incrémenter révoque les liens déjà distribués.
   icalTokenVersion Int @default(0)
 
@@ -110,6 +114,18 @@ model StaffListPanel {
 // HIÉRARCHIES MULTIPLES STAFF
 // ============================================================================
 
+/// Canvas libre de l'organigramme : positions des cartes, cadres et traits. Purement visuel,
+/// sauf les traits « pleins liés » qui pilotent aussi StaffHierarchy.parentHierarchyId.
+model StaffOrgCanvas {
+  guildId   String   @id
+  data      Json     @default("{}")
+  updatedAt DateTime @updatedAt
+
+  guild Guild @relation("GuildStaffOrgCanvas", fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@map("staff_org_canvases")
+}
+
 model StaffHierarchy {
   id          String  @id @default(cuid())
   guildId     String
@@ -121,6 +137,13 @@ model StaffHierarchy {
   parentHierarchyId String? // Hiérarchie supérieure (null = racine)
   responsableUserId String? // Discord userId du responsable de cette hiérarchie
   discordRoleId String?     // Rôle Discord du responsable (optionnel)
+  /// Rôle Discord commun à tout le pôle : attribué automatiquement aux membres actifs
+  /// de cette hiérarchie pour simplifier la gestion des permissions Discord.
+  poleRoleId String?
+  /// Rôle Discord « séparateur » posé juste au-dessus des grades de la hiérarchie.
+  /// Avec separatorStyle : rôle créé et nommé par Kotbo. Sans : rôle existant choisi par l'admin (jamais renommé).
+  separatorRoleId String?
+  separatorStyle  String?
   enabled     Boolean @default(true)
 
   guild  Guild       @relation("GuildStaffHierarchies", fields: [guildId], references: [id], onDelete: Cascade)

@@ -14,14 +14,27 @@
  */
 
 import type { Client } from 'discord.js';
+import { Prisma } from '@prisma/client';
 import prisma from '../../../utils/db.js';
+import { cache } from '../../../utils/cache.js';
 import { logger } from '../../../utils/logger.js';
+import { isModuleEnabled } from '../../core/moduleGate.js';
 import { awardRpgGuildXp, checkLevelUp } from '../economyService.js';
 import { shouldAwardClanPoints } from './rpgBestiaryPolicy.js';
 import { splitRaidRewards } from './rpgRaidPolicy.js';
 import { asRpgTeamMode, resolveRpgTeamForUser } from './rpgTeamResolver.js';
 import { awardRpgTeamPoints } from './rpgTeamRewards.js';
+import { grantQuestRewards } from './rpgQuestRewards.js';
 import {
+  conditionsNeedRoles,
+  questConditionsMet,
+  readQuestConditions,
+  readQuestRewards,
+  type QuestContext,
+  type QuestReward,
+} from './rpgQuestRules.js';
+import {
+  ABSOLUTE_QUEST_OBJECTIVES,
   isQuestOnCooldown,
   normalizeRpgQuestInput,
   questWindowBounds,
@@ -51,16 +64,65 @@ export async function listGuildQuests(guildId: string) {
   });
 }
 
+/**
+ * Quêtes actives d'un serveur, relues à chaque message, réaction ou minute de vocal - y
+ * compris sur les serveurs qui n'en ont aucune. Mises en cache sous le préfixe `guild:<id>:`
+ * et invalidées par chaque écriture de définition.
+ */
+const ACTIVE_QUESTS_TTL_SECONDS = 60;
+const activeQuestsKey = (guildId: string) => `guild:${guildId}:active-quests`;
+
+function loadActiveQuests(guildId: string) {
+  return prisma.rpgQuest.findMany({ where: { guildId, enabled: true } });
+}
+
+async function getActiveQuests(guildId: string) {
+  const rows = await cache.wrap(activeQuestsKey(guildId), ACTIVE_QUESTS_TTL_SECONDS, () => loadActiveQuests(guildId));
+  // Le cache sérialise : les dates en reviennent sous forme de texte.
+  return rows.map((row) => ({
+    ...row,
+    activeFrom: row.activeFrom ? new Date(row.activeFrom) : null,
+    activeUntil: row.activeUntil ? new Date(row.activeUntil) : null,
+  }));
+}
+
+export function invalidateActiveQuests(guildId: string): Promise<void> {
+  return cache.delete(activeQuestsKey(guildId));
+}
+
+/** `null` s'écrit `DbNull` sur une colonne JSON ; `undefined` laisse la valeur en place. */
+function jsonColumn<T>(value: T | null | undefined): Prisma.InputJsonValue | typeof Prisma.DbNull | undefined {
+  if (value === undefined) return undefined;
+  return value === null ? Prisma.DbNull : (value as unknown as Prisma.InputJsonValue);
+}
+
 export async function saveGuildQuest(guildId: string, input: RpgQuestInput, questId?: string) {
   const normalized = normalizeRpgQuestInput(input);
   if (!normalized.ok) throw new QuestError(normalized.error, 400);
-  const data = normalized.value;
+  const { conditions, rewards, ...rest } = normalized.value;
+  const data = { ...rest, conditions: jsonColumn(conditions), rewards: jsonColumn(rewards) };
 
   const twin = await prisma.rpgQuest.findFirst({
     where: { guildId, name: data.name, ...(questId ? { NOT: { id: questId } } : {}) },
     select: { id: true },
   });
   if (twin) throw new QuestError(`Une quête se nomme déjà « ${data.name} ».`, 409);
+
+  if (data.prerequisiteQuestId) {
+    if (data.prerequisiteQuestId === questId) throw new QuestError('Une quête ne peut pas être son propre prérequis.', 400);
+    const prerequisite = await prisma.rpgQuest.findFirst({
+      where: { id: data.prerequisiteQuestId, guildId },
+      select: { prerequisiteQuestId: true },
+    });
+    if (!prerequisite) throw new QuestError('Quête prérequise introuvable.', 404);
+    // Une boucle (A exige B qui exige A) verrouillerait les deux à jamais.
+    if (questId && prerequisite.prerequisiteQuestId === questId) {
+      throw new QuestError('Ce prérequis boucle : la quête choisie exige déjà celle-ci.', 409);
+    }
+  }
+  if (data.activeFrom && data.activeUntil && data.activeUntil <= data.activeFrom) {
+    throw new QuestError('La date de fin doit suivre la date de début.', 400);
+  }
 
   // Une quête d'équipe sans module d'équipe ne compterait jamais rien : personne ne
   // pourrait être rattaché à quoi que ce soit, et le compteur resterait à zéro sans que
@@ -77,14 +139,18 @@ export async function saveGuildQuest(guildId: string, input: RpgQuestInput, ques
   }
 
   if (!questId) {
-    return { quest: await prisma.rpgQuest.create({ data: { guildId, ...data } }), created: true };
+    const quest = await prisma.rpgQuest.create({ data: { guildId, ...data } });
+    await invalidateActiveQuests(guildId);
+    return { quest, created: true };
   }
 
   const existing = await prisma.rpgQuest.findUnique({ where: { id: questId }, select: { guildId: true } });
   if (!existing) throw new QuestError('Quête introuvable.', 404);
   if (existing.guildId !== guildId) throw new QuestError('Cette quête appartient à un autre serveur.', 403);
 
-  return { quest: await prisma.rpgQuest.update({ where: { id: questId }, data }), created: false };
+  const quest = await prisma.rpgQuest.update({ where: { id: questId }, data });
+  await invalidateActiveQuests(guildId);
+  return { quest, created: false };
 }
 
 export async function deleteGuildQuest(guildId: string, questId: string) {
@@ -93,17 +159,22 @@ export async function deleteGuildQuest(guildId: string, questId: string) {
   if (existing.guildId !== guildId) throw new QuestError('Cette quête appartient à un autre serveur.', 403);
 
   await prisma.rpgQuest.delete({ where: { id: questId } });
+  // Les quêtes qui l'exigeaient ne doivent pas rester verrouillées pour toujours.
+  await prisma.rpgQuest.updateMany({ where: { guildId, prerequisiteQuestId: questId }, data: { prerequisiteQuestId: null } });
+  await invalidateActiveQuests(guildId);
   return { name: existing.name };
 }
 
 // ── Avancement ────────────────────────────────────────────────────────────
 
 /**
- * Compte une action de jeu sur toutes les quêtes qui la visent.
+ * Compte une action sur toutes les quêtes qui la visent.
  *
- * Point d'entrée unique, appelé depuis le combat, le raid et la pêche. Volontairement
- * silencieux : une quête qui ne progresse pas ne doit jamais faire échouer le combat qui
- * vient d'être gagné.
+ * Point d'entrée unique, appelé depuis le combat, le raid, la pêche, mais aussi les messages,
+ * le vocal, les concours, les niveaux... Volontairement silencieux : une quête qui ne
+ * progresse pas ne doit jamais faire échouer l'action qui vient d'être accomplie.
+ *
+ * Pour un objectif d'état (niveau, série), `amount` est la valeur courante et non un delta.
  */
 export async function trackRpgQuest(
   client: Client,
@@ -111,18 +182,46 @@ export async function trackRpgQuest(
   userId: string,
   objective: RpgQuestObjective,
   amount = 1,
+  context: QuestContext & { channelId?: string | null } = {},
 ): Promise<void> {
   if (amount <= 0) return;
 
   try {
-    const quests = await prisma.rpgQuest.findMany({ where: { guildId, enabled: true, objective } });
+    const now = new Date();
+    const quests = (await getActiveQuests(guildId)).filter((quest) => {
+      if (quest.objective !== objective) return false;
+      if (quest.activeFrom && quest.activeFrom > now) return false;
+      if (quest.activeUntil && quest.activeUntil <= now) return false;
+      return true;
+    });
     if (quests.length === 0) return;
 
+    const absolute = ABSOLUTE_QUEST_OBJECTIVES.has(objective);
+    const channelId = context.channelId ?? undefined;
+    let roleIds = context.roleIds;
+    let timeZone: string | undefined;
+
     for (const quest of quests) {
+      const conditions = readQuestConditions(quest.conditions);
+      if (Object.keys(conditions).length > 0) {
+        if (roleIds === undefined && conditionsNeedRoles(conditions)) {
+          const guild = client.guilds.cache.get(guildId);
+          const member = guild ? await guild.members.fetch(userId).catch(() => null) : null;
+          roleIds = member ? [...member.roles.cache.keys()] : [];
+        }
+        if (timeZone === undefined && (conditions.weekdays || conditions.hourFrom !== undefined)) {
+          const guild = await prisma.guild.findUnique({ where: { id: guildId }, select: { timezone: true } });
+          timeZone = guild?.timezone ?? 'UTC';
+        }
+        if (!questConditionsMet(conditions, { ...context, roleIds }, { now, timeZone })) continue;
+      }
+
+      if (quest.prerequisiteQuestId && !(await hasCompletedQuest(quest.prerequisiteQuestId, userId))) continue;
+
       const windowKey = questWindowKey(quest.windowHours);
 
       if (quest.scope === 'MEMBER') {
-        await bumpMemberProgress(quest, userId, windowKey, amount, NO_TEAM, client);
+        await bumpMemberProgress(quest, userId, windowKey, amount, NO_TEAM, client, absolute, channelId);
         continue;
       }
 
@@ -131,12 +230,21 @@ export async function trackRpgQuest(
       const identity = await resolveRpgTeamForUser(quest.guildId, userId, asRpgTeamMode(quest.teamMode), client);
       if (!identity) continue;
 
-      await bumpMemberProgress(quest, userId, windowKey, amount, identity.key, client);
+      await bumpMemberProgress(quest, userId, windowKey, amount, identity.key, client, absolute, channelId);
       await bumpTeamProgress(quest, identity, windowKey, amount, client);
     }
   } catch (error) {
     logger.error('RpgQuest', `Progression ${objective} en échec pour ${userId} sur ${guildId}:`, error);
   }
+}
+
+/** Une quête enchaînée se débloque dès que sa prérequise a été payée au moins une fois. */
+async function hasCompletedQuest(questId: string, userId: string): Promise<boolean> {
+  const done = await prisma.rpgQuestProgress.findFirst({
+    where: { questId, userId, OR: [{ status: 'CLAIMED' }, { completions: { gt: 0 } }] },
+    select: { id: true },
+  });
+  return done !== null;
 }
 
 type QuestRow = Awaited<ReturnType<typeof listGuildQuests>>[number];
@@ -156,6 +264,8 @@ async function bumpMemberProgress(
   amount: number,
   teamKey: string,
   client: Client,
+  absolute: boolean,
+  channelId?: string,
 ): Promise<void> {
   const where = { questId_userId_windowKey_teamKey: { questId: quest.id, userId, windowKey, teamKey } };
   const existing = await prisma.rpgQuestProgress.findUnique({ where });
@@ -166,7 +276,8 @@ async function bumpMemberProgress(
   // restées en attente du temps où le joueur devait les réclamer à la main.
   if (quest.scope === 'MEMBER' && !quest.repeatable && existing?.status === 'CLAIMED') return;
 
-  const raw = (existing?.current ?? 0) + amount;
+  // Un objectif d'état garde la plus haute valeur vue ; un compteur additionne.
+  const raw = absolute ? Math.max(existing?.current ?? 0, amount) : (existing?.current ?? 0) + amount;
   const current = quest.scope === 'MEMBER' ? Math.min(raw, quest.target) : raw;
   const completed = quest.scope === 'MEMBER' && current >= quest.target;
 
@@ -195,7 +306,7 @@ async function bumpMemberProgress(
   // une seule action très généreuse.
   if (completed) {
     const carry = Math.min(Math.max(raw - quest.target, 0), quest.target);
-    await rewardMemberQuest(client, quest, progress.id, userId, carry);
+    await rewardMemberQuest(client, quest, progress.id, userId, carry, channelId);
   }
 }
 
@@ -236,6 +347,7 @@ async function rewardMemberQuest(
   progressId: string,
   userId: string,
   carry: number,
+  channelId?: string,
 ): Promise<void> {
   if (!quest.repeatable && isQuestOnCooldown(await lastQuestReward(quest.id, userId))) return;
 
@@ -249,14 +361,20 @@ async function rewardMemberQuest(
   });
   if (claimed.count === 0) return;
 
-  await prisma.rpgProfile.updateMany({
-    where: { guildId: quest.guildId, userId },
-    data: {
-      balance: { increment: quest.rewardCoins },
-      xp: { increment: quest.rewardXp },
-    },
-  });
-  await checkLevelUp(quest.guildId, userId);
+  // Les pièces appartiennent à l'économie : éteinte, la quête se solde quand même, sans
+  // créditer un solde que plus rien n'affiche. L'upsert : un membre qui n'a jamais touché au
+  // RPG n'a pas encore de profil, et la quête passerait payée sans qu'il reçoive rien.
+  const coins = quest.rewardCoins > 0 && (await isModuleEnabled(quest.guildId, 'economy')) ? quest.rewardCoins : 0;
+  if (coins > 0 || quest.rewardXp > 0) {
+    await prisma.rpgProfile.upsert({
+      where: { guildId_userId: { guildId: quest.guildId, userId } },
+      update: { balance: { increment: coins }, xp: { increment: quest.rewardXp } },
+      create: { guildId: quest.guildId, userId, balance: coins, xp: quest.rewardXp },
+    });
+    await checkLevelUp(quest.guildId, userId);
+  }
+  await grantQuestRewards(client, quest, readQuestRewards(quest.rewards), userId, channelId);
+  await trackQuestCompleted(client, quest, userId);
   // Une quête personnelle crédite l'équipe de celui qui la termine, exactement comme un
   // monstre vaincu : son clan, ou sa guilde du jeu selon ce dont sont faites les équipes.
   await awardRpgTeamPoints({
@@ -267,6 +385,15 @@ async function rewardMemberQuest(
     source: 'RPG_QUEST',
     reason: quest.name,
   });
+}
+
+/**
+ * Une quête payée compte pour les quêtes « terminer N quêtes » : c'est ainsi que se posent
+ * des paliers bonus. Celles-ci ne se comptent pas elles-mêmes, sinon la boucle ne s'arrête plus.
+ */
+async function trackQuestCompleted(client: Client, quest: QuestRow, userId: string): Promise<void> {
+  if (quest.objective === 'QUESTS_COMPLETED') return;
+  await trackRpgQuest(client, quest.guildId, userId, 'QUESTS_COMPLETED', 1);
 }
 
 /** Additionne l'action au compteur de l'équipe, et paie celle-ci si la cible est atteinte. */
@@ -330,14 +457,18 @@ async function rewardTeamQuest(client: Client, quest: QuestRow, teamKey: string,
   for (const { userId } of members) {
     const coins = coinShares.get(userId) ?? 0;
     const xp = xpShares.get(userId) ?? 0;
-    if (coins === 0 && xp === 0) continue;
 
     try {
-      await prisma.rpgProfile.update({
-        where: { guildId_userId: { guildId: quest.guildId, userId } },
-        data: { balance: { increment: coins }, xp: { increment: xp } },
-      });
-      await checkLevelUp(quest.guildId, userId);
+      if (coins > 0 || xp > 0) {
+        await prisma.rpgProfile.update({
+          where: { guildId_userId: { guildId: quest.guildId, userId } },
+          data: { balance: { increment: coins }, xp: { increment: xp } },
+        });
+        await checkLevelUp(quest.guildId, userId);
+      }
+      // Les récompenses libres ne se partagent pas : chaque contributeur reçoit les siennes.
+      await grantQuestRewards(client, quest, readQuestRewards(quest.rewards), userId);
+      await trackQuestCompleted(client, quest, userId);
     } catch (error) {
       logger.error('RpgQuest', `Récompense non versée à ${userId} sur ${quest.guildId}:`, error);
     }
@@ -411,12 +542,25 @@ export interface QuestView {
   current: number;
   status: string;
   teamName: string | null;
+  /** Récompenses libres : XP de niveau, rôle, objet, concours, message. */
+  rewards: QuestReward[];
+  /** Quête enchaînée dont la prérequise n'est pas terminée : elle ne compte rien encore. */
+  locked: boolean;
 }
 
 /** Quêtes en cours d'un membre : les siennes, puis celles de son équipe. */
 export async function getMemberQuests(client: Client, guildId: string, userId: string): Promise<QuestView[]> {
-  const quests = await prisma.rpgQuest.findMany({ where: { guildId, enabled: true }, orderBy: { name: 'asc' } });
+  const now = new Date();
+  const quests = (await prisma.rpgQuest.findMany({ where: { guildId, enabled: true }, orderBy: { name: 'asc' } }))
+    .filter((quest) => (!quest.activeFrom || quest.activeFrom <= now) && (!quest.activeUntil || quest.activeUntil > now));
   if (quests.length === 0) return [];
+
+  const prerequisiteIds = [...new Set(quests.map((q) => q.prerequisiteQuestId).filter((id): id is string => !!id))];
+  const done = prerequisiteIds.length === 0 ? [] : await prisma.rpgQuestProgress.findMany({
+    where: { userId, questId: { in: prerequisiteIds }, OR: [{ status: 'CLAIMED' }, { completions: { gt: 0 } }] },
+    select: { questId: true },
+  });
+  const doneIds = new Set(done.map((row) => row.questId));
 
   const views: QuestView[] = [];
   const teams = new Map<string, { key: string; name: string } | null>();
@@ -437,6 +581,8 @@ export async function getMemberQuests(client: Client, guildId: string, userId: s
       rewardCoins: quest.rewardCoins,
       rewardXp: quest.rewardXp,
       rewardClanPoints: quest.rewardClanPoints,
+      rewards: readQuestRewards(quest.rewards),
+      locked: !!quest.prerequisiteQuestId && !doneIds.has(quest.prerequisiteQuestId),
     };
 
     if (quest.scope === 'MEMBER') {
@@ -473,4 +619,9 @@ export async function getMemberQuests(client: Client, guildId: string, userId: s
   }
 
   return views;
+}
+
+/** Vrai si une quête active vise cet objectif : évite des calculs coûteux pour rien. */
+export async function guildHasQuestObjective(guildId: string, objective: RpgQuestObjective): Promise<boolean> {
+  return (await getActiveQuests(guildId)).some((quest) => quest.objective === objective);
 }

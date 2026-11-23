@@ -1,6 +1,6 @@
 import type { NewsChannel } from 'discord.js';
 import { type TextChannel, type Message, type Guild, type Embed } from 'discord.js';
-import type { Prisma } from '@prisma/client';
+import type { MessageLog, Prisma } from '@prisma/client';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { buildTranscriptData } from './transcriptData.js';
@@ -271,11 +271,17 @@ export async function generateTranscript(channel: TextChannel): Promise<{ id: st
 
 /**
  * Enregistre la transcription JSON (`TranscriptDataV1`) d'une suite de
- * messages, dans l'ordre donné. Les transcriptions HTML historiques restent
- * lisibles via `parseTranscriptHtml`.
+ * messages, dans l'ordre donné, complétée des messages supprimés relus dans
+ * le journal (`deletedLogs`, triés avec les autres). Les transcriptions HTML
+ * historiques restent lisibles via `parseTranscriptHtml`.
  */
-export async function generateTranscriptFromMessages(channel: TextChannel | NewsChannel, allMessages: Message[]): Promise<{ id: string; url: string; count: number }> {
-  const data = await buildTranscriptData(channel, allMessages);
+export async function generateTranscriptFromMessages(
+  channel: TextChannel | NewsChannel,
+  allMessages: Message[],
+  deletedLogs: MessageLog[] = [],
+): Promise<{ id: string; url: string; count: number }> {
+  const data = await buildTranscriptData(channel, allMessages, deletedLogs);
+  const totalCount = data.messages.length;
   const firstMsg = allMessages[0];
   const lastMsg = allMessages[allMessages.length - 1];
 
@@ -286,14 +292,14 @@ export async function generateTranscriptFromMessages(channel: TextChannel | News
       channelName: channel.name,
       format: 'json',
       data: data as unknown as Prisma.InputJsonValue,
-      messageCount: allMessages.length,
+      messageCount: totalCount,
       startMessageId: firstMsg?.id || null,
       endMessageId: lastMsg?.id || null,
-      startTime: firstMsg?.createdAt || null,
-      endTime: lastMsg?.createdAt || null,
+      startTime: data.messages.length ? new Date(data.messages[0].timestamp) : null,
+      endTime: data.messages.length ? new Date(data.messages[data.messages.length - 1].timestamp) : null,
     },
   });
 
-  logger.success('Transcript', `Transcription générée pour #${channel.name} (${allMessages.length} messages) : ID ${transcript.id}`);
-  return { id: transcript.id, url: `/transcripts/${transcript.id}`, count: allMessages.length };
+  logger.success('Transcript', `Transcription générée pour #${channel.name} (${totalCount} messages) : ID ${transcript.id}`);
+  return { id: transcript.id, url: `/transcripts/${transcript.id}`, count: totalCount };
 }

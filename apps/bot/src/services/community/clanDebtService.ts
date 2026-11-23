@@ -6,7 +6,7 @@
  * au classement.
  *
  * La dette appartient à la couche clans, pas au module qui l'a creusée : c'est
- * ce qui permet à un gain de progression, de boost ou du Daily Algo de la
+ * ce qui permet à un gain de progression, de boost de la
  * rembourser sans que les clans aient à connaître les paris.
  */
 import prisma from '../../utils/db.js';
@@ -58,9 +58,9 @@ export async function openClanPointDebt(params: {
   // colonne finirait par déborder l'entier 32 bits de Postgres.
   const total = row.amount > BET_DEBT_CEILING
     ? (await prisma.clanPointDebt.update({
-        where: { guildId_userId: { guildId: params.guildId, userId: params.userId } },
-        data: { amount: BET_DEBT_CEILING },
-      })).amount
+      where: { guildId_userId: { guildId: params.guildId, userId: params.userId } },
+      data: { amount: BET_DEBT_CEILING },
+    })).amount
     : row.amount;
 
   if (total !== row.amount) {

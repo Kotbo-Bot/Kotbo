@@ -37,6 +37,8 @@ model QuestDefinition {
 
   // Objectif
   target    Int @default(1) // ex: 50 messages, 30 minutes, etc.
+  // Conditions avancées optionnelles (salons, rôles, mots-clés, longueur min, règle personnalisée)
+  conditions Json?
 
   // Récompenses
   rewardCoins Int @default(0)

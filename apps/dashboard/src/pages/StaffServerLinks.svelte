@@ -369,6 +369,7 @@
                         {#each [
                           { field: 'modlogMirrorChannelId', label: m.staff_server_field_modlog_mirror(), hint: m.staff_server_hint_modlog_mirror() },
                           { field: 'sanctionReportChannelId', label: m.staff_server_field_sanction_report(), hint: m.staff_server_hint_sanction_report() },
+                          { field: 'internalReportChannelId', label: m.staff_server_field_internal_report(), hint: m.staff_server_hint_internal_report() },
                           { field: 'recruitmentAlertChannelId', label: m.staff_server_field_recruitment_alert(), hint: m.staff_server_hint_recruitment_alert() },
                           { field: 'offboardingAlertChannelId', label: m.staff_server_field_offboarding_alert(), hint: m.staff_server_hint_offboarding_alert() },
                           { field: 'onboardingInviteChannelId', label: m.staff_server_field_onboarding_invite(), hint: m.staff_server_hint_onboarding_invite() },

@@ -246,6 +246,30 @@ model SanctionEvidenceFile {
   @@map("sanction_evidence_files")
 }
 
+// Corbeille des sanctions supprimées : instantané JSON de la ligne et ids des
+// rapports/preuves qu'elle portait (leur sanctionId passe à null à la
+// suppression). Permet de relire puis restaurer. Purgée après 90 jours.
+model SanctionDeletion {
+  id String @id @default(cuid())
+
+  guildId String
+  sanctionId String
+  snapshot Json
+  reportIds String[] @default([])
+  evidenceFileIds String[] @default([])
+
+  deletedByUserId String
+  deletedByTag String?
+  deletedAt DateTime @default(now())
+  restoredAt DateTime?
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@index([guildId, deletedAt])
+  @@index([deletedAt])
+  @@map("sanction_deletions")
+}
+
 model SanctionReport {
   id String @id @default(cuid())
 

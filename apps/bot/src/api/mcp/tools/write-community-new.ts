@@ -1,8 +1,11 @@
 /** Outils MCP - write community new (permission WRITE_COMMUNITY). */
 import { createCustomForm, deleteCustomForm } from '../../../services/features/customFormService.js';
 import { createCustomEvent } from '../../../services/features/eventService.js';
-import { invalidateActiveQuests } from '../../../services/community/questService.js';
+import { deleteGuildQuest, saveGuildQuest } from '../../../services/features/rpg/rpgQuestService.js';
+import { RPG_QUEST_OBJECTIVES, type RpgQuestInput } from '../../../services/features/rpg/rpgQuestPolicy.js';
+import { QUEST_REWARD_TYPES, readQuestRewards } from '../../../services/features/rpg/rpgQuestRules.js';
 import { createGiveaway, deleteGiveaway, endGiveaway, refreshActiveGiveaways, rerollGiveaway } from '../../../services/features/giveawayService.js';
+import { normalizeConditions, type GiveawayCondition } from '../../../services/features/giveawayConditions.js';
 import { invalidateAutoResponseCacheAcrossShards } from '../../../services/features/autoResponseService.js';
 import prisma from '../../../utils/db.js';
 import { sanitizeCustomCss, sanitizeFormTheme } from '../../../utils/formCustomization.js';
@@ -15,6 +18,15 @@ import { assertFirstKillRole } from '../../../services/features/rpg/rpgFirstKill
 import { regexProblem } from '../../../utils/safeRegex.js';
 import { reloadScheduleAcrossShards } from '../../../services/system/scheduleService.js';
 import nodeCron from 'node-cron';
+const questObjective = z.enum(RPG_QUEST_OBJECTIVES);
+const questConditionsSchema = z.record(z.string(), z.unknown()).optional().describe(
+  'Filtres : channelIds, excludeChannelIds, categoryIds, roleIds, excludeRoleIds, minLength, keywords[], requireAttachment, requireLink, requireMention, weekdays[0-6], hourFrom, hourTo',
+);
+const questRewardsSchema = z.array(z.record(z.string(), z.unknown())).optional().describe(
+  `Récompenses libres, types ${QUEST_REWARD_TYPES.join('/')} : {type:"LEVEL_XP",amount} {type:"ROLE",roleId,durationHours?} {type:"ITEM",itemId,quantity} {type:"GIVEAWAY_ENTRY",giveawayId} {type:"MESSAGE",content,channelId?} (variables {user} {quest} {target})`,
+);
+
+
 export function registerWriteCommunityNewTools(ctx: McpToolContext) {
   const { server, guildId, client, shouldRegister, guard, audit, toolMeta, ownerId } = ctx;
 
@@ -195,6 +207,27 @@ export function registerWriteCommunityNewTools(ctx: McpToolContext) {
     );
 
     // 4. create_giveaway / create_giveway
+    // Un seul objet à plat plutôt qu'une union : l'IA lit mieux un schéma simple.
+    // `normalizeConditions` valide le détail et écarte ce qui est invalide.
+    const conditionSchema = z.object({
+      type: z.enum([
+        'roles_all', 'roles_any', 'roles_none', 'account_age', 'member_age', 'booster', 'avatar', 'banner',
+        'server_tag', 'topgg_vote', 'nickname_contains', 'status_contains', 'messages', 'voice_minutes',
+        'invites', 'level', 'xp', 'coins', 'reputation', 'in_guild',
+      ]),
+      roleIds: z.array(z.string()).optional().describe('roles_all / roles_any / roles_none : IDs de rôles'),
+      days: z.number().int().optional().describe('account_age / member_age : ancienneté minimale en jours'),
+      min: z.number().int().optional().describe('messages, voice_minutes (minutes), invites (encore présents), level, xp, coins, reputation : seuil minimum'),
+      period: z.enum(['total', '7d', '30d', 'since_start']).optional().describe('messages / voice_minutes : période comptée'),
+      mode: z.enum(['required', 'excluded']).optional().describe('booster : réservé aux boosters ou exclus'),
+      text: z.string().optional().describe('nickname_contains / status_contains : texte exigé'),
+      guildId: z.string().optional().describe('in_guild : ID de l\'autre serveur (le bot doit y être)'),
+      group: z.string().optional().describe('Même valeur = groupe « au moins une de ces conditions » (OU). Sans groupe, la condition est obligatoire.'),
+    });
+    const conditionsField = z.array(conditionSchema).max(15).optional().describe(
+      'Conditions de participation. Absent à la création = reprend le filtre du serveur ; [] = ouvert à tous. Toutes obligatoires, sauf celles qui partagent un `group`.',
+    );
+
     const giveawayInputSchema = {
       channel: z.string().describe('Salon cible'),
       prize: z.string().describe('Lot à gagner'),
@@ -206,12 +239,22 @@ export function registerWriteCommunityNewTools(ctx: McpToolContext) {
       rpg_item_id: z.string().optional().describe('ID de l\'objet RPG offert aux gagnants, refuse s\'il n\'existe pas sur ce serveur'),
       need_validation: z.boolean().default(false).describe('Exiger la validation du staff avant de remettre le lot'),
       ignore_bonuses: z.boolean().default(false).describe('Tirage strictement egalitaire : ignore les roles avantages et le bonus de clan'),
+      conditions: conditionsField,
+      create_discord_event: z.boolean().default(false).describe('Créer aussi un événement planifié Discord qui démarre à l\'heure du tirage (le bot doit avoir « Gérer les événements »)'),
       key_name: z.string().optional(),
     };
 
-    const giveawayHandler = guard('WRITE_COMMUNITY', async ({ channel, prize, winner_count, duration_minutes, description, rpg_xp, rpg_coins, rpg_item_id, need_validation, ignore_bonuses, key_name }) => {
+    const giveawayHandler = guard('WRITE_COMMUNITY', async ({ channel, prize, winner_count, duration_minutes, description, rpg_xp, rpg_coins, rpg_item_id, need_validation, ignore_bonuses, conditions, create_discord_event, key_name }) => {
       const resolved = resolveChannel(guildId, client, channel);
       if (!resolved.ok) return resolved.response;
+
+      let cleanConditions: GiveawayCondition[] | undefined;
+      if (conditions) {
+        const normalized = normalizeConditions(conditions);
+        // Une condition écartée en silence ouvrirait le concours plus grand que voulu.
+        if (normalized.rejected > 0) return err(`${normalized.rejected} condition(s) invalide(s) : vérifie les champs requis de chaque type.`);
+        cleanConditions = normalized.conditions;
+      }
 
       try {
         const giveaway = await createGiveaway(
@@ -230,11 +273,13 @@ export function registerWriteCommunityNewTools(ctx: McpToolContext) {
           // sans lui la variable {host} de l'annonce reste vide.
           ownerId,
           {},
-          ignore_bonuses
+          ignore_bonuses,
+          create_discord_event,
+          cleanConditions
         );
 
         await audit(key_name, 'Création giveaway MCP', prize, `Salon: #${resolved.channel.name}`);
-        return ok({ ok: true, giveawayId: giveaway.id, prize });
+        return ok({ ok: true, giveawayId: giveaway.id, prize, discordEventId: giveaway.discordEventId ?? null });
       } catch (e) {
         return toolError(e, 'Erreur lors du lancement du giveaway');
       }
@@ -305,42 +350,53 @@ export function registerWriteCommunityNewTools(ctx: McpToolContext) {
       })
     );
 
-    // 6. create_rpg_adventure / create_quest_definition
+    // 6. create_quest_definition
     server.registerTool(
       'create_quest_definition',
       {
-        description: 'Crée une nouvelle définition de quête pour le système communautaire.',
+        description: 'Crée une quête (moteur unique, communautaire ou RPG) : objectif, fenêtre, conditions et récompenses libres.',
         inputSchema: {
           name: z.string().describe('Nom de la quête'),
           description: z.string().describe('Description des objectifs'),
-          type: z.enum(['SEND_MESSAGES', 'VOICE_MINUTES', 'REACT_MESSAGES', 'WIN_GAME', 'EARN_COINS', 'GIVE_REP', 'CREATE_THREADS', 'REPLY_MESSAGES']),
-          frequency: z.enum(['DAILY', 'WEEKLY']),
-          target: z.number().int().describe('Nombre de répétitions requises pour valider la quête'),
-          reward_coins: z.number().int().default(0),
-          reward_xp: z.number().int().default(0),
+          objective: questObjective.describe('Ce qui compte (SEND_MESSAGES, GIVEAWAYS_JOINED, LEVEL_REACHED, ACTIVE_STREAK, QUESTS_COMPLETED...)'),
+          frequency: z.enum(['DAILY', 'WEEKLY']).optional().describe('Raccourci de window_hours : 24 h ou 168 h'),
+          window_hours: z.number().int().min(1).max(720).optional(),
+          target: z.number().int().min(1).describe('Valeur à atteindre'),
+          reward_coins: z.number().int().min(0).default(0),
+          reward_xp: z.number().int().min(0).default(0).describe("XP de niveau (leveling), pas l'XP RPG"),
+          conditions: questConditionsSchema,
+          rewards: questRewardsSchema,
+          prerequisite_quest_id: z.string().optional(),
+          active_from: z.string().optional().describe('Date ISO de début'),
+          active_until: z.string().optional().describe('Date ISO de fin'),
+          repeatable: z.boolean().optional(),
           key_name: z.string().optional(),
         },
         _meta: toolMeta,
       },
-      guard('WRITE_COMMUNITY', async ({ name, description, type, frequency, target, reward_coins, reward_xp, key_name }) => {
+      guard('WRITE_COMMUNITY', async (a) => {
         try {
-          const quest = await prisma.questDefinition.create({
-            data: {
-              guildId,
-              name,
-              description,
-              type,
-              frequency,
-              target,
-              rewardCoins: reward_coins,
-              rewardXp: reward_xp,
-              enabled: true,
-            }
+          const rewards = [
+            ...(a.reward_xp > 0 ? [{ type: 'LEVEL_XP', amount: a.reward_xp }] : []),
+            ...(a.rewards ?? []),
+          ];
+          const { quest } = await saveGuildQuest(guildId, {
+            name: a.name,
+            description: a.description,
+            objective: a.objective,
+            target: a.target,
+            windowHours: a.window_hours ?? (a.frequency === 'WEEKLY' ? 168 : 24),
+            rewardCoins: a.reward_coins,
+            conditions: a.conditions,
+            rewards,
+            prerequisiteQuestId: a.prerequisite_quest_id,
+            activeFrom: a.active_from,
+            activeUntil: a.active_until,
+            repeatable: a.repeatable,
           });
-          await invalidateActiveQuests(guildId);
 
-          await audit(key_name, 'Création quête MCP', name, `Target: ${target} | XP: ${reward_xp}`);
-          return ok({ ok: true, questId: quest.id, name });
+          await audit(a.key_name, 'Création quête MCP', a.name, `Target: ${a.target} | XP: ${a.reward_xp}`);
+          return ok({ ok: true, questId: quest.id, name: a.name });
         } catch (e) {
           return toolError(e);
         }
@@ -670,17 +726,23 @@ export function registerWriteCommunityNewTools(ctx: McpToolContext) {
           // passer par lui, et un concours a cinquante gagnants n'aurait pu
           // naitre que par ici.
           winner_count: z.number().int().min(1).max(20).optional().describe('Nombre de gagnants, 20 au maximum'),
+          conditions: conditionsField.describe('Remplace toutes les conditions du giveaway ([] = ouvert à tous). Les participants déjà inscrits restent inscrits.'),
           key_name: z.string().optional(),
         },
         _meta: toolMeta,
       },
-      guard('WRITE_COMMUNITY', async ({ giveaway_id, prize, description, duration_minutes, winner_count, key_name }) => {
+      guard('WRITE_COMMUNITY', async ({ giveaway_id, prize, description, duration_minutes, winner_count, conditions, key_name }) => {
         try {
           const existing = await prisma.giveaway.findFirst({ where: { id: giveaway_id, guildId } });
           if (!existing) return err('Giveaway introuvable');
           if (existing.ended) return err('Impossible de modifier un giveaway terminé');
 
           const updateData: any = {};
+          if (conditions !== undefined) {
+            const normalized = normalizeConditions(conditions);
+            if (normalized.rejected > 0) return err(`${normalized.rejected} condition(s) invalide(s) : vérifie les champs requis de chaque type.`);
+            updateData.conditions = normalized.conditions;
+          }
           if (prize !== undefined) updateData.prize = prize;
           if (description !== undefined) updateData.description = description;
           if (duration_minutes !== undefined) {
@@ -737,44 +799,65 @@ export function registerWriteCommunityNewTools(ctx: McpToolContext) {
     server.registerTool(
       'update_quest_definition',
       {
-        description: 'Met à jour une quête existante. Requiert WRITE_COMMUNITY.',
+        description: 'Met à jour une quête existante. Requiert WRITE_COMMUNITY. Seuls les champs fournis changent.',
         inputSchema: {
           quest_id: z.string().describe('ID de la quête à modifier'),
           name: z.string().optional(),
           description: z.string().optional(),
-          type: z.enum(['SEND_MESSAGES', 'VOICE_MINUTES', 'REACT_MESSAGES', 'WIN_GAME', 'EARN_COINS', 'GIVE_REP', 'CREATE_THREADS', 'REPLY_MESSAGES']).optional(),
-          frequency: z.enum(['DAILY', 'WEEKLY']).optional(),
+          objective: questObjective.optional(),
+          window_hours: z.number().int().min(1).max(720).optional(),
           target: z.number().int().min(1).optional().describe('Objectif quantitatif'),
-          reward_coins: z.number().int().optional(),
-          reward_xp: z.number().int().optional(),
+          reward_coins: z.number().int().min(0).optional(),
+          reward_xp: z.number().int().min(0).optional().describe("XP de niveau ; 0 la retire"),
+          conditions: questConditionsSchema.describe('Remplace toutes les conditions ; {} les efface'),
+          rewards: questRewardsSchema.describe('Remplace les récompenses libres ; [] les efface'),
+          prerequisite_quest_id: z.string().nullable().optional(),
+          active_from: z.string().nullable().optional(),
+          active_until: z.string().nullable().optional(),
+          repeatable: z.boolean().optional(),
           enabled: z.boolean().optional(),
           key_name: z.string().optional(),
         },
         _meta: toolMeta,
       },
-      guard('WRITE_COMMUNITY', async ({ quest_id, name, description, type, frequency, target, reward_coins, reward_xp, enabled, key_name }) => {
+      guard('WRITE_COMMUNITY', async (a) => {
         try {
-          const existing = await prisma.questDefinition.findFirst({ where: { id: quest_id, guildId } });
+          const existing = await prisma.rpgQuest.findFirst({ where: { id: a.quest_id, guildId } });
           if (!existing) return err('Quête introuvable');
 
-          const updateData: any = {};
-          if (name !== undefined) updateData.name = name;
-          if (description !== undefined) updateData.description = description;
-          if (type !== undefined) updateData.type = type;
-          if (frequency !== undefined) updateData.frequency = frequency;
-          if (target !== undefined) updateData.target = target;
-          if (reward_coins !== undefined) updateData.rewardCoins = reward_coins;
-          if (reward_xp !== undefined) updateData.rewardXp = reward_xp;
-          if (enabled !== undefined) updateData.enabled = enabled;
+          // L'XP de niveau vit dans `rewards` : on la remplace sans toucher aux autres.
+          let rewards: unknown = a.rewards ?? readQuestRewards(existing.rewards);
+          if (a.reward_xp !== undefined) {
+            rewards = [
+              ...(rewards as Array<{ type: string }>).filter((r) => r.type !== 'LEVEL_XP'),
+              ...(a.reward_xp > 0 ? [{ type: 'LEVEL_XP', amount: a.reward_xp }] : []),
+            ];
+          }
 
-          await prisma.questDefinition.update({
-            where: { id: quest_id },
-            data: updateData,
-          });
-          await invalidateActiveQuests(guildId);
+          const input: RpgQuestInput = {
+            name: a.name ?? existing.name,
+            description: a.description ?? existing.description,
+            emoji: existing.emoji,
+            objective: a.objective ?? existing.objective,
+            target: a.target ?? existing.target,
+            scope: existing.scope,
+            teamMode: existing.teamMode,
+            windowHours: a.window_hours ?? existing.windowHours,
+            rewardCoins: a.reward_coins ?? existing.rewardCoins,
+            rewardXp: existing.rewardXp,
+            rewardClanPoints: existing.rewardClanPoints,
+            repeatable: a.repeatable ?? existing.repeatable,
+            enabled: a.enabled ?? existing.enabled,
+            conditions: a.conditions ?? existing.conditions,
+            rewards,
+            prerequisiteQuestId: a.prerequisite_quest_id === undefined ? existing.prerequisiteQuestId : a.prerequisite_quest_id,
+            activeFrom: a.active_from === undefined ? existing.activeFrom?.toISOString() : a.active_from,
+            activeUntil: a.active_until === undefined ? existing.activeUntil?.toISOString() : a.active_until,
+          };
+          await saveGuildQuest(guildId, input, a.quest_id);
 
-          await audit(key_name, 'Mise à jour quête MCP', name || existing.name, `ID: ${quest_id}`);
-          return ok({ ok: true, questId: quest_id });
+          await audit(a.key_name, 'Mise à jour quête MCP', a.name || existing.name, `ID: ${a.quest_id}`);
+          return ok({ ok: true, questId: a.quest_id });
         } catch (e) {
           return toolError(e);
         }
@@ -784,7 +867,7 @@ export function registerWriteCommunityNewTools(ctx: McpToolContext) {
     server.registerTool(
       'delete_quest_definition',
       {
-        description: 'Supprime une définition de quête. Requiert WRITE_COMMUNITY.',
+        description: 'Supprime une quête. Requiert WRITE_COMMUNITY.',
         inputSchema: {
           quest_id: z.string().describe('ID de la quête à supprimer'),
           key_name: z.string().optional(),
@@ -793,12 +876,8 @@ export function registerWriteCommunityNewTools(ctx: McpToolContext) {
       },
       guard('WRITE_COMMUNITY', async ({ quest_id, key_name }) => {
         try {
-          const existing = await prisma.questDefinition.findFirst({ where: { id: quest_id, guildId } });
-          if (!existing) return err('Quête introuvable');
-
-          await prisma.questDefinition.delete({ where: { id: quest_id } });
-          await invalidateActiveQuests(guildId);
-          await audit(key_name, 'Suppression quête MCP', existing.name, `ID: ${quest_id}`);
+          const { name } = await deleteGuildQuest(guildId, quest_id);
+          await audit(key_name, 'Suppression quête MCP', name, `ID: ${quest_id}`);
           return ok({ ok: true });
         } catch (e) {
           return toolError(e);

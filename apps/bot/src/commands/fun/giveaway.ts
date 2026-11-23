@@ -1,7 +1,8 @@
 import type { SlashCommandDefinition } from '../../commands.js';
 import { SlashCommandBuilder, MessageFlags, type AutocompleteInteraction, type ChatInputCommandInteraction, type SharedNameAndDescription } from 'discord.js';
-import { createGiveaway, endGiveaway, listGiveawayRpgItems, rerollGiveaway } from '../../services/features/giveawayService.js';
-import { canManageGiveaways } from '../../services/features/giveawayConfigService.js';
+import { conditionsFromConfig, createGiveaway, endGiveaway, listGiveawayRpgItems, rerollGiveaway } from '../../services/features/giveawayService.js';
+import { canManageGiveaways, getGiveawayConfig } from '../../services/features/giveawayConfigService.js';
+import type { GiveawayCondition } from '../../services/features/giveawayConditions.js';
 import { findGiveawayTemplateByName, listGiveawayTemplates } from '../../services/features/giveawayTemplateService.js';
 import prisma from '../../utils/db.js';
 import { extractTrackingInfo, resolveModuleFromCommand, wrapModuleTracking } from '../../utils/moduleTracking.js';
@@ -26,6 +27,13 @@ const coinsMeta = getCommandMetadata('gvw_opt_coins');
 const itemMeta = getCommandMetadata('gvw_opt_item');
 const validationMeta = getCommandMetadata('gvw_opt_validation');
 const idMeta = getCommandMetadata('gvw_opt_id');
+const eventMeta = getCommandMetadata('gvw_opt_event');
+const roleMeta = getCommandMetadata('gvw_opt_role');
+const levelMeta = getCommandMetadata('gvw_opt_level');
+const minMessagesMeta = getCommandMetadata('gvw_opt_min_messages');
+const accountAgeMeta = getCommandMetadata('gvw_opt_account_age');
+const memberAgeMeta = getCommandMetadata('gvw_opt_member_age');
+const voteMeta = getCommandMetadata('gvw_opt_vote');
 
 /**
  * Pose nom et description d'une sous-commande ou d'une option, dans les deux
@@ -65,6 +73,13 @@ const data = new SlashCommandBuilder()
       .addIntegerOption((o) => describe(o, coinsMeta).setRequired(false))
       .addStringOption((o) => describe(o, itemMeta).setRequired(false).setAutocomplete(true))
       .addBooleanOption((o) => describe(o, validationMeta).setRequired(false))
+      .addBooleanOption((o) => describe(o, eventMeta).setRequired(false))
+      .addRoleOption((o) => describe(o, roleMeta).setRequired(false))
+      .addIntegerOption((o) => describe(o, levelMeta).setRequired(false).setMinValue(1))
+      .addIntegerOption((o) => describe(o, minMessagesMeta).setRequired(false).setMinValue(1))
+      .addIntegerOption((o) => describe(o, accountAgeMeta).setRequired(false).setMinValue(1))
+      .addIntegerOption((o) => describe(o, memberAgeMeta).setRequired(false).setMinValue(1))
+      .addBooleanOption((o) => describe(o, voteMeta).setRequired(false))
   )
   .addSubcommand((sub) =>
     describe(sub, endMeta)
@@ -164,6 +179,26 @@ async function executeInternal(interaction: ChatInputCommandInteraction): Promis
       return;
     }
 
+    // Les options de condition s'ajoutent à celles du modèle, ou à celles du
+    // serveur quand le modèle n'en porte pas. Aucune option : on laisse
+    // `createGiveaway` reprendre le filtre du serveur.
+    const extra: GiveawayCondition[] = [];
+    const role = interaction.options.getRole(roleMeta.name);
+    if (role) extra.push({ type: 'roles_any', roleIds: [role.id] });
+    const minLevel = interaction.options.getInteger(levelMeta.name);
+    if (minLevel) extra.push({ type: 'level', min: minLevel });
+    const minMessages = interaction.options.getInteger(minMessagesMeta.name);
+    if (minMessages) extra.push({ type: 'messages', min: minMessages, period: 'total' });
+    const accountAge = interaction.options.getInteger(accountAgeMeta.name);
+    if (accountAge) extra.push({ type: 'account_age', days: accountAge });
+    const memberAge = interaction.options.getInteger(memberAgeMeta.name);
+    if (memberAge) extra.push({ type: 'member_age', days: memberAge });
+    if (interaction.options.getBoolean(voteMeta.name)) extra.push({ type: 'topgg_vote' });
+    const baseConditions = template?.conditions
+      ?? (extra.length > 0 ? conditionsFromConfig(await getGiveawayConfig(guildId)) : undefined);
+    const conditions = baseConditions ? [...baseConditions, ...extra] : undefined;
+    const createEvent = interaction.options.getBoolean(eventMeta.name) ?? template?.createDiscordEvent ?? false;
+
     await interaction.reply({ content: m.gvw_cmd_creating({}, { locale }), flags: [MessageFlags.Ephemeral] });
     try {
       const giveaway = await createGiveaway(
@@ -180,7 +215,9 @@ async function executeInternal(interaction: ChatInputCommandInteraction): Promis
         needValidation,
         interaction.user.id,
         template?.styleOverrides ?? {},
-        template?.ignoreBonuses ?? false
+        template?.ignoreBonuses ?? false,
+        createEvent,
+        conditions
       );
       await interaction.editReply(m.gvw_cmd_created({ id: `\`${giveaway.id}\`` }, { locale }));
     } catch (err) {

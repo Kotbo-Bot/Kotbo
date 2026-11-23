@@ -21,6 +21,7 @@ import type {
   APIUser,
 } from 'discord-api-types/v10';
 import type { Guild, Message, MessageInteractionMetadata, User } from 'discord.js';
+import type { MessageLog } from '@prisma/client';
 import { msgMentionEntities, type MessageEntities } from '../../utils/messageEntities.js';
 
 export const TRANSCRIPT_DATA_VERSION = 1;
@@ -48,6 +49,8 @@ export type TranscriptDataV1 = DiscordConversation & {
   guildId: string;
   channel: { id: string; name: string; topic: string | null };
   generatedAt: string;
+  /** Messages supprimés relus dans le journal des messages, absent s'il n'y en a pas. */
+  deletedMessageIds?: string[];
 };
 
 /** Bit `VerifiedBot` des drapeaux publics d'un utilisateur Discord. */
@@ -301,16 +304,111 @@ export async function buildConversation(
   };
 }
 
-/** Construit la transcription JSON d'une suite de messages, dans l'ordre donné. */
+/**
+ * Message supprimé relu dans le journal des messages, au format de l'API :
+ * seuls le texte et les pièces jointes y sont conservés.
+ */
+export function serializeDeletedLog(log: MessageLog): APIMessage {
+  const attachments = (Array.isArray(log.attachments) ? log.attachments : []) as Array<{ url: string; name: string; contentType: string | null }>;
+  return {
+    id: log.messageId,
+    channel_id: log.channelId,
+    type: 0,
+    author: {
+      id: log.authorId,
+      username: log.authorName,
+      global_name: log.authorName,
+      discriminator: '0',
+      avatar: null,
+      ...(log.isBot ? { bot: true } : {}),
+    },
+    content: log.content,
+    timestamp: log.createdAt.toISOString(),
+    edited_timestamp: log.editedAt?.toISOString() ?? null,
+    tts: false,
+    mention_everyone: false,
+    mentions: [],
+    mention_roles: [],
+    attachments: attachments.map((attachment, index) => ({
+      id: `${log.messageId}-${index}`,
+      filename: attachment.name,
+      url: attachment.url,
+      proxy_url: attachment.url,
+      size: 0,
+      ...(attachment.contentType ? { content_type: attachment.contentType } : {}),
+    })),
+    embeds: [],
+    pinned: false,
+  } as APIMessage;
+}
+
+/** Identifiant numérique stable d'un auteur hors Discord (la lib en tire l'avatar par défaut). */
+function externalAuthorId(name: string): string {
+  let hash = 2166136261n;
+  for (const char of name) hash = ((hash ^ BigInt(char.codePointAt(0) ?? 0)) * 16777619n) % 10n ** 17n;
+  return `9${hash.toString().padStart(17, '0')}`;
+}
+
+/**
+ * Message d'un ticket écrit hors Discord (formulaire web, e-mail, dashboard),
+ * ajouté à une conversation au format de l'API, avec son auteur figé.
+ */
+export function addExternalMessage(
+  conversation: DiscordConversation,
+  msg: { id: string; authorId: string | null; authorName: string; content: string; createdAt: Date },
+): void {
+  const authorId = msg.authorId || externalAuthorId(msg.authorName);
+  conversation.messages.push({
+    id: msg.id,
+    channel_id: '',
+    type: 0,
+    author: { id: authorId, username: msg.authorName, global_name: msg.authorName, discriminator: '0', avatar: null },
+    content: msg.content,
+    timestamp: msg.createdAt.toISOString(),
+    edited_timestamp: null,
+    tts: false,
+    mention_everyone: false,
+    mentions: [],
+    mention_roles: [],
+    attachments: [],
+    embeds: [],
+    pinned: false,
+  } as APIMessage);
+  conversation.authors[authorId] ??= { displayName: msg.authorName, avatarUrl: '', bot: false, verified: false };
+}
+
+/**
+ * Construit la transcription JSON d'une suite de messages, dans l'ordre donné.
+ * Les messages supprimés (`deletedLogs`) y sont insérés selon leur date.
+ */
 export async function buildTranscriptData(
   channel: { id: string; name: string; topic?: string | null; guild: Guild },
   messages: Message[],
+  deletedLogs: MessageLog[] = [],
 ): Promise<TranscriptDataV1> {
+  const conversation = await buildConversation(channel.guild, messages);
+  if (deletedLogs.length > 0) {
+    const entities: Required<MessageEntities> = { users: {}, roles: {}, channels: {}, emojis: {}, ...conversation.entities };
+    for (const log of deletedLogs) {
+      conversation.messages.push(serializeDeletedLog(log));
+      conversation.authors[log.authorId] ??= {
+        displayName: log.authorName,
+        avatarUrl: log.authorAvatar ?? '',
+        bot: log.isBot,
+        verified: false,
+      };
+      mergeEntities(entities, msgMentionEntities([log.content], channel.guild));
+    }
+    // Tri stable : les messages encore présents gardent leur ordre.
+    conversation.messages.sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
+    conversation.entities = Object.fromEntries(Object.entries(entities).filter(([, value]) => Object.keys(value).length > 0));
+  }
   return {
     version: TRANSCRIPT_DATA_VERSION,
     guildId: channel.guild.id,
     channel: { id: channel.id, name: channel.name, topic: channel.topic ?? null },
     generatedAt: new Date().toISOString(),
-    ...(await buildConversation(channel.guild, messages)),
+    ...conversation,
+    ...(deletedLogs.length > 0 ? { deletedMessageIds: deletedLogs.map((log) => log.messageId) } : {}),
   };
 }

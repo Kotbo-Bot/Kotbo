@@ -13,6 +13,7 @@
   type TranscriptData = DiscordConversation & {
     channel: { id: string; name: string; topic: string | null };
     generatedAt: string;
+    deletedMessageIds?: string[];
   };
 
   /** Messages ajoutés à chaque tranche : un gros salon s'affiche sans bloquer la page. */
@@ -30,7 +31,13 @@
   );
 
   const conversation = $derived(transcript ? conversationOf(transcript) : null);
-  const views = $derived(conversation ? conversationViews(conversation) : []);
+  // Messages supprimés relus dans le journal : signalés à côté du nom de l'auteur.
+  const deletedIds = $derived(new Set(transcript?.deletedMessageIds ?? []));
+  const views = $derived(
+    (conversation ? conversationViews(conversation) : []).map((view) =>
+      deletedIds.has(view.id) ? { ...view, author: { ...view.author, tag: { text: m.sev_deleted_badge() } } } : view
+    )
+  );
   const visibleViews = $derived(views.slice(0, visibleCount));
   const remaining = $derived(Math.max(0, views.length - visibleCount));
   const summary = $derived(transcript

@@ -81,6 +81,8 @@ model TestingPeriod {
   // Liste de suivi des missions confiées pendant le tutorat : ses cartes sont
   // attribuées au tutoré et apparaissent dans son planning.
   doingListId String?
+  // Modules du dashboard débloqués pour le tutoré quand le tutorat est validé.
+  unlockFeatureKeys String[] @default([])
 
   notes String?
 

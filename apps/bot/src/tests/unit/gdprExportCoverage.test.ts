@@ -44,12 +44,14 @@ const EXCLUDED_MEMBER_LISTS: Record<string, string> = {
   'StarboardConfig.blockedUserIds': 'réglage du serveur, sans information sur la personne',
   'TagAutomodConfig.exemptUserIds': 'réglage du serveur, sans information sur la personne',
   'TagWave.userIds': "vague d'arrivées partagée : la liste désigne d'autres membres, l'événement du membre est exporté par TagAutomodEvent",
+  'WellbeingConfig.teamUserIds': 'réglage du serveur (équipe cellule bien-être)',
+  'WellbeingConfig.directorUserIds': 'réglage du serveur (direction cellule bien-être)',
 };
 
 /** Champs au nom d'auteur d'action qui n'en sont pas : état de jeu, réglage. */
 const NOT_ACTOR_FIELDS = new Set([
   'killedBy', 'firstClearUserId', 'lastBumpUserId', 'countingLastUserId', 'oneWordStoryLastUserId',
-  'wordChainLastUserId', 'chiefStaffUserId',
+  'wordChainLastUserId', 'chiefStaffUserId', 'subjectUserId',
 ]);
 
 const ACTOR_LIKE = /(By|ById|ByUserId|ByUsUserId|actorId|actorUserId|executorId|moderatorUserId|evaluatorId|mentorId|superiorUserId|authorUserId|LastUserId|UserId)$/;

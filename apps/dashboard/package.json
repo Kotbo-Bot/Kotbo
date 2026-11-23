@@ -7,13 +7,13 @@
     "build:i18n": "bunx @inlang/paraglide-js compile --project ./project.inlang --outdir ./src/lib/paraglide --output-structure locale-modules",
     "dev": "vite",
     "dev:demo": "vite --mode demo",
-    "check": "svelte-check --output human",
+    "check": "svelte-check --output human --incremental",
     "typecheck:test": "bun run build:i18n && tsc -p tsconfig.test.json --noEmit",
-    "lint": "eslint src --ext .ts,.svelte",
+    "lint": "eslint src --ext .ts,.svelte --cache --cache-location node_modules/.cache/eslint",
     "build": "vite build",
     "build:demo": "vite build --mode demo --base /demo/ --outDir dist-demo",
     "preview": "vite preview",
-    "test": "bun run build:i18n && bun test"
+    "test": "bun run build:i18n && bun test --isolate"
   },
   "devDependencies": {
     "@inlang/paraglide-js": "^2.29.3",

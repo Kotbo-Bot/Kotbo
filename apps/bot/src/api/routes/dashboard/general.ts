@@ -902,6 +902,84 @@ export function createGuildGeneralRouter(client: Client) {
     }
   });
 
+  // Export global : progression des membres (niveaux, monnaie, quêtes)
+  router.get(`${base}/exports/progression`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    try {
+      const [levels, rpgProfiles, completedQuests, rpgQuestsCompleted] = await Promise.all([
+        prisma.memberLevel.findMany({ where: { guildId }, select: { userId: true, level: true, xp: true, dailyXp: true, lastXpGain: true } }),
+        prisma.rpgProfile.findMany({ where: { guildId }, select: { userId: true, balance: true, level: true, xp: true, dailyStreak: true } }),
+        // Les anciennes quêtes communautaires vivent désormais dans le moteur unique (ligne suivante).
+        Promise.resolve([] as Array<{ userId: string; _count: { _all: number } }>),
+        prisma.rpgQuestProgress.groupBy({
+          by: ['userId'],
+          where: { guildId, status: { in: ['COMPLETED', 'CLAIMED'] } },
+          _count: { _all: true },
+        }),
+      ]);
+
+      const discordGuild = client.guilds.cache.get(guildId);
+      const map = new Map<string, {
+        userId: string;
+        username: string;
+        level: number;
+        xp: number;
+        coins: number;
+        rpgLevel: number;
+        rpgXp: number;
+        dailyStreak: number;
+        questsCompleted: number;
+        rpgQuestsCompleted: number;
+      }>();
+
+      const ensure = (userId: string) => {
+        let row = map.get(userId);
+        if (!row) {
+          const member = discordGuild?.members.cache.get(userId);
+          row = {
+            userId,
+            username: member?.displayName ?? member?.user.username ?? userId,
+            level: 0,
+            xp: 0,
+            coins: 0,
+            rpgLevel: 0,
+            rpgXp: 0,
+            dailyStreak: 0,
+            questsCompleted: 0,
+            rpgQuestsCompleted: 0,
+          };
+          map.set(userId, row);
+        }
+        return row;
+      };
+
+      for (const l of levels) {
+        const row = ensure(l.userId);
+        row.level = l.level;
+        row.xp = l.xp;
+      }
+      for (const p of rpgProfiles) {
+        const row = ensure(p.userId);
+        row.coins = p.balance;
+        row.rpgLevel = p.level;
+        row.rpgXp = p.xp;
+        row.dailyStreak = p.dailyStreak;
+      }
+      for (const q of completedQuests) {
+        ensure(q.userId).questsCompleted = q._count._all;
+      }
+      for (const q of rpgQuestsCompleted) {
+        ensure(q.userId).rpgQuestsCompleted = q._count._all;
+      }
+
+      const members = Array.from(map.values()).sort((a, b) => b.xp - a.xp || b.coins - a.coins);
+      return send(c, { members });
+    } catch (err) {
+      logger.error('GeneralAPI', 'Error exporting member progression:', err);
+      return fail(c, err, "Erreur lors de l'export de la progression des membres.", 'GeneralAPI');
+    }
+  });
+
   return router;
 }
 

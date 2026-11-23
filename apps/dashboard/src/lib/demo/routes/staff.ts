@@ -86,6 +86,7 @@ type HierarchyRow = {
   parentHierarchyId: string | null;
   responsableUserId: string | null;
   discordRoleId: string | null;
+  poleRoleId: string | null;
   enabled: boolean;
   createdAt: string;
   updatedAt: string;
@@ -94,7 +95,7 @@ type HierarchyRow = {
 function hierarchiesSeed(): HierarchyRow[] {
   const h = (id: string, name: string, description: string, color: string, icon: string, sortOrder: number, parent: string | null, responsable: string): HierarchyRow => ({
     id, guildId: DEMO_GUILD_ID, name, description, color, icon, sortOrder, parentHierarchyId: parent,
-    responsableUserId: personByName(responsable).id, discordRoleId: null, enabled: true, createdAt: ago(300 * DAY), updatedAt: ago(10 * DAY),
+    responsableUserId: personByName(responsable).id, discordRoleId: null, poleRoleId: null, enabled: true, createdAt: ago(300 * DAY), updatedAt: ago(10 * DAY),
   });
   return [
     h('hier-direction', 'Direction', 'Décisions, partenariats, budget du serveur', '#f0b232', 'Crown', 0, null, 'Arka'),
@@ -252,6 +253,12 @@ export function registerStaffRoutes(): void {
 
   route('GET', `${base}/hierarchies`, () => ({ hierarchies: hierarchiesWithRoles() }));
   route('GET', `${base}/hierarchies/schema`, () => schema());
+  let orgCanvas = { nodes: {}, frames: [], links: [] };
+  route('GET', `${base}/org-canvas`, () => ({ canvas: orgCanvas }));
+  route('PUT', `${base}/org-canvas`, ({ body }) => {
+    orgCanvas = body?.canvas ?? orgCanvas;
+    return { canvas: orgCanvas };
+  });
   route('POST', `${base}/hierarchies`, ({ body }) => {
     const created: HierarchyRow = {
       id: `hier-${demoId()}`,
@@ -264,6 +271,7 @@ export function registerStaffRoutes(): void {
       parentHierarchyId: body?.parentHierarchyId ?? null,
       responsableUserId: body?.responsableUserId ?? null,
       discordRoleId: body?.discordRoleId ?? null,
+      poleRoleId: body?.poleRoleId ?? null,
       enabled: true,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -281,6 +289,7 @@ export function registerStaffRoutes(): void {
   });
   route('POST', `${base}/hierarchies/:hierarchyId/import-roles`, () => ({ imported: 2, skipped: 1, total: 3 }));
   route('POST', `${base}/hierarchies/sync`, () => ({ success: true, synced: 6 }));
+  route('POST', `${base}/hierarchies/separators/apply`, () => ({ separators: [] }));
 
   route('POST', `${base}/members/:userId/tutor`, () => ({ success: true }));
   route('POST', `${base}/members/:userId/hierarchy-grade`, ({ body }) => ({ success: true, grade: { id: `hg-${demoId()}`, ...body, joinedAt: new Date().toISOString() } }));

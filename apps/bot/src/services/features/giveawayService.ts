@@ -38,6 +38,10 @@ import {
   type GiveawayTextContext,
 } from './giveawayAppearance.js';
 import { publicErrorMessage } from '../../utils/publicError.js';
+import { createGiveawayEvent, deleteGiveawayEvent } from './giveawayEvent.js';
+import { evaluateConditions, normalizeConditions, type GiveawayCondition } from './giveawayConditions.js';
+import { conditionsBlock, failuresMessage } from './giveawayConditionLabels.js';
+import { buildConditionResolvers, buildConditionSubject } from './giveawayConditionData.js';
 
 // Cooldown map to prevent spamming/double clicks on the join button
 const joinCooldowns = new Map<string, number>();
@@ -101,6 +105,7 @@ interface GiveawayEmbedData {
   createdById?: string | null;
   styleOverrides?: unknown;
   ignoreBonuses?: boolean | null;
+  conditions?: unknown;
 }
 
 /**
@@ -198,6 +203,10 @@ function buildActiveGiveawayEmbed(
     description += `\n${bonusRolesBlock}`;
   }
 
+  // Les conditions du concours, pour qu'on sache avant de cliquer ce qu'il faut remplir.
+  const requirements = conditionsBlock(normalizeConditions(giveaway.conditions).conditions, locale);
+  if (requirements) description += `\n\n${requirements}`;
+
   return buildGiveawayEmbed(giveaway, description, resolveEmbedColor(appearance.embedColorActive), appearance, participantCount, locale, { itemLabel });
 }
 
@@ -215,11 +224,12 @@ function bonusRolesBlockFor(config: GiveawayConfig, bonus: ResolvedBonus): strin
  * réinjecter à chaque `message.edit`.
  */
 function buildGiveawayJoinRow(
-  giveawayId: string,
+  giveaway: { id: string; conditions?: unknown },
   appearance: GiveawayAppearance,
+  locale: BotLocale,
 ): ActionRowBuilder<ButtonBuilder> {
   const button = new ButtonBuilder()
-    .setCustomId(`giveaway_join:${giveawayId}`)
+    .setCustomId(`giveaway_join:${giveaway.id}`)
     .setLabel(appearance.joinButtonLabel)
     .setStyle(resolveButtonStyle(appearance.joinButtonStyle));
 
@@ -231,7 +241,16 @@ function buildGiveawayJoinRow(
     // Emoji invalide, on garde le bouton nu.
   }
 
-  return new ActionRowBuilder<ButtonBuilder>().addComponents(button);
+  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(button);
+
+  // Un concours à conditions propose de les contrôler sans s'inscrire.
+  if (normalizeConditions(giveaway.conditions).conditions.length > 0) {
+    row.addComponents(new ButtonBuilder()
+      .setCustomId(`giveaway_check:${giveaway.id}`)
+      .setLabel(m.gvw_check_button({}, { locale }))
+      .setStyle(ButtonStyle.Secondary));
+  }
+  return row;
 }
 
 /**
@@ -313,6 +332,17 @@ function buildGiveawayEmbed(
   return embed;
 }
 
+/** Filtre du serveur traduit en conditions de concours (valeurs par défaut au lancement). */
+export function conditionsFromConfig(config: GiveawayConfig): GiveawayCondition[] {
+  const list: GiveawayCondition[] = [];
+  if (config.requiredRoleIds.length > 0) list.push({ type: 'roles_any', roleIds: config.requiredRoleIds });
+  if (config.blockedRoleIds.length > 0) list.push({ type: 'roles_none', roleIds: config.blockedRoleIds });
+  if (config.minAccountAgeDays > 0) list.push({ type: 'account_age', days: config.minAccountAgeDays });
+  if (config.minMemberAgeDays > 0) list.push({ type: 'member_age', days: config.minMemberAgeDays });
+  if (config.minLevel > 0) list.push({ type: 'level', min: config.minLevel });
+  return list;
+}
+
 /**
  * Crée un nouveau giveaway sur Discord et en BDD
  */
@@ -330,7 +360,9 @@ export async function createGiveaway(
   needValidation = false,
   createdById: string | null = null,
   styleOverrides: Partial<GiveawayAppearance> = {},
-  ignoreBonuses = false
+  ignoreBonuses = false,
+  createEvent = false,
+  conditions?: GiveawayCondition[]
 ) {
   const locale = await resolveGuildLocale(guildId);
 
@@ -380,6 +412,14 @@ export async function createGiveaway(
   }
 
   const cleanOverrides = normalizeAppearancePatch(styleOverrides);
+  // Sans conditions fournies, le concours reprend celles du serveur : explicites
+  // dès lors, il ne dépend plus de la config qui peut changer ensuite.
+  const finalConditions = (conditions
+    ? normalizeConditions(conditions).conditions
+    : conditionsFromConfig(await getGiveawayConfig(guildId))
+  ).map((c) => (c.type === 'in_guild' && !c.guildName
+    ? { ...c, guildName: client.guilds.cache.get(c.guildId)?.name.slice(0, 64) }
+    : c));
   const endsAt = new Date(Date.now() + durationMinutes * 60 * 1000);
 
   // 1. Sauvegarder dans la BDD pour générer l'ID
@@ -399,6 +439,7 @@ export async function createGiveaway(
       createdById,
       styleOverrides: (Object.keys(cleanOverrides).length > 0 ? cleanOverrides : undefined) as Prisma.InputJsonValue | undefined,
       ignoreBonuses,
+      conditions: finalConditions as unknown as Prisma.InputJsonValue,
     },
   });
 
@@ -408,7 +449,7 @@ export async function createGiveaway(
     bonusRolesBlock: bonusRolesBlockFor(config, bonus),
     itemLabel,
   });
-  const row = buildGiveawayJoinRow(giveaway.id, appearance);
+  const row = buildGiveawayJoinRow(giveaway, appearance, config.locale);
 
   let publishedMessage: Message | null = null;
   try {
@@ -423,6 +464,19 @@ export async function createGiveaway(
     await publishedMessage?.delete().catch(() => undefined);
     await prisma.giveaway.delete({ where: { id: giveaway.id } }).catch(() => undefined);
     throw new Error(m.gvw_err_publish({ reason: publicErrorMessage(error) }, { locale }));
+  }
+
+  // Après la publication : l'événement renvoie vers le message du concours.
+  if (createEvent) {
+    const discordEventId = await createGiveawayEvent(
+      discordGuild,
+      { ...giveaway, messageId: publishedMessage.id },
+      channel.isDMBased() ? '' : channel.name,
+    );
+    if (discordEventId) {
+      await prisma.giveaway.update({ where: { id: giveaway.id }, data: { discordEventId } }).catch(() => undefined);
+      return { ...giveaway, messageId: publishedMessage.id, discordEventId };
+    }
   }
 
   return giveaway;
@@ -479,7 +533,29 @@ export async function toggleGiveawayParticipation(
   // la transaction : un membre exclu ne doit pas apparaître une seconde dans la
   // liste des participants.
   const config = await getGiveawayConfig(guildId);
-  if (hasParticipationRules(config)) {
+  const entry = await prisma.giveaway.findFirst({
+    where: { id: giveawayId, guildId },
+    select: { conditions: true, participants: true, createdAt: true },
+  });
+
+  if (entry && entry.conditions !== null) {
+    // Conditions propres au concours. Se retirer reste toujours possible.
+    if (!entry.participants.includes(userId)) {
+      const conditions = normalizeConditions(entry.conditions).conditions;
+      if (conditions.length > 0) {
+        const member = await client.guilds.cache.get(guildId)?.members.fetch(userId).catch(() => null) ?? null;
+        const result = await evaluateConditions(
+          conditions,
+          buildConditionSubject({ ...participant, guildId }, member, entry.createdAt),
+          buildConditionResolvers(client, guildId, userId),
+        );
+        if (!result.allowed) {
+          return { ok: false, reason: 'denied', message: resolveEmojiShortcodes(failuresMessage(result.failures, config.locale)).slice(0, 2000) };
+        }
+      }
+    }
+  } else if (hasParticipationRules(config)) {
+    // Concours antérieur aux conditions par giveaway : il garde le filtre du serveur.
     const check = await checkParticipation(guildId, {
       userId,
       roleIds: participant.roleIds,
@@ -585,7 +661,7 @@ export async function toggleGiveawayParticipation(
           // ne fournit pas `components` efface les boutons du message.
           await message.edit({
             embeds: [updatedEmbed],
-            components: [buildGiveawayJoinRow(giveaway.id, appearance)],
+            components: [buildGiveawayJoinRow(giveaway, appearance, config.locale)],
             allowedMentions: GIVEAWAY_MENTIONS,
           }).catch(() => null);
         }
@@ -622,6 +698,40 @@ export async function toggleGiveawayParticipation(
     logger.error('GiveawayService', 'Erreur lors de toggleGiveawayParticipation :', err);
     return { ok: false, reason: 'error', message: m.gvw_join_error({}, { locale: config.locale }) };
   }
+}
+
+/**
+ * « Vérifier mes conditions » : même contrôle que l'inscription, sans s'inscrire.
+ * Un concours antérieur aux conditions propres se contrôle sur le filtre du serveur.
+ */
+export async function handleGiveawayCheck(interaction: ButtonInteraction) {
+  const giveawayId = interaction.customId.split(':')[1];
+  const guildId = interaction.guildId;
+  const reply = (content: string) => interaction.reply({ content: resolveEmojiShortcodes(content).slice(0, 2000), flags: [MessageFlags.Ephemeral] });
+  if (!guildId) return reply(m.gvw_guild_only({}, { locale: getLocale(interaction) }));
+
+  const [config, row] = await Promise.all([
+    getGiveawayConfig(guildId),
+    prisma.giveaway.findFirst({ where: { id: giveawayId, guildId }, select: { conditions: true, ended: true, createdAt: true } }),
+  ]);
+  if (!row || row.ended) return reply(m.gvw_join_ended({}, { locale: config.locale }));
+
+  const conditions = row.conditions === null ? conditionsFromConfig(config) : normalizeConditions(row.conditions).conditions;
+  const member = interaction.guild
+    ? await interaction.guild.members.fetch(interaction.user.id).catch(() => null)
+    : null;
+  const result = await evaluateConditions(
+    conditions,
+    buildConditionSubject({
+      userId: interaction.user.id,
+      guildId,
+      roleIds: memberRoleIds(interaction),
+      accountCreatedAt: interaction.user.createdAt ?? null,
+      joinedAt: memberJoinedAt(interaction),
+    }, member, row.createdAt),
+    buildConditionResolvers(interaction.client, guildId, interaction.user.id),
+  );
+  return reply(result.allowed ? m.gvw_check_ok({}, { locale: config.locale }) : failuresMessage(result.failures, config.locale));
 }
 
 export async function handleGiveawayJoin(interaction: ButtonInteraction) {
@@ -698,7 +808,7 @@ export async function refreshActiveGiveaways(client: Client, guildId: string): P
           },
         )],
         // En Components V2, une édition sans `components` efface les boutons.
-        components: [buildGiveawayJoinRow(giveaway.id, appearance)],
+        components: [buildGiveawayJoinRow(giveaway, appearance, config.locale)],
         allowedMentions: GIVEAWAY_MENTIONS,
       });
       refreshed += 1;
@@ -770,7 +880,7 @@ export async function removeMemberFromActiveGiveaways(
           itemLabel,
         })],
         // En Components V2, une edition sans `components` efface les boutons.
-        components: [buildGiveawayJoinRow(giveaway.id, appearance)],
+        components: [buildGiveawayJoinRow(giveaway, appearance, config.locale)],
         allowedMentions: GIVEAWAY_MENTIONS,
       }).catch(() => null);
     } catch (err) {
@@ -839,7 +949,7 @@ export async function endGiveaway(client: Client, giveawayId: string, expectedGu
   const { config, appearance, bonus, itemLabel } = await loadStyle(giveaway.guildId, giveaway);
 
   // Tirer les gagnants en appliquant les chances supplémentaires
-  const candidates = await foldLinkedCandidates(giveaway.guildId, giveaway.participants, config);
+  const candidates = await dropIneligible(client, giveaway, await foldLinkedCandidates(giveaway.guildId, giveaway.participants, config));
   const winners = await drawWinnersWeighted(candidates, giveaway.winnerCount, discordGuild, bonus);
 
   // Clôture et résultat en une écriture conditionnelle : seul l'appel qui bascule
@@ -852,6 +962,8 @@ export async function endGiveaway(client: Client, giveawayId: string, expectedGu
       : { ended: true, validationStatus: 'APPROVED', winners },
   });
   if (closed.count === 0) return;
+
+  await deleteGiveawayEvent(discordGuild, giveaway.discordEventId);
 
   const winnersMentions = winners.length > 0
     ? winners.map(w => `<@${w}>`).join(', ')
@@ -980,6 +1092,11 @@ export async function deleteGiveaway(
   const giveaway = await prisma.giveaway.findFirst({ where: { id: giveawayId, guildId } });
   if (!giveaway) return false;
 
+  if (giveaway.discordEventId) {
+    const guild = client.guilds.cache.get(guildId) ?? await client.guilds.fetch(guildId).catch(() => null);
+    if (guild) await deleteGiveawayEvent(guild, giveaway.discordEventId);
+  }
+
   if (giveaway.messageId) {
     const channel = await client.channels.fetch(giveaway.channelId).catch(() => null);
     if (channel?.isTextBased()) {
@@ -1025,7 +1142,7 @@ export async function rerollGiveaway(
 
   // Filtrer les participants qui ne sont ni gagnants validés ni en attente de validation
   const remaining = giveaway.participants.filter(id => !giveaway.winners.includes(id) && !giveaway.pendingWinners.includes(id));
-  const candidates = await foldLinkedCandidates(giveaway.guildId, remaining, config);
+  const candidates = await dropIneligible(client, giveaway, await foldLinkedCandidates(giveaway.guildId, remaining, config));
   if (candidates.length === 0) {
     await channel.send({ content: m.gvw_reroll_no_candidate({ prize: giveaway.prize }, { locale: config.locale }), allowedMentions: GIVEAWAY_MENTIONS }).catch(() => null);
     return false;
@@ -1453,6 +1570,47 @@ async function resolveCandidates(
     logger.error('GiveawayService', 'Impossible de verifier la presence des participants :', err);
     return { present: candidates, rolesByUser };
   }
+}
+
+/**
+ * Écarte, avant le tirage, ceux qui ne remplissent plus les conditions : rôle
+ * perdu, boost retiré, seuil jamais atteint pendant l'attente.
+ *
+ * Le vote Top.gg n'est pas revérifié : il expire au bout de douze heures, et
+ * un concours plus long écarterait tous ses participants. Une donnée illisible
+ * laisse passer (voir `evaluateConditions`). Par lots de dix pour ne pas
+ * saturer l'API Discord ni la base.
+ * shortcut: lecture membre par membre, à regrouper si les concours dépassent quelques milliers d'inscrits.
+ */
+async function dropIneligible(
+  client: Client,
+  giveaway: { guildId: string; conditions: unknown; createdAt: Date },
+  candidates: string[],
+): Promise<string[]> {
+  if (giveaway.conditions == null) return candidates;
+  const conditions = normalizeConditions(giveaway.conditions).conditions.filter((c) => c.type !== 'topgg_vote');
+  const guild = client.guilds.cache.get(giveaway.guildId);
+  if (conditions.length === 0 || !guild) return candidates;
+
+  const kept: string[] = [];
+  for (let i = 0; i < candidates.length; i += 10) {
+    const batch = candidates.slice(i, i + 10);
+    const verdicts = await Promise.all(batch.map(async (userId) => {
+      const member = await guild.members.fetch(userId).catch(() => null);
+      // Parti ou illisible : la présence se revérifie déjà au tirage.
+      if (!member) return true;
+      const subject = buildConditionSubject({
+        userId,
+        guildId: giveaway.guildId,
+        roleIds: [...member.roles.cache.keys()],
+        accountCreatedAt: member.user.createdAt,
+        joinedAt: member.joinedAt,
+      }, member, giveaway.createdAt);
+      return (await evaluateConditions(conditions, subject, buildConditionResolvers(client, giveaway.guildId, userId))).allowed;
+    }));
+    batch.forEach((userId, index) => { if (verdicts[index]) kept.push(userId); });
+  }
+  return kept;
 }
 
 /**

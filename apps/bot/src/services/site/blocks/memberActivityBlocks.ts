@@ -3,6 +3,7 @@
  * formulaires envoyés, avec leur état. Rendus pour le visiteur connecté.
  */
 
+import { questWindowKey } from '../../features/rpg/rpgQuestPolicy.js';
 import prisma from '../../../utils/db.js';
 import * as m from '../../../lib/paraglide/messages.js';
 import { attrs, cls, esc } from '../siteHtml.js';
@@ -15,16 +16,23 @@ async function renderMemberQuests(ctx: BlockContext): Promise<string> {
   const o = { locale: ctx.locale };
   const guildId = ctx.site.guildId;
   const userId = ctx.viewer!.userId;
-  const since = new Date(Date.now() - 8 * 86_400_000);
-  const [definitions, progress] = await Promise.all([
-    prisma.questDefinition.findMany({ where: { guildId, enabled: true }, orderBy: [{ frequency: 'asc' }, { createdAt: 'asc' }], take: 30 }),
-    prisma.questProgress.findMany({ where: { guildId, userId, updatedAt: { gte: since }, status: { not: 'EXPIRED' } }, orderBy: { updatedAt: 'desc' } }),
-  ]);
+  const now = new Date();
+  const definitions = (await prisma.rpgQuest.findMany({
+    where: { guildId, enabled: true, scope: 'MEMBER' },
+    orderBy: [{ windowHours: 'asc' }, { createdAt: 'asc' }],
+    take: 30,
+  })).filter((quest) => (!quest.activeFrom || quest.activeFrom <= now) && (!quest.activeUntil || quest.activeUntil > now));
+  // Avancement de la fenêtre en cours, pour chaque quête.
+  const progress = definitions.length === 0 ? [] : await prisma.rpgQuestProgress.findMany({
+    where: { guildId, userId, teamKey: '', questId: { in: definitions.map((q) => q.id) }, windowKey: { in: [...new Set(definitions.map((q) => questWindowKey(q.windowHours)))] } },
+  });
   if (definitions.length === 0) return `<p class="mod-title">${esc(m.site_quests_title({}, o))}</p>${emptyState(m.site_quests_empty({}, o))}`;
 
-  // Avancement le plus récent de chaque quête (période en cours).
   const latest = new Map<string, (typeof progress)[number]>();
-  for (const row of progress) if (!latest.has(row.questId)) latest.set(row.questId, row);
+  for (const row of progress) {
+    const quest = definitions.find((q) => q.id === row.questId);
+    if (quest && row.windowKey === questWindowKey(quest.windowHours)) latest.set(row.questId, row);
+  }
 
   const FREQ: Record<string, () => string> = { DAILY: () => m.site_quests_daily({}, o), WEEKLY: () => m.site_quests_weekly({}, o) };
   const items = definitions
@@ -32,11 +40,11 @@ async function renderMemberQuests(ctx: BlockContext): Promise<string> {
       const row = latest.get(quest.id);
       const target = row?.target ?? quest.target;
       const current = Math.min(row?.current ?? 0, target);
-      const done = row?.status === 'COMPLETED' || row?.status === 'CLAIMED';
+      const done = row?.status === 'COMPLETED' || row?.status === 'CLAIMED' || (row?.completions ?? 0) > 0;
       const pct = target > 0 ? Math.round((current / target) * 100) : 0;
       const rewards = [quest.rewardCoins ? m.site_reward_coins({ count: quest.rewardCoins }, o) : '', quest.rewardXp ? m.site_reward_xp({ count: quest.rewardXp }, o) : ''].filter(Boolean).join(' · ');
       return `<li class="${cls('quest', done && 'is-done')}">
-  <div class="quest-head"><strong>${esc(quest.name)}</strong><span class="tag">${esc((FREQ[quest.frequency] ?? FREQ.DAILY)())}</span></div>
+  <div class="quest-head"><strong>${esc(quest.name)}</strong><span class="tag">${esc((FREQ[quest.windowHours >= 168 ? 'WEEKLY' : 'DAILY'])())}</span></div>
   ${quest.description ? `<p class="card-meta">${esc(quest.description)}</p>` : ''}
   <div class="quest-bar"${attrs({ role: 'progressbar', 'aria-valuemin': 0, 'aria-valuemax': target, 'aria-valuenow': current })}><span style="width:${pct}%"></span></div>
   <p class="card-meta">${esc(done ? m.site_quests_done({}, o) : m.site_quests_progress({ current: formatNumber(current, ctx.locale), target: formatNumber(target, ctx.locale) }, o))}${rewards ? ` · ${esc(rewards)}` : ''}</p>

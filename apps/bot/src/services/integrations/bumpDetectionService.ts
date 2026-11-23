@@ -43,6 +43,7 @@ export const BUMP_PROVIDERS: BumpProvider[] = [
   { key: 'discadia', label: 'Discadia', usernames: ['discadia'], cooldownMinutes: 240 },
   { key: 'dsme', label: 'DiscordServers.com', usernames: ['discordservers', 'dsme', 'discordservers com'], cooldownMinutes: 360 },
   { key: 'disforge', label: 'Disforge', usernames: ['disforge'], cooldownMinutes: 240 },
+  { key: 'discordl', label: 'DiscordL.org', usernames: ['dl', 'bot dl', 'discordl', 'discordl org'], cooldownMinutes: 120 },
 ];
 
 function normalizeUsername(value: string): string {
