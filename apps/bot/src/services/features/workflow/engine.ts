@@ -61,6 +61,8 @@ export interface WorkflowEffects {
   /** Score de risque 0-100 du membre ; absent (essai à blanc, tests) = 0. */
   getMemberRisk?(userId: string): Promise<number>;
   getGuildInfo(): Promise<{ name: string; memberCount: number }>;
+  /** Classements en texte ; absent (essai à blanc, tests) = vides. */
+  getRankings?(): Promise<Partial<Record<'topMessagesMonth' | 'topVoiceMonth' | 'topThanksMonth' | 'topXp', string>>>;
   /** Exécute une action à effet de bord et retourne ses éventuelles sorties. */
   runAction(
     type: string,
@@ -564,6 +566,15 @@ export async function evaluatePureNode(
       return { role: await effects.getRole(String(config.roleId ?? '')) };
     case 'SelectChannel':
       return { channel: await effects.getChannel(String(config.channelId ?? '')) };
+    case 'RankingInfo': {
+      const rankings = (await effects.getRankings?.()) ?? {};
+      return {
+        topMessagesMonth: rankings.topMessagesMonth ?? '',
+        topVoiceMonth: rankings.topVoiceMonth ?? '',
+        topThanksMonth: rankings.topThanksMonth ?? '',
+        topXp: rankings.topXp ?? '',
+      };
+    }
     case 'GuildInfo': {
       const guild = await effects.getGuildInfo();
       return { name: guild.name, memberCount: guild.memberCount };

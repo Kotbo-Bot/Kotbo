@@ -130,6 +130,15 @@ class Compiler {
       return { nodeId: infoId.nodeId, portId: property };
     }
 
+    if (root === 'ranking') {
+      const infoId = this.builder.memo('info:ranking', () => {
+        const at = this.builder.dataPosition(column);
+        this.builder.node('ctx__ranking', 'RankingInfo', {}, at.x, at.y);
+        return { nodeId: 'ctx__ranking', portId: property };
+      });
+      return { nodeId: infoId.nodeId, portId: property };
+    }
+
     if (root === 'run') {
       const infoId = this.builder.memo('info:run', () => {
         const at = this.builder.dataPosition(column);

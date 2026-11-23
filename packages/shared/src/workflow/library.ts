@@ -53,6 +53,14 @@ const RUN_TOKENS: ContextToken[] = (getNodeDef('RunInfo')?.outputs ?? []).map((p
   root: false,
 }));
 
+/** Classements du serveur, disponibles quel que soit le déclencheur. */
+const RANKING_TOKENS: ContextToken[] = (getNodeDef('RankingInfo')?.outputs ?? []).map((port) => ({
+  path: `ranking.${port.id}`,
+  label: `Classements › ${port.label}`,
+  type: port.type,
+  root: false,
+}));
+
 /** Propriétés du serveur, disponibles quel que soit le déclencheur. */
 const GUILD_TOKENS: ContextToken[] = (getNodeDef('GuildInfo')?.outputs ?? []).map((port) => ({
   path: `guild.${port.id}`,
@@ -70,7 +78,7 @@ const GUILD_TOKENS: ContextToken[] = (getNodeDef('GuildInfo')?.outputs ?? []).ma
  */
 export function contextTokens(triggerType: string): ContextToken[] {
   const def = getNodeDef(triggerType);
-  if (!def || def.category !== 'trigger') return [...GUILD_TOKENS];
+  if (!def || def.category !== 'trigger') return [...GUILD_TOKENS, ...RANKING_TOKENS];
 
   const tokens: ContextToken[] = [];
 
@@ -93,7 +101,7 @@ export function contextTokens(triggerType: string): ContextToken[] {
   }
 
   const hasMember = def.outputs.some((port) => port.type === 'Member');
-  return [...tokens, ...(hasMember ? RUN_TOKENS : []), ...GUILD_TOKENS];
+  return [...tokens, ...(hasMember ? RUN_TOKENS : []), ...GUILD_TOKENS, ...RANKING_TOKENS];
 }
 
 export function findToken(triggerType: string, path: string): ContextToken | undefined {

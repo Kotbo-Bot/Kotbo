@@ -70,6 +70,7 @@ export function createDryRunEffects(real: WorkflowEffects, sample: DryRunSample)
     getMember: (userId) => real.getMember(userId),
     getMemberRisk: (userId) => real.getMemberRisk?.(userId) ?? Promise.resolve(0),
     getGuildInfo: () => real.getGuildInfo(),
+    getRankings: () => real.getRankings?.() ?? Promise.resolve({}),
     // Un essai ne réserve aucun délai : il passe toujours, sans gêner le
     // prochain vrai déclenchement.
     claimCooldown: async () => true,

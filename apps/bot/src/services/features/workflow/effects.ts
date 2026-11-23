@@ -27,6 +27,7 @@ import { expectBotNickname } from './nicknameEcho.js';
 import { expectBotRoleChange } from './roleEcho.js';
 import { keepMessage, serialized } from './keptMessage.js';
 import { buildEmbedMessage } from './embedMessage.js';
+import { buildRankings } from './rankings.js';
 import {
   coerceToNumber,
   coerceToString,
@@ -414,6 +415,8 @@ export function createWorkflowEffects(guild: Guild, workflowId?: string): Workfl
     async getGuildInfo() {
       return { name: guild.name, memberCount: guild.memberCount };
     },
+
+    getRankings: () => buildRankings(guild.id),
 
     checkAction: (type, inputs) => checkAction(guild, type, inputs),
 

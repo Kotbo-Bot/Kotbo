@@ -1547,6 +1547,19 @@ const DATA: NodeDef[] = [
     config: [{ key: 'name', label: 'Nom de la variable', type: 'text', defaultValue: '', placeholder: 'points' }],
   },
   {
+    type: 'RankingInfo',
+    label: 'Classements du serveur',
+    category: 'data',
+    description: "Les trois premiers membres du mois (messages, vocal, remerciements) et du classement d'XP, prêts à insérer dans un texte. Vide quand personne n'est classé.",
+    inputs: [],
+    outputs: [
+      { id: 'topMessagesMonth', label: 'Top 3 messages du mois', type: 'String' },
+      { id: 'topVoiceMonth', label: 'Top 3 vocal du mois', type: 'String' },
+      { id: 'topThanksMonth', label: 'Top 3 remerciements du mois', type: 'String' },
+      { id: 'topXp', label: 'Top 3 XP', type: 'String' },
+    ],
+  },
+  {
     type: 'GuildInfo',
     label: 'Infos du serveur',
     category: 'data',

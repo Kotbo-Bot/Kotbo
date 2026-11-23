@@ -67,6 +67,11 @@ class Reader {
       return `guild.${source.portId}`;
     }
 
+    if (source.node.type === 'RankingInfo') {
+      this.consumed.add(source.node.id);
+      return `ranking.${source.portId}`;
+    }
+
     if (source.node.type === 'RunInfo') {
       this.consumed.add(source.node.id);
       return `run.${source.portId}`;
