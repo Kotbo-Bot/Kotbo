@@ -437,6 +437,10 @@ export async function registerCrons(client: Client): Promise<void> {
       const { pruneSiteAnalytics } = await import('../services/site/siteAnalyticsService.js');
       await pruneSiteAnalytics();
     },
+    'wellbeing-cases-prune': async () => {
+      const { pruneClosedWellbeingCases } = await import('../services/staff/wellbeingRetention.js');
+      await pruneClosedWellbeingCases();
+    },
     'server-tag-roles-resync': () => resyncServerTagRoles(client),
     'server-tag-holders-snapshot': () => runTagHoldersSnapshot(client),
     'site-scheduled-publish': async () => {
@@ -771,6 +775,14 @@ export async function registerCrons(client: Client): Promise<void> {
     await runCronJob('dashboard-telemetry-prune', async () => {
       const { pruneDashboardTelemetry } = await import('../services/analytics/dashboardTelemetryService.js');
       await pruneDashboardTelemetry();
+    }, 2000);
+  });
+
+  // Cellule bien-être : suppression des dossiers fermés au-delà de la durée de conservation (03:58).
+  cron.schedule('58 3 * * *', async () => {
+    await runCronJob('wellbeing-cases-prune', async () => {
+      const { pruneClosedWellbeingCases } = await import('../services/staff/wellbeingRetention.js');
+      await pruneClosedWellbeingCases();
     }, 2000);
   });
 

@@ -8,11 +8,13 @@ import prisma from '../../../../utils/db.js';
 import { logger } from '../../../../utils/logger.js';
 import { getGuildName, pushAudit } from '../../../shared.js';
 import { auditUserOf, fail, guildRoute, readBody, send } from '../../../hono/dashboard/kit.js';
+import { describeConfigChange } from '../../../../services/staff/wellbeingPolicy.js';
 
 const BREAK_GLASS_HOURS = 2;
 const CATEGORIES = ['SOUTIEN', 'MEDIATION', 'SIGNALEMENT', 'SUIVI'];
 const SEVERITIES = ['LOW', 'NORMAL', 'HIGH', 'CRITICAL'];
 const STATUSES = ['OPEN', 'MONITORING', 'CLOSED'];
+const SNOWFLAKE_RE = /^\d{17,20}$/;
 
 async function resolveWellbeingRole(client: Client, guildId: string, userId: string, isAdmin: boolean) {
   const config = await prisma.wellbeingConfig.findUnique({ where: { guildId } });
@@ -43,9 +45,21 @@ async function resolveWellbeingRole(client: Client, guildId: string, userId: str
     config,
     isTeamMember,
     isDirector,
+    // La composition de la cellule décide qui lit les dossiers : seul le propriétaire
+    // la modifie. Un admin qui pourrait s'y ajouter contournerait l'accès d'urgence.
+    canConfigure: isOwner,
+    discordGuild,
     hasCaseAccess: !!config?.enabled && (isTeamMember || !!activeBreakGlass),
     activeBreakGlass,
   };
+}
+
+/** Id d'un dossier de ce serveur, ou null : un id inconnu n'entre pas au journal. */
+async function caseIdOfGuild(guildId: string, caseId: string | undefined): Promise<string | null> {
+  const id = caseId?.trim();
+  if (!id) return null;
+  const found = await prisma.wellbeingCase.findFirst({ where: { id, guildId }, select: { id: true } });
+  return found?.id ?? null;
 }
 
 export function createWellbeingRouter(client: Client) {
@@ -64,6 +78,7 @@ export function createWellbeingRouter(client: Client) {
         requireReason: state.config?.requireReason ?? true,
         isTeamMember: state.isTeamMember,
         isDirector: state.isDirector,
+        canConfigure: state.canConfigure,
         hasCaseAccess: state.hasCaseAccess,
         breakGlassExpiresAt: state.activeBreakGlass?.expiresAt.toISOString() ?? null,
       });
@@ -105,8 +120,8 @@ export function createWellbeingRouter(client: Client) {
     const isAdmin = c.var.effectiveAccess.level === 'admin';
     try {
       const state = await resolveWellbeingRole(client, guildId, user.userId, isAdmin);
-      if (!state.isDirector) {
-        return send(c, { error: 'Réservé à la direction.' }, 403);
+      if (!state.canConfigure) {
+        return send(c, { error: 'Seul le propriétaire du serveur peut modifier la cellule bien-être.' }, 403);
       }
       const body = await readBody<{
         enabled?: boolean;
@@ -117,7 +132,7 @@ export function createWellbeingRouter(client: Client) {
         requireReason?: boolean;
       }>(c);
       const cleanIds = (arr: unknown) =>
-        Array.isArray(arr) ? arr.filter((x): x is string => typeof x === 'string' && /^\d{17,20}$/.test(x)) : [];
+        Array.isArray(arr) ? arr.filter((x): x is string => typeof x === 'string' && SNOWFLAKE_RE.test(x)) : [];
 
       const config = await prisma.wellbeingConfig.upsert({
         where: { guildId },
@@ -146,7 +161,11 @@ export function createWellbeingRouter(client: Client) {
         context: getGuildName(client, guildId),
         module: 'Cellule bien-être',
         eventType: 'Manuel',
-        details: `Cellule ${config.enabled ? 'activée' : 'désactivée'} · ${config.teamRoleIds.length} rôle(s), ${config.teamUserIds.length} membre(s).`,
+        details: describeConfigChange(state.config, config, (id) => {
+          const role = state.discordGuild?.roles.cache.get(id);
+          if (role) return `@${role.name}`;
+          return state.discordGuild?.members.cache.get(id)?.user.username ?? id;
+        }),
         channelId: null,
       });
 
@@ -179,7 +198,7 @@ export function createWellbeingRouter(client: Client) {
           guildId,
           actorId: user.userId,
           actorName: user.username ?? user.userId,
-          caseId: body?.caseId?.trim() || null,
+          caseId: await caseIdOfGuild(guildId, body?.caseId),
           reason: reason || 'Enquête interne (sans motif requis)',
           expiresAt,
         },
@@ -234,12 +253,25 @@ export function createWellbeingRouter(client: Client) {
         return send(c, { error: 'Espace cloisonné : accès réservé à la cellule bien-être (ou break-glass direction).' }, 403);
       }
       // Filtre optionnel : la fiche membre ne charge que les dossiers de la personne.
-      const subjectUserId = c.req.query('subjectUserId');
+      const requested = c.req.query('subjectUserId');
+      const subjectUserId = requested && SNOWFLAKE_RE.test(requested) ? requested : null;
       const cases = await prisma.wellbeingCase.findMany({
-        where: { guildId, ...(subjectUserId && /^\d{17,20}$/.test(subjectUserId) ? { subjectUserId } : {}) },
+        where: { guildId, ...(subjectUserId ? { subjectUserId } : {}) },
         include: { notes: { orderBy: { createdAt: 'asc' } } },
         orderBy: { updatedAt: 'desc' },
       });
+      // Sous accès d'urgence, chaque consultation laisse une trace, sans le contenu des dossiers.
+      if (!state.isTeamMember) {
+        await pushAudit(guildId, {
+          user: auditUserOf(c),
+          action: 'Consultation Cellule bien-être',
+          context: getGuildName(client, guildId),
+          module: 'Cellule bien-être',
+          eventType: 'Sécurité',
+          details: `Accès d'urgence : ${cases.length} dossier(s) consulté(s)${subjectUserId ? ` pour le membre ${subjectUserId}` : ''}.`,
+          channelId: null,
+        });
+      }
       return send(c, { cases });
     } catch (err) {
       logger.error('WellbeingAPI', 'Error listing cases:', err);
@@ -273,7 +305,7 @@ export function createWellbeingRouter(client: Client) {
       const created = await prisma.wellbeingCase.create({
         data: {
           guildId,
-          subjectUserId: body?.subjectUserId?.trim() || null,
+          subjectUserId: SNOWFLAKE_RE.test(body?.subjectUserId?.trim() ?? '') ? body!.subjectUserId!.trim() : null,
           subjectName,
           title,
           category: CATEGORIES.includes(body?.category ?? '') ? body!.category! : 'SOUTIEN',
@@ -314,6 +346,33 @@ export function createWellbeingRouter(client: Client) {
     } catch (err) {
       logger.error('WellbeingAPI', 'Error updating case:', err);
       return fail(c, err, 'Erreur lors de la mise à jour du dossier.', 'WellbeingAPI');
+    }
+  });
+
+  // Suppression d'un dossier : réservée à la cellule, l'accès d'urgence ne sert qu'à lire.
+  router.delete(`${base}/cases/:caseId`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    const isAdmin = c.var.effectiveAccess.level === 'admin';
+    try {
+      const state = await resolveWellbeingRole(client, guildId, user.userId, isAdmin);
+      if (!state.config?.enabled || !state.isTeamMember) return send(c, { error: 'Réservé à la cellule bien-être.' }, 403);
+      const caseId = c.req.param('caseId');
+      const { count } = await prisma.wellbeingCase.deleteMany({ where: { id: caseId, guildId } });
+      if (count === 0) return send(c, { error: 'Dossier introuvable.' }, 404);
+      await pushAudit(guildId, {
+        user: auditUserOf(c),
+        action: 'Suppression Cellule bien-être',
+        context: getGuildName(client, guildId),
+        module: 'Cellule bien-être',
+        eventType: 'Manuel',
+        details: `Dossier ${caseId} supprimé avec ses notes.`,
+        channelId: null,
+      });
+      return send(c, { ok: true });
+    } catch (err) {
+      logger.error('WellbeingAPI', 'Error deleting case:', err);
+      return fail(c, err, 'Erreur lors de la suppression du dossier.', 'WellbeingAPI');
     }
   });
 
