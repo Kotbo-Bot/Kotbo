@@ -23,8 +23,6 @@ import {
 import type { TagAutomodConfig, TagAutomodRule } from '@prisma/client';
 import prisma from '../../../utils/db.js';
 import { logger } from '../../../utils/logger.js';
-import { getCachedGuild } from '../../../utils/cache.js';
-import { resolveLogChannel } from '../../../utils/logChannel.js';
 import { resolveGuildLocale, type BotLocale } from '../../../utils/i18n.js';
 import { extractPrimaryGuildTag, guildIconUrl } from '../../core/serverTagService.js';
 import { applyAutoSanction, autoSanctionLabel, formatMinutes } from '../autoSanction.js';
@@ -44,6 +42,7 @@ import {
   type TagHit,
   type TagTrigger,
 } from './tagRules.js';
+import { resolveEventLogChannel } from '../../../utils/logDispatch.js';
 
 // ── Textes envoyés sur Discord ──────────────────────────────────────────────
 
@@ -231,8 +230,7 @@ async function tagServerInfo(guildId: string): Promise<{ name: string | null; ic
 }
 
 async function alertChannel(guild: Guild, config: TagAutomodConfig | null) {
-  const fallback = (await getCachedGuild(guild.id))?.logChannelId;
-  return resolveLogChannel(guild, config?.alertChannelId ?? fallback, 'TagAutomod');
+  return resolveEventLogChannel(guild, 'automod_tag', 'TagAutomod', { moduleChannelId: config?.alertChannelId });
 }
 
 async function recentTicketExists(guildId: string, userId: string): Promise<boolean> {

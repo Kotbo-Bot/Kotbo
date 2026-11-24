@@ -18,8 +18,8 @@ import type { EmojiBanRule } from '@prisma/client';
 import { kotboEventBus } from '@kotbo/core';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
-import { resolveLogChannel } from '../../utils/logChannel.js';
 import { AUTO_SANCTIONS, applyAutoSanction, autoSanctionLabel, normalizeAutoSanction, type AutoSanction } from './autoSanction.js';
+import { resolveEventLogChannel } from '../../utils/logDispatch.js';
 
 export const EMOJI_BAN_KINDS = ['EMOJI', 'UNICODE', 'STICKER', 'SOURCE_GUILD'] as const;
 export type EmojiBanKind = (typeof EMOJI_BAN_KINDS)[number];
@@ -253,8 +253,7 @@ export async function handleEmojiBan(message: Message, client: Client): Promise<
   }
 
   try {
-    const guildDb = await prisma.guild.findUnique({ where: { id: guild.id }, select: { logChannelId: true } });
-    const channel = await resolveLogChannel(guild, guildDb?.logChannelId, 'EmojiBan');
+    const channel = await resolveEventLogChannel(guild, 'automod_emoji', 'EmojiBan');
     await channel?.send({
       content: `🛡️ **Emoji ou sticker interdit** · <@${message.author.id}> dans <#${message.channelId}>\n` +
         `Interdit : ${labels}\nSanction : ${autoSanctionLabel(result.applied, top.rule.durationMin)}${result.done ? '' : ' (non appliquée)'}`,

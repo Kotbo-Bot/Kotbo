@@ -48,3 +48,4 @@ export * from './autoThread/index.js';
 export * from './threadPanel/index.js';
 export * from './errors.js';
 export * from './site/index.js';
+export * from './logEvents/index.js';

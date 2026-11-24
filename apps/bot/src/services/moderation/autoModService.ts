@@ -4,7 +4,6 @@ import { kotboEventBus } from '@kotbo/core';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { cache } from '../../utils/cache.js';
-import { resolveLogChannel } from '../../utils/logChannel.js';
 import { registerWarnSanction, registerTimeoutSanction } from './sanctionService.js';
 import { loadBannedWords, loadGlobalWords, loadCustomWords } from './bannedWordsService.js';
 import { isReservedByNicknameModeration } from './nicknameModerationService.js';
@@ -14,6 +13,7 @@ import { classifyLink, findKeywordRanges, findLiteralRanges, INVITE_KEYWORDS, LI
 import { queueCensoredRepost, repostCensored } from './censorService.js';
 import { handleGroupSpam, handlePreventiveSlowmode } from './groupSpamSlowmode.js';
 import { handleEmojiBan } from './emojiBanService.js';
+import { resolveEventLogChannel, resolveEventLogChannelId } from '../../utils/logDispatch.js';
 
 // Cache for AutoMod configs: key is guildId, value is the config object
 const autoModConfigsCache = new Map<string, AutoModConfig>();
@@ -191,12 +191,9 @@ export async function syncDiscordAutoModRules(client: Client, guildId: string, c
 
   try {
 
-    // Récupérer le logChannelId de la guilde depuis la base de données
-    const guildDb = await prisma.guild.findUnique({
-      where: { id: guildId },
-      select: { logChannelId: true }
-    });
-    const rawLogChannelId = guildDb?.logChannelId || null;
+    // Salon où Discord poste ses alertes : routé comme les autres journaux,
+    // pour que la page Journaux puisse les couper ou les envoyer ailleurs.
+    const rawLogChannelId = await resolveEventLogChannelId(guildId, 'automod_native_alert');
 
     /**
      * Le salon d'alerte, s'il est utilisable.
@@ -572,7 +569,6 @@ export async function syncDiscordAutoModProfileRule(client: Client, guildId: str
       where: { id: guildId },
       select: {
         nickModDiscordAutoModSync: true,
-        logChannelId: true,
         nicknameModerationWhitelist: true,
         nicknameModerationBypass: true,
         nickModCheckGlobal: true,
@@ -643,11 +639,12 @@ export async function syncDiscordAutoModProfileRule(client: Client, guildId: str
       }
     ];
 
-    if (guildDb.logChannelId) {
+    const alertChannelId = await resolveEventLogChannelId(guildId, 'automod_native_alert');
+    if (alertChannelId) {
       actions.push({
         type: 2 as AutoModerationActionType, // SEND_ALERT_MESSAGE
         metadata: {
-          channel: guildDb.logChannelId
+          channel: alertChannelId
         }
       });
     }
@@ -1035,10 +1032,6 @@ async function applySanction(message: Message, action: string, reason: string, c
 
   // Notifier dans le salon de log si configuré
   try {
-    const guildDb = await prisma.guild.findUnique({
-      where: { id: guildId },
-      select: { logChannelId: true },
-    });
     const embed = new EmbedBuilder()
       .setTitle('🛡️ Sanction AutoMod')
       .setDescription(`L'utilisateur <@${target.id}> a déclenché une alerte de sécurité.`)
@@ -1052,7 +1045,7 @@ async function applySanction(message: Message, action: string, reason: string, c
       .setTimestamp();
 
     {
-      const logChannel = await resolveLogChannel(message.guild!, guildDb?.logChannelId, 'AutoModService');
+      const logChannel = await resolveEventLogChannel(message.guild!, 'automod_sanction', 'AutoModService');
       if (logChannel) {
         await logChannel.send({ embeds: [embed], allowedMentions: { parse: [] } }).catch(() => null);
       }
@@ -1268,10 +1261,6 @@ async function triggerGhostPingAlert(
 
   // 3. Notifier dans le salon de log si configuré
   try {
-    const guildDb = await prisma.guild.findUnique({
-      where: { id: guildId },
-      select: { logChannelId: true },
-    });
     const embed = new EmbedBuilder()
       .setTitle('🛡️ Alerte AutoMod (Ghost Ping)')
       .setDescription(`Un ghost ping a été détecté dans le salon <#${message.channel.id}>.`)
@@ -1291,7 +1280,7 @@ async function triggerGhostPingAlert(
     }
 
     {
-      const logChannel = await resolveLogChannel(message.guild!, guildDb?.logChannelId, 'AutoModService');
+      const logChannel = await resolveEventLogChannel(message.guild!, 'automod_ghost_ping', 'AutoModService');
       if (logChannel) {
         await logChannel.send({ embeds: [embed], allowedMentions: { parse: [] } }).catch(() => null);
       }
@@ -1424,10 +1413,6 @@ export async function handleAntiBotAdd(member: GuildMember, client: Client): Pro
 
     // Notifier dans le salon de log
     try {
-      const guildDb = await prisma.guild.findUnique({
-        where: { id: guildId },
-        select: { logChannelId: true },
-      });
       const embed = new EmbedBuilder()
         .setTitle('🤖 Bot bloqué (Mode Sécurisé)')
         .setDescription(`Le bot **${member.user.tag}** a été ${action === 'BAN' ? 'banni' : 'expulsé'} automatiquement.`)
@@ -1441,7 +1426,7 @@ export async function handleAntiBotAdd(member: GuildMember, client: Client): Pro
         .setTimestamp();
 
       {
-        const logChannel = await resolveLogChannel(member.guild, guildDb?.logChannelId, 'AutoModService');
+        const logChannel = await resolveEventLogChannel(member.guild, 'security_anti_bot', 'AutoModService');
         if (logChannel) {
           await logChannel.send({ embeds: [embed], allowedMentions: { parse: [] } }).catch(() => null);
         }

@@ -22,13 +22,15 @@
  * charge a l'execution par cette chaine.
  */
 
-import { ActionRowBuilder, ButtonBuilder, EmbedBuilder, Guild } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, EmbedBuilder, Guild, type SendableChannels } from 'discord.js';
+import { routeLogEvent, type LogEventType } from '@kotbo/shared';
 import { queueAuditLog } from './auditLogger.js';
 import { cache, getCachedGuild } from './cache.js';
 import prisma from './db.js';
 import { logger } from './logger.js';
 import { resoudreConfigLog, type EntreeConfigLog } from '../events/logEventConfig.js';
 import { resoudreLogChannel, type EntreeLogChannel } from '../events/logChannelConfig.js';
+import { resolveLogChannel } from './logChannel.js';
 
 /**
  * Copie deliberee de la fonction homonyme d'`advancedLogs.ts`.
@@ -133,14 +135,14 @@ function configEvenementLog(guildId: string, eventType: string) {
 }
 
 /** Pour éviter un travail coûteux (journal d'audit) dont le log serait jeté. */
-export async function isLogEventEnabled(guildId: string, eventType: string): Promise<boolean> {
+export async function isLogEventEnabled(guildId: string, eventType: LogEventType): Promise<boolean> {
   return (await configEvenementLog(guildId, eventType)).journaliser;
 }
 
 export async function sendLogEmbed(
   guild: Guild,
   embed: EmbedBuilder,
-  eventType: string,
+  eventType: LogEventType,
   components?: Array<ActionRowBuilder<ButtonBuilder>>,
   executorTag?: string | null,
   sourceChannelIds?: Array<string | null | undefined>,
@@ -200,4 +202,68 @@ export async function sendLogEmbed(
   await channel.send({ embeds: [embed], components, allowedMentions: { parse: [] } }).catch((error) => {
     logger.warn('Logs', `Impossible d'envoyer un log dans ${guild.id}: ${String(error)}`);
   });
+}
+
+export interface LogRouteOptions {
+  /**
+   * Salon propre au module (salon d'alerte anti-spam, de Vision, du captcha…).
+   * Prioritaire quand il est rempli ; s'il est introuvable, on retombe sur le
+   * routage normal, comme le faisaient déjà ces modules avant d'être routés.
+   */
+  moduleChannelId?: string | null;
+  /** Dernier recours, après le salon de logs du serveur. */
+  fallbackChannelId?: string | null;
+}
+
+/**
+ * Salon où publier un journal d'un module, ou `null` s'il ne doit pas partir.
+ *
+ * Le pendant de `sendLogEmbed` pour la vingtaine de services qui écrivaient en
+ * direct sur `logChannelId` : même réglage par type (activé, salon dédié),
+ * mêmes caches, même invalidation depuis le dashboard. L'ordre de priorité est
+ * celui de `routeLogEvent`, partagé avec le dashboard pour que la page affiche
+ * exactement le salon où le bot écrira.
+ *
+ * Ces services ne suivent volontairement pas l'interrupteur global du module
+ * « logs » ni les salons ignorés : ce sont des alertes de sécurité et de
+ * modération, et elles partaient déjà sans ces deux garde-fous. Seul le
+ * réglage par type, que l'administrateur choisit un par un, peut les couper.
+ */
+export async function resolveEventLogChannelId(
+  guildId: string,
+  eventType: LogEventType,
+  options: LogRouteOptions = {},
+): Promise<string | null> {
+  const decision = await configEvenementLog(guildId, eventType);
+  if (!decision.journaliser) return null;
+
+  const needsGuildChannel = !options.moduleChannelId && !decision.channelId;
+  const guildConfig = needsGuildChannel ? await getCachedGuild(guildId) : null;
+
+  return routeLogEvent({
+    enabled: true,
+    moduleChannelId: options.moduleChannelId,
+    eventChannelId: decision.channelId,
+    guildLogChannelId: guildConfig?.logChannelId ?? null,
+    fallbackChannelId: options.fallbackChannelId,
+  });
+}
+
+/** Comme `resolveEventLogChannelId`, mais rend le salon prêt à l'envoi. */
+export async function resolveEventLogChannel(
+  guild: Guild,
+  eventType: LogEventType,
+  label: string,
+  options: LogRouteOptions = {},
+): Promise<SendableChannels | null> {
+  if (options.moduleChannelId) {
+    const enabled = (await configEvenementLog(guild.id, eventType)).journaliser;
+    if (!enabled) return null;
+    const moduleChannel = await resolveLogChannel(guild, options.moduleChannelId, label);
+    if (moduleChannel) return moduleChannel;
+  }
+  const channelId = await resolveEventLogChannelId(guild.id, eventType, {
+    fallbackChannelId: options.fallbackChannelId,
+  });
+  return resolveLogChannel(guild, channelId, label);
 }

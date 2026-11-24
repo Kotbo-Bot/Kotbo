@@ -25,6 +25,7 @@ import {
   type JoinInvite,
   type LearnedAssessment,
 } from './dc/index.js';
+import { resolveEventLogChannel } from '../../utils/logDispatch.js';
 
 // ─── Constantes de seuils ─────────────────────────────────────────────────────
 const ACCOUNT_CREATION_PROXIMITY_MS = 15 * 60 * 1000;
@@ -683,7 +684,7 @@ export async function analyzeMemberJoin(member: GuildMember, joinInvite?: JoinIn
   if (totalScore >= 75) {
     const config = await prisma.guild.findUnique({
       where: { id: guildId },
-      select: { verificationRoleId: true, logChannelId: true }
+      select: { verificationRoleId: true }
     });
     if (config?.verificationRoleId) {
       try {
@@ -692,9 +693,9 @@ export async function analyzeMemberJoin(member: GuildMember, joinInvite?: JoinIn
           await member.roles.set([config.verificationRoleId], 'Kotbo Quarantine: Auto-quarantined suspect DC (score >= 75)');
           logger.warn('DCDetection', `Membre ${member.user.tag} (${member.id}) mis en quarantaine automatique (score: ${totalScore})`);
           
-          if (config.logChannelId) {
-            const logChannel = await member.guild.channels.fetch(config.logChannelId).catch(() => null);
-            if (logChannel && 'send' in logChannel) {
+          {
+            const logChannel = await resolveEventLogChannel(member.guild, 'alt_detection', 'DCDetection');
+            if (logChannel) {
               const quarantineEmbed = new EmbedBuilder()
                 .setTitle('🔒 Quarantaine Automatique : Double Compte')
                 .setColor('#ED4245')
@@ -925,12 +926,8 @@ async function reportSuspectedDC(
   guildMemberCount = 500,
 ): Promise<void> {
   const guild = member.guild;
-  const config = await prisma.guild.findUnique({ where: { id: guild.id }, select: { logChannelId: true } });
-  const logChannelId = config?.logChannelId;
-  if (!logChannelId) return;
-
-  const logChannel = await guild.channels.fetch(logChannelId).catch(() => null);
-  if (!logChannel || !('send' in logChannel)) return;
+  const logChannel = await resolveEventLogChannel(guild, 'alt_detection', 'DCDetection');
+  if (!logChannel) return;
 
   const severity: Severity = classify(evidence.totalScore, guildMemberCount);
   const scoreColor = severity === 'HIGH' ? '#ED4245' : severity === 'MEDIUM' ? '#FFA500' : '#FEE75C';
