@@ -9,6 +9,7 @@ import { logger } from '../../../../utils/logger.js';
 import { getGuildName, pushAudit } from '../../../shared.js';
 import { auditUserOf, fail, guildRoute, readBody, send } from '../../../hono/dashboard/kit.js';
 import { describeConfigChange } from '../../../../services/staff/wellbeingPolicy.js';
+import { bodyText } from '../../../../utils/bodyText.js';
 
 const BREAK_GLASS_HOURS = 2;
 const CATEGORIES = ['SOUTIEN', 'MEDIATION', 'SIGNALEMENT', 'SUIVI'];
@@ -55,8 +56,8 @@ async function resolveWellbeingRole(client: Client, guildId: string, userId: str
 }
 
 /** Id d'un dossier de ce serveur, ou null : un id inconnu n'entre pas au journal. */
-async function caseIdOfGuild(guildId: string, caseId: string | undefined): Promise<string | null> {
-  const id = caseId?.trim();
+async function caseIdOfGuild(guildId: string, caseId: unknown): Promise<string | null> {
+  const id = bodyText(caseId, 64);
   if (!id) return null;
   const found = await prisma.wellbeingCase.findFirst({ where: { id, guildId }, select: { id: true } });
   return found?.id ?? null;
@@ -187,7 +188,7 @@ export function createWellbeingRouter(client: Client) {
         return send(c, { error: "Seule la direction peut déclencher un accès d'urgence." }, 403);
       }
       const body = await readBody<{ reason?: string; caseId?: string }>(c);
-      const reason = body?.reason?.trim().slice(0, 500) ?? '';
+      const reason = bodyText(body?.reason, 500);
       if ((state.config?.requireReason ?? true) && reason.length < 8) {
         return send(c, { error: 'Un motif détaillé (8 caractères min.) est obligatoire pour cet accès journalisé.' }, 400);
       }
@@ -296,16 +297,17 @@ export function createWellbeingRouter(client: Client) {
         severity?: string;
         summary?: string;
       }>(c);
-      const subjectName = body?.subjectName?.trim().slice(0, 80) ?? '';
-      const title = body?.title?.trim().slice(0, 160) ?? '';
-      const summary = body?.summary?.trim().slice(0, 4000) ?? '';
+      const subjectName = bodyText(body?.subjectName, 80);
+      const title = bodyText(body?.title, 160);
+      const summary = bodyText(body?.summary, 4000);
+      const subjectUserId = bodyText(body?.subjectUserId, 20);
       if (!subjectName || !title || !summary) {
         return send(c, { error: 'Personne concernée, titre et résumé sont obligatoires.' }, 400);
       }
       const created = await prisma.wellbeingCase.create({
         data: {
           guildId,
-          subjectUserId: SNOWFLAKE_RE.test(body?.subjectUserId?.trim() ?? '') ? body!.subjectUserId!.trim() : null,
+          subjectUserId: SNOWFLAKE_RE.test(subjectUserId) ? subjectUserId : null,
           subjectName,
           title,
           category: CATEGORIES.includes(body?.category ?? '') ? body!.category! : 'SOUTIEN',
@@ -387,7 +389,7 @@ export function createWellbeingRouter(client: Client) {
       const existing = await prisma.wellbeingCase.findFirst({ where: { id: caseId, guildId } });
       if (!existing) return send(c, { error: 'Dossier introuvable.' }, 404);
       const body = await readBody<{ content?: string }>(c);
-      const content = body?.content?.trim().slice(0, 4000) ?? '';
+      const content = bodyText(body?.content, 4000);
       if (!content) return send(c, { error: 'Contenu requis.' }, 400);
       const note = await prisma.wellbeingCaseNote.create({
         data: {
