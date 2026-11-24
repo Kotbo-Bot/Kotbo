@@ -4,6 +4,7 @@ import prisma from '../../../utils/db.js';
 import { z } from 'zod';
 import { type McpToolContext, SNOWFLAKE, err, ok, resolveMember, publicErrorMessage } from '../toolkit.js';
 import { memberProfileIdentity } from '../../../services/moderation/memberIdentityService.js';
+import { CELL_ROLE_REFUSAL, cellRoleIds } from '../../../services/staff/wellbeingRoles.js';
 
 export function registerWriteMembersTools(ctx: McpToolContext) {
   const { server, guildId, client, shouldRegister, guard, audit, toolMeta } = ctx;
@@ -76,6 +77,7 @@ export function registerWriteMembersTools(ctx: McpToolContext) {
           : guild.roles.cache.find((r) => r.name.toLowerCase() === role.toLowerCase());
 
         if (!discordRole) return err(`Rôle « ${role} » introuvable`);
+        if ((await cellRoleIds(guildId)).has(discordRole.id)) return err(CELL_ROLE_REFUSAL);
 
         if (target.roles.cache.has(discordRole.id)) {
           return err(`${resolved.label} a déjà le rôle ${discordRole.name}`);
@@ -142,6 +144,7 @@ export function registerWriteMembersTools(ctx: McpToolContext) {
           : guild.roles.cache.find((r) => r.name.toLowerCase() === role.toLowerCase());
 
         if (!discordRole) return err(`Rôle « ${role} » introuvable`);
+        if ((await cellRoleIds(guildId)).has(discordRole.id)) return err(CELL_ROLE_REFUSAL);
 
         if (!target.roles.cache.has(discordRole.id)) {
           return err(`${resolved.label} n'a pas le rôle ${discordRole.name}`);

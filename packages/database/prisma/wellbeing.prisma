@@ -11,10 +11,10 @@ model WellbeingConfig {
   directorUserIds  String[] @default([])
   requireReason    Boolean  @default(true)
   // Alertes : salon et membres prévenus, et événements qui les déclenchent
-  // (BREAK_GLASS | EMERGENCY_READ | TEAM_READ | CASE_CHANGE | CONFIG_CHANGE | REPORT | REMINDER).
+  // (BREAK_GLASS | EMERGENCY_READ | TEAM_READ | CASE_CHANGE | CONFIG_CHANGE | REPORT | REMINDER | MEMBERSHIP_CHANGE).
   alertChannelId   String?
   alertUserIds     String[] @default([])
-  alertEvents      String[] @default(["BREAK_GLASS", "EMERGENCY_READ", "CONFIG_CHANGE", "REPORT", "REMINDER"])
+  alertEvents      String[] @default(["BREAK_GLASS", "EMERGENCY_READ", "CONFIG_CHANGE", "REPORT", "REMINDER", "MEMBERSHIP_CHANGE"])
   // Accès d'urgence validé par une seconde personne (direction ou cellule).
   breakGlassApproval Boolean @default(false)
   // Signalements depuis Discord (/bienetre signaler).
