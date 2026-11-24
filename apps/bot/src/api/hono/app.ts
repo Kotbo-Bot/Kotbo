@@ -41,6 +41,7 @@ import { createPublicRpgClansRouter } from './routes/public/publicRpgClans.js';
 import { createPublicFilesRouter } from './routes/public/publicFiles.js';
 import { createPublicFormsRouter } from './routes/public/publicForms.js';
 import { fail } from './dashboard/kit.js';
+import { INSTANCE_BLOCKED_MESSAGE, instanceBlockReason, isInstanceBlocked, isPathAllowedWhileBlocked } from '../../services/system/instanceBlock.js';
 
 /**
  * Crée et configure l'application Hono avec tous les middlewares et routes.
@@ -63,6 +64,16 @@ export function createHonoApp(client: Client): OpenAPIHono {
     if (c.res.status === 404) return;
     const ms = Date.now() - start;
     logger.info('HonoAPI', `${c.req.method} ${c.req.path} → ${c.res.status} (${ms}ms)`);
+  });
+
+  // Instance bloquée (sans bail ou bannie) : tout est fermé sauf la connexion et
+  // ce qu'il faut au dashboard pour afficher le motif (voir instanceBlock.ts).
+  // Un 403 et non un 503 : le dashboard lirait un 503 comme une panne.
+  app.use('*', async (c, next) => {
+    if (isInstanceBlocked() && !isPathAllowedWhileBlocked(c.req.path)) {
+      return c.json({ error: INSTANCE_BLOCKED_MESSAGE, code: 'instance_blocked', reason: instanceBlockReason() }, 403);
+    }
+    await next();
   });
 
   // ---------------------------------------------------------------------------

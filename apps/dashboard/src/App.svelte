@@ -17,6 +17,7 @@
   import { memberCaseModal } from "./lib/stores/memberCaseModal.svelte";
   import ToastContainer from "./lib/components/ToastContainer.svelte";
   import BackendDownBanner from "./lib/components/BackendDownBanner.svelte";
+  import InstanceBlockedBanner from "./lib/components/InstanceBlockedBanner.svelte";
   import GlobalConfirmDialog from "./lib/components/GlobalConfirmDialog.svelte";
   import GlobalNoticeModal from "./lib/components/GlobalNoticeModal.svelte";
   import CommandPalette from "./lib/components/CommandPalette.svelte";
@@ -1366,6 +1367,7 @@
 {/if}
 
 <BackendDownBanner />
+<InstanceBlockedBanner />
 <ToastContainer />
 <GlobalConfirmDialog />
 <GlobalNoticeModal />

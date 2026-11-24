@@ -26,6 +26,7 @@ import { pruneOldWordStats } from '../services/analytics/wordStatsService.js';
 import { runBanHygieneScan } from '../services/moderation/banHygieneService.js';
 import { refreshPhishingFeeds } from '../services/moderation/phishingFeedService.js';
 import { isModuleEnabled } from '../services/core/moduleGate.js';
+import { isInstanceBlocked, isJobAllowedWhileBlocked } from '../services/system/instanceBlock.js';
 
 const runningJobs = new Set<string>();
 
@@ -71,6 +72,8 @@ function defaultJitterMs(name: string): number {
  * quatre cycles de partenariats, restes muets depuis leur arrivee.
  */
 async function runCronJob(name: BackgroundJobName, task: () => Promise<void>, jitterMs?: number): Promise<void> {
+  // Instance bloquée : seuls le ping et les purges tournent (voir instanceBlock.ts).
+  if (isInstanceBlocked() && !isJobAllowedWhileBlocked(name)) return;
   // Sans décalage explicite : un décalage fixe par nom, pour que la vingtaine de
   // tâches « chaque minute » ne démarrent plus toutes à la seconde 0 (pics de CPU).
   jitterMs ??= defaultJitterMs(name);
@@ -115,6 +118,7 @@ async function runCronJob(name: BackgroundJobName, task: () => Promise<void>, ji
 const runningSweeps = new Set<string>();
 
 async function runLocalSweep(name: string, task: () => Promise<void>): Promise<void> {
+  if (isInstanceBlocked() && !isJobAllowedWhileBlocked(name)) return;
   if (runningSweeps.has(name)) return;
   runningSweeps.add(name);
   try {
@@ -1309,7 +1313,7 @@ export async function registerCrons(client: Client): Promise<void> {
 
   // Publication des statistiques vers les annuaires de bots (Botillon, Top.gg, Discordium).
   // Hors runCronJob pour garantir l'exécution sur le shard 0 qui agrège tous les shards.
-  const syncBotLists = () => import('../services/integrations/botListStatsService.js')
+  const syncBotLists = () => isInstanceBlocked() ? Promise.resolve() : import('../services/integrations/botListStatsService.js')
     .then(({ syncBotListStats }) => syncBotListStats(client))
     .catch((err) => logger.error('Cron', 'Échec de la publication des stats botlists :', err));
   cron.schedule('*/30 * * * *', syncBotLists);

@@ -5,6 +5,7 @@ const modules: Record<string, Record<string, unknown>> = {
   'stores/auth.svelte.ts': { authStore: { token: 'jeton', selectedGuildId: 'g', guilds: [] } },
   'stores/backendHealth.svelte.ts': { backendHealth: { canWrite: true, reportFailure() {}, reportSuccess() {} } },
   'stores/toast.svelte.ts': { toast: {} },
+  'stores/instanceBlock.svelte.ts': { instanceBlock: { report() {} } },
   'sentry.ts': { captureApiFailure() {} },
   'telemetry/telemetry.ts': { trackApiResult() {} },
 };

@@ -3,6 +3,7 @@ import { addXp, getOrCreateLevelConfig } from '../services/progression/levelingS
 import { handleUserActivity } from '../services/features/economyService.js';
 import { isProgressionBlocked } from '../services/progression/progressionBlacklist.js';
 import { logger } from '../utils/logger.js';
+import { isInstanceBlocked } from '../services/system/instanceBlock.js';
 
 
 let voiceXpInterval: ReturnType<typeof setInterval> | null = null;
@@ -14,6 +15,7 @@ export function registerLevelingListener(client: Client) {
   if (voiceXpInterval) clearInterval(voiceXpInterval);
   
   voiceXpInterval = setInterval(async () => {
+    if (isInstanceBlocked()) return;
     try {
       const xpPromises: Promise<void>[] = [];
 

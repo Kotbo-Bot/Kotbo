@@ -6,6 +6,7 @@ import { fetchAllMembers, settleWithin, RENAME_TIMEOUT_MS } from '../utils/disco
 import { readStatsConfig } from '../services/analytics/statsConfig.js';
 import * as m from '../lib/paraglide/messages.js';
 import { resolveGuildLocale } from '../utils/i18n.js';
+import { isInstanceBlocked } from '../services/system/instanceBlock.js';
 
 const updateTimeouts = new Map<string, NodeJS.Timeout>();
 
@@ -19,7 +20,7 @@ let globalPassRunning = false;
 export function registerStatsChannelListener(client: Client): void {
   client.on(Events.ClientReady, () => {
     updateAllGuildsStats(client);
-    setInterval(() => updateAllGuildsStats(client), 10 * 60 * 1000);
+    setInterval(() => { if (!isInstanceBlocked()) void updateAllGuildsStats(client); }, 10 * 60 * 1000);
   });
 
   client.on(Events.GuildMemberAdd, (member) => {

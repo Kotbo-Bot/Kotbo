@@ -3,6 +3,7 @@ import { trackGhostSignal } from './services/analytics/ghostActivityTracker.js';
 import { recordModuleExecution, wasModuleExecutionTracked } from './services/analytics/moduleUsageBuffer.js';
 import { commandLabel, recordCommandUsage } from './services/analytics/commandStatsService.js';
 import { WELLBEING_COMMAND } from './services/staff/wellbeingPolicy.js';
+import { INSTANCE_BLOCKED_MESSAGE, isInstanceBlocked, shouldDeliverEvent } from './services/system/instanceBlock.js';
 import dotenv from 'dotenv';
 import path from 'path';
 dotenv.config({ path: path.resolve(process.cwd(), '../../.env') });
@@ -231,6 +232,10 @@ client.emit = function (eventName: string | symbol, ...args: unknown[]) {
   if (PASSTHROUGH_EVENTS.has(eventName)) {
     return originalEmit.call(client, eventName, ...args);
   }
+
+  // Instance bloquée : plus aucune fonction automatique (automod, logs,
+  // accueil...). Les interactions passent pour recevoir le message de blocage.
+  if (!shouldDeliverEvent(eventName, isInstanceBlocked())) return false;
 
   // Les evenements Discord transportent des objets heterogenes : la resolution
   // balaye tous les arguments, la guilde n'etant pas toujours portee par le
@@ -920,7 +925,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     if (global.KOTBO_INSTANCE_BANNED) {
       if (interaction.isRepliable()) {
         await interaction.reply({
-          content: "❌ Cette instance auto-hébergée a été désactivée par l'administration Kotbo.",
+          content: `❌ ${INSTANCE_BLOCKED_MESSAGE}`,
           flags: [MessageFlags.Ephemeral]
         });
       }
