@@ -18,7 +18,9 @@ import {
   getModuleRequirements,
   isCoreModule,
   isModulePaused,
+  isRestrictedModule,
   withoutPausedModulePermissions,
+  withoutRestrictedModules,
 } from '@kotbo/contracts';
 
 describe('registre des modules', () => {
@@ -172,3 +174,16 @@ describe('graphe de dependances', () => {
     expect(getModuleDependents('regulation')).toEqual([]);
   });
 });
+
+describe('modules confidentiels', () => {
+  test("la cellule bien-être décide seule de son accès", () => {
+    expect(isRestrictedModule('wellbeing')).toBe(true);
+    expect(isRestrictedModule('tickets')).toBe(false);
+  });
+
+  test('ils sortent des listes du Centre de gestion, le reste garde son ordre', () => {
+    const configs = [{ featureKey: 'tickets' }, { featureKey: 'wellbeing' }, { featureKey: 'sanctions' }];
+    expect(withoutRestrictedModules(configs).map((c) => c.featureKey)).toEqual(['tickets', 'sanctions']);
+  });
+});
+

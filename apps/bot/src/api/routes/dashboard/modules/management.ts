@@ -7,6 +7,10 @@ import { logger } from '../../../../utils/logger.js';
 import { broadcastDashboardStateChange, getGuildName, pushAudit } from '../../../shared.js';
 import { auditUserOf, fail, guildRoute, readBody, send } from '../../../hono/dashboard/kit.js';
 import { withoutManagedRoles } from '../../../../services/core/dashboardAccessRoles.js';
+import { isRestrictedModule } from '@kotbo/contracts';
+
+/** Un module confidentiel (cellule bien-être) décide seul de son accès : aucune règle ne s'y écrit. */
+const RESTRICTED_ERROR = "Ce module gère son accès dans sa propre configuration : le Centre de gestion n'y donne aucun droit.";
 
 export function createManagementRouter(client: Client) {
   const router = new Hono();
@@ -17,6 +21,7 @@ export function createManagementRouter(client: Client) {
     }
     const guildId = c.req.param('guildId');
     const featureKey = c.req.param('featureKey');
+    if (isRestrictedModule(featureKey)) return send(c, { error: RESTRICTED_ERROR }, 403);
     try {
       const body = await readBody<{
         roleAccessConfigs: Array<{
@@ -70,6 +75,7 @@ export function createManagementRouter(client: Client) {
     }
     const guildId = c.req.param('guildId');
     const featureKey = c.req.param('featureKey');
+    if (isRestrictedModule(featureKey)) return send(c, { error: RESTRICTED_ERROR }, 403);
     try {
       const body = await readBody<{
         keyAccessConfigs: Array<{

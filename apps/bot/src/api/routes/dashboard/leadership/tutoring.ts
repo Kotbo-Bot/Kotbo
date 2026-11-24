@@ -70,8 +70,8 @@ const denied = (c: Context, message = 'Action réservée aux responsables du tut
 /** Clés de modules du dashboard, filtrées sur celles du serveur. */
 async function readFeatureKeys(guildId: string, value: unknown): Promise<string[]> {
   if (!Array.isArray(value)) return [];
-  const { getOrCreateFeatureConfigs } = await import('../../../../services/core/dashboardManagementService.js');
-  const known = new Set((await getOrCreateFeatureConfigs(guildId)).map((config) => config.featureKey));
+  const { getAvailableFeatureConfigs } = await import('../../../../services/core/dashboardManagementService.js');
+  const known = new Set((await getAvailableFeatureConfigs(guildId)).map((config) => config.featureKey));
   return [...new Set(value.filter((key): key is string => typeof key === 'string' && known.has(key)))];
 }
 

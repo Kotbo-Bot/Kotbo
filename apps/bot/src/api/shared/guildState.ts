@@ -36,6 +36,7 @@ import {
   normalizePlanKey,
   planForMemberCount,
   planIncludesModule,
+  withoutRestrictedModules,
 } from '@kotbo/contracts';
 import { getModuleStates } from '../../services/core/moduleGate.js';
 import { canFinishOnboardingWithoutPayment, isOnboardingFeatureEnabled } from '../../services/core/onboardingGate.js';
@@ -51,7 +52,9 @@ export async function resolveFeatureAccessMap(
   roleIds: string[],
 ): Promise<FeatureAccessMap> {
   const { getOrCreateFeatureConfigs } = await import('../../services/core/dashboardManagementService.js');
-  const featureConfigs = await getOrCreateFeatureConfigs(guildId);
+  // Un module confidentiel n'a pas de droits ici : son accès se décide dans sa
+  // propre configuration, aucune règle de rôle ni déblocage ne s'y applique.
+  const featureConfigs = withoutRestrictedModules(await getOrCreateFeatureConfigs(guildId));
   const isGlobalAdmin = userId ? await resolveAdminAccess(client, userId) : false;
   const discordGuild = client.guilds.cache.get(guildId);
 

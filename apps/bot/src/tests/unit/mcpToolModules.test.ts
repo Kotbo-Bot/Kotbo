@@ -8,7 +8,7 @@
 import { describe, expect, mock, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { getModuleDefinition, isMcpClosedModule } from '@kotbo/contracts';
+import { getModuleDefinition, isRestrictedModule } from '@kotbo/contracts';
 import { mcpToolModule, mcpToolRight, withKeyAccessGate, withModuleGate, type McpKeyRight, type McpKeyRule } from '../../api/mcp/toolModules.js';
 
 /** Noms réellement enregistrés, lus dans les sources des outils. */
@@ -151,9 +151,9 @@ describe('droits d\'une clé MCP par module', () => {
 describe('cellule bien-être fermée au MCP', () => {
   const handler = mock(async () => ({ content: [{ type: 'text' as const, text: 'ok' }] }));
 
-  test('le registre marque la cellule comme fermée au MCP', () => {
-    expect(isMcpClosedModule('wellbeing')).toBe(true);
-    expect(isMcpClosedModule('tickets')).toBe(false);
+  test('le registre marque la cellule comme module confidentiel', () => {
+    expect(isRestrictedModule('wellbeing')).toBe(true);
+    expect(isRestrictedModule('tickets')).toBe(false);
   });
 
   test('un outil de la cellule refuse même module allumé, sans appeler son gestionnaire', async () => {
@@ -175,10 +175,10 @@ describe('cellule bien-être fermée au MCP', () => {
 });
 
 describe('bascule des modules par le MCP', () => {
-  test("set_module_activation refuse d'allumer ou d'éteindre un module fermé au MCP", () => {
+  test("set_module_activation refuse d'allumer ou d'éteindre un module confidentiel", () => {
     const source = readFileSync(path.resolve(import.meta.dir, '../../api/mcp/tools/write-community-2.ts'), 'utf8');
     const tool = source.slice(source.indexOf("'set_module_activation'"));
-    expect(tool.indexOf('isMcpClosedModule(moduleKey)')).toBeGreaterThan(-1);
-    expect(tool.indexOf('isMcpClosedModule(moduleKey)')).toBeLessThan(tool.indexOf('setDashboardModuleStatus('));
+    expect(tool.indexOf('isRestrictedModule(moduleKey)')).toBeGreaterThan(-1);
+    expect(tool.indexOf('isRestrictedModule(moduleKey)')).toBeLessThan(tool.indexOf('setDashboardModuleStatus('));
   });
 });

@@ -13,7 +13,7 @@
  * rallument les modules : la garde ne doit pas fermer ce qu'elle ne sait pas
  * décrire.
  */
-import { getModuleDefinition, isMcpClosedModule } from '@kotbo/contracts';
+import { getModuleDefinition, isRestrictedModule } from '@kotbo/contracts';
 import { err, type McpToolHandler } from './toolResult.js';
 
 const RULES: ReadonlyArray<readonly [RegExp, string]> = [
@@ -55,12 +55,12 @@ const RULES: ReadonlyArray<readonly [RegExp, string]> = [
   [/digest/, 'digest'],
 ];
 
-/** Refus d'un module fermé au MCP (voir `ModuleDefinition.mcpClosed`). */
+/** Refus d'un module confidentiel (voir `ModuleDefinition.restricted`). */
 export function closedModuleMessage(moduleKey: string): string {
   return `Le module « ${getModuleDefinition(moduleKey)?.name ?? moduleKey} » n'est pas accessible par le MCP ni par l'API.`;
 }
 
-/** Ni l'état du module ni les règles de la clé n'ouvrent un module fermé au MCP. */
+/** Ni l'état du module ni les règles de la clé n'ouvrent un module confidentiel. */
 function closedModuleHandler(moduleKey: string): McpToolHandler {
   return async () => err(closedModuleMessage(moduleKey));
 }
@@ -97,7 +97,7 @@ export function withKeyAccessGate(
 ): McpToolHandler {
   const moduleKey = mcpToolModule(toolName);
   if (!moduleKey) return handler;
-  if (isMcpClosedModule(moduleKey)) return closedModuleHandler(moduleKey);
+  if (isRestrictedModule(moduleKey)) return closedModuleHandler(moduleKey);
   const right = mcpToolRight(toolName);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -121,7 +121,7 @@ export function withModuleGate(
 ): McpToolHandler {
   const moduleKey = mcpToolModule(toolName);
   if (!moduleKey) return handler;
-  if (isMcpClosedModule(moduleKey)) return closedModuleHandler(moduleKey);
+  if (isRestrictedModule(moduleKey)) return closedModuleHandler(moduleKey);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return async (args: any) => {
