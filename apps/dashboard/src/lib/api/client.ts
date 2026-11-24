@@ -216,9 +216,12 @@ export function getGuildId(guildId?: string) {
  * sur chaque lecture, et une page qui en lance dix aurait empile dix toasts
  * identiques par-dessus l'ecran qui dit deja que l'acces est refuse.
  *
+ * `instance_blocked` aussi : toute l'API refuse, et InstanceBlockedBanner le
+ * dit une fois pour toutes les pages.
+ *
  * L'erreur continue d'etre levee : l'appelant garde la main.
  */
-const SILENT_REFUSAL_CODES = new Set(['module_disabled', 'feature_denied']);
+const SILENT_REFUSAL_CODES = new Set(['module_disabled', 'feature_denied', 'instance_blocked']);
 
 /** Un refus attendu ne merite ni toast, ni ecran d'erreur, ni alerte Sentry. */
 export function isExpectedRefusal(error: unknown): boolean {

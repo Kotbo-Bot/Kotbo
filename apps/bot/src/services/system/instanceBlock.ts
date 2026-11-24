@@ -38,7 +38,23 @@ export function isPathAllowedWhileBlocked(path: string): boolean {
   return OPEN_PATHS.some((pattern) => pattern.test(path));
 }
 
-/** Seules les interactions passent : elles reçoivent le message de blocage. */
+/**
+ * Passent aussi les journaux et l'état de connexion de discord.js : sans eux,
+ * une instance bloquée ne dirait plus rien de ses erreurs.
+ */
+const ALWAYS_DELIVERED = new Set<string | symbol>([
+  Events.InteractionCreate,
+  Events.Error,
+  Events.Warn,
+  Events.Debug,
+  Events.ShardDisconnect,
+  Events.ShardError,
+  Events.ShardReconnecting,
+  Events.ShardResume,
+  Events.Invalidated,
+]);
+
+/** Seules les interactions (pour le message de blocage) et les journaux passent. */
 export function shouldDeliverEvent(eventName: string | symbol, blocked: boolean): boolean {
-  return !blocked || eventName === Events.InteractionCreate;
+  return !blocked || ALWAYS_DELIVERED.has(eventName);
 }

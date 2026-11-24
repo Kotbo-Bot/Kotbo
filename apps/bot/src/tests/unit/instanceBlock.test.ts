@@ -74,4 +74,10 @@ describe('événements Discord sous blocage', () => {
     expect(shouldDeliverEvent(Events.GuildMemberAdd, true)).toBe(false);
     expect(shouldDeliverEvent(Events.MessageCreate, false)).toBe(true);
   });
+
+  test("les journaux de discord.js passent : une instance bloquée doit pouvoir dire ce qui lui arrive", () => {
+    for (const event of [Events.Error, Events.Warn, Events.Debug, Events.ShardDisconnect, Events.ShardError, Events.ShardReconnecting, Events.ShardResume, Events.Invalidated]) {
+      expect(shouldDeliverEvent(event, true)).toBe(true);
+    }
+  });
 });
