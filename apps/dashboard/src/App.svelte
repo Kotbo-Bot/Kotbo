@@ -240,6 +240,7 @@
     if (path.startsWith("/social-networks")) return "social_networks";
     if (path.startsWith("/backups")) return "settings";
     if (path.startsWith("/schedules")) return "settings";
+    if (path.startsWith("/public-pages")) return "settings";
     if (path.startsWith("/mcp-settings")) return "settings";
     if (path.startsWith("/webhooks")) return "settings";
     if (path.startsWith("/network")) return "settings";
@@ -304,7 +305,7 @@
   const ADMIN_ROUTES = [
     "/management", "/modules", "/server-template", "/setup",
     "/migration", "/campaigns", "/module-settings", "/alerts",
-    "/command-access", "/backups", "/schedules", "/mcp-settings", "/webhooks", "/network",
+    "/command-access", "/backups", "/schedules", "/public-pages", "/mcp-settings", "/webhooks", "/network",
     "/custom-bot", "/automations", "/staff-management", "/channels-management",
   ];
 
@@ -1054,6 +1055,10 @@
               <LazyRoute
                 path="/schedules"
                 load={() => import("./pages/Schedules.svelte")}
+              />
+              <LazyRoute
+                path="/public-pages"
+                load={() => import("./pages/PublicPagesAppearance.svelte")}
               />
               <LazyRoute
                 path="/mcp-settings"

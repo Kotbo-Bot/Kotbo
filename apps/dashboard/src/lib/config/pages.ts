@@ -226,6 +226,7 @@ export const configItems: PageConfig[] = [
   { get name() { return m.nav_commands(); },           icon: "terminal",      href: "/command-access",       featureKey: "commands", beta: false, wip: false },
   { get name() { return m.nav_backups(); },         icon: "archive",        href: "/backups",              featureKey: "settings", beta: false, wip: false },
   { get name() { return m.nav_schedules(); },      icon: "calendar",      href: "/schedules",            featureKey: "settings", beta: false, wip: false },
+  { get name() { return m.nav_public_pages(); },    icon: "palette",       href: "/public-pages",         featureKey: "settings", beta: false, wip: false },
 ];
 
 /** Ce qui relie Kotbo a l'exterieur : agents, services tiers, autres serveurs. */

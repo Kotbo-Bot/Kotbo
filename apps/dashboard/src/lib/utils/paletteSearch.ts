@@ -52,6 +52,7 @@ const PAGE_KEYWORDS: Record<string, string> = {
   '/command-access': 'slash commandes permissions',
   '/backups': 'sauvegarde restauration backup',
   '/schedules': 'cron planifie automatique rappel',
+  '/public-pages': 'pages publiques apparence theme couleurs classement habillage personnaliser',
   '/mcp-settings': 'mcp ia ai claude chatgpt agent api cle token llm',
   '/webhooks': 'webhook http integration evenements sortants',
   '/network': 'reseau multi serveurs association regrouper rattacher principal',
