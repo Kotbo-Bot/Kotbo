@@ -22,6 +22,7 @@
  * charge a l'execution par cette chaine.
  */
 
+import { executorAuditUser, executorTag, type LogExecutor } from './logExecutor.js';
 import { ActionRowBuilder, ButtonBuilder, EmbedBuilder, Guild, type SendableChannels } from 'discord.js';
 import { routeLogEvent, type LogEventType } from '@kotbo/shared';
 import { queueAuditLog } from './auditLogger.js';
@@ -144,7 +145,7 @@ export async function sendLogEmbed(
   embed: EmbedBuilder,
   eventType: LogEventType,
   components?: Array<ActionRowBuilder<ButtonBuilder>>,
-  executorTag?: string | null,
+  executor?: LogExecutor,
   sourceChannelIds?: Array<string | null | undefined>,
   /**
    * Ce que l'audit en base doit garder, quand le résumé de l'embed (description
@@ -161,8 +162,9 @@ export async function sendLogEmbed(
   // pied de page dit par qui. Un embed qui porte deja son propre pied de page
   // garde le sien - il n'y a qu'un emplacement, et l'ecraser perdrait une
   // information au lieu d'en ajouter une.
-  if (executorTag && !embed.toJSON().footer) {
-    embed.setFooter({ text: `Action réalisée par ${executorTag}` });
+  const footerTag = executorTag(executor);
+  if (footerTag && !embed.toJSON().footer) {
+    embed.setFooter({ text: `Action réalisée par ${footerTag}` });
   }
 
   // 1. Configuration du type d'evenement, cache compris.
@@ -186,7 +188,7 @@ export async function sendLogEmbed(
   queueAuditLog({
     guildId: guild.id,
     channelId: audit?.channelId ?? channelId,
-    user: executorTag ?? 'Système',
+    user: executorAuditUser(executor),
     action: summary.action,
     context: guild.name,
     module: 'Logs avancés',

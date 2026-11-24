@@ -17476,7 +17476,7 @@
   "arx_duration_permanent": "Permanent",
   "arx_tab_detection": "Detection & locks",
   "arx_tab_captcha": "Entry captcha",
-  "arx_tab_scams": "Scams & tag",
+  "arx_tab_scams": "Scams",
   "arx_tab_invites": "Invites",
   "arx_tab_queues": "Queues",
   "arx_load_failed": "Couldn't load the configuration",

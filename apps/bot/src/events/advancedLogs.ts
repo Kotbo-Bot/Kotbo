@@ -13,6 +13,7 @@ import {
   type Role,
   type VoiceState,
 } from 'discord.js';
+import type { LogExecutor } from '../utils/logExecutor.js';
 import { kotboEventBus } from '@kotbo/core';
 import prisma from '../utils/db.js';
 import { upsertRetryingRace } from '../utils/upsertRetry.js';
@@ -601,13 +602,14 @@ async function resolveAuditEntry(
   guild: Guild,
   type: AuditLogEvent,
   targetId?: string | null,
-): Promise<{ executor: string | null; reason: string | null }> {
+): Promise<{ executor: { tag: string; id: string } | null; reason: string | null }> {
   try {
     const audit = await guild.fetchAuditLogs({ type, limit: 6 });
     const matching = pickRecentAuditEntry(audit.entries.values(), targetId, Date.now(), AUDIT_LOOKBACK_MS);
     const executor = matching?.executor;
     return {
-      executor: executor ? executor.tag ?? executor.username ?? `Utilisateur ${executor.id}` : null,
+      // L'identifiant suit le pseudo jusqu'au journal : l'auteur y devient cliquable.
+      executor: executor ? { tag: executor.tag ?? executor.username ?? `Utilisateur ${executor.id}`, id: executor.id } : null,
       reason: matching?.reason ?? null,
     };
   } catch {
@@ -672,7 +674,7 @@ async function resolveAuditExecutorName(
   guild: Guild,
   type: AuditLogEvent,
   targetId?: string | null,
-): Promise<string | null> {
+): Promise<{ tag: string; id: string } | null> {
   return (await resolveAuditEntry(guild, type, targetId)).executor;
 }
 
@@ -680,7 +682,7 @@ async function resolveAuditExecutorName(
  * Qui a supprime le message : `display` pour le champ de l'embed (mention
  * cliquable), `name` pour le pied de page, ou Discord ne resout aucune mention.
  */
-type LogActor = { display: string; name: string | null };
+type LogActor = { display: string; name: string | null; id: string | null };
 
 async function resolveMessageDeleteActor(
   guild: Guild,
@@ -691,11 +693,11 @@ async function resolveMessageDeleteActor(
   const authorTag = snapshot?.authorTag ?? message.author?.tag;
 
   if (!authorId || !authorTag) {
-    return { display: 'Inconnu', name: null };
+    return { display: 'Inconnu', name: null, id: null };
   }
 
   // Aucune entree d'audit : personne d'autre que l'auteur n'a touche au message.
-  const selfDelete: LogActor = { display: formatUser(authorId, authorTag), name: authorTag };
+  const selfDelete: LogActor = { display: formatUser(authorId, authorTag), name: authorTag, id: authorId };
 
   try {
     const audit = await guild.fetchAuditLogs({ type: AuditLogEvent.MessageDelete, limit: 6 });
@@ -725,10 +727,16 @@ async function resolveMessageDeleteActor(
     }
 
     const executorName = matching.executor.tag ?? matching.executor.username ?? `Utilisateur ${executorId}`;
-    return { display: formatUser(executorId, executorName), name: executorName };
+    return { display: formatUser(executorId, executorName), name: executorName, id: executorId };
   } catch {
     return selfDelete;
   }
+}
+
+/** Auteur d'un log tiré d'un `LogActor` : identifiant compris quand il est connu. */
+function logActor(actor: LogActor): LogExecutor {
+  if (!actor.name) return null;
+  return actor.id ? { tag: actor.name, id: actor.id } : actor.name;
 }
 
 async function resolveBulkDeleteActor(
@@ -755,11 +763,11 @@ async function resolveBulkDeleteActor(
 
     const executor = matching?.executor;
     const executorId = executor?.id;
-    if (!executor || !executorId) return { display: 'Inconnu', name: null };
+    if (!executor || !executorId) return { display: 'Inconnu', name: null, id: null };
     const executorName = executor.tag ?? executor.username ?? `Utilisateur ${executorId}`;
-    return { display: formatUser(executorId, executorName), name: executorName };
+    return { display: formatUser(executorId, executorName), name: executorName, id: executorId };
   } catch {
-    return { display: 'Inconnu', name: null };
+    return { display: 'Inconnu', name: null, id: null };
   }
 }
 
@@ -1003,7 +1011,7 @@ export function registerAdvancedLogsListener(client: Client): void {
     const deletedBy = await resolveMessageDeleteActor(message.guild, message, snapshot);
     const embed = buildMessageDeleteEmbed(snapshot, deletedBy.display);
     const components = [buildMemberCaseActionRow(snapshot.authorId)];
-    await sendLogEmbed(message.guild, embed, 'message_delete', components, deletedBy.name, [message.channelId]);
+    await sendLogEmbed(message.guild, embed, 'message_delete', components, logActor(deletedBy), [message.channelId]);
   });
 
   client.on(Events.MessageUpdate, async (oldMessage, newMessage) => {
@@ -1038,7 +1046,7 @@ export function registerAdvancedLogsListener(client: Client): void {
       createdAt: Date.now(),
     });
 
-    await sendLogEmbed(newMessage.guild, embed, 'message_edit', [buildMemberCaseActionRow(snapshot.authorId)], snapshot.authorTag, [newMessage.channelId]);
+    await sendLogEmbed(newMessage.guild, embed, 'message_edit', [buildMemberCaseActionRow(snapshot.authorId)], { tag: snapshot.authorTag, id: snapshot.authorId }, [newMessage.channelId]);
   });
 
   client.on(Events.MessageBulkDelete, async (messages, channel) => {
@@ -1076,7 +1084,7 @@ export function registerAdvancedLogsListener(client: Client): void {
       preview.length > 0 ? preview : 'Auteur non déterminé (messages non présents en cache).',
     );
 
-    await sendLogEmbed(guild, embed, 'message_bulk_delete', undefined, deletedBy.name, [channelId]);
+    await sendLogEmbed(guild, embed, 'message_bulk_delete', undefined, logActor(deletedBy), [channelId]);
   });
 
   client.on(Events.VoiceStateUpdate, async (oldState: VoiceState, newState: VoiceState) => {
@@ -1109,7 +1117,7 @@ export function registerAdvancedLogsListener(client: Client): void {
         });
       }
 
-      await sendLogEmbed(guild, embed, 'voice_join', [buildMemberCaseActionRow(userId)], safeTag(member, userId), [newState.channelId]);
+      await sendLogEmbed(guild, embed, 'voice_join', [buildMemberCaseActionRow(userId)], { tag: safeTag(member, userId), id: userId }, [newState.channelId]);
       return;
     }
 
@@ -1659,7 +1667,7 @@ export function registerAdvancedLogsListener(client: Client): void {
         moderatorTag,
         reason,
       );
-      await sendLogEmbed(guild, embed, 'moderation_kick', [buildMemberCaseActionRow(targetId), buildMemberCaseActionRow(executorId)], moderatorTag);
+      await sendLogEmbed(guild, embed, 'moderation_kick', [buildMemberCaseActionRow(targetId), buildMemberCaseActionRow(executorId)], { tag: moderatorTag, id: executorId });
       return;
     }
 
@@ -1673,7 +1681,7 @@ export function registerAdvancedLogsListener(client: Client): void {
         moderatorTag,
         reason,
       );
-      await sendLogEmbed(guild, embed, 'moderation_ban', [buildMemberCaseActionRow(targetId), buildMemberCaseActionRow(executorId)], moderatorTag);
+      await sendLogEmbed(guild, embed, 'moderation_ban', [buildMemberCaseActionRow(targetId), buildMemberCaseActionRow(executorId)], { tag: moderatorTag, id: executorId });
       return;
     }
 
@@ -1687,7 +1695,7 @@ export function registerAdvancedLogsListener(client: Client): void {
         moderatorTag,
         reason,
       );
-      await sendLogEmbed(guild, embed, 'moderation_unban', [buildMemberCaseActionRow(targetId), buildMemberCaseActionRow(executorId)], moderatorTag);
+      await sendLogEmbed(guild, embed, 'moderation_unban', [buildMemberCaseActionRow(targetId), buildMemberCaseActionRow(executorId)], { tag: moderatorTag, id: executorId });
       return;
     }
 
@@ -1715,7 +1723,7 @@ export function registerAdvancedLogsListener(client: Client): void {
         );
         // Un modérateur peut se couper le micro : Discord refuse deux `custom_id` identiques.
         const casiers = [...new Set([targetId, executorId])].map((id) => buildMemberCaseActionRow(id));
-        await sendLogEmbed(guild, embed, 'voice_moderation', casiers, moderatorTag);
+        await sendLogEmbed(guild, embed, 'voice_moderation', casiers, { tag: moderatorTag, id: executorId });
       }
 
       const timeoutChange = entry.changes.find((change) => change.key === 'communication_disabled_until');
@@ -1742,7 +1750,7 @@ export function registerAdvancedLogsListener(client: Client): void {
         ],
       );
 
-      await sendLogEmbed(guild, embed, 'moderation_timeout', [buildMemberCaseActionRow(targetId), buildMemberCaseActionRow(executorId)], moderatorTag);
+      await sendLogEmbed(guild, embed, 'moderation_timeout', [buildMemberCaseActionRow(targetId), buildMemberCaseActionRow(executorId)], { tag: moderatorTag, id: executorId });
     }
   });
 
@@ -1791,7 +1799,7 @@ export function registerAdvancedLogsListener(client: Client): void {
       .setTimestamp();
 
     if (badgeUrl) embed.setThumbnail(badgeUrl);
-    await sendLogEmbed(guild, embed, 'member_tag_update', [buildMemberCaseActionRow(payload.userId)], payload.userTag);
+    await sendLogEmbed(guild, embed, 'member_tag_update', [buildMemberCaseActionRow(payload.userId)], { tag: payload.userTag, id: payload.userId });
   });
 
   logger.success('Logs', 'Écouteur de logs avancés enregistré');
