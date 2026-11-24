@@ -145,12 +145,22 @@ export const RICH_FEATURE_PAGE_SEEDS: FeaturePageSeed[] =
     "position": 1,
     "content": {
       "fr": {
-        "name": "Détection des doubles comptes",
-        "title": "Bot Discord anti double compte : détecter les alts · Kotbo",
-        "description": "Kotbo repère les doubles comptes dès leur arrivée : profil, invitations, style d'écriture, horaires, vocal et appareil. Le staff tranche, la détection apprend.",
-        "h1": "Repérer les doubles comptes avant qu'ils contournent un ban",
-        "lead": "Un membre banni revient avec un autre compte ? Kotbo compare chaque nouvel arrivant aux membres déjà présents, et signale au staff les ressemblances qui comptent.",
+        "name": "Détecteur de doubles comptes",
+        "title": "Détecteur de doubles comptes Discord gratuit · Kotbo",
+        "description": "Détecteur de doubles comptes Discord gratuit : Kotbo repère les alts à l'arrivée (profil, invitations, écriture, horaires, appareil). Le staff tranche.",
+        "h1": "Détecteur de doubles comptes Discord : repère les alts avant qu'ils contournent un ban",
+        "lead": "Un membre banni revient avec un autre compte ? Kotbo est un alt checker qui tourne dans ton serveur : il compare chaque nouvel arrivant aux membres déjà présents et signale au staff les ressemblances qui comptent, avec les raisons du soupçon. Il est gratuit, et il ne bannit jamais tout seul.",
         "sections": [
+          {
+            "h2": "Comment fonctionne le détecteur d'alts",
+            "body": "Tu ajoutes Kotbo, tu actives la détection dans le dashboard, et elle tourne à chaque arrivée.",
+            "points": [
+              "Un membre arrive : Kotbo compare son compte à tous ceux déjà présents sur le serveur",
+              "Les indices de natures différentes s'additionnent en un niveau de risque : faible, moyen ou élevé",
+              "Le staff lit les indices, puis lie les comptes ou écarte l'alerte",
+              "Un scan peut aussi passer en revue les membres déjà là, pour repérer les alts arrivés avant l'activation"
+            ]
+          },
           {
             "h2": "Ce que Kotbo compare",
             "body": "Aucun indice ne suffit seul. Kotbo les combine, et des indices de natures différentes qui concordent pèsent bien plus lourd que deux indices du même genre.",
@@ -163,12 +173,26 @@ export const RICH_FEATURE_PAGE_SEEDS: FeaturePageSeed[] =
             ]
           },
           {
+            "h2": "Vérifier un alt par ID ou sur un site : ce qu'il faut savoir",
+            "body": "Kotbo n'est pas un site où l'on colle un ID pour connaître les alts de n'importe qui. Discord n'expose pas le lien entre deux comptes : un outil qui prétend le deviner depuis un ID seul ne peut pas le savoir. Kotbo travaille dans ton serveur, là où il peut comparer de vraies données : invitations, activité, vérification. Dans le dashboard, tu retrouves chaque détection par pseudo ou par ID."
+          },
+          {
             "h2": "Le staff tranche, la détection apprend",
             "body": "Kotbo ne bannit pas sur un soupçon. Il propose, et le staff lie les comptes ou écarte l'alerte. Chaque décision ajuste le poids des indices pour ton serveur, et un petit serveur profite de ce que les autres ont déjà appris."
           },
           {
             "h2": "Les comptes liés, au même endroit",
             "body": "Une fois liés, les comptes se consultent ensemble dans le dashboard, avec l'historique de chacun."
+          },
+          {
+            "h2": "Activer la détection en quelques minutes",
+            "body": "Tout se règle dans le dashboard.",
+            "points": [
+              "Ajoute Kotbo, puis ouvre la page Comptes suspects, dans la section Protection",
+              "Active la détection automatique et règle le seuil : plus il est bas, plus tu verras de cas à vérifier",
+              "Choisis si tu veux un rôle de validation et un rôle de sanction",
+              "En option, active la vérification par lien et l'enregistrement des messages pour des indices plus solides"
+            ]
           }
         ],
         "faq": [
@@ -177,24 +201,46 @@ export const RICH_FEATURE_PAGE_SEEDS: FeaturePageSeed[] =
             "a": "Discord ne le montre pas. Les indices sont ailleurs : même façon d'écrire, horaires qui ne se chevauchent jamais, même personne qui invite. Kotbo les relève à chaque arrivée et prévient le staff."
           },
           {
+            "q": "Peut-on vérifier les alts d'un utilisateur avec son ID ou sur un site ?",
+            "a": "Non, aucun site ne peut le faire de façon fiable : Discord n'expose pas le lien entre deux comptes. Kotbo compare les comptes à l'intérieur de ton serveur, avec les invitations, l'activité et la vérification, puis te montre les raisons de chaque soupçon."
+          },
+          {
             "q": "Faut-il une vérification pour que la détection marche ?",
             "a": "Non. Les indices de profil et d'invitation marchent sans rien demander aux membres, ceux de comportement dès que l'enregistrement des messages est activé. La vérification par lien ajoute les indices techniques : appareil et adresse IP."
           },
           {
-            "q": "Kotbo est-il une alternative à Double Counter ?",
-            "a": "Oui pour la détection des alts : Kotbo propose aussi une vérification par lien qui compare appareils et adresses IP, et y ajoute les indices de comportement. La détection fait partie d'un bot complet, avec la modération, les logs et les tickets."
+            "q": "Kotbo bannit-il les alts automatiquement ?",
+            "a": "Non. Un score élevé est un soupçon, pas une preuve. Kotbo signale, et c'est le staff qui confirme le lien ou rejette l'alerte."
+          },
+          {
+            "q": "Comment empêcher un membre banni de revenir avec un autre compte ?",
+            "a": "Aucun outil ne l'empêche à coup sûr. Kotbo repère les arrivées qui ressemblent à un compte déjà connu, et ton staff les vérifie avant qu'elles ne causent des dégâts."
+          },
+          {
+            "q": "Kotbo est-il une alternative à Double Counter ou Altdentifier ?",
+            "a": "Oui pour la détection des alts : Kotbo compare des indices de profil, d'invitation et de comportement, et propose aussi une vérification par lien qui compare appareils et adresses IP. La détection fait partie d'un bot complet, avec la modération, les logs et les tickets : pas besoin d'un bot de plus."
           }
         ]
       },
       "en": {
-        "name": "Alt account detection",
-        "title": "Discord alt detection bot and alt account checker · Kotbo",
-        "description": "Kotbo flags alt accounts as they join: profile, invites, writing style, activity hours, voice and device. Staff decides, and detection learns from it.",
-        "h1": "Catch alt accounts before they dodge a ban",
-        "lead": "A banned member comes back on another account? Kotbo compares every newcomer with the members already there, and flags the resemblances that matter to staff.",
+        "name": "Discord alt checker",
+        "title": "Free Discord Alt Checker: Detect Alt Accounts · Kotbo",
+        "description": "A free Discord alt checker that flags alt accounts when they join: profile, invites, writing style, activity hours and device. Staff decides, no auto-ban.",
+        "h1": "Free Discord alt checker: catch alt accounts before they dodge a ban",
+        "lead": "Looking for a Discord alt finder? Kotbo is an alt detector that runs inside your server. It compares every newcomer with the members already there and flags the likely alts to your staff, with the reasons behind each flag. It is free, and it never bans on its own.",
         "sections": [
           {
-            "h2": "What Kotbo compares",
+            "h2": "How the alt checker works",
+            "body": "Add Kotbo, turn detection on in the dashboard, and it runs on every join.",
+            "points": [
+              "A member joins: Kotbo compares the account with everyone already on your server",
+              "Clues of different kinds add up to a risk level: low, medium or high",
+              "Staff reads the clues, then links the accounts or dismisses the alert",
+              "A scan can also review the members already there, to catch alts that joined before you turned it on"
+            ]
+          },
+          {
+            "h2": "What the alt detector compares",
             "body": "No single clue is enough. Kotbo combines them, and clues of different kinds that agree weigh far more than two clues of the same kind.",
             "points": [
               "Profile: account age, similar username, same avatar",
@@ -205,12 +251,26 @@ export const RICH_FEATURE_PAGE_SEEDS: FeaturePageSeed[] =
             ]
           },
           {
+            "h2": "Checking alts by user ID or on a website: what to expect",
+            "body": "Kotbo is not a website where you paste a user ID to see anyone's alts. Discord doesn't expose the link between two accounts, so a tool that claims to guess it from an ID alone can't know. Kotbo works inside your server, where it can compare real data: invites, activity, verification. In the dashboard, you find each detection by name or ID."
+          },
+          {
             "h2": "Staff decides, detection learns",
             "body": "Kotbo never bans on a hunch. It suggests, and staff links the accounts or dismisses the alert. Each decision tunes the weight of each clue for your server, and small servers benefit from what the others have already learned."
           },
           {
             "h2": "Linked accounts in one place",
             "body": "Once linked, accounts can be reviewed together in the dashboard, with each one's history."
+          },
+          {
+            "h2": "Turn it on in a few minutes",
+            "body": "Everything is set in the dashboard.",
+            "points": [
+              "Add Kotbo, then open the Suspect accounts page, under Protection",
+              "Turn on automatic detection and set the threshold: the lower it is, the more cases you'll have to check",
+              "Pick a validation role and a sanction role if you want them",
+              "Optionally, turn on link verification and message logging for stronger clues"
+            ]
           }
         ],
         "faq": [
@@ -219,12 +279,24 @@ export const RICH_FEATURE_PAGE_SEEDS: FeaturePageSeed[] =
             "a": "Discord doesn't show it. The clues are elsewhere: the same way of writing, activity hours that never overlap, the same person inviting. Kotbo picks them up on every join and alerts staff."
           },
           {
+            "q": "Can I check someone's alts by user ID or on a website?",
+            "a": "Not reliably: Discord doesn't expose the link between two accounts, so no website can tell. Kotbo compares accounts inside your server, using invites, activity and verification, and shows you the reasons behind every suspicion."
+          },
+          {
             "q": "Does detection need a verification step?",
             "a": "No. Profile and invite clues work without asking members anything, behavior clues as soon as message logging is on. Link verification adds the technical clues: device and IP address."
           },
           {
-            "q": "Is Kotbo an alternative to Double Counter?",
-            "a": "For alt detection, yes: Kotbo also offers link verification that compares devices and IP addresses, and adds behavior clues on top. Detection is part of a full bot, with moderation, logs and tickets."
+            "q": "Does Kotbo ban alts automatically?",
+            "a": "No. A high score is a suspicion, not proof. Kotbo flags, and staff confirms the link or dismisses the alert."
+          },
+          {
+            "q": "How do I stop a banned member from coming back with another account?",
+            "a": "No tool stops it for sure. Kotbo spots arrivals that look like an account it already knows, and your staff can check them before they cause damage."
+          },
+          {
+            "q": "Is Kotbo an alternative to Double Counter or Altdentifier?",
+            "a": "For alt detection, yes: Kotbo compares profile, invite and behavior clues, and also offers link verification that compares devices and IP addresses. Detection is part of a full bot, with moderation, logs and tickets, so you don't need one more bot."
           }
         ]
       }
