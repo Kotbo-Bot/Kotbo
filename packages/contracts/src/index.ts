@@ -170,6 +170,7 @@ export {
   isOnboardingBacktrack,
   isPublicAcquisitionStep,
   normalizeAcquisitionSource,
+  normalizeInviteContent,
   sizeBucketFor,
 } from './types/acquisition.js';
 export type {

@@ -198,6 +198,23 @@ export function normalizeAcquisitionSource(value: unknown): AcquisitionSource {
 }
 
 /**
+ * Normalise l'identifiant d'un bouton d'invitation (`utm_content`).
+ *
+ * Les pages d'articles ou de fonctionnalités ajoutaient parfois un suffixe
+ * `-final` qui créait deux lignes distinctes dans `/admin/analytics` pour le
+ * même CTA. Le bouton dédié `'final'` de la landing est préservé tel quel.
+ */
+export function normalizeInviteContent(value: string | null | undefined): string | null {
+  if (typeof value !== 'string') return null;
+  let cleaned = value.trim().toLowerCase().slice(0, 64);
+  if (!cleaned) return null;
+  if (cleaned !== 'final' && cleaned.endsWith('-final')) {
+    cleaned = cleaned.slice(0, -'-final'.length);
+  }
+  return cleaned || null;
+}
+
+/**
  * Origine de l'activation d'un serveur, pour l'axe « qu'est-ce qui rapporte ».
  * Distincte de la provenance du clic : un serveur peut arriver depuis Google
  * puis être activé par un code partenaire.
