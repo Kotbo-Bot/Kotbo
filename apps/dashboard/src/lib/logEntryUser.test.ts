@@ -47,3 +47,10 @@ describe("membre d'une ligne de journal", () => {
     expect(logEntryUser(entry)).toEqual({ name: 'Modo', userId: ACTOR });
   });
 });
+
+describe('auteur des logs avancés', () => {
+  test('« pseudo (<@id>) » donne le pseudo seul et ouvre la bonne fiche', () => {
+    expect(logEntryUser({ user: 'klaynight (<@123456789012345678>)', details: 'Rôle @nouveau rôle' }))
+      .toEqual({ name: 'klaynight', userId: '123456789012345678' });
+  });
+});
