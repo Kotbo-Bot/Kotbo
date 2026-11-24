@@ -16,6 +16,7 @@
   import { m } from '../lib/i18n';
   import Papicon from '../lib/components/Papicon.svelte';
   import Skeleton from '../lib/components/Skeleton.svelte';
+  import PublicShell from '../lib/components/public/PublicShell.svelte';
   import { fetchPublicRpgClans } from '../lib/api';
 
   const { serverId }: { serverId: string } = $props();
@@ -146,17 +147,7 @@
   <title>{data?.guildName ? `${data.guildName} - ${m.rpg_public_title()}` : m.rpg_public_title()}</title>
 </svelte:head>
 
-<div class="min-h-screen bg-surface text-on-surface px-4 py-10 sm:px-8">
-  <div class="max-w-6xl mx-auto space-y-8">
-    <header class="flex items-center gap-4">
-      {#if data?.guildIcon}
-        <img src={data.guildIcon} alt="" class="w-14 h-14 rounded-2xl" />
-      {/if}
-      <div>
-        <h1 class="text-2xl font-semibold font-headline">{m.rpg_public_title()}</h1>
-        <p class="text-sm text-on-surface-variant">{data?.guildName ?? ''}</p>
-      </div>
-    </header>
+<PublicShell {serverId} subtitle={m.rpg_public_title()} icon="Sparkles" guildName={data?.guildName} guildIcon={data?.guildIcon} width="wide" live>
 
     {#if loading}
       <Skeleton height="240px" radius="1rem" />
@@ -172,7 +163,7 @@
       </p>
     {:else}
       <!-- Le raid en premier : c'est ce qui a une echeance, donc ce qu'on vient verifier. -->
-      <section class="bg-surface-container-low/40 border border-outline-variant/10 rounded-2xl p-6 space-y-2">
+      <section class="pub-card p-6 space-y-2">
         {#if raid?.status === 'OPEN'}
           <div class="flex flex-wrap items-baseline justify-between gap-2">
             <h2 class="text-lg font-semibold flex items-center gap-2">
@@ -221,7 +212,7 @@
           {#if (solo?.leaderboard ?? []).length === 0}
             <p class="text-sm text-on-surface-variant italic">{m.rpg_public_solo_empty()}</p>
           {:else}
-            <div class="bg-surface-container-low/40 border border-outline-variant/10 rounded-2xl divide-y divide-outline-variant/10 overflow-hidden">
+            <div class="pub-card divide-y divide-outline-variant/10 overflow-hidden">
               {#each solo.leaderboard as player (player.userId)}
                 <div class="flex items-center gap-3 px-5 py-3">
                   <span class="w-7 text-body-sm font-bold text-on-surface-variant tabular-nums">{player.rank}</span>
@@ -250,7 +241,7 @@
             </h2>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {#each solo.quests as quest (quest.id)}
-                <div class="bg-surface-container-low/40 border border-outline-variant/10 rounded-xl px-5 py-4">
+                <div class="pub-card px-5 py-4">
                   <div class="flex flex-wrap items-baseline justify-between gap-2">
                     <span class="text-body-sm font-semibold flex items-center gap-1.5">
                       <Papicon icon={questIcon(quest.objective)} size={14} class="text-on-surface-variant" />
@@ -276,7 +267,7 @@
           </h2>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {#each quests as quest (quest.id)}
-              <div class="bg-surface-container-low/40 border border-outline-variant/10 rounded-xl px-5 py-4">
+              <div class="pub-card px-5 py-4">
                 <div class="flex flex-wrap items-baseline justify-between gap-2">
                   <span class="text-body-sm font-semibold flex items-center gap-1.5">
                     <Papicon icon={questIcon(quest.objective)} size={14} class="text-on-surface-variant" />
@@ -312,7 +303,7 @@
 
         <div class="grid grid-cols-1 xl:grid-cols-2 gap-3">
         {#each rankedClans as clan, index (clan.id)}
-          <article class="bg-surface-container-low/40 border border-outline-variant/10 rounded-2xl p-5 space-y-3">
+          <article class="pub-card p-5 space-y-3">
             <div class="flex flex-wrap items-center justify-between gap-2">
               <div class="flex items-center gap-2 min-w-0">
                 <span class="text-2xs font-bold text-on-surface-variant/40 tabular-nums w-5 shrink-0">{index + 1}</span>
@@ -390,5 +381,4 @@
         {m.rpg_public_refresh()}
       </footer>
     {/if}
-  </div>
-</div>
+</PublicShell>

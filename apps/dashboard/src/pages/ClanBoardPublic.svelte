@@ -1,4 +1,5 @@
 <script lang="ts">
+  import PublicShell from '../lib/components/public/PublicShell.svelte';
   /**
    * Page publique unifiee des clans : classement de saison, RPG, paris et dettes.
    *
@@ -30,9 +31,7 @@
     EMPTY_CLAN_SEARCH,
     type RecentScore,
   } from '../lib/api';
-  import { m, dateLocale, getLocale, locales, type Locale } from '../lib/i18n';
-  import { themeStore } from '../lib/stores/theme.svelte';
-  import { userPrefs } from '../lib/stores/userPreferences.svelte';
+  import { m, dateLocale } from '../lib/i18n';
 
   import { errorMessage } from '@kotbo/shared';
   interface Props {
@@ -129,11 +128,6 @@
     return Math.max(0, clan.totalDebt - clan.totalEngaged);
   }
 
-  const currentLocale = $derived(getLocale());
-  function switchLocale(loc: Locale) {
-    if (loc === currentLocale) return;
-    userPrefs.set('language', loc);
-  }
 
   async function loadClans(initial = false) {
     try {
@@ -543,11 +537,11 @@
   }
 
   function getRankBadgeColor(rank: number | null) {
-    if (rank === null) return 'bg-slate-100 dark:bg-slate-800 text-slate-400';
+    if (rank === null) return 'bg-surface-container-high text-on-surface-variant';
     if (rank === 1) return 'bg-amber-500/10 text-amber-500 border border-amber-500/20';
-    if (rank === 2) return 'bg-slate-400/10 text-slate-400 border border-slate-400/20';
+    if (rank === 2) return 'bg-outline/10 text-on-surface-variant border border-outline-variant/20';
     if (rank === 3) return 'bg-amber-700/10 text-amber-700 border border-amber-700/20';
-    return 'bg-slate-100 dark:bg-slate-800 text-slate-500';
+    return 'bg-surface-container-high text-on-surface-variant';
   }
 
   // Replis : le detail reste sur la page, il ne prend la place qu'a la demande.
@@ -566,91 +560,30 @@
   <meta name="description" content={m.clan_public_meta_desc({ guildName })} />
 </svelte:head>
 
-<div class="min-h-screen whiteboard-container relative overflow-x-hidden py-12 px-4 sm:px-6 z-10">
-  <div class="relative z-10 w-full max-w-6xl mx-auto space-y-8 animate-in fade-in duration-300">
-
-    <header class="relative flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-[#111a2e] border border-slate-200 dark:border-slate-800 p-5 rounded-lg shadow-sm">
-      <div class="tape-accent"></div>
-
-      <div class="flex items-center gap-4">
-        {#if guildIcon}
-          <img src={guildIcon} alt="" class="w-11 h-11 rounded-lg object-cover border border-slate-200 dark:border-slate-800 shrink-0" />
-        {:else}
-          <div class="w-11 h-11 bg-slate-50 dark:bg-[#0c1322] border border-slate-200 dark:border-slate-800 rounded-lg flex items-center justify-center font-bold text-sm text-slate-800 dark:text-slate-100 shrink-0">
-            {guildName.slice(0, 2).toUpperCase()}
-          </div>
+<PublicShell {serverId} subtitle={clansEnabled ? m.clan_public_header_subtitle({ n: currentClanSeason }) : m.rpg_public_title()} icon={clansEnabled ? 'Shield' : 'Sparkles'} {guildName} {guildIcon} width="wide" live>
+  {#snippet meta()}
+    {#if clansEnabled && (seasonRangeLabel || seasonCountdown)}
+      <div class="flex flex-wrap items-center gap-2">
+        {#if seasonRangeLabel}
+          <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-surface-container border border-outline-variant text-2xs font-semibold text-on-surface-variant">
+            <Papicon icon="Calendar" size={12} />
+            {seasonRangeLabel}
+          </span>
         {/if}
-
-        <div>
-          <h1 class="text-lg font-extrabold tracking-tight text-slate-800 dark:text-slate-100">{guildName}</h1>
-          {#if clansEnabled}
-            <div class="flex items-center gap-1.5 text-slate-500 dark:text-slate-400 font-semibold text-xs">
-              <span class="text-amber-500"><Papicon icon="Shield" size={14} /></span>
-              <span>{m.clan_public_header_subtitle({ n: currentClanSeason })}</span>
-            </div>
-
-            {#if seasonRangeLabel || seasonCountdown}
-              <div class="flex flex-wrap items-center gap-2 mt-1.5">
-                {#if seasonRangeLabel}
-                  <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-slate-50 dark:bg-[#0c1322] border border-slate-200 dark:border-slate-800 text-2xs font-bold text-slate-500 dark:text-slate-400">
-                    <Papicon icon="Calendar" size={12} />
-                    {seasonRangeLabel}
-                  </span>
-                {/if}
-                {#if seasonCountdown}
-                  <span
-                    class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-2xs font-bold border {seasonCountdown.ended
-                      ? 'bg-slate-100 dark:bg-slate-800/60 border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400'
-                      : 'bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400'}"
-                  >
-                    <Papicon icon="Clock" size={12} />
-                    {seasonCountdown.text}
-                  </span>
-                {/if}
-              </div>
-            {/if}
-          {:else if rpgEnabled}
-            <div class="flex items-center gap-1.5 text-slate-500 dark:text-slate-400 font-semibold text-xs">
-              <span class="text-fuchsia-500"><Papicon icon="Sparkles" size={14} /></span>
-              <span>{m.rpg_public_title()}</span>
-            </div>
-          {/if}
-        </div>
+        {#if seasonCountdown}
+          <span
+            class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-2xs font-semibold border {seasonCountdown.ended
+              ? 'bg-surface-container border-outline-variant text-on-surface-variant'
+              : 'bg-warning/10 border-warning/25 text-on-warning-container'}"
+          >
+            <Papicon icon="Clock" size={12} />
+            {seasonCountdown.text}
+          </span>
+        {/if}
       </div>
+    {/if}
+  {/snippet}
 
-      <div class="flex items-center gap-3 self-start sm:self-auto">
-        <div class="flex items-center rounded-full border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#0c1322] p-0.5 text-xs font-semibold">
-          {#each locales as loc}
-            <button
-              type="button"
-              onclick={() => switchLocale(loc)}
-              class="px-2.5 py-1 rounded-full transition-colors cursor-pointer {loc === currentLocale
-                ? 'bg-white dark:bg-[#111a2e] text-slate-800 dark:text-slate-100 shadow-sm'
-                : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'}"
-            >{loc}</button>
-          {/each}
-        </div>
-
-        <button
-          type="button"
-          onclick={themeStore.toggle}
-          aria-label={m.navbar_change_theme()}
-          class="w-8 h-8 rounded-full border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#0c1322] flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-100 transition-colors cursor-pointer"
-        >
-          {#if themeStore.dark}
-            <Papicon icon="sun" size={15} class="text-amber-500" />
-          {:else}
-            <Papicon icon="moon" size={15} />
-          {/if}
-        </button>
-
-        <div class="relative flex items-center gap-2 px-3 py-1.5 rounded-full border border-emerald-500/20 dark:border-emerald-500/10 bg-emerald-500/5 text-emerald-600 dark:text-emerald-400 text-xs font-bold">
-          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span>
-          <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 absolute"></span>
-          <span class="ml-2.5 text-xs">{m.clan_public_live_badge()}</span>
-        </div>
-      </div>
-    </header>
 
     {#if loading}
       <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -658,34 +591,34 @@
         <Skeleton height="500px" radius="1.25rem" />
       </div>
     {:else if errorMsg}
-      <div class="bg-white dark:bg-[#111a2e] border border-red-200 dark:border-red-950 p-12 rounded-lg text-center space-y-4 shadow-sm">
+      <div class="bg-surface-container-low border border-red-200 dark:border-red-950 p-12 rounded-lg text-center space-y-4 shadow-sm">
         <div class="w-12 h-12 bg-red-50 dark:bg-red-950/35 rounded-full flex items-center justify-center text-red-500 dark:text-red-400 mx-auto">
           <Papicon icon="AlertTriangle" size={20} />
         </div>
         <div class="space-y-1.5">
-          <p class="text-slate-800 dark:text-slate-100 font-extrabold text-lg">{m.clan_public_error_title()}</p>
-          <p class="text-slate-500 dark:text-slate-400 text-sm max-w-md mx-auto">{errorMsg}</p>
+          <p class="text-on-surface font-extrabold text-lg">{m.clan_public_error_title()}</p>
+          <p class="text-on-surface-variant text-sm max-w-md mx-auto">{errorMsg}</p>
         </div>
       </div>
     {:else if !clansReachable && !rpgReachable}
       <!-- Les deux endpoints muets : c'est une panne, pas un reglage. -->
-      <div class="bg-white dark:bg-[#111a2e] border border-slate-200 dark:border-slate-800 p-16 rounded-lg text-center flex flex-col items-center space-y-4 shadow-sm">
-        <div class="w-14 h-14 rounded-full bg-slate-50 dark:bg-[#0c1322] flex items-center justify-center text-slate-400">
+      <div class="bg-surface-container-low border border-outline-variant p-16 rounded-lg text-center flex flex-col items-center space-y-4 shadow-sm">
+        <div class="w-14 h-14 rounded-full bg-surface-container flex items-center justify-center text-on-surface-variant">
           <Papicon icon="AlertTriangle" size={24} />
         </div>
-        <p class="text-slate-500 dark:text-slate-400 text-sm leading-relaxed max-w-sm">{m.rpg_public_unavailable()}</p>
+        <p class="text-on-surface-variant text-sm leading-relaxed max-w-sm">{m.rpg_public_unavailable()}</p>
       </div>
     {:else if openTabs.length === 0}
       <!-- Les deux racines coupees : ni clans, ni RPG. Un module eteint et un
            serveur injoignable ne sont pas la meme chose, mais ici les deux
            endpoints ont repondu - il n'y a simplement rien d'ouvert. -->
-      <div class="bg-white dark:bg-[#111a2e] border border-slate-200 dark:border-slate-800 p-16 rounded-lg text-center flex flex-col items-center space-y-4 shadow-sm">
-        <div class="w-14 h-14 rounded-full bg-slate-50 dark:bg-[#0c1322] flex items-center justify-center text-slate-400">
+      <div class="bg-surface-container-low border border-outline-variant p-16 rounded-lg text-center flex flex-col items-center space-y-4 shadow-sm">
+        <div class="w-14 h-14 rounded-full bg-surface-container flex items-center justify-center text-on-surface-variant">
           <Papicon icon="Lock" size={24} />
         </div>
         <div class="space-y-1.5 max-w-sm">
-          <h2 class="text-xl font-bold text-slate-800 dark:text-slate-100">{m.clan_board_empty_title()}</h2>
-          <p class="text-slate-500 dark:text-slate-400 text-sm leading-relaxed">{m.clan_board_empty_desc()}</p>
+          <h2 class="text-xl font-bold text-on-surface">{m.clan_board_empty_title()}</h2>
+          <p class="text-on-surface-variant text-sm leading-relaxed">{m.clan_board_empty_desc()}</p>
         </div>
       </div>
     {:else}
@@ -710,7 +643,7 @@
             <span class="min-w-0">
               {#if raid.status === 'OPEN' || raid.status === 'SCHEDULED'}
                 <span class="block font-extrabold text-[15.5px] text-slate-50 tracking-tight">{raid.bossName}</span>
-                <span class="block text-2xs text-slate-400">
+                <span class="block text-2xs text-on-surface-variant">
                   {#if raid.status === 'OPEN'}
                     {raidIsClanWide ? m.rpg_public_raid_open({ level: raid.bossLevel }) : m.rpg_public_raid_guild_mode({ level: raid.bossLevel })}
                   {:else}
@@ -719,7 +652,7 @@
                 </span>
               {:else}
                 <span class="block font-extrabold text-[15.5px] text-slate-50 tracking-tight">{m.rpg_public_raid_none_title()}</span>
-                <span class="block text-2xs text-slate-400">{m.rpg_public_raid_none()}</span>
+                <span class="block text-2xs text-on-surface-variant">{m.rpg_public_raid_none()}</span>
               {/if}
             </span>
 
@@ -731,7 +664,7 @@
                     : m.rpg_public_raid_opens({ time: countdown(raid.opensAt) })}
                 </span>
               {/if}
-              <span class="text-slate-500 transition-transform duration-200 {raidOpen ? 'rotate-180' : ''}">
+              <span class="text-on-surface-variant transition-transform duration-200 {raidOpen ? 'rotate-180' : ''}">
                 <Papicon icon="ChevronDown" size={16} />
               </span>
             </span>
@@ -748,24 +681,24 @@
               <div class="flex flex-wrap gap-6">
                 {#if raid.status === 'OPEN' && raidIsClanWide}
                   <div>
-                    <span class="block text-xs font-semibold text-slate-500">{m.rpg_public_clans_title()}</span>
+                    <span class="block text-xs font-semibold text-on-surface-variant">{m.rpg_public_clans_title()}</span>
                     <b class="font-mono text-[16px] text-slate-100">{m.rpg_public_summary({ engaged: clansEngaged, total: rpgClans.length })}</b>
                   </div>
                   {#if bossesDown > 0}
                     <div>
-                      <span class="block text-xs font-semibold text-slate-500">{m.rpg_public_raid_bar()}</span>
+                      <span class="block text-xs font-semibold text-on-surface-variant">{m.rpg_public_raid_bar()}</span>
                       <b class="font-mono text-[16px] text-emerald-300">{m.rpg_public_summary_bosses({ count: bossesDown })}</b>
                     </div>
                   {/if}
                 {/if}
                 {#if raid.status === 'OPEN'}
                   <div>
-                    <span class="block text-xs font-semibold text-slate-500">{m.clan_public_col_date()}</span>
+                    <span class="block text-xs font-semibold text-on-surface-variant">{m.clan_public_col_date()}</span>
                     <b class="font-mono text-[16px] text-slate-100">{new Date(raid.opensAt).toLocaleString(dateLocale(), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</b>
                   </div>
                 {/if}
               </div>
-              <p class="text-xs text-slate-400 leading-relaxed border-l-2 border-[#d9b45a] pl-3">
+              <p class="text-xs text-on-surface-variant leading-relaxed border-l-2 border-[#d9b45a] pl-3">
                 {raidIsClanWide ? m.rpg_public_raid_open({ level: raid.bossLevel }) : m.rpg_public_raid_guild_mode({ level: raid.bossLevel })}
               </p>
             </div>
@@ -784,12 +717,12 @@
                   type="button"
                   onclick={() => activeTab = tab}
                   class="px-5 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest transition-all cursor-pointer border {activeTab === tab
-                    ? (tab === 'bets' ? 'bg-indigo-500/10 border-indigo-500/40 text-indigo-600 dark:text-indigo-400'
+                    ? (tab === 'bets' ? 'bg-primary/10 border-primary/40 text-primary'
                       : tab === 'debts' ? 'bg-rose-500/10 border-rose-500/40 text-rose-600 dark:text-rose-400'
                       : tab === 'solo' ? 'bg-fuchsia-500/10 border-fuchsia-500/40 text-fuchsia-600 dark:text-fuchsia-400'
                       : tab === 'raid' ? 'bg-red-500/10 border-red-500/40 text-red-600 dark:text-red-400'
                       : 'bg-amber-500/10 border-amber-500/40 text-amber-600 dark:text-amber-400')
-                    : 'bg-white dark:bg-[#111a2e] border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'}"
+                    : 'bg-surface-container-low border-outline-variant text-on-surface-variant hover:text-on-surface'}"
                 >
                   {#if tab === 'raid'}{m.clan_board_tab_raid()}
                   {:else if tab === 'ranking'}{m.clan_public_tab_ranking()}
@@ -803,21 +736,21 @@
 
           {#if clansEnabled || rpgEnabled}
             <div class="relative flex-1 min-w-[220px] group">
-              <span class="absolute inset-y-0 left-4 flex items-center text-slate-400 group-focus-within:text-slate-500 transition-colors">
+              <span class="absolute inset-y-0 left-4 flex items-center text-on-surface-variant group-focus-within:text-on-surface-variant transition-colors">
                 <Papicon icon="Search" size={16} />
               </span>
               <input aria-label={m.clan_public_search_placeholder()}
                 type="text"
                 bind:value={searchQuery}
                 placeholder={m.clan_public_search_placeholder()}
-                class="w-full pl-11 pr-11 py-3 bg-white dark:bg-[#111a2e] border border-slate-200 dark:border-slate-800 rounded-lg text-sm text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500/50 shadow-sm transition-all"
+                class="w-full pl-11 pr-11 py-3 bg-surface-container-low border border-field-border rounded-lg text-sm text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500/50 shadow-sm transition-all"
               />
               {#if searchQuery}
                 <button
                   type="button"
                   onclick={() => searchQuery = ''}
                   aria-label={m.clan_public_search_placeholder()}
-                  class="absolute right-3.5 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-slate-200 dark:bg-slate-700 hover:bg-red-100 dark:hover:bg-red-950/45 text-slate-500 dark:text-slate-400 flex items-center justify-center transition-all cursor-pointer"
+                  class="absolute right-3.5 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-surface-container-highest hover:bg-red-100 dark:hover:bg-red-950/45 text-on-surface-variant flex items-center justify-center transition-all cursor-pointer"
                 ><Papicon icon="x" size={11} /></button>
               {/if}
             </div>
@@ -841,18 +774,17 @@
                    pour garder ses angles arrondis sous les panneaux replies, et
                    rognait donc aussi le morceau qui doit deborder en haut. -->
               <div class="relative">
-                <div class="tape-accent"></div>
-                <article class="clean-card bg-white dark:bg-[#111a2e] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
+                <article class="pub-card bg-surface-container-low border border-outline-variant rounded-2xl shadow-sm overflow-hidden">
                 <div class="flex items-center gap-3 flex-wrap px-5 pt-4 pb-3">
-                  <span class="w-[26px] h-[26px] rounded-lg shrink-0 grid place-items-center font-mono text-xs font-bold {index === 0 ? 'bg-amber-500/10 text-amber-500' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}">{index + 1}</span>
+                  <span class="w-[26px] h-[26px] rounded-lg shrink-0 grid place-items-center font-mono text-xs font-bold {index === 0 ? 'bg-amber-500/10 text-amber-500' : 'bg-surface-container-high text-on-surface-variant'}">{index + 1}</span>
                   <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background: {clan.roleColor || '#94a3b8'}"></span>
                   <div class="min-w-0">
-                    <h2 class="text-base font-extrabold text-slate-800 dark:text-slate-100 tracking-tight truncate">{clan.name}</h2>
-                    <p class="text-2xs text-slate-400 dark:text-slate-500">{m.clan_public_member_count({ n: clan.memberCount })}</p>
+                    <h2 class="text-base font-extrabold text-on-surface tracking-tight truncate">{clan.name}</h2>
+                    <p class="text-2xs text-on-surface-variant">{m.clan_public_member_count({ n: clan.memberCount })}</p>
                   </div>
                   <div class="ml-auto text-right">
-                    <span class="block text-xs font-semibold text-slate-400">{m.clan_public_season_xp_label()}</span>
-                    <b class="font-mono text-[17px] font-bold text-slate-800 dark:text-slate-100 tabular-nums">{clan.totalXp.toLocaleString(dateLocale())}</b>
+                    <span class="block text-xs font-semibold text-on-surface-variant">{m.clan_public_season_xp_label()}</span>
+                    <b class="font-mono text-[17px] font-bold text-on-surface tabular-nums">{clan.totalXp.toLocaleString(dateLocale())}</b>
                     {#if debtOwed > 0}
                       <span
                         class="block font-mono text-2xs font-semibold text-rose-500 mt-0.5"
@@ -867,11 +799,11 @@
                     {#if showClanRaidBar}
                       <div class="space-y-1.5">
                         <div class="flex flex-wrap items-baseline gap-2 text-xs">
-                          <span class="font-semibold text-slate-700 dark:text-slate-200 inline-flex items-center gap-1.5">
+                          <span class="font-semibold text-on-surface inline-flex items-center gap-1.5">
                             <span class="{rpg.raid?.defeated ? 'text-emerald-500' : 'text-rose-500'}"><Papicon icon="Crown" size={12} /></span>
                             {raid.bossName}
                           </span>
-                          <span class="ml-auto font-mono text-2xs text-slate-500 dark:text-slate-400 tabular-nums">
+                          <span class="ml-auto font-mono text-2xs text-on-surface-variant tabular-nums">
                             {#if !rpg.raid}
                               {m.rpg_public_raid_not_engaged()}
                             {:else if rpg.raid.defeated}
@@ -881,7 +813,7 @@
                             {/if}
                           </span>
                         </div>
-                        <div class="h-[7px] rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
+                        <div class="h-[7px] rounded-full bg-surface-container-highest overflow-hidden">
                           <!-- La barre montre les points de vie restants du boss, pas
                                l'avancement : une barre qui se vide se lit comme un boss
                                qui tombe. -->
@@ -899,32 +831,32 @@
                         {@const key = `${clan.id}:${progress.questId}`}
                         <div class="space-y-1.5">
                           <div class="flex flex-wrap items-baseline gap-2 text-xs">
-                            <span class="font-semibold text-slate-700 dark:text-slate-200 inline-flex items-center gap-1.5 min-w-0">
-                              <span class="text-slate-400"><Papicon icon={questIcon(quest.objective)} size={12} /></span>
+                            <span class="font-semibold text-on-surface inline-flex items-center gap-1.5 min-w-0">
+                              <span class="text-on-surface-variant"><Papicon icon={questIcon(quest.objective)} size={12} /></span>
                               <span class="truncate">{quest.name}</span>
                               <button
                                 type="button"
                                 onclick={() => toggle(openQuests, key)}
                                 aria-expanded={openQuests[key] === true}
                                 aria-label={m.clan_board_quest_detail()}
-                                class="w-[15px] h-[15px] shrink-0 rounded-full grid place-items-center text-2xs font-bold leading-none bg-slate-100 dark:bg-slate-800 text-slate-500 hover:bg-sky-500/10 hover:text-sky-500 transition-colors cursor-pointer"
+                                class="w-[15px] h-[15px] shrink-0 rounded-full grid place-items-center text-2xs font-bold leading-none bg-surface-container-high text-on-surface-variant hover:bg-sky-500/10 hover:text-sky-500 transition-colors cursor-pointer"
                               >i</button>
                             </span>
-                            <span class="ml-auto font-mono text-2xs text-slate-500 dark:text-slate-400 tabular-nums whitespace-nowrap">
+                            <span class="ml-auto font-mono text-2xs text-on-surface-variant tabular-nums whitespace-nowrap">
                               {progress.current.toLocaleString(dateLocale())} / {progress.target.toLocaleString(dateLocale())}
                               {#if progress.completed}<span class="text-emerald-500 font-semibold ml-1">{m.rpg_public_quest_done()}</span>{/if}
                             </span>
                           </div>
-                          <div class="h-[7px] rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
+                          <div class="h-[7px] rounded-full bg-surface-container-highest overflow-hidden">
                             <div
                               class="h-full rounded-full transition-all duration-500 {progress.completed ? 'bg-emerald-500' : 'bg-sky-500'}"
                               style="width: {percent(progress.current, progress.target)}%"
                             ></div>
                           </div>
                           {#if openQuests[key]}
-                            <div class="mt-1.5 px-3 py-2.5 rounded-lg bg-slate-50 dark:bg-[#0c1322] border border-slate-100 dark:border-slate-800 text-2xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                            <div class="mt-1.5 px-3 py-2.5 rounded-lg bg-surface-container border border-outline-variant/50 text-2xs text-on-surface-variant leading-relaxed">
                               {quest.description}
-                              <span class="block mt-1 font-mono text-2xs text-slate-400 dark:text-slate-500">
+                              <span class="block mt-1 font-mono text-2xs text-on-surface-variant">
                                 {m.eco_quest_goal({ target: quest.target, objective: objectiveLabel(quest.objective), hours: quest.windowHours })}
                                 &middot; {m.rpg_public_quest_resets({ time: countdown(quest.windowEndsAt) })}
                               </span>
@@ -941,7 +873,7 @@
                     type="button"
                     onclick={() => toggle(openMembers, clan.id)}
                     aria-expanded={openMembers[clan.id] === true}
-                    class="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-50 dark:bg-[#0c1322] border border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-colors cursor-pointer inline-flex items-center gap-1.5"
+                    class="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-surface-container border border-outline-variant text-on-surface-variant hover:text-on-surface transition-colors cursor-pointer inline-flex items-center gap-1.5"
                   >
                     {m.clan_board_fold_members()}
                     <span class="font-mono opacity-70">{clan.memberCount}</span>
@@ -952,7 +884,7 @@
                       onclick={() => toggle(openDebtors, clan.id)}
                       aria-expanded={openDebtors[clan.id] === true}
                       disabled={debtOwed === 0}
-                      class="px-2.5 py-1.5 rounded-lg text-2xs font-bold uppercase tracking-wider bg-slate-50 dark:bg-[#0c1322] border border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 transition-colors inline-flex items-center gap-1.5 {debtOwed === 0 ? 'opacity-50 cursor-default' : 'hover:text-slate-800 dark:hover:text-slate-200 cursor-pointer'}"
+                      class="px-2.5 py-1.5 rounded-lg text-2xs font-bold uppercase tracking-wider bg-surface-container border border-outline-variant text-on-surface-variant transition-colors inline-flex items-center gap-1.5 {debtOwed === 0 ? 'opacity-50 cursor-default' : 'hover:text-on-surface cursor-pointer'}"
                     >
                       {#if debtOwed === 0}
                         {m.clan_board_fold_no_debt()}
@@ -965,24 +897,24 @@
                 </div>
 
                 {#if openMembers[clan.id]}
-                  <div class="border-t border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-[#0c1322]">
+                  <div class="border-t border-outline-variant/50 bg-surface-container/60">
                     {#if searching && pList.length === 0}
-                      <p class="px-5 py-4 text-xs text-slate-400 italic">{m.clan_public_searching()}</p>
+                      <p class="px-5 py-4 text-xs text-on-surface-variant italic">{m.clan_public_searching()}</p>
                     {:else if pList.length === 0}
-                      <p class="px-5 py-4 text-xs text-slate-400 italic">{m.clan_public_no_members_found()}</p>
+                      <p class="px-5 py-4 text-xs text-on-surface-variant italic">{m.clan_public_no_members_found()}</p>
                     {:else}
                       {#each pList as p (p.userId)}
-                        <div class="flex items-center gap-2.5 px-5 py-2 border-b border-slate-100 dark:border-slate-800 last:border-0">
+                        <div class="flex items-center gap-2.5 px-5 py-2 border-b border-outline-variant/50 last:border-0">
                           <span class="w-6 h-6 shrink-0 rounded-md grid place-items-center text-[10px] font-mono font-bold {getRankBadgeColor(p.rank)}">{p.rank ?? '-'}</span>
                           {#if p.avatarUrl}
                             <img src={p.avatarUrl} alt="" class="w-6 h-6 rounded-full shrink-0" />
                           {:else}
-                            <span class="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-800 shrink-0"></span>
+                            <span class="w-6 h-6 rounded-full bg-surface-container-highest shrink-0"></span>
                           {/if}
-                          <span class="text-body-sm font-medium text-slate-700 dark:text-slate-200 truncate">{p.displayName}</span>
-                          <span class="ml-auto font-mono text-xs text-slate-500 dark:text-slate-400 tabular-nums shrink-0">
+                          <span class="text-body-sm font-medium text-on-surface truncate">{p.displayName}</span>
+                          <span class="ml-auto font-mono text-xs text-on-surface-variant tabular-nums shrink-0">
                             {#if p.rank === null}
-                              <span class="text-slate-400 dark:text-slate-500 italic font-sans text-2xs">{m.clan_public_no_points_yet()}</span>
+                              <span class="text-on-surface-variant italic font-sans text-2xs">{m.clan_public_no_points_yet()}</span>
                             {:else}
                               {p.xp.toLocaleString(dateLocale())}
                             {/if}
@@ -990,7 +922,7 @@
                         </div>
                       {/each}
                       {#if hiddenCount > 0}
-                        <p class="px-5 py-2 text-2xs text-slate-400 italic">{m.clan_public_more_results({ n: hiddenCount })}</p>
+                        <p class="px-5 py-2 text-2xs text-on-surface-variant italic">{m.clan_public_more_results({ n: hiddenCount })}</p>
                       {/if}
                     {/if}
                   </div>
@@ -998,19 +930,19 @@
 
                 {#if openDebtors[clan.id] && debts}
                   {@const clanDebt = debts.clans.find((entry) => entry.id === clan.id)}
-                  <div class="border-t border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-[#0c1322]">
+                  <div class="border-t border-outline-variant/50 bg-surface-container/60">
                     {#each clanDebt?.debtors ?? [] as debtor (debtor.userId)}
-                      <div class="flex items-center gap-2.5 px-5 py-2 border-b border-slate-100 dark:border-slate-800 last:border-0">
+                      <div class="flex items-center gap-2.5 px-5 py-2 border-b border-outline-variant/50 last:border-0">
                         {#if debtor.avatarUrl}
                           <img src={debtor.avatarUrl} alt="" class="w-6 h-6 rounded-full shrink-0" />
                         {:else}
-                          <span class="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-800 shrink-0"></span>
+                          <span class="w-6 h-6 rounded-full bg-surface-container-highest shrink-0"></span>
                         {/if}
-                        <span class="text-body-sm font-medium text-slate-700 dark:text-slate-200 truncate">{debtor.displayName}</span>
+                        <span class="text-body-sm font-medium text-on-surface truncate">{debtor.displayName}</span>
                         <span class="ml-auto font-mono text-xs text-rose-500 tabular-nums shrink-0">
                           -{debtor.amount.toLocaleString(dateLocale())}
                           {#if debtor.engaged > 0}
-                            <span class="block text-2xs text-slate-400 dark:text-slate-500 font-sans">{m.clan_public_debt_engaged_hint({ amount: debtor.engaged.toLocaleString(dateLocale()) })}</span>
+                            <span class="block text-2xs text-on-surface-variant font-sans">{m.clan_public_debt_engaged_hint({ amount: debtor.engaged.toLocaleString(dateLocale()) })}</span>
                           {/if}
                         </span>
                       </div>
@@ -1020,7 +952,7 @@
                 </article>
               </div>
             {:else}
-              <p class="text-sm text-slate-500 dark:text-slate-400 italic">{m.rpg_public_no_clan()}</p>
+              <p class="text-sm text-on-surface-variant italic">{m.rpg_public_no_clan()}</p>
             {/each}
           </div>
 
@@ -1032,32 +964,32 @@
             colonnes, la carte reprend sa hauteur naturelle.
           -->
           <div class="min-w-0 lg:relative lg:h-full">
-          <section class="clean-card bg-white dark:bg-[#111a2e] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden flex flex-col min-h-0 lg:absolute lg:inset-0">
-            <div class="px-5 py-3.5 border-b border-slate-100 dark:border-slate-800">
-              <h2 class="text-xs font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-2">
+          <section class="pub-card bg-surface-container-low border border-outline-variant rounded-2xl shadow-sm overflow-hidden flex flex-col min-h-0 lg:absolute lg:inset-0">
+            <div class="px-5 py-3.5 border-b border-outline-variant/50">
+              <h2 class="text-xs font-semibold text-on-surface flex items-center gap-2">
                 <Papicon icon="Activity" size={14} />
                 {m.clan_public_recent_scores_title()}
               </h2>
-              <p class="text-2xs text-slate-400 dark:text-slate-500 mt-1">{m.clan_public_recent_scores_desc()}</p>
+              <p class="text-2xs text-on-surface-variant mt-1">{m.clan_public_recent_scores_desc()}</p>
             </div>
 
             {#if displayedScores.length === 0}
-              <p class="flex-1 grid place-items-center px-5 py-8 text-center text-sm text-slate-400 italic">{m.clan_public_no_recent_scores()}</p>
+              <p class="flex-1 grid place-items-center px-5 py-8 text-center text-sm text-on-surface-variant italic">{m.clan_public_no_recent_scores()}</p>
             {:else}
               <div class="flex-1 min-h-0 overflow-y-auto">
                 {#each displayedScores as s (s.id)}
-                  <div class="flex items-start gap-2.5 px-5 py-2.5 border-b border-slate-100 dark:border-slate-800 last:border-0">
+                  <div class="flex items-start gap-2.5 px-5 py-2.5 border-b border-outline-variant/50 last:border-0">
                     <div class="min-w-0 flex-1 space-y-1">
-                      <div class="flex items-center gap-2 text-body-sm font-semibold text-slate-700 dark:text-slate-200">
+                      <div class="flex items-center gap-2 text-body-sm font-semibold text-on-surface">
                         {#if s.isClan}
                           <span class="w-2 h-2 rounded-full shrink-0" style="background: {s.clanColor || '#94a3b8'}"></span>
                           <span class="truncate">{s.clanName ?? s.displayName}</span>
-                          <span class="text-2xs font-mono font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 shrink-0">{m.clan_public_clan_badge()}</span>
+                          <span class="text-2xs font-mono font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface-variant shrink-0">{m.clan_public_clan_badge()}</span>
                         {:else}
                           {#if s.avatarUrl}
                             <img src={s.avatarUrl} alt="" class="w-5 h-5 rounded-full shrink-0" />
                           {:else}
-                            <span class="w-5 h-5 rounded-full bg-slate-200 dark:bg-slate-800 shrink-0"></span>
+                            <span class="w-5 h-5 rounded-full bg-surface-container-highest shrink-0"></span>
                           {/if}
                           <span class="truncate">{s.displayName}</span>
                         {/if}
@@ -1067,13 +999,13 @@
                         {:else if s.source === 'BOOST'}
                           <span class="text-2xs font-mono font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-pink-500/10 text-pink-500 shrink-0">{m.clan_public_source_boost()}</span>
                         {:else if s.source === 'BET'}
-                          <span class="text-2xs font-mono font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-500 shrink-0">{m.clan_public_source_bet()}</span>
+                          <span class="text-2xs font-mono font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-primary/10 text-primary shrink-0">{m.clan_public_source_bet()}</span>
                         {:else if s.source === 'BET_TOP1'}
-                          <span class="text-2xs font-mono font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-500 shrink-0">{m.clan_public_source_bet_top1()}</span>
+                          <span class="text-2xs font-mono font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-primary/10 text-primary shrink-0">{m.clan_public_source_bet_top1()}</span>
                         {:else if s.source === 'BET_TOP2'}
-                          <span class="text-2xs font-mono font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-500 shrink-0">{m.clan_public_source_bet_top2()}</span>
+                          <span class="text-2xs font-mono font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-primary/10 text-primary shrink-0">{m.clan_public_source_bet_top2()}</span>
                         {:else if s.source === 'BET_TOP3'}
-                          <span class="text-2xs font-mono font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-500 shrink-0">{m.clan_public_source_bet_top3()}</span>
+                          <span class="text-2xs font-mono font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-primary/10 text-primary shrink-0">{m.clan_public_source_bet_top3()}</span>
                         {:else if s.source === 'DEBT'}
                           <span class="text-2xs font-mono font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-500 shrink-0">{m.clan_public_source_debt()}</span>
                         {:else if s.source === 'DROP'}
@@ -1105,7 +1037,7 @@
                           <span class="text-2xs font-mono font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-500 shrink-0">{m.clan_public_source_xp()}</span>
                         {/if}
                       </div>
-                      <div class="font-mono text-2xs text-slate-400 dark:text-slate-500">
+                      <div class="font-mono text-2xs text-on-surface-variant">
                         {formatRelativeTime(s.createdAt)}
                         {#if !s.isClan && s.clanName}&middot; {s.clanName}{/if}
                       </div>
@@ -1113,7 +1045,7 @@
                     <div class="font-mono text-body-sm font-bold text-right shrink-0 tabular-nums {s.amount < 0 ? 'text-rose-500' : 'text-emerald-500'}">
                       {s.amount > 0 ? '+' : ''}{s.amount.toLocaleString(dateLocale())}
                       {#if s.credit > 0}
-                        <span class="block text-2xs font-sans font-medium text-slate-400 dark:text-slate-500" title={m.clan_public_credit_share_desc()}>
+                        <span class="block text-2xs font-sans font-medium text-on-surface-variant" title={m.clan_public_credit_share_desc()}>
                           {m.clan_public_credit_share({ amount: s.credit.toLocaleString(dateLocale()) })}
                         </span>
                       {/if}
@@ -1128,25 +1060,24 @@
 
       {:else if activeTab === 'bets'}
         {#if searching}
-          <p class="text-center text-sm text-slate-400 italic py-8">{m.clan_public_searching()}</p>
+          <p class="text-center text-sm text-on-surface-variant italic py-8">{m.clan_public_searching()}</p>
         {:else if betSearchEmpty}
-          <p class="text-center text-sm text-slate-400 italic py-8">{m.clan_public_search_no_match()}</p>
+          <p class="text-center text-sm text-on-surface-variant italic py-8">{m.clan_public_search_no_match()}</p>
         {:else if displayedBettors.length === 0 && displayedBets.length === 0}
-          <p class="text-center text-sm text-slate-400 italic py-8">{m.clan_public_bets_empty()}</p>
+          <p class="text-center text-sm text-on-surface-variant italic py-8">{m.clan_public_bets_empty()}</p>
         {:else}
           <div class="space-y-6 relative z-10">
             {#if displayedBettors.length > 0}
               <div class="relative">
-                <div class="tape-accent"></div>
-                <section class="clean-card bg-white dark:bg-[#111a2e] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
-                <div class="px-6 py-4 border-b border-slate-100 dark:border-slate-800">
-                  <h2 class="text-sm font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-2">
+                <section class="pub-card bg-surface-container-low border border-outline-variant rounded-2xl shadow-sm overflow-hidden">
+                <div class="px-6 py-4 border-b border-outline-variant/50">
+                  <h2 class="text-sm font-semibold text-on-surface flex items-center gap-2">
                     <Papicon icon="Trophy" size={14} />
                     {m.clan_public_bettors_title()}
                   </h2>
-                  <p class="text-2xs text-slate-400 dark:text-slate-500 mt-1">{m.clan_public_bettors_desc()}</p>
+                  <p class="text-2xs text-on-surface-variant mt-1">{m.clan_public_bettors_desc()}</p>
                   {#if showBettorRewards && bettorRewards}
-                    <p class="text-2xs text-slate-400 dark:text-slate-500 mt-1.5 flex flex-wrap gap-x-2">
+                    <p class="text-2xs text-on-surface-variant mt-1.5 flex flex-wrap gap-x-2">
                       <span>{m.clan_public_bettors_rewards({
                         top1: bettorRewards.top1.toLocaleString(dateLocale()),
                         top2: bettorRewards.top2.toLocaleString(dateLocale()),
@@ -1161,7 +1092,7 @@
                 <div class="overflow-x-auto">
                   <table class="w-full text-sm">
                     <thead>
-                      <tr class="text-2xs font-mono font-semibold uppercase tracking-[0.12em] text-slate-400 border-b border-slate-100 dark:border-slate-800">
+                      <tr class="text-2xs font-mono font-semibold uppercase tracking-[0.12em] text-on-surface-variant border-b border-outline-variant/50">
                         <th class="px-6 py-3 text-left">{m.clan_public_col_user()}</th>
                         <th class="px-6 py-3 text-center">{m.clan_public_bettors_col_record()}</th>
                         <th class="px-6 py-3 text-center">{m.clan_public_bettors_col_streak()}</th>
@@ -1173,23 +1104,23 @@
                     </thead>
                     <tbody>
                       {#each displayedBettors as bettor (bettor.userId)}
-                        <tr class="border-b border-slate-100 dark:border-slate-800 last:border-0">
+                        <tr class="border-b border-outline-variant/50 last:border-0">
                           <td class="px-6 py-3">
                             <div class="flex items-center gap-2.5">
                               {#if bettor.avatarUrl}
                                 <img src={bettor.avatarUrl} alt="" class="w-6 h-6 rounded-full shrink-0" />
                               {:else}
-                                <span class="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-800 shrink-0"></span>
+                                <span class="w-6 h-6 rounded-full bg-surface-container-highest shrink-0"></span>
                               {/if}
-                              <span class="font-semibold text-slate-700 dark:text-slate-200 truncate">{bettor.displayName}</span>
+                              <span class="font-semibold text-on-surface truncate">{bettor.displayName}</span>
                             </div>
                           </td>
-                          <td class="px-6 py-3 text-center font-mono text-slate-600 dark:text-slate-300 tabular-nums">{bettor.wins} - {bettor.losses}</td>
+                          <td class="px-6 py-3 text-center font-mono text-on-surface-variant tabular-nums">{bettor.wins} - {bettor.losses}</td>
                           <td class="px-6 py-3 text-center">
                             {#if bettor.bestStreak > 1}
                               <span class="font-mono text-2xs px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500 font-bold">{m.clan_public_bettors_streak({ n: bettor.bestStreak })}</span>
                             {:else}
-                              <span class="font-mono text-slate-400">{bettor.bestStreak}</span>
+                              <span class="font-mono text-on-surface-variant">{bettor.bestStreak}</span>
                             {/if}
                           </td>
                           <td class="px-6 py-3 text-right font-mono tabular-nums font-semibold {bettor.netGain < 0 ? 'text-rose-500' : 'text-emerald-500'}">
@@ -1209,7 +1140,7 @@
                                   {m.clan_public_bettors_reward_amount({ amount: bettor.reward.toLocaleString(dateLocale()) })}
                                 </span>
                               {:else}
-                                <span class="text-slate-300 dark:text-slate-600">-</span>
+                                <span class="text-on-surface-variant">-</span>
                               {/if}
                             </td>
                           {/if}
@@ -1223,18 +1154,18 @@
             {/if}
 
             {#if displayedBets.length > 0}
-              <section class="clean-card bg-white dark:bg-[#111a2e] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
-                <div class="px-6 py-4 border-b border-slate-100 dark:border-slate-800">
-                  <h2 class="text-sm font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-2">
+              <section class="pub-card bg-surface-container-low border border-outline-variant rounded-2xl shadow-sm overflow-hidden">
+                <div class="px-6 py-4 border-b border-outline-variant/50">
+                  <h2 class="text-sm font-semibold text-on-surface flex items-center gap-2">
                     <Papicon icon="Sparkles" size={14} />
                     {m.clan_public_bets_title()}
                   </h2>
-                  <p class="text-2xs text-slate-400 dark:text-slate-500 mt-1">{m.clan_public_bets_desc()}</p>
+                  <p class="text-2xs text-on-surface-variant mt-1">{m.clan_public_bets_desc()}</p>
                 </div>
                 {#each displayedBets as bet (bet.id)}
-                  <div class="px-6 py-3.5 border-b border-slate-100 dark:border-slate-800 last:border-0 space-y-1">
-                    <p class="text-body-sm font-semibold text-slate-700 dark:text-slate-200">{bet.subject}</p>
-                    <p class="text-2xs text-slate-500 dark:text-slate-400">
+                  <div class="px-6 py-3.5 border-b border-outline-variant/50 last:border-0 space-y-1">
+                    <p class="text-body-sm font-semibold text-on-surface">{bet.subject}</p>
+                    <p class="text-2xs text-on-surface-variant">
                       {formatRelativeTime(bet.resolvedAt)}
                       {#if bet.winningSideLabel}
                         &middot; <span class="text-emerald-500 font-semibold">{bet.winningSideLabel}</span>
@@ -1255,97 +1186,97 @@
       {:else if activeTab === 'debts'}
         <div class="space-y-6 relative z-10">
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div class="clean-card bg-white dark:bg-[#111a2e] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm px-5 py-4">
-              <p class="text-xs font-semibold text-slate-400">{m.clan_public_debt_total_label()}</p>
+            <div class="pub-card bg-surface-container-low border border-outline-variant rounded-2xl shadow-sm px-5 py-4">
+              <p class="text-xs font-semibold text-on-surface-variant">{m.clan_public_debt_total_label()}</p>
               <b class="block font-mono text-[22px] font-bold text-rose-500 tabular-nums mt-0.5">{debtTotals.owed.toLocaleString(dateLocale())}</b>
               {#if debtTotals.engaged > 0}
-                <p class="text-2xs text-slate-400 dark:text-slate-500 mt-1 leading-snug" title={m.clan_public_debt_engaged_desc()}>
+                <p class="text-2xs text-on-surface-variant mt-1 leading-snug" title={m.clan_public_debt_engaged_desc()}>
                   {m.clan_public_debt_engaged_hint({ amount: debtTotals.engaged.toLocaleString(dateLocale()) })}
                 </p>
               {/if}
             </div>
-            <div class="clean-card bg-white dark:bg-[#111a2e] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm px-5 py-4">
-              <p class="text-xs font-semibold text-slate-400">{m.clan_public_debt_people_label()}</p>
-              <b class="block font-mono text-[22px] font-bold text-slate-800 dark:text-slate-100 tabular-nums mt-0.5">{debtTotals.count}</b>
+            <div class="pub-card bg-surface-container-low border border-outline-variant rounded-2xl shadow-sm px-5 py-4">
+              <p class="text-xs font-semibold text-on-surface-variant">{m.clan_public_debt_people_label()}</p>
+              <b class="block font-mono text-[22px] font-bold text-on-surface tabular-nums mt-0.5">{debtTotals.count}</b>
               {#if debtTotals.partial}
-                <p class="text-2xs text-slate-400 dark:text-slate-500 mt-1 leading-snug">{m.clan_public_debt_search_scope()}</p>
+                <p class="text-2xs text-on-surface-variant mt-1 leading-snug">{m.clan_public_debt_search_scope()}</p>
               {/if}
             </div>
-            <div class="clean-card bg-white dark:bg-[#111a2e] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm px-5 py-4">
-              <p class="text-xs font-semibold text-slate-400">{m.clan_public_debt_average_label()}</p>
-              <b class="block font-mono text-[22px] font-bold text-slate-800 dark:text-slate-100 tabular-nums mt-0.5">{debtAverage.toLocaleString(dateLocale())}</b>
-              <p class="text-2xs text-slate-400 dark:text-slate-500 mt-1 leading-snug">{m.clan_public_debt_average_hint()}</p>
+            <div class="pub-card bg-surface-container-low border border-outline-variant rounded-2xl shadow-sm px-5 py-4">
+              <p class="text-xs font-semibold text-on-surface-variant">{m.clan_public_debt_average_label()}</p>
+              <b class="block font-mono text-[22px] font-bold text-on-surface tabular-nums mt-0.5">{debtAverage.toLocaleString(dateLocale())}</b>
+              <p class="text-2xs text-on-surface-variant mt-1 leading-snug">{m.clan_public_debt_average_hint()}</p>
             </div>
           </div>
 
           {#if searching}
-            <p class="text-center text-sm text-slate-400 italic py-8">{m.clan_public_searching()}</p>
+            <p class="text-center text-sm text-on-surface-variant italic py-8">{m.clan_public_searching()}</p>
           {:else if debtSearchEmpty}
-            <p class="text-center text-sm text-slate-400 italic py-8">{m.clan_public_search_no_match()}</p>
+            <p class="text-center text-sm text-on-surface-variant italic py-8">{m.clan_public_search_no_match()}</p>
           {:else if displayedDebtClans.length === 0 && displayedUnaffiliated.length === 0}
-            <p class="text-center text-sm text-slate-400 italic py-8">{m.clan_public_debt_empty()}</p>
+            <p class="text-center text-sm text-on-surface-variant italic py-8">{m.clan_public_debt_empty()}</p>
           {:else}
             <div class="grid grid-cols-1 md:grid-cols-2 gap-5 items-start">
               {#each displayedDebtClans as clan (clan.id)}
-                <section class="clean-card bg-white dark:bg-[#111a2e] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
-                  <div class="px-5 py-3.5 border-b border-slate-100 dark:border-slate-800 flex items-center gap-2.5">
+                <section class="pub-card bg-surface-container-low border border-outline-variant rounded-2xl shadow-sm overflow-hidden">
+                  <div class="px-5 py-3.5 border-b border-outline-variant/50 flex items-center gap-2.5">
                     <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background: {clan.roleColor || '#94a3b8'}"></span>
                     <div class="min-w-0">
-                      <h2 class="text-base font-extrabold text-slate-800 dark:text-slate-100 truncate">{clan.name}</h2>
-                      <p class="text-2xs text-slate-400">{m.clan_public_debt_debtors({ n: clan.debtorCount })}</p>
+                      <h2 class="text-base font-extrabold text-on-surface truncate">{clan.name}</h2>
+                      <p class="text-2xs text-on-surface-variant">{m.clan_public_debt_debtors({ n: clan.debtorCount })}</p>
                     </div>
                     <div class="ml-auto text-right">
-                      <span class="block text-xs font-semibold text-slate-400">{m.clan_public_debt_clan_total()}</span>
+                      <span class="block text-xs font-semibold text-on-surface-variant">{m.clan_public_debt_clan_total()}</span>
                       <b class="font-mono text-[15px] text-rose-500 tabular-nums">{clan.totalDebt.toLocaleString(dateLocale())}</b>
                       {#if clan.totalEngaged > 0}
-                        <span class="block text-2xs text-slate-400 dark:text-slate-500">{m.clan_public_debt_engaged_hint({ amount: clan.totalEngaged.toLocaleString(dateLocale()) })}</span>
+                        <span class="block text-2xs text-on-surface-variant">{m.clan_public_debt_engaged_hint({ amount: clan.totalEngaged.toLocaleString(dateLocale()) })}</span>
                       {/if}
                     </div>
                   </div>
                   {#if clan.debtors.length === 0}
-                    <p class="px-5 py-4 text-xs text-slate-400 italic">{m.clan_public_debt_clan_clear()}</p>
+                    <p class="px-5 py-4 text-xs text-on-surface-variant italic">{m.clan_public_debt_clan_clear()}</p>
                   {:else}
                     {#each clan.debtors as debtor (debtor.userId)}
-                      <div class="flex items-center gap-2.5 px-5 py-2 border-b border-slate-100 dark:border-slate-800 last:border-0">
+                      <div class="flex items-center gap-2.5 px-5 py-2 border-b border-outline-variant/50 last:border-0">
                         {#if debtor.avatarUrl}
                           <img src={debtor.avatarUrl} alt="" class="w-6 h-6 rounded-full shrink-0" />
                         {:else}
-                          <span class="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-800 shrink-0"></span>
+                          <span class="w-6 h-6 rounded-full bg-surface-container-highest shrink-0"></span>
                         {/if}
-                        <span class="text-body-sm font-medium text-slate-700 dark:text-slate-200 truncate">{debtor.displayName}</span>
+                        <span class="text-body-sm font-medium text-on-surface truncate">{debtor.displayName}</span>
                         <span class="ml-auto font-mono text-xs text-rose-500 tabular-nums shrink-0 text-right">
                           -{debtor.amount.toLocaleString(dateLocale())}
                           {#if debtor.engaged > 0}
-                            <span class="block text-2xs text-slate-400 dark:text-slate-500 font-sans">{m.clan_public_debt_engaged_hint({ amount: debtor.engaged.toLocaleString(dateLocale()) })}</span>
+                            <span class="block text-2xs text-on-surface-variant font-sans">{m.clan_public_debt_engaged_hint({ amount: debtor.engaged.toLocaleString(dateLocale()) })}</span>
                           {/if}
                         </span>
                       </div>
                     {/each}
                     {#if clan.debtorCount > clan.debtors.length}
-                      <p class="px-5 py-2 text-2xs text-slate-400 italic">{m.clan_public_more_results({ n: clan.debtorCount - clan.debtors.length })}</p>
+                      <p class="px-5 py-2 text-2xs text-on-surface-variant italic">{m.clan_public_more_results({ n: clan.debtorCount - clan.debtors.length })}</p>
                     {/if}
                   {/if}
                 </section>
               {/each}
 
               {#if displayedUnaffiliated.length > 0}
-                <section class="clean-card bg-white dark:bg-[#111a2e] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
-                  <div class="px-5 py-3.5 border-b border-slate-100 dark:border-slate-800">
-                    <h2 class="text-sm font-semibold text-slate-700 dark:text-slate-200">{m.clan_public_debt_unaffiliated_title()}</h2>
-                    <p class="text-2xs text-slate-400 dark:text-slate-500 mt-1">{m.clan_public_debt_unaffiliated_desc()}</p>
+                <section class="pub-card bg-surface-container-low border border-outline-variant rounded-2xl shadow-sm overflow-hidden">
+                  <div class="px-5 py-3.5 border-b border-outline-variant/50">
+                    <h2 class="text-sm font-semibold text-on-surface">{m.clan_public_debt_unaffiliated_title()}</h2>
+                    <p class="text-2xs text-on-surface-variant mt-1">{m.clan_public_debt_unaffiliated_desc()}</p>
                   </div>
                   {#each displayedUnaffiliated as debtor (debtor.userId)}
-                    <div class="flex items-center gap-2.5 px-5 py-2 border-b border-slate-100 dark:border-slate-800 last:border-0">
+                    <div class="flex items-center gap-2.5 px-5 py-2 border-b border-outline-variant/50 last:border-0">
                       {#if debtor.avatarUrl}
                         <img src={debtor.avatarUrl} alt="" class="w-6 h-6 rounded-full shrink-0" />
                       {:else}
-                        <span class="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-800 shrink-0"></span>
+                        <span class="w-6 h-6 rounded-full bg-surface-container-highest shrink-0"></span>
                       {/if}
-                      <span class="text-body-sm font-medium text-slate-700 dark:text-slate-200 truncate">{debtor.displayName}</span>
+                      <span class="text-body-sm font-medium text-on-surface truncate">{debtor.displayName}</span>
                       <span class="ml-auto font-mono text-xs text-rose-500 tabular-nums shrink-0 text-right">
                         -{debtor.amount.toLocaleString(dateLocale())}
                         {#if debtor.engaged > 0}
-                          <span class="block text-2xs text-slate-400 dark:text-slate-500 font-sans">{m.clan_public_debt_engaged_hint({ amount: debtor.engaged.toLocaleString(dateLocale()) })}</span>
+                          <span class="block text-2xs text-on-surface-variant font-sans">{m.clan_public_debt_engaged_hint({ amount: debtor.engaged.toLocaleString(dateLocale()) })}</span>
                         {/if}
                       </span>
                     </div>
@@ -1360,13 +1291,13 @@
         <!-- Bilan du dernier raid. L'onglet n'existe que tant que l'API le sert, donc
              `raidRecap` est forcement renseigne ici. -->
         <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] gap-6 items-start relative z-10">
-          <section class="clean-card bg-white dark:bg-[#111a2e] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
-            <div class="px-5 py-3.5 border-b border-slate-100 dark:border-slate-800">
-              <h2 class="text-sm font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-2">
+          <section class="pub-card bg-surface-container-low border border-outline-variant rounded-2xl shadow-sm overflow-hidden">
+            <div class="px-5 py-3.5 border-b border-outline-variant/50">
+              <h2 class="text-sm font-semibold text-on-surface flex items-center gap-2">
                 <Papicon icon="Crown" size={14} class="text-red-400" />
                 <EmojiText value={raidRecap.bossEmoji} /> {raidRecap.bossName}
               </h2>
-              <p class="text-2xs text-slate-400 dark:text-slate-500 mt-1">
+              <p class="text-2xs text-on-surface-variant mt-1">
                 {m.clan_board_raid_ended({
                   level: raidRecap.bossLevel,
                   date: new Date(raidRecap.resolvedAt).toLocaleString(dateLocale()),
@@ -1374,42 +1305,42 @@
               </p>
             </div>
             {#each raidRecap.teams as team}
-              <div class="flex items-center gap-3 px-5 py-2.5 border-b border-slate-100 dark:border-slate-800 last:border-0">
+              <div class="flex items-center gap-3 px-5 py-2.5 border-b border-outline-variant/50 last:border-0">
                 {#if team.defeated}
                   <Papicon icon="Trophy" size={14} class="text-emerald-500 shrink-0" />
                 {:else}
-                  <Papicon icon="Shield" size={14} class="text-slate-400 shrink-0" />
+                  <Papicon icon="Shield" size={14} class="text-on-surface-variant shrink-0" />
                 {/if}
-                <span class="text-body-sm font-semibold text-slate-700 dark:text-slate-200 truncate flex-1 min-w-0">{team.teamName}</span>
-                <span class="text-2xs text-slate-400 dark:text-slate-500 shrink-0 tabular-nums">
+                <span class="text-body-sm font-semibold text-on-surface truncate flex-1 min-w-0">{team.teamName}</span>
+                <span class="text-2xs text-on-surface-variant shrink-0 tabular-nums">
                   {team.defeated
                     ? m.clan_board_raid_downed()
                     : m.clan_board_raid_survived({ remaining: team.remainingHealth.toLocaleString(dateLocale()) })}
                 </span>
               </div>
             {:else}
-              <p class="px-5 py-8 text-center text-sm text-slate-400 italic">{m.clan_board_raid_no_team()}</p>
+              <p class="px-5 py-8 text-center text-sm text-on-surface-variant italic">{m.clan_board_raid_no_team()}</p>
             {/each}
           </section>
 
           {#if raidRecap.strikers.length > 0}
-            <section class="clean-card bg-white dark:bg-[#111a2e] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
-              <div class="px-5 py-3.5 border-b border-slate-100 dark:border-slate-800">
-                <h2 class="text-sm font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-2">
+            <section class="pub-card bg-surface-container-low border border-outline-variant rounded-2xl shadow-sm overflow-hidden">
+              <div class="px-5 py-3.5 border-b border-outline-variant/50">
+                <h2 class="text-sm font-semibold text-on-surface flex items-center gap-2">
                   <Papicon icon="Grades" size={14} />
                   {m.clan_board_raid_strikers()}
                 </h2>
               </div>
               {#each raidRecap.strikers as striker, index (striker.userId)}
-                <div class="flex items-center gap-3 px-5 py-2.5 border-b border-slate-100 dark:border-slate-800 last:border-0">
-                  <span class="w-7 font-mono text-body-sm font-bold text-slate-400 tabular-nums shrink-0">{index + 1}</span>
+                <div class="flex items-center gap-3 px-5 py-2.5 border-b border-outline-variant/50 last:border-0">
+                  <span class="w-7 font-mono text-body-sm font-bold text-on-surface-variant tabular-nums shrink-0">{index + 1}</span>
                   {#if striker.avatarUrl}
                     <img src={striker.avatarUrl} alt="" class="w-8 h-8 rounded-full shrink-0" />
                   {:else}
-                    <span class="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-800 shrink-0"></span>
+                    <span class="w-8 h-8 rounded-full bg-surface-container-highest shrink-0"></span>
                   {/if}
-                  <span class="text-body-sm font-semibold text-slate-700 dark:text-slate-200 truncate flex-1 min-w-0">{striker.displayName}</span>
-                  <span class="text-2xs text-slate-400 dark:text-slate-500 shrink-0 tabular-nums">
+                  <span class="text-body-sm font-semibold text-on-surface truncate flex-1 min-w-0">{striker.displayName}</span>
+                  <span class="text-2xs text-on-surface-variant shrink-0 tabular-nums">
                     {m.clan_board_raid_damage({
                       damage: striker.damage.toLocaleString(dateLocale()),
                       assaults: striker.assaults,
@@ -1426,28 +1357,28 @@
              clans, mais il dit qui joue - et c'est tout ce qui reste quand le
              module de clans est eteint. -->
         <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] gap-6 items-start relative z-10">
-          <section class="clean-card bg-white dark:bg-[#111a2e] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
-            <div class="px-5 py-3.5 border-b border-slate-100 dark:border-slate-800">
-              <h2 class="text-sm font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-2">
+          <section class="pub-card bg-surface-container-low border border-outline-variant rounded-2xl shadow-sm overflow-hidden">
+            <div class="px-5 py-3.5 border-b border-outline-variant/50">
+              <h2 class="text-sm font-semibold text-on-surface flex items-center gap-2">
                 <Papicon icon="Grades" size={14} />
                 {m.rpg_public_solo_title()}
               </h2>
             </div>
             {#if displayedSoloPlayers.length === 0}
-              <p class="px-5 py-8 text-center text-sm text-slate-400 italic">
+              <p class="px-5 py-8 text-center text-sm text-on-surface-variant italic">
                 {searchActive ? m.clan_public_search_no_match() : m.rpg_public_solo_empty()}
               </p>
             {:else}
               {#each displayedSoloPlayers as player (player.userId)}
-                <div class="flex items-center gap-3 px-5 py-2.5 border-b border-slate-100 dark:border-slate-800 last:border-0">
-                  <span class="w-7 font-mono text-body-sm font-bold text-slate-400 tabular-nums shrink-0">{player.rank}</span>
+                <div class="flex items-center gap-3 px-5 py-2.5 border-b border-outline-variant/50 last:border-0">
+                  <span class="w-7 font-mono text-body-sm font-bold text-on-surface-variant tabular-nums shrink-0">{player.rank}</span>
                   {#if player.avatarUrl}
                     <img src={player.avatarUrl} alt="" class="w-8 h-8 rounded-full shrink-0" />
                   {:else}
-                    <span class="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-800 shrink-0"></span>
+                    <span class="w-8 h-8 rounded-full bg-surface-container-highest shrink-0"></span>
                   {/if}
-                  <span class="text-body-sm font-semibold text-slate-700 dark:text-slate-200 truncate flex-1 min-w-0">{player.displayName}</span>
-                  <span class="text-2xs text-slate-400 dark:text-slate-500 shrink-0">
+                  <span class="text-body-sm font-semibold text-on-surface truncate flex-1 min-w-0">{player.displayName}</span>
+                  <span class="text-2xs text-on-surface-variant shrink-0">
                     {m.rpg_public_solo_line({
                       level: player.level,
                       monsters: player.monstersKilled,
@@ -1460,24 +1391,24 @@
           </section>
 
           {#if (solo?.quests ?? []).length > 0}
-            <section class="clean-card bg-white dark:bg-[#111a2e] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm overflow-hidden">
-              <div class="px-5 py-3.5 border-b border-slate-100 dark:border-slate-800">
-                <h2 class="text-sm font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-2">
+            <section class="pub-card bg-surface-container-low border border-outline-variant rounded-2xl shadow-sm overflow-hidden">
+              <div class="px-5 py-3.5 border-b border-outline-variant/50">
+                <h2 class="text-sm font-semibold text-on-surface flex items-center gap-2">
                   <Papicon icon="Tasks" size={14} />
                   {m.rpg_public_solo_quests()}
                 </h2>
               </div>
               {#each solo.quests as quest (quest.id)}
-                <div class="px-5 py-3.5 border-b border-slate-100 dark:border-slate-800 last:border-0 space-y-1">
+                <div class="px-5 py-3.5 border-b border-outline-variant/50 last:border-0 space-y-1">
                   <div class="flex flex-wrap items-baseline gap-2">
-                    <span class="text-body-sm font-semibold text-slate-700 dark:text-slate-200 inline-flex items-center gap-1.5">
-                      <span class="text-slate-400"><Papicon icon={questIcon(quest.objective)} size={13} /></span>
+                    <span class="text-body-sm font-semibold text-on-surface inline-flex items-center gap-1.5">
+                      <span class="text-on-surface-variant"><Papicon icon={questIcon(quest.objective)} size={13} /></span>
                       {quest.name}
                     </span>
-                    <span class="ml-auto font-mono text-2xs text-slate-400">{m.rpg_public_quest_resets({ time: countdown(quest.windowEndsAt) })}</span>
+                    <span class="ml-auto font-mono text-2xs text-on-surface-variant">{m.rpg_public_quest_resets({ time: countdown(quest.windowEndsAt) })}</span>
                   </div>
-                  <p class="text-2xs text-slate-500 dark:text-slate-400 leading-relaxed">{quest.description}</p>
-                  <p class="font-mono text-2xs text-slate-400 dark:text-slate-500">
+                  <p class="text-2xs text-on-surface-variant leading-relaxed">{quest.description}</p>
+                  <p class="font-mono text-2xs text-on-surface-variant">
                     {m.eco_quest_goal({ target: quest.target, objective: objectiveLabel(quest.objective), hours: quest.windowHours })}
                   </p>
                 </div>
@@ -1487,71 +1418,15 @@
         </div>
       {/if}
 
-      <footer class="flex items-center justify-center gap-1.5 text-2xs text-slate-400 dark:text-slate-500 pt-2">
+      <footer class="flex items-center justify-center gap-1.5 text-2xs text-on-surface-variant pt-2">
         <Papicon icon="Clock" size={12} />
         {m.rpg_public_refresh()}
       </footer>
     {/if}
 
-  </div>
-</div>
+</PublicShell>
 
 <style>
-  .whiteboard-container {
-    background-color: #faf9f6;
-    background-image: radial-gradient(#cbd5e1 1.2px, transparent 1.2px);
-    background-size: 24px 24px;
-    color: #0f172a;
-    font-family: 'Outfit', sans-serif;
-    transition: background-color 0.3s ease, color 0.3s ease;
-  }
-
-  :global(.dark) .whiteboard-container {
-    background-color: #090d16 !important;
-    background-image: radial-gradient(#1e293b 1.2px, transparent 1.2px) !important;
-    color: #f8fafc !important;
-  }
-
-  /*
-   * `dark:selection:bg-slate-850` ne designait aucune couleur : slate ne va pas
-   * au-dela de 900. La regle sombre ne s'appliquait donc jamais, et la
-   * selection restait sur le jaune pale du theme clair - illisible sous le
-   * texte clair du theme sombre. Les deux couples fond/texte sont poses ici.
-   */
-  .whiteboard-container :global(::selection) {
-    background: #fde68a;
-    color: #0f172a;
-  }
-  :global(.dark) .whiteboard-container :global(::selection) {
-    background: rgba(251, 191, 36, 0.32);
-    color: #f8fafc;
-  }
-
-  .clean-card {
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px -2px rgba(0, 0, 0, 0.02);
-  }
-  :global(.dark) .clean-card {
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.15), 0 2px 4px -2px rgba(0, 0, 0, 0.15) !important;
-  }
-
-  .tape-accent {
-    position: absolute;
-    top: -8px;
-    right: 24px;
-    width: 80px;
-    height: 20px;
-    background-color: rgba(251, 191, 36, 0.22);
-    border-left: 1px dashed rgba(0, 0, 0, 0.1);
-    border-right: 1px dashed rgba(0, 0, 0, 0.1);
-    transform: rotate(3deg);
-    z-index: 10;
-  }
-  :global(.dark) .tape-accent {
-    background-color: rgba(251, 191, 36, 0.1) !important;
-    border-left: 1px dashed rgba(255, 255, 255, 0.08) !important;
-    border-right: 1px dashed rgba(255, 255, 255, 0.08) !important;
-  }
-
   /*
    * Ruban de raid : seul bloc sombre dans les deux themes, et seul a angles vifs
    * sur une page de cartes arrondies. C'est le signal qu'il ne se lit pas comme
