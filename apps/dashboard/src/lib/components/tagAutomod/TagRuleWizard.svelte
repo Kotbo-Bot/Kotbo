@@ -15,6 +15,7 @@
   import Button from '../ui/Button.svelte';
   import Callout from '../ui/Callout.svelte';
   import { tagPatternMaxLength } from '@kotbo/shared';
+  import { MAX_BULK_TAGS, mergeScans, parseBulkTags } from './bulkTags';
   import { m } from '../../i18n';
   import { toast } from '../../stores/toast.svelte';
   import { dashboardStore } from '../../stores/dashboard.svelte';
@@ -68,6 +69,9 @@
   let saving = $state(false);
   let escalate = $state(false);
   let nameTouched = $state(false);
+  // Plusieurs tags d'un coup : une règle par tag, mêmes réglages (création seulement).
+  let bulk = $state(false);
+  let bulkText = $state('');
   let searchTimer: ReturnType<typeof setTimeout> | null = null;
 
   const roles = $derived((dashboardStore.state.discordRoles ?? []).filter((r) => r.name !== '@everyone').map((r) => ({ id: r.id, name: r.name, color: r.color ?? null })));
@@ -76,10 +80,21 @@
   const meta = $derived(tagActionMeta((draft.action ?? 'ALERT') as TagAction));
   const patternMax = $derived(tagPatternMaxLength(draft.matchMode));
   const patternTooLong = $derived((draft.pattern?.trim().length ?? 0) > patternMax);
-  const targetReady = $derived(draft.targetType === 'SERVER' ? Boolean(draft.targetGuildId) : Boolean(draft.pattern?.trim()) && !patternTooLong);
+  const bulkActive = $derived(bulk && draft.targetType === 'TEXT' && !editing);
+  const bulkParsed = $derived(parseBulkTags(bulkText));
+  const bulkReady = $derived(bulkParsed.tags.length > 0 && bulkParsed.tags.length <= MAX_BULK_TAGS && bulkParsed.tooLong.length === 0);
+  const targetReady = $derived(
+    draft.targetType === 'SERVER' ? Boolean(draft.targetGuildId)
+      : bulkActive ? bulkReady
+      : Boolean(draft.pattern?.trim()) && !patternTooLong,
+  );
   const responseReady = $derived(draft.action !== 'ROLE' || Boolean(draft.roleId));
   const canNext = $derived(step === 'target' ? targetReady : step === 'response' ? responseReady : true);
-  const targetLabel = $derived(draft.targetType === 'SERVER' ? (draft.targetName ?? draft.targetGuildId ?? '') : `« ${draft.pattern ?? ''} »`);
+  const targetLabel = $derived(
+    draft.targetType === 'SERVER' ? (draft.targetName ?? draft.targetGuildId ?? '')
+      : bulkActive ? bulkParsed.tags.map((tag) => `« ${tag} »`).join(', ')
+      : `« ${draft.pattern ?? ''} »`,
+  );
 
   // Réinitialise à chaque ouverture, d'après la règle modifiée ou le modèle.
   $effect(() => {
@@ -90,6 +105,8 @@
     nameTouched = Boolean(editing || initial?.name);
     preview = null;
     query = '';
+    bulk = false;
+    bulkText = '';
     step = editing || (initial && (initial.targetGuildId || initial.pattern)) ? (base.effect === 'ALLOW' ? 'preview' : 'response') : 'target';
     void runSearch('');
   });
@@ -127,6 +144,15 @@
   async function loadPreview() {
     previewing = true;
     try {
+      if (bulkActive) {
+        const results: TagScanResult[] = [];
+        for (const tag of bulkParsed.tags) {
+          const result = await scanTagMembers({ ...draft, pattern: tag, name: draft.name || 'draft' });
+          if (result) results.push(result);
+        }
+        preview = mergeScans(results);
+        return;
+      }
       preview = await scanTagMembers({ ...draft, name: draft.name || 'draft' });
     } catch {
       preview = null;
@@ -153,6 +179,11 @@
       durationMin: meta.needsDuration ? draft.durationMin ?? null : null,
       source: initial && !editing ? 'TEMPLATE' : (editing?.source === 'TEMPLATE' ? 'TEMPLATE' : 'MANUAL'),
     };
+    if (bulkActive) {
+      await saveBulk(payload);
+      saving = false;
+      return;
+    }
     try {
       const res = editing ? await updateTagRule(editing.id, payload) : await createTagRule(payload);
       if (res?.rule) {
@@ -164,6 +195,37 @@
       toast.error(err instanceof Error ? err.message : m.tam_err_save());
     } finally {
       saving = false;
+    }
+  }
+
+  /** Nom d'une règle de la saisie groupée : le nom saisi suivi du tag, ou le nom proposé pour ce tag. */
+  function bulkRuleName(tag: string): string {
+    if (nameTouched && draft.name.trim()) return `${draft.name.trim()} · ${tag}`.slice(0, 80);
+    return draft.effect === 'ALLOW' ? m.tam_wiz_name_allow({ target: tag }) : m.tam_wiz_name_block({ target: tag });
+  }
+
+  /** Une règle par tag. S'arrête à la première erreur (plafond de règles atteint, par exemple) et dit où. */
+  async function saveBulk(payload: TagRuleDraft) {
+    const tags = bulkParsed.tags;
+    let created = 0;
+    for (const tag of tags) {
+      try {
+        const res = await createTagRule({ ...payload, pattern: tag, name: bulkRuleName(tag) });
+        if (!res?.rule) break;
+        onSaved?.(res.rule);
+        created += 1;
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : m.tam_err_save());
+        break;
+      }
+    }
+    if (created === tags.length) {
+      toast.success(m.tam_wiz_bulk_created({ count: created }));
+      open = false;
+    } else if (created > 0) {
+      // Seuls les tags restants restent saisis : un nouvel essai ne recrée pas les règles déjà faites.
+      bulkText = tags.slice(created).join('\n');
+      toast.error(m.tam_wiz_bulk_partial({ count: created, total: tags.length }));
     }
   }
 
@@ -254,6 +316,32 @@
         </div>
       {:else}
         <div class="space-y-3">
+          {#if !editing}
+            <div class="inline-flex rounded-xl border border-outline-variant/30 p-0.5" role="group" aria-label={m.tam_wiz_bulk_label()}>
+              {#each [{ v: false, t: m.tam_wiz_bulk_one() }, { v: true, t: m.tam_wiz_bulk_many() }] as opt (opt.t)}
+                <button type="button" aria-pressed={bulk === opt.v}
+                  onclick={() => { bulk = opt.v; if (bulk && draft.matchMode === 'REGEX') draft.matchMode = 'EXACT'; }}
+                  class="px-3 py-1 rounded-lg text-xs font-medium {bulk === opt.v ? 'bg-primary/10 text-primary' : 'text-on-surface-variant'}">{opt.t}</button>
+              {/each}
+            </div>
+          {/if}
+          {#if bulkActive}
+            <label class="block">
+              <span class="text-xs font-medium text-on-surface-variant">{m.tam_wiz_bulk_field()}</span>
+              <textarea bind:value={bulkText} rows={4} placeholder={m.tam_wiz_bulk_ph()}
+                aria-invalid={!bulkReady && bulkText.trim() !== ''} aria-describedby="tam-bulk-help"
+                class="mt-1 w-full rounded-xl bg-surface-container border border-field-border px-3 py-2.5 text-body-sm text-on-surface font-mono"></textarea>
+              <span id="tam-bulk-help" class="block text-2xs mt-1 {bulkParsed.tooLong.length > 0 || bulkParsed.tags.length > MAX_BULK_TAGS ? 'text-error' : 'text-on-surface-variant'}">
+                {#if bulkParsed.tooLong.length > 0}
+                  {m.tam_wiz_bulk_too_long({ tags: bulkParsed.tooLong.join(', ') })}
+                {:else if bulkParsed.tags.length > MAX_BULK_TAGS}
+                  {m.tam_wiz_bulk_too_many({ max: MAX_BULK_TAGS })}
+                {:else}
+                  {m.tam_wiz_bulk_hint({ count: bulkParsed.tags.length, max: MAX_BULK_TAGS })}
+                {/if}
+              </span>
+            </label>
+          {:else}
           <label class="block">
             <span class="text-xs font-medium text-on-surface-variant">{m.tam_wiz_pattern()}</span>
             <input type="text" bind:value={draft.pattern} maxlength={patternMax} placeholder={m.tam_wiz_pattern_ph()}
@@ -263,8 +351,9 @@
               <span id="tam-pattern-too-long" class="block text-2xs text-error mt-1">{m.tam_wiz_pattern_too_long({ max: patternMax })}</span>
             {/if}
           </label>
+          {/if}
           <div class="grid sm:grid-cols-3 gap-2" role="radiogroup" aria-label={m.tam_wiz_match_mode()}>
-            {#each [{ v: 'EXACT', t: m.tam_wiz_match_exact(), d: m.tam_wiz_match_exact_hint() }, { v: 'CONTAINS', t: m.tam_wiz_match_contains(), d: m.tam_wiz_match_contains_hint() }, { v: 'REGEX', t: m.tam_wiz_match_regex(), d: m.tam_wiz_match_regex_hint() }] as opt (opt.v)}
+            {#each [{ v: 'EXACT', t: m.tam_wiz_match_exact(), d: m.tam_wiz_match_exact_hint() }, { v: 'CONTAINS', t: m.tam_wiz_match_contains(), d: m.tam_wiz_match_contains_hint() }, { v: 'REGEX', t: m.tam_wiz_match_regex(), d: m.tam_wiz_match_regex_hint() }].filter((opt) => !bulkActive || opt.v !== 'REGEX') as opt (opt.v)}
               <button type="button" role="radio" aria-checked={draft.matchMode === opt.v} onclick={() => (draft.matchMode = opt.v as 'EXACT' | 'CONTAINS' | 'REGEX')}
                 class="text-left rounded-xl border p-2.5 transition-colors {draft.matchMode === opt.v ? 'border-primary/60 bg-primary/10' : 'border-outline-variant/30 hover:border-outline-variant/60'}">
                 <span class="block text-xs font-medium text-on-surface">{opt.t}</span>
