@@ -3,6 +3,7 @@ import cron from 'node-cron';
 import { ScheduledTask } from '@prisma/client';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
+import { isInstanceBlocked } from './instanceBlock.js';
 
 const activeCronJobs = new Map<string, cron.ScheduledTask>();
 
@@ -48,6 +49,8 @@ export async function startSchedule(client: Client, task: ScheduledTask): Promis
 
   try {
     const job = cron.schedule(task.cron, async () => {
+      // Instance bloquée : les tâches programmées des serveurs ne partent plus.
+      if (isInstanceBlocked()) return;
       try {
         await executeSchedule(client, task.id);
       } catch (err) {

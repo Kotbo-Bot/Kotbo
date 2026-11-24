@@ -5,12 +5,14 @@ const modules: Record<string, Record<string, unknown>> = {
   'stores/auth.svelte.ts': { authStore: { token: 'jeton', selectedGuildId: 'g', guilds: [] } },
   'stores/backendHealth.svelte.ts': { backendHealth: { canWrite: true, reportFailure() {}, reportSuccess() {} } },
   'stores/toast.svelte.ts': { toast: {} },
+  'stores/instanceBlock.svelte.ts': { instanceBlock: { report() {} } },
   'sentry.ts': { captureApiFailure() {} },
   'telemetry/telemetry.ts': { trackApiResult() {} },
 };
 for (const [file, exports] of Object.entries(modules)) mock.module(path.resolve(import.meta.dir, '..', file), () => exports);
 
-const { dashboardFetch } = await import('./client');
+const { dashboardFetch, isExpectedRefusal } = await import('./client');
+const { DashboardApiError } = await import('./errors');
 
 describe('requête annulée par l\'appelant', () => {
   test('elle n\'est pas rejouée et remonte comme une annulation', async () => {
@@ -23,3 +25,11 @@ describe('requête annulée par l\'appelant', () => {
     fetchSpy.mockRestore();
   });
 });
+
+describe('instance bloquée', () => {
+  test("le refus est attendu : le bandeau l'explique, sans notification ni remontée Sentry", () => {
+    const error = new DashboardApiError({ kind: 'forbidden', status: 403, code: 'instance_blocked', path: '/state', method: 'GET' });
+    expect(isExpectedRefusal(error)).toBe(true);
+  });
+});
+

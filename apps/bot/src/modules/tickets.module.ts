@@ -15,6 +15,7 @@ import { COLORS } from '../utils/embeds.js';
 import { autoClaimTicketOnStaffMessage, markTicketOrphaned, recordTicketFirstResponse, recordTicketTurn, relayDmToThread, relayThreadToDm } from '../services/features/ticketService.js';
 import { logger } from '../utils/logger.js';
 import { drainAllTicketQueues, onTicketCapacityFreed } from '../services/features/ticketQueueService.js';
+import { isInstanceBlocked } from '../services/system/instanceBlock.js';
 
 const MODULE_NAME = 'tickets';
 
@@ -77,6 +78,7 @@ export function registerTicketsBusSubscribers(client: Client): void {
   });
 
   setInterval(() => {
+    if (isInstanceBlocked()) return;
     drainAllTicketQueues(client).catch((err) => logger.error('TicketQueue', 'Erreur balayage de la file :', err));
   }, TICKET_QUEUE_SWEEP_MS).unref?.();
 

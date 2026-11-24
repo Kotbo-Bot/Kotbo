@@ -2,6 +2,7 @@ import { Events, type Client } from 'discord.js';
 import { kotboEventBus } from '@kotbo/core';
 import { logger } from '../utils/logger.js';
 import { evaluateTagMember, runTagAutomodSweep } from '../services/moderation/tagAutomod/tagAutomodService.js';
+import { isInstanceBlocked } from '../services/system/instanceBlock.js';
 
 const SWEEP_MS = 60_000;
 
@@ -23,6 +24,7 @@ export function registerTagAutomodListener(client: Client): void {
   });
 
   setInterval(() => {
+    if (isInstanceBlocked()) return;
     void runTagAutomodSweep(client).catch((err) => logger.warn('TagAutomod', `Balayage impossible: ${String(err)}`));
   }, SWEEP_MS).unref?.();
 

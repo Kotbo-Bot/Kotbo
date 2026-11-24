@@ -20103,5 +20103,8 @@
   "wb_attachment_remove_q": "Remove this document from the case?",
   "wb_attachment_remove_warn": "The link is removed from the case. The file stays in Google Drive.",
   "toast_wb_attachment_added": "Document attached to the case.",
-  "toast_wb_attachment_failed": "Could not update the document."
+  "toast_wb_attachment_failed": "Could not update the document.",
+  "instance_blocked_title": "Instance disabled by the Kotbo administration",
+  "instance_blocked_desc": "The dashboard, commands and automatic features are turned off until this instance is authorized.",
+  "instance_blocked_reason": "Reason: {reason}"
 }

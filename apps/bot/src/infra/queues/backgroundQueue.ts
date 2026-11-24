@@ -5,6 +5,7 @@ import { logger } from '../../utils/logger.js';
 import { trackActiveTask } from '../../observability/eventLoopLag.js';
 import { captureException } from '../../observability/sentry.js';
 import { getCurrentInstance } from '../../utils/instanceContext.js';
+import { isInstanceBlocked, isJobAllowedWhileBlocked } from '../../services/system/instanceBlock.js';
 
 export type BackgroundJobName =
   | 'rss'
@@ -130,6 +131,8 @@ function readPositiveInteger(value: string | undefined, fallback: number): numbe
 
 function getProcessor(): Processor<BackgroundJobPayload, void, BackgroundJobName> {
   return async (job) => {
+    // Un job mis en file avant le blocage ne s'exécute pas après.
+    if (isInstanceBlocked() && !isJobAllowedWhileBlocked(job.name)) return;
     const handler = handlers[job.name as BackgroundJobName];
     if (!handler) {
       // Un succès silencieux supprimait définitivement le job de BullMQ alors

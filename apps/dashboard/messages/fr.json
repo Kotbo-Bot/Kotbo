@@ -20107,5 +20107,8 @@
   "wb_attachment_remove_q": "Retirer ce document du dossier ?",
   "wb_attachment_remove_warn": "Le lien est retiré du dossier. Le fichier reste dans Google Drive.",
   "toast_wb_attachment_added": "Document joint au dossier.",
-  "toast_wb_attachment_failed": "Opération sur le document impossible."
+  "toast_wb_attachment_failed": "Opération sur le document impossible.",
+  "instance_blocked_title": "Instance désactivée par l'administration Kotbo",
+  "instance_blocked_desc": "Le dashboard, les commandes et les fonctions automatiques sont coupés tant que cette instance n'est pas autorisée.",
+  "instance_blocked_reason": "Motif : {reason}"
 }

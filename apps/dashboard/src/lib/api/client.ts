@@ -24,6 +24,8 @@
  */
 import { authStore } from '../stores/auth.svelte';
 import { backendHealth } from '../stores/backendHealth.svelte';
+import { instanceBlock } from '../stores/instanceBlock.svelte';
+import { instanceBlockFromBody } from '../instanceBlock';
 import { toast } from '../stores/toast.svelte';
 import { captureApiFailure } from '../sentry';
 import { trackApiResult } from '../telemetry/telemetry';
@@ -214,9 +216,12 @@ export function getGuildId(guildId?: string) {
  * sur chaque lecture, et une page qui en lance dix aurait empile dix toasts
  * identiques par-dessus l'ecran qui dit deja que l'acces est refuse.
  *
+ * `instance_blocked` aussi : toute l'API refuse, et InstanceBlockedBanner le
+ * dit une fois pour toutes les pages.
+ *
  * L'erreur continue d'etre levee : l'appelant garde la main.
  */
-const SILENT_REFUSAL_CODES = new Set(['module_disabled', 'feature_denied']);
+const SILENT_REFUSAL_CODES = new Set(['module_disabled', 'feature_denied', 'instance_blocked']);
 
 /** Un refus attendu ne merite ni toast, ni ecran d'erreur, ni alerte Sentry. */
 export function isExpectedRefusal(error: unknown): boolean {
@@ -414,6 +419,17 @@ async function performRequestAttempts(
     }
 
     const kind = kindFromStatus(response.status);
+
+    // Instance bloquée : le bandeau le dit une fois pour toutes les pages. Lu
+    // sur une copie, l'appelant garde la réponse intacte.
+    if (response.status === 403) {
+      void response.clone().json()
+        .then((body) => {
+          const block = instanceBlockFromBody(body);
+          if (block) instanceBlock.report(block);
+        })
+        .catch(() => undefined);
+    }
 
     // Une reponse d'echec compte comme une preuve que le serveur repond : le
     // mode degrade ne vise que les pannes d'infrastructure.
