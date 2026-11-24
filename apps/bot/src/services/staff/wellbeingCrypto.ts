@@ -9,8 +9,8 @@
  * La clé vient de `WELLBEING_ENCRYPTION_KEY`, à défaut de `JWT_SECRET`. La
  * changer rend les dossiers existants illisibles.
  *
- * Les dossiers écrits avant le chiffrement restent en clair et se relisent
- * tels quels ; ils sont chiffrés à leur prochaine modification.
+ * Les textes écrits avant le chiffrement restent en clair et se relisent tels
+ * quels : seuls les nouveaux dossiers et les nouvelles notes sont chiffrés.
  */
 import { createSecretBox } from '../../utils/secretBox.js';
 

@@ -25,7 +25,6 @@
     /** Sous accès d'urgence, la direction lit sans écrire. */
     canWriteCases: boolean;
     breakGlassExpiresAt: string | null;
-    breakGlassSubjectUserId: string | null;
     /** Accès d'urgence soumis à la validation d'une seconde personne. */
     breakGlassApproval: boolean;
     reportEnabled: boolean;
@@ -758,6 +757,9 @@
       <input type="checkbox" bind:checked={cfgReportEnabled} />
       {m.wb_cfg_report_enabled()}
     </label>
+    {#if cfgReportEnabled && (!cfgAlertEvents.includes('REPORT') || (!cfgAlertChannelId && cfgAlertUserIds.length === 0))}
+      <p class="text-xs text-warning">{m.wb_cfg_report_unnoticed()}</p>
+    {/if}
     <Field label={m.wb_cfg_stale_days()} hint={m.wb_cfg_stale_hint()}>
       {#snippet children(id)}
         <input {id} type="number" min="0" max="90" step="1" bind:value={cfgStaleDays} class="input w-32" />

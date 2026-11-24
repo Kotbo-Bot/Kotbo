@@ -986,11 +986,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
 
       // Track command usage for analytics (buffered), sauf la cellule bien-être (anonymat).
-      if (interaction.commandName !== WELLBEING_COMMAND) try {
-        const usageKey = `${interaction.guildId || 'DM'}:${interaction.commandName}:${interaction.user.id}`;
-        commandUsageBuffer.set(usageKey, (commandUsageBuffer.get(usageKey) || 0) + 1);
-      } catch (e) {
-        logger.error('Analytics', 'Erreur lors de la mise en buffer de commande', e);
+      if (interaction.commandName !== WELLBEING_COMMAND) {
+        try {
+          const usageKey = `${interaction.guildId || 'DM'}:${interaction.commandName}:${interaction.user.id}`;
+          commandUsageBuffer.set(usageKey, (commandUsageBuffer.get(usageKey) || 0) + 1);
+        } catch (e) {
+          logger.error('Analytics', 'Erreur lors de la mise en buffer de commande', e);
+        }
       }
     }
 

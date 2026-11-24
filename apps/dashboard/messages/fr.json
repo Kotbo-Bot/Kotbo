@@ -20094,5 +20094,6 @@
   "wb_cfg_report_enabled": "Recevoir des signalements depuis Discord (/bienetre signaler)",
   "wb_cfg_stale_days": "Relancer un dossier critique inactif après (jours)",
   "wb_cfg_stale_hint": "0 pour ne jamais relancer.",
-  "wb_source_discord": "Discord"
+  "wb_source_discord": "Discord",
+  "wb_cfg_report_unnoticed": "Aucun salon ni membre ne sera prévenu des signalements : coche « Signalement reçu depuis Discord » et choisis un salon ou des membres dans les alertes."
 }

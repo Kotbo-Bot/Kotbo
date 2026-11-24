@@ -151,7 +151,6 @@ export function createWellbeingRouter(client: Client) {
         hasCaseAccess: state.canReadCases,
         canWriteCases: state.canWriteCases,
         breakGlassExpiresAt: state.activeBreakGlass?.expiresAt.toISOString() ?? null,
-        breakGlassSubjectUserId: state.activeBreakGlass?.subjectUserId ?? null,
       });
     } catch (err) {
       logger.error('WellbeingAPI', 'Error fetching status:', err);

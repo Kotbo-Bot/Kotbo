@@ -20090,5 +20090,6 @@
   "wb_cfg_report_enabled": "Receive reports from Discord (/wellbeing report)",
   "wb_cfg_stale_days": "Remind about an inactive critical case after (days)",
   "wb_cfg_stale_hint": "0 to never remind.",
-  "wb_source_discord": "Discord"
+  "wb_source_discord": "Discord",
+  "wb_cfg_report_unnoticed": "No channel or member will be notified of reports: tick \"Report received from Discord\" and pick a channel or members in the alerts."
 }
