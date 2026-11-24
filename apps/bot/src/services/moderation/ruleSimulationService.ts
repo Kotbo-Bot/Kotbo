@@ -11,6 +11,7 @@
  * pendant que l'administrateur attend devant sa page.
  */
 import { PermissionFlagsBits, type Client } from 'discord.js';
+import { isChannelExempt } from '../../utils/channelExemption.js';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { BucketZoner } from '../analytics/zonedBuckets.js';
@@ -82,7 +83,7 @@ export interface SimulationReport {
 }
 
 interface Exemptions {
-  channels: Set<string>;
+  isChannelExempt: (channelId: string) => boolean;
   isExempt: (authorId: string) => boolean;
 }
 
@@ -97,7 +98,7 @@ async function loadExemptions(client: Client, guildId: string, rule: SimulatedRu
   if (rule.kind === 'scam') {
     // Le filtre anti-arnaque laisse passer quiconque peut gérer les messages.
     return {
-      channels: new Set(),
+      isChannelExempt: () => false,
       isExempt: (authorId) => !!member(authorId)?.permissions.has(PermissionFlagsBits.ManageMessages),
     };
   }
@@ -105,7 +106,8 @@ async function loadExemptions(client: Client, guildId: string, rule: SimulatedRu
   const config = await getOrCreateAutoModConfig(guildId);
   const bypassRoles = new Set(config.bypassRoles);
   return {
-    channels: new Set(config.bypassChannels),
+    // L'historique ne garde que l'id du salon : sa catégorie se lit dans le cache.
+    isChannelExempt: (channelId) => isChannelExempt(guild?.channels.cache.get(channelId) ?? { id: channelId }, config.bypassChannels),
     isExempt: (authorId) => {
       const current = member(authorId);
       if (!current) return false;
@@ -285,7 +287,7 @@ export async function simulateRule(
 
   let exempted = 0;
   const messages = loaded.messages.filter((message) => {
-    const skip = exemptions.channels.has(message.channelId) || exemptions.isExempt(message.authorId);
+    const skip = exemptions.isChannelExempt(message.channelId) || exemptions.isExempt(message.authorId);
     if (skip) exempted += 1;
     return !skip;
   });

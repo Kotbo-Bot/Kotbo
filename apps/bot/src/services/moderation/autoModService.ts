@@ -3,6 +3,7 @@ import type { AutoModConfig } from '@prisma/client';
 import { kotboEventBus } from '@kotbo/core';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
+import { isChannelExempt } from '../../utils/channelExemption.js';
 import { cache } from '../../utils/cache.js';
 import { getAutomodWarnWeight, registerWarnSanction, registerTimeoutSanction } from './sanctionService.js';
 import { loadBannedWords, loadGlobalWords, loadCustomWords } from './bannedWordsService.js';
@@ -700,7 +701,7 @@ export async function handleAutoMod(message: Message, client: Client): Promise<b
     const config = await getOrCreateAutoModConfig(guildId);
 
     // Vérifier si le rôle ou le salon est exempté
-    if (config.bypassChannels.includes(message.channel.id)) return false;
+    if (isChannelExempt(message.channel, config.bypassChannels)) return false;
     const hasBypassRole = message.member.roles.cache.some(r => config.bypassRoles.includes(r.id));
     if (hasBypassRole) return false;
 
@@ -1169,7 +1170,7 @@ export async function handleGhostPingDelete(message: Message | PartialMessage, c
     if (isStaffRole || !!isStaffDb) return;
 
     // Vérifier si le rôle ou le salon est exempté
-    if (config.bypassChannels.includes(message.channel.id)) return;
+    if (isChannelExempt(message.channel, config.bypassChannels)) return;
     const hasBypassRole = message.member.roles.cache.some(r => config.bypassRoles.includes(r.id));
     if (hasBypassRole) return;
 
@@ -1245,7 +1246,7 @@ export async function handleGhostPingUpdate(
     if (isStaffRole || !!isStaffDb) return;
 
     // Vérifier si le rôle ou le salon est exempté
-    if (config.bypassChannels.includes(oldMessage.channel.id)) return;
+    if (isChannelExempt(oldMessage.channel, config.bypassChannels)) return;
     const hasBypassRole = oldMessage.member.roles.cache.some(r => config.bypassRoles.includes(r.id));
     if (hasBypassRole) return;
 

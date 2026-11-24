@@ -1,6 +1,6 @@
 <script lang="ts">
   import { explainDisabled } from '../lib/actions/explainDisabled';
-  import { channelDisplayName } from '../lib/channelUtils';
+  import { channelDisplayName, exemptionOptions } from '../lib/channelUtils';
   import { m } from '../lib/i18n';
   import { onMount, onDestroy, untrack } from 'svelte';
   import { router } from 'tinro';
@@ -49,6 +49,7 @@
   let isOwner = $state(false);
 
   const availableChannels = $derived(dashboardStore.state.discordChannels || []);
+  const availableCategories = $derived(dashboardStore.state.discordCategories || []);
   const availableRoles = $derived(dashboardStore.state.discordRoles || []);
 
   let config = $state({
@@ -279,7 +280,9 @@
 
   function getChannelName(channelId: string) {
     const chan = availableChannels.find(c => c.id === channelId);
-    return chan ? `#${chan.name}` : channelId;
+    if (chan) return `#${chan.name}`;
+    const category = availableCategories.find(c => c.id === channelId);
+    return category ? category.name.toUpperCase() : channelId;
   }
 
   function addAntiBotBypassUser() {
@@ -1445,7 +1448,7 @@
                     <SearchableSelect 
                       id="bypassChanSelect"
                       bind:value={selectedBypassChannel} 
-                      options={availableChannels.map(c => ({ id: c.id, name: channelDisplayName(c) }))} 
+                      options={exemptionOptions(availableChannels, availableCategories)} 
                       placeholder={m.am_add_channel_placeholder()} 
                       className="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-lg px-3 py-2 text-xs focus:ring-1 focus:ring-primary/20 transition-all"
                     />

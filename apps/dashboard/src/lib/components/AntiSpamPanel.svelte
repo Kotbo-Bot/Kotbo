@@ -3,6 +3,7 @@
   import { onMount } from 'svelte';
   import { authStore } from '../stores/auth.svelte';
   import { dashboardStore } from '../stores/dashboard.svelte';
+  import { exemptionOptions } from '../channelUtils';
   import {
     fetchSpamDetection,
     updateSpamDetection,
@@ -131,6 +132,7 @@
 
   const channels = $derived((dashboardStore.state.discordChannels ?? []) as { id: string; name: string }[]);
   const roles = $derived((dashboardStore.state.discordRoles ?? []) as { id: string; name: string }[]);
+  const exemptTargets = $derived(exemptionOptions(channels, dashboardStore.state.discordCategories ?? []));
 
   /** Répartition des scores observés, pour choisir des seuils sur des données réelles. */
   const histogramMax = $derived(Math.max(1, ...(stats?.histogram ?? []).map((b) => b.count)));
@@ -514,7 +516,7 @@
             {m.asp_exempt_channels_help()}
           </p>
           <div class="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto">
-            {#each channels as channel (channel.id)}
+            {#each exemptTargets as channel (channel.id)}
               <button
                 type="button"
                 class="px-2.5 py-1 rounded-full text-xs font-medium border transition-colors
@@ -523,7 +525,7 @@
                   : 'bg-surface-container-low border-outline-variant/40 text-on-surface-variant hover:text-on-surface'}"
                 onclick={() => toggleBypassChannel(channel.id)}
               >
-                #{channel.name}
+                {channel.name}
               </button>
             {/each}
           </div>

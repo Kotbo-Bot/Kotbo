@@ -10,6 +10,7 @@
  */
 
 import { type Message, type TextChannel, EmbedBuilder, PermissionFlagsBits } from 'discord.js';
+import { isChannelExempt } from '../../../utils/channelExemption.js';
 import prisma from '../../../utils/db.js';
 import { logger } from '../../../utils/logger.js';
 import { COLORS, truncate } from '../../../utils/embeds.js';
@@ -212,7 +213,7 @@ export async function handleSpamMessage(message: Message): Promise<boolean> {
   if (!config?.enabled) return false;
 
   // ── Exemptions ─────────────────────────────────────────────────────────────
-  if (config.bypassChannelIds.includes(message.channelId)) return false;
+  if (isChannelExempt(message.channel, config.bypassChannelIds)) return false;
   if (message.member.roles.cache.some((r) => config.bypassRoleIds.includes(r.id))) return false;
   // Quiconque peut déjà supprimer des messages n'a pas à être modéré par le bot.
   if (message.member.permissions.has(PermissionFlagsBits.ManageMessages)) return false;

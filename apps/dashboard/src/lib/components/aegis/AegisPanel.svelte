@@ -19,7 +19,7 @@
   import { m } from '../../i18n';
   import { toast } from '../../stores/toast.svelte';
   import { dashboardStore } from '../../stores/dashboard.svelte';
-  import { channelDisplayName } from '../../channelUtils';
+  import { channelDisplayName, exemptionOptions } from '../../channelUtils';
   import { useUnsavedChanges } from '../../useUnsavedChanges.svelte';
   import { fetchAegis, updateAegis, type AegisConfig, type AegisConfigPatch, type AegisState } from '../../api';
   import AegisScale from './AegisScale.svelte';
@@ -56,7 +56,7 @@
       .filter((c) => !c.type || c.type === 'text' || c.type === 'announcement')
       .map((c) => ({ id: c.id, name: channelDisplayName(c) })),
   );
-  const allChannels = $derived((dashboardStore.state.discordChannels ?? []).map((c) => ({ id: c.id, name: channelDisplayName(c) })));
+  const allChannels = $derived(exemptionOptions(dashboardStore.state.discordChannels ?? [], dashboardStore.state.discordCategories ?? []));
   const roles = $derived((dashboardStore.state.discordRoles ?? []).map((r) => ({ id: r.id, name: `@${r.name}` })));
 
   async function load() {
