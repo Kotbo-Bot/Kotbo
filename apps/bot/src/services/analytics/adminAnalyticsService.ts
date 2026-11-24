@@ -26,6 +26,7 @@ import {
   ANALYTICS_DIMENSIONS,
   ONBOARDING_STEPS,
   SIZE_BUCKETS,
+  normalizeInviteContent,
   normalizePlanKey,
   planForMemberCount,
   sizeBucketFor,
@@ -173,14 +174,34 @@ async function computeFunnelCounts(from: Date, to: Date): Promise<{
       select: { step: true, source: true, content: true, metadata: true, occurredAt: true, visitorId: true, guildId: true },
     }).catch(() => []);
 
+    const unresolvedGuildIds = Array.from(
+      new Set(
+        events
+          .filter((ev) => (ev.step === 'bot_joined' || ev.step === 'first_payment') && ev.guildId && (!ev.source || !ev.content))
+          .map((ev) => ev.guildId!),
+      ),
+    );
+    const lifecycleAttr = new Map<string, { source: string | null; content: string | null }>();
+    if (unresolvedGuildIds.length > 0) {
+      const rows = await prisma.guildLifecycle.findMany({
+        where: { guildId: { in: unresolvedGuildIds } },
+        select: { guildId: true, source: true, content: true },
+      }).catch(() => []);
+      for (const row of rows) {
+        lifecycleAttr.set(row.guildId, { source: row.source, content: row.content });
+      }
+    }
+
     for (const ev of events) {
       const currentCount = counts.get(ev.step);
       if (currentCount !== undefined) {
         counts.set(ev.step, currentCount + 1);
       }
 
-      if (ev.source) {
-        const src = ev.source;
+      const lc = ev.guildId ? lifecycleAttr.get(ev.guildId) : undefined;
+      const src = ev.source ?? (ev.step === 'bot_joined' || ev.step === 'first_payment' ? lc?.source ?? null : null);
+
+      if (src) {
         if (!sourceMap.has(src)) sourceMap.set(src, { visits: 0, joins: 0, paid: 0 });
         const sm = sourceMap.get(src)!;
         if (ev.step === 'site_visit') sm.visits += 1;
@@ -188,13 +209,16 @@ async function computeFunnelCounts(from: Date, to: Date): Promise<{
         if (ev.step === 'first_payment') sm.paid += 1;
       }
 
-      if (ev.content) {
-        const cnt = ev.content;
-        if (!contentMap.has(cnt)) contentMap.set(cnt, { clicks: 0, joins: 0, paid: 0 });
-        const cm = contentMap.get(cnt)!;
-        if (ev.step === 'invite_clicked') cm.clicks += 1;
-        if (ev.step === 'bot_joined') cm.joins += 1;
-        if (ev.step === 'first_payment') cm.paid += 1;
+      if (ev.step === 'invite_clicked' || ev.step === 'bot_joined' || ev.step === 'first_payment') {
+        const rawCnt = ev.content ?? (ev.step !== 'invite_clicked' ? lc?.content ?? null : null);
+        const cnt = normalizeInviteContent(rawCnt);
+        if (cnt) {
+          if (!contentMap.has(cnt)) contentMap.set(cnt, { clicks: 0, joins: 0, paid: 0 });
+          const cm = contentMap.get(cnt)!;
+          if (ev.step === 'invite_clicked') cm.clicks += 1;
+          if (ev.step === 'bot_joined') cm.joins += 1;
+          if (ev.step === 'first_payment') cm.paid += 1;
+        }
       }
     }
 

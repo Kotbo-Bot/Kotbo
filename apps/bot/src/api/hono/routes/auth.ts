@@ -23,6 +23,8 @@ import {
 } from '../../auth/sessionStore.js';
 import { customDomainForHost, isCustomDomainOrigin } from '../../../services/system/customDomain.js';
 import { openSecret } from '../../../utils/secretBox.js';
+import { readAttributionCookie, verifyInviteState } from '../../shared/inviteAttribution.js';
+import { recordGuildAttribution } from '../../../services/analytics/acquisitionService.js';
 
 export const authRouter = new OpenAPIHono();
 
@@ -170,7 +172,69 @@ authRouter.get('/api/auth/discord/callback', async (c) => {
   // qui sait attendre l'arrivee effective du bot puis entrer dedans.
   const installedGuildId = c.req.query('guild_id');
   if (installedGuildId && /^\d{17,20}$/.test(installedGuildId)) {
-    return c.redirect(`${dashboardUrl}/servers?installed=${installedGuildId}`, 302);
+    const attrFromState = verifyInviteState(state ?? undefined);
+    const attr = attrFromState ?? readAttributionCookie(c.req.header('cookie'));
+    if (attr) {
+      await recordGuildAttribution(installedGuildId, {
+        source: attr.source,
+        content: attr.content,
+        campaign: attr.campaign,
+      });
+    }
+
+    const redirectUrl = `${dashboardUrl}/onboarding?guild_id=${installedGuildId}`;
+    if (attrFromState?.popup) {
+      const allowedOrigins = ['https://kotbo.fr', 'https://www.kotbo.fr'];
+      try {
+        allowedOrigins.push(new URL(dashboardUrl).origin);
+      } catch {
+        // ignore invalid dashboardUrl
+      }
+      if (process.env.NODE_ENV !== 'production') {
+        allowedOrigins.push('http://localhost:5173', 'http://localhost:4173', 'http://127.0.0.1:5173', 'http://127.0.0.1:4173');
+      }
+      const payloadJson = JSON.stringify({
+        type: 'KOTBO_BOT_INSTALLED',
+        guildId: installedGuildId,
+        redirectUrl,
+      }).replace(/</g, '\\u003c');
+      const originsJson = JSON.stringify(Array.from(new Set(allowedOrigins))).replace(/</g, '\\u003c');
+      const safeHref = redirectUrl.replace(/"/g, '&quot;');
+
+      return c.html(
+        `<!doctype html>
+<html lang="fr">
+<head><meta charset="utf-8"><title>Kotbo — Installation terminée</title></head>
+<body style="margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#09090b;color:#f4f4f5;font-family:system-ui,-apple-system,sans-serif;text-align:center;padding:24px;">
+  <div>
+    <p style="font-size:16px;font-weight:600;margin:0 0 12px;">Kotbo a rejoint ton serveur !</p>
+    <p style="font-size:14px;color:#a1a1aa;margin:0 0 18px;">Redirection vers la configuration…</p>
+    <a href="${safeHref}" style="display:inline-block;padding:10px 18px;border-radius:10px;background:#4f46e5;color:#fff;text-decoration:none;font-size:14px;font-weight:600;">Continuer vers le tableau de bord</a>
+  </div>
+  <script>
+    (function () {
+      var payload = ${payloadJson};
+      var origins = ${originsJson};
+      try {
+        if (window.opener && !window.opener.closed) {
+          for (var i = 0; i < origins.length; i++) {
+            try { window.opener.postMessage(payload, origins[i]); } catch (e) {}
+          }
+          window.close();
+        }
+      } catch (e) {}
+      setTimeout(function () {
+        window.location.replace(payload.redirectUrl);
+      }, 350);
+    })();
+  </script>
+</body>
+</html>`,
+        200,
+      );
+    }
+
+    return c.redirect(redirectUrl, 302);
   }
   const cookies = parseCookies(c.req.header('cookie') ?? '');
   const returnTo = safeReturnTo(cookies.kotbo_oauth_return_to);

@@ -400,3 +400,95 @@ export function trackDashboardOpen(guildId: string): void {
 export function trackAcquisitionStep(input: AcquisitionStepInput): void {
   void recordAcquisitionStep(input);
 }
+
+// ─────────────────────────────────────────────────────────────
+// Attribution en attente entre le callback OAuth2 et GUILD_CREATE
+// ─────────────────────────────────────────────────────────────
+
+const ATTRIBUTION_TTL_MS = 10 * 60 * 1000;
+const pendingAttribution = new Map<
+  string,
+  { source: string | null; content: string | null; campaign: string | null; expiresAt: number }
+>();
+
+/**
+ * Enregistre la provenance d'un serveur au retour du callback OAuth2.
+ *
+ * `GUILD_CREATE` peut arriver quelques millisecondes avant ou après la requête
+ * HTTP de callback. On pose donc l'attribution en mémoire (pour que
+ * `recordBotArrival` la lise tout de suite) ET dans `GuildLifecycle` sans
+ * jamais écraser une provenance déjà connue.
+ */
+export async function recordGuildAttribution(
+  guildId: string,
+  attr: { source?: string | null; content?: string | null; campaign?: string | null },
+): Promise<void> {
+  const source = str(attr.source);
+  const content = str(attr.content);
+  const campaign = str(attr.campaign);
+  if (!source && !content && !campaign) return;
+
+  if (pendingAttribution.size > 5_000) {
+    const now = Date.now();
+    for (const [key, entry] of pendingAttribution) {
+      if (entry.expiresAt <= now) pendingAttribution.delete(key);
+    }
+  }
+  pendingAttribution.set(guildId, {
+    source,
+    content,
+    campaign,
+    expiresAt: Date.now() + ATTRIBUTION_TTL_MS,
+  });
+
+  try {
+    const existing = await prisma.guildLifecycle.findUnique({
+      where: { guildId },
+      select: { source: true, content: true, campaign: true },
+    });
+
+    const patch: Record<string, string> = {};
+    if (!existing?.source && source) patch.source = source;
+    if (!existing?.content && content) patch.content = content;
+    if (!existing?.campaign && campaign) patch.campaign = campaign;
+
+    if (Object.keys(patch).length > 0) {
+      await prisma.guildLifecycle.upsert({
+        where: { guildId },
+        update: patch,
+        create: { guildId, ...patch },
+      });
+    }
+
+    // Si `GUILD_CREATE` est déjà passé juste avant le callback OAuth2, on
+    // rattache aussi l'événement `bot_joined` récent qui manquait de provenance.
+    await prisma.acquisitionEvent.updateMany({
+      where: {
+        guildId,
+        step: 'bot_joined',
+        source: null,
+        content: null,
+      },
+      data: {
+        ...(source ? { source } : {}),
+        ...(content ? { content } : {}),
+        ...(campaign ? { campaign } : {}),
+      },
+    });
+  } catch (error) {
+    logger.warn('Acquisition', `Attribution non enregistrée pour ${guildId}: ${String(error)}`);
+  }
+}
+
+/**
+ * Lit et consomme l'attribution en attente d'un serveur à son arrivée.
+ */
+export function consumeGuildAttribution(
+  guildId: string,
+): { source: string | null; content: string | null; campaign: string | null } | null {
+  const entry = pendingAttribution.get(guildId);
+  if (!entry) return null;
+  pendingAttribution.delete(guildId);
+  if (entry.expiresAt <= Date.now()) return null;
+  return { source: entry.source, content: entry.content, campaign: entry.campaign };
+}

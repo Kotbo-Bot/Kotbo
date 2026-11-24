@@ -31,10 +31,12 @@ import {
   ACQUISITION_REFERRERS,
   isPublicAcquisitionStep,
   normalizeAcquisitionSource,
+  normalizeInviteContent,
   type AcquisitionReferrer,
 } from '@kotbo/contracts';
 import { rateLimit } from '../../middleware/rateLimit.js';
 import { funnelRateLimiter } from '../../../limiters.js';
+import { isBotRequest } from '../../../shared/botFilter.js';
 import { trackAcquisitionStep } from '../../../../services/analytics/acquisitionService.js';
 
 /**
@@ -87,6 +89,10 @@ export function createPublicFunnelRouter(): OpenAPIHono {
   // jamais - et détailler ce qui a été refusé n'aiderait qu'à chercher la
   // faille. Une mesure perdue n'a aucune conséquence pour le visiteur.
   router.post('/api/public/funnel', async (c) => {
+    if (isBotRequest({ method: c.req.method, headers: c.req.raw.headers })) {
+      return c.body(null, 204);
+    }
+
     const raw = await c.req.text().catch(() => '');
     if (!raw || raw.length > MAX_BODY_BYTES) return c.body(null, 204);
 
@@ -108,6 +114,9 @@ export function createPublicFunnelRouter(): OpenAPIHono {
     const path = field(payload.path, PATH_MAX);
     if (path) metadata.path = path;
 
+    const rawContent = field(payload.content);
+    const content = step === 'invite_clicked' ? normalizeInviteContent(rawContent) : rawContent;
+
     trackAcquisitionStep({
       step,
       visitorId: field(payload.visitorId),
@@ -115,7 +124,7 @@ export function createPublicFunnelRouter(): OpenAPIHono {
       // même, le corps venant du navigateur.
       source: normalizeAcquisitionSource(payload.source ?? 'landing'),
       campaign: field(payload.campaign),
-      content: field(payload.content),
+      content,
       metadata: Object.keys(metadata).length ? metadata : null,
     });
 

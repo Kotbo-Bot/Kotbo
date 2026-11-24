@@ -44,7 +44,7 @@ import {
   handleModalSubmit,
 } from './handlers/interactionHandler.js';
 import prisma from './utils/db.js';
-import { trackAcquisitionStep } from './services/analytics/acquisitionService.js';
+import { consumeGuildAttribution, trackAcquisitionStep } from './services/analytics/acquisitionService.js';
 import { successEmbed } from './utils/embeds.js';
 import { loadApplicationEmojis } from './utils/emojis.js';
 import { getCachedDashboardSettings, cache } from './utils/cache.js';
@@ -840,7 +840,7 @@ async function recordBotArrival(guild: Guild): Promise<void> {
   try {
     const known = await prisma.guildLifecycle.findUnique({
       where: { guildId: guild.id },
-      select: { invitedAt: true, source: true },
+      select: { invitedAt: true, source: true, content: true, campaign: true },
     });
 
     const row = await prisma.guild.findUnique({
@@ -848,9 +848,14 @@ async function recordBotArrival(guild: Guild): Promise<void> {
       select: { instanceId: true, language: true, timezone: true },
     });
 
+    const pending = consumeGuildAttribution(guild.id);
+
     trackAcquisitionStep({
       step: known?.invitedAt ? 'bot_reinstalled' : 'bot_joined',
       guildId: guild.id,
+      source: pending?.source ?? known?.source ?? null,
+      content: pending?.content ?? known?.content ?? null,
+      campaign: pending?.campaign ?? known?.campaign ?? null,
       metadata: {
         memberCount: guild.memberCount ?? null,
         locale: row?.language ?? guild.preferredLocale ?? null,

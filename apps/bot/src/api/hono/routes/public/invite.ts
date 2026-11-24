@@ -22,8 +22,10 @@
  */
 import { OpenAPIHono } from '@hono/zod-openapi';
 import { PermissionFlagsBits } from 'discord.js';
-import { normalizeAcquisitionSource } from '@kotbo/contracts';
-import { getDiscordClientId, getDashboardUrl } from '../../../shared.js';
+import { normalizeAcquisitionSource, normalizeInviteContent } from '@kotbo/contracts';
+import { getDiscordClientId, getDiscordRedirectUri, getDashboardUrl } from '../../../shared.js';
+import { isBotRequest } from '../../../shared/botFilter.js';
+import { makeAttributionCookie, signInviteState } from '../../../shared/inviteAttribution.js';
 import { logger } from '../../../../utils/logger.js';
 import { trackAcquisitionStep } from '../../../../services/analytics/acquisitionService.js';
 
@@ -114,22 +116,64 @@ export function createPublicInviteRouter(): OpenAPIHono {
     }
 
     const source = normalizeAcquisitionSource(c.req.query('utm_source'));
-    const content = shortValue(c.req.query('utm_content'));
+    const content = normalizeInviteContent(shortValue(c.req.query('utm_content')));
     const campaign = shortValue(c.req.query('utm_campaign'));
     const visitorId = shortValue(c.req.query('vid'));
+    const referrer = shortValue(c.req.query('referrer'));
+    const landingPath = shortValue(c.req.query('landing_path'));
     const direct = c.req.query('direct') === '1';
+    const popup = c.req.query('popup') === '1';
 
-    // Ce point de passage voit *tous* ceux qui cliquent, y compris ceux qui
-    // abandonnent plus loin. Sans lui, la premiere mesure disponible serait
-    // l'arrivee du bot : on ne compterait que les gagnants.
-    trackAcquisitionStep({
-      step: 'invite_redirected',
-      visitorId,
-      source,
-      campaign,
-      content,
-      metadata: { direct },
-    });
+    const botRequest = isBotRequest({ method: c.req.method, headers: c.req.raw.headers });
+
+    if (!botRequest) {
+      // Ce point de passage voit *tous* ceux qui cliquent, y compris ceux qui
+      // abandonnent plus loin. Sans lui, la premiere mesure disponible serait
+      // l'arrivee du bot : on ne compterait que les gagnants.
+      trackAcquisitionStep({
+        step: 'invite_redirected',
+        visitorId,
+        source,
+        campaign,
+        content,
+        metadata: { direct, popup },
+      });
+
+      c.header(
+        'Set-Cookie',
+        makeAttributionCookie({ source, content, campaign, referrer, landingPath }),
+      );
+    }
+
+    if (popup) {
+      const redirectUri = getDiscordRedirectUri();
+      const params = new URLSearchParams({
+        client_id: clientId,
+        permissions: INVITE_PERMISSIONS,
+        scope: 'bot applications.commands',
+        disable_guild_select: 'false',
+        state: signInviteState({
+          source,
+          content,
+          campaign,
+          referrer,
+          landingPath,
+          popup: true,
+        }),
+      });
+      if (redirectUri) {
+        params.set('redirect_uri', redirectUri);
+        params.set('response_type', 'code');
+      }
+
+      const guildId = c.req.query('guild_id') ?? '';
+      if (/^\d{17,20}$/.test(guildId)) {
+        params.set('guild_id', guildId);
+        params.set('disable_guild_select', 'true');
+      }
+
+      return c.redirect(`https://discord.com/oauth2/authorize?${params.toString()}`, 302);
+    }
 
     if (!direct) {
       // La provenance est repassée au dashboard : c'est lui qui, à l'arrivée,

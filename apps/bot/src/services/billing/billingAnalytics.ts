@@ -185,9 +185,19 @@ export async function recordInvoice(
       where: { guildId, status: 'paid', id: { not: invoice.id } },
     });
 
+    const lifecycle = await prisma.guildLifecycle
+      .findUnique({
+        where: { guildId },
+        select: { source: true, content: true, campaign: true },
+      })
+      .catch(() => null);
+
     trackAcquisitionStep({
       step: priorPaid === 0 ? 'first_payment' : 'payment',
       guildId,
+      source: lifecycle?.source ?? null,
+      content: lifecycle?.content ?? null,
+      campaign: lifecycle?.campaign ?? null,
       metadata: {
         amountCents: data.amountPaidCents,
         mrrCents: monthlyCents(data.totalCents, interval),
