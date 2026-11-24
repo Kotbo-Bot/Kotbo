@@ -17852,6 +17852,8 @@
   "pwp_staff_title": "Staff avec widget actif",
   "sff_mode_blacklist": "Liste noire : les serveurs listés sont refusés",
   "sff_mode_whitelist": "Liste blanche : seuls les serveurs listés passent",
+  "sff_file_mode_blacklist": "Liste noire : les extensions listées sont refusées",
+  "sff_file_mode_whitelist": "Liste blanche : seules les extensions listées passent",
   "sff_sanction_delete": "Message supprimé seulement",
   "sff_group_executables": "Exécutables",
   "sff_group_videos": "Vidéos",

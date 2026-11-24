@@ -17852,6 +17852,8 @@
   "pwp_staff_title": "Staff with an active widget",
   "sff_mode_blacklist": "Blocklist: listed servers are refused",
   "sff_mode_whitelist": "Allowlist: only listed servers get through",
+  "sff_file_mode_blacklist": "Blocklist: listed extensions are refused",
+  "sff_file_mode_whitelist": "Allowlist: only listed extensions get through",
   "sff_sanction_delete": "Message deleted only",
   "sff_group_executables": "Executables",
   "sff_group_videos": "Videos",

@@ -39,6 +39,12 @@
     { value: 'BLACKLIST', get label() { return m.sff_mode_blacklist(); } },
     { value: 'WHITELIST', get label() { return m.sff_mode_whitelist(); } },
   ];
+  // La règle des pièces jointes porte sur des extensions, pas sur des serveurs (#777).
+  const FILE_MODES = [
+    { value: 'OFF', get label() { return m.common_disabled(); } },
+    { value: 'BLACKLIST', get label() { return m.sff_file_mode_blacklist(); } },
+    { value: 'WHITELIST', get label() { return m.sff_file_mode_whitelist(); } },
+  ];
   const SANCTIONS = [
     { value: 'DELETE', get label() { return m.sff_sanction_delete(); } },
     { value: 'WARN', get label() { return m.arx_sanction_warn(); } },
@@ -190,11 +196,11 @@
   });
 </script>
 
-{#snippet modeSelect(field: string, label: string, help: string)}
+{#snippet modeSelect(field: string, label: string, help: string, modes = MODES)}
   <label class="block">
     <span class="text-xs font-medium text-on-surface-variant">{label}</span>
     <select bind:value={config[field]} class="mt-1 w-full rounded-lg bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface">
-      {#each MODES as mode (mode.value)}<option value={mode.value}>{mode.label}</option>{/each}
+      {#each modes as mode (mode.value)}<option value={mode.value}>{mode.label}</option>{/each}
     </select>
     <p class="text-2xs text-on-surface-variant mt-1">{help}</p>
   </label>
@@ -285,7 +291,7 @@
         icon="Paperclip"
       >
         <div class="space-y-4">
-          {@render modeSelect('fileFilterMode', m.sff_server_rule(), m.sff_server_rule_help())}
+          {@render modeSelect('fileFilterMode', m.sff_server_rule(), m.sff_server_rule_help(), FILE_MODES)}
           {#if config.fileFilterMode !== 'OFF'}
             <div class="flex flex-wrap gap-2">
               {#each Object.keys(GROUP_LABELS) as group (group)}
