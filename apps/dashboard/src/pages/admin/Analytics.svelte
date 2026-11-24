@@ -294,10 +294,26 @@
       .map(([key, value]) => ({ id: key, label: key.charAt(0).toUpperCase() + key.slice(1), value: value.visits, sub: `${value.joins} installations · ${value.paid} clients` }))
       .sort((a, b) => b.value - a.value),
   );
-  const contentItems = $derived(
+  let showInactiveButtons = $state(false);
+  const allContentItems = $derived(
     Object.entries(funnelData?.contents ?? {})
-      .map(([key, value]) => ({ id: key, label: key, value: value.clicks, sub: `${value.joins} installations · ${value.paid} clients` }))
+      .map(([key, value]) => ({
+        id: key,
+        label: key,
+        value: value.clicks,
+        joins: value.joins,
+        paid: value.paid,
+        sub: `${value.joins} installations · ${value.paid} clients`,
+      }))
       .sort((a, b) => b.value - a.value),
+  );
+  const inactiveButtonCount = $derived(
+    allContentItems.filter((item) => item.value === 0 && item.joins === 0 && item.paid === 0).length,
+  );
+  const contentItems = $derived(
+    showInactiveButtons
+      ? allContentItems
+      : allContentItems.filter((item) => item.value > 0 || item.joins > 0 || item.paid > 0),
   );
   const dropItems = $derived(
     (onboardingData?.stepDropOffs ?? []).map((drop) => ({ id: drop.step, label: drop.step, value: drop.count, display: `${nf.format(drop.count)} · ${formatPercent(drop.dropOffRate)}` })),
@@ -510,6 +526,18 @@
           <BarList items={sourceItems} empty="Aucune visite mesurée sur la période." />
         </AdminCard>
         <AdminCard title="Boutons qui amènent des installations" description="Clics par bouton d’invitation du site">
+          {#snippet actions()}
+            {#if inactiveButtonCount > 0}
+              <Button
+                size="sm"
+                variant={showInactiveButtons ? 'primary' : 'secondary'}
+                aria-pressed={showInactiveButtons}
+                onclick={() => (showInactiveButtons = !showInactiveButtons)}
+              >
+                {showInactiveButtons ? 'Masquer les inactifs' : `Afficher les inactifs (${inactiveButtonCount})`}
+              </Button>
+            {/if}
+          {/snippet}
           <BarList items={contentItems} empty="Aucun clic mesuré sur la période." />
         </AdminCard>
       </div>
