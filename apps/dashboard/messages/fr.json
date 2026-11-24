@@ -19511,6 +19511,7 @@
   "tam_wiz_no_holders": "Personne ne le porte ici",
   "tam_wiz_pattern": "Texte du tag",
   "tam_wiz_pattern_ph": "RAID",
+  "tam_wiz_pattern_too_long": "Un tag de serveur fait {max} caractères au plus.",
   "tam_wiz_match_mode": "Correspondance",
   "tam_wiz_match_exact": "Exact",
   "tam_wiz_match_exact_hint": "Le tag entier, imitations comprises.",

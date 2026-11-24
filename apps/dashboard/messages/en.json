@@ -19507,6 +19507,7 @@
   "tam_wiz_no_holders": "Nobody wears it here",
   "tam_wiz_pattern": "Tag text",
   "tam_wiz_pattern_ph": "RAID",
+  "tam_wiz_pattern_too_long": "A server tag is {max} characters at most.",
   "tam_wiz_match_mode": "Matching",
   "tam_wiz_match_exact": "Exact",
   "tam_wiz_match_exact_hint": "The whole tag, imitations included.",

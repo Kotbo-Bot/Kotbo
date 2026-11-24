@@ -14,6 +14,7 @@
   import SearchableSelect from '../SearchableSelect.svelte';
   import Button from '../ui/Button.svelte';
   import Callout from '../ui/Callout.svelte';
+  import { tagPatternMaxLength } from '@kotbo/shared';
   import { m } from '../../i18n';
   import { toast } from '../../stores/toast.svelte';
   import { dashboardStore } from '../../stores/dashboard.svelte';
@@ -73,7 +74,9 @@
   const steps = $derived<Step[]>(draft.effect === 'ALLOW' ? ['target', 'preview', 'confirm'] : ['target', 'response', 'preview', 'confirm']);
   const stepIndex = $derived(steps.indexOf(step));
   const meta = $derived(tagActionMeta((draft.action ?? 'ALERT') as TagAction));
-  const targetReady = $derived(draft.targetType === 'SERVER' ? Boolean(draft.targetGuildId) : Boolean(draft.pattern?.trim()));
+  const patternMax = $derived(tagPatternMaxLength(draft.matchMode));
+  const patternTooLong = $derived((draft.pattern?.trim().length ?? 0) > patternMax);
+  const targetReady = $derived(draft.targetType === 'SERVER' ? Boolean(draft.targetGuildId) : Boolean(draft.pattern?.trim()) && !patternTooLong);
   const responseReady = $derived(draft.action !== 'ROLE' || Boolean(draft.roleId));
   const canNext = $derived(step === 'target' ? targetReady : step === 'response' ? responseReady : true);
   const targetLabel = $derived(draft.targetType === 'SERVER' ? (draft.targetName ?? draft.targetGuildId ?? '') : `« ${draft.pattern ?? ''} »`);
@@ -253,8 +256,12 @@
         <div class="space-y-3">
           <label class="block">
             <span class="text-xs font-medium text-on-surface-variant">{m.tam_wiz_pattern()}</span>
-            <input type="text" bind:value={draft.pattern} maxlength={100} placeholder={m.tam_wiz_pattern_ph()}
+            <input type="text" bind:value={draft.pattern} maxlength={patternMax} placeholder={m.tam_wiz_pattern_ph()}
+              aria-invalid={patternTooLong} aria-describedby={patternTooLong ? 'tam-pattern-too-long' : undefined}
               class="mt-1 w-full rounded-xl bg-surface-container border border-field-border px-3 py-2.5 text-body-sm text-on-surface font-mono" />
+            {#if patternTooLong}
+              <span id="tam-pattern-too-long" class="block text-2xs text-error mt-1">{m.tam_wiz_pattern_too_long({ max: patternMax })}</span>
+            {/if}
           </label>
           <div class="grid sm:grid-cols-3 gap-2" role="radiogroup" aria-label={m.tam_wiz_match_mode()}>
             {#each [{ v: 'EXACT', t: m.tam_wiz_match_exact(), d: m.tam_wiz_match_exact_hint() }, { v: 'CONTAINS', t: m.tam_wiz_match_contains(), d: m.tam_wiz_match_contains_hint() }, { v: 'REGEX', t: m.tam_wiz_match_regex(), d: m.tam_wiz_match_regex_hint() }] as opt (opt.v)}

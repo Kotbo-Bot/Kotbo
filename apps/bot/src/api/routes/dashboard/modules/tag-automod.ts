@@ -13,6 +13,7 @@
  */
 import { Prisma } from '@prisma/client';
 import { Hono, type Context } from 'hono';
+import { tagPatternMaxLength } from '@kotbo/shared';
 import type { Client, Guild } from 'discord.js';
 import prisma from '../../../../utils/db.js';
 import { broadcastDashboardStateChange, getGuildName, pushAudit } from '../../../shared.js';
@@ -117,9 +118,11 @@ function parseRule(body: Body, partial = false): { rule: Partial<RuleInput> } | 
       rule.targetIcon = typeof body.targetIcon === 'string' && body.targetIcon.startsWith('https://cdn.discordapp.com/') ? body.targetIcon : null;
       rule.pattern = null;
     } else {
-      const pattern = typeof body.pattern === 'string' ? body.pattern.trim().slice(0, 100) : '';
+      const pattern = typeof body.pattern === 'string' ? body.pattern.trim() : '';
       if (!pattern) return { error: 'Saisis le texte du tag.' };
       const matchMode = oneOf(body.matchMode, ['EXACT', 'CONTAINS', 'REGEX'] as const) ?? 'EXACT';
+      const maxLength = tagPatternMaxLength(matchMode);
+      if (pattern.length > maxLength) return { error: `Le texte du tag fait ${maxLength} caractères au plus.` };
       if (matchMode === 'REGEX') {
         try {
           new RegExp(pattern, 'iu');
