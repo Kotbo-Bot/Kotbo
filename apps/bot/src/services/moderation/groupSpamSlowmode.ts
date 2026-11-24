@@ -6,10 +6,9 @@
  */
 
 import { EmbedBuilder, type Message } from 'discord.js';
-import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
-import { resolveLogChannel } from '../../utils/logChannel.js';
 import { mirrorModlogToStaffServer } from '../staff/staffServerService.js';
+import { resolveEventLogChannel } from '../../utils/logDispatch.js';
 
 /** Membres distincts qui doivent déclencher l'anti-spam dans la fenêtre. */
 export const GROUP_SPAM_MIN_USERS = 3;
@@ -126,7 +125,6 @@ async function logPreventiveSlowmode(
 ): Promise<void> {
   try {
     const guild = message.guild!;
-    const guildDb = await prisma.guild.findUnique({ where: { id: guild.id }, select: { logChannelId: true } });
     const embed = new EmbedBuilder()
       .setTitle('🐢 Mode lent préventif activé')
       .setDescription(`Pic d'activité détecté (${messageCount} messages en ${windowSec} s) : le salon passe temporairement en mode lent.`)
@@ -138,7 +136,7 @@ async function logPreventiveSlowmode(
       .setColor('#FEE75C')
       .setTimestamp();
 
-    const logChannel = await resolveLogChannel(guild, guildDb?.logChannelId, 'AutoModService');
+    const logChannel = await resolveEventLogChannel(guild, 'automod_slowmode', 'AutoModService');
     if (logChannel) await logChannel.send({ embeds: [embed], allowedMentions: { parse: [] } }).catch(() => null);
     await mirrorModlogToStaffServer(message.client, guild.id, embed);
   } catch (err) {
@@ -200,7 +198,6 @@ export async function handleGroupSpam(message: Message, slowmodeSec: number, dur
 async function logGroupSpam(message: Message, spammers: string[], slowmodeSec: number, durationMin: number): Promise<void> {
   try {
     const guild = message.guild!;
-    const guildDb = await prisma.guild.findUnique({ where: { id: guild.id }, select: { logChannelId: true } });
     const embed = new EmbedBuilder()
       .setTitle('🐢 Spam à plusieurs')
       .setDescription(`Plusieurs membres ont spammé en même temps : le salon passe en mode lent au lieu de sanctionner chacun.`)
@@ -212,7 +209,7 @@ async function logGroupSpam(message: Message, spammers: string[], slowmodeSec: n
       .setColor('#FEE75C')
       .setTimestamp();
 
-    const logChannel = await resolveLogChannel(guild, guildDb?.logChannelId, 'AutoModService');
+    const logChannel = await resolveEventLogChannel(guild, 'automod_slowmode', 'AutoModService');
     if (logChannel) await logChannel.send({ embeds: [embed], allowedMentions: { parse: [] } }).catch(() => null);
     await mirrorModlogToStaffServer(message.client, guild.id, embed);
   } catch (err) {

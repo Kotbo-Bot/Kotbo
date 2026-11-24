@@ -1,9 +1,8 @@
 import { MessageFlags, PermissionFlagsBits, SlashCommandBuilder, type ChatInputCommandInteraction } from 'discord.js';
 import type { SlashCommandDefinition } from '../../commands.js';
 import { errorEmbed, infoEmbed, successEmbed } from '../../utils/embeds.js';
-import { getCachedGuild } from '../../utils/cache.js';
-import { resolveLogChannel } from '../../utils/logChannel.js';
 import { grantBotBypass, listBotBypasses } from '../../services/moderation/autoModService.js';
+import { resolveEventLogChannel } from '../../utils/logDispatch.js';
 
 const data = new SlashCommandBuilder()
   .setName('bypass')
@@ -58,8 +57,7 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
     flags: [MessageFlags.Ephemeral],
   });
 
-  const guildConfig = await getCachedGuild(guild.id);
-  const log = await resolveLogChannel(guild, guildConfig?.logChannelId, 'Bypass');
+  const log = await resolveEventLogChannel(guild, 'security_anti_bot', 'Bypass');
   await log?.send({ content: `🤖 <@${interaction.user.id}> a autorisé le bot ${bot.tag} (\`${bot.id}\`) à rejoindre une fois, jusqu'à ${until}.`, allowedMentions: { parse: [] } }).catch(() => null);
 }
 

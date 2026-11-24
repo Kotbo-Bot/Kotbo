@@ -29,6 +29,7 @@ import { loadSpamWeights, logSpamSample } from './learning.js';
 import { normalizeContent } from './normalize.js';
 import { evaluateMessage } from './scoring.js';
 import { resolveAction, type SpamAction, type SpamVerdict, type TrustContext } from './types.js';
+import { resolveEventLogChannel } from '../../../utils/logDispatch.js';
 
 export * from './types.js';
 export { evaluateMessage, computeSpamScore, trustMultiplier } from './scoring.js';
@@ -120,13 +121,10 @@ async function sendAlert(
 ): Promise<void> {
   const guild = message.guild!;
   const config = await getSpamConfig(guild.id);
-  const guildConfig = (await getCachedGuild(guild.id)) as { logChannelId?: string | null } | null;
-
-  const channelId = config?.alertChannelId ?? guildConfig?.logChannelId;
-  if (!channelId) return;
-
-  const channel = await guild.channels.fetch(channelId).catch(() => null);
-  if (!channel?.isTextBased()) return;
+  const channel = await resolveEventLogChannel(guild, 'automod_spam', 'AntiSpam', {
+    moduleChannelId: config?.alertChannelId,
+  });
+  if (!channel) return;
 
   const embed = new EmbedBuilder()
     .setColor(shadow ? COLORS.info : action === 'BAN' || action === 'TIMEOUT' ? COLORS.danger : COLORS.warning)

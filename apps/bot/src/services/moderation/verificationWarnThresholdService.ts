@@ -9,7 +9,7 @@
  *  - NOTIFY_STAFF: un embed est posté dans le canal de log pour prévenir le staff
  */
 
-import type { Client, GuildMember, TextChannel, User } from 'discord.js';
+import type { Client, GuildMember, User } from 'discord.js';
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
@@ -23,6 +23,7 @@ import { deliverVerification } from './verificationDeliveryService.js';
 import { getWarnScore } from './sanctionService.js';
 import { queueAuditLog } from '../../utils/auditLogger.js';
 import { getDashboardUrl } from '../../api/shared.js';
+import { resolveEventLogChannel } from '../../utils/logDispatch.js';
 
 const TIMEOUT_DURATION_MS = 28 * 24 * 60 * 60 * 1000; // 28 jours (max Discord)
 
@@ -211,21 +212,20 @@ async function triggerNotifyStaff(params: {
 }): Promise<void> {
   const { client, guildId, targetUser, guildConfig, reason, threshold, warnCount } = params;
 
-  const logChannelId = guildConfig.verificationLogChannelId || guildConfig.logChannelId;
-  if (!logChannelId) {
-    logger.warn(
-      'VerifThreshold',
-      `NOTIFY_STAFF: aucun canal de log configuré pour ${guildId}. Impossible de notifier le staff.`,
-    );
-    return;
-  }
-
   try {
     const guild = await client.guilds.fetch(guildId).catch(() => null);
     if (!guild) return;
 
-    const channel = (await guild.channels.fetch(logChannelId).catch(() => null)) as TextChannel | null;
-    if (!channel || !('send' in channel)) return;
+    const channel = await resolveEventLogChannel(guild, 'verification_warn_threshold', 'VerifThreshold', {
+      moduleChannelId: guildConfig.verificationLogChannelId,
+    });
+    if (!channel) {
+      logger.warn(
+        'VerifThreshold',
+        `NOTIFY_STAFF: aucun salon de log utilisable (ou type désactivé) pour ${guildId}. Impossible de notifier le staff.`,
+      );
+      return;
+    }
 
     const embed = new EmbedBuilder()
       .setColor(0xffa500)
@@ -257,7 +257,7 @@ async function triggerNotifyStaff(params: {
       context: `${targetUser.tag} (${targetUser.id})`,
       module: 'Vérification',
       eventType: 'Automatique',
-      details: `Seuil ${threshold} atteint (${warnCount} warns). Notification envoyée dans <#${logChannelId}>.`,
+      details: `Seuil ${threshold} atteint (${warnCount} warns). Notification envoyée dans <#${channel.id}>.`,
     });
   } catch (err) {
     logger.error('VerifThreshold', `Erreur lors de la notification du staff pour ${targetUser.tag}:`, err);

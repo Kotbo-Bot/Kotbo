@@ -17,6 +17,7 @@ import {
   getQueueLength,
   normalizeVoiceLocale,
 } from './voiceCaptchaService.js';
+import { resolveEventLogChannel } from '../../utils/logDispatch.js';
 
 // Lettres sans ambiguïté (pas de I/O/0/1…)
 const CAPTCHA_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -540,18 +541,12 @@ async function cleanupCaptchaMessage(guildId: string, session: CaptchaSession, c
  * journal signalait dans le vide qu'il ne fonctionnait pas.
  */
 async function logCaptcha(client: Client, guildId: string, config: RaidProtectionConfig, content: string): Promise<void> {
-  let channelId = config.captchaLogChannelId;
-  if (!channelId) {
-    const guildConfig = await prisma.guild.findUnique({ where: { id: guildId }, select: { logChannelId: true } });
-    channelId = guildConfig?.logChannelId ?? null;
-  }
-  if (!channelId) return;
-
   const guild = client.guilds.cache.get(guildId);
-  const channel = guild ? await guild.channels.fetch(channelId).catch(() => null) : null;
-  if (channel?.isTextBased()) {
-    await (channel as TextChannel).send(content).catch(() => null);
-  }
+  if (!guild) return;
+  const channel = await resolveEventLogChannel(guild, 'security_captcha', 'Captcha', {
+    moduleChannelId: config.captchaLogChannelId,
+  });
+  await channel?.send(content).catch(() => null);
 }
 
 /**
