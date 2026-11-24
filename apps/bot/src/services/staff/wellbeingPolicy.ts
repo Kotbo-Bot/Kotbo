@@ -313,6 +313,29 @@ export function resourcesMessage(guildName: string, resources: readonly Wellbein
   return [`La cellule bien-être de **${guildName}** te partage ces ressources d'aide :`, ...lines].join('\n');
 }
 
+// ── Documents Google Drive ─────────────────────────────────────────────────
+
+/** Hôtes acceptés : Drive et les éditeurs Docs, Sheets, Slides, Forms. */
+const DRIVE_HOSTS = new Set(['drive.google.com', 'docs.google.com']);
+export const MAX_CASE_ATTACHMENTS = 20;
+export const ATTACHMENT_LABEL_MAX = 120;
+
+/**
+ * Lien vers un document Google Drive, ou `null`. Seul le lien est gardé : le
+ * fichier reste chez Google, et ses droits de partage décident qui l'ouvre.
+ */
+export function cleanDriveLink(value: unknown): string | null {
+  const raw = text(value, 500);
+  if (!raw) return null;
+  try {
+    const url = new URL(raw);
+    if (url.protocol !== 'https:' || url.username || url.password || !DRIVE_HOSTS.has(url.hostname)) return null;
+    return raw;
+  } catch {
+    return null;
+  }
+}
+
 // ── Relances et signalements ───────────────────────────────────────────────
 
 export function staleCutoff(now: Date, days: number): Date {

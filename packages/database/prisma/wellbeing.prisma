@@ -55,8 +55,9 @@ model WellbeingCase {
   lastActivityAt   DateTime @default(now())
 
   guild  Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
-  notes  WellbeingCaseNote[]
-  events WellbeingCaseEvent[]
+  notes       WellbeingCaseNote[]
+  events      WellbeingCaseEvent[]
+  attachments WellbeingCaseAttachment[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -80,13 +81,30 @@ model WellbeingCaseNote {
   @@map("wellbeing_case_notes")
 }
 
+// Document Google Drive joint à un dossier. Seul le lien est gardé, chiffré
+// avec son nom (wellbeingCrypto) ; le fichier reste chez Google.
+model WellbeingCaseAttachment {
+  id          String   @id @default(cuid())
+  caseId      String
+  label       String
+  url         String
+  addedById   String
+  addedByName String
+  createdAt   DateTime @default(now())
+
+  wellbeingCase WellbeingCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@index([caseId, createdAt])
+  @@map("wellbeing_case_attachments")
+}
+
 // Historique d'un dossier : qui a changé quoi, et quand. Aucun contenu.
 model WellbeingCaseEvent {
   id        String   @id @default(cuid())
   caseId    String
   actorId   String?
   actorName String
-  type      String   // CREATED | STATUS | SEVERITY | ASSIGNEE | REVIEW | NOTE | RESOURCES_SENT | REMINDER
+  type      String   // CREATED | STATUS | SEVERITY | ASSIGNEE | REVIEW | NOTE | RESOURCES_SENT | REMINDER | ATTACHMENT_ADDED | ATTACHMENT_REMOVED
   fromValue String?
   toValue   String?
   createdAt DateTime @default(now())

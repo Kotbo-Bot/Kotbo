@@ -60,6 +60,16 @@
   let savingResources = $state(false);
   let sendingResources = $state(false);
   let assigneeCandidate = $state('');
+
+  // Documents Google Drive du dossier ouvert
+  let newAttachmentLabel = $state('');
+  let newAttachmentUrl = $state('');
+  let addingAttachment = $state(false);
+  let removingAttachmentId = $state<string | null>(null);
+  /** Même plafond que le bot (MAX_CASE_ATTACHMENTS). */
+  const MAX_CASE_ATTACHMENTS = 20;
+  /** Un lien illisible (clé changée) ne devient jamais un href. */
+  const isDriveLink = (url: string) => /^https:\/\/(drive|docs)\.google\.com\//.test(url);
   let breakGlassSubmitting = $state(false);
 
   // New case modal
@@ -367,6 +377,47 @@
     }
   }
 
+  async function addAttachment(event: SubmitEvent) {
+    event.preventDefault();
+    const target = selectedCase;
+    if (!target || addingAttachment) return;
+    addingAttachment = true;
+    try {
+      const res = await dashboardFetch(`/wellbeing/cases/${target.id}/attachments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: newAttachmentLabel.trim(), url: newAttachmentUrl.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? '');
+      cases = cases.map((c) => (c.id === data.item.id ? data.item : c));
+      newAttachmentLabel = '';
+      newAttachmentUrl = '';
+      toast.success(m.toast_wb_attachment_added());
+    } catch (err: any) {
+      toast.error(err?.message || m.toast_wb_attachment_failed());
+    } finally {
+      addingAttachment = false;
+    }
+  }
+
+  async function removeAttachment(attachmentId: string) {
+    const target = selectedCase;
+    if (!target || removingAttachmentId) return;
+    if (!(await confirmDialog.danger(m.wb_attachment_remove_q(), m.wb_attachment_remove_warn()))) return;
+    removingAttachmentId = attachmentId;
+    try {
+      const res = await dashboardFetch(`/wellbeing/cases/${target.id}/attachments/${attachmentId}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? '');
+      cases = cases.map((c) => (c.id === data.item.id ? data.item : c));
+    } catch (err: any) {
+      toast.error(err?.message || m.toast_wb_attachment_failed());
+    } finally {
+      removingAttachmentId = null;
+    }
+  }
+
   async function saveResources() {
     if (savingResources) return;
     savingResources = true;
@@ -568,6 +619,35 @@
                     <p class="whitespace-pre-wrap text-on-surface">{note.content}</p>
                   </div>
                 {/each}
+              </div>
+
+              <div class="space-y-2">
+                <h3 class="text-xs font-semibold text-on-surface-variant">{m.wb_attachments_title()}</h3>
+                <p class="text-xs text-on-surface-variant">{m.wb_attachments_desc()}</p>
+                {#each selectedCase.attachments ?? [] as attachment (attachment.id)}
+                  <div class="flex items-center justify-between gap-2 rounded-lg border border-outline-variant px-3 py-2 text-sm">
+                    {#if isDriveLink(attachment.url)}
+                      <a href={attachment.url} target="_blank" rel="noopener noreferrer" class="text-primary underline truncate">{attachment.label}</a>
+                    {:else}
+                      <span class="truncate text-on-surface-variant">{attachment.label}</span>
+                    {/if}
+                    <span class="flex items-center gap-2 shrink-0 text-xs text-on-surface-variant">
+                      {attachment.addedByName}
+                      {#if status?.canWriteCases}
+                        <Button size="sm" variant="ghost" icon="trash" loading={removingAttachmentId === attachment.id}
+                          aria-label={m.wb_attachment_remove({ name: attachment.label })}
+                          onclick={() => void removeAttachment(attachment.id)}>{m.common_delete()}</Button>
+                      {/if}
+                    </span>
+                  </div>
+                {/each}
+                {#if status?.canWriteCases && (selectedCase.attachments ?? []).length < MAX_CASE_ATTACHMENTS}
+                  <form onsubmit={addAttachment} class="grid grid-cols-1 sm:grid-cols-[1fr_2fr_auto] gap-2">
+                    <input bind:value={newAttachmentLabel} maxlength={120} class="input text-sm" aria-label={m.wb_attachment_label()} placeholder={m.wb_attachment_label()} />
+                    <input bind:value={newAttachmentUrl} type="url" required maxlength={500} class="input text-sm" aria-label={m.wb_attachment_url()} placeholder={m.wb_attachment_url_ph()} />
+                    <Button type="submit" size="sm" variant="secondary" loading={addingAttachment}>{m.common_add()}</Button>
+                  </form>
+                {/if}
               </div>
 
               {#if status?.canWriteCases}
