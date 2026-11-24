@@ -5,7 +5,7 @@ import { dashboardMutation, dashboardRequest } from './client';
 export type TagAction = 'ALERT' | 'DM' | 'TICKET' | 'ROLE' | 'WARN' | 'TIMEOUT' | 'JAIL' | 'KICK' | 'SOFTBAN' | 'BAN';
 export type TagTrigger =
   | 'JOIN' | 'TAG_CHANGE' | 'RESCAN' | 'WAVE' | 'NEW_ACCOUNT' | 'MASS_ADOPT'
-  | 'IMPERSONATION' | 'SHARED_LIST' | 'ALLOWLIST' | 'ESCALATION';
+  | 'IMPERSONATION' | 'SHARED_LIST' | 'PRESET_LIST' | 'ALLOWLIST' | 'ESCALATION';
 
 export interface TagAutomodConfig {
   enabled: boolean;
@@ -21,6 +21,12 @@ export interface TagAutomodConfig {
   sharedListEnabled: boolean;
   sharedListAction: TagAction;
   sharedListDurationMin: number | null;
+  /** Catégories de listes prédéfinies activées ; vide = détection éteinte. */
+  presetCategories: string[];
+  presetAction: TagAction;
+  presetDurationMin: number | null;
+  /** Tags retirés des listes (faux positifs). */
+  presetExcluded: string[];
   waveEnabled: boolean;
   waveMode: 'ADAPTIVE' | 'FIXED';
   wavePreset: 'SOFT' | 'NORMAL' | 'STRICT';

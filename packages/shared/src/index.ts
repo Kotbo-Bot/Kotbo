@@ -46,6 +46,7 @@ export * from './rankCard/decor.js';
 export * from './automod/presets.js';
 export * from './automod/hateSymbols.js';
 export * from './automod/serverTag.js';
+export * from './automod/tagPresetLists.js';
 export * from './tempVoice/types.js';
 export * from './tempVoice/diff.js';
 export * from './autoThread/index.js';

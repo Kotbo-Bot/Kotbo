@@ -32,6 +32,7 @@
   import { toast } from '../../lib/stores/toast.svelte';
   import { removeWithUndo } from '../../lib/undoRemoval';
   import { formatDuration } from '../../lib/durationFormat';
+  import { DEFAULT_TAG_PRESET_CATEGORIES, TAG_PRESET_CATEGORIES, TAG_PRESET_LISTS, normalizeTagList } from '@kotbo/shared';
   import {
     fetchTagAutomod,
     updateTagAutomodConfig,
@@ -95,6 +96,18 @@
   }
 
   /** Enregistre aussitôt, avec retour arrière si l'appel échoue. */
+  const PRESET_CATEGORY_LABELS: Record<string, () => string> = {
+    HATE: () => m.tam_preset_cat_hate(),
+    ANTISEMITISM: () => m.tam_preset_cat_antisemitism(),
+    EXTREMISM: () => m.tam_preset_cat_extremism(),
+    POLITICS: () => m.tam_preset_cat_politics(),
+  };
+
+  /** Liste de tags saisie à la main, séparée par virgules, espaces ou lignes. */
+  function parseTagList(value: string): string[] {
+    return normalizeTagList(value.split(/[\s,;]+/));
+  }
+
   async function patch(partial: Partial<TagAutomodConfig>, success?: string) {
     if (!data) return;
     const before = data.config;
@@ -524,6 +537,36 @@
             </div>
           {/snippet}
           {@render detection(m.tam_shared_title(), m.tam_shared_desc(), 'Globe', config.sharedListEnabled, (v) => patch({ sharedListEnabled: v }), sharedBody)}
+
+          {#snippet presetBody()}
+            <fieldset class="space-y-2">
+              <legend class="text-xs font-medium text-on-surface-variant">{m.tam_preset_categories()}</legend>
+              {#each TAG_PRESET_CATEGORIES as category (category)}
+                {@const active = config.presetCategories.includes(category)}
+                <label class="flex items-start gap-2 rounded-xl border border-outline-variant/30 px-3 py-2 text-body-sm text-on-surface">
+                  <input type="checkbox" class="mt-1" checked={active}
+                    onchange={() => patch({ presetCategories: active ? config.presetCategories.filter((c) => c !== category) : [...config.presetCategories, category] })} />
+                  <span class="min-w-0">
+                    {PRESET_CATEGORY_LABELS[category]()}
+                    <span class="block text-2xs text-on-surface-variant font-mono">{TAG_PRESET_LISTS[category].join(' · ')}</span>
+                  </span>
+                </label>
+              {/each}
+            </fieldset>
+            <div class="grid grid-cols-2 gap-3">
+              {@render actionPicker(config.presetAction, (a) => patch({ presetAction: a }), m.tam_wave_action())}
+              {#if tagActionMeta(config.presetAction).needsDuration}{@render durationField(config.presetDurationMin, (v) => patch({ presetDurationMin: v }), m.tam_wiz_duration())}{/if}
+            </div>
+            <label class="block">
+              <span class="text-xs font-medium text-on-surface-variant">{m.tam_preset_excluded()}</span>
+              <input type="text" value={config.presetExcluded.join(', ')} placeholder={m.tam_preset_excluded_ph()}
+                onchange={(e) => patch({ presetExcluded: parseTagList(e.currentTarget.value) })}
+                class="mt-1 w-full rounded-xl bg-surface-container border border-field-border px-3 py-2 text-body-sm text-on-surface font-mono" />
+              <span class="block text-2xs text-on-surface-variant mt-1">{m.tam_preset_excluded_hint()}</span>
+            </label>
+          {/snippet}
+          {@render detection(m.tam_preset_title(), m.tam_preset_desc(), 'ListChecks', config.presetCategories.length > 0,
+            (v) => patch({ presetCategories: v ? [...DEFAULT_TAG_PRESET_CATEGORIES] : [] }), presetBody)}
 
           {#snippet allowBody()}
             {#if !rules.some((r) => r.effect === 'ALLOW')}

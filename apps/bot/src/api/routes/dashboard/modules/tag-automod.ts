@@ -13,7 +13,7 @@
  */
 import { Prisma } from '@prisma/client';
 import { Hono, type Context } from 'hono';
-import { tagPatternMaxLength } from '@kotbo/shared';
+import { isTagPresetCategory, normalizeTagList, tagPatternMaxLength } from '@kotbo/shared';
 import type { Client, Guild } from 'discord.js';
 import prisma from '../../../../utils/db.js';
 import { broadcastDashboardStateChange, getGuildName, pushAudit } from '../../../shared.js';
@@ -68,6 +68,10 @@ function parseConfig(body: Body): Prisma.TagAutomodConfigUncheckedUpdateInput {
     sharedListEnabled: bool(body.sharedListEnabled),
     sharedListAction: action(body.sharedListAction),
     sharedListDurationMin: optInt(body.sharedListDurationMin, 1, MAX_AUTO_SANCTION_DURATION_MIN),
+    presetCategories: Array.isArray(body.presetCategories) ? [...new Set(body.presetCategories.filter(isTagPresetCategory))] : undefined,
+    presetAction: action(body.presetAction),
+    presetDurationMin: optInt(body.presetDurationMin, 1, MAX_AUTO_SANCTION_DURATION_MIN),
+    presetExcluded: Array.isArray(body.presetExcluded) ? normalizeTagList(body.presetExcluded).slice(0, 100) : undefined,
     waveEnabled: bool(body.waveEnabled),
     waveMode: oneOf(body.waveMode, ['ADAPTIVE', 'FIXED'] as const),
     wavePreset: oneOf(body.wavePreset, ['SOFT', 'NORMAL', 'STRICT'] as const),
@@ -152,6 +156,7 @@ const DEFAULT_CONFIG = {
   enabled: false, testMode: false, onJoin: true, onTagChange: true, exemptRoleIds: [], exemptUserIds: [], alertChannelId: null,
   allowlistOnly: false, allowlistAction: 'ALERT', allowlistDurationMin: null,
   sharedListEnabled: false, sharedListAction: 'ALERT', sharedListDurationMin: null,
+  presetCategories: [], presetAction: 'ALERT', presetDurationMin: null, presetExcluded: [],
   waveEnabled: false, waveMode: 'ADAPTIVE', wavePreset: 'NORMAL', waveThreshold: 5, waveWindowSec: 120, waveAction: 'JAIL',
   waveDurationMin: null, waveBlockHours: 24, waveReportFleet: true,
   newAccountEnabled: false, newAccountDays: 7, newAccountScope: 'UNKNOWN', newAccountAction: 'ALERT', newAccountDurationMin: null,

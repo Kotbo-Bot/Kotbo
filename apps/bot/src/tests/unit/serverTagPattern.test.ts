@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { MAX_SERVER_TAG_LENGTH, tagPatternMaxLength } from '@kotbo/shared';
+import { MAX_SERVER_TAG_LENGTH, normalizeTagList, tagPatternMaxLength } from '@kotbo/shared';
 
 describe('tagPatternMaxLength', () => {
   test('un tag de serveur Discord fait 4 caractères au plus', () => {
@@ -13,5 +13,11 @@ describe('tagPatternMaxLength', () => {
 
   test('une expression régulière garde la place de décrire plusieurs tags', () => {
     expect(tagPatternMaxLength('REGEX')).toBe(100);
+  });
+});
+
+describe('normalizeTagList', () => {
+  test('met en capitales, écarte les vides, les doublons et les tags trop longs', () => {
+    expect(normalizeTagList([' ss', 'SS', '', 'toolong', 14, '14'])).toEqual(['SS', '14']);
   });
 });
