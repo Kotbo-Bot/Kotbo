@@ -20071,7 +20071,7 @@
   "wb_resources_phone": "Téléphone",
   "wb_resources_url": "Lien (https)",
   "wb_resources_description": "Précision",
-  "wb_resources_remove": "Retirer {name}",
+  "wb_resources_remove": "Supprimer {name}",
   "wb_resources_save": "Enregistrer les ressources",
   "toast_wb_resources_saved": "Ressources enregistrées.",
   "toast_wb_resources_save_failed": "Enregistrement des ressources impossible.",

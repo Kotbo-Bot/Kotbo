@@ -20067,7 +20067,7 @@
   "wb_resources_phone": "Phone",
   "wb_resources_url": "Link (https)",
   "wb_resources_description": "Details",
-  "wb_resources_remove": "Remove {name}",
+  "wb_resources_remove": "Delete {name}",
   "wb_resources_save": "Save resources",
   "toast_wb_resources_saved": "Resources saved.",
   "toast_wb_resources_save_failed": "Could not save the resources.",

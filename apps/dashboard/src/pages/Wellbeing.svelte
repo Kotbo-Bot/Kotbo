@@ -529,7 +529,7 @@
                   {/snippet}
                 </Field>
                 <Field label={m.wb_assignee()} hint={m.wb_assignee_hint()}>
-                  {#snippet children(id)}
+                  {#snippet children(id, describedBy)}
                     {#if selectedCase?.assigneeId}
                       <div class="flex items-center justify-between gap-2 text-sm">
                         <MemberName userId={selectedCase.assigneeId} />
@@ -538,7 +538,7 @@
                         {/if}
                       </div>
                     {:else if status?.canWriteCases}
-                      <MemberSearchSelect {id} bind:value={assigneeCandidate} placeholder={m.wb_member_ph()}
+                      <MemberSearchSelect {id} {describedBy} bind:value={assigneeCandidate} placeholder={m.wb_member_ph()}
                         onselect={(member) => { assigneeCandidate = ''; void updateCase({ assigneeId: member.id }); }} />
                     {:else}
                       <p class="text-sm text-on-surface-variant">{m.wb_assignee_none()}</p>
@@ -546,8 +546,8 @@
                   {/snippet}
                 </Field>
                 <Field label={m.wb_review_at()} hint={m.wb_review_hint()}>
-                  {#snippet children(id)}
-                    <input {id} type="date" class="input w-full" disabled={updatingCase || !status?.canWriteCases}
+                  {#snippet children(id, describedBy)}
+                    <input {id} aria-describedby={describedBy} type="date" class="input w-full" disabled={updatingCase || !status?.canWriteCases}
                       value={selectedCase?.reviewAt ? selectedCase.reviewAt.slice(0, 10) : ''}
                       onchange={(e) => void updateCase({ reviewAt: e.currentTarget.value || null })} />
                   {/snippet}
@@ -667,8 +667,8 @@
       {/snippet}
     </Field>
     <Field label={m.wb_bg_scope()} hint={m.wb_bg_scope_hint()}>
-      {#snippet children(id)}
-        <MemberSearchSelect {id} bind:value={breakGlassSubjectUserId} placeholder={m.wb_member_ph()} />
+      {#snippet children(id, describedBy)}
+        <MemberSearchSelect {id} {describedBy} bind:value={breakGlassSubjectUserId} placeholder={m.wb_member_ph()} />
       {/snippet}
     </Field>
     {#if status?.breakGlassApproval}
@@ -722,13 +722,13 @@
     </Field>
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
       <Field label={m.wb_assignee()} hint={m.wb_assignee_hint()}>
-        {#snippet children(id)}
-          <MemberSearchSelect {id} bind:value={newAssigneeId} placeholder={m.wb_member_ph()} />
+        {#snippet children(id, describedBy)}
+          <MemberSearchSelect {id} {describedBy} bind:value={newAssigneeId} placeholder={m.wb_member_ph()} />
         {/snippet}
       </Field>
       <Field label={m.wb_review_at()} hint={m.wb_review_hint()}>
-        {#snippet children(id)}
-          <input {id} type="date" bind:value={newReviewAt} class="input w-full" />
+        {#snippet children(id, describedBy)}
+          <input {id} aria-describedby={describedBy} type="date" bind:value={newReviewAt} class="input w-full" />
         {/snippet}
       </Field>
     </div>
@@ -761,8 +761,8 @@
       <p class="text-xs text-warning">{m.wb_cfg_report_unnoticed()}</p>
     {/if}
     <Field label={m.wb_cfg_stale_days()} hint={m.wb_cfg_stale_hint()}>
-      {#snippet children(id)}
-        <input {id} type="number" min="0" max="90" step="1" bind:value={cfgStaleDays} class="input w-32" />
+      {#snippet children(id, describedBy)}
+        <input {id} aria-describedby={describedBy} type="number" min="0" max="90" step="1" bind:value={cfgStaleDays} class="input w-32" />
       {/snippet}
     </Field>
     <Field label={m.wb_cfg_team_roles()}>

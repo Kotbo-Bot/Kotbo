@@ -2984,6 +2984,7 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "nathanChannelId": null,
     "youtubeShortRoleId": null,
     "youtubeVideoRoleId": null,
+    "publicTheme": null,
     "warnsToDemote": 3,
     "warnsToBlacklist": 5,
     "blacklistPermanentByDefault": false,
