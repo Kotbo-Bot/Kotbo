@@ -14,6 +14,7 @@ import {
   MODULE_REGISTRY,
   PLAN_KEYS,
   getModuleDefinition,
+  getModuleForApiSegment,
   getModuleRequirements,
   PLAN_REGISTRY,
   canPurchasePlan,
@@ -227,5 +228,20 @@ describe('essai gratuit', () => {
     // FREE n a rien a essayer, CUSTOM se negocie periode de decouverte comprise.
     expect(planAllowsTrial('FREE')).toBe(false);
     expect(planAllowsTrial('CUSTOM')).toBe(false);
+  });
+});
+
+describe('cellule bien-etre', () => {
+  // Les dossiers de la cellule portent des donnees sensibles (sante, conflits) :
+  // l'outil releve de la gestion du staff avancee, donc de l'offre Plus.
+  test('est un module a part entiere, ferme en gratuit et ouvert des Plus', () => {
+    expect(getModuleDefinition('wellbeing')?.category).toBe('staff');
+    expect(planIncludesModule('FREE', 'wellbeing')).toBe(false);
+    expect(planIncludesModule('PLUS', 'wellbeing')).toBe(true);
+    expect(lowestPlanWithModule('wellbeing')).toBe('PLUS');
+  });
+
+  test('ses routes API sont rattachees au module, pour que la garde les ferme', () => {
+    expect(getModuleForApiSegment('wellbeing')).toBe('wellbeing');
   });
 });

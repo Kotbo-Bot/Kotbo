@@ -1700,6 +1700,12 @@ export async function handleModalSubmit(interaction: ModalSubmitInteraction, cli
     return;
   }
 
+  if (customId.startsWith('wellbeing:report:')) {
+    const { handleWellbeingReportModal } = await import('../commands/utility/wellbeing.js');
+    await handleWellbeingReportModal(interaction);
+    return;
+  }
+
   if (customId === 'modal:resignation:open') {
     const reason = interaction.fields.getTextInputValue('reason');
     try {

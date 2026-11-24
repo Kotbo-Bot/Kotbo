@@ -118,13 +118,20 @@
 
   // Onglet Bien-être : seulement pour la cellule, et sur le serveur sélectionné.
   let wellbeingAccess = $state(false);
+  // Sous accès d'urgence, l'onglet se lit sans permettre d'écrire.
+  let wellbeingCanWrite = $state(false);
   $effect(() => {
     const id = userId;
     wellbeingAccess = false;
+    wellbeingCanWrite = false;
     if (!open || !id || caseGuildId) return;
     dashboardFetch('/wellbeing/status')
       .then((res) => (res.ok ? res.json() : null))
-      .then((st) => { if (userId === id) wellbeingAccess = !!st?.hasCaseAccess; })
+      .then((st) => {
+        if (userId !== id) return;
+        wellbeingAccess = !!st?.hasCaseAccess;
+        wellbeingCanWrite = !!st?.canWriteCases;
+      })
       .catch(() => {});
   });
   let analyticsData = $state<MemberAnalyticsResponse | null>(null);
@@ -2121,7 +2128,7 @@
                 </div>
               </SectionCard>
             {:else if activeTab === 'wellbeing' && userId}
-              <MemberWellbeingPanel {userId} userName={displayName} />
+              <MemberWellbeingPanel {userId} userName={displayName} canWrite={wellbeingCanWrite} />
             {/if}
           </div>
 

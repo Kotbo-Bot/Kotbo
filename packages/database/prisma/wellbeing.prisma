@@ -10,6 +10,19 @@ model WellbeingConfig {
   directorRoleIds  String[] @default([])
   directorUserIds  String[] @default([])
   requireReason    Boolean  @default(true)
+  // Alertes : salon et membres prévenus, et événements qui les déclenchent
+  // (BREAK_GLASS | EMERGENCY_READ | TEAM_READ | CASE_CHANGE | CONFIG_CHANGE | REPORT | REMINDER).
+  alertChannelId   String?
+  alertUserIds     String[] @default([])
+  alertEvents      String[] @default(["BREAK_GLASS", "EMERGENCY_READ", "CONFIG_CHANGE", "REPORT", "REMINDER"])
+  // Accès d'urgence validé par une seconde personne (direction ou cellule).
+  breakGlassApproval Boolean @default(false)
+  // Signalements depuis Discord (/bienetre signaler).
+  reportEnabled    Boolean  @default(false)
+  // Relance d'un dossier critique resté sans activité pendant ce nombre de jours.
+  staleCriticalDays Int     @default(7)
+  // Ressources d'aide : [{ label, url?, phone?, description? }].
+  resources        Json     @default("[]")
 
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
 
@@ -28,17 +41,28 @@ model WellbeingCase {
   category       String   @default("SOUTIEN") // SOUTIEN | MEDIATION | SIGNALEMENT | SUIVI
   severity       String   @default("NORMAL")  // LOW | NORMAL | HIGH | CRITICAL
   status         String   @default("OPEN")    // OPEN | MONITORING | CLOSED
+  // Titre, personne concernée et résumé sont chiffrés (wellbeingCrypto).
   summary        String
   createdById    String
   createdByName  String
+  source         String   @default("DASHBOARD") // DASHBOARD | DISCORD
+  // Référent du dossier et prochaine échéance de suivi.
+  assigneeId       String?
+  reviewAt         DateTime?
+  reviewRemindedAt DateTime?
+  staleRemindedAt  DateTime?
+  // Dernier geste réel (création, modification, note) : les relances ne le déplacent pas.
+  lastActivityAt   DateTime @default(now())
 
-  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
-  notes WellbeingCaseNote[]
+  guild  Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  notes  WellbeingCaseNote[]
+  events WellbeingCaseEvent[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([guildId, status])
+  @@index([status, reviewAt])
   @@map("wellbeing_cases")
 }
 
@@ -56,13 +80,37 @@ model WellbeingCaseNote {
   @@map("wellbeing_case_notes")
 }
 
+// Historique d'un dossier : qui a changé quoi, et quand. Aucun contenu.
+model WellbeingCaseEvent {
+  id        String   @id @default(cuid())
+  caseId    String
+  actorId   String?
+  actorName String
+  type      String   // CREATED | STATUS | SEVERITY | ASSIGNEE | REVIEW | NOTE | RESOURCES_SENT | REMINDER
+  fromValue String?
+  toValue   String?
+  createdAt DateTime @default(now())
+
+  wellbeingCase WellbeingCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@index([caseId, createdAt])
+  @@map("wellbeing_case_events")
+}
+
 model WellbeingBreakGlassLog {
   id         String   @id @default(cuid())
   guildId    String
   actorId    String
   actorName  String
   caseId     String?
+  // Accès limité aux dossiers de ce membre, si renseigné.
+  subjectUserId String?
   reason     String
+  // PENDING tant qu'une seconde personne n'a pas validé, puis APPROVED ou REJECTED.
+  status         String    @default("APPROVED")
+  approvedById   String?
+  approvedByName String?
+  decidedAt      DateTime?
   expiresAt  DateTime
   createdAt  DateTime @default(now())
 

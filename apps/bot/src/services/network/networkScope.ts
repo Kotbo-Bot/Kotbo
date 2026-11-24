@@ -57,6 +57,9 @@ export const LOCAL_MODELS: ReadonlySet<string> = new Set([
   'RankedTierRole', 'SuggestionConfig', 'GiveawayConfig', 'DropConfig', 'BanAppealConfig',
   'WellbeingConfig', 'RpgClanTowerConfig', 'RpgTowerConfig', 'ShopRoleGrant',
   'WellbeingBreakGlassLog', 'CommunitySite', 'SiteAsset',
+  // Dossiers confidentiels : seule la cellule de leur serveur les lit. Leurs
+  // notes suivent par `caseId`, sans `guildId` à rediriger.
+  'WellbeingCase',
 ]);
 
 export function isSynced(model: string): boolean {

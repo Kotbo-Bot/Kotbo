@@ -148,3 +148,26 @@ describe('garde des écritures : widget de profil', () => {
     expect((await gate('POST', 'widget/refresh-all', STAFF)).denied).toEqual(ADMIN_ONLY);
   });
 });
+
+describe('garde des écritures : cellule bien-être', () => {
+  test('un membre du staff peut ouvrir un dossier, le modifier, le noter ou demander un accès d urgence', async () => {
+    // wellbeing.ts revérifie ensuite l'appartenance à la cellule ou à la direction.
+    featureAccess = {};
+    for (const [method, route] of [
+      ['POST', 'wellbeing/cases'],
+      ['PATCH', 'wellbeing/cases/dossier-1'],
+      ['DELETE', 'wellbeing/cases/dossier-1'],
+      ['POST', 'wellbeing/cases/dossier-1/notes'],
+      ['POST', 'wellbeing/break-glass'],
+    ] as const) {
+      const result = await gate(method, route, STAFF);
+      expect({ route, method, denied: result.denied }).toEqual({ route, method, denied: null });
+      if (result.denied === null) expect(result.effectiveAccess.canManageSettings).toBe(false);
+    }
+  });
+
+  test('la composition de la cellule reste derrière la garde des administrateurs', async () => {
+    featureAccess = {};
+    expect((await gate('PUT', 'wellbeing/config', STAFF)).denied).toEqual(ADMIN_ONLY);
+  });
+});

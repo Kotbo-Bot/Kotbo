@@ -2,6 +2,7 @@ import type { Prisma } from '@prisma/client';
 import { trackGhostSignal } from './services/analytics/ghostActivityTracker.js';
 import { recordModuleExecution, wasModuleExecutionTracked } from './services/analytics/moduleUsageBuffer.js';
 import { commandLabel, recordCommandUsage } from './services/analytics/commandStatsService.js';
+import { WELLBEING_COMMAND } from './services/staff/wellbeingPolicy.js';
 import dotenv from 'dotenv';
 import path from 'path';
 dotenv.config({ path: path.resolve(process.cwd(), '../../.env') });
@@ -984,8 +985,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
         await cache.invalidateGuild(interaction.guildId);
       }
 
-      // Track command usage for analytics (buffered)
-      try {
+      // Track command usage for analytics (buffered), sauf la cellule bien-être (anonymat).
+      if (interaction.commandName !== WELLBEING_COMMAND) try {
         const usageKey = `${interaction.guildId || 'DM'}:${interaction.commandName}:${interaction.user.id}`;
         commandUsageBuffer.set(usageKey, (commandUsageBuffer.get(usageKey) || 0) + 1);
       } catch (e) {
@@ -1085,8 +1086,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
       logger.error('Event', 'InteractionCreate error:', e);
     }
   } finally {
-    // Analytics des commandes : une ligne par jour, commande et membre.
-    if (interaction.isChatInputCommand() && interaction.guildId && !interaction.user.bot) {
+    // Analytics des commandes : une ligne par jour, commande et membre. La
+    // cellule bien-être n'y figure pas : un signalement anonyme se retrouverait
+    // à son auteur par le classement des commandes.
+    if (interaction.isChatInputCommand() && interaction.guildId && !interaction.user.bot
+      && interaction.commandName !== WELLBEING_COMMAND) {
       void recordCommandUsage({
         guildId: interaction.guildId,
         commandName: commandLabel(
@@ -1104,7 +1108,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         guildId: interaction.guildId,
         moduleName: moduleTracking.moduleKey,
         actionType: moduleTracking.actionType,
-        userId: interaction.user.bot ? undefined : interaction.user.id,
+        userId: interaction.user.bot || moduleTracking.moduleKey === 'wellbeing' ? undefined : interaction.user.id,
         durationMs: Date.now() - moduleTracking.startedAt,
         success: !interactionFailed,
       });

@@ -6,6 +6,7 @@ import { casierCommand, casierContextCommand } from './commands/moderation/casie
 import { configCommand } from './commands/admin/config.js';
 import { dcCommand } from './commands/moderation/dc.js';
 import { demissionCommand } from './commands/admin/demission.js';
+import { wellbeingCommand } from './commands/utility/wellbeing.js';
 import { devutilsCommand } from './commands/admin/devutils.js';
 import { epochCommand } from './commands/utility/epoch.js';
 import { eventCommand } from './commands/utility/event.js';
@@ -145,6 +146,7 @@ export const commands: SlashCommandDefinition[] = [
   ticketCommand,
   sayCommand,
   demissionCommand,
+  wellbeingCommand,
   rankCommand,
   prestigeCommand,
   prestigeAdminCommand,
@@ -293,6 +295,7 @@ export const COMMAND_MODULES = new Map<ApplicationCommandDefinition, string>([
   [absentCommand, 'absences'],
   [meetingCommand, 'meetings'],
   [demissionCommand, 'staff_directory'],
+  [wellbeingCommand, 'wellbeing'],
   [evaluationsCommand, 'evaluations'],
   [staffserverCommand, 'staff_server'],
 

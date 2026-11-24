@@ -262,6 +262,11 @@ export async function evaluateGuildGate(
   // exact sur chaque tutorat est revérifié dans handleTutoringRoutes.
   const isTutoringAction = parts[4] === 'tutoring' && method !== 'GET';
 
+  // Cellule bien-être : ses membres ne sont pas forcément administrateurs du
+  // dashboard. Dossiers, notes et accès d'urgence sont revérifiés dans
+  // wellbeing.ts ; la composition de la cellule reste sous cette garde.
+  const isWellbeingAction = parts[4] === 'wellbeing' && parts[5] !== 'config' && method !== 'GET';
+
   // Trancher une suggestion est un geste de modération : le droit « Modérer »
   // de la fonctionnalité, revérifié dans handleSuggestionRoutes, suffit.
   const isSuggestionDecisionAction = parts[4] === 'suggestions'
@@ -376,7 +381,7 @@ export async function evaluateGuildGate(
     ? { ...access, canManageSettings: true }
     : access;
 
-  if (!access.canManageSettings && method !== 'GET' && !hasFeatureWriteRight && !isSanctionAction && !isStaffAbsenceAction && !isStaffResignationAction && !isNotificationAction && !isMeetingAction && !isNewsAction && !isMemberModerationAction && !isGiveawayManagerAction && !isAnalyticsAnnotationAction && !isAegisReviewAction && !isDoingListAction && !isTutoringAction && !isSuggestionDecisionAction && !isStarboardModerationAction && !isBanAppealModerationAction && !isStaffAbsenceItemAction && !isCallCreationAction && !isPersonalPreferenceAction && !isOwnWidgetAction) {
+  if (!access.canManageSettings && method !== 'GET' && !hasFeatureWriteRight && !isSanctionAction && !isStaffAbsenceAction && !isStaffResignationAction && !isNotificationAction && !isMeetingAction && !isNewsAction && !isMemberModerationAction && !isGiveawayManagerAction && !isAnalyticsAnnotationAction && !isAegisReviewAction && !isDoingListAction && !isTutoringAction && !isWellbeingAction && !isSuggestionDecisionAction && !isStarboardModerationAction && !isBanAppealModerationAction && !isStaffAbsenceItemAction && !isCallCreationAction && !isPersonalPreferenceAction && !isOwnWidgetAction) {
     return deny(403, { error: 'Action réservée aux administrateurs du dashboard.' });
   }
 

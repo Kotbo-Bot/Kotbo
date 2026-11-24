@@ -61,4 +61,9 @@ describe('LOCAL_MODELS', () => {
     expect(isSynced('FutureFeatureModel')).toBe(true);
     expect(LOCAL_MODELS.has('FutureFeatureModel')).toBe(false);
   });
+  test('les dossiers de la cellule bien-être restent sur leur serveur', () => {
+    // La composition de la cellule est propre à chaque serveur : partager les
+    // dossiers ouvrirait ceux du principal à la cellule d'un sous-serveur.
+    expect(isSynced('WellbeingCase')).toBe(false);
+  });
 });

@@ -409,6 +409,17 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
     paths: ['/doing-lists'],
   },
   {
+    key: 'wellbeing',
+    name: 'Cellule bien-être',
+    description: "Dossiers confidentiels de soutien et de médiation, cloisonnés, avec accès d'urgence journalisé.",
+    category: 'staff',
+    icon: 'HeartHandshake',
+    defaultEnabled: true,
+    apiSegments: ['wellbeing'],
+    paths: ['/wellbeing'],
+    interactionPrefixes: ['wellbeing:'],
+  },
+  {
     key: 'polls',
     name: 'Sondages staff',
     description: "Consultations internes à l'équipe avec vote et clôture.",

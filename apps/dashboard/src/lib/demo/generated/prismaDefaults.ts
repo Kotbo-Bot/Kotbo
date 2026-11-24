@@ -5799,6 +5799,19 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "directorRoleIds": [],
     "directorUserIds": [],
     "requireReason": true,
+    "alertChannelId": null,
+    "alertUserIds": [],
+    "alertEvents": [
+      "BREAK_GLASS",
+      "EMERGENCY_READ",
+      "CONFIG_CHANGE",
+      "REPORT",
+      "REMINDER"
+    ],
+    "breakGlassApproval": false,
+    "reportEnabled": false,
+    "staleCriticalDays": 7,
+    "resources": [],
     "createdAt": "__NOW__",
     "updatedAt": "__NOW__"
   },
@@ -5814,6 +5827,12 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "summary": "",
     "createdById": "",
     "createdByName": "",
+    "source": "DASHBOARD",
+    "assigneeId": null,
+    "reviewAt": null,
+    "reviewRemindedAt": null,
+    "staleRemindedAt": null,
+    "lastActivityAt": "__NOW__",
     "createdAt": "__NOW__",
     "updatedAt": "__NOW__"
   },
@@ -5825,13 +5844,28 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "content": "",
     "createdAt": "__NOW__"
   },
+  "WellbeingCaseEvent": {
+    "id": "",
+    "caseId": "",
+    "actorId": null,
+    "actorName": "",
+    "type": "",
+    "fromValue": null,
+    "toValue": null,
+    "createdAt": "__NOW__"
+  },
   "WellbeingBreakGlassLog": {
     "id": "",
     "guildId": "",
     "actorId": "",
     "actorName": "",
     "caseId": null,
+    "subjectUserId": null,
     "reason": "",
+    "status": "APPROVED",
+    "approvedById": null,
+    "approvedByName": null,
+    "decidedAt": null,
     "expiresAt": "__NOW__",
     "createdAt": "__NOW__"
   },

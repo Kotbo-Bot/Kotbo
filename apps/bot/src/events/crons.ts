@@ -441,6 +441,10 @@ export async function registerCrons(client: Client): Promise<void> {
       const { pruneClosedWellbeingCases } = await import('../services/staff/wellbeingRetention.js');
       await pruneClosedWellbeingCases();
     },
+    'wellbeing-reminders': async () => {
+      const { runWellbeingReminders } = await import('../services/staff/wellbeingReminders.js');
+      await runWellbeingReminders(client);
+    },
     'server-tag-roles-resync': () => resyncServerTagRoles(client),
     'server-tag-holders-snapshot': () => runTagHoldersSnapshot(client),
     'site-scheduled-publish': async () => {
@@ -775,6 +779,14 @@ export async function registerCrons(client: Client): Promise<void> {
     await runCronJob('dashboard-telemetry-prune', async () => {
       const { pruneDashboardTelemetry } = await import('../services/analytics/dashboardTelemetryService.js');
       await pruneDashboardTelemetry();
+    }, 2000);
+  });
+
+  // Cellule bien-être : relance des échéances de suivi et des dossiers critiques inactifs (toutes les heures, à 20).
+  cron.schedule('20 * * * *', async () => {
+    await runCronJob('wellbeing-reminders', async () => {
+      const { runWellbeingReminders } = await import('../services/staff/wellbeingReminders.js');
+      await runWellbeingReminders(client);
     }, 2000);
   });
 
