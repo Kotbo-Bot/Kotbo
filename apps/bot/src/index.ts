@@ -113,6 +113,7 @@ import { registerAutoThreadBusSubscribers } from './modules/autoThread.module.js
 import { registerStickyMessageBusSubscribers } from './modules/stickyMessage.module.js';
 import { registerWelcomeGoodbyeBusSubscribers } from './modules/welcomeGoodbye.module.js';
 import { registerModerationBusSubscribers } from './modules/moderation.module.js';
+import { registerWellbeingRoleWatch } from './events/wellbeingRoleWatch.js';
 import { registerTicketsBusSubscribers } from './modules/tickets.module.js';
 import { loadActivatedGuilds, isGuildActivated, activateGuildSelfServe } from './utils/activation.js';
 import {
@@ -569,6 +570,8 @@ client.once(Events.ClientReady, async (c) => {
   registerStickyMessageBusSubscribers(client);
   registerWelcomeGoodbyeBusSubscribers(client);
   registerModerationBusSubscribers(scopeClientToModule(client, 'sanctions'));
+  // Cellule bien-être : seul le propriétaire donne ses rôles, chaque changement est signalé.
+  registerWellbeingRoleWatch(scopeClientToModule(client, 'wellbeing'));
   // Vue filtrée : le module garde quelques `client.on()` (fils supprimés ou
   // archivés, messages des fils) qui ne passent pas par le bus.
   registerTicketsBusSubscribers(scopeClientToModule(client, 'tickets'));

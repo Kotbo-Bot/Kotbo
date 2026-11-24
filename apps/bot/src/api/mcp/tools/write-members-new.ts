@@ -18,6 +18,7 @@ import { RAID_TEAM_MODES } from '../../../services/features/rpg/rpgRaidPolicy.js
 import { FIRST_KILL_ANNOUNCE_MODES } from '../../../services/features/rpg/rpgBestiaryPolicy.js';
 import { setGamblingState } from '../../../services/features/gamblingCommandsService.js';
 import { GAMBLING_COMMANDS, type GamblingCommand } from '../../../utils/commandAccess.js';
+import { CELL_ROLE_REFUSAL, cellRoleIds } from '../../../services/staff/wellbeingRoles.js';
 
 const nonNegative = z.number().int().min(0);
 const announceMode = z.enum(ANNOUNCE_MODE_VALUES);
@@ -171,6 +172,8 @@ export function registerWriteMembersNewTools(ctx: McpToolContext) {
         }
 
         if (resolvedRoles.length === 0) return err('Aucun rôle valide trouvé');
+        const cellRoles = await cellRoleIds(guildId);
+        if (resolvedRoles.some((role) => cellRoles.has(role.id))) return err(CELL_ROLE_REFUSAL);
 
         try {
           if (action === 'add') {

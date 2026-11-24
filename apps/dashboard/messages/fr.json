@@ -20110,5 +20110,11 @@
   "toast_wb_attachment_failed": "Opération sur le document impossible.",
   "instance_blocked_title": "Instance désactivée par l'administration Kotbo",
   "instance_blocked_desc": "Le dashboard, les commandes et les fonctions automatiques sont coupés tant que cette instance n'est pas autorisée.",
-  "instance_blocked_reason": "Motif : {reason}"
+  "instance_blocked_reason": "Motif : {reason}",
+  "wb_cfg_named_advice": "Le plus sûr : désigner les membres un par un. Un rôle Discord peut être donné par d'autres que toi ; Kotbo retire alors ce rôle et prévient la cellule.",
+  "wb_cfg_team_members": "Membres de la cellule",
+  "wb_cfg_director_members": "Membres de la direction",
+  "wb_cfg_named_hint": "Toi seul peux modifier cette liste.",
+  "wb_cfg_roles_hint": "Un rôle donné par quelqu'un d'autre que le propriétaire est retiré automatiquement.",
+  "wb_alert_membership_change": "Rôle de la cellule ou de la direction donné ou retiré"
 }

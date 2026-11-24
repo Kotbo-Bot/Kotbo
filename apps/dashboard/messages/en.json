@@ -20106,5 +20106,11 @@
   "toast_wb_attachment_failed": "Could not update the document.",
   "instance_blocked_title": "Instance disabled by the Kotbo administration",
   "instance_blocked_desc": "The dashboard, commands and automatic features are turned off until this instance is authorized.",
-  "instance_blocked_reason": "Reason: {reason}"
+  "instance_blocked_reason": "Reason: {reason}",
+  "wb_cfg_named_advice": "Safest option: name members one by one. A Discord role can be given by others; Kotbo then removes that role and alerts the unit.",
+  "wb_cfg_team_members": "Unit members",
+  "wb_cfg_director_members": "Management members",
+  "wb_cfg_named_hint": "Only you can change this list.",
+  "wb_cfg_roles_hint": "A role given by anyone other than the owner is removed automatically.",
+  "wb_alert_membership_change": "Unit or management role given or removed"
 }

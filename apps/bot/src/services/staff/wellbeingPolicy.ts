@@ -29,13 +29,14 @@ export interface WellbeingAccessLists {
  * - CASE_CHANGE : dossier créé, modifié, annoté ou supprimé ;
  * - CONFIG_CHANGE : composition ou réglages de la cellule modifiés ;
  * - REPORT : signalement reçu depuis Discord ;
- * - REMINDER : dossier arrivé à échéance de suivi, ou critique et inactif.
+ * - REMINDER : dossier arrivé à échéance de suivi, ou critique et inactif ;
+ * - MEMBERSHIP_CHANGE : rôle de la cellule ou de la direction donné ou retiré.
  */
 export const WELLBEING_ALERT_EVENTS = [
-  'BREAK_GLASS', 'EMERGENCY_READ', 'TEAM_READ', 'CASE_CHANGE', 'CONFIG_CHANGE', 'REPORT', 'REMINDER',
+  'BREAK_GLASS', 'EMERGENCY_READ', 'TEAM_READ', 'CASE_CHANGE', 'CONFIG_CHANGE', 'REPORT', 'REMINDER', 'MEMBERSHIP_CHANGE',
 ] as const;
 export type WellbeingAlertEvent = (typeof WELLBEING_ALERT_EVENTS)[number];
-export const DEFAULT_ALERT_EVENTS: WellbeingAlertEvent[] = ['BREAK_GLASS', 'EMERGENCY_READ', 'CONFIG_CHANGE', 'REPORT', 'REMINDER'];
+export const DEFAULT_ALERT_EVENTS: WellbeingAlertEvent[] = ['BREAK_GLASS', 'EMERGENCY_READ', 'CONFIG_CHANGE', 'REPORT', 'REMINDER', 'MEMBERSHIP_CHANGE'];
 /** Destinataires prévenus en message privé, au plus. */
 export const MAX_ALERT_USERS = 10;
 /** Une même personne qui recharge la page ne déclenche qu'une alerte de consultation par période. */
@@ -64,6 +65,11 @@ export interface AlertContext {
   anonymous?: boolean;
   reminder?: 'review' | 'stale';
   days?: number;
+  /** Changement d'appartenance : membre visé, sens, portée, et ajout annulé. */
+  targetId?: string;
+  change?: 'added' | 'removed';
+  scope?: 'team' | 'direction';
+  reverted?: boolean;
 }
 
 /**
@@ -94,6 +100,16 @@ export function alertText(event: WellbeingAlertEvent, ctx: AlertContext): string
       return ctx.anonymous
         ? 'Cellule bien-être : nouveau signalement anonyme reçu depuis Discord.'
         : `Cellule bien-être : nouveau signalement de ${actor} reçu depuis Discord.`;
+    case 'MEMBERSHIP_CHANGE': {
+      const target = `<@${ctx.targetId ?? ''}>`;
+      // L'audit Discord ne nomme pas toujours l'auteur.
+      const author = ctx.actorId ? actor : 'un auteur inconnu';
+      const group = ctx.scope === 'direction' ? 'la direction' : 'la cellule';
+      if (ctx.change === 'removed') return `Cellule bien-être : ${author} a retiré ${target} de ${group} (rôle Discord).`;
+      return ctx.reverted
+        ? `Cellule bien-être : ${author} a donné à ${target} un rôle de ${group} ; ajout annulé, seul le propriétaire du serveur peut le faire.`
+        : `Cellule bien-être : ${author} a ajouté ${target} à ${group} (rôle Discord).`;
+    }
     case 'REMINDER':
       return ctx.reminder === 'stale'
         ? `Cellule bien-être : un dossier critique est sans activité depuis ${ctx.days ?? 0} jour(s).`
@@ -354,3 +370,50 @@ export const WELLBEING_AUDIT_MODULE = 'Cellule bien-être';
 
 /** Nom de base (anglais) de la commande Discord : ses usages ne sont pas comptés par membre. */
 export const WELLBEING_COMMAND = 'wellbeing';
+
+// ── Appartenance par rôle Discord ──────────────────────────────────────────
+
+export interface RoleDelta {
+  added: string[];
+  removed: string[];
+}
+
+function roleIdsOf(changes: ReadonlyArray<{ key: string; new?: unknown }>, key: '$add' | '$remove'): string[] {
+  const value = changes.find((change) => change.key === key)?.new;
+  return Array.isArray(value)
+    ? value.map((role) => (role as { id?: unknown })?.id).filter((id): id is string => typeof id === 'string')
+    : [];
+}
+
+/** Rôles ajoutés et retirés d'une entrée d'audit `MemberRoleUpdate`. */
+export function roleDeltaFromChanges(changes: ReadonlyArray<{ key: string; new?: unknown }> | null | undefined): RoleDelta {
+  return { added: roleIdsOf(changes ?? [], '$add'), removed: roleIdsOf(changes ?? [], '$remove') };
+}
+
+export interface CellMembershipChange {
+  roleId: string;
+  scope: 'team' | 'direction';
+  change: 'added' | 'removed';
+}
+
+/** Changements d'un membre qui touchent un rôle de la cellule ou de la direction. */
+export function cellMembershipChanges(config: WellbeingAccessLists | null, delta: RoleDelta): CellMembershipChange[] {
+  if (!config) return [];
+  const scopeOf = (roleId: string): 'team' | 'direction' | null =>
+    config.teamRoleIds.includes(roleId) ? 'team' : config.directorRoleIds.includes(roleId) ? 'direction' : null;
+  const of = (roleIds: string[], change: 'added' | 'removed') => roleIds.flatMap((roleId) => {
+    const scope = scopeOf(roleId);
+    return scope ? [{ roleId, scope, change }] : [];
+  });
+  return [...of(delta.added, 'added'), ...of(delta.removed, 'removed')];
+}
+
+/**
+ * Seul le propriétaire fait entrer quelqu'un dans la cellule ou la direction :
+ * un ajout par un autre membre, par Kotbo lui-même (niveaux, boutique, menus
+ * de rôles, workflows...) ou par un auteur inconnu est annulé.
+ */
+export function shouldRevertCellRoleGrant(executorId: string | null, ownerId: string): boolean {
+  return executorId !== ownerId;
+}
+
