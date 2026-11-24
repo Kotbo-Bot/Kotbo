@@ -47,6 +47,7 @@ import { createVerificationModuleRouter } from '../../routes/dashboard/modules/v
 import { createChannelLinksRouter } from '../../routes/dashboard/channelLinks.js';
 import { createDropsRouter } from '../../routes/dashboard/drops.js';
 import { createCustomFormsRouter } from '../../routes/dashboard/customForms.js';
+import { createPublicThemeRouter } from '../../routes/dashboard/publicTheme.js';
 import { createStaffServerRouter } from '../../routes/dashboard/staffServer.js';
 import { createRecruitmentFormsRouter } from '../../routes/dashboard/recruitmentForms.js';
 import { createMessageLogsRouter } from '../../routes/dashboard/messageLogs.js';
@@ -160,6 +161,7 @@ export function createDashboardRouter(client: Client) {
   router.route('/', createRecruitmentFormsRouter(client));
   router.route('/', createStaffServerRouter(client));
   router.route('/', createCustomFormsRouter(client));
+  router.route('/', createPublicThemeRouter(client));
   router.route('/', createDropsRouter(client));
   router.route('/', createChannelLinksRouter(client));
   router.route('/', createVerificationModuleRouter(client));

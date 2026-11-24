@@ -18,6 +18,7 @@ import { getMemberIdentities, resolveMemberAvatarUrl } from '../../../../service
 import { getGuildLadder } from '../../../../services/progression/ranked/rankedConfigService.js';
 import { getRankedLeaderboard } from '../../../../services/progression/ranked/rankedLeaderboardService.js';
 import { resolveDashboardAccess, resolveMemberFeatureAccess } from '../../../shared.js';
+import { sanitizePublicTheme } from '../../../../utils/publicTheme.js';
 import { SNOWFLAKE, authOf, fail, headersOf, readBody, send, underLimit } from './kit.js';
 
 /**
@@ -166,6 +167,26 @@ export function createPublicCommunityRouter(client: Client): Hono {
 
   const guildOf = async (guildId: string) =>
     client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
+
+  // Habillage commun des pages publiques : une requête légère, indépendante du module affiché.
+  router.get('/api/public/guilds/:guildId/theme', async (c) => {
+    const guildId = c.req.param('guildId');
+    if (!SNOWFLAKE.test(guildId)) return send(c, { error: 'ID de guilde invalide' }, 400);
+    if (!isBrowserPageRequest(headersOf(c))) return send(c, SCRAPE_REFUSED, 403);
+    if (!underLimit(c, publicLevelingRateLimiter, 60, 60_000)) return send(c, { error: 'Trop de requêtes, réessaie dans une minute.' }, 429);
+    try {
+      const row = await prisma.guild.findUnique({ where: { id: guildId }, select: { publicTheme: true } });
+      const discordGuild = client.guilds.cache.get(guildId);
+      return send(c, {
+        theme: sanitizePublicTheme(row?.publicTheme),
+        guildName: discordGuild?.name ?? null,
+        guildIcon: discordGuild?.iconURL({ size: 128 }) ?? null,
+      });
+    } catch (err: unknown) {
+      logger.error('PublicAPI', `Error fetching public theme for guild ${guildId}: ${err instanceof Error ? err.message : String(err)}`);
+      return send(c, { error: "Erreur lors du chargement de l'habillage" }, 500);
+    }
+  });
 
   router.get('/api/public/guilds/:guildId/leveling', async (c) => {
     const guildId = c.req.param('guildId');
