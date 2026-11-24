@@ -18742,7 +18742,7 @@
   "obx_co_code": "Referral or activation code",
   "obx_co_code_ph": "KOTBO-XXXXXX or KB-XXXX-XXXX-XXXX",
   "obx_co_checking": "Checking…",
-  "obx_co_free": "Continue for free",
+  "obx_co_free": "Continue with the Free plan",
   "obx_co_opening": "Opening…",
   "obx_co_trial": "Start the {days}-day trial",
   "obx_co_start": "Go live",
@@ -20106,5 +20106,16 @@
   "toast_wb_attachment_failed": "Could not update the document.",
   "instance_blocked_title": "Instance disabled by the Kotbo administration",
   "instance_blocked_desc": "The dashboard, commands and automatic features are turned off until this instance is authorized.",
-  "instance_blocked_reason": "Reason: {reason}"
+  "instance_blocked_reason": "Reason: {reason}",
+  "obx_wc_defer": "Set up later",
+  "obx_wc_defer_failed": "Could not defer setup right now.",
+  "obx_st_presets_label": "Ready-to-use preset",
+  "obx_st_autodetect_title": "Detected channels & roles ({count})",
+  "obx_st_autodetect_desc": "Automatically pre-select your server's existing channels and roles to skip manual mapping.",
+  "obx_st_autodetect_action": "Pre-select in 1 click",
+  "obx_st_autodetect_done": "Pre-selection applied",
+  "obx_co_trial_banner": "{days}-day free trial, €0 charged today",
+  "obx_co_trial_banner_desc": "Try all Pro modules with no commitment. You can cancel anytime before the trial ends.",
+  "obx_co_pro_summary_title": "Pro features configured",
+  "obx_co_pro_summary_desc": "Included in the {days}-day trial, or upgradeable later from the dashboard."
 }

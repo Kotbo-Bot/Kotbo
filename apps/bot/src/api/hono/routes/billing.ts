@@ -622,12 +622,15 @@ export function createBillingRouter(client: Client): OpenAPIHono {
         create: { id: guildId, stripeCustomerId: customerId, billingOwnerId: auth.userId },
       });
 
-      // L'essai n'existe qu'avec un code de parrainage. Il est réservé *avant*
-      // d'appeler Stripe : l'insertion en base est le verrou qui garantit « une
-      // fois par compte Discord », et un aller-retour réseau laisserait passer
-      // un second clic. En échec de réservation, on ouvre un parcours d'achat
-      // sans essai ni remise plutôt que de renvoyer une erreur.
-      const trialReserved = referral !== null && (await reserveTrial(guildId, auth.userId, plan as PlanKey, interval, referral));
+      // Essai gratuit de 15 jours offert à toute première souscription éligible
+      // (code de parrainage ou essai standard). La réservation en base garantit
+      // l'unicité « une fois par compte Discord / serveur ».
+      const trialEligibility = referral
+        ? { eligible: true }
+        : await checkTrialEligibility(guildId, auth.userId, plan as PlanKey);
+      const trialReserved =
+        trialEligibility.eligible &&
+        (await reserveTrial(guildId, auth.userId, plan as PlanKey, interval, referral ?? 'DIRECT'));
 
       let session: { id: string; url: string };
       try {
@@ -638,7 +641,7 @@ export function createBillingRouter(client: Client): OpenAPIHono {
           interval,
           initiatedBy: auth.userId,
           trialDays: trialReserved ? TRIAL_DAYS : 0,
-          referralDiscount: trialReserved,
+          referralDiscount: referral !== null && trialReserved,
         });
       } catch (err) {
         // Stripe n'a pas ouvert la page : l'essai n'a jamais démarré, la

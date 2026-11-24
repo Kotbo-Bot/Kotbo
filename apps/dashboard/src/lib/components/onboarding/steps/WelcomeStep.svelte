@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { router } from 'tinro';
   import { m } from '../../../i18n';
   /**
    * La rencontre : le bot et le serveur, cote a cote.
@@ -13,12 +14,14 @@
    * qu'on s'apprete a traverser.
    */
   import { authStore } from '../../../stores/auth.svelte';
+  import { dashboardStore } from '../../../stores/dashboard.svelte';
   import { wizard } from '../../../stores/onboardingWizard.svelte';
   import { onboardingData } from '../../../stores/onboardingData.svelte';
   import { toast } from '../../../stores/toast.svelte';
   import {
     ADMIN_INVITE_PERMISSIONS,
     buildBotInviteUrl,
+    completeOnboarding,
     fetchDiscordClientId,
   } from '../../../api';
   import KotboMark from '../KotboMark.svelte';
@@ -61,12 +64,24 @@
     }
   }
 
+  let deferring = $state(false);
+
   function handleStart() {
-    if (!isAdministrator && !acknowledgedDetailed) {
-      frictionModalOpen = true;
-      return;
-    }
     wizard.next();
+  }
+
+  async function deferOnboarding() {
+    if (deferring) return;
+    deferring = true;
+    try {
+      await completeOnboarding(undefined, { deferred: true });
+      await dashboardStore.refresh();
+      router.goto('/');
+    } catch (err) {
+      toast.error(err instanceof Error && err.message ? err.message : m.obx_wc_defer_failed());
+    } finally {
+      deferring = false;
+    }
   }
 
   function confirmDetailedAndProceed() {
@@ -155,8 +170,17 @@
   {#snippet footer()}
     <button
       type="button"
+      onclick={deferOnboarding}
+      disabled={deferring}
+      class="text-body-sm font-medium text-on-surface-variant/75 hover:text-on-surface transition-colors disabled:opacity-40"
+    >
+      {m.obx_wc_defer()}
+    </button>
+    <button
+      type="button"
       onclick={handleStart}
-      class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-on-primary text-sm font-semibold hover:opacity-90 transition-opacity"
+      disabled={deferring}
+      class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-on-primary text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-40"
     >
       {m.obx_wc_start()}
       <Papicon icon="ChevronRight" size={15} />

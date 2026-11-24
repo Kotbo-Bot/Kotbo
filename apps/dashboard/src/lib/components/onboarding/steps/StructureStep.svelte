@@ -27,10 +27,12 @@
   import { wizard } from '../../../stores/onboardingWizard.svelte';
   import { onboardingData } from '../../../stores/onboardingData.svelte';
   import {
+    THEMES,
     adoptionsFrom,
     alreadyPresent,
     buildSequence,
     celebrateFinale,
+    defaultMapping,
     defaultsMapping,
     mappingTally,
     selectionFor,
@@ -46,11 +48,32 @@
   import WizardShell from '../WizardShell.svelte';
 
   import { errorMessage } from '@kotbo/shared';
-  const { onEditTracks }: { onEditTracks: () => void } = $props();
+  const { onEditTracks, skip }: { onEditTracks: () => void; skip?: () => void } = $props();
 
   const template = $derived(onboardingData.template);
   const kind = $derived(wizard.kind ?? 'new');
   const theme = $derived<ThemeKey>(wizard.theme ?? 'communaute');
+  const PRESETS = THEMES.filter(
+    (entry) => entry.key === 'communaute' || entry.key === 'gaming' || entry.key === 'creation',
+  );
+  const hasExistingInventory = $derived(
+    !!template && (template.inventory.channels.length > 0 || template.inventory.roles.length > 0),
+  );
+  const detectedMatchesCount = $derived(Object.keys(template?.matches ?? {}).length);
+  let autoDetectedApplied = $state(false);
+
+  function selectPreset(key: ThemeKey) {
+    wizard.answer({ theme: key });
+    autoDetectedApplied = false;
+  }
+
+  function applyAutoDetect() {
+    if (!template) return;
+    const detected = defaultMapping(template.plan, theme, template.matches, template.inventory, {});
+    wizard.seedMapping(detected);
+    wizard.answer({ structured: true });
+    autoDetectedApplied = true;
+  }
 
   /**
    * Le mappage a repondu pour nous, quand il a eu lieu.
@@ -281,6 +304,50 @@
     </div>
 
   {:else}
+    <!-- ── Presets prêts à l'emploi + détection automatique 1 clic ────────── -->
+    <div class="mb-5 space-y-3">
+      <div>
+        <p class="text-xs font-semibold text-on-surface-variant mb-2">{m.obx_st_presets_label()}</p>
+        <div class="flex flex-wrap gap-2">
+          {#each PRESETS as preset (preset.key)}
+            <button
+              type="button"
+              onclick={() => selectPreset(preset.key)}
+              aria-pressed={theme === preset.key}
+              class="inline-flex items-center gap-1.5 rounded-xl border px-3.5 py-2 text-xs font-semibold transition-colors {theme === preset.key
+                ? 'border-primary/50 bg-primary/10 text-primary'
+                : 'border-outline-variant/35 bg-surface-container-low/40 text-on-surface-variant hover:text-on-surface'}"
+            >
+              <Papicon icon={preset.icon} size={13} />
+              {preset.label}
+            </button>
+          {/each}
+        </div>
+      </div>
+
+      {#if hasExistingInventory && detectedMatchesCount > 0 && !mapped}
+        <div class="rounded-xl border border-primary/25 bg-primary/[0.04] px-4 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div class="min-w-0">
+            <p class="text-xs font-semibold text-on-surface flex items-center gap-1.5">
+              <Papicon icon="sparkles" size={13} class="text-primary shrink-0" />
+              {m.obx_st_autodetect_title({ count: detectedMatchesCount })}
+            </p>
+            <p class="mt-0.5 text-2xs text-on-surface-variant leading-relaxed">
+              {m.obx_st_autodetect_desc()}
+            </p>
+          </div>
+          <button
+            type="button"
+            onclick={applyAutoDetect}
+            class="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-primary/15 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/25 transition-colors"
+          >
+            <Papicon icon="check" size={13} />
+            {autoDetectedApplied ? m.obx_st_autodetect_done() : m.obx_st_autodetect_action()}
+          </button>
+        </div>
+      {/if}
+    </div>
+
     {#if tally}
       <!-- Sur un serveur habite, ce qui compte n'est pas combien de salons
            existeront a la fin mais combien Kotbo va toucher : c'est la seule
@@ -387,6 +454,15 @@
         <Papicon icon="ChevronRight" size={15} />
       </button>
     {:else}
+      {#if skip}
+        <button
+          type="button"
+          onclick={skip}
+          class="text-body-sm font-medium text-on-surface-variant hover:text-on-surface transition-colors"
+        >
+          {m.obx_skip()}
+        </button>
+      {/if}
       <button
         type="button"
         onclick={apply}

@@ -99,16 +99,16 @@ export const STEPS: StepDefinition[] = [
   // deduisait tout d'un rapprochement de noms et doublait ce qu'il ratait.
   // Chaque ecran se retire de lui-meme quand sa vocation n'en retient pas les
   // sections - on ne demande pas ou ranger les vocaux d'un serveur d'entraide.
-  { key: 'map-access', label: () => m.obs_access(), icon: 'door-open', phase: 'build', track: 'structure', requires: 'structured', optional: false, layout: 'split' },
-  { key: 'map-staff', label: () => m.obs_staff(), icon: 'users', phase: 'build', track: 'structure', requires: 'structured', optional: false, layout: 'split' },
-  { key: 'map-tickets', label: () => m.obs_support(), icon: 'inbox', phase: 'build', track: 'structure', requires: 'structured', optional: false, layout: 'split' },
-  { key: 'map-welcome', label: () => m.obs_welcome(), icon: 'book-open', phase: 'build', track: 'structure', requires: 'structured', optional: false, layout: 'split' },
-  { key: 'map-stats', label: () => m.obs_counters(), icon: 'chart', phase: 'build', track: 'structure', requires: 'structured', optional: false, layout: 'split' },
-  { key: 'map-text', label: () => m.obs_chat(), icon: 'message-circle', phase: 'build', track: 'structure', requires: 'structured', optional: false, layout: 'split' },
-  { key: 'map-fun', label: () => m.obs_fun(), icon: 'sparkles', phase: 'build', track: 'structure', requires: 'structured', optional: false, layout: 'split' },
-  { key: 'map-voice', label: () => m.obs_voice(), icon: 'mic', phase: 'build', track: 'structure', requires: 'structured', optional: false, layout: 'split' },
+  { key: 'map-access', label: () => m.obs_access(), icon: 'door-open', phase: 'build', track: 'structure', requires: 'structured', optional: true, layout: 'split' },
+  { key: 'map-staff', label: () => m.obs_staff(), icon: 'users', phase: 'build', track: 'structure', requires: 'structured', optional: true, layout: 'split' },
+  { key: 'map-tickets', label: () => m.obs_support(), icon: 'inbox', phase: 'build', track: 'structure', requires: 'structured', optional: true, layout: 'split' },
+  { key: 'map-welcome', label: () => m.obs_welcome(), icon: 'book-open', phase: 'build', track: 'structure', requires: 'structured', optional: true, layout: 'split' },
+  { key: 'map-stats', label: () => m.obs_counters(), icon: 'chart', phase: 'build', track: 'structure', requires: 'structured', optional: true, layout: 'split' },
+  { key: 'map-text', label: () => m.obs_chat(), icon: 'message-circle', phase: 'build', track: 'structure', requires: 'structured', optional: true, layout: 'split' },
+  { key: 'map-fun', label: () => m.obs_fun(), icon: 'sparkles', phase: 'build', track: 'structure', requires: 'structured', optional: true, layout: 'split' },
+  { key: 'map-voice', label: () => m.obs_voice(), icon: 'mic', phase: 'build', track: 'structure', requires: 'structured', optional: true, layout: 'split' },
 
-  { key: 'structure', label: () => m.obs_structure(), icon: 'layout-grid', phase: 'build', track: 'structure', requires: null, optional: false, layout: 'split' },
+  { key: 'structure', label: () => m.obs_structure(), icon: 'layout-grid', phase: 'build', track: 'structure', requires: null, optional: true, layout: 'split' },
   { key: 'moderation', label: () => m.obs_moderation(), icon: 'shield', phase: 'build', track: 'moderation', requires: null, optional: false, layout: 'split' },
   { key: 'logs', label: () => m.onb_step_logs(), icon: 'scroll', phase: 'build', track: 'logs', requires: null, optional: true, layout: 'split' },
   { key: 'staff', label: () => m.onb_step_staff(), icon: 'users', phase: 'build', track: 'staff', requires: null, optional: true, layout: 'split' },

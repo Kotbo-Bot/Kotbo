@@ -14,9 +14,13 @@ import { DashboardApiError, kindFromStatus } from './errors';
  * a laisser n'importe quel visiteur sauter le parcours d'un serveur qui ne l'a
  * jamais traverse.
  */
-export async function completeOnboarding(guildId = authStore.selectedGuildId ?? undefined): Promise<boolean> {
+export async function completeOnboarding(
+  guildId = authStore.selectedGuildId ?? undefined,
+  options?: { deferred?: boolean },
+): Promise<boolean> {
   const result = await dashboardRequest('/onboarding/complete', {
     method: 'POST',
+    payload: options?.deferred ? { deferred: true } : undefined,
     guildId,
     silent: true,
     errorContext: 'API Error (Onboarding):',

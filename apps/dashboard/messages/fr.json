@@ -18746,7 +18746,7 @@
   "obx_co_code": "Code de parrainage ou d'activation",
   "obx_co_code_ph": "KOTBO-XXXXXX ou KB-XXXX-XXXX-XXXX",
   "obx_co_checking": "Vérification…",
-  "obx_co_free": "Continuer en gratuit",
+  "obx_co_free": "Continuer avec le plan Gratuit",
   "obx_co_opening": "Ouverture…",
   "obx_co_trial": "Démarrer l'essai de {days} jours",
   "obx_co_start": "Mettre en service",
@@ -20110,5 +20110,16 @@
   "toast_wb_attachment_failed": "Opération sur le document impossible.",
   "instance_blocked_title": "Instance désactivée par l'administration Kotbo",
   "instance_blocked_desc": "Le dashboard, les commandes et les fonctions automatiques sont coupés tant que cette instance n'est pas autorisée.",
-  "instance_blocked_reason": "Motif : {reason}"
+  "instance_blocked_reason": "Motif : {reason}",
+  "obx_wc_defer": "Configurer plus tard",
+  "obx_wc_defer_failed": "Impossible de différer la configuration pour l'instant.",
+  "obx_st_presets_label": "Preset prêt à l'emploi",
+  "obx_st_autodetect_title": "Salons et rôles détectés ({count})",
+  "obx_st_autodetect_desc": "Pré-sélectionne automatiquement les salons et rôles existants de ton serveur pour éviter le mappage manuel.",
+  "obx_st_autodetect_action": "Pré-sélectionner en 1 clic",
+  "obx_st_autodetect_done": "Pré-sélection appliquée",
+  "obx_co_trial_banner": "{days} jours d'essai gratuit, 0 € débité aujourd'hui",
+  "obx_co_trial_banner_desc": "Teste l'ensemble des modules Pro sans engagement. Tu peux annuler à tout moment avant la fin de l'essai.",
+  "obx_co_pro_summary_title": "Fonctionnalités Pro configurées",
+  "obx_co_pro_summary_desc": "Incluses dans l'essai de {days} jours, ou accessibles plus tard depuis le tableau de bord."
 }

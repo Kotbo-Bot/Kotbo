@@ -215,9 +215,9 @@
 {:else if MAPPING_STEPS.includes(wizard.step)}
   <!-- Un composant pour tous : les ecrans de mappage ne different que par la
        section qu'ils interrogent, et c'est `wizard.step` qui la designe. -->
-  <MappingStep onEditTracks={editTracks} />
+  <MappingStep onEditTracks={editTracks} {skip} />
 {:else if wizard.step === 'structure'}
-  <StructureStep onEditTracks={editTracks} />
+  <StructureStep onEditTracks={editTracks} {skip} />
 {:else if wizard.step === 'moderation'}
   <ModerationStep onEditTracks={editTracks} />
 {:else if wizard.step === 'logs'}

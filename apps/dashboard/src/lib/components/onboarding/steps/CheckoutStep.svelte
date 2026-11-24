@@ -21,6 +21,7 @@
   import { onboardingData } from '../../../stores/onboardingData.svelte';
   import { activateGuildWithCode, completeOnboarding, startCheckout } from '../../../api';
   import type { BillingInterval } from '../../../api/billing';
+  import { trackOf, type TrackKey } from '../../../onboarding';
   import KotboMark from '../KotboMark.svelte';
   import Papicon from '../../Papicon.svelte';
   import WizardShell from '../WizardShell.svelte';
@@ -93,8 +94,16 @@
     dashboardStore.state.onboardingCanFinishWithoutPayment === true
   );
 
-  // L'essai n'existe qu'avec un code de parrainage.
-  const trialDays = $derived(billing?.trial.available && referralCode ? billing.trial.days : 0);
+  // Essai gratuit de 15 jours offert à toute première souscription éligible.
+  const trialDays = $derived(billing?.trial.available ? billing.trial.days : 0);
+
+  const PRO_TRACK_KEYS: TrackKey[] = ['economy', 'animation', 'staff', 'mcp', 'logs'];
+  const configuredProTracks = $derived(
+    wizard.tracks
+      .filter((key) => PRO_TRACK_KEYS.includes(key))
+      .map((key) => trackOf(key))
+      .filter((t): t is NonNullable<typeof t> => !!t),
+  );
 
   /**
    * Periodicite de l'abonnement. Le mensuel reste le choix par defaut : c'est
@@ -257,12 +266,41 @@
         {offer.description}
       </p>
       {#if trialDays > 0}
+        <div class="mt-3 rounded-xl border border-success/30 bg-success/[0.06] px-4 py-3">
+          <p class="flex items-center gap-2 text-body-sm font-semibold text-success">
+            <Papicon icon="sparkles" size={14} class="shrink-0" />
+            <span>{m.obx_co_trial_banner({ days: trialDays })}</span>
+          </p>
+          <p class="mt-1 text-xs text-on-surface-variant leading-relaxed">
+            {m.obx_co_trial_banner_desc()}
+          </p>
+        </div>
+      {/if}
+      {#if trialDays > 0 && referralCode}
         <p class="mt-3 flex items-start gap-2 text-body-sm font-medium text-success">
           <Papicon icon="gift" size={14} class="mt-0.5 shrink-0" />
           <span>
             {m.obx_co_referral({ code: referralCode ?? '', days: trialDays, percent: REFERRAL_DISCOUNT_PERCENT })}
           </span>
         </p>
+      {/if}
+      {#if configuredProTracks.length > 0}
+        <div class="mt-4 rounded-xl border border-outline-variant/25 bg-surface-container-lowest/40 px-4 py-3">
+          <p class="text-xs font-semibold text-on-surface mb-1.5">{m.obx_co_pro_summary_title()}</p>
+          <div class="flex flex-wrap gap-1.5">
+            {#each configuredProTracks as track (track.key)}
+              <span class="inline-flex items-center gap-1 rounded-md border border-outline-variant/30 bg-surface-container-low px-2 py-0.5 text-2xs font-medium text-on-surface-variant">
+                <Papicon icon={track.icon} size={11} class="text-primary" />
+                {track.label()}
+              </span>
+            {/each}
+          </div>
+          {#if trialDays > 0}
+            <p class="mt-1.5 text-2xs text-on-surface-variant/75">
+              {m.obx_co_pro_summary_desc({ days: trialDays })}
+            </p>
+          {/if}
+        </div>
       {/if}
       <p class="mt-3 flex items-start gap-2 text-xs text-on-surface-variant/55 leading-relaxed">
         <Papicon icon="lock" size={12} class="mt-0.5 shrink-0" />
@@ -315,7 +353,7 @@
         type="button"
         onclick={finishWithoutBilling}
         disabled={onboardingData.busy}
-        class="inline-flex items-center px-4 py-2.5 rounded-xl text-sm font-medium text-on-surface-variant hover:text-on-surface transition-colors disabled:opacity-40"
+        class="inline-flex items-center px-4 py-2.5 rounded-xl border border-outline-variant/40 text-sm font-medium text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low/60 transition-colors disabled:opacity-40"
       >
         {m.obx_co_free()}
       </button>

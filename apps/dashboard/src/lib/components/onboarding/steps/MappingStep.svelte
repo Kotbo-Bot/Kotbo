@@ -37,7 +37,7 @@
   import Papicon from '../../Papicon.svelte';
   import WizardShell from '../WizardShell.svelte';
 
-  const { onEditTracks }: { onEditTracks: () => void } = $props();
+  const { onEditTracks, skip }: { onEditTracks: () => void; skip?: () => void } = $props();
 
   const template = $derived(onboardingData.template);
   const theme = $derived<ThemeKey>(wizard.theme ?? 'communaute');
@@ -352,6 +352,15 @@
   {/snippet}
 
   {#snippet footer()}
+    {#if skip}
+      <button
+        type="button"
+        onclick={skip}
+        class="text-body-sm font-medium text-on-surface-variant hover:text-on-surface transition-colors"
+      >
+        {m.obx_skip()}
+      </button>
+    {/if}
     <button
       type="button"
       onclick={() => wizard.complete(wizard.step)}

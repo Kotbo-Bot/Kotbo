@@ -334,10 +334,14 @@ export function createGuildGeneralRouter(client: Client) {
   router.post(`${base}/onboarding/complete`, ...gate, async (c) => {
     const guildId = c.req.param('guildId');
     try {
+      const body = await readBody<{ deferred?: boolean }>(c);
+      const deferred = body?.deferred === true;
+
       const guild = await prisma.guild.findUnique({
         where: { id: guildId },
         select: {
           onboardingCompletedAt: true,
+          onboardingState: true,
           plan: true,
           stripeSubscriptionId: true,
           accessType: true,
@@ -349,13 +353,30 @@ export function createGuildGeneralRouter(client: Client) {
         return send(c, { error: 'Guilde introuvable' }, 404);
       }
 
+      if (deferred) {
+        const currentState =
+          guild.onboardingState && typeof guild.onboardingState === 'object' && !Array.isArray(guild.onboardingState)
+            ? (guild.onboardingState as Record<string, unknown>)
+            : {};
+        await prisma.guild.update({
+          where: { id: guildId },
+          data: {
+            onboardingState: { ...currentState, deferred: true } as Prisma.InputJsonValue,
+          },
+        });
+      }
+
       // Deja clos, ou instance qui ne presente pas de parcours : rejouer
       // l'appel ne doit pas devenir une erreur, la page peut le refaire apres
       // un retour de paiement ou un simple rafraichissement.
       if (!guild.onboardingCompletedAt && isOnboardingFeatureEnabled()) {
         await markOnboardingComplete(
           guildId,
-          canFinishOnboardingWithoutPayment(guild) ? 'dernier écran, rien à payer' : 'dernier écran, offre gratuite',
+          deferred
+            ? 'différé depuis welcome'
+            : canFinishOnboardingWithoutPayment(guild)
+              ? 'dernier écran, rien à payer'
+              : 'dernier écran, offre gratuite',
         );
       }
 
