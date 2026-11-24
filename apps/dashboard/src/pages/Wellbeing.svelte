@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { m } from '../lib/i18n';
+  import { dateLocale, m } from '../lib/i18n';
   import { onMount } from 'svelte';
   import { dashboardFetch } from '../lib/api';
   import { dashboardStore } from '../lib/stores/dashboard.svelte';
@@ -7,6 +7,8 @@
   import { confirmDialog } from '../lib/stores/confirmDialog.svelte';
   import ModulePage from '../lib/components/ModulePage.svelte';
   import MultiSelect from '../lib/components/MultiSelect.svelte';
+  import MemberSearchSelect from '../lib/components/MemberSearchSelect.svelte';
+  import { WB_CATEGORIES, WB_SEVERITIES, WB_STATUSES, wbCategoryLabel, wbSeverityLabel, wbStatusLabel } from '../lib/wellbeingLabels';
   import { Button, Callout, EmptyState, Field, Modal, SectionCard } from '../lib/components/ui';
 
   type WellbeingStatus = {
@@ -38,6 +40,8 @@
 
   // New case modal
   let newCaseOpen = $state(false);
+  // Membre choisi : lie le dossier à sa fiche. Le nom reste modifiable, ou libre hors serveur.
+  let newSubjectUserId = $state('');
   let newSubjectName = $state('');
   let newTitle = $state('');
   let newCategory = $state('SOUTIEN');
@@ -143,7 +147,7 @@
         body: JSON.stringify({ reason: breakGlassReason.trim() }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Refusé');
+      if (!res.ok) throw new Error(data.error ?? '');
       breakGlassOpen = false;
       breakGlassReason = '';
       toast.success(m.toast_wb_break_glass_on());
@@ -164,6 +168,7 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          subjectUserId: newSubjectUserId || undefined,
           subjectName: newSubjectName.trim(),
           title: newTitle.trim(),
           category: newCategory,
@@ -172,10 +177,11 @@
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Erreur');
+      if (!res.ok) throw new Error(data.error ?? '');
       cases = [data.item, ...cases];
       selectedCaseId = data.item.id;
       newCaseOpen = false;
+      newSubjectUserId = '';
       newSubjectName = '';
       newTitle = '';
       newSummary = '';
@@ -184,6 +190,32 @@
       toast.error(err?.message || m.toast_wb_create_failed());
     } finally {
       creatingCase = false;
+    }
+  }
+
+  const formatDate = (iso: string) => new Date(iso).toLocaleString(dateLocale());
+
+  let updatingCase = $state(false);
+
+  /** Statut ou gravité du dossier ouvert. Fermer un dossier le rend purgeable après un an. */
+  async function updateCase(patch: { status?: string; severity?: string }) {
+    const target = selectedCase;
+    if (!target || updatingCase) return;
+    updatingCase = true;
+    try {
+      const res = await dashboardFetch(`/wellbeing/cases/${target.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      });
+      if (!res.ok) throw new Error('update');
+      const { item } = await res.json();
+      cases = cases.map((c) => (c.id === item.id ? item : c));
+      toast.success(m.toast_wb_case_updated());
+    } catch {
+      toast.error(m.toast_wb_update_failed());
+    } finally {
+      updatingCase = false;
     }
   }
 
@@ -230,58 +262,58 @@
 </script>
 
 <ModulePage
-  title="Cellule bien-être"
-  description="Espace confidentiel cloisonné avec accès exceptionnel journalisé (break-glass)"
+  title={m.wb_title()}
+  description={m.wb_desc()}
   icon="shield"
   featureKey="staff_directory"
 >
   {#snippet actions()}
     <div class="flex flex-wrap items-center gap-2">
       {#if status?.hasCaseAccess}
-        <Button variant="primary" icon="plus" onclick={() => (newCaseOpen = true)}>Nouveau dossier</Button>
+        <Button variant="primary" icon="plus" onclick={() => (newCaseOpen = true)}>{m.wb_new_case()}</Button>
       {/if}
       {#if status?.canConfigure}
-        <Button variant="ghost" icon="settings" onclick={() => void openConfig()}>Configuration</Button>
+        <Button variant="ghost" icon="settings" onclick={() => void openConfig()}>{m.wb_config()}</Button>
       {/if}
     </div>
   {/snippet}
 
   {#if loading}
-    <p class="text-sm text-on-surface-variant">Chargement…</p>
+    <p class="text-sm text-on-surface-variant">{m.common_loading()}</p>
   {:else if !status?.enabled}
     <EmptyState
       icon="shield"
-      title="Cellule bien-être désactivée"
-      description="Activez la cellule et désignez les rôles autorisés depuis la configuration."
-      actionLabel={status?.canConfigure ? 'Configurer' : undefined}
+      title={m.wb_disabled_title()}
+      description={m.wb_disabled_desc()}
+      actionLabel={status?.canConfigure ? m.wb_configure() : undefined}
       onAction={status?.canConfigure ? () => void openConfig() : undefined}
     />
   {:else if !status.hasCaseAccess}
     <div class="space-y-4">
-      <Callout variant="warning" title="Espace confidentiel cloisonné">
-        Les dossiers de la cellule bien-être sont strictement réservés aux membres habilités de la cellule.
+      <Callout variant="warning" title={m.wb_locked_title()}>
+        {m.wb_locked_desc()}
         {#if status.isDirector}
-          En tant que membre de la direction, vous pouvez déclencher un accès exceptionnel (« break-glass ») de 2 heures, intégralement journalisé.
+          {m.wb_locked_director()}
         {/if}
       </Callout>
       {#if status.isDirector}
         <Button variant="primary" icon="lock" onclick={() => (breakGlassOpen = true)}>
-          Activer l'accès exceptionnel (break-glass)
+          {m.wb_break_glass_open()}
         </Button>
       {/if}
     </div>
   {:else}
     {#if status.breakGlassExpiresAt && !status.isTeamMember}
-      <Callout variant="warning" title="Mode break-glass actif">
-        Accès exceptionnel directionnel actif jusqu'à {new Date(status.breakGlassExpiresAt).toLocaleTimeString('fr-FR')}. Toutes vos consultations sont journalisées.
+      <Callout variant="warning" title={m.wb_break_glass_active_title()}>
+        {m.wb_break_glass_active_desc({ time: new Date(status.breakGlassExpiresAt).toLocaleTimeString(dateLocale()) })}
       </Callout>
     {/if}
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <SectionCard title="Dossiers confidentiels" description="Un dossier fermé est supprimé après un an sans modification." icon="folder">
+      <SectionCard title={m.wb_cases_title()} description={m.wb_cases_retention()} icon="folder">
         <div class="divide-y divide-outline-variant">
           {#if cases.length === 0}
-            <p class="p-4 text-sm text-on-surface-variant">Aucun dossier ouvert.</p>
+            <p class="p-4 text-sm text-on-surface-variant">{m.wb_cases_empty()}</p>
           {:else}
             {#each cases as c (c.id)}
               <button
@@ -291,9 +323,9 @@
               >
                 <div class="flex items-center justify-between gap-2">
                   <span class="text-sm font-semibold text-on-surface truncate">{c.title}</span>
-                  <span class="text-2xs px-2 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant">{c.status}</span>
+                  <span class="text-2xs px-2 py-0.5 rounded-full bg-surface-container-high text-on-surface-variant">{wbStatusLabel(c.status)}</span>
                 </div>
-                <p class="text-xs text-on-surface-variant mt-1">{c.subjectName} · {c.category}</p>
+                <p class="text-xs text-on-surface-variant mt-1">{c.subjectName} · {wbCategoryLabel(c.category)} · {wbSeverityLabel(c.severity)}</p>
               </button>
             {/each}
           {/if}
@@ -302,19 +334,37 @@
 
       <div class="lg:col-span-2 space-y-6">
         {#if selectedCase}
-          <SectionCard title={selectedCase.title} description="Personne concernée : {selectedCase.subjectName} · {selectedCase.category}" icon="file-text">
+          <SectionCard title={selectedCase.title} description={m.wb_case_subject({ name: selectedCase.subjectName, category: wbCategoryLabel(selectedCase.category) })} icon="file-text">
             <div class="p-4 space-y-4">
+              <div class="grid grid-cols-2 gap-3">
+                <Field label={m.wb_status_label()}>
+                  {#snippet children(id)}
+                    <select {id} value={selectedCase?.status} disabled={updatingCase} class="input w-full"
+                      onchange={(e) => void updateCase({ status: e.currentTarget.value })}>
+                      {#each WB_STATUSES as code (code)}<option value={code}>{wbStatusLabel(code)}</option>{/each}
+                    </select>
+                  {/snippet}
+                </Field>
+                <Field label={m.wb_severity_label()}>
+                  {#snippet children(id)}
+                    <select {id} value={selectedCase?.severity} disabled={updatingCase} class="input w-full"
+                      onchange={(e) => void updateCase({ severity: e.currentTarget.value })}>
+                      {#each WB_SEVERITIES as code (code)}<option value={code}>{wbSeverityLabel(code)}</option>{/each}
+                    </select>
+                  {/snippet}
+                </Field>
+              </div>
               <p class="text-sm whitespace-pre-wrap text-on-surface bg-surface-container-low rounded-lg p-3 border border-outline-variant">
                 {selectedCase.summary}
               </p>
 
               <div class="space-y-2">
-                <h3 class="text-xs font-semibold text-on-surface-variant">Notes de suivi</h3>
+                <h3 class="text-xs font-semibold text-on-surface-variant">{m.wb_notes_title()}</h3>
                 {#each selectedCase.notes ?? [] as note (note.id)}
                   <div class="rounded-lg border border-outline-variant p-3 text-xs bg-surface-container-lowest">
                     <div class="flex justify-between text-on-surface-variant mb-1">
                       <span class="font-semibold text-on-surface">{note.authorName}</span>
-                      <span>{new Date(note.createdAt).toLocaleString('fr-FR')}</span>
+                      <span>{formatDate(note.createdAt)}</span>
                     </div>
                     <p class="whitespace-pre-wrap text-on-surface">{note.content}</p>
                   </div>
@@ -322,13 +372,13 @@
               </div>
 
               <form onsubmit={addNote} class="flex gap-2">
-                <input bind:value={newNote} aria-label={m.a11y_wellbeing_note()} required placeholder="Ajouter une note confidentielle…" class="input flex-1 text-sm" />
-                <Button type="submit" size="sm" variant="primary" loading={addingNote}>Ajouter</Button>
+                <input bind:value={newNote} aria-label={m.a11y_wellbeing_note()} required placeholder={m.wb_note_ph()} class="input flex-1 text-sm" />
+                <Button type="submit" size="sm" variant="primary" loading={addingNote}>{m.common_add()}</Button>
               </form>
 
               {#if status?.isTeamMember}
                 <div class="flex justify-end">
-                  <Button size="sm" variant="ghost" icon="trash" loading={deletingCase} onclick={() => void deleteCase()}>Supprimer le dossier</Button>
+                  <Button size="sm" variant="ghost" icon="trash" loading={deletingCase} onclick={() => void deleteCase()}>{m.wb_delete_case()}</Button>
                 </div>
               {/if}
             </div>
@@ -336,7 +386,7 @@
         {/if}
 
         {#if logs.length > 0}
-          <SectionCard title="Journal des accès break-glass" icon="eye">
+          <SectionCard title={m.wb_logs_title()} icon="eye">
             <div class="divide-y divide-outline-variant">
               {#each logs as log (log.id)}
                 <div class="px-4 py-3 text-xs flex flex-wrap items-center justify-between gap-2">
@@ -344,7 +394,7 @@
                     <span class="font-semibold text-on-surface">{log.actorName}</span>
                     <span class="text-on-surface-variant"> — {log.reason}</span>
                   </div>
-                  <span class="text-on-surface-variant">{new Date(log.createdAt).toLocaleString('fr-FR')}</span>
+                  <span class="text-on-surface-variant">{formatDate(log.createdAt)}</span>
                 </div>
               {/each}
             </div>
@@ -355,82 +405,92 @@
   {/if}
 </ModulePage>
 
-<Modal bind:open={breakGlassOpen} title="Accès exceptionnel (Break-glass)" size="sm">
+<Modal bind:open={breakGlassOpen} title={m.wb_bg_modal_title()} size="sm">
   <form id="bg-form" onsubmit={activateBreakGlass} class="space-y-4">
     <Callout variant="warning">
-      Cet accès temporaire (2 heures) est destiné aux enquêtes internes et sera tracé dans le journal d'audit.
+      {m.wb_bg_modal_desc()}
     </Callout>
-    <Field label="Motif de l'accès" required>
+    <Field label={m.wb_bg_reason()} required>
       {#snippet children(id)}
-        <textarea {id} bind:value={breakGlassReason} required minlength={8} rows={3} class="input w-full" placeholder="Ex. Enquête interne suite à un signalement…"></textarea>
+        <textarea {id} bind:value={breakGlassReason} required minlength={8} rows={3} class="input w-full" placeholder={m.wb_bg_reason_ph()}></textarea>
       {/snippet}
     </Field>
   </form>
   {#snippet footer()}
-    <Button variant="ghost" onclick={() => (breakGlassOpen = false)}>Annuler</Button>
-    <Button variant="primary" type="submit" form="bg-form" loading={breakGlassSubmitting}>Confirmer l'accès</Button>
+    <Button variant="ghost" onclick={() => (breakGlassOpen = false)}>{m.common_cancel()}</Button>
+    <Button variant="primary" type="submit" form="bg-form" loading={breakGlassSubmitting}>{m.wb_bg_confirm()}</Button>
   {/snippet}
 </Modal>
 
-<Modal bind:open={newCaseOpen} title="Nouveau dossier confidentiel" size="md">
+<Modal bind:open={newCaseOpen} title={m.wb_new_modal_title()} size="md">
   <form id="wb-case-form" onsubmit={createCase} class="space-y-4">
+    <Field label={m.wb_member()} hint={m.wb_member_hint()}>
+      {#snippet children(id)}
+        <MemberSearchSelect {id} bind:value={newSubjectUserId} placeholder={m.wb_member_ph()}
+          onselect={(member) => (newSubjectName = member.displayName || member.username)} />
+      {/snippet}
+    </Field>
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-      <Field label="Personne concernée" required>
+      <Field label={m.wb_subject()} hint={m.wb_subject_hint()} required>
         {#snippet children(id)}
-          <input {id} bind:value={newSubjectName} required class="input w-full" placeholder="Pseudo ou nom" />
+          <input {id} bind:value={newSubjectName} required class="input w-full" placeholder={m.wb_subject_ph()} />
         {/snippet}
       </Field>
-      <Field label="Catégorie">
+      <Field label={m.wb_category()}>
         {#snippet children(id)}
           <select {id} bind:value={newCategory} class="input w-full">
-            <option value="SOUTIEN">Soutien</option>
-            <option value="MEDIATION">Médiation</option>
-            <option value="SIGNALEMENT">Signalement</option>
-            <option value="SUIVI">Suivi</option>
+            {#each WB_CATEGORIES as code (code)}<option value={code}>{wbCategoryLabel(code)}</option>{/each}
           </select>
         {/snippet}
       </Field>
     </div>
-    <Field label="Titre du dossier" required>
+    <Field label={m.wb_severity_label()}>
       {#snippet children(id)}
-        <input {id} bind:value={newTitle} required class="input w-full" placeholder="Objet du dossier" />
+        <select {id} bind:value={newSeverity} class="input w-full">
+          {#each WB_SEVERITIES as code (code)}<option value={code}>{wbSeverityLabel(code)}</option>{/each}
+        </select>
       {/snippet}
     </Field>
-    <Field label="Résumé confidentiel" required>
+    <Field label={m.wb_case_title()} required>
       {#snippet children(id)}
-        <textarea {id} bind:value={newSummary} required rows={4} class="input w-full" placeholder="Contexte et éléments initiaux…"></textarea>
+        <input {id} bind:value={newTitle} required class="input w-full" placeholder={m.wb_case_title_ph()} />
+      {/snippet}
+    </Field>
+    <Field label={m.wb_summary()} required>
+      {#snippet children(id)}
+        <textarea {id} bind:value={newSummary} required rows={4} class="input w-full" placeholder={m.wb_summary_ph()}></textarea>
       {/snippet}
     </Field>
   </form>
   {#snippet footer()}
-    <Button variant="ghost" onclick={() => (newCaseOpen = false)}>Annuler</Button>
-    <Button variant="primary" type="submit" form="wb-case-form" loading={creatingCase}>Créer</Button>
+    <Button variant="ghost" onclick={() => (newCaseOpen = false)}>{m.common_cancel()}</Button>
+    <Button variant="primary" type="submit" form="wb-case-form" loading={creatingCase}>{m.wb_create()}</Button>
   {/snippet}
 </Modal>
 
-<Modal bind:open={configOpen} title="Configuration Cellule bien-être" size="md">
+<Modal bind:open={configOpen} title={m.wb_cfg_title()} size="md">
   <form id="wb-cfg-form" onsubmit={saveConfig} class="space-y-4">
     <label class="flex items-center gap-2 text-sm font-medium">
       <input type="checkbox" bind:checked={cfgEnabled} />
-      Activer l'espace confidentiel cloisonné
+      {m.wb_cfg_enabled()}
     </label>
     <label class="flex items-center gap-2 text-sm font-medium">
       <input type="checkbox" bind:checked={cfgRequireReason} />
-      Exiger un motif obligatoire pour le break-glass direction
+      {m.wb_cfg_require_reason()}
     </label>
-    <Field label="Rôles membres de la cellule bien-être">
+    <Field label={m.wb_cfg_team_roles()}>
       {#snippet children(id)}
-        <MultiSelect {id} bind:values={cfgTeamRoleIds} options={roleOptions} placeholder="Rechercher un rôle…" />
+        <MultiSelect {id} bind:values={cfgTeamRoleIds} options={roleOptions} placeholder={m.wb_role_search_ph()} />
       {/snippet}
     </Field>
-    <Field label="Rôles Direction autorisés (break-glass)">
+    <Field label={m.wb_cfg_director_roles()}>
       {#snippet children(id)}
-        <MultiSelect {id} bind:values={cfgDirectorRoleIds} options={roleOptions} placeholder="Rechercher un rôle…" />
+        <MultiSelect {id} bind:values={cfgDirectorRoleIds} options={roleOptions} placeholder={m.wb_role_search_ph()} />
       {/snippet}
     </Field>
   </form>
   {#snippet footer()}
-    <Button variant="ghost" onclick={() => (configOpen = false)}>Annuler</Button>
-    <Button variant="primary" type="submit" form="wb-cfg-form" loading={savingConfig}>Enregistrer</Button>
+    <Button variant="ghost" onclick={() => (configOpen = false)}>{m.common_cancel()}</Button>
+    <Button variant="primary" type="submit" form="wb-cfg-form" loading={savingConfig}>{m.common_save()}</Button>
   {/snippet}
 </Modal>
