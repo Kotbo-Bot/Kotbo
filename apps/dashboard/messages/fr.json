@@ -20121,5 +20121,11 @@
   "obx_co_trial_banner": "{days} jours d'essai gratuit, 0 € débité aujourd'hui",
   "obx_co_trial_banner_desc": "Teste l'ensemble des modules Pro sans engagement. Tu peux annuler à tout moment avant la fin de l'essai.",
   "obx_co_pro_summary_title": "Fonctionnalités Pro configurées",
-  "obx_co_pro_summary_desc": "Incluses dans l'essai de {days} jours, ou accessibles plus tard depuis le tableau de bord."
+  "obx_co_pro_summary_desc": "Incluses dans l'essai de {days} jours, ou accessibles plus tard depuis le tableau de bord.",
+  "wb_cfg_named_advice": "Le plus sûr : désigner les membres un par un. Un rôle Discord peut être donné par d'autres que toi ; Kotbo retire alors ce rôle et prévient la cellule.",
+  "wb_cfg_team_members": "Membres de la cellule",
+  "wb_cfg_director_members": "Membres de la direction",
+  "wb_cfg_named_hint": "Toi seul peux modifier cette liste.",
+  "wb_cfg_roles_hint": "Un rôle donné par quelqu'un d'autre que le propriétaire est retiré automatiquement.",
+  "wb_alert_membership_change": "Rôle de la cellule ou de la direction donné ou retiré"
 }

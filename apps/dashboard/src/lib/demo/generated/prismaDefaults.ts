@@ -5807,7 +5807,8 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
       "EMERGENCY_READ",
       "CONFIG_CHANGE",
       "REPORT",
-      "REMINDER"
+      "REMINDER",
+      "MEMBERSHIP_CHANGE"
     ],
     "breakGlassApproval": false,
     "reportEnabled": false,

@@ -20117,5 +20117,11 @@
   "obx_co_trial_banner": "{days}-day free trial, €0 charged today",
   "obx_co_trial_banner_desc": "Try all Pro modules with no commitment. You can cancel anytime before the trial ends.",
   "obx_co_pro_summary_title": "Pro features configured",
-  "obx_co_pro_summary_desc": "Included in the {days}-day trial, or upgradeable later from the dashboard."
+  "obx_co_pro_summary_desc": "Included in the {days}-day trial, or upgradeable later from the dashboard.",
+  "wb_cfg_named_advice": "Safest option: name members one by one. A Discord role can be given by others; Kotbo then removes that role and alerts the unit.",
+  "wb_cfg_team_members": "Unit members",
+  "wb_cfg_director_members": "Management members",
+  "wb_cfg_named_hint": "Only you can change this list.",
+  "wb_cfg_roles_hint": "A role given by anyone other than the owner is removed automatically.",
+  "wb_alert_membership_change": "Unit or management role given or removed"
 }

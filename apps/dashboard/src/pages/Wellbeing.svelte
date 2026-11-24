@@ -10,6 +10,7 @@
   import MemberSearchSelect from '../lib/components/MemberSearchSelect.svelte';
   import { WB_ALERT_EVENTS, wbCaseEventLabel, WB_CATEGORIES, WB_SEVERITIES, WB_STATUSES, wbAlertEventLabel, wbCategoryLabel, wbSeverityLabel, wbStatusLabel } from '../lib/wellbeingLabels';
   import MemberName from '../lib/components/MemberName.svelte';
+  import WellbeingMemberList from '../lib/components/WellbeingMemberList.svelte';
   import { channelDisplayName } from '../lib/channelUtils';
   import { Button, Callout, EmptyState, Field, Modal, SectionCard } from '../lib/components/ui';
   import { authStore } from '../lib/stores/auth.svelte';
@@ -95,10 +96,13 @@
   let cfgRequireReason = $state(true);
   let cfgTeamRoleIds = $state<string[]>([]);
   let cfgDirectorRoleIds = $state<string[]>([]);
+  let cfgTeamUserIds = $state<string[]>([]);
+  let cfgDirectorUserIds = $state<string[]>([]);
+  /** Membres désignés un par un, par liste. */
+  const MAX_NAMED_MEMBERS = 25;
   let cfgAlertChannelId = $state('');
   let cfgAlertUserIds = $state<string[]>([]);
   let cfgAlertEvents = $state<string[]>([]);
-  let cfgAlertCandidate = $state('');
   let cfgBreakGlassApproval = $state(false);
   let cfgReportEnabled = $state(false);
   let cfgStaleDays = $state(7);
@@ -110,13 +114,6 @@
       .filter((c) => c.type === undefined || c.type === 'text' || c.type === 'announcement'),
   );
 
-  function addAlertUser() {
-    const id = cfgAlertCandidate;
-    if (id && !cfgAlertUserIds.includes(id) && cfgAlertUserIds.length < MAX_ALERT_USERS) {
-      cfgAlertUserIds = [...cfgAlertUserIds, id];
-    }
-    cfgAlertCandidate = '';
-  }
 
   function toggleAlertEvent(code: string, checked: boolean) {
     cfgAlertEvents = checked ? [...new Set([...cfgAlertEvents, code])] : cfgAlertEvents.filter((e) => e !== code);
@@ -177,10 +174,11 @@
       cfgRequireReason = config.requireReason !== false;
       cfgTeamRoleIds = [...(config.teamRoleIds ?? [])];
       cfgDirectorRoleIds = [...(config.directorRoleIds ?? [])];
+      cfgTeamUserIds = [...(config.teamUserIds ?? [])];
+      cfgDirectorUserIds = [...(config.directorUserIds ?? [])];
       cfgAlertChannelId = config.alertChannelId ?? '';
       cfgAlertUserIds = [...(config.alertUserIds ?? [])];
       cfgAlertEvents = [...(config.alertEvents ?? [])];
-      cfgAlertCandidate = '';
       cfgBreakGlassApproval = config.breakGlassApproval === true;
       cfgReportEnabled = config.reportEnabled === true;
       cfgStaleDays = typeof config.staleCriticalDays === 'number' ? config.staleCriticalDays : 7;
@@ -202,6 +200,8 @@
           requireReason: cfgRequireReason,
           teamRoleIds: cfgTeamRoleIds,
           directorRoleIds: cfgDirectorRoleIds,
+          teamUserIds: cfgTeamUserIds,
+          directorUserIds: cfgDirectorUserIds,
           alertChannelId: cfgAlertChannelId || null,
           alertUserIds: cfgAlertUserIds,
           alertEvents: cfgAlertEvents,
@@ -845,14 +845,25 @@
         <input {id} aria-describedby={describedBy} type="number" min="0" max="90" step="1" bind:value={cfgStaleDays} class="input w-32" />
       {/snippet}
     </Field>
-    <Field label={m.wb_cfg_team_roles()}>
-      {#snippet children(id)}
-        <MultiSelect {id} bind:values={cfgTeamRoleIds} options={roleOptions} placeholder={m.wb_role_search_ph()} />
+    <Callout variant="info">{m.wb_cfg_named_advice()}</Callout>
+    <Field label={m.wb_cfg_team_members()} hint={m.wb_cfg_named_hint()}>
+      {#snippet children(id, describedBy)}
+        <WellbeingMemberList {id} {describedBy} bind:ids={cfgTeamUserIds} max={MAX_NAMED_MEMBERS} />
       {/snippet}
     </Field>
-    <Field label={m.wb_cfg_director_roles()}>
-      {#snippet children(id)}
-        <MultiSelect {id} bind:values={cfgDirectorRoleIds} options={roleOptions} placeholder={m.wb_role_search_ph()} />
+    <Field label={m.wb_cfg_team_roles()} hint={m.wb_cfg_roles_hint()}>
+      {#snippet children(id, describedBy)}
+        <MultiSelect {id} {describedBy} bind:values={cfgTeamRoleIds} options={roleOptions} placeholder={m.wb_role_search_ph()} />
+      {/snippet}
+    </Field>
+    <Field label={m.wb_cfg_director_members()} hint={m.wb_cfg_named_hint()}>
+      {#snippet children(id, describedBy)}
+        <WellbeingMemberList {id} {describedBy} bind:ids={cfgDirectorUserIds} max={MAX_NAMED_MEMBERS} />
+      {/snippet}
+    </Field>
+    <Field label={m.wb_cfg_director_roles()} hint={m.wb_cfg_roles_hint()}>
+      {#snippet children(id, describedBy)}
+        <MultiSelect {id} {describedBy} bind:values={cfgDirectorRoleIds} options={roleOptions} placeholder={m.wb_role_search_ph()} />
       {/snippet}
     </Field>
 
@@ -871,26 +882,7 @@
       </Field>
       <Field label={m.wb_alerts_users({ max: MAX_ALERT_USERS })}>
         {#snippet children(id)}
-          <div class="space-y-2">
-            {#if cfgAlertUserIds.length > 0}
-              <ul class="flex flex-wrap gap-2">
-                {#each cfgAlertUserIds as userId (userId)}
-                  <li class="flex items-center gap-1 rounded-md bg-surface-container px-2 py-1 text-xs">
-                    <MemberName {userId} />
-                    <button type="button" class="text-on-surface-variant hover:text-error"
-                      aria-label={m.wb_alerts_remove_user({ name: userId })}
-                      onclick={() => (cfgAlertUserIds = cfgAlertUserIds.filter((u) => u !== userId))}>×</button>
-                  </li>
-                {/each}
-              </ul>
-            {/if}
-            {#if cfgAlertUserIds.length < MAX_ALERT_USERS}
-              <div class="flex gap-2">
-                <div class="flex-1"><MemberSearchSelect {id} bind:value={cfgAlertCandidate} placeholder={m.wb_member_ph()} /></div>
-                <Button size="sm" variant="secondary" disabled={!cfgAlertCandidate} onclick={addAlertUser}>{m.wb_alerts_add_user()}</Button>
-              </div>
-            {/if}
-          </div>
+          <WellbeingMemberList {id} bind:ids={cfgAlertUserIds} max={MAX_ALERT_USERS} />
         {/snippet}
       </Field>
       <div class="space-y-1">
