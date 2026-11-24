@@ -5,6 +5,7 @@
 
   interface Props {
     id?: string;
+    describedBy?: string;
     value?: string;
     placeholder?: string;
     disabled?: boolean;
@@ -14,6 +15,7 @@
 
   let {
     id = '',
+    describedBy,
     value = $bindable(''),
     placeholder = '',
     disabled = false,
@@ -107,6 +109,7 @@
 <div style="position:relative">
   <input
     {id}
+    aria-describedby={describedBy}
     type="text"
     placeholder={placeholder || m.member_search_placeholder()}
     bind:value={query}

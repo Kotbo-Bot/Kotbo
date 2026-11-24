@@ -425,15 +425,15 @@
 <Modal bind:open={newCaseOpen} title={m.wb_new_modal_title()} size="md">
   <form id="wb-case-form" onsubmit={createCase} class="space-y-4">
     <Field label={m.wb_member()} hint={m.wb_member_hint()}>
-      {#snippet children(id)}
-        <MemberSearchSelect {id} bind:value={newSubjectUserId} placeholder={m.wb_member_ph()}
+      {#snippet children(id, describedBy)}
+        <MemberSearchSelect {id} {describedBy} bind:value={newSubjectUserId} placeholder={m.wb_member_ph()}
           onselect={(member) => (newSubjectName = member.displayName || member.username)} />
       {/snippet}
     </Field>
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
       <Field label={m.wb_subject()} hint={m.wb_subject_hint()} required>
-        {#snippet children(id)}
-          <input {id} bind:value={newSubjectName} required class="input w-full" placeholder={m.wb_subject_ph()} />
+        {#snippet children(id, describedBy)}
+          <input {id} aria-describedby={describedBy} bind:value={newSubjectName} required class="input w-full" placeholder={m.wb_subject_ph()} />
         {/snippet}
       </Field>
       <Field label={m.wb_category()}>
