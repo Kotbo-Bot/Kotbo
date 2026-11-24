@@ -101,6 +101,9 @@
       $router.path.startsWith("/sanction-evidence/") ||
       $router.path.startsWith("/form/") ||
       $router.path.startsWith("/appeal/") ||
+      // Formulaire de support et boutique : ouverts sans compte Discord.
+      $router.path.startsWith("/support/") ||
+      $router.path.startsWith("/boutique/") ||
       $router.path.startsWith("/verify/"),
   );
 

@@ -27,6 +27,8 @@ const PAGE_RULES: PageRule[] = [
       '/sanction-evidence/',
       '/form/',
       '/appeal/',
+      '/support/',
+      '/boutique/',
       '/verify/',
       '/profile/',
     ],
