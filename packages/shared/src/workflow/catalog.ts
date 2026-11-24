@@ -1285,13 +1285,27 @@ const ACTIONS: NodeDef[] = [
     type: 'CreateTicket',
     label: 'Ouvrir un ticket',
     category: 'action',
-    description: 'Ouvre un ticket de support au nom d\'un membre.',
+    description: 'Ouvre un ticket au nom d\'un membre. Le type (son nom ou son identifiant) choisit la catégorie et le rôle staff ; sans type, ceux du serveur. Le nom du salon accepte les variables.',
     inputs: [
       EXEC_IN,
       { id: 'member', label: 'Membre', type: 'Member' },
       { id: 'subject', label: 'Sujet', type: 'String' },
+      { id: 'type', label: 'Type de ticket', type: 'String', optional: true },
+      { id: 'name', label: 'Nom du salon', type: 'String', optional: true },
     ],
     outputs: [EXEC_OUT, { id: 'channel', label: 'Salon créé', type: 'Channel' }],
+  },
+  {
+    type: 'RenameChannel',
+    label: 'Renommer un salon',
+    category: 'action',
+    description: 'Renomme un salon, par exemple pour marquer l\'état d\'un ticket (pris en charge, en attente, validé). Discord limite à deux renommages par salon toutes les dix minutes.',
+    inputs: [
+      EXEC_IN,
+      { id: 'channel', label: 'Salon', type: 'Channel' },
+      { id: 'name', label: 'Nouveau nom', type: 'String' },
+    ],
+    outputs: [EXEC_OUT],
   },
   {
     type: 'ReplyToMessage',

@@ -50,6 +50,7 @@ export const CHANNEL_REQUIREMENTS: Partial<Record<string, ChannelRequirement>> =
   SendMessage: { target: 'channel', permissions: WRITE },
   SendEmbed: { target: 'channel', permissions: [...WRITE, 'EmbedLinks'] },
   CreateThread: { target: 'channel', permissions: ['ViewChannel', 'CreatePublicThreads'] },
+  RenameChannel: { target: 'channel', permissions: ['ViewChannel', 'ManageChannels'] },
   ReplyToMessage: { target: 'message', permissions: [...WRITE, 'ReadMessageHistory'] },
   AddReaction: { target: 'message', permissions: ['ViewChannel', 'ReadMessageHistory', 'AddReactions'] },
   DeleteMessage: { target: 'message', permissions: ['ViewChannel', 'ManageMessages'] },

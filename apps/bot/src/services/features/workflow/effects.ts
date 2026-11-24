@@ -28,6 +28,7 @@ import { expectBotRoleChange } from './roleEcho.js';
 import { keepMessage, serialized } from './keptMessage.js';
 import { buildEmbedMessage } from './embedMessage.js';
 import { buildRankings } from './rankings.js';
+import { findTicketType } from './ticketTypeRef.js';
 import { infoMenuRow, parseInfoMenu } from './infoMenu.js';
 import {
   coerceToNumber,
@@ -679,8 +680,28 @@ export function createWorkflowEffects(guild: Guild, workflowId?: string): Workfl
         case 'CreateTicket': {
           const member = await resolveMember(guild, inputs.member);
           const subject = coerceToString(inputs.subject).slice(0, 100) || 'Ticket automatique';
-          const channel = await createTicketChannel(guild, member, subject);
+          const channel = await createTicketChannel(guild, member, subject, {
+            typeRef: coerceToString(inputs.type),
+            channelName: coerceToString(inputs.name),
+          });
           return { channel: toChannelValue(channel) };
+        }
+
+        case 'RenameChannel': {
+          const action = 'Renommer un salon';
+          const target = inputs.channel;
+          if (!isChannel(target)) throw new WorkflowActionError(action, 'salon absent ou invalide');
+          const channel = guild.channels.cache.get(target.id) ?? await guild.channels.fetch(target.id).catch(() => null);
+          if (!channel) throw new WorkflowActionError(action, `${target.name} est introuvable`);
+          const name = coerceToString(inputs.name).trim().slice(0, 100);
+          if (!name) throw new WorkflowActionError(action, 'le nouveau nom est vide');
+          if (channel.name === name) return {};
+          try {
+            await channel.setName(name, 'Automatisation');
+          } catch {
+            throw new WorkflowActionError(action, 'refusé par Discord : permission « Gérer les salons » manquante');
+          }
+          return {};
         }
 
         case 'ReplyToMessage': {
@@ -867,23 +888,49 @@ export function createWorkflowEffects(guild: Guild, workflowId?: string): Workfl
  * workflow ne dispose pas : on recrée donc ici le strict nécessaire, en
  * réutilisant la catégorie et le rôle staff configurés pour le serveur.
  */
-async function createTicketChannel(guild: Guild, member: GuildMember, subject: string): Promise<TextChannel> {
-  const config = await prisma.guild.findUnique({
+async function createTicketChannel(
+  guild: Guild,
+  member: GuildMember,
+  subject: string,
+  options: { typeRef: string; channelName: string },
+): Promise<TextChannel> {
+  const guildConfig = await prisma.guild.findUnique({
     where: { id: guild.id },
-    select: { ticketCategoryId: true, ticketStaffRoleId: true },
+    select: {
+      ticketCategoryId: true,
+      ticketStaffRoleId: true,
+      ticketTypes: true,
+      ticketEmbedButtonText: true,
+      ticketEmbedDesc: true,
+    },
   });
 
+  // Sans type demandé : catégorie et rôle staff du serveur, comme avant.
+  // Avec un type : ceux du type, qui retombent sur ceux du serveur s'il n'en a pas.
+  let ticketType: { id: string; label: string } | null = null;
+  let categoryId = guildConfig?.ticketCategoryId ?? null;
+  let staffRoleId = guildConfig?.ticketStaffRoleId ?? null;
+  if (options.typeRef.trim()) {
+    const { listTicketPanelTypes } = await import('../ticketService.js');
+    const found = findTicketType(listTicketPanelTypes(guildConfig ?? {}), options.typeRef);
+    if (!found) throw new WorkflowActionError('Ouvrir un ticket', `type de ticket « ${options.typeRef.trim()} » introuvable`);
+    ticketType = { id: found.id, label: found.label };
+    categoryId = found.categoryId ?? categoryId;
+    staffRoleId = found.staffRoleId ?? staffRoleId;
+  }
+  const config = { ticketCategoryId: categoryId, ticketStaffRoleId: staffRoleId };
+
   const channel = await guild.channels.create({
-    name: `ticket-${member.user.username}`.slice(0, 100),
+    name: (options.channelName.trim() || `ticket-${member.user.username}`).slice(0, 100),
     type: ChannelType.GuildText,
-    parent: config?.ticketCategoryId ?? undefined,
+    parent: config.ticketCategoryId ?? undefined,
     permissionOverwrites: [
       { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
       {
         id: member.id,
         allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory],
       },
-      ...(config?.ticketStaffRoleId
+      ...(config.ticketStaffRoleId
         ? [{
           id: config.ticketStaffRoleId,
           allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory],
@@ -901,13 +948,15 @@ async function createTicketChannel(guild: Guild, member: GuildMember, subject: s
       username: member.user.username,
       reason: subject,
       description: 'Ticket ouvert automatiquement par un workflow.',
-      staffRoleId: config?.ticketStaffRoleId ?? null,
-      categoryId: config?.ticketCategoryId ?? null,
+      staffRoleId: config.ticketStaffRoleId ?? null,
+      categoryId: config.ticketCategoryId ?? null,
+      ticketTypeId: ticketType?.id ?? null,
+      ticketTypeLabel: ticketType?.label ?? null,
     },
   });
 
   await channel.send({
-    content: `${member}${config?.ticketStaffRoleId ? ` <@&${config.ticketStaffRoleId}>` : ''}`,
+    content: `${member}${config.ticketStaffRoleId ? ` <@&${config.ticketStaffRoleId}>` : ''}`,
     embeds: [
       new EmbedBuilder()
         .setColor(0x5865f2)
