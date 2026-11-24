@@ -35,6 +35,7 @@
   import ImportSanctionsModal from '../lib/components/sanctions/ImportSanctionsModal.svelte';
   import { normalizeEvidenceLinks, sanitizeEvidenceLinks } from '../lib/sanctions/evidenceLinks';
   import { durationLabel, statusLabel, toDateTimeLocal, typeLabel } from '../lib/sanctions/formatters';
+  import { MAX_TIER_REPEAT, groupTiers, patchGroup, removeGroup, resizeGroup, type TierLike } from '../lib/sanctions/tierGroups';
   import { filterAndSortSanctions, type SanctionFilters, type SortField, type SortOption, type Sanction } from '../lib/sanctions/filterSort';
   import { toast } from '../lib/stores/toast.svelte';
   import { confirmDialog } from '../lib/stores/confirmDialog.svelte';
@@ -152,13 +153,38 @@ import DiscordAutomodEvents from '../lib/components/automod/DiscordAutomodEvents
     });
   }
 
-  function removeTier(tableIndex: number, tierIndex: number) {
+  // Une ligne de l'éditeur couvre un groupe de paliers identiques qui se suivent (« × N ») :
+  // chaque modification s'applique à tout le groupe, qui reste ainsi regroupé.
+  function removeTierGroup(tableIndex: number, start: number, count: number) {
     const table = guildSettings.sanctionTables[tableIndex];
     if (!table) return;
-    table.tiers.splice(tierIndex, 1);
-    table.tiers.forEach((tier: any, i: number) => {
-      tier.level = i + 1;
-    });
+    table.tiers = removeGroup(table.tiers, start, count);
+  }
+
+  function patchTierGroup(tableIndex: number, start: number, count: number, patch: Partial<TierLike>) {
+    const table = guildSettings.sanctionTables[tableIndex];
+    if (!table) return;
+    table.tiers = patchGroup(table.tiers, start, count, patch);
+  }
+
+  function setTierRepeat(tableIndex: number, start: number, count: number, nextCount: number) {
+    const table = guildSettings.sanctionTables[tableIndex];
+    if (!table) return;
+    table.tiers = resizeGroup(table.tiers, start, count, nextCount);
+  }
+
+  const TIER_ACTION_LABELS: Record<string, () => string> = {
+    TIMEOUT: () => m.sc_action_timeout(),
+    KICK: () => m.sc_action_kick(),
+    TEMP_BAN: () => m.sc_action_temp_ban(),
+    BAN: () => m.sc_action_ban(),
+    SOFTBAN: () => m.sc_action_softban(),
+  };
+
+  /** Libellé d'un palier dans le résumé : « Rappel », « Timeout 1h »… */
+  function tierSummaryLabel(tier: TierLike): string {
+    const base = tier.action === 'WARN' ? typeLabel('WARN', tier.weight) : (TIER_ACTION_LABELS[tier.action]?.() ?? tier.action);
+    return ['TIMEOUT', 'TEMP_BAN'].includes(tier.action) && tier.durationSeconds ? `${base} ${formatSeconds(tier.durationSeconds)}` : base;
   }
 
   function getDurationValue(seconds: number | null): number {
@@ -183,16 +209,12 @@ import DiscordAutomodEvents from '../lib/components/automod/DiscordAutomodEvents
     return m.aegis_weight_1();
   }
 
-  function updateTierDuration(tableIndex: number, tierIndex: number, value: number, unit: 'm' | 'h' | 'd') {
-    const table = guildSettings.sanctionTables[tableIndex];
-    const tier = table?.tiers[tierIndex];
-    if (!tier) return;
-
+  function updateTierDuration(tableIndex: number, start: number, count: number, value: number, unit: 'm' | 'h' | 'd') {
     let multiplier = 60;
     if (unit === 'h') multiplier = 3600;
     if (unit === 'd') multiplier = 86400;
 
-    tier.durationSeconds = value * multiplier;
+    patchTierGroup(tableIndex, start, count, { durationSeconds: value * multiplier });
   }
 
   function exportTableToImage(table: any) {
@@ -595,6 +617,7 @@ import DiscordAutomodEvents from '../lib/components/automod/DiscordAutomodEvents
   }
 
   const availableRoles = $derived(dashboardStore.state.discordRoles || []);
+  const currentTierGroups = $derived(groupTiers(guildSettings.sanctionTables[selectedTableIndex]?.tiers ?? []));
 
   function toggleRuleSelection(ruleId: string, checked: boolean) {
     if (checked) {
@@ -1606,17 +1629,31 @@ import DiscordAutomodEvents from '../lib/components/automod/DiscordAutomodEvents
                           </tr>
                         </thead>
                         <tbody class="divide-y divide-outline-variant/10">
-                          {#each currentTable.tiers as tier, tierIdx}
+                          {#each currentTierGroups as group (group.start)}
+                            {@const tier = group.tier}
                             <tr class="group hover:bg-surface-hover/10 transition-colors">
-                              <!-- Palier -->
-                              <td class="py-2.5 px-4 font-semibold text-center text-primary/80 select-none bg-surface-container-high/15 border-r border-outline-variant/10">
-                                T{tier.level}
+                              <!-- Palier, et nombre de fois de suite -->
+                              <td class="py-2 px-3 font-semibold text-center text-primary/80 bg-surface-container-high/15 border-r border-outline-variant/10">
+                                <div class="select-none">T{group.start + 1}{#if group.count > 1}–T{group.start + group.count}{/if}</div>
+                                <label class="mt-1 flex items-center justify-center gap-1 text-2xs font-semibold text-on-surface-variant" title={m.sc_tier_repeat_hint()}>
+                                  <span aria-hidden="true">×</span>
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    max={MAX_TIER_REPEAT}
+                                    value={group.count}
+                                    onchange={(e) => setTierRepeat(selectedTableIndex, group.start, group.count, Number((e.target as HTMLInputElement).value))}
+                                    aria-label={m.sc_tier_repeat()}
+                                    class="w-12 text-center py-0.5 px-1 rounded-md bg-surface-container-high/30 text-on-surface border border-field-border focus:border-primary/40 outline-hidden text-2xs font-bold"
+                                  />
+                                </label>
                               </td>
                               
                               <!-- Action -->
                               <td class="py-2 px-3 border-r border-outline-variant/10">
                                 <select 
-                                  bind:value={tier.action}
+                                  value={tier.action}
+                                  onchange={(e) => patchTierGroup(selectedTableIndex, group.start, group.count, { action: (e.target as HTMLSelectElement).value })}
                                   class="w-full bg-transparent font-bold py-1.5 px-2 rounded-lg cursor-pointer outline-hidden focus:bg-surface-container-high/40 border border-transparent focus:border-primary/20 transition-all
  {tier.action === 'WARN' ? 'text-warning' : ''}
                                     {tier.action === 'TIMEOUT' ? 'text-blue-500 dark:text-blue-400' : ''}
@@ -1643,13 +1680,13 @@ import DiscordAutomodEvents from '../lib/components/automod/DiscordAutomodEvents
                                     <input 
                                       type="number" 
                                       value={initialVal} 
-                                      oninput={(e) => updateTierDuration(selectedTableIndex, tierIdx, Number((e.target as HTMLInputElement).value), initialUnit)}
+                                      oninput={(e) => updateTierDuration(selectedTableIndex, group.start, group.count, Number((e.target as HTMLInputElement).value), initialUnit)}
                                       class="w-16 text-center py-1 px-1.5 rounded-lg bg-surface-container-high/30 text-on-surface border border-field-border focus:border-primary/40 focus:bg-surface-container-high/60 outline-hidden transition-all text-xs font-bold"
                                       min="1"
                                     />
                                     <select 
                                       value={initialUnit}
-                                      onchange={(e) => updateTierDuration(selectedTableIndex, tierIdx, initialVal, (e.target as HTMLSelectElement).value as any)}
+                                      onchange={(e) => updateTierDuration(selectedTableIndex, group.start, group.count, initialVal, (e.target as HTMLSelectElement).value as any)}
                                       class="flex-1 bg-transparent py-1 px-1.5 rounded-lg border border-transparent hover:border-outline-variant/10 focus:border-primary/30 outline-hidden transition-all text-xs font-semibold cursor-pointer"
                                     >
                                       <option value="m" class="text-on-surface bg-surface-container-lowest">{m.sc_unit_minutes()}</option>
@@ -1659,7 +1696,8 @@ import DiscordAutomodEvents from '../lib/components/automod/DiscordAutomodEvents
                                   </div>
                                 {:else if tier.action === 'WARN'}
                                   <select
-                                    bind:value={tier.weight}
+                                    value={tier.weight}
+                                    onchange={(e) => patchTierGroup(selectedTableIndex, group.start, group.count, { weight: Number((e.target as HTMLSelectElement).value) })}
                                     aria-label={m.sc_tier_weight()}
                                     class="w-full bg-transparent py-1 px-1.5 rounded-lg border border-transparent hover:border-outline-variant/10 focus:border-primary/30 outline-hidden transition-all text-xs font-semibold cursor-pointer"
                                   >
@@ -1678,7 +1716,8 @@ import DiscordAutomodEvents from '../lib/components/automod/DiscordAutomodEvents
                               <td class="py-2 px-3 border-r border-outline-variant/10">
                                 <input 
                                   type="text"
-                                  bind:value={tier.customReason}
+                                  value={tier.customReason ?? ''}
+                                  onchange={(e) => patchTierGroup(selectedTableIndex, group.start, group.count, { customReason: (e.target as HTMLInputElement).value })}
                                   placeholder={m.sc_reason_ph()}
                                   class="w-full bg-transparent py-1.5 px-2 rounded-lg border border-transparent hover:border-outline-variant/10 focus:border-primary/30 focus:bg-surface-container-high/30 outline-hidden transition-all text-xs text-on-surface"
                                 />
@@ -1686,9 +1725,9 @@ import DiscordAutomodEvents from '../lib/components/automod/DiscordAutomodEvents
 
                               <!-- Supprimer -->
                               <td class="py-2 px-2 text-center">
-                                {#if currentTable.tiers.length > 1}
+                                {#if currentTable.tiers.length > group.count}
                                   <button 
-                                    onclick={() => removeTier(selectedTableIndex, tierIdx)}
+                                    onclick={() => removeTierGroup(selectedTableIndex, group.start, group.count)}
                                     class="text-on-surface-variant/40 hover:text-error active:scale-95 transition-all p-1.5 rounded-lg hover:bg-error/10 opacity-0 group-hover:opacity-100 cursor-pointer flex items-center justify-center mx-auto"
                                     title={m.sc_delete_tier()}
                                   >
@@ -1715,6 +1754,23 @@ import DiscordAutomodEvents from '../lib/components/automod/DiscordAutomodEvents
                       </table>
                     </div>
                   </div>
+
+                  <!-- Résumé en phrases, dont ce qui se passe au-delà du dernier palier -->
+                  {#if currentTierGroups.length > 0}
+                    <div class="rounded-lg border border-outline-variant/10 bg-surface-container-low/20 px-4 py-3">
+                      <p class="text-xs font-semibold text-on-surface-variant">{m.sc_summary_title()}</p>
+                      <ul class="mt-1.5 space-y-0.5 text-xs text-on-surface">
+                        {#each currentTierGroups as group (group.start)}
+                          <li>
+                            {group.count > 1
+                              ? m.sc_summary_range({ from: group.start + 1, to: group.start + group.count, action: tierSummaryLabel(group.tier) })
+                              : m.sc_summary_single({ n: group.start + 1, action: tierSummaryLabel(group.tier) })}
+                          </li>
+                        {/each}
+                        <li class="text-on-surface-variant">{m.sc_summary_after({ action: tierSummaryLabel(currentTierGroups[currentTierGroups.length - 1].tier) })}</li>
+                      </ul>
+                    </div>
+                  {/if}
                 {/if}
               {/if}
             </div>
