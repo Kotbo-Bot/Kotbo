@@ -46,6 +46,7 @@ const EXCLUDED_MEMBER_LISTS: Record<string, string> = {
   'TagWave.userIds': "vague d'arrivées partagée : la liste désigne d'autres membres, l'événement du membre est exporté par TagAutomodEvent",
   'WellbeingConfig.teamUserIds': 'réglage du serveur (équipe cellule bien-être)',
   'WellbeingConfig.directorUserIds': 'réglage du serveur (direction cellule bien-être)',
+  'WellbeingConfig.alertUserIds': 'réglage du serveur (destinataires des alertes de la cellule bien-être)',
 };
 
 /** Champs au nom d'auteur d'action qui n'en sont pas : état de jeu, réglage. */

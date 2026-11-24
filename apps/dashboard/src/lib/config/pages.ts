@@ -204,7 +204,7 @@ export const staffItems: PageConfig[] = [
   { get name() { return m.nav_tickets(); }, icon: "message-square",href: "/tickets",          featureKey: "tickets", beta: false, wip: false },
 // { name: m.nav_staff_evaluations(),   icon: "award",         href: "/evaluations",      featureKey: "staff_directory", beta: true, wip: false },
   { get name() { return m.nav_tutoring(); },             icon: "book-open",     href: "/tutoring",         featureKey: "tutoring", beta: false, wip: false },
-  { name: "Cellule bien-être",                         icon: "shield",        href: "/wellbeing",        featureKey: "staff_directory", beta: false, wip: false },
+  { get name() { return m.wb_title(); },                icon: "heart",         href: "/wellbeing",        featureKey: "wellbeing", beta: false, wip: false },
   { get name() { return m.nav_planning(); },            icon: "calendar",      href: "/planning",         featureKey: "absences", beta: false, wip: false },
   { get name() { return m.nav_doing_lists(); },         icon: "list-checks",   href: "/doing-lists",      featureKey: "doing_lists", beta: true, wip: false },
   // Sondages et Discipline sont des onglets de la page staff : ils quittent le

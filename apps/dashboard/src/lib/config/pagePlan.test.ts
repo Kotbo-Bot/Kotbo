@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { pagePlan } from './pages';
+import { pagePlan, staffItems } from './pages';
 
 describe('pagePlan', () => {
   test('module hors offre gratuite : couronne Plus', () => {
@@ -14,5 +14,10 @@ describe('pagePlan', () => {
   test('le marquage explicite l’emporte sur le module', () => {
     expect(pagePlan({ name: '', href: '/custom-bot', featureKey: 'settings', plan: 'plus' })).toBe('plus');
     expect(pagePlan({ name: '', href: '/analytics', featureKey: 'analytics', plan: 'freemium' })).toBe('freemium');
+  });
+
+  test('la cellule bien-être porte la couronne Plus dans le menu', () => {
+    const page = staffItems.find((item) => item.href === '/wellbeing');
+    expect(page && pagePlan(page)).toBe('plus');
   });
 });

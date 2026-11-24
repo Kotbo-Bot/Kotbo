@@ -10,7 +10,7 @@
   import { dateLocale, m } from '../i18n';
   import { wbStatusLabel } from '../wellbeingLabels';
 
-  let { userId, userName }: { userId: string; userName: string } = $props();
+  let { userId, userName, canWrite = false }: { userId: string; userName: string; canWrite?: boolean } = $props();
 
   type Note = { id: string; authorName: string; content: string; createdAt: string };
   type Case = { id: string; title: string; status: string; severity: string; summary: string; notes: Note[]; createdByName: string; createdAt: string };
@@ -68,6 +68,7 @@
     {m.wb_panel_intro()}
   </p>
 
+  {#if canWrite}
   <div>
     <label for="wb-quick-note" class="sr-only">{m.wb_panel_note_label()}</label>
     <textarea id="wb-quick-note" class="input min-h-[120px] resize-y" bind:value={text} placeholder={m.wb_panel_note_ph()}></textarea>
@@ -75,6 +76,9 @@
       <button class="btn-primary" disabled={busy || !text.trim()} onclick={addQuickNote}>{m.wb_panel_save()}</button>
     </div>
   </div>
+  {:else}
+  <p class="text-xs text-on-surface-variant">{m.wb_read_only_emergency()}</p>
+  {/if}
 
   {#if !loading && cases.length === 0}
     <p class="text-sm text-on-surface-variant">{m.wb_panel_empty()}</p>

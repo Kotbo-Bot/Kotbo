@@ -12,6 +12,7 @@ import {
   projectProgressionBlacklist,
   type GdprSource,
 } from './gdprProjections.js';
+import { openNote } from '../staff/wellbeingCrypto.js';
 
 /**
  * Service d'export RGPD (droit d'accès / portabilité).
@@ -274,7 +275,7 @@ const STATIC_SOURCES: GdprSource[] = [
   { category: 'staff', key: 'staffManagerNote', label: 'Notes de suivi', model: 'staffManagerNote', where: ({ staffIds }) => ({ staffUserId: { in: staffIds } }) },
   { category: 'staff', key: 'staffPollVote', label: 'Votes aux sondages staff', model: 'staffPollVote', where: ({ staffIds }) => ({ staffUserId: { in: staffIds } }) },
   { category: 'staff', key: 'staffProcedureRead', label: 'Lectures de procédures', model: 'staffProcedureRead', where: ({ staffIds }) => ({ staffUserId: { in: staffIds } }) },
-  { category: 'staff', key: 'wellbeingCaseNote', label: 'Notes cellule bien-être', model: 'wellbeingCaseNote', where: ({ discordId }) => ({ authorId: discordId }) },
+  { category: 'staff', key: 'wellbeingCaseNote', label: 'Notes cellule bien-être', model: 'wellbeingCaseNote', where: ({ discordId }) => ({ authorId: discordId }), project: (record) => openNote(record as unknown as { caseId: string; content: string }) },
 
   // ── Système ────────────────────────────────────────────────────
   { category: 'system', key: 'scheduledTask', label: 'Tâches planifiées', model: 'scheduledTask', where: ({ discordId }) => ({ targetId: discordId }) },

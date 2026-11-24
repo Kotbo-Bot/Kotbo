@@ -57,6 +57,7 @@ export type BackgroundJobName =
   | 'server-tag-holders-snapshot'
   | 'site-analytics-prune'
   | 'wellbeing-cases-prune'
+  | 'wellbeing-reminders'
   | 'site-scheduled-publish'
   | 'notification-dm-flush'
   | 'site-vote-reminders'
