@@ -30,8 +30,6 @@ import {
 } from 'discord.js';
 import { Prisma, type RaidProtectionConfig } from '@prisma/client';
 import { logger } from '../../utils/logger.js';
-import { getCachedGuild } from '../../utils/cache.js';
-import { resolveLogChannel } from '../../utils/logChannel.js';
 import {
   activateRaidMode,
   deactivateRaidMode,
@@ -41,6 +39,7 @@ import {
   upsertRaidProtectionConfig,
 } from './raidProtectionService.js';
 import { releaseFrozenCaptchas } from './captchaService.js';
+import { resolveEventLogChannel } from '../../utils/logDispatch.js';
 
 export type ShieldLevel = 1 | 2 | 3 | 4 | 5;
 
@@ -219,8 +218,7 @@ function rolesThatCanStillTalk(guild: Guild): string[] {
 }
 
 async function logLevelChange(guild: Guild, previous: ShieldLevel, level: ShieldLevel, actorId: string): Promise<void> {
-  const guildConfig = await getCachedGuild(guild.id);
-  const channel = await resolveLogChannel(guild, guildConfig?.logChannelId, 'Shield');
+  const channel = await resolveEventLogChannel(guild, 'security_shield', 'Shield');
   if (!channel) return;
   const meta = SHIELD_LEVELS[level];
   const verb = level < previous ? 'monté' : 'descendu';

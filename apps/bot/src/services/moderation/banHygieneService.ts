@@ -13,7 +13,6 @@ import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  ChannelType,
   EmbedBuilder,
   type ButtonInteraction,
   type Client,
@@ -24,6 +23,7 @@ import { logger } from '../../utils/logger.js';
 import { isGuildActivated } from '../../utils/activation.js';
 import { queueAuditLog } from '../../utils/auditLogger.js';
 import { notifyMany } from '../notifications/notifyService.js';
+import { resolveEventLogChannel } from '../../utils/logDispatch.js';
 
 const SCAN_PAGE_SIZE = 1000;
 const MAX_LISTED_IN_EMBED = 15;
@@ -95,9 +95,8 @@ async function notifyStaff(
 ): Promise<void> {
   const guildConfig = await prisma.guild.findUnique({
     where: { id: guildId },
-    select: { logChannelId: true, verificationLogChannelId: true },
+    select: { verificationLogChannelId: true },
   });
-  const channelId = guildConfig?.logChannelId || guildConfig?.verificationLogChannelId;
 
   const totalPending = await prisma.banHygieneRecord.count({
     where: { guildId, unbannedAt: null },
@@ -130,13 +129,13 @@ async function notifyStaff(
       .setStyle(ButtonStyle.Secondary),
   );
 
-  if (channelId) {
-    const guild = await client.guilds.fetch(guildId).catch(() => null);
-    const channel = guild ? await guild.channels.fetch(channelId).catch(() => null) : null;
-    if (channel && channel.type === ChannelType.GuildText) {
-      await channel.send({ embeds: [embed], components: [row], allowedMentions: { parse: [] } }).catch(() => null);
-    }
-  }
+  const guild = await client.guilds.fetch(guildId).catch(() => null);
+  const channel = guild
+    ? await resolveEventLogChannel(guild, 'security_ban_hygiene', 'BanHygiene', {
+      fallbackChannelId: guildConfig?.verificationLogChannelId,
+    })
+    : null;
+  await channel?.send({ embeds: [embed], components: [row], allowedMentions: { parse: [] } }).catch(() => null);
 
   await prisma.banHygieneRecord.updateMany({
     where: { guildId, userId: { in: fresh.map((f) => f.userId) }, notifiedAt: null },

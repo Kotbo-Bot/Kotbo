@@ -17,10 +17,9 @@ import type { FileFilterRule, RaidProtectionConfig } from '@prisma/client';
 import prisma from '../../utils/db.js';
 import { cache } from '../../utils/cache.js';
 import { fetchExternal } from '../../utils/http.js';
-import { getCachedGuild } from '../../utils/cache.js';
-import { resolveLogChannel } from '../../utils/logChannel.js';
 import { getRaidProtectionConfig } from './raidProtectionService.js';
 import { applyAutoSanction, autoSanctionLabel, normalizeAutoSanction } from './autoSanction.js';
+import { resolveEventLogChannel } from '../../utils/logDispatch.js';
 
 export const FILE_GROUPS: Record<string, string[]> = {
   EXECUTABLES: ['exe', 'msi', 'msp', 'bat', 'cmd', 'com', 'scr', 'pif', 'cpl', 'ps1', 'psm1', 'vbs', 'vbe', 'js', 'jse', 'wsf', 'wsh', 'hta', 'jar', 'apk', 'xapk', 'ipa', 'app', 'dmg', 'pkg', 'deb', 'rpm', 'sh', 'run', 'bin', 'elf', 'lnk', 'reg', 'gadget', 'appx', 'msix', 'dll', 'sys'],
@@ -173,8 +172,7 @@ export async function handleFileExtensionMessage(message: Message): Promise<bool
     reason: `Fichier d'une extension refusée : ${refusal.file}`,
   });
 
-  const guildConfig = await getCachedGuild(message.guild.id);
-  const channel = await resolveLogChannel(message.guild, guildConfig?.logChannelId, 'Automod');
+  const channel = await resolveEventLogChannel(message.guild, 'automod_files', 'Automod');
   await channel
     ?.send({
       content: [

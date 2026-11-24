@@ -15,6 +15,7 @@ import { COLORS, successEmbed, infoEmbed } from '../../utils/embeds.js';
 import { scanGuildMembersForYoungAccounts } from '../../services/moderation/dcDetectionService.js';
 import { getEffectiveLocale, localized, type BotLocale } from '../../utils/i18n.js';
 import * as m from '../../lib/paraglide/messages.js';
+import { resolveEventLogChannel, resolveEventLogChannelId } from '../../utils/logDispatch.js';
 
 const data = localized(new SlashCommandBuilder(), 'dc')
   .addSubcommand((sub) =>
@@ -152,11 +153,10 @@ async function execute(interaction: ChatInputCommandInteraction) {
       });
 
       // Send log to staff
-      const logChannelId = dbGuild?.logChannelId;
-      if (logChannelId) {
-        const logChannel = await guild.channels.fetch(logChannelId).catch(() => null);
-        if (logChannel && logChannel.isTextBased()) {
-          const staffPing = dbGuild.baseStaffRoleId ? `<@&${dbGuild.baseStaffRoleId}>` : 'Staff';
+      {
+        const logChannel = await resolveEventLogChannel(guild, 'alt_validation', 'DC');
+        if (logChannel) {
+          const staffPing = dbGuild?.baseStaffRoleId ? `<@&${dbGuild.baseStaffRoleId}>` : 'Staff';
           const embed = new EmbedBuilder()
             .setColor(COLORS.info)
             .setTitle(m.dc_pending_title({}, { locale }))
@@ -254,15 +254,15 @@ async function execute(interaction: ChatInputCommandInteraction) {
     const guild = interaction.guild;
     if (!guild) return;
 
-    const dbGuild = await prisma.guild.findUnique({ where: { id: guild.id } });
-    const logChannelId = dbGuild?.logChannelId;
-
-    if (!logChannelId) {
+    // Ni salon, ni type activé : la demande n'arriverait à personne. On le dit
+    // au membre plutôt que de créer une liaison en attente que nul ne verra.
+    const channelId = await resolveEventLogChannelId(guild.id, 'alt_validation');
+    if (!channelId) {
       return ephemeral(m.dc_no_log_config({}, { locale }));
     }
 
-    const logChannel = await guild.channels.fetch(logChannelId).catch(() => null);
-    if (!logChannel || !logChannel.isTextBased()) {
+    const logChannel = await resolveEventLogChannel(guild, 'alt_validation', 'DC');
+    if (!logChannel) {
       return ephemeral(m.dc_log_not_found({}, { locale }));
     }
 

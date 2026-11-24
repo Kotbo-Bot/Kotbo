@@ -36,8 +36,6 @@ import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { COLORS } from '../../utils/embeds.js';
 import { fetchExternal } from '../../utils/http.js';
-import { getCachedGuild } from '../../utils/cache.js';
-import { resolveLogChannel } from '../../utils/logChannel.js';
 import { getRaidProtectionConfig } from './raidProtectionService.js';
 import {
   analyzeImage,
@@ -56,6 +54,7 @@ import { readImageText } from './ocrService.js';
 import { compactOcrText } from './scamHeuristics.js';
 import { promoteImageIfWidespread, recordScamSignals } from './scamDatasetService.js';
 import { detectInImageText, reasonForScamDetection } from './phishingFeedService.js';
+import { resolveEventLogChannel } from '../../utils/logDispatch.js';
 
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 const MAX_IMAGES_PER_MESSAGE = 8;
@@ -622,12 +621,9 @@ async function notifyAuthor(user: User, guild: Guild, reason: string, sanction: 
 }
 
 async function logChannelFor(guild: Guild, config: RaidProtectionConfig): Promise<TextBasedChannel | null> {
-  if (config.scamFilterAlertChannelId) {
-    const channel = await guild.channels.fetch(config.scamFilterAlertChannelId).catch(() => null);
-    if (channel?.isTextBased()) return channel;
-  }
-  const guildConfig = await getCachedGuild(guild.id);
-  return resolveLogChannel(guild, guildConfig?.logChannelId, 'Kotbo Vision');
+  return resolveEventLogChannel(guild, 'vision_blocked', 'Kotbo Vision', {
+    moduleChannelId: config.scamFilterAlertChannelId,
+  });
 }
 
 async function logBlocked(message: Message<true>, match: VisionMatch, list: VisionList | undefined, reason: string, sanction: string, config: RaidProtectionConfig): Promise<void> {

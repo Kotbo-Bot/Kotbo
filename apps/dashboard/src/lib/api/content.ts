@@ -126,6 +126,18 @@ export async function updateLogEventConfigs(configs: Array<{ eventType: string; 
   });
 }
 
+/**
+ * Message d'essai envoyé par le bot là où partirait un journal de ce type.
+ * Lève une `DashboardApiError` dont `userMessage` dit pourquoi rien n'est parti.
+ */
+export async function testLogEvent(eventType: string, guildId = authStore.selectedGuildId) {
+  return dashboardRequest<{ ok: true; channelId: string }>(`/logs/event-configs/${encodeURIComponent(eventType)}/test`, {
+    method: 'POST',
+    guildId,
+    errorContext: 'API Error (Test Log Event):'
+  });
+}
+
 export async function fetchSocialFollows(guildId = authStore.selectedGuildId) {
   return dashboardRequest('/social-follows', {
     method: 'GET',

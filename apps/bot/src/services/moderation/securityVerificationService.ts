@@ -20,6 +20,7 @@ import {
   notifyStaffVerificationCompleted,
   type VerificationDeliveryResult,
 } from './verificationDeliveryService.js';
+import { resolveEventLogChannel } from '../../utils/logDispatch.js';
 
 const VERIFICATION_TOKEN_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24h
 
@@ -441,7 +442,7 @@ export async function completeVerification(params: {
         metadata: evidence,
       });
 
-      await notifyStaffOfDuplicate(client, verification.guildId, verification.userId, verifiedDiscordId, evidence, guildConfig?.verificationLogChannelId || guildConfig?.logChannelId, true);
+      await notifyStaffOfDuplicate(client, verification.guildId, verification.userId, verifiedDiscordId, evidence, guildConfig?.verificationLogChannelId, true);
 
       return {
         success: true,
@@ -450,7 +451,7 @@ export async function completeVerification(params: {
         duplicateUserId: verifiedDiscordId,
       };
     } else {
-      await notifyStaffOfDuplicate(client, verification.guildId, verification.userId, verifiedDiscordId, evidence, guildConfig?.verificationLogChannelId || guildConfig?.logChannelId, false);
+      await notifyStaffOfDuplicate(client, verification.guildId, verification.userId, verifiedDiscordId, evidence, guildConfig?.verificationLogChannelId, false);
 
       return {
         success: true,
@@ -529,7 +530,7 @@ export async function completeVerification(params: {
       verifiedDiscordId,
       duplicateUserId,
       evidence,
-      guildConfig?.verificationLogChannelId || guildConfig?.logChannelId,
+      guildConfig?.verificationLogChannelId,
       action === 'AUTO_LINK',
     );
 
@@ -657,7 +658,8 @@ async function notifyStaffOfDuplicate(
   userId1: string,
   userId2: string,
   evidence: Record<string, unknown>,
-  logChannelId: string | null | undefined,
+  /** Salon de vérification : prioritaire sur le routage des journaux. */
+  verificationLogChannelId: string | null | undefined,
   autoLinked: boolean,
 ): Promise<void> {
   const guild = await client.guilds.fetch(guildId).catch(() => null);
@@ -700,13 +702,13 @@ async function notifyStaffOfDuplicate(
     );
   }
 
-  const targetChannelId = logChannelId;
-  if (targetChannelId) {
-    const channel = await guild.channels.fetch(targetChannelId).catch(() => null) as TextChannel | null;
-    if (channel) {
-      await channel.send({ embeds: [embed], components, allowedMentions: { parse: [] } }).catch(() => null);
-    }
-  }
+  // Une liaison automatique est un constat ; une liaison en attente est une
+  // demande sur laquelle le staff doit cliquer. Deux types, pour pouvoir couper
+  // l'un sans perdre l'autre.
+  const channel = await resolveEventLogChannel(guild, autoLinked ? 'alt_detection' : 'alt_validation', 'SecurityVerification', {
+    moduleChannelId: verificationLogChannelId,
+  });
+  await channel?.send({ embeds: [embed], components, allowedMentions: { parse: [] } }).catch(() => null);
 
   // Notify managers via dashboard notifications
   const managers = await prisma.staffMember.findMany({
