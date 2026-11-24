@@ -20091,5 +20091,17 @@
   "wb_cfg_stale_days": "Remind about an inactive critical case after (days)",
   "wb_cfg_stale_hint": "0 to never remind.",
   "wb_source_discord": "Discord",
-  "wb_cfg_report_unnoticed": "No channel or member will be notified of reports: tick \"Report received from Discord\" and pick a channel or members in the alerts."
+  "wb_cfg_report_unnoticed": "No channel or member will be notified of reports: tick \"Report received from Discord\" and pick a channel or members in the alerts.",
+  "wb_ev_attachment_added": "Drive document attached",
+  "wb_ev_attachment_removed": "Drive document removed",
+  "wb_attachments_title": "Google Drive documents",
+  "wb_attachments_desc": "Only the link is kept, encrypted. Who can open the file is set in its Drive sharing: limit it to the unit.",
+  "wb_attachment_label": "Document name",
+  "wb_attachment_url": "Google Drive link",
+  "wb_attachment_url_ph": "https://drive.google.com/…",
+  "wb_attachment_remove": "Delete {name}",
+  "wb_attachment_remove_q": "Remove this document from the case?",
+  "wb_attachment_remove_warn": "The link is removed from the case. The file stays in Google Drive.",
+  "toast_wb_attachment_added": "Document attached to the case.",
+  "toast_wb_attachment_failed": "Could not update the document."
 }

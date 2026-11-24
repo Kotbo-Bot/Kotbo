@@ -64,8 +64,10 @@ export {
   getModuleForPath,
   getModuleRequirements,
   isCoreModule,
+  isRestrictedModule,
   isModulePaused,
   withoutPausedModulePermissions,
+  withoutRestrictedModules,
 } from './types/modules.js';
 export type {
   ModuleCategory,

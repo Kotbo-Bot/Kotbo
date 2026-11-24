@@ -46,4 +46,21 @@ describe('chiffrement des dossiers de la cellule', () => {
     process.env.WELLBEING_ENCRYPTION_KEY = 'autre-cle';
     expect(openNote({ caseId: 'dossier-1', content: sealed }).content).toBe('[contenu illisible]');
   });
+
+  test('le nom et le lien d un document joint sont chiffrés et liés à leur dossier', () => {
+    const guildId = '100000000000000001';
+    const attachment = {
+      caseId: 'dossier-1',
+      label: sealNote('dossier-1', 'Compte rendu'),
+      url: sealNote('dossier-1', 'https://drive.google.com/file/d/abc/view'),
+    };
+    expect(attachment.url).not.toContain('drive.google.com');
+    const fields = sealCaseFields(guildId, { title: 'T', subjectName: 'S', summary: 'R' });
+    const opened = openCase({ guildId, ...fields, attachments: [attachment] });
+    expect(opened.attachments?.[0]).toMatchObject({ label: 'Compte rendu', url: 'https://drive.google.com/file/d/abc/view' });
+
+    const moved = openCase({ guildId, ...fields, attachments: [{ ...attachment, caseId: 'dossier-2' }] });
+    expect(moved.attachments?.[0]?.url).toBe('[contenu illisible]');
+  });
 });
+

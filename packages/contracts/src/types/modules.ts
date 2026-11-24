@@ -132,6 +132,13 @@ export interface ModuleDefinition {
    * de nouveau activable ; ses données sont restées en base.
    */
   paused?: boolean;
+  /**
+   * Module confidentiel : son accès n'est décidé que par sa propre
+   * configuration. Il est fermé aux clés MCP et à l'API REST, et le Centre de
+   * gestion ne le liste pas : ni règle de rôle ou de clé, ni préréglage, ni
+   * déblocage par le tutorat ne peuvent l'ouvrir.
+   */
+  restricted?: boolean;
 }
 
 /**
@@ -418,6 +425,7 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
     apiSegments: ['wellbeing'],
     paths: ['/wellbeing'],
     interactionPrefixes: ['wellbeing:'],
+    restricted: true,
   },
   {
     key: 'polls',
@@ -923,6 +931,16 @@ export function getModuleDefinition(key: string): ModuleDefinition | undefined {
 
 export function isCoreModule(key: string): boolean {
   return getModuleDefinition(key)?.core === true;
+}
+
+/** Module confidentiel (voir `ModuleDefinition.restricted`). */
+export function isRestrictedModule(key: string): boolean {
+  return getModuleDefinition(key)?.restricted === true;
+}
+
+/** Retire les modules confidentiels d'une liste de fonctionnalités du Centre de gestion. */
+export function withoutRestrictedModules<T extends { featureKey: string }>(items: readonly T[]): T[] {
+  return items.filter((item) => !isRestrictedModule(item.featureKey));
 }
 
 /** Module retiré du produit (voir `ModuleDefinition.paused`). */

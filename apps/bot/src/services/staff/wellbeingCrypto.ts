@@ -43,7 +43,10 @@ export function sealCaseFields(guildId: string, fields: CaseTextFields): CaseTex
   };
 }
 
-/** Une note est liée à son dossier : l'export RGPD la relit sans connaître le serveur. */
+/**
+ * Une note (ou un document joint) est liée à son dossier : l'export RGPD la
+ * relit sans connaître le serveur.
+ */
 export function sealNote(caseId: string, content: string): string {
   return box.seal(content, `case:${caseId}`);
 }
@@ -52,12 +55,27 @@ export function openNote<T extends { caseId: string; content: string }>(note: T)
   return { ...note, content: box.open(note.content, `case:${note.caseId}`) ?? UNREADABLE };
 }
 
-export function openCase<T extends CaseTextFields & { guildId: string; notes?: Array<{ caseId: string; content: string }> }>(item: T): T {
+/** Document joint : nom et lien chiffrés, liés à leur dossier comme une note. */
+export function openAttachment<T extends { caseId: string; label: string; url: string }>(attachment: T): T {
+  const context = `case:${attachment.caseId}`;
+  return {
+    ...attachment,
+    label: box.open(attachment.label, context) ?? UNREADABLE,
+    url: box.open(attachment.url, context) ?? UNREADABLE,
+  };
+}
+
+export function openCase<T extends CaseTextFields & {
+  guildId: string;
+  notes?: Array<{ caseId: string; content: string }>;
+  attachments?: Array<{ caseId: string; label: string; url: string }>;
+}>(item: T): T {
   return {
     ...item,
     title: readable(item.guildId, item.title),
     subjectName: readable(item.guildId, item.subjectName),
     summary: readable(item.guildId, item.summary),
     ...(item.notes ? { notes: item.notes.map((note) => openNote(note)) } : {}),
+    ...(item.attachments ? { attachments: item.attachments.map((attachment) => openAttachment(attachment)) } : {}),
   } as T;
 }

@@ -5,6 +5,7 @@ import {
   alertText,
   breakGlassScope,
   caseChangeEvents,
+  cleanDriveLink,
   cleanResources,
   decideBreakGlassError,
   isBreakGlassActive,
@@ -114,3 +115,25 @@ describe('relances et signalements', () => {
     expect(alertText('REMINDER', { actorId: '', reminder: 'stale', days: 7 })).toContain('7');
   });
 });
+
+describe('documents Google Drive joints à un dossier', () => {
+  test('seuls les liens https vers Drive ou Docs sont acceptés', () => {
+    expect(cleanDriveLink('https://drive.google.com/file/d/abc/view')).toBe('https://drive.google.com/file/d/abc/view');
+    expect(cleanDriveLink('  https://docs.google.com/document/d/abc/edit  ')).toBe('https://docs.google.com/document/d/abc/edit');
+  });
+
+  test('un autre site, un faux sous-domaine ou un lien non chiffré est refusé', () => {
+    for (const url of [
+      'http://drive.google.com/file/d/abc',
+      'https://drive.google.com.evil.example/file',
+      'https://evil.example/?u=https://drive.google.com',
+      'javascript:alert(1)',
+      'https://user@drive.google.com/file/d/abc',
+      '',
+      42,
+    ]) {
+      expect(cleanDriveLink(url)).toBeNull();
+    }
+  });
+});
+

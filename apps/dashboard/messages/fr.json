@@ -20095,5 +20095,17 @@
   "wb_cfg_stale_days": "Relancer un dossier critique inactif après (jours)",
   "wb_cfg_stale_hint": "0 pour ne jamais relancer.",
   "wb_source_discord": "Discord",
-  "wb_cfg_report_unnoticed": "Aucun salon ni membre ne sera prévenu des signalements : coche « Signalement reçu depuis Discord » et choisis un salon ou des membres dans les alertes."
+  "wb_cfg_report_unnoticed": "Aucun salon ni membre ne sera prévenu des signalements : coche « Signalement reçu depuis Discord » et choisis un salon ou des membres dans les alertes.",
+  "wb_ev_attachment_added": "Document Drive joint",
+  "wb_ev_attachment_removed": "Document Drive retiré",
+  "wb_attachments_title": "Documents Google Drive",
+  "wb_attachments_desc": "Seul le lien est gardé, chiffré. Qui peut ouvrir le fichier se règle dans son partage Drive : limite-le à la cellule.",
+  "wb_attachment_label": "Nom du document",
+  "wb_attachment_url": "Lien Google Drive",
+  "wb_attachment_url_ph": "https://drive.google.com/…",
+  "wb_attachment_remove": "Supprimer {name}",
+  "wb_attachment_remove_q": "Retirer ce document du dossier ?",
+  "wb_attachment_remove_warn": "Le lien est retiré du dossier. Le fichier reste dans Google Drive.",
+  "toast_wb_attachment_added": "Document joint au dossier.",
+  "toast_wb_attachment_failed": "Opération sur le document impossible."
 }

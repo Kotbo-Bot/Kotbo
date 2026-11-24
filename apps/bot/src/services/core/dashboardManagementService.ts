@@ -1,5 +1,5 @@
 import type { Prisma } from '@prisma/client';
-import { MODULE_REGISTRY, isModulePaused } from '@kotbo/contracts';
+import { MODULE_REGISTRY, isModulePaused, withoutRestrictedModules } from '@kotbo/contracts';
 import prisma from '../../utils/db.js';
 import { getDeclaredModuleStates } from './moduleGate.js';
 
@@ -47,7 +47,10 @@ export const defaultFeatures = [
  * droits), mais sortent du dashboard et des outils MCP.
  */
 export async function getAvailableFeatureConfigs(guildId: string) {
-  const configs = await getOrCreateFeatureConfigs(guildId);
+  // Un module confidentiel (cellule bien-etre) decide seul de son acces : il
+  // n'apparait ni dans le Centre de gestion, ni dans les outils MCP, ni dans
+  // les deblocages du tutorat.
+  const configs = withoutRestrictedModules(await getOrCreateFeatureConfigs(guildId));
   return configs.filter((config) => !isModulePaused(config.featureKey));
 }
 
@@ -263,7 +266,7 @@ export async function applyPresetToFeatureAccess(
   presetKey: 'general' | 'gaming' | 'dev',
   roleIds: { adminRoleIds: string[]; modRoleIds: string[] }
 ) {
-  const configs = await getOrCreateFeatureConfigs(guildId);
+  const configs = withoutRestrictedModules(await getOrCreateFeatureConfigs(guildId));
 
   const updates = configs.map(async (config) => {
     const featureKey = config.featureKey;

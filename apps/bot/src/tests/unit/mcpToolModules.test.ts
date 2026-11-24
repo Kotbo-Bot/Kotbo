@@ -8,7 +8,7 @@
 import { describe, expect, mock, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
-import { getModuleDefinition } from '@kotbo/contracts';
+import { getModuleDefinition, isRestrictedModule } from '@kotbo/contracts';
 import { mcpToolModule, mcpToolRight, withKeyAccessGate, withModuleGate, type McpKeyRight, type McpKeyRule } from '../../api/mcp/toolModules.js';
 
 /** Noms réellement enregistrés, lus dans les sources des outils. */
@@ -145,5 +145,40 @@ describe('droits d\'une clé MCP par module', () => {
     const refused = await withKeyAccessGate('get_giveaways', handler, async () => rules)({});
     expect(refused.isError).toBe(true);
     expect(withKeyAccessGate('send_message', handler, async () => rules)).toBe(handler);
+  });
+});
+
+describe('cellule bien-être fermée au MCP', () => {
+  const handler = mock(async () => ({ content: [{ type: 'text' as const, text: 'ok' }] }));
+
+  test('le registre marque la cellule comme module confidentiel', () => {
+    expect(isRestrictedModule('wellbeing')).toBe(true);
+    expect(isRestrictedModule('tickets')).toBe(false);
+  });
+
+  test('un outil de la cellule refuse même module allumé, sans appeler son gestionnaire', async () => {
+    handler.mockClear();
+    expect(mcpToolModule('get_wellbeing_cases')).toBe('wellbeing');
+    const gated = withModuleGate('get_wellbeing_cases', handler, async () => true);
+    const result = await gated({});
+    expect(handler).not.toHaveBeenCalled();
+    expect(result.isError).toBe(true);
+  });
+
+  test("aucune règle de clé n'ouvre la cellule", async () => {
+    handler.mockClear();
+    const rules: McpKeyRule[] = [{ featureKey: 'wellbeing', canView: true, canModerate: true, canConfigure: true, canDelete: true }];
+    const result = await withKeyAccessGate('get_wellbeing_cases', handler, async () => rules)({});
+    expect(handler).not.toHaveBeenCalled();
+    expect(result.isError).toBe(true);
+  });
+});
+
+describe('bascule des modules par le MCP', () => {
+  test("set_module_activation refuse d'allumer ou d'éteindre un module confidentiel", () => {
+    const source = readFileSync(path.resolve(import.meta.dir, '../../api/mcp/tools/write-community-2.ts'), 'utf8');
+    const tool = source.slice(source.indexOf("'set_module_activation'"));
+    expect(tool.indexOf('isRestrictedModule(moduleKey)')).toBeGreaterThan(-1);
+    expect(tool.indexOf('isRestrictedModule(moduleKey)')).toBeLessThan(tool.indexOf('setDashboardModuleStatus('));
   });
 });

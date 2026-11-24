@@ -54,6 +54,7 @@ import { registerSiteTools } from './tools/site.js';
 import { registerShopTools } from './tools/shop.js';
 import { registerRegulationTools } from './tools/regulation.js';
 import { withKeyAccessGate, withModuleGate, type McpKeyRule } from './toolModules.js';
+import { withWellbeingChannelGuard, type ChannelRef } from './wellbeingGuard.js';
 import { cache } from '../../utils/cache.js';
 import { isModuleEnabled } from '../../services/core/moduleGate.js';
 
@@ -76,6 +77,18 @@ export function registerMcpTools(
     });
     await cache.set(cacheKey, rows, 15);
     return rows;
+  };
+
+  // Salon d'alerte de la cellule bien-être, avec son nom pour reconnaître « #alertes ».
+  const loadWellbeingAlertChannel = async (): Promise<ChannelRef | null> => {
+    const cacheKey = `guild:${guildId}:wellbeing-alert-channel`;
+    const cached = await cache.get<{ id: string | null }>(cacheKey);
+    const id = cached
+      ? cached.id
+      : (await prisma.wellbeingConfig.findUnique({ where: { guildId }, select: { alertChannelId: true } }))?.alertChannelId ?? null;
+    if (!cached) await cache.set(cacheKey, { id }, 15);
+    if (!id) return null;
+    return { id, name: client.guilds.cache.get(guildId)?.channels.cache.get(id)?.name ?? null };
   };
 
   // Vue NON GÉNÉRIQUE de `mcpServer.registerTool` - ne pas remplacer par un
@@ -105,10 +118,13 @@ export function registerMcpTools(
       mcpServer.registerTool(
         name,
         config as never,
-        withModuleGate(
-          name,
-          options.keyId ? withKeyAccessGate(name, cb, loadKeyRules) : cb,
-          (moduleKey) => isModuleEnabled(guildId, moduleKey),
+        withWellbeingChannelGuard(
+          withModuleGate(
+            name,
+            options.keyId ? withKeyAccessGate(name, cb, loadKeyRules) : cb,
+            (moduleKey) => isModuleEnabled(guildId, moduleKey),
+          ),
+          loadWellbeingAlertChannel,
         ) as never,
       ),
   };

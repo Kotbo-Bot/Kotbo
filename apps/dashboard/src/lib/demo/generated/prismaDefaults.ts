@@ -5845,6 +5845,15 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "content": "",
     "createdAt": "__NOW__"
   },
+  "WellbeingCaseAttachment": {
+    "id": "",
+    "caseId": "",
+    "label": "",
+    "url": "",
+    "addedById": "",
+    "addedByName": "",
+    "createdAt": "__NOW__"
+  },
   "WellbeingCaseEvent": {
     "id": "",
     "caseId": "",

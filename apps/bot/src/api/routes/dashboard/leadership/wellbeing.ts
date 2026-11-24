@@ -14,9 +14,13 @@ import { logger } from '../../../../utils/logger.js';
 import { getGuildName, pushAudit } from '../../../shared.js';
 import { auditUserOf, fail, guildRoute, readBody, send } from '../../../hono/dashboard/kit.js';
 import {
+  ATTACHMENT_LABEL_MAX,
   BREAK_GLASS_HOURS,
+  MAX_CASE_ATTACHMENTS,
+  cleanDriveLink,
   BREAK_GLASS_REQUEST_HOURS,
   DEFAULT_ALERT_EVENTS,
+  WELLBEING_AUDIT_MODULE,
   MAX_ALERT_USERS,
   breakGlassScope,
   caseChangeEvents,
@@ -39,11 +43,11 @@ const STATUSES = ['OPEN', 'MONITORING', 'CLOSED'];
 const SNOWFLAKE_RE = /^\d{17,20}$/;
 const HOUR_MS = 60 * 60 * 1000;
 const MAX_STALE_DAYS = 90;
-const MODULE_LABEL = 'Cellule bien-être';
 
 const CASE_INCLUDE = {
   notes: { orderBy: { createdAt: 'asc' as const } },
   events: { orderBy: { createdAt: 'asc' as const } },
+  attachments: { orderBy: { createdAt: 'asc' as const } },
 };
 
 async function actorOf(discordGuild: Guild | null, userId: string) {
@@ -124,7 +128,7 @@ async function audit(client: Client, c: Context, guildId: string, action: string
     user: auditUserOf(c),
     action,
     context: getGuildName(client, guildId),
-    module: MODULE_LABEL,
+    module: WELLBEING_AUDIT_MODULE,
     eventType,
     details,
     channelId: null,
@@ -574,6 +578,73 @@ export function createWellbeingRouter(client: Client) {
     } catch (err) {
       logger.error('WellbeingAPI', 'Error adding case note:', err);
       return fail(c, err, "Erreur lors de l'ajout de la note.", 'WellbeingAPI');
+    }
+  });
+
+  // Documents Google Drive : seul le lien est gardé, chiffré. L'accès au
+  // fichier reste réglé par son partage dans Drive.
+  router.post(`${base}/cases/:caseId/attachments`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    try {
+      const state = await resolveWellbeingRole(client, guildId, user.userId);
+      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule bien-être.' }, 403);
+      const caseId = c.req.param('caseId');
+      const existing = await prisma.wellbeingCase.findFirst({
+        where: { id: caseId, guildId },
+        select: { id: true, _count: { select: { attachments: true } } },
+      });
+      if (!existing) return send(c, { error: 'Dossier introuvable.' }, 404);
+      if (existing._count.attachments >= MAX_CASE_ATTACHMENTS) {
+        return send(c, { error: `Un dossier compte au plus ${MAX_CASE_ATTACHMENTS} documents.` }, 400);
+      }
+      const body = await readBody<{ label?: string; url?: string }>(c);
+      const url = cleanDriveLink(body?.url);
+      if (!url) return send(c, { error: 'Seuls les liens https vers Google Drive ou Google Docs sont acceptés.' }, 400);
+      const label = bodyText(body?.label, ATTACHMENT_LABEL_MAX) || 'Document Drive';
+
+      await prisma.wellbeingCaseAttachment.create({
+        data: {
+          caseId,
+          label: sealNote(caseId, label),
+          url: sealNote(caseId, url),
+          addedById: user.userId,
+          addedByName: actorName(c),
+        },
+      });
+      await prisma.wellbeingCase.update({ where: { id: caseId }, data: { lastActivityAt: new Date() } });
+      await recordEvents(caseId, c, [{ type: 'ATTACHMENT_ADDED' }]);
+      void sendWellbeingAlert(client, guildId, state.config, 'CASE_CHANGE', { actorId: user.userId, action: 'complété d\'un document' });
+
+      const item = await prisma.wellbeingCase.findUniqueOrThrow({ where: { id: caseId }, include: CASE_INCLUDE });
+      return send(c, { item: openCase(item) }, 201);
+    } catch (err) {
+      logger.error('WellbeingAPI', 'Error adding attachment:', err);
+      return fail(c, err, "Erreur lors de l'ajout du document.", 'WellbeingAPI');
+    }
+  });
+
+  router.delete(`${base}/cases/:caseId/attachments/:attachmentId`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    try {
+      const state = await resolveWellbeingRole(client, guildId, user.userId);
+      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule bien-être.' }, 403);
+      const caseId = c.req.param('caseId');
+      // Le dossier doit être de ce serveur : un id de document seul ne suffit pas.
+      const { count } = await prisma.wellbeingCaseAttachment.deleteMany({
+        where: { id: c.req.param('attachmentId'), caseId, wellbeingCase: { guildId } },
+      });
+      if (count === 0) return send(c, { error: 'Document introuvable.' }, 404);
+      await prisma.wellbeingCase.update({ where: { id: caseId }, data: { lastActivityAt: new Date() } });
+      await recordEvents(caseId, c, [{ type: 'ATTACHMENT_REMOVED' }]);
+      void sendWellbeingAlert(client, guildId, state.config, 'CASE_CHANGE', { actorId: user.userId, action: 'modifié' });
+
+      const item = await prisma.wellbeingCase.findUniqueOrThrow({ where: { id: caseId }, include: CASE_INCLUDE });
+      return send(c, { item: openCase(item) });
+    } catch (err) {
+      logger.error('WellbeingAPI', 'Error removing attachment:', err);
+      return fail(c, err, 'Erreur lors du retrait du document.', 'WellbeingAPI');
     }
   });
 
