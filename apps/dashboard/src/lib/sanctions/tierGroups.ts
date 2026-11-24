@@ -24,6 +24,21 @@ export interface TierGroup<T extends TierLike> {
 }
 
 export const MAX_TIER_REPEAT = 50;
+/** Durée d'un nouveau timeout ou ban temporaire : celle que l'éditeur affiche faute de valeur. */
+export const DEFAULT_TIER_DURATION_SECONDS = 3600;
+const ACTIONS_WITH_DURATION = ['TIMEOUT', 'TEMP_BAN'];
+
+/**
+ * Changement d'action d'un palier. Une action à durée reçoit la durée par
+ * défaut si le palier n'en a pas : sans elle, l'éditeur affiche « 1 h » mais
+ * le bot refuse l'enregistrement.
+ */
+export function actionPatch(tier: TierLike, action: string): Partial<TierLike> {
+  if (ACTIONS_WITH_DURATION.includes(action) && !tier.durationSeconds) {
+    return { action, durationSeconds: DEFAULT_TIER_DURATION_SECONDS };
+  }
+  return { action };
+}
 
 /** Même sanction : même action, même durée, même raison, et même gravité pour un avertissement. */
 function sameTier(a: TierLike, b: TierLike): boolean {

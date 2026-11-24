@@ -35,7 +35,7 @@
   import ImportSanctionsModal from '../lib/components/sanctions/ImportSanctionsModal.svelte';
   import { normalizeEvidenceLinks, sanitizeEvidenceLinks } from '../lib/sanctions/evidenceLinks';
   import { durationLabel, statusLabel, toDateTimeLocal, typeLabel } from '../lib/sanctions/formatters';
-  import { MAX_TIER_REPEAT, groupTiers, patchGroup, removeGroup, resizeGroup, type TierLike } from '../lib/sanctions/tierGroups';
+  import { DEFAULT_TIER_DURATION_SECONDS, MAX_TIER_REPEAT, actionPatch, groupTiers, patchGroup, removeGroup, resizeGroup, type TierLike } from '../lib/sanctions/tierGroups';
   import { filterAndSortSanctions, type SanctionFilters, type SortField, type SortOption, type Sanction } from '../lib/sanctions/filterSort';
   import { toast } from '../lib/stores/toast.svelte';
   import { confirmDialog } from '../lib/stores/confirmDialog.svelte';
@@ -140,7 +140,7 @@ import DiscordAutomodEvents from '../lib/components/automod/DiscordAutomodEvents
     if (table.tiers.length > 0) {
       const prevTier = table.tiers[table.tiers.length - 1];
       defaultAction = prevTier.action === 'WARN' ? 'TIMEOUT' : prevTier.action === 'TIMEOUT' ? 'KICK' : 'BAN';
-      defaultDuration = defaultAction === 'TIMEOUT' ? 3600 : null;
+      defaultDuration = defaultAction === 'TIMEOUT' ? DEFAULT_TIER_DURATION_SECONDS : null;
     }
 
     table.tiers.push({
@@ -1653,7 +1653,7 @@ import DiscordAutomodEvents from '../lib/components/automod/DiscordAutomodEvents
                               <td class="py-2 px-3 border-r border-outline-variant/10">
                                 <select 
                                   value={tier.action}
-                                  onchange={(e) => patchTierGroup(selectedTableIndex, group.start, group.count, { action: (e.target as HTMLSelectElement).value })}
+                                  onchange={(e) => patchTierGroup(selectedTableIndex, group.start, group.count, actionPatch(tier, (e.target as HTMLSelectElement).value))}
                                   class="w-full bg-transparent font-bold py-1.5 px-2 rounded-lg cursor-pointer outline-hidden focus:bg-surface-container-high/40 border border-transparent focus:border-primary/20 transition-all
  {tier.action === 'WARN' ? 'text-warning' : ''}
                                     {tier.action === 'TIMEOUT' ? 'text-blue-500 dark:text-blue-400' : ''}

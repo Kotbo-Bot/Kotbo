@@ -1,5 +1,14 @@
 import { describe, expect, test } from 'bun:test';
-import { MAX_TIER_REPEAT, groupTiers, patchGroup, removeGroup, resizeGroup, type TierLike } from './tierGroups';
+import {
+  DEFAULT_TIER_DURATION_SECONDS,
+  MAX_TIER_REPEAT,
+  actionPatch,
+  groupTiers,
+  patchGroup,
+  removeGroup,
+  resizeGroup,
+  type TierLike,
+} from './tierGroups';
 
 function tier(level: number, action: string, extra: Partial<TierLike> = {}): TierLike {
   return { id: `t${level}`, level, action, durationSeconds: null, weight: 1, customReason: null, ...extra };
@@ -72,6 +81,24 @@ describe('patchGroup', () => {
     const result = patchGroup([reminder(1), reminder(2), timeout(3)], 0, 2, { weight: 1 });
     expect(result.map((t) => t.weight)).toEqual([1, 1, 1]);
     expect(result[2].durationSeconds).toBe(3600);
+  });
+});
+
+describe('actionPatch', () => {
+  test('passer en timeout sans durée pose la durée par défaut affichée (1 h)', () => {
+    expect(actionPatch(reminder(1), 'TIMEOUT')).toEqual({ action: 'TIMEOUT', durationSeconds: DEFAULT_TIER_DURATION_SECONDS });
+  });
+
+  test('passer en ban temporaire sans durée pose aussi la durée par défaut', () => {
+    expect(actionPatch(tier(1, 'KICK'), 'TEMP_BAN')).toEqual({ action: 'TEMP_BAN', durationSeconds: DEFAULT_TIER_DURATION_SECONDS });
+  });
+
+  test('une durée déjà réglée est gardée', () => {
+    expect(actionPatch(timeout(1), 'TEMP_BAN')).toEqual({ action: 'TEMP_BAN' });
+  });
+
+  test('une action sans durée ne touche pas à la durée', () => {
+    expect(actionPatch(reminder(1), 'KICK')).toEqual({ action: 'KICK' });
   });
 });
 
