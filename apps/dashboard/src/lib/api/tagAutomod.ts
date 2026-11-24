@@ -102,6 +102,8 @@ export interface TagServerResult {
   memberCount: number | null;
   holders: number;
   fleetBlocks: number;
+  /** Identifiant saisi, inconnu de Kotbo : ni nom ni tag connus. */
+  unlisted: boolean;
 }
 
 export interface TagScanMatch {

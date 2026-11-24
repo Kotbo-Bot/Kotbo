@@ -19497,6 +19497,8 @@
   "tam_wiz_searching": "Searching…",
   "tam_wiz_search_empty": "No server found. Try its tag or ID.",
   "tam_wiz_search_none_here": "None of your members shows another tag. Search a server by name.",
+  "tam_wiz_unlisted_name": "Unlisted server",
+  "tam_wiz_unlisted_hint": "ID {id}: the rule applies as soon as a member wears its tag.",
   "tam_wiz_holders": "{count} members wear it here",
   "tam_wiz_no_holders": "Nobody wears it here",
   "tam_wiz_pattern": "Tag text",

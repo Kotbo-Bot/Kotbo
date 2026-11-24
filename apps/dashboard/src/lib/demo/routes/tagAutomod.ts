@@ -93,9 +93,9 @@ const config = () => demoDb.get('tag-automod/config', configSeed);
 const rules = () => demoDb.get('tag-automod/rules', rulesSeed);
 
 const SERVERS = [
-  { guildId: '930000000000000011', name: 'DevHub Community', iconUrl: null, tag: 'DEVH', badgeUrl: null, memberCount: 2_400, holders: 3, fleetBlocks: 1 },
-  { guildId: '930000000000000012', name: 'Koda', iconUrl: null, tag: 'KODA', badgeUrl: null, memberCount: 860, holders: 2, fleetBlocks: 0 },
-  { guildId: '930000000000000013', name: 'Pixel Forge', iconUrl: null, tag: 'PXF', badgeUrl: null, memberCount: 15_300, holders: 1, fleetBlocks: 4 },
+  { guildId: '930000000000000011', name: 'DevHub Community', iconUrl: null, tag: 'DEVH', badgeUrl: null, memberCount: 2_400, holders: 3, fleetBlocks: 1, unlisted: false },
+  { guildId: '930000000000000012', name: 'Koda', iconUrl: null, tag: 'KODA', badgeUrl: null, memberCount: 860, holders: 2, fleetBlocks: 0, unlisted: false },
+  { guildId: '930000000000000013', name: 'Pixel Forge', iconUrl: null, tag: 'PXF', badgeUrl: null, memberCount: 15_300, holders: 1, fleetBlocks: 4, unlisted: false },
 ];
 
 export function registerTagAutomodRoutes(): void {

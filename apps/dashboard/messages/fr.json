@@ -19501,6 +19501,8 @@
   "tam_wiz_searching": "Recherche…",
   "tam_wiz_search_empty": "Aucun serveur trouvé. Essaie avec son tag ou son identifiant.",
   "tam_wiz_search_none_here": "Aucun de tes membres n'affiche un autre tag. Cherche un serveur par son nom.",
+  "tam_wiz_unlisted_name": "Serveur non recensé",
+  "tam_wiz_unlisted_hint": "Identifiant {id} : la règle s'appliquera dès qu'un membre portera son tag.",
   "tam_wiz_holders": "{count} membres le portent ici",
   "tam_wiz_no_holders": "Personne ne le porte ici",
   "tam_wiz_pattern": "Texte du tag",
