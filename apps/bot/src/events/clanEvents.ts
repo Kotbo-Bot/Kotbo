@@ -1,7 +1,7 @@
 import { Client, Events, EmbedBuilder } from 'discord.js';
 import prisma from '../utils/db.js';
 import { logger } from '../utils/logger.js';
-import { resolveLogChannel } from '../utils/logChannel.js';
+import { resolveEventLogChannel } from '../utils/logDispatch.js';
 
 export function registerClanListener(client: Client) {
   // 1. Sécurité de Clan Unique (guildMemberUpdate)
@@ -61,8 +61,8 @@ export function registerClanListener(client: Client) {
       );
 
       // Loguer dans le salon de modération/logs
-      if (config.logChannelId) {
-        const logChannel = await resolveLogChannel(newMember.guild, config.logChannelId, 'ClansSecurity');
+      {
+        const logChannel = await resolveEventLogChannel(newMember.guild, 'automod_clans', 'ClansSecurity');
         if (logChannel) {
           const embed = new EmbedBuilder()
             .setColor(0x3a86c8)

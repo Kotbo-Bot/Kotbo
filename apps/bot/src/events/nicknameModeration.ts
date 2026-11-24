@@ -3,11 +3,11 @@ import { isNicknameProblematic, isSafeNickname, safeNickname, buildRenameReason,
 import { invalidateBannedWordsCache, loadGlobalWords, loadCustomWords } from '../services/moderation/bannedWordsService.js';
 import { logger } from '../utils/logger.js';
 import { admitJoiningMember } from '../services/moderation/joinAdmissionService.js';
-import { resolveLogChannel } from '../utils/logChannel.js';
 import { resolveGuildLocale } from '../utils/i18n.js';
 import * as m from '../lib/paraglide/messages.js';
 
 import { getCachedGuild, cache } from '../utils/cache.js';
+import { resolveEventLogChannel } from '../utils/logDispatch.js';
 
 // ---------------------------------------------------------------------------
 // Cache du statut d'activation par serveur (TTL 60s)
@@ -120,8 +120,8 @@ async function checkAndRename(member: GuildMember): Promise<void> {
       select: { logChannelId: true },
     });
 
-    if (guildData?.logChannelId) {
-      const logChannel = await resolveLogChannel(member.guild, guildData.logChannelId, 'NicknameAutomod');
+    {
+      const logChannel = await resolveEventLogChannel(member.guild, 'automod_nickname', 'NicknameAutomod');
       if (logChannel) {
         const embed = new EmbedBuilder()
           .setColor(0xf4a261)

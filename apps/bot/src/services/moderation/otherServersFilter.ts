@@ -24,12 +24,11 @@ import {
 } from 'discord.js';
 import type { RaidProtectionConfig } from '@prisma/client';
 import { logger } from '../../utils/logger.js';
-import { getCachedGuild } from '../../utils/cache.js';
-import { resolveLogChannel } from '../../utils/logChannel.js';
 import { getRaidProtectionConfig } from './raidProtectionService.js';
 import { applyAutoSanction, autoSanctionLabel, normalizeAutoSanction } from './autoSanction.js';
 import { getActiveJail, isJailConfigured, releaseJail } from './jailService.js';
 import { registerJailSanction } from './sanctionService.js';
+import { resolveEventLogChannel } from '../../utils/logDispatch.js';
 
 export type ListMode = 'OFF' | 'BLACKLIST' | 'WHITELIST';
 export const MAX_OTHER_SERVERS = 25;
@@ -197,8 +196,7 @@ export async function handleOtherServersMessage(message: Message): Promise<boole
 async function logModeration(guildId: string, client: Client, lines: string[]): Promise<void> {
   const guild = client.guilds.cache.get(guildId);
   if (!guild) return;
-  const guildConfig = await getCachedGuild(guildId);
-  const channel = await resolveLogChannel(guild, guildConfig?.logChannelId, 'Automod');
+  const channel = await resolveEventLogChannel(guild, 'automod_other_servers', 'Automod');
   await channel?.send({ content: lines.join('\n'), allowedMentions: { parse: [] } }).catch(() => null);
 }
 

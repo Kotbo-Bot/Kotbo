@@ -34,11 +34,11 @@ import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { notify } from '../notifications/notifyService.js';
 import { publicErrorMessage } from '../../utils/publicError.js';
-import { resolveLogChannel } from '../../utils/logChannel.js';
 import { getOrCreateAutoModConfig, invalidateAutoModCache } from './autoModService.js';
 import { mirrorModlogToStaffServer } from '../staff/staffServerService.js';
 import { recordAndCheckBurst, type BurstWindow } from '../../utils/burstTracker.js';
 import { roleGrantsAdministrator, isAdminLockBypassedCore } from '../../utils/adminLockPermissions.js';
+import { resolveEventLogChannel } from '../../utils/logDispatch.js';
 
 export { roleGrantsAdministrator, isAdminLockBypassedCore };
 
@@ -193,19 +193,15 @@ async function notifyAdminLockRequest(
   const embed = buildRequestEmbed(guild, request);
   const components = buildRequestButtons(request.id, request.status);
 
-  const channelId =
-    config.adminLockNotifyChannelId ||
-    (await prisma.guild.findUnique({ where: { id: guild.id }, select: { logChannelId: true } }))?.logChannelId;
-
-  if (channelId) {
-    const channel = guild.channels.cache.get(channelId);
-    if (channel?.isTextBased()) {
-      const message = await channel.send({ embeds: [embed], components }).catch(() => null);
-      if (message) {
-        await prisma.adminPermissionRequest
-          .update({ where: { id: request.id }, data: { staffChannelId: channel.id, staffMessageId: message.id } })
-          .catch(() => null);
-      }
+  const channel = await resolveEventLogChannel(guild, 'security_admin_lock', 'AdminLockService', {
+    moduleChannelId: config.adminLockNotifyChannelId,
+  });
+  if (channel) {
+    const message = await channel.send({ embeds: [embed], components }).catch(() => null);
+    if (message) {
+      await prisma.adminPermissionRequest
+        .update({ where: { id: request.id }, data: { staffChannelId: channel.id, staffMessageId: message.id } })
+        .catch(() => null);
     }
   }
 
@@ -455,8 +451,7 @@ async function tripCircuitBreakerIfNeeded(client: Client, guild: Guild): Promise
 
   await notifyAdminLock(guild.id, guild.ownerId, embedToNotice(embed));
 
-  const guildDb = await prisma.guild.findUnique({ where: { id: guild.id }, select: { logChannelId: true } });
-  const logChannel = await resolveLogChannel(guild, guildDb?.logChannelId, 'AdminLockService');
+  const logChannel = await resolveEventLogChannel(guild, 'security_admin_lock', 'AdminLockService');
   if (logChannel) await logChannel.send({ embeds: [embed] }).catch(() => null);
 
   logger.warn('AdminLockService', `Coupe-circuit admin-lock déclenché pour la guilde ${guild.id}`);
@@ -480,10 +475,9 @@ async function notifyNativeRevert(
     )
     .setTimestamp();
 
-  const channelId =
-    config.adminLockNotifyChannelId ||
-    (await prisma.guild.findUnique({ where: { id: guild.id }, select: { logChannelId: true } }))?.logChannelId;
-  const logChannel = await resolveLogChannel(guild, channelId, 'AdminLockService');
+  const logChannel = await resolveEventLogChannel(guild, 'security_admin_lock', 'AdminLockService', {
+    moduleChannelId: config.adminLockNotifyChannelId,
+  });
   if (logChannel) {
     await logChannel.send({ embeds: [embed], allowedMentions: { parse: [] } }).catch(() => null);
   }
@@ -684,13 +678,10 @@ async function handleBurstSuspendCheck(
     .setDescription("Ce membre a effectué un grand nombre d'actions destructrices en peu de temps. Ses rôles donnant la permission ADMINISTRATOR ont été retirés par précaution. Aucune expulsion n'a été effectuée.")
     .setTimestamp();
 
-  const channelId =
-    config.adminLockNotifyChannelId ||
-    (await prisma.guild.findUnique({ where: { id: guild.id }, select: { logChannelId: true } }))?.logChannelId;
-  if (channelId) {
-    const channel = guild.channels.cache.get(channelId);
-    if (channel?.isTextBased()) await channel.send({ embeds: [embed] }).catch(() => null);
-  }
+  const channel = await resolveEventLogChannel(guild, 'security_admin_lock', 'AdminLockService', {
+    moduleChannelId: config.adminLockNotifyChannelId,
+  });
+  await channel?.send({ embeds: [embed] }).catch(() => null);
   await mirrorModlogToStaffServer(client, guild.id, embed).catch(() => null);
 
   if (guild.ownerId !== executorId) await notifyAdminLock(guild.id, guild.ownerId, embedToNotice(embed));

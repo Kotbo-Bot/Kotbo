@@ -9,11 +9,9 @@
     Tabs,
     Button,
     Callout,
-    Field,
     SectionCard,
     SettingsGroup,
     SettingsRow,
-    ToggleSwitch,
     EmptyState,
   } from "../lib/components/ui";
   import MetricCard from "../lib/components/MetricCard.svelte";
@@ -28,6 +26,8 @@
   import { MemberCaseState } from "../lib/memberCase.svelte";
   import AuditDiffViewer from "../lib/components/logs/AuditDiffViewer.svelte";
   import LogDetails from "../lib/components/logs/LogDetails.svelte";
+  import LogEventRouting from "../lib/components/logs/LogEventRouting.svelte";
+  import type { LogEventConfig } from "@kotbo/shared";
   import ColumnSortFilter, {
     type ColumnFilterOption,
   } from "../lib/components/sanctions/ColumnSortFilter.svelte";
@@ -98,233 +98,11 @@
     })),
   ]);
 
-  const logCategories = [
-    {
-      id: "messages",
-      get label() {
-        return m.lg_cat_messages();
-      },
-      icon: "Chat",
-      events: [
-        {
-          type: "message_delete",
-          get label() {
-            return m.lg_ev_message_delete();
-          },
-          get desc() {
-            return m.lg_ev_message_delete_d();
-          },
-        },
-        {
-          type: "message_edit",
-          get label() {
-            return m.lg_ev_message_edit();
-          },
-          get desc() {
-            return m.lg_ev_message_edit_d();
-          },
-        },
-        {
-          type: "message_bulk_delete",
-          get label() {
-            return m.lg_ev_bulk_delete();
-          },
-          get desc() {
-            return m.lg_ev_bulk_delete_d();
-          },
-        },
-      ],
-    },
-    {
-      id: "members",
-      get label() {
-        return m.lg_cat_members();
-      },
-      icon: "Users",
-      events: [
-        {
-          type: "member_join",
-          get label() {
-            return m.lg_ev_member_join();
-          },
-          get desc() {
-            return m.lg_ev_member_join_d();
-          },
-        },
-        {
-          type: "member_leave",
-          get label() {
-            return m.lg_ev_member_leave();
-          },
-          get desc() {
-            return m.lg_ev_member_leave_d();
-          },
-        },
-        {
-          type: "member_roles_update",
-          get label() {
-            return m.lg_ev_roles_update();
-          },
-          get desc() {
-            return m.lg_ev_roles_update_d();
-          },
-        },
-        {
-          type: "member_tag_update",
-          get label() {
-            return m.lg_ev_tag_update();
-          },
-          get desc() {
-            return m.lg_ev_tag_update_d();
-          },
-        },
-        {
-          type: "member_timeout",
-          get label() {
-            return m.lg_ev_member_timeout();
-          },
-          get desc() {
-            return m.lg_ev_member_timeout_d();
-          },
-        },
-      ],
-    },
-    {
-      id: "moderation",
-      get label() {
-        return m.lg_cat_moderation();
-      },
-      icon: "Shield",
-      events: [
-        {
-          type: "moderation_kick",
-          get label() {
-            return m.lg_ev_kick();
-          },
-          get desc() {
-            return m.lg_ev_kick_d();
-          },
-        },
-        {
-          type: "moderation_ban",
-          get label() {
-            return m.lg_ev_ban();
-          },
-          get desc() {
-            return m.lg_ev_ban_d();
-          },
-        },
-        {
-          type: "moderation_unban",
-          get label() {
-            return m.lg_ev_unban();
-          },
-          get desc() {
-            return m.lg_ev_unban_d();
-          },
-        },
-        {
-          type: "moderation_timeout",
-          get label() {
-            return m.lg_ev_timeout_audit();
-          },
-          get desc() {
-            return m.lg_ev_timeout_audit_d();
-          },
-        },
-      ],
-    },
-    {
-      id: "voice",
-      get label() {
-        return m.lg_cat_voice();
-      },
-      icon: "Microphone",
-      events: [
-        {
-          type: "voice_join",
-          get label() {
-            return m.lg_ev_voice_join();
-          },
-          get desc() {
-            return m.lg_ev_voice_join_d();
-          },
-        },
-        {
-          type: "voice_leave",
-          get label() {
-            return m.lg_ev_voice_leave();
-          },
-          get desc() {
-            return m.lg_ev_voice_leave_d();
-          },
-        },
-        {
-          type: "voice_move",
-          get label() {
-            return m.lg_ev_voice_move();
-          },
-          get desc() {
-            return m.lg_ev_voice_move_d();
-          },
-        },
-        {
-          type: "voice_moderation",
-          get label() {
-            return m.lg_ev_voice_moderation();
-          },
-          get desc() {
-            return m.lg_ev_voice_moderation_d();
-          },
-        },
-        {
-          type: "voice_panel",
-          get label() {
-            return m.lg_ev_voice_panel();
-          },
-          get desc() {
-            return m.lg_ev_voice_panel_d();
-          },
-        },
-      ],
-    },
-    {
-      id: "lifecycle",
-      get label() {
-        return m.lg_cat_lifecycle();
-      },
-      icon: "Folder",
-      events: [
-        {
-          type: "channel_lifecycle",
-          get label() {
-            return m.lg_ev_channel_lifecycle();
-          },
-          get desc() {
-            return m.lg_ev_channel_lifecycle_d();
-          },
-        },
-        {
-          type: "role_lifecycle",
-          get label() {
-            return m.lg_ev_role_lifecycle();
-          },
-          get desc() {
-            return m.lg_ev_role_lifecycle_d();
-          },
-        },
-      ],
-    },
-  ];
-
   let logsConfig = $state<any>(null);
   let loadingConfig = $state(false);
-  let eventConfigs = $state<
-    Array<{ eventType: string; enabled: boolean; channelId: string | null }>
-  >([]);
-  let savedEventConfigs = $state<
-    Array<{ eventType: string; enabled: boolean; channelId: string | null }>
-  >([]);
+  let eventConfigs = $state<LogEventConfig[]>([]);
+  let savedEventConfigs = $state<LogEventConfig[]>([]);
+  let moduleChannels = $state<Partial<Record<string, string | null>>>({});
 
   $effect(() => {
     const current = JSON.stringify(eventConfigs);
@@ -365,6 +143,7 @@
         configs?.features?.find((c: any) => c.featureKey === "logs") || null;
       eventConfigs = eventConfigsRes?.configs || [];
       savedEventConfigs = JSON.parse(JSON.stringify(eventConfigs));
+      moduleChannels = eventConfigsRes?.moduleChannels || {};
     } catch (err) {
       console.error("Error fetching logs config:", err);
     } finally {
@@ -765,57 +544,22 @@
         title={m.lg_per_event_config()}
         description={m.lg_per_event_desc()}
       >
-        <div class="grid grid-cols-1 gap-4 xl:grid-cols-2">
-          {#each logCategories as cat}
-            <SectionCard
-              title={cat.label}
-              description={m.lg_manage_category_alerts()}
-              icon={cat.icon}
-              flush
-            >
-              <div class="divide-y divide-outline-variant">
-                {#each cat.events as ev}
-                  {@const confIdx = eventConfigs.findIndex(
-                    (c) => c.eventType === ev.type,
-                  )}
-                  {#if confIdx !== -1}
-                    <div>
-                      <SettingsRow label={ev.label} description={ev.desc}>
-                        <ToggleSwitch
-                          checked={eventConfigs[confIdx].enabled}
-                          ariaLabel={ev.label}
-                          onToggle={(v: boolean) => {
-                            eventConfigs[confIdx].enabled = v;
-                            eventConfigs = [...eventConfigs];
-                          }}
-                        />
-                      </SettingsRow>
-                      {#if eventConfigs[confIdx].enabled}
-                        <Field label={m.lg_dest_channel()} class="px-4 pb-4">
-                          {#snippet children(id, describedBy)}
-                            <select
-                              {id}
-                              aria-describedby={describedBy}
-                              class="input"
-                              bind:value={eventConfigs[confIdx].channelId}
-                            >
-                              <option value={null}
-                                >{m.lg_default_log_channel()}</option
-                              >
-                              {#each dashboardStore.state.discordChannels as c}
-                                <option value={c.id}>#{c.name}</option>
-                              {/each}
-                            </select>
-                          {/snippet}
-                        </Field>
-                      {/if}
-                    </div>
-                  {/if}
-                {/each}
-              </div>
-            </SectionCard>
-          {/each}
-        </div>
+        {#if loadingConfig}
+          <div class="space-y-3" aria-busy="true">
+            {#each [0, 1, 2] as i (i)}
+              <div class="h-24 animate-pulse rounded-xl bg-surface-container"></div>
+            {/each}
+          </div>
+        {:else}
+          <LogEventRouting
+            bind:configs={eventConfigs}
+            savedConfigs={savedEventConfigs}
+            {moduleChannels}
+            defaultChannelId={dashboardStore.state.logChannelId || null}
+            channels={dashboardStore.state.discordChannels || []}
+            disabled={saveAction.state.loading}
+          />
+        {/if}
       </SettingsGroup>
     </div>
   {/if}

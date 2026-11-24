@@ -1,6 +1,5 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, Client, Events, Message, MessageFlags, TextChannel, PermissionFlagsBits, type ButtonInteraction } from 'discord.js';
 import { logger } from '../utils/logger.js';
-import { resolveLogChannel } from '../utils/logChannel.js';
 import { errorEmbed } from '../utils/embeds.js';
 import { getCachedGuild } from '../utils/cache.js';
 import {
@@ -25,6 +24,7 @@ import { scheduleScamDatasetBackfill } from '../services/moderation/scamBackfill
 import { INVITE_SOURCE, recordBotInvite } from '../services/analytics/inviteService.js';
 import { notifyJoinBlocked } from '../services/notifications/notifyService.js';
 import { recordHoneypotCatch } from '../services/moderation/honeypotProvisioning.js';
+import { resolveEventLogChannel } from '../utils/logDispatch.js';
 
 // ── Délai avant sanction ────────────────────────────────────────────────────
 //
@@ -307,7 +307,7 @@ async function punish(client: Client, message: Message, guildConfig: GuildConfig
       }
       const embed = errorEmbed(logTitle, embedDescription);
 
-      const logChannel = await resolveLogChannel(guild, guildConfig.logChannelId, 'Honeypot');
+      const logChannel = await resolveEventLogChannel(guild, 'security_honeypot', 'Honeypot');
       if (logChannel) {
         await logChannel.send({ embeds: [embed], allowedMentions: { parse: [] } }).catch(() => null);
       }

@@ -16,8 +16,8 @@ import type { AegisDetection } from '@prisma/client';
 import prisma from '../../../utils/db.js';
 import { logger } from '../../../utils/logger.js';
 import { COLORS, truncate } from '../../../utils/embeds.js';
-import { resolveLogChannel } from '../../../utils/logChannel.js';
 import type { AegisEmotion } from './aegisClient.js';
+import { isLogEventEnabled, resolveEventLogChannel } from '../../../utils/logDispatch.js';
 
 export const AEGIS_BUTTON_PREFIX = 'aegis:';
 export type AegisButtonAction = 'confirm' | 'dismiss' | 'unslow';
@@ -233,12 +233,7 @@ export function buildButtons(
 
 /** Salon des cartes : celui demandé, sinon le salon de logs du serveur. */
 export async function resolveAlertChannel(guild: Guild, preferredId: string | null): Promise<SendableChannels | null> {
-  if (preferredId) {
-    const preferred = await resolveLogChannel(guild, preferredId, 'AegisAI');
-    if (preferred) return preferred;
-  }
-  const row = await prisma.guild.findUnique({ where: { id: guild.id }, select: { logChannelId: true } });
-  return resolveLogChannel(guild, row?.logChannelId, 'AegisAI');
+  return resolveEventLogChannel(guild, 'aegis_alert', 'AegisAI', { moduleChannelId: preferredId });
 }
 
 /** Envoie une carte et la rattache à sa détection. */
@@ -248,6 +243,9 @@ export async function postAlert(
   detectionId: string,
   payload: { embeds: EmbedBuilder[]; components: ActionRowBuilder<ButtonBuilder>[] },
 ): Promise<void> {
+  // Type coupé depuis la page Journaux : un choix, pas une panne. Pas
+  // d'avertissement, sinon chaque détection en écrirait un.
+  if (!(await isLogEventEnabled(guild.id, 'aegis_alert'))) return;
   const channel = await resolveAlertChannel(guild, channelId);
   if (!channel) {
     logger.warn('AegisAI', `Aucun salon pour la carte ${detectionId} sur ${guild.id}`);
