@@ -44,6 +44,7 @@ export * from './rankCard/normalize.js';
 export * from './rankCard/achievements.js';
 export * from './rankCard/decor.js';
 export * from './automod/presets.js';
+export * from './automod/hateSymbols.js';
 export * from './tempVoice/types.js';
 export * from './tempVoice/diff.js';
 export * from './autoThread/index.js';

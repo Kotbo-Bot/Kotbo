@@ -1,6 +1,7 @@
 import { type AutoModerationActionExecution, type AutoModerationActionOptions, Message, PermissionFlagsBits, EmbedBuilder, Client, PartialMessage, User, Role, Collection, AuditLogEvent, AutoModerationRuleTriggerType, AutoModerationRuleEventType, AutoModerationActionType, AutoModerationRuleKeywordPresetType, GuildMember } from 'discord.js';
 import type { AutoModConfig } from '@prisma/client';
 import { kotboEventBus } from '@kotbo/core';
+import { findHateSymbol } from '@kotbo/shared';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { isChannelExempt } from '../../utils/channelExemption.js';
@@ -789,6 +790,16 @@ export async function handleAutoMod(message: Message, client: Client): Promise<b
           `[AutoMod] Excès de majuscules (${Math.round(percent)}% de majuscules)`,
           client
         );
+        return true;
+      }
+    }
+
+    // 3a. Symboles haineux en Unicode (liste prédéfinie, symboles autorisés exclus)
+    if (config.hateSymbolsEnabled) {
+      const symbol = findHateSymbol(content, config.hateSymbolsAllowed);
+      if (symbol) {
+        await deleteMessage(message);
+        await applySanction(message, config.hateSymbolsAction, `[AutoMod] Symbole haineux (${symbol.label})`, client);
         return true;
       }
     }

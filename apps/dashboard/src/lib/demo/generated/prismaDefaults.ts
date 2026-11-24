@@ -831,6 +831,9 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "linksWhitelist": [],
     "discordRulesWarn": false,
     "linksLevel": 1,
+    "hateSymbolsEnabled": false,
+    "hateSymbolsAction": "DELETE_AND_WARN",
+    "hateSymbolsAllowed": [],
     "capsEnabled": false,
     "capsThresholdPercent": 80,
     "capsMinLength": 10,
@@ -1177,6 +1180,27 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "metadata": null,
     "ip": null,
     "outcome": "OK",
+    "createdAt": "__NOW__"
+  },
+  "Feedback": {
+    "id": "",
+    "userId": "",
+    "username": "",
+    "type": "",
+    "message": "",
+    "url": "",
+    "guildId": null,
+    "status": "NEW",
+    "createdAt": "__NOW__",
+    "updatedAt": "__NOW__"
+  },
+  "FeedbackMessage": {
+    "id": "",
+    "feedbackId": "",
+    "authorId": "",
+    "authorName": "",
+    "fromStaff": false,
+    "content": "",
     "createdAt": "__NOW__"
   },
   "BumpState": {
@@ -1527,6 +1551,8 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "pendingWinners": [],
     "styleOverrides": null,
     "ignoreBonuses": false,
+    "conditions": null,
+    "discordEventId": null,
     "createdAt": "__NOW__",
     "updatedAt": "__NOW__"
   },
@@ -1591,6 +1617,8 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "rpgItemId": null,
     "needValidation": false,
     "ignoreBonuses": false,
+    "conditions": null,
+    "createDiscordEvent": false,
     "styleOverrides": null,
     "presetId": null,
     "createdAt": "__NOW__",
@@ -1940,6 +1968,28 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "metadata": null,
     "createdAt": "__NOW__",
     "updatedAt": "__NOW__"
+  },
+  "MemberCaseLayout": {
+    "id": "",
+    "guildId": "",
+    "name": "",
+    "position": 0,
+    "roleIds": [],
+    "tabOrder": [],
+    "hiddenTabs": [],
+    "createdAt": "__NOW__",
+    "updatedAt": "__NOW__"
+  },
+  "DashboardFeatureUserAccess": {
+    "id": "",
+    "guildId": "",
+    "userId": "",
+    "featureKey": "",
+    "canView": true,
+    "canModerate": true,
+    "source": "TUTORING",
+    "sourceId": null,
+    "createdAt": "__NOW__"
   },
   "DashboardFeatureRoleAccess": {
     "id": "",
@@ -2449,6 +2499,11 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "rewardXp": 0,
     "rewardClanPoints": 0,
     "enabled": true,
+    "conditions": null,
+    "rewards": null,
+    "prerequisiteQuestId": null,
+    "activeFrom": null,
+    "activeUntil": null,
     "createdAt": "__NOW__",
     "updatedAt": "__NOW__"
   },
@@ -3159,6 +3214,7 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "verificationWarnReason": "Seuil d'avertissements atteint - vérification de sécurité requise.",
     "warnWeightingEnabled": false,
     "warnDecayDays": null,
+    "automodWarnWeight": 1,
     "countArchivedInWarnScore": false,
     "warnAutoArchiveDays": null,
     "wordStatsEnabled": false,
@@ -3582,6 +3638,7 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "level": 0,
     "action": "WARN",
     "durationSeconds": null,
+    "weight": 1,
     "customReason": null,
     "createdAt": "__NOW__",
     "updatedAt": "__NOW__"
@@ -3596,6 +3653,18 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "data": "",
     "uploadedByUserId": "",
     "createdAt": "__NOW__"
+  },
+  "SanctionDeletion": {
+    "id": "",
+    "guildId": "",
+    "sanctionId": "",
+    "snapshot": {},
+    "reportIds": [],
+    "evidenceFileIds": [],
+    "deletedByUserId": "",
+    "deletedByTag": null,
+    "deletedAt": "__NOW__",
+    "restoredAt": null
   },
   "SanctionReport": {
     "id": "",
@@ -3908,6 +3977,19 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "reviewMessageId": null,
     "handledBy": null,
     "handledAt": null,
+    "createdAt": "__NOW__"
+  },
+  "VisionBlock": {
+    "id": "",
+    "guildId": "",
+    "authorId": "",
+    "channelId": "",
+    "listId": null,
+    "matchId": null,
+    "kind": "",
+    "similarity": null,
+    "sanction": "",
+    "reason": "",
     "createdAt": "__NOW__"
   },
   "MemberRoleSnapshot": {
@@ -4290,7 +4372,7 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "price": 0,
     "listPrice": 0,
     "promoCodeId": null,
-    "status": "// Payée, en attente de la décision du staff (offre soumise à validation).",
+    "status": "PENDING",
     "source": "",
     "note": null,
     "decidedBy": null,
@@ -4792,6 +4874,7 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "targetGrade": null,
     "hierarchyId": null,
     "doingListId": null,
+    "unlockFeatureKeys": [],
     "notes": null,
     "lastReportAt": null,
     "createdAt": "__NOW__",
@@ -5017,6 +5100,7 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "parentHierarchyId": null,
     "responsableUserId": null,
     "discordRoleId": null,
+    "poleRoleId": null,
     "separatorRoleId": null,
     "separatorStyle": null,
     "enabled": true,
@@ -5417,7 +5501,10 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "guildId": "",
     "channelId": "",
     "channelName": "",
-    "html": "",
+    "html": null,
+    "data": null,
+    "format": "html",
+    "messageCount": null,
     "startMessageId": null,
     "endMessageId": null,
     "startTime": null,

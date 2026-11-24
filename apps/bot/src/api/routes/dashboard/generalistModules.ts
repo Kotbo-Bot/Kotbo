@@ -4,7 +4,7 @@ import { Client, EmbedBuilder, PermissionFlagsBits, type ColorResolvable } from 
 import prisma, { prismaRead } from '../../../utils/db.js';
 import { logger } from '../../../utils/logger.js';
 import { defaultLevelUpMessage, getOrCreateLevelConfig, updateMemberLevelRoles, getXpForLevel, getLevelFromXp, getGuildLevelCurve, invalidateLevelConfigCache, levelCurveFromConfig, resyncGuildLevels, countCurveImpact, invalidateLevelRewardsCache, getRoleResyncStatus, startRoleResync, stopRoleResync } from '../../../services/progression/levelingService.js';
-import { clampXp, normalizeLevelCurve } from '@kotbo/shared';
+import { HATE_SYMBOLS, clampXp, normalizeLevelCurve } from '@kotbo/shared';
 import { externalLevelsJob, forgetExternalLevels, isLevelImportSource, type ExternalLevel } from '../../../services/progression/levelImportSources.js';
 import { extractLeaderboardWithLlm, type LlmImportInput } from '../../../services/progression/levelImportLlm.js';
 import { getGuildPlan } from '../../../services/system/planService.js';
@@ -75,6 +75,8 @@ import { regexProblem } from '../../../utils/safeRegex.js';
 const LEADERBOARD_PAGE_SIZE = 25;
 /** Plafond des profils retenus par une recherche, avant pagination. */
 const LEADERBOARD_SEARCH_LIMIT = 500;
+/** Actions proposées pour les symboles haineux : supprimer, avec ou sans avertissement, ou exclure temporairement. */
+const HATE_SYMBOL_ACTIONS = ['DELETE_ONLY', 'DELETE_AND_WARN', 'TIMEOUT'];
 
 /**
  * Complète des lignes de classement avec de quoi les afficher : le profil connu
@@ -2420,6 +2422,9 @@ export function createGeneralistModulesRouter(client: Client) {
         linksLevel?: number;
         discordRulesWarn?: boolean;
         capsEnabled?: boolean;
+        hateSymbolsEnabled?: boolean;
+        hateSymbolsAction?: string;
+        hateSymbolsAllowed?: string[];
         capsThresholdPercent?: number;
         capsMinLength?: number;
         emojisEnabled?: boolean;
@@ -2558,6 +2563,12 @@ export function createGeneralistModulesRouter(client: Client) {
         linksLevel: clampInt(body.linksLevel, 0, 2),
         discordRulesWarn: body.discordRulesWarn,
         capsEnabled: body.capsEnabled,
+        hateSymbolsEnabled: body.hateSymbolsEnabled,
+        hateSymbolsAction: HATE_SYMBOL_ACTIONS.includes(body.hateSymbolsAction ?? '') ? body.hateSymbolsAction : undefined,
+        // Seuls les identifiants du catalogue sont gardés.
+        hateSymbolsAllowed: Array.isArray(body.hateSymbolsAllowed)
+          ? body.hateSymbolsAllowed.filter((id) => HATE_SYMBOLS.some((symbol) => symbol.id === id))
+          : undefined,
         capsThresholdPercent: body.capsThresholdPercent,
         capsMinLength: body.capsMinLength,
         emojisEnabled: body.emojisEnabled,
