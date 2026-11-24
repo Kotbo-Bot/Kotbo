@@ -3,6 +3,8 @@ import {
   resolveModuleKey,
   setDashboardModuleStatus,
 } from '../../../services/core/moduleActivationService.js';
+import { isMcpClosedModule } from '@kotbo/contracts';
+import { closedModuleMessage } from '../toolModules.js';
 import prisma from '../../../utils/db.js';
 import { z } from 'zod';
 import { type McpToolContext, err, ok, toolError } from '../toolkit.js';
@@ -30,6 +32,10 @@ export function registerWriteCommunity2Tools(ctx: McpToolContext) {
         const moduleKey = resolveModuleKey(module_name);
         if (!moduleKey) {
           return err(`Module sans equivalent dans le registre des modules : ${module_name}`);
+        }
+        // Un module ferme au MCP (cellule bien-etre) ne se bascule pas non plus d'ici.
+        if (isMcpClosedModule(moduleKey)) {
+          return err(closedModuleMessage(moduleKey));
         }
 
         try {

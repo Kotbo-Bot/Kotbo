@@ -132,6 +132,12 @@ export interface ModuleDefinition {
    * de nouveau activable ; ses données sont restées en base.
    */
   paused?: boolean;
+  /**
+   * Module jamais accessible par une clé MCP ou l'API REST, quelles que soient
+   * ses permissions : ses données sont trop sensibles pour être confiées à un
+   * agent ou à un service tiers.
+   */
+  mcpClosed?: boolean;
 }
 
 /**
@@ -418,6 +424,7 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
     apiSegments: ['wellbeing'],
     paths: ['/wellbeing'],
     interactionPrefixes: ['wellbeing:'],
+    mcpClosed: true,
   },
   {
     key: 'polls',
@@ -923,6 +930,11 @@ export function getModuleDefinition(key: string): ModuleDefinition | undefined {
 
 export function isCoreModule(key: string): boolean {
   return getModuleDefinition(key)?.core === true;
+}
+
+/** Module fermé aux clés MCP (voir `ModuleDefinition.mcpClosed`). */
+export function isMcpClosedModule(key: string): boolean {
+  return getModuleDefinition(key)?.mcpClosed === true;
 }
 
 /** Module retiré du produit (voir `ModuleDefinition.paused`). */

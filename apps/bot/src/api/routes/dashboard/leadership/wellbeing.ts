@@ -17,6 +17,7 @@ import {
   BREAK_GLASS_HOURS,
   BREAK_GLASS_REQUEST_HOURS,
   DEFAULT_ALERT_EVENTS,
+  WELLBEING_AUDIT_MODULE,
   MAX_ALERT_USERS,
   breakGlassScope,
   caseChangeEvents,
@@ -39,7 +40,6 @@ const STATUSES = ['OPEN', 'MONITORING', 'CLOSED'];
 const SNOWFLAKE_RE = /^\d{17,20}$/;
 const HOUR_MS = 60 * 60 * 1000;
 const MAX_STALE_DAYS = 90;
-const MODULE_LABEL = 'Cellule bien-être';
 
 const CASE_INCLUDE = {
   notes: { orderBy: { createdAt: 'asc' as const } },
@@ -124,7 +124,7 @@ async function audit(client: Client, c: Context, guildId: string, action: string
     user: auditUserOf(c),
     action,
     context: getGuildName(client, guildId),
-    module: MODULE_LABEL,
+    module: WELLBEING_AUDIT_MODULE,
     eventType,
     details,
     channelId: null,

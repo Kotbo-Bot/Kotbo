@@ -2,6 +2,26 @@
 import prisma from '../../../utils/db.js';
 import { z } from 'zod';
 import { type McpToolContext, ok, toolError } from '../toolkit.js';
+import { WELLBEING_AUDIT_MODULE } from '../../../services/staff/wellbeingPolicy.js';
+
+/**
+ * Filtre du journal d'audit lu par le MCP. Les gestes de la cellule bien-être
+ * (accès d'urgence, motifs, membres consultés) n'en sortent jamais.
+ */
+export function auditLogSearchWhere(guildId: string, query?: string) {
+  return {
+    guildId,
+    NOT: { module: WELLBEING_AUDIT_MODULE },
+    ...(query ? {
+      OR: [
+        { action: { contains: query, mode: 'insensitive' as const } },
+        { details: { contains: query, mode: 'insensitive' as const } },
+        { user: { contains: query, mode: 'insensitive' as const } },
+        { module: { contains: query, mode: 'insensitive' as const } },
+      ],
+    } : {}),
+  };
+}
 
 export function registerReadStats2Tools(ctx: McpToolContext) {
   const { server, guildId, shouldRegister, guard, toolMeta } = ctx;
@@ -21,17 +41,7 @@ export function registerReadStats2Tools(ctx: McpToolContext) {
       guard('READ_STATS', async ({ query, limit }) => {
         try {
           const logs = await prisma.dashboardAuditLog.findMany({
-            where: {
-              guildId,
-              ...(query ? {
-                OR: [
-                  { action: { contains: query, mode: 'insensitive' } },
-                  { details: { contains: query, mode: 'insensitive' } },
-                  { user: { contains: query, mode: 'insensitive' } },
-                  { module: { contains: query, mode: 'insensitive' } },
-                ]
-              } : {})
-            },
+            where: auditLogSearchWhere(guildId, query),
             orderBy: { dateIso: 'desc' },
             take: limit,
           });

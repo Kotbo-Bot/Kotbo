@@ -1,5 +1,5 @@
 import type { Prisma } from '@prisma/client';
-import { MODULE_REGISTRY, isModulePaused } from '@kotbo/contracts';
+import { MODULE_REGISTRY, isMcpClosedModule, isModulePaused } from '@kotbo/contracts';
 import prisma from '../../utils/db.js';
 import { getDeclaredModuleStates } from './moduleGate.js';
 
@@ -230,6 +230,10 @@ export async function updateKeyAccess(
     canDelete?: boolean;
   }>
 ) {
+  // Un module ferme au MCP (cellule bien-etre) ne recoit aucune regle : la garde
+  // des outils le refuse deja, la matrice ne doit pas laisser croire l'inverse.
+  if (isMcpClosedModule(featureKey)) keyAccessConfigs = [];
+
   // Une cle d'un autre serveur ne doit pas pouvoir recevoir de regle ici.
   const owned = new Set(
     (await prisma.mcpApiKey.findMany({

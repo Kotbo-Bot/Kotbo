@@ -326,5 +326,8 @@ export function shouldAcceptReport(lastAt: number | undefined, now: number): boo
   return lastAt === undefined || now - lastAt >= REPORT_COOLDOWN_MS;
 }
 
+/** Module inscrit au journal d'audit pour les gestes de la cellule. */
+export const WELLBEING_AUDIT_MODULE = 'Cellule bien-être';
+
 /** Nom de base (anglais) de la commande Discord : ses usages ne sont pas comptés par membre. */
 export const WELLBEING_COMMAND = 'wellbeing';

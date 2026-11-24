@@ -13,10 +13,12 @@
  * rallument les modules : la garde ne doit pas fermer ce qu'elle ne sait pas
  * décrire.
  */
-import { getModuleDefinition } from '@kotbo/contracts';
+import { getModuleDefinition, isMcpClosedModule } from '@kotbo/contracts';
 import { err, type McpToolHandler } from './toolResult.js';
 
 const RULES: ReadonlyArray<readonly [RegExp, string]> = [
+  // En tête : un outil qui toucherait la cellule ne doit relever d'aucun autre module.
+  [/wellbeing/, 'wellbeing'],
   [/marketplace/, 'marketplace'],
   [/rpg|economy|gambling|_coins$|^get_shop|_shop_/, 'economy'],
   [/ticket/, 'tickets'],
@@ -53,6 +55,16 @@ const RULES: ReadonlyArray<readonly [RegExp, string]> = [
   [/digest/, 'digest'],
 ];
 
+/** Refus d'un module fermé au MCP (voir `ModuleDefinition.mcpClosed`). */
+export function closedModuleMessage(moduleKey: string): string {
+  return `Le module « ${getModuleDefinition(moduleKey)?.name ?? moduleKey} » n'est pas accessible par le MCP ni par l'API.`;
+}
+
+/** Ni l'état du module ni les règles de la clé n'ouvrent un module fermé au MCP. */
+function closedModuleHandler(moduleKey: string): McpToolHandler {
+  return async () => err(closedModuleMessage(moduleKey));
+}
+
 /** Module dont relève l'outil, ou `undefined` s'il n'en relève d'aucun. */
 export function mcpToolModule(toolName: string): string | undefined {
   return RULES.find(([pattern]) => pattern.test(toolName))?.[1];
@@ -85,6 +97,7 @@ export function withKeyAccessGate(
 ): McpToolHandler {
   const moduleKey = mcpToolModule(toolName);
   if (!moduleKey) return handler;
+  if (isMcpClosedModule(moduleKey)) return closedModuleHandler(moduleKey);
   const right = mcpToolRight(toolName);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -108,6 +121,7 @@ export function withModuleGate(
 ): McpToolHandler {
   const moduleKey = mcpToolModule(toolName);
   if (!moduleKey) return handler;
+  if (isMcpClosedModule(moduleKey)) return closedModuleHandler(moduleKey);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return async (args: any) => {

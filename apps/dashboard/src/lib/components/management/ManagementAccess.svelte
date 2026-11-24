@@ -1,5 +1,5 @@
 <script module>
-  import { MODULE_CATEGORIES, getModuleDefinition } from '@kotbo/contracts';
+  import { MODULE_CATEGORIES, getModuleDefinition, isMcpClosedModule } from '@kotbo/contracts';
   import { m } from '../../i18n';
   import { moduleName } from '../../moduleLabels';
 
@@ -103,6 +103,8 @@
   const entries = $derived<any[]>([...roleEntries, ...keyEntries]);
   const listProp = (entry: any) => (entry.kind === 'key' ? 'keyAccess' : 'roleAccessByRole');
   const idProp = (entry: any) => (entry.kind === 'key' ? 'keyId' : 'roleId');
+  /** Une clé MCP n'a aucune règle sur un module fermé au MCP (cellule bien-être) : elle n'y figure pas. */
+  const appliesTo = (entry: any, featureKey: string) => !(entry.kind === 'key' && isMcpClosedModule(featureKey));
 
   const permissions = $derived([
     { key: 'canView', label: m.ma_perm_view(), icon: 'Eye', desc: m.ma_perm_view_desc() },
@@ -367,7 +369,7 @@
                                 </tr>
                               </thead>
                               <tbody class="divide-y divide-outline-variant/5">
-                                {#each entries as role (`${role.kind ?? 'role'}:${role.id}`)}
+                                {#each entries.filter((entry) => appliesTo(entry, feature.featureKey)) as role (`${role.kind ?? 'role'}:${role.id}`)}
                                   {@const rule = ruleOf(feature, role)}
                                   <tr>
                                     <td class="py-2 pr-4">
@@ -479,7 +481,7 @@
                                 </th>
                               </tr>
 
-                              {#each items as { feature, idx } (feature.featureKey)}
+                              {#each items.filter(({ feature }) => appliesTo(role, feature.featureKey)) as { feature, idx } (feature.featureKey)}
                                 {@const rule = ruleOf(feature, role)}
                                 {@const moduleActive = featureModuleState(modules, feature.featureKey)}
                                 <tr>

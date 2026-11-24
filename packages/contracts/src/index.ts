@@ -64,6 +64,7 @@ export {
   getModuleForPath,
   getModuleRequirements,
   isCoreModule,
+  isMcpClosedModule,
   isModulePaused,
   withoutPausedModulePermissions,
 } from './types/modules.js';
