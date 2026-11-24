@@ -14,6 +14,7 @@ class AuthStore {
     loading = $state(true);
     initialized = $state(false);
     private initialization: Promise<void> | null = null;
+    private pendingGuildRetries = 0;
     /**
      * Incremente a chaque invalidation de session. Les lectures parallelees par
      * `initialize` comparent la valeur figee au depart : celle qui revient apres
@@ -142,10 +143,29 @@ class AuthStore {
                 this.guilds = Array.isArray(data?.guilds)
                     ? (data.guilds as SessionGuild[]).filter((guild) => guild.botPresent)
                     : [];
-                if (this.guilds.length === 0) {
-                    this.clearGuildSelection();
-                } else if (!this.selectedGuildId || !this.guilds.some((guild) => guild.id === this.selectedGuildId)) {
-                    this.setGuild(this.guilds[0].id);
+                const pendingGuildId =
+                    typeof sessionStorage !== 'undefined'
+                        ? sessionStorage.getItem('kotbo_pending_guild_id')
+                        : null;
+                if (pendingGuildId && this.guilds.some((guild) => guild.id === pendingGuildId)) {
+                    sessionStorage.removeItem('kotbo_pending_guild_id');
+                    this.pendingGuildRetries = 0;
+                    if (this.selectedGuildId !== pendingGuildId) {
+                        this.setGuild(pendingGuildId);
+                    }
+                } else if (pendingGuildId && this.pendingGuildRetries < 5) {
+                    this.pendingGuildRetries += 1;
+                    this.selectedGuildId = pendingGuildId;
+                    setTimeout(() => void this.fetchGuilds(), 1200);
+                } else {
+                    if (pendingGuildId && typeof sessionStorage !== 'undefined') {
+                        sessionStorage.removeItem('kotbo_pending_guild_id');
+                    }
+                    if (this.guilds.length === 0) {
+                        this.clearGuildSelection();
+                    } else if (!this.selectedGuildId || !this.guilds.some((guild) => guild.id === this.selectedGuildId)) {
+                        this.setGuild(this.guilds[0].id);
+                    }
                 }
             }
         } catch (err) {

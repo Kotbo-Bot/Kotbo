@@ -13,10 +13,15 @@ const GUILD_ID = /^\d{17,20}$/;
 if (typeof window !== 'undefined') {
   try {
     const url = new URL(window.location.href);
-    const guildId = url.searchParams.get('guild');
+    const paramGuildId = url.searchParams.get('guild_id');
+    const guildId = url.searchParams.get('guild') ?? paramGuildId;
     if (guildId && GUILD_ID.test(guildId)) {
       localStorage.setItem('kotbo_guild_id', guildId);
+      if (paramGuildId && GUILD_ID.test(paramGuildId)) {
+        sessionStorage.setItem('kotbo_pending_guild_id', paramGuildId);
+      }
       url.searchParams.delete('guild');
+      url.searchParams.delete('guild_id');
       window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
     }
   } catch {

@@ -924,6 +924,9 @@
               path="/"
               load={() => import("./pages/Home.svelte")}
             />
+            <Route path="/onboarding">
+              <div use:navigate={"/"}></div>
+            </Route>
 
             <LazyRoute
               path="/analytics/*"
