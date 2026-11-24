@@ -814,17 +814,6 @@
       </SectionCard>
 
       <SectionCard
-        title={m.arx_tag_role()}
-        description={m.arx_tag_desc()}
-        icon="Tag"
-      >
-        <Callout variant="info">
-          {m.arx_tag_moved()}
-          <a href="/welcome/autoroles" class="underline font-semibold">{m.arx_tag_moved_link()}</a>
-        </Callout>
-      </SectionCard>
-
-      <SectionCard
         title={m.arx_reports_title()}
         description={m.arx_reports_desc()}
         icon="Flag"

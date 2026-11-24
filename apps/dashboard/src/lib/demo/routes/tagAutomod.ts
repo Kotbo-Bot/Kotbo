@@ -42,6 +42,10 @@ const configSeed = () => ({
   impersonationEnabled: true,
   impersonationAction: 'TIMEOUT',
   impersonationDurationMin: 1440,
+  presetCategories: ['HATE', 'ANTISEMITISM', 'EXTREMISM'],
+  presetAction: 'JAIL',
+  presetDurationMin: null,
+  presetExcluded: [],
 });
 
 const rule = (id: string, extra: Record<string, unknown>) => ({

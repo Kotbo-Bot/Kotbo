@@ -120,12 +120,12 @@ const TRIGGER_LABELS: Record<BotLocale, Record<TagTrigger, string>> = {
   fr: {
     JOIN: 'Arrivée', TAG_CHANGE: 'Changement de tag', RESCAN: 'Analyse du serveur', WAVE: 'Vague d\'arrivées',
     NEW_ACCOUNT: 'Compte récent', MASS_ADOPT: 'Adoption en masse', IMPERSONATION: 'Imitation du tag du serveur',
-    SHARED_LIST: 'Liste partagée Kotbo', ALLOWLIST: 'Tag hors liste blanche', ESCALATION: 'Escalade',
+    SHARED_LIST: 'Liste partagée Kotbo', PRESET_LIST: 'Liste prédéfinie Kotbo', ALLOWLIST: 'Tag hors liste blanche', ESCALATION: 'Escalade',
   },
   en: {
     JOIN: 'Join', TAG_CHANGE: 'Tag change', RESCAN: 'Server scan', WAVE: 'Join wave',
     NEW_ACCOUNT: 'New account', MASS_ADOPT: 'Mass adoption', IMPERSONATION: 'Server tag impersonation',
-    SHARED_LIST: 'Kotbo shared list', ALLOWLIST: 'Tag outside the allowlist', ESCALATION: 'Escalation',
+    SHARED_LIST: 'Kotbo shared list', PRESET_LIST: 'Kotbo predefined list', ALLOWLIST: 'Tag outside the allowlist', ESCALATION: 'Escalation',
   },
 };
 

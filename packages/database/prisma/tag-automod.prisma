@@ -28,6 +28,12 @@ model TagAutomodConfig {
   sharedListEnabled     Boolean @default(false)
   sharedListAction      String  @default("ALERT")
   sharedListDurationMin Int?
+  /// Listes de tags prédéfinies par Kotbo (@kotbo/shared) : catégories activées, vide = éteint.
+  presetCategories      String[] @default([])
+  presetAction          String   @default("ALERT")
+  presetDurationMin     Int?
+  /// Tags retirés des listes par le serveur (faux positifs).
+  presetExcluded        String[] @default([])
 
   /// Vague d'arrivées portant le même tag. ADAPTIVE | FIXED ; SOFT | NORMAL | STRICT.
   waveEnabled     Boolean @default(false)
@@ -112,7 +118,7 @@ model TagAutomodEvent {
   userTag    String?
   tagGuildId String?
   tag        String?
-  /// JOIN | TAG_CHANGE | RESCAN | WAVE | NEW_ACCOUNT | MASS_ADOPT | IMPERSONATION | SHARED_LIST | ALLOWLIST | ESCALATION
+  /// JOIN | TAG_CHANGE | RESCAN | WAVE | NEW_ACCOUNT | MASS_ADOPT | IMPERSONATION | SHARED_LIST | PRESET_LIST | ALLOWLIST | ESCALATION
   trigger    String
   ruleId     String?
   waveId     String?

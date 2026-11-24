@@ -8,6 +8,7 @@
   import { dashboardFetch } from '../api';
   import { toast } from '../stores/toast.svelte';
   import { dateLocale, m } from '../i18n';
+  import { wbStatusLabel } from '../wellbeingLabels';
 
   let { userId, userName }: { userId: string; userName: string } = $props();
 
@@ -48,7 +49,7 @@
         }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || 'Erreur');
+      if (!res.ok) throw new Error(data.error ?? '');
       cases = [data.item, ...cases];
       text = '';
       toast.success(m.toast_wb_note_saved());
@@ -64,26 +65,26 @@
 
 <section class="section-card p-5 space-y-4">
   <p class="text-xs text-on-surface-variant">
-    Espace confidentiel : visible uniquement par la cellule bien-être. Les autres membres du staff, même admins, ne voient pas ce contenu.
+    {m.wb_panel_intro()}
   </p>
 
   <div>
-    <label for="wb-quick-note" class="sr-only">Nouvelle note confidentielle</label>
-    <textarea id="wb-quick-note" class="input min-h-[120px] resize-y" bind:value={text} placeholder="Nouvelle note confidentielle…"></textarea>
+    <label for="wb-quick-note" class="sr-only">{m.wb_panel_note_label()}</label>
+    <textarea id="wb-quick-note" class="input min-h-[120px] resize-y" bind:value={text} placeholder={m.wb_panel_note_ph()}></textarea>
     <div class="mt-2 flex justify-end">
-      <button class="btn-primary" disabled={busy || !text.trim()} onclick={addQuickNote}>Enregistrer la note</button>
+      <button class="btn-primary" disabled={busy || !text.trim()} onclick={addQuickNote}>{m.wb_panel_save()}</button>
     </div>
   </div>
 
   {#if !loading && cases.length === 0}
-    <p class="text-sm text-on-surface-variant">Aucun dossier sur cette personne.</p>
+    <p class="text-sm text-on-surface-variant">{m.wb_panel_empty()}</p>
   {/if}
 
   <ul class="space-y-3">
     {#each cases as item (item.id)}
       <li class="rounded-lg bg-surface-container px-4 py-3">
         <p class="font-semibold">{item.title}</p>
-        <p class="text-xs text-on-surface-variant">{item.createdByName} · {fmt(item.createdAt)} · {item.status}</p>
+        <p class="text-xs text-on-surface-variant">{item.createdByName} · {fmt(item.createdAt)} · {wbStatusLabel(item.status)}</p>
         <p class="mt-2 whitespace-pre-wrap break-words text-sm">{item.summary}</p>
         {#each item.notes as note (note.id)}
           <p class="mt-2 border-l-2 border-outline-variant pl-3 text-sm">

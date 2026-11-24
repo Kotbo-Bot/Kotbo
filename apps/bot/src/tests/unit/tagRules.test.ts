@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import {
   decideTag,
   isImpersonatingTag,
+  matchPresetTag,
   renderTagMessage,
   ruleMatches,
   tagSkeleton,
@@ -25,6 +26,7 @@ const OFF: ConfigLike = {
   sharedListEnabled: false, sharedListAction: 'ALERT', sharedListDurationMin: null,
   newAccountEnabled: false, newAccountDays: 7, newAccountScope: 'UNKNOWN', newAccountAction: 'ALERT', newAccountDurationMin: null,
   impersonationEnabled: false, impersonationAction: 'ALERT', impersonationDurationMin: null,
+  presetCategories: [], presetAction: 'ALERT', presetDurationMin: null, presetExcluded: [],
 };
 
 const ctx = (guildId: string, tag: string, over: Partial<Parameters<typeof decideTag>[2]> = {}) => ({
@@ -81,5 +83,39 @@ describe('tagRules', () => {
 
   test('variables du message', () => {
     expect(renderTagMessage('{user} {tag} {server} {delay}', { user: 'a', tag: 'b', server: 'c', delay: 'd' })).toBe('a b c d');
+  });
+});
+
+describe('listes prédéfinies de tags (#24)', () => {
+  test('un code en lettres est reconnu, imitations comprises', () => {
+    expect(matchPresetTag('KKK', ['HATE'], [])).toBe('KKK');
+    expect(matchPresetTag('ΚΚΚ', ['HATE'], [])).toBe('KKK');
+  });
+
+  test('un code chiffré n\'est reconnu que tel quel : « BB » n\'est pas « 88 »', () => {
+    expect(matchPresetTag('88', ['HATE'], [])).toBe('88');
+    expect(matchPresetTag('BB', ['HATE'], [])).toBe(null);
+  });
+
+  test('seules les catégories activées comptent', () => {
+    expect(matchPresetTag('MAGA', ['HATE'], [])).toBe(null);
+    expect(matchPresetTag('MAGA', ['POLITICS'], [])).toBe('MAGA');
+  });
+
+  test('un tag retiré par le serveur passe', () => {
+    expect(matchPresetTag('ss', ['HATE'], ['SS'])).toBe(null);
+  });
+
+  test('decideTag répond avec l\'action de la liste prédéfinie', () => {
+    const config = { ...OFF, presetCategories: ['HATE'], presetAction: 'JAIL' };
+    const hit = decideTag(config, [], ctx('200', '1488'));
+    expect(hit?.trigger).toBe('PRESET_LIST');
+    expect(hit?.action).toBe('JAIL');
+  });
+
+  test('un tag autorisé par une règle ne déclenche pas la liste prédéfinie', () => {
+    const config = { ...OFF, presetCategories: ['HATE'], presetAction: 'JAIL' };
+    const allow = rule({ effect: 'ALLOW', targetType: 'SERVER', targetGuildId: '200' });
+    expect(decideTag(config, [allow], ctx('200', '1488'))).toBe(null);
   });
 });

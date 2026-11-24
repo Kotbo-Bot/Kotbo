@@ -35,6 +35,7 @@ export function tagTriggerLabel(trigger: TagTrigger): string {
     MASS_ADOPT: m.tam_trigger_mass_adopt(),
     IMPERSONATION: m.tam_trigger_impersonation(),
     SHARED_LIST: m.tam_trigger_shared_list(),
+    PRESET_LIST: m.tam_trigger_preset_list(),
     ALLOWLIST: m.tam_trigger_allowlist(),
     ESCALATION: m.tam_trigger_escalation(),
   }[trigger];

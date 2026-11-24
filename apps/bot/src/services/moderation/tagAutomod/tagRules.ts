@@ -4,6 +4,8 @@
  * de vague. Aucun accès Discord ni base : testable seule.
  */
 
+import { TAG_PRESET_LISTS, isTagPresetCategory } from '@kotbo/shared';
+
 export const TAG_ACTIONS = ['ALERT', 'DM', 'TICKET', 'ROLE', 'WARN', 'TIMEOUT', 'JAIL', 'KICK', 'SOFTBAN', 'BAN'] as const;
 export type TagAction = (typeof TAG_ACTIONS)[number];
 
@@ -22,7 +24,7 @@ export function isSanctionAction(action: TagAction): boolean {
 
 export type TagTrigger =
   | 'JOIN' | 'TAG_CHANGE' | 'RESCAN' | 'WAVE' | 'NEW_ACCOUNT' | 'MASS_ADOPT'
-  | 'IMPERSONATION' | 'SHARED_LIST' | 'ALLOWLIST' | 'ESCALATION';
+  | 'IMPERSONATION' | 'SHARED_LIST' | 'PRESET_LIST' | 'ALLOWLIST' | 'ESCALATION';
 
 export type DisplayedTag = { guildId: string; tag: string | null };
 
@@ -60,6 +62,12 @@ export type ConfigLike = {
   impersonationEnabled: boolean;
   impersonationAction: string;
   impersonationDurationMin: number | null;
+  /** Catégories de listes prédéfinies activées ; vide = détection éteinte. */
+  presetCategories: string[];
+  presetAction: string;
+  presetDurationMin: number | null;
+  /** Tags retirés des listes par le serveur (faux positifs). */
+  presetExcluded: string[];
 };
 
 export type TagHit = {
@@ -115,6 +123,24 @@ function patternMatches(pattern: string, mode: string, tag: string): boolean {
   const p = pattern.toLowerCase();
   if (mode === 'CONTAINS') return t.includes(p) || tagSkeleton(tag).includes(tagSkeleton(pattern));
   return t === p || (tagSkeleton(tag) !== '' && tagSkeleton(tag) === tagSkeleton(pattern));
+}
+
+/**
+ * Entrée des listes prédéfinies qui correspond au tag, ou null. Un code en
+ * lettres compte aussi sous ses imitations ; un code chiffré seulement tel quel.
+ */
+export function matchPresetTag(tag: string, categories: readonly string[], excluded: readonly string[]): string | null {
+  const shown = tag.trim().toUpperCase();
+  if (!shown || excluded.some((entry) => entry.toUpperCase() === shown)) return null;
+  for (const category of categories) {
+    if (!isTagPresetCategory(category)) continue;
+    for (const entry of TAG_PRESET_LISTS[category]) {
+      if (excluded.some((ex) => ex.toUpperCase() === entry)) continue;
+      const matches = /\d/.test(entry) ? shown === entry : patternMatches(entry, 'EXACT', tag);
+      if (matches) return entry;
+    }
+  }
+  return null;
 }
 
 export function isRuleActive(rule: RuleLike, now = Date.now()): boolean {
@@ -193,6 +219,9 @@ export function decideTag(config: ConfigLike, rules: RuleLike[], ctx: DecideCont
   }
   if (config.sharedListEnabled && ctx.sharedFlagged) {
     hits.push(hit('SHARED_LIST', config.sharedListAction, config.sharedListDurationMin));
+  }
+  if (config.presetCategories.length > 0 && tag.tag && matchPresetTag(tag.tag, config.presetCategories, config.presetExcluded)) {
+    hits.push(hit('PRESET_LIST', config.presetAction, config.presetDurationMin));
   }
   if (config.allowlistOnly) {
     hits.push(hit('ALLOWLIST', config.allowlistAction, config.allowlistDurationMin));
