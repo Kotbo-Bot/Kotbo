@@ -9,6 +9,7 @@
  * partie ; `AegisConfig.enabled` est la seconde clé. Module éteint, les messages
  * partent encore si le serveur a accepté le partage pour l'entraînement.
  */
+import { isChannelExempt, type ScopedChannel } from '../utils/channelExemption.js';
 import {
   Events,
   PermissionFlagsBits,
@@ -36,12 +37,11 @@ const RESTORE_SWEEP_MS = 60_000;
  * `analyzeExempt` coupé, son message est noté comme les autres, mais le bot ne
  * le sanctionne jamais seul : au-dessus du seuil, il part en revue.
  */
-async function isExempt(member: GuildMember | null, channelId: string, parentId: string | null, config: AegisRuntimeConfig): Promise<boolean> {
+async function isExempt(member: GuildMember | null, channel: ScopedChannel | null, config: AegisRuntimeConfig): Promise<boolean> {
   if (!member) return false;
   if (member.permissions.has(PermissionFlagsBits.Administrator)) return true;
   const automod = await getOrCreateAutoModConfig(member.guild.id);
-  const channels = [...automod.bypassChannels, ...config.exemptChannelIds];
-  if (channels.includes(channelId) || (parentId !== null && channels.includes(parentId))) return true;
+  if (isChannelExempt(channel, [...automod.bypassChannels, ...config.exemptChannelIds])) return true;
   const roles = [...automod.bypassRoles, ...config.exemptRoleIds];
   return member.roles.cache.some((role) => roles.includes(role.id));
 }
@@ -76,7 +76,7 @@ async function onMessage(message: Message): Promise<void> {
   if (!(await inScope(message, config))) return;
 
   const parentId = parentOf(message);
-  const exempt = await isExempt(message.member, message.channelId, parentId, config);
+  const exempt = await isExempt(message.member, message.channel, config);
   if (exempt && !config.analyzeExempt) return;
   const job: AegisJob = {
     source: 'MESSAGE',
@@ -107,7 +107,7 @@ async function onMessageUpdate(oldMessage: Message | PartialMessage, newMessage:
   if (!text) return;
   if (!(await inScope(message, config))) return;
   const parentId = parentOf(message);
-  const exempt = await isExempt(message.member, message.channelId, parentId, config);
+  const exempt = await isExempt(message.member, message.channel, config);
   if (exempt && !config.analyzeExempt) return;
 
   await enqueueAegisJob({
@@ -133,7 +133,7 @@ async function checkNickname(member: GuildMember): Promise<void> {
   const name = member.nickname ?? member.user.globalName ?? member.user.username;
   const text = prepareText(name);
   if (!text) return;
-  const exempt = await isExempt(member, '', null, config);
+  const exempt = await isExempt(member, null, config);
   if (exempt && !config.analyzeExempt) return;
 
   await enqueueAegisJob({
