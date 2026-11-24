@@ -17,6 +17,8 @@ Documentation technique et fonctionnelle du bot Kotbo.
   chaque serveur : vitrine, démarches, modules du bot, wiki et blog.
 - [`outgoing-webhooks.md`](./outgoing-webhooks.md) - Webhooks sortants : format
   de la requête, signature et événements.
+- [`pages-publiques.md`](./pages-publiques.md) - Classements, clans et giveaways
+  publics : coque commune et personnalisation de l'apparence par serveur.
 
 ## Dashboard, accès et intégrations
 
