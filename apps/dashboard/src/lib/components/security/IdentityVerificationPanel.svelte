@@ -213,19 +213,19 @@
       <div class="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
         <label class="space-y-1.5">
           <span class="text-xs font-medium text-on-surface-variant/40">{m.da_verify_channel()}</span>
-          <SearchableSelect bind:value={verifConfig.verificationChannelId} options={dashboardStore.state.discordChannels.map(c => ({ id: c.id, name: channelDisplayName(c) }))} placeholder={m.da_no_channel()} className="w-full rounded-lg border border-outline-variant/10 bg-surface-container-high/40 px-3 py-2.5 text-sm" />
+          <SearchableSelect bind:value={verifConfig.verificationChannelId} options={dashboardStore.state.discordChannels.map(c => ({ id: c.id, name: channelDisplayName(c) }))} placeholder={m.da_no_channel()} className="w-full" />
         </label>
         <label class="space-y-1.5">
           <span class="text-xs font-medium text-on-surface-variant/40">{m.da_verified_role()}</span>
-          <SearchableSelect bind:value={verifConfig.verificationRoleId} options={dashboardStore.state.discordRoles.map(r => ({ id: r.id, name: `@${r.name}` }))} placeholder={m.da_no_role()} className="w-full rounded-lg border border-outline-variant/10 bg-surface-container-high/40 px-3 py-2.5 text-sm" />
+          <SearchableSelect bind:value={verifConfig.verificationRoleId} options={dashboardStore.state.discordRoles.map(r => ({ id: r.id, name: `@${r.name}` }))} placeholder={m.da_no_role()} className="w-full" />
         </label>
         <label class="space-y-1.5">
           <span class="text-xs font-medium text-on-surface-variant/40">{m.da_log_channel()}</span>
-          <SearchableSelect bind:value={verifConfig.verificationLogChannelId} options={dashboardStore.state.discordChannels.map(c => ({ id: c.id, name: channelDisplayName(c) }))} placeholder={m.da_default()} className="w-full rounded-lg border border-outline-variant/10 bg-surface-container-high/40 px-3 py-2.5 text-sm" />
+          <SearchableSelect bind:value={verifConfig.verificationLogChannelId} options={dashboardStore.state.discordChannels.map(c => ({ id: c.id, name: channelDisplayName(c) }))} placeholder={m.da_default()} className="w-full" />
         </label>
         <label class="space-y-1.5 sm:col-span-2 lg:col-span-3">
           <span class="text-xs font-semibold text-on-surface-variant/40">{m.da_fallback_channel()}</span>
-          <SearchableSelect bind:value={verifConfig.verificationFallbackChannelId} options={dashboardStore.state.discordChannels.map(c => ({ id: c.id, name: channelDisplayName(c) }))} placeholder={m.da_default_verify_channel()} className="w-full rounded-lg border border-outline-variant/10 bg-surface-container-high/40 px-3 py-2.5 text-sm" />
+          <SearchableSelect bind:value={verifConfig.verificationFallbackChannelId} options={dashboardStore.state.discordChannels.map(c => ({ id: c.id, name: channelDisplayName(c) }))} placeholder={m.da_default_verify_channel()} className="w-full" />
           <span class="block text-2xs text-on-surface-variant">{m.da_fallback_channel_desc()}</span>
         </label>
       </div>
