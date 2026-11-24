@@ -162,6 +162,9 @@
 </script>
 
 <div class={className} style="position:relative" bind:this={wrapper}>
+  <!-- Repère propre au champ : l'icône et la croix se calent sur lui, même
+       quand `className` donne du padding au conteneur. -->
+  <div class="relative">
   {#if adorned}
     <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 flex items-center text-on-surface-variant">
       {#if selected?.icon}
@@ -182,7 +185,7 @@
     on:focus={() => !disabled && (open = true)}
     on:blur={() => setTimeout(close, 150)}
     on:keydown={handleKeydown}
-    class="w-full bg-surface-container-high text-on-surface text-sm {adorned ? 'pl-9 pr-4' : 'px-4'} py-2.5 rounded-xl border border-field-border outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
+    class="w-full bg-surface-container-high text-on-surface text-sm {adorned ? 'pl-9' : 'pl-4'} {clearable && query && !disabled ? 'pr-9' : 'pr-4'} py-2.5 rounded-xl border border-field-border outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50 disabled:cursor-not-allowed"
     autocomplete="off"
     disabled={disabled}
   />
@@ -200,6 +203,7 @@
       <Papicon icon="Cross" size={12} />
     </button>
   {/if}
+  </div>
 
   {#if open}
     <!-- mousedown|preventDefault sur toute la liste : le champ garde le focus.

@@ -1,4 +1,5 @@
 import { SanctionType } from '@prisma/client';
+import { mergeChannelRows } from './channelRows.js';
 import { normalizeTimezone } from '@kotbo/contracts';
 import prisma, { prismaRead } from '../../utils/db.js';
 import { BucketZoner } from './zonedBuckets.js';
@@ -299,7 +300,8 @@ async function computeSocial(
       where: { guildId, authorId: { in: userIds }, createdAt: { gte: since } },
       _count: { _all: true },
       orderBy: { _count: { channelId: 'desc' } },
-      take: 10,
+      // Plus large que le classement : un salon renommé occupe plusieurs lignes.
+      take: 30,
     }),
     prismaRead.messageLog.findMany({
       where: { guildId, authorId: { in: userIds }, createdAt: { gte: since } },
@@ -308,12 +310,14 @@ async function computeSocial(
     }),
   ]);
 
-  const totalInTopChannels = channelRows.reduce((sum, row) => sum + row._count._all, 0);
-  const topChannels = channelRows.map((row) => ({
-    channelId: row.channelId,
-    channelName: row.channelName,
-    count: row._count._all,
-    share: totalInTopChannels > 0 ? Math.round((row._count._all / totalInTopChannels) * 100) : 0,
+  const mergedChannels = mergeChannelRows(
+    channelRows.map((row) => ({ channelId: row.channelId, channelName: row.channelName, count: row._count._all })),
+    10,
+  );
+  const totalInTopChannels = mergedChannels.reduce((sum, row) => sum + row.count, 0);
+  const topChannels = mergedChannels.map((row) => ({
+    ...row,
+    share: totalInTopChannels > 0 ? Math.round((row.count / totalInTopChannels) * 100) : 0,
   }));
 
   const counters = new Map<string, { mentions: number; replies: number }>();

@@ -177,7 +177,7 @@ async function searchServers(guildId: string, q: string) {
      LIMIT 20
   `;
   const fleet = await getFleetTagCounts();
-  return rows.map((r) => ({
+  const servers = rows.map((r) => ({
     guildId: r.guildId,
     name: r.name,
     iconUrl: guildIconUrl(r.guildId, r.icon),
@@ -186,7 +186,18 @@ async function searchServers(guildId: string, q: string) {
     memberCount: r.memberCount,
     holders: Number(r.holders),
     fleetBlocks: fleet.get(r.guildId) ?? 0,
+    unlisted: false,
   }));
+  // Un identifiant inconnu de Kotbo reste ciblable : partenaire ou serveur hostile
+  // où Kotbo n'est pas, dont personne ne porte encore le tag (#23).
+  const id = q.trim();
+  if (SNOWFLAKE.test(id) && id !== guildId && !servers.some((s) => s.guildId === id)) {
+    servers.push({
+      guildId: id, name: id, iconUrl: null, tag: null, badgeUrl: null, memberCount: null,
+      holders: 0, fleetBlocks: fleet.get(id) ?? 0, unlisted: true,
+    });
+  }
+  return servers;
 }
 
 function draftRule(body: Body): RuleLike | null {

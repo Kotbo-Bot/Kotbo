@@ -14,6 +14,7 @@
   import ModulePage from '../lib/components/ModulePage.svelte';
   import InlineFeedback from '../lib/components/InlineFeedback.svelte';
   import ToggleSwitch from '../lib/components/ToggleSwitch.svelte';
+  import { HATE_SYMBOLS } from '@kotbo/shared';
   import SearchableSelect from '../lib/components/SearchableSelect.svelte';
   import Skeleton from '../lib/components/Skeleton.svelte';
   import LoadingHint from '../lib/components/LoadingHint.svelte';
@@ -74,6 +75,9 @@
     linksLevel: 1,
     discordRulesWarn: false,
 
+    hateSymbolsEnabled: false,
+    hateSymbolsAction: 'DELETE_AND_WARN',
+    hateSymbolsAllowed: [] as string[],
     capsEnabled: false,
     capsThresholdPercent: 80,
     capsMinLength: 10,
@@ -129,6 +133,14 @@
     bypassChannels: [] as string[]
   });
 
+  const HATE_SYMBOL_LABELS: Record<string, () => string> = {
+    swastika: () => m.am_hate_sym_swastika(),
+    manji: () => m.am_hate_sym_manji(),
+    svasti_tibetan: () => m.am_hate_sym_svasti_tibetan(),
+    ss_runes: () => m.am_hate_sym_ss_runes(),
+    ss_lightning: () => m.am_hate_sym_ss_lightning(),
+  };
+
   // Snapshot of last-saved state
   let savedConfig = $state(JSON.parse(JSON.stringify({
     discordAutoModEnabled: true,
@@ -137,6 +149,7 @@
     preventiveSlowmodeEnabled: false, preventiveSlowmodeMsgThreshold: 15, preventiveSlowmodeMinUsers: 3,
     preventiveSlowmodeWindowSec: 10, preventiveSlowmodeSeconds: 5, preventiveSlowmodeMinutes: 5,
     linksEnabled: false, linksAction: 'DELETE_AND_WARN', linksWhitelist: [], linksLevel: 1, discordRulesWarn: false,
+    hateSymbolsEnabled: false, hateSymbolsAction: 'DELETE_AND_WARN', hateSymbolsAllowed: [],
     capsEnabled: false, capsThresholdPercent: 80, capsMinLength: 10,
     emojisEnabled: false, emojisLimit: 10,
     mentionsEnabled: false, mentionsLimit: 5,
@@ -621,6 +634,66 @@
                     disabled={!canManageSettings}
                   ></textarea>
                 </div>
+              </div>
+            {/if}
+          </section>
+
+          <!-- Symboles haineux (liste prédéfinie, #22) -->
+          <section class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-6">
+            <div class="flex items-center justify-between border-b border-outline-variant/15 pb-4">
+              <div>
+                <h3 class="text-lg font-semibold flex items-center gap-3">
+                  <Papicon icon="shield" size={20} class="text-error" />
+                  {m.am_hate_title()}
+                </h3>
+                <p class="text-xs text-on-surface-variant mt-1">{m.am_hate_desc()}</p>
+              </div>
+              <ToggleSwitch
+                checked={config.hateSymbolsEnabled}
+                onToggle={(v: boolean) => config.hateSymbolsEnabled = v}
+                disabled={!canManageSettings}
+              />
+            </div>
+
+            {#if config.hateSymbolsEnabled}
+              <div class="space-y-4 animate-in fade-in duration-300">
+                <div class="space-y-1.5">
+                  <label for="hateSymbolsAction" class="text-xs font-semibold text-on-surface-variant ml-2">{m.am_action_label()}</label>
+                  <select
+                    id="hateSymbolsAction"
+                    bind:value={config.hateSymbolsAction}
+                    class="w-full bg-surface-container-high/45 border border-field-border rounded-lg px-4 py-3 text-sm text-on-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    disabled={!canManageSettings}
+                  >
+                    <option value="DELETE_AND_WARN">{m.am_action_delete_warn()}</option>
+                    <option value="DELETE_ONLY">{m.am_action_delete_silent()}</option>
+                    <option value="TIMEOUT">{m.am_action_block_timeout()}</option>
+                  </select>
+                </div>
+
+                <fieldset class="space-y-2">
+                  <legend class="text-xs font-semibold text-on-surface-variant ml-2">{m.am_hate_allowed_label()}</legend>
+                  <p class="text-2xs text-on-surface-variant ml-2">{m.am_hate_allowed_hint()}</p>
+                  {#each HATE_SYMBOLS as symbol (symbol.id)}
+                    <label class="flex items-center gap-3 rounded-lg border border-outline-variant/20 px-3 py-2 text-sm text-on-surface">
+                      <input
+                        type="checkbox"
+                        checked={!config.hateSymbolsAllowed.includes(symbol.id)}
+                        onchange={(e) => {
+                          config.hateSymbolsAllowed = e.currentTarget.checked
+                            ? config.hateSymbolsAllowed.filter((id) => id !== symbol.id)
+                            : [...config.hateSymbolsAllowed, symbol.id];
+                        }}
+                        disabled={!canManageSettings}
+                      />
+                      <span class="w-10 text-center text-base" aria-hidden="true">{symbol.sample}</span>
+                      <span class="flex-1">
+                        {HATE_SYMBOL_LABELS[symbol.id]?.() ?? symbol.label}
+                        {#if symbol.religious}<span class="block text-2xs text-on-surface-variant">{m.am_hate_religious()}</span>{/if}
+                      </span>
+                    </label>
+                  {/each}
+                </fieldset>
               </div>
             {/if}
           </section>

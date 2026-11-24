@@ -4,6 +4,7 @@
   import { dashboardFetch } from '../lib/api';
   import { dashboardStore } from '../lib/stores/dashboard.svelte';
   import { toast } from '../lib/stores/toast.svelte';
+  import { confirmDialog } from '../lib/stores/confirmDialog.svelte';
   import ModulePage from '../lib/components/ModulePage.svelte';
   import MultiSelect from '../lib/components/MultiSelect.svelte';
   import { Button, Callout, EmptyState, Field, Modal, SectionCard } from '../lib/components/ui';
@@ -13,6 +14,8 @@
     requireReason: boolean;
     isTeamMember: boolean;
     isDirector: boolean;
+    /** Propriétaire du serveur : seul à modifier la composition de la cellule. */
+    canConfigure: boolean;
     hasCaseAccess: boolean;
     breakGlassExpiresAt: string | null;
   };
@@ -184,6 +187,26 @@
     }
   }
 
+  let deletingCase = $state(false);
+
+  async function deleteCase() {
+    const target = selectedCase;
+    if (!target || deletingCase) return;
+    if (!(await confirmDialog.danger(m.wb_delete_case_q(), m.wb_delete_case_warn()))) return;
+    deletingCase = true;
+    try {
+      const res = await dashboardFetch(`/wellbeing/cases/${target.id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('delete');
+      cases = cases.filter((c) => c.id !== target.id);
+      selectedCaseId = null;
+      toast.success(m.toast_wb_case_deleted());
+    } catch {
+      toast.error(m.toast_wb_delete_failed());
+    } finally {
+      deletingCase = false;
+    }
+  }
+
   async function addNote(event: SubmitEvent) {
     event.preventDefault();
     if (!selectedCase || !newNote.trim() || addingNote) return;
@@ -217,7 +240,7 @@
       {#if status?.hasCaseAccess}
         <Button variant="primary" icon="plus" onclick={() => (newCaseOpen = true)}>Nouveau dossier</Button>
       {/if}
-      {#if status?.isDirector}
+      {#if status?.canConfigure}
         <Button variant="ghost" icon="settings" onclick={() => void openConfig()}>Configuration</Button>
       {/if}
     </div>
@@ -230,8 +253,8 @@
       icon="shield"
       title="Cellule bien-être désactivée"
       description="Activez la cellule et désignez les rôles autorisés depuis la configuration."
-      actionLabel={status?.isDirector ? 'Configurer' : undefined}
-      onAction={status?.isDirector ? () => void openConfig() : undefined}
+      actionLabel={status?.canConfigure ? 'Configurer' : undefined}
+      onAction={status?.canConfigure ? () => void openConfig() : undefined}
     />
   {:else if !status.hasCaseAccess}
     <div class="space-y-4">
@@ -255,7 +278,7 @@
     {/if}
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <SectionCard title="Dossiers confidentiels" icon="folder">
+      <SectionCard title="Dossiers confidentiels" description="Un dossier fermé est supprimé après un an sans modification." icon="folder">
         <div class="divide-y divide-outline-variant">
           {#if cases.length === 0}
             <p class="p-4 text-sm text-on-surface-variant">Aucun dossier ouvert.</p>
@@ -302,6 +325,12 @@
                 <input bind:value={newNote} aria-label={m.a11y_wellbeing_note()} required placeholder="Ajouter une note confidentielle…" class="input flex-1 text-sm" />
                 <Button type="submit" size="sm" variant="primary" loading={addingNote}>Ajouter</Button>
               </form>
+
+              {#if status?.isTeamMember}
+                <div class="flex justify-end">
+                  <Button size="sm" variant="ghost" icon="trash" loading={deletingCase} onclick={() => void deleteCase()}>Supprimer le dossier</Button>
+                </div>
+              {/if}
             </div>
           </SectionCard>
         {/if}

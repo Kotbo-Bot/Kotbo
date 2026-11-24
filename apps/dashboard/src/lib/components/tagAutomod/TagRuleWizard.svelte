@@ -224,11 +224,11 @@
                 {#if server.iconUrl}
                   <img src={server.iconUrl} alt="" class="w-9 h-9 rounded-xl shrink-0" loading="lazy" />
                 {:else}
-                  <span class="w-9 h-9 rounded-xl shrink-0 grid place-items-center bg-surface-container-high text-on-surface-variant text-xs font-bold">{server.name.slice(0, 2)}</span>
+                  <span class="w-9 h-9 rounded-xl shrink-0 grid place-items-center bg-surface-container-high text-on-surface-variant text-xs font-bold">{server.unlisted ? 'ID' : server.name.slice(0, 2)}</span>
                 {/if}
                 <span class="min-w-0 flex-1">
                   <span class="flex items-center gap-2 text-body-sm font-medium text-on-surface truncate">
-                    {server.name}
+                    {server.unlisted ? m.tam_wiz_unlisted_name() : server.name}
                     {#if server.tag}
                       <span class="inline-flex items-center gap-1 rounded-md border border-outline-variant/40 px-1.5 py-0.5 text-2xs font-mono">
                         {#if server.badgeUrl}<img src={server.badgeUrl} alt="" class="w-3 h-3" />{/if}{server.tag}
@@ -236,7 +236,11 @@
                     {/if}
                   </span>
                   <span class="block text-2xs text-on-surface-variant">
-                    {server.holders > 0 ? m.tam_wiz_holders({ count: server.holders }) : m.tam_wiz_no_holders()}
+                    {#if server.unlisted}
+                      {m.tam_wiz_unlisted_hint({ id: server.guildId })}
+                    {:else}
+                      {server.holders > 0 ? m.tam_wiz_holders({ count: server.holders }) : m.tam_wiz_no_holders()}
+                    {/if}
                     {#if server.fleetBlocks > 0}<span class="text-error"> · {m.tam_fleet_blocks({ count: server.fleetBlocks })}</span>{/if}
                   </span>
                 </span>

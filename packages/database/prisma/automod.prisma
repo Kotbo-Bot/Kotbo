@@ -64,6 +64,12 @@ model AutoModConfig {
   discordRulesWarn     Boolean  @default(false) // Un warn par déclenchement d'une règle Discord qui n'est pas gérée par Kotbo
   linksLevel           Int      @default(1) // 0 = invitations seulement, 1 = liens externes (hors Discord et GIF), 2 = tous les liens
 
+  // Symboles haineux en Unicode (liste prédéfinie, @kotbo/shared). Les ids
+  // listés dans `hateSymbolsAllowed` passent : sens religieux ou culturel.
+  hateSymbolsEnabled   Boolean  @default(false)
+  hateSymbolsAction    String   @default("DELETE_AND_WARN")
+  hateSymbolsAllowed   String[] @default([])
+
   capsEnabled          Boolean  @default(false)
   capsThresholdPercent Int      @default(80)
   capsMinLength        Int      @default(10)

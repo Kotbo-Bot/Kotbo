@@ -110,7 +110,7 @@
       {#each localRoleAccess as entry, i}
         <div class="flex flex-col md:flex-row items-start md:items-center gap-4 p-5 bg-surface-container-low/40 rounded-xl border border-outline-variant/10 group animate-in fade-in slide-in-from-right-4 duration-300">
           <div class="w-full md:w-64">
-            <SearchableSelect bind:value={entry.roleId} options={availableRoles.map(role => ({ id: role.id, name: `@${role.name}` }))} placeholder={m.rp_select_role_placeholder()} className="w-full bg-surface-container-high/40 border border-outline-variant/10 rounded-xl px-4 py-2.5 text-sm" />
+            <SearchableSelect bind:value={entry.roleId} options={availableRoles.map(role => ({ id: role.id, name: `@${role.name}` }))} placeholder={m.rp_select_role_placeholder()} className="w-full" />
           </div>
 
           <div class="flex flex-wrap items-center gap-3 flex-1">

@@ -931,7 +931,7 @@
                   <!-- Discord Channel Selector -->
                   <div class="space-y-1.5">
                     <label for="config-channel" class="text-xs font-semibold text-on-surface-variant ml-2">{m.news_config_channel_label()}</label>
-                    <SearchableSelect id="config-channel" bind:value={configChannelId} options={(dashboardStore.state.discordChannels || []).map(channel => ({ id: channel.id, name: channelDisplayName(channel) }))} placeholder={m.news_config_channel_ph()} className="w-full bg-surface-container-high/45 border border-outline-variant/10 rounded-lg px-5 py-3 text-sm focus:ring-2 focus:ring-primary/30 outline-none transition-all" />
+                    <SearchableSelect id="config-channel" bind:value={configChannelId} options={(dashboardStore.state.discordChannels || []).map(channel => ({ id: channel.id, name: channelDisplayName(channel) }))} placeholder={m.news_config_channel_ph()} className="w-full" />
                   </div>
 
                   <!-- Save Config Button -->

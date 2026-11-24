@@ -804,7 +804,7 @@
     { id: 'connexions', label: m.mcm_tab_connections(), icon: 'link' },
     { id: 'linked_accounts', label: m.mcm_tab_linked(), icon: 'link-2', count: () => (caseData?.linkedAccounts?.length ?? 0) + pendingCrossServerLinks.length },
     { id: 'notes', label: m.mcm_tab_notes(), icon: 'edit-3' },
-    ...(wellbeingAccess ? [{ id: 'wellbeing' as const, label: 'Bien-être', icon: 'heart' }] : []),
+    ...(wellbeingAccess ? [{ id: 'wellbeing' as const, label: m.wb_tab_label(), icon: 'heart' }] : []),
   ]);
 
   const displayName = $derived(caseData?.profile?.displayName || caseData?.profile?.globalName || userName);
