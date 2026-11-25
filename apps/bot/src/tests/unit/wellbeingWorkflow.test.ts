@@ -75,8 +75,8 @@ describe("ressources d'aide", () => {
       'pas un objet',
     ]);
     expect(cleaned).toEqual([
-      { label: 'Écoute', phone: '3114', url: 'https://example.org', description: null },
-      { label: 'Piège', phone: null, url: null, description: null },
+      { label: 'Écoute', phone: '3114', url: 'https://example.org', description: null, locale: null },
+      { label: 'Piège', phone: null, url: null, description: null, locale: null },
     ]);
   });
 
@@ -85,7 +85,7 @@ describe("ressources d'aide", () => {
   });
 
   test('le message liste les ressources sans rien dire du dossier', () => {
-    const text = resourcesMessage('Mon serveur', [{ label: 'Écoute', phone: '3114', url: null, description: 'Jour et nuit' }]);
+    const text = resourcesMessage('Mon serveur', [{ label: 'Écoute', phone: '3114', url: null, description: 'Jour et nuit', locale: null }]);
     expect(text).toContain('Mon serveur');
     expect(text).toContain('Écoute');
     expect(text).toContain('3114');

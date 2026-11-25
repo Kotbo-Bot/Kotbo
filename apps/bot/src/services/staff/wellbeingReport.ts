@@ -7,21 +7,26 @@
  * connaît l'auteur, en mémoire, le temps du délai.
  *
  * L'auteur reçoit un code de suivi (`/bienetre suivi`) : il y lit l'état de
- * son signalement, jamais son contenu ni qui le traite. Seule l'empreinte du
- * code est gardée, si bien que la base ne relie pas un code à une personne.
+ * son signalement et les derniers échanges avec la cellule, jamais qui le
+ * traite. Avec ce code, il peut aussi répondre (`/bienetre repondre`) sans que
+ * la cellule sache qui il est. Seule l'empreinte du code est gardée, si bien
+ * que la base ne relie pas un code à une personne.
  */
 import type { Client } from 'discord.js';
 import prisma from '../../utils/db.js';
 import { sendWellbeingAlert } from './wellbeingAlerts.js';
-import { openWellbeing, sealCaseFields } from './wellbeingCrypto.js';
+import { openReporterMessage, sealCaseFields, sealWellbeing } from './wellbeingCrypto.js';
 import { appendCaseEvents } from './wellbeingEvents.js';
 import {
   REPORT_COOLDOWN_MS,
+  REPORTER_REPLY_MAX,
   TRACKING_LOOKUP_COOLDOWN_MS,
   generateTrackingCode,
+  reporterCanWrite,
   shouldAcceptReport,
   trackingCodeHash,
   trackingStatus,
+  trackingThread,
 } from './wellbeingPolicy.js';
 
 export const REPORT_MODAL_PREFIX = 'wellbeing:report:';
@@ -94,27 +99,85 @@ export async function submitWellbeingReport(
 const lastLookup = new Map<string, number>();
 
 /**
- * État d'un signalement d'après son code. La limite par personne rend un code
- * impossible à deviner par essais ; elle ne garde rien au-delà du délai.
+ * Une même personne ne vérifie un code, ou n'écrit avec, qu'à ce rythme :
+ * deviner un code par essais reste hors de portée. Chaque usage a son propre
+ * délai, pour qu'on puisse répondre juste après avoir lu le suivi. Rien n'est
+ * gardé au-delà du délai.
  */
+function lookupThrottled(scope: 'track' | 'reply', guildId: string, userId: string): boolean {
+  const key = `${scope}:${guildId}:${userId}`;
+  const now = Date.now();
+  const last = lastLookup.get(key);
+  if (last !== undefined && now - last < TRACKING_LOOKUP_COOLDOWN_MS) return true;
+  lastLookup.set(key, now);
+  for (const [k, at] of lastLookup) if (now - at >= TRACKING_LOOKUP_COOLDOWN_MS) lastLookup.delete(k);
+  return false;
+}
+
+async function findReport(guildId: string, code: string) {
+  const item = await prisma.wellbeingCase.findUnique({
+    where: { trackingCodeHash: trackingCodeHash(guildId, code) },
+    select: {
+      id: true,
+      guildId: true,
+      status: true,
+      assigneeId: true,
+      deletedAt: true,
+      reporterMessages: { orderBy: { createdAt: 'asc' }, select: { fromReporter: true, content: true, createdAt: true } },
+    },
+  });
+  return item && item.guildId === guildId ? item : null;
+}
+
+export interface TrackingMessage {
+  fromReporter: boolean;
+  content: string;
+}
+
+/** État d'un signalement d'après son code, et ses derniers échanges avec la cellule. */
 export async function lookupWellbeingReport(
   guildId: string,
   userId: string,
   code: string,
-): Promise<{ status: ReturnType<typeof trackingStatus> | 'cooldown'; reply?: string }> {
-  const key = `${guildId}:${userId}`;
-  const now = Date.now();
-  const last = lastLookup.get(key);
-  if (last !== undefined && now - last < TRACKING_LOOKUP_COOLDOWN_MS) return { status: 'cooldown' };
-  lastLookup.set(key, now);
-  for (const [k, at] of lastLookup) if (now - at >= TRACKING_LOOKUP_COOLDOWN_MS) lastLookup.delete(k);
+): Promise<{ status: ReturnType<typeof trackingStatus> | 'cooldown'; thread: TrackingMessage[] }> {
+  if (lookupThrottled('track', guildId, userId)) return { status: 'cooldown', thread: [] };
+  const found = await findReport(guildId, code);
+  // Un dossier à la corbeille ne montre plus ses échanges.
+  const thread = found && !found.deletedAt
+    ? trackingThread(found.reporterMessages).map((message) => {
+        const { fromReporter, content } = openReporterMessage(guildId, message);
+        return { fromReporter, content };
+      })
+    : [];
+  return { status: trackingStatus(found), thread };
+}
 
-  const item = await prisma.wellbeingCase.findUnique({
-    where: { trackingCodeHash: trackingCodeHash(guildId, code) },
-    select: { guildId: true, status: true, assigneeId: true, deletedAt: true, reporterReply: true },
+export type ReporterMessageOutcome = 'sent' | 'cooldown' | 'unknown' | 'closed' | 'empty';
+
+/**
+ * Message de l'auteur d'un signalement à la cellule, avec son code de suivi.
+ * Rien ne relie le message à la personne qui l'envoie.
+ */
+export async function postReporterMessage(
+  client: Client,
+  guildId: string,
+  userId: string,
+  code: string,
+  message: string,
+): Promise<ReporterMessageOutcome> {
+  const content = message.trim().slice(0, REPORTER_REPLY_MAX);
+  if (!content) return 'empty';
+  if (lookupThrottled('reply', guildId, userId)) return 'cooldown';
+  const found = await findReport(guildId, code);
+  if (!found) return 'unknown';
+  const config = await prisma.wellbeingConfig.findUnique({ where: { guildId } });
+  if (!config?.enabled || !reporterCanWrite(found, found.reporterMessages.filter((m) => m.fromReporter).length)) return 'closed';
+
+  await prisma.wellbeingReporterMessage.create({
+    data: { caseId: found.id, fromReporter: true, content: sealWellbeing(guildId, content) },
   });
-  const found = item && item.guildId === guildId ? item : null;
-  // Message de la cellule, s'il y en a un et que le dossier n'est pas à la corbeille.
-  const reply = found?.reporterReply && !found.deletedAt ? openWellbeing(guildId, found.reporterReply) ?? undefined : undefined;
-  return { status: trackingStatus(found), reply };
+  await prisma.wellbeingCase.update({ where: { id: found.id }, data: { lastActivityAt: new Date() } });
+  await appendCaseEvents(found.id, [{ actorId: null, actorName: ANONYMOUS_NAME, type: 'REPORTER_MESSAGE' }]);
+  void sendWellbeingAlert(client, guildId, config, 'REPORT', { actorId: '', followUp: true }, found.assigneeId ? [found.assigneeId] : []);
+  return 'sent';
 }

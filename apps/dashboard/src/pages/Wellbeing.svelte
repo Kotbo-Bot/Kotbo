@@ -7,8 +7,11 @@
   import ModulePage from '../lib/components/ModulePage.svelte';
   import MemberSearchSelect from '../lib/components/MemberSearchSelect.svelte';
   import { WB_CLOSE_REASONS, wbCloseReasonLabel, wbCaseEventLabel, WB_CATEGORIES, WB_SEVERITIES, WB_STATUSES, wbCategoryLabel, wbIsSummaryTemplate, wbSeverityLabel, wbStatusLabel, wbSummaryTemplate } from '../lib/wellbeingLabels';
-  import WellbeingStats, { type WellbeingCellStats } from '../lib/components/wellbeing/WellbeingStats.svelte';
+  import WellbeingStats, { type WellbeingCellStats, type WellbeingPulseWeek, type WellbeingReferentLoad } from '../lib/components/wellbeing/WellbeingStats.svelte';
   import CaseTasks from '../lib/components/wellbeing/CaseTasks.svelte';
+  import ReporterThread from '../lib/components/wellbeing/ReporterThread.svelte';
+  import DistressSignals, { type DistressSignal } from '../lib/components/wellbeing/DistressSignals.svelte';
+  import ReportPanelPublisher from '../lib/components/wellbeing/ReportPanelPublisher.svelte';
   import CaseBoard from '../lib/components/wellbeing/CaseBoard.svelte';
   import WellbeingSettings from '../lib/components/wellbeing/WellbeingSettings.svelte';
   import { memberCaseModal } from '../lib/stores/memberCaseModal.svelte';
@@ -44,7 +47,12 @@
     reportEnabled: boolean;
   };
 
-  type Resource = { label: string; phone: string | null; url: string | null; description: string | null };
+  type Resource = { label: string; phone: string | null; url: string | null; description: string | null; locale: string | null };
+  /** Langues proposées pour une ressource ; vide : pour tout le monde. */
+  const RESOURCE_LOCALES = ['fr', 'en', 'de', 'es', 'it', 'pt'] as const;
+  const languageName = (code: string) => {
+    try { return new Intl.DisplayNames([dateLocale()], { type: 'language' }).of(code) ?? code; } catch { return code; }
+  };
 
   let loading = $state(true);
   let status = $state<WellbeingStatus | null>(null);
@@ -320,6 +328,40 @@
   let newAssigneeId = $state('');
   let newReviewAt = $state('');
   let creatingCase = $state(false);
+  /** Signal de détresse d'où vient le dossier : il sera marqué traité. */
+  let newSignalId = $state('');
+  /** Référent proposé par le bot : le membre de la cellule le moins chargé. */
+  let suggestedAssigneeId = $state('');
+  let signalsPanel = $state<{ reload: () => Promise<void> }>();
+
+  /** Ouvre la fenêtre de création, avec le référent le moins chargé proposé. */
+  async function openNewCase(prefill: { subjectUserId?: string; subjectName?: string; severity?: string; signalId?: string } = {}) {
+    // Un brouillon venu d'un signal puis abandonné ne doit pas servir à un autre dossier.
+    if (newSignalId && !prefill.signalId) {
+      newSubjectUserId = '';
+      newSubjectName = '';
+      newSeverity = 'NORMAL';
+    }
+    newSignalId = prefill.signalId ?? '';
+    if (prefill.subjectUserId !== undefined) newSubjectUserId = prefill.subjectUserId;
+    if (prefill.subjectName !== undefined) newSubjectName = prefill.subjectName;
+    if (prefill.severity) newSeverity = prefill.severity;
+    if (wbIsSummaryTemplate(newSummary)) newSummary = wbSummaryTemplate(newCategory);
+    newCaseOpen = true;
+    const query = newSubjectUserId ? `?subjectUserId=${encodeURIComponent(newSubjectUserId)}` : '';
+    const res = await dashboardFetch(`/wellbeing/assignee-suggestion${query}`).catch(() => null);
+    const suggested = res?.ok ? (await res.json()).userId : null;
+    suggestedAssigneeId = typeof suggested === 'string' ? suggested : '';
+    if (suggestedAssigneeId && !newAssigneeId) newAssigneeId = suggestedAssigneeId;
+  }
+
+  // Le référent proposé ne peut pas être la personne concernée, choisie après coup.
+  $effect(() => {
+    if (newAssigneeId && newAssigneeId === suggestedAssigneeId && newAssigneeId === newSubjectUserId) newAssigneeId = '';
+  });
+
+  const openCaseFromSignal = (signal: DistressSignal) =>
+    openNewCase({ subjectUserId: signal.userId, subjectName: signal.userName, severity: 'HIGH', signalId: signal.id });
 
   // Note on selected case
   let newNote = $state('');
@@ -380,13 +422,21 @@
 
   // Bilan : relu à chaque ouverture de l'onglet, il ne coûte qu'une requête.
   let cellStats = $state<WellbeingCellStats | null>(null);
+  let cellLoad = $state<WellbeingReferentLoad[]>([]);
+  let cellPulse = $state<WellbeingPulseWeek[] | null>(null);
   $effect(() => {
     if (activeTab === 'stats') void loadStats();
   });
   async function loadStats() {
     const res = await dashboardFetch('/wellbeing/stats');
-    if (res.ok) cellStats = (await res.json()).stats;
-    else toast.error(m.toast_wb_load_failed());
+    if (res.ok) {
+      const data = await res.json();
+      cellStats = data.stats;
+      cellLoad = data.load ?? [];
+      cellPulse = data.pulse ?? null;
+    } else {
+      toast.error(m.toast_wb_load_failed());
+    }
   }
 
   async function loadAll() {
@@ -526,6 +576,7 @@
           summary: newSummary.trim(),
           assigneeId: newAssigneeId || undefined,
           reviewAt: newReviewAt || undefined,
+          signalId: newSignalId || undefined,
         }),
       });
       const data = await res.json();
@@ -541,6 +592,8 @@
       newSummary = '';
       newAssigneeId = '';
       newReviewAt = '';
+      if (newSignalId) void signalsPanel?.reload();
+      newSignalId = '';
       toast.success(m.toast_wb_file_created());
       void refreshCaseList();
     } catch (err: any) {
@@ -830,32 +883,6 @@
       toast.error(err?.message || m.toast_wb_save_failed());
     } finally {
       cancellingDissolution = false;
-    }
-  }
-
-  // Réponse à l'auteur d'un signalement, lue avec son code de suivi (même plafond que le bot).
-  const REPORTER_REPLY_MAX = 500;
-  let reporterReplyText = $state('');
-  let savingReply = $state(false);
-  async function saveReporterReply(clear = false) {
-    const target = selectedCase;
-    if (!target || savingReply) return;
-    savingReply = true;
-    try {
-      const res = await dashboardFetch(`/wellbeing/cases/${target.id}/reporter-reply`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: clear ? '' : reporterReplyText.trim() }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error ?? '');
-      applyItem(data.item);
-      reporterReplyText = '';
-      toast.success(clear ? m.toast_wb_reply_cleared() : m.toast_wb_reply_saved());
-    } catch (err: any) {
-      toast.error(err?.message || m.toast_wb_update_failed());
-    } finally {
-      savingReply = false;
     }
   }
 
@@ -1203,28 +1230,7 @@
       </div>
 
       {#if selectedCase.hasTrackingCode}
-        <div class="rounded-xl border border-outline-variant/40 p-4 space-y-2">
-          <h3 class="text-sm font-semibold flex items-center gap-2"><Papicon icon="MessageSquare" size={15} /> {m.wb_reply_title()}</h3>
-          <p class="text-xs text-on-surface-variant">{m.wb_reply_desc()}</p>
-          {#if selectedCase.reporterReply && !contentHidden}
-            <div class="rounded-lg bg-surface-container-high/30 p-3 text-sm space-y-1">
-              <p class="whitespace-pre-wrap text-on-surface">{selectedCase.reporterReply}</p>
-              <p class="text-2xs text-on-surface-variant">{m.wb_reply_sent({ date: formatDate(selectedCase.reporterReplyAt) })}</p>
-            </div>
-          {/if}
-          {#if status?.canWriteCases}
-            <textarea bind:value={reporterReplyText} maxlength={REPORTER_REPLY_MAX} rows={2} class="input w-full text-sm"
-              aria-label={m.wb_reply_label()} placeholder={m.wb_reply_ph()}></textarea>
-            <div class="flex flex-wrap justify-end gap-2">
-              {#if selectedCase.reporterReply}
-                <Button size="sm" variant="ghost" icon="trash" disabled={savingReply} onclick={() => void saveReporterReply(true)}>{m.wb_reply_clear()}</Button>
-              {/if}
-              <Button size="sm" variant="primary" icon="Send" loading={savingReply} disabled={!reporterReplyText.trim()} onclick={() => void saveReporterReply()}>
-                {selectedCase.reporterReply ? m.wb_reply_replace() : m.wb_reply_save()}
-              </Button>
-            </div>
-          {/if}
-        </div>
+        <ReporterThread caseId={selectedCase.id} messages={selectedCase.reporterMessages ?? []} canWrite={!!status?.canWriteCases} hidden={contentHidden} onchange={applyItem} />
       {/if}
 
       {#if linkedCases.length > 0}
@@ -1374,7 +1380,7 @@
 >
   {#snippet actions()}
     {#if status?.enabled && status.canWriteCases}
-      <Button variant="primary" icon="plus" onclick={() => { if (wbIsSummaryTemplate(newSummary)) newSummary = wbSummaryTemplate(newCategory); newCaseOpen = true; }}>{m.wb_new_case()}</Button>
+      <Button variant="primary" icon="plus" onclick={() => void openNewCase()}>{m.wb_new_case()}</Button>
     {/if}
   {/snippet}
 
@@ -1449,6 +1455,9 @@
           {/if}
         </section>
       {:else}
+        {#if status.canWriteCases}
+          <DistressSignals bind:this={signalsPanel} onopen={(signal) => void openCaseFromSignal(signal)} />
+        {/if}
         <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <StatTile icon="folder" tone="bg-primary/10 text-primary" value={stats.active} label={m.wb_stat_active()} />
           <StatTile icon="AlertTriangle" tone="bg-error/10 text-on-error-container" value={stats.urgent} label={m.wb_stat_urgent()} />
@@ -1492,7 +1501,7 @@
       {/if}
     {:else if activeTab === 'stats'}
       {#if cellStats}
-        <WellbeingStats stats={cellStats} />
+        <WellbeingStats stats={cellStats} load={cellLoad} pulse={cellPulse} />
       {:else}
         <Skeleton height="320px" />
       {/if}
@@ -1504,7 +1513,7 @@
         </div>
         {#if resources.length === 0}
           <EmptyState icon="heart" title={m.wb_resources_empty()} actionLabel={m.wb_resources_add()}
-            onAction={() => (resources = [...resources, { label: '', phone: null, url: null, description: null }])} />
+            onAction={() => (resources = [...resources, { label: '', phone: null, url: null, description: null, locale: null }])} />
         {:else}
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             {#each resources as resource, index (index)}
@@ -1517,16 +1526,26 @@
                 <input bind:value={resource.phone} maxlength={30} class="input text-sm w-full" aria-label={m.wb_resources_phone()} placeholder={m.wb_resources_phone()} />
                 <input bind:value={resource.url} maxlength={300} type="url" class="input text-sm w-full" aria-label={m.wb_resources_url()} placeholder={m.wb_resources_url()} />
                 <input bind:value={resource.description} maxlength={200} class="input text-sm w-full" aria-label={m.wb_resources_description()} placeholder={m.wb_resources_description()} />
+                <select bind:value={() => resource.locale ?? '', (value) => (resource.locale = value || null)} class="input text-sm w-full" aria-label={m.wb_resources_locale()}>
+                  <option value="">{m.wb_resources_locale_all()}</option>
+                  {#each RESOURCE_LOCALES as code (code)}
+                    <option value={code}>{languageName(code)}</option>
+                  {/each}
+                </select>
               </div>
             {/each}
           </div>
         {/if}
         <div class="flex flex-wrap justify-between gap-2 border-t border-outline-variant/30 pt-4">
           <Button variant="ghost" icon="plus" disabled={resources.length >= 10}
-            onclick={() => (resources = [...resources, { label: '', phone: null, url: null, description: null }])}>{m.wb_resources_add()}</Button>
+            onclick={() => (resources = [...resources, { label: '', phone: null, url: null, description: null, locale: null }])}>{m.wb_resources_add()}</Button>
           <Button variant="primary" loading={savingResources} onclick={() => void saveResources()}>{m.wb_resources_save()}</Button>
         </div>
+        <p class="text-2xs text-on-surface-variant">{m.wb_resources_locale_hint()}</p>
       </section>
+      <div class="mt-6">
+        <ReportPanelPublisher reportEnabled={status.reportEnabled} />
+      </div>
     {:else if activeTab === 'access'}
       <div class="space-y-6">
         {#if pendingLogs.length > 0}
@@ -1629,6 +1648,9 @@
 
 <Modal bind:open={newCaseOpen} title={m.wb_new_modal_title()} size="md">
   <form id="wb-case-form" onsubmit={createCase} class="space-y-4">
+    {#if newSignalId}
+      <Callout variant="info">{m.wb_new_from_signal()}</Callout>
+    {/if}
     <Field label={m.wb_member()} hint={m.wb_member_hint()} error={subjectIsSelf ? m.wb_subject_self_error() : ''}>
       {#snippet children(id, describedBy)}
         <MemberSearchSelect {id} {describedBy} bind:value={newSubjectUserId} placeholder={m.wb_member_ph()}
@@ -1674,7 +1696,7 @@
       {/snippet}
     </Field>
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-      <Field label={m.wb_assignee()} hint={m.wb_assignee_hint()}>
+      <Field label={m.wb_assignee()} hint={suggestedAssigneeId && newAssigneeId === suggestedAssigneeId ? m.wb_assignee_suggested() : m.wb_assignee_hint()}>
         {#snippet children(id, describedBy)}
           <MemberSearchSelect {id} {describedBy} bind:value={newAssigneeId} placeholder={m.wb_member_ph()} />
         {/snippet}

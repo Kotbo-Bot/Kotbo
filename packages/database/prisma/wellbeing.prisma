@@ -11,10 +11,10 @@ model WellbeingConfig {
   directorUserIds  String[] @default([])
   requireReason    Boolean  @default(true)
   // Alertes : salon et membres prévenus, et événements qui les déclenchent
-  // (BREAK_GLASS | EMERGENCY_READ | TEAM_READ | CASE_CHANGE | CONFIG_CHANGE | REPORT | REMINDER | MEMBERSHIP_CHANGE | PURGE_SOON | UNUSUAL_ACCESS | DISSOLUTION).
+  // (BREAK_GLASS | EMERGENCY_READ | TEAM_READ | CASE_CHANGE | CONFIG_CHANGE | REPORT | REMINDER | MEMBERSHIP_CHANGE | PURGE_SOON | UNUSUAL_ACCESS | DISSOLUTION | DISTRESS | SANCTION_SIGNAL).
   alertChannelId   String?
   alertUserIds     String[] @default([])
-  alertEvents      String[] @default(["BREAK_GLASS", "EMERGENCY_READ", "CONFIG_CHANGE", "REPORT", "REMINDER", "MEMBERSHIP_CHANGE", "PURGE_SOON", "UNUSUAL_ACCESS", "DISSOLUTION"])
+  alertEvents      String[] @default(["BREAK_GLASS", "EMERGENCY_READ", "CONFIG_CHANGE", "REPORT", "REMINDER", "MEMBERSHIP_CHANGE", "PURGE_SOON", "UNUSUAL_ACCESS", "DISSOLUTION", "DISTRESS"])
   // Accès d'urgence validé par une seconde personne (direction ou cellule).
   breakGlassApproval Boolean @default(false)
   // Signalements depuis Discord (/bienetre signaler).
@@ -36,6 +36,18 @@ model WellbeingConfig {
   dissolutionById    String?
   dissolutionByName  String?
   dissolutionKind    String?
+  // Protocole de crise : étapes ajoutées au plan d'action d'un dossier qui devient critique.
+  crisisProtocol     Boolean  @default(true)
+  // Rappel « prendre des nouvelles » d'un dossier résolu, ce nombre de jours après (0 : jamais).
+  followUpDays       Int      @default(30)
+  // Prévenir le modérateur et le référent quand une personne suivie est sanctionnée.
+  sanctionSignal     Boolean  @default(false)
+  // Repérer les mots de détresse dans les messages du serveur.
+  distressWatch      Boolean  @default(false)
+  // Météo du staff : sondage anonyme du lundi aux membres de ces rôles.
+  pulseEnabled       Boolean  @default(false)
+  pulseRoleIds       String[] @default([])
+  pulseSentAt        DateTime?
 
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
 
@@ -58,7 +70,9 @@ model WellbeingCase {
   summary        String
   createdById    String
   createdByName  String
-  source         String   @default("DASHBOARD") // DASHBOARD | DISCORD
+  source         String   @default("DASHBOARD") // DASHBOARD | DISCORD | TICKET | DISTRESS
+  // Ticket transféré à la cellule : un ticket ne devient qu'un seul dossier.
+  ticketId       String?  @unique
   // Référent du dossier et prochaine échéance de suivi.
   assigneeId       String?
   reviewAt         DateTime?
@@ -80,11 +94,12 @@ model WellbeingCase {
   trackingCodeHash     String?   @unique
   // Motif de clôture (RESOLVED | REFERRED | NO_FOLLOWUP | DUPLICATE), vidé à la réouverture.
   closedReason         String?
-  // Message de la cellule à l'auteur du signalement, lu avec son code de suivi (chiffré).
-  reporterReply        String?
-  reporterReplyAt      DateTime?
+  // Dossier résolu : rappel de prendre des nouvelles, et sa date d'envoi.
+  followUpAt           DateTime?
+  followUpSentAt       DateTime?
 
   guild  Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  reporterMessages WellbeingReporterMessage[]
   notes       WellbeingCaseNote[]
   tasks       WellbeingCaseTask[]
   events      WellbeingCaseEvent[]
@@ -96,7 +111,75 @@ model WellbeingCase {
   @@index([guildId, status])
   @@index([status, reviewAt])
   @@index([guildId, deletedAt])
+  @@index([status, followUpAt])
   @@map("wellbeing_cases")
+}
+
+// Échanges anonymes avec l'auteur d'un signalement, lus et écrits par lui avec
+// son code de suivi. Le contenu est chiffré et lié au serveur, comme le dossier.
+model WellbeingReporterMessage {
+  id           String   @id @default(cuid())
+  caseId       String
+  fromReporter Boolean
+  content      String
+  // Membre de la cellule qui a écrit ; vide pour le signaleur, jamais connu.
+  authorId     String?
+  createdAt    DateTime @default(now())
+
+  wellbeingCase WellbeingCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@index([caseId, createdAt])
+  @@map("wellbeing_reporter_messages")
+}
+
+// Message aux mots de détresse repéré sur le serveur : un lien, jamais son
+// contenu. La cellule ouvre un dossier ou l'écarte ; effacé après 30 jours.
+model WellbeingDistressSignal {
+  id            String    @id @default(cuid())
+  guildId       String
+  userId        String
+  channelId     String
+  messageId     String
+  createdAt     DateTime  @default(now())
+  handledAt     DateTime?
+  handledById   String?
+  handledByName String?
+  // CASE | DISMISSED
+  outcome       String?
+  caseId        String?
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@index([guildId, handledAt])
+  @@index([createdAt])
+  @@map("wellbeing_distress_signals")
+}
+
+// Météo du staff : compteurs de notes par semaine, sans lien avec qui a voté.
+model WellbeingPulseWeek {
+  guildId String
+  week    String
+  score1  Int    @default(0)
+  score2  Int    @default(0)
+  score3  Int    @default(0)
+  score4  Int    @default(0)
+  score5  Int    @default(0)
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+
+  @@id([guildId, week])
+  @@map("wellbeing_pulse_weeks")
+}
+
+// Qui a déjà répondu cette semaine, par empreinte : un seul vote par personne.
+// Effacé une fois la semaine passée.
+model WellbeingPulseVoter {
+  guildId   String
+  week      String
+  voterHash String
+
+  @@id([guildId, week, voterHash])
+  @@map("wellbeing_pulse_voters")
 }
 
 model WellbeingCaseNote {

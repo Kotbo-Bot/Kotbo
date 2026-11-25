@@ -60,13 +60,18 @@ describe('chiffrement des dossiers de la cellule', () => {
     expect(openNote({ caseId: 'dossier-1', content: sealNote('dossier-1', 'x'), originalContent: null }).originalContent).toBeNull();
   });
 
-  test("l'empreinte du code de suivi ne sort pas, la réponse au signaleur se relit", () => {
+  test("l'empreinte du code de suivi ne sort pas, les échanges avec le signaleur se relisent", () => {
     const guildId = '100000000000000001';
     const fields = sealCaseFields(guildId, { title: 'T', subjectName: 'S', summary: 'R' });
-    const opened = openCase({ guildId, ...fields, trackingCodeHash: 'abc', reporterReply: sealWellbeing(guildId, 'Pris en compte') });
+    const opened = openCase({
+      guildId,
+      ...fields,
+      trackingCodeHash: 'abc',
+      reporterMessages: [{ fromReporter: false, content: sealWellbeing(guildId, 'Pris en compte') }],
+    });
     expect('trackingCodeHash' in opened).toBe(false);
     expect(opened.hasTrackingCode).toBe(true);
-    expect(opened.reporterReply).toBe('Pris en compte');
+    expect(opened.reporterMessages[0]?.content).toBe('Pris en compte');
   });
 
   test("une note déplacée vers un autre dossier reste illisible", () => {

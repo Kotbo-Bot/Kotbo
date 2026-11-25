@@ -13,6 +13,8 @@
  *   confirmation, la liste de qui lit les dossiers.
  * - Référent absent : ses relances vont au suppléant de la cellule.
  * - Résumé du lundi : chaque membre de la cellule reçoit ses chiffres de la semaine.
+ * - Dossier résolu depuis `followUpDays` : le référent est invité à prendre des nouvelles.
+ * - Météo du staff : le sondage anonyme du lundi part aux rôles choisis.
  * - Désactivation demandée par le propriétaire : appliquée une fois ses 24 h écoulées.
  *
  * Aucune relance ne dit quoi que ce soit du contenu d'un dossier.
@@ -37,10 +39,11 @@ import {
 import { currentAbsence } from './wellbeingAbsence.js';
 import { applyDueDissolutions } from './wellbeingDissolution.js';
 import { setDashboardModuleStatus } from '../core/moduleActivationService.js';
+import { sendWeeklyPulses } from './wellbeingPulse.js';
 
 const SYSTEM_ACTOR = 'Relance automatique';
 
-async function remind(client: Client, item: { id: string; guildId: string; assigneeId: string | null }, ctx: { reminder: 'review' | 'stale'; days?: number }) {
+async function remind(client: Client, item: { id: string; guildId: string; assigneeId: string | null }, ctx: { reminder: 'review' | 'stale' | 'follow_up'; days?: number }) {
   const config = await prisma.wellbeingConfig.findUnique({ where: { guildId: item.guildId } });
   if (!config?.enabled || !(await isModuleEnabled(item.guildId, 'wellbeing'))) return false;
   const absent = item.assigneeId && (await currentAbsence(item.guildId, item.assigneeId)) ? new Set([item.assigneeId]) : new Set<string>();
@@ -87,12 +90,32 @@ export async function runWellbeingReminders(client: Client, now: Date = new Date
         }
       }
     }
+    await sendFollowUps(client, now);
     await announcePurges(client, now);
     await sendAccessReviews(client, now);
     await sendWeeklyDigests(client, now);
+    await sendWeeklyPulses(client, now);
     await applyDueDissolutions(client, now, (guildId, active) => setDashboardModuleStatus(guildId, 'wellbeing', active));
   } catch (error) {
     logger.error('Wellbeing', 'Relances de la cellule en échec :', error);
+  }
+}
+
+/**
+ * Dossiers résolus dont le délai de prise de nouvelles est passé : une relance
+ * par dossier. `updatedAt` est réécrit tel quel : la relance ne repousse pas
+ * l'effacement du dossier fermé.
+ */
+async function sendFollowUps(client: Client, now: Date): Promise<void> {
+  const due = await prisma.wellbeingCase.findMany({
+    where: { status: 'CLOSED', deletedAt: null, followUpAt: { lte: now }, followUpSentAt: null },
+    select: { id: true, guildId: true, assigneeId: true, updatedAt: true },
+    take: 200,
+  });
+  for (const item of due) {
+    const config = await prisma.wellbeingConfig.findUnique({ where: { guildId: item.guildId }, select: { followUpDays: true } });
+    await remind(client, item, { reminder: 'follow_up', days: config?.followUpDays ?? 0 });
+    await prisma.wellbeingCase.update({ where: { id: item.id }, data: { followUpSentAt: now, updatedAt: item.updatedAt } });
   }
 }
 

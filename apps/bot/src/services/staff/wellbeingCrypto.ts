@@ -76,6 +76,14 @@ export function openCaseHeader<T extends { guildId: string; title: string; subje
   return { ...item, title: readable(item.guildId, item.title), subjectName: readable(item.guildId, item.subjectName) };
 }
 
+/**
+ * Échange avec l'auteur d'un signalement : lié au serveur, comme le dossier,
+ * pour que `/bienetre suivi` le relise sans avoir à connaître le dossier.
+ */
+export function openReporterMessage<T extends { content: string }>(guildId: string, message: T): T {
+  return { ...message, content: readable(guildId, message.content) };
+}
+
 /** Tâche du plan d'action : libellé chiffré et lié à son dossier, comme une note. */
 export function openTask<T extends { caseId: string; label: string }>(task: T): T {
   return { ...task, label: box.open(task.label, `case:${task.caseId}`) ?? UNREADABLE };
@@ -86,7 +94,7 @@ export function openCase<T extends CaseTextFields & {
   notes?: Array<{ caseId: string; content: string }>;
   attachments?: Array<{ caseId: string; label: string; url: string }>;
   tasks?: Array<{ caseId: string; label: string }>;
-  reporterReply?: string | null;
+  reporterMessages?: Array<{ content: string }>;
   trackingCodeHash?: string | null;
 }>(item: T): Omit<T, 'trackingCodeHash'> & { hasTrackingCode: boolean } {
   // L'empreinte du code de suivi ne sort pas du bot : on dit seulement qu'il en existe une.
@@ -100,6 +108,6 @@ export function openCase<T extends CaseTextFields & {
     ...(item.notes ? { notes: item.notes.map((note) => openNote(note)) } : {}),
     ...(item.attachments ? { attachments: item.attachments.map((attachment) => openAttachment(attachment)) } : {}),
     ...(item.tasks ? { tasks: item.tasks.map((task) => openTask(task)) } : {}),
-    ...(item.reporterReply ? { reporterReply: readable(item.guildId, item.reporterReply) } : {}),
+    ...(item.reporterMessages ? { reporterMessages: item.reporterMessages.map((message) => openReporterMessage(item.guildId, message)) } : {}),
   } as Omit<T, 'trackingCodeHash'> & { hasTrackingCode: boolean };
 }

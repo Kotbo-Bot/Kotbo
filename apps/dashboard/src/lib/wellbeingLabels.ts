@@ -7,8 +7,8 @@ import { m } from './i18n';
 export const WB_STATUSES = ['OPEN', 'MONITORING', 'CLOSED'] as const;
 export const WB_SEVERITIES = ['LOW', 'NORMAL', 'HIGH', 'CRITICAL'] as const;
 export const WB_CATEGORIES = ['SOUTIEN', 'MEDIATION', 'SIGNALEMENT', 'SUIVI'] as const;
-export const WB_ALERT_EVENTS = ['BREAK_GLASS', 'EMERGENCY_READ', 'TEAM_READ', 'CASE_CHANGE', 'CONFIG_CHANGE', 'REPORT', 'REMINDER', 'MEMBERSHIP_CHANGE', 'PURGE_SOON', 'UNUSUAL_ACCESS', 'DISSOLUTION'] as const;
-export const WB_CASE_EVENTS = ['CREATED', 'STATUS', 'SEVERITY', 'ASSIGNEE', 'REVIEW', 'NOTE', 'RESOURCES_SENT', 'REMINDER', 'ATTACHMENT_ADDED', 'ATTACHMENT_REMOVED', 'VIEWED', 'TRASHED', 'RESTORED', 'EXTENDED', 'EXPORTED', 'TASK_ADDED', 'TASK_DONE', 'TASK_REOPENED', 'TASK_REMOVED', 'PURGE_REQUESTED', 'CLOSED_REASON', 'NOTE_EDITED', 'REPORTER_REPLY'] as const;
+export const WB_ALERT_EVENTS = ['BREAK_GLASS', 'EMERGENCY_READ', 'TEAM_READ', 'CASE_CHANGE', 'CONFIG_CHANGE', 'REPORT', 'REMINDER', 'MEMBERSHIP_CHANGE', 'PURGE_SOON', 'UNUSUAL_ACCESS', 'DISSOLUTION', 'DISTRESS', 'SANCTION_SIGNAL'] as const;
+export const WB_CASE_EVENTS = ['CREATED', 'STATUS', 'SEVERITY', 'ASSIGNEE', 'REVIEW', 'NOTE', 'RESOURCES_SENT', 'REMINDER', 'ATTACHMENT_ADDED', 'ATTACHMENT_REMOVED', 'VIEWED', 'TRASHED', 'RESTORED', 'EXTENDED', 'EXPORTED', 'TASK_ADDED', 'TASK_DONE', 'TASK_REOPENED', 'TASK_REMOVED', 'PURGE_REQUESTED', 'CLOSED_REASON', 'NOTE_EDITED', 'REPORTER_REPLY', 'REPORTER_MESSAGE', 'CRISIS_PROTOCOL', 'SANCTION'] as const;
 export const WB_CLOSE_REASONS = ['RESOLVED', 'REFERRED', 'NO_FOLLOWUP', 'DUPLICATE'] as const;
 
 const STATUS_LABELS: Record<string, () => string> = {
@@ -41,6 +41,8 @@ const ALERT_EVENT_LABELS: Record<string, () => string> = {
   PURGE_SOON: () => m.wb_alert_purge_soon(),
   UNUSUAL_ACCESS: () => m.wb_alert_unusual_access(),
   DISSOLUTION: () => m.wb_alert_dissolution(),
+  DISTRESS: () => m.wb_alert_distress(),
+  SANCTION_SIGNAL: () => m.wb_alert_sanction_signal(),
 };
 
 const CLOSE_REASON_LABELS: Record<string, () => string> = {
@@ -85,7 +87,10 @@ export function wbCaseEventLabel(event: WbCaseEvent, formatDate: (iso: string) =
   const { fromValue: from, toValue: to } = event;
   switch (event.type) {
     case 'CREATED':
-      return to === 'DISCORD' ? m.wb_ev_created_discord() : m.wb_ev_created();
+      if (to === 'DISCORD') return m.wb_ev_created_discord();
+      if (to === 'TICKET') return m.wb_ev_created_ticket();
+      if (to === 'DISTRESS') return m.wb_ev_created_distress();
+      return m.wb_ev_created();
     case 'STATUS':
       return m.wb_ev_status({ from: wbStatusLabel(from ?? ''), to: wbStatusLabel(to ?? '') });
     case 'SEVERITY':
@@ -99,7 +104,7 @@ export function wbCaseEventLabel(event: WbCaseEvent, formatDate: (iso: string) =
     case 'RESOURCES_SENT':
       return m.wb_ev_resources_sent({ count: to ?? '0' });
     case 'REMINDER':
-      return m.wb_ev_reminder();
+      return to === 'follow_up' ? m.wb_ev_reminder_follow_up() : m.wb_ev_reminder();
     case 'ATTACHMENT_ADDED':
       return m.wb_ev_attachment_added();
     case 'ATTACHMENT_REMOVED':
@@ -130,6 +135,12 @@ export function wbCaseEventLabel(event: WbCaseEvent, formatDate: (iso: string) =
       return m.wb_ev_note_edited();
     case 'REPORTER_REPLY':
       return to === 'CLEARED' ? m.wb_ev_reporter_reply_cleared() : m.wb_ev_reporter_reply();
+    case 'REPORTER_MESSAGE':
+      return m.wb_ev_reporter_message();
+    case 'CRISIS_PROTOCOL':
+      return m.wb_ev_crisis_protocol({ count: to ?? '0' });
+    case 'SANCTION':
+      return m.wb_ev_sanction();
     default:
       return event.type;
   }

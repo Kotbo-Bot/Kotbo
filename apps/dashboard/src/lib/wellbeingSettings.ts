@@ -18,6 +18,12 @@ export interface WbConfigForm {
   breakGlassApproval: boolean;
   reportEnabled: boolean;
   staleCriticalDays: number;
+  crisisProtocol: boolean;
+  followUpDays: number;
+  sanctionSignal: boolean;
+  distressWatch: boolean;
+  pulseEnabled: boolean;
+  pulseRoleIds: string[];
 }
 
 const ids = (value: unknown): string[] => (Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : []);
@@ -38,21 +44,30 @@ export function wbConfigFromApi(config: Record<string, unknown>): WbConfigForm {
     breakGlassApproval: config.breakGlassApproval === true,
     reportEnabled: config.reportEnabled === true,
     staleCriticalDays: typeof config.staleCriticalDays === 'number' ? config.staleCriticalDays : 7,
+    crisisProtocol: config.crisisProtocol !== false,
+    followUpDays: typeof config.followUpDays === 'number' ? config.followUpDays : 30,
+    sanctionSignal: config.sanctionSignal === true,
+    distressWatch: config.distressWatch === true,
+    pulseEnabled: config.pulseEnabled === true,
+    pulseRoleIds: ids(config.pulseRoleIds),
   };
 }
 
-/** Corps de `PUT /wellbeing/config`. Même plafond que le bot pour la relance (MAX_STALE_DAYS). */
+const clampDays = (value: number, max: number) => Math.max(0, Math.min(max, Math.round(Number(value) || 0)));
+
+/** Corps de `PUT /wellbeing/config`. Mêmes plafonds que le bot (MAX_STALE_DAYS, MAX_FOLLOW_UP_DAYS). */
 export function wbConfigToApi(form: WbConfigForm) {
   return {
     ...form,
     alertChannelId: form.alertChannelId || null,
-    staleCriticalDays: Math.max(0, Math.min(90, Math.round(Number(form.staleCriticalDays) || 0))),
+    staleCriticalDays: clampDays(form.staleCriticalDays, 90),
+    followUpDays: clampDays(form.followUpDays, 180),
   };
 }
 
 // ── Sections et parcours ───────────────────────────────────────────────────
 
-export type WbSettingsSection = 'review' | 'team' | 'direction' | 'alerts' | 'reports';
+export type WbSettingsSection = 'review' | 'team' | 'direction' | 'alerts' | 'reports' | 'care' | 'signals' | 'pulse';
 
 export const WB_SETUP_STEPS = ['team', 'direction', 'alerts', 'reports', 'summary'] as const;
 export type WbSetupStep = (typeof WB_SETUP_STEPS)[number];
@@ -65,16 +80,20 @@ export function wbFirstSetup(form: WbConfigForm): boolean {
 const hasTeam = (form: WbConfigForm) => form.teamUserIds.length > 0 || form.teamRoleIds.length > 0;
 const hasAlertRecipients = (form: WbConfigForm) => !!form.alertChannelId || form.alertUserIds.length > 0;
 
-/** L'essentiel d'une étape est rempli ; direction et signalements sont facultatifs. */
-export function wbStepComplete(form: WbConfigForm, step: WbSetupStep): boolean {
+/**
+ * L'essentiel d'une étape (ou d'une section) est rempli ; direction et
+ * signalements sont facultatifs. La météo du staff, activée, demande des rôles.
+ */
+export function wbStepComplete(form: WbConfigForm, step: WbSetupStep | 'pulse'): boolean {
   if (step === 'team') return hasTeam(form);
   if (step === 'alerts') return hasAlertRecipients(form);
+  if (step === 'pulse') return !form.pulseEnabled || form.pulseRoleIds.length > 0;
   return true;
 }
 
 // ── Score de sécurité ──────────────────────────────────────────────────────
 
-export type WbSecurityCheckId = 'named_members' | 'two_keys' | 'require_reason' | 'alerts' | 'backup' | 'review' | 'reports_noticed';
+export type WbSecurityCheckId = 'named_members' | 'two_keys' | 'require_reason' | 'alerts' | 'backup' | 'review' | 'reports_noticed' | 'distress_noticed';
 
 export interface WbSecurityCheck {
   id: WbSecurityCheckId;
@@ -84,9 +103,9 @@ export interface WbSecurityCheck {
 }
 
 /**
- * Points de prudence d'une configuration. Les signalements ne comptent que
- * s'ils sont ouverts : sans destinataire, ils arriveraient sans que personne
- * ne le sache.
+ * Points de prudence d'une configuration. Les signalements et le repérage des
+ * mots de détresse ne comptent que s'ils sont actifs : sans destinataire, ils
+ * arriveraient sans que personne ne le sache.
  */
 export function wbSecurityChecks(form: WbConfigForm, context: { accessReviewDue: boolean }): WbSecurityCheck[] {
   const checks: WbSecurityCheck[] = [
@@ -100,6 +119,9 @@ export function wbSecurityChecks(form: WbConfigForm, context: { accessReviewDue:
   ];
   if (form.reportEnabled) {
     checks.push({ id: 'reports_noticed', ok: form.alertEvents.includes('REPORT') && hasAlertRecipients(form), section: 'reports' });
+  }
+  if (form.distressWatch) {
+    checks.push({ id: 'distress_noticed', ok: form.alertEvents.includes('DISTRESS') && hasAlertRecipients(form), section: 'signals' });
   }
   return checks;
 }

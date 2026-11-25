@@ -114,6 +114,7 @@ import { registerStickyMessageBusSubscribers } from './modules/stickyMessage.mod
 import { registerWelcomeGoodbyeBusSubscribers } from './modules/welcomeGoodbye.module.js';
 import { registerModerationBusSubscribers } from './modules/moderation.module.js';
 import { registerWellbeingRoleWatch } from './events/wellbeingRoleWatch.js';
+import { registerWellbeingWatch } from './events/wellbeingWatch.js';
 import { registerTicketsBusSubscribers } from './modules/tickets.module.js';
 import { loadActivatedGuilds, isGuildActivated, activateGuildSelfServe } from './utils/activation.js';
 import {
@@ -572,6 +573,8 @@ client.once(Events.ClientReady, async (c) => {
   registerModerationBusSubscribers(scopeClientToModule(client, 'sanctions'));
   // Cellule bien-être : seul le propriétaire donne ses rôles, chaque changement est signalé.
   registerWellbeingRoleWatch(scopeClientToModule(client, 'wellbeing'));
+  // Signal aux modérateurs et repérage des mots de détresse, si la cellule les active.
+  registerWellbeingWatch(scopeClientToModule(client, 'wellbeing'));
   // Vue filtrée : le module garde quelques `client.on()` (fils supprimés ou
   // archivés, messages des fils) qui ne passent pas par le bus.
   registerTicketsBusSubscribers(scopeClientToModule(client, 'tickets'));
@@ -970,7 +973,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return;
       }
 
-      if (interaction.guildId) {
+      // La cellule bien-être n'entre pas au journal : ses arguments (code de
+      // suivi, message au signaleur) relieraient un signalement anonyme à son auteur.
+      if (interaction.guildId && interaction.commandName !== WELLBEING_COMMAND) {
         const optionsString = interaction.options.data.map(opt => {
           if (opt.value !== undefined) {
             return `${opt.name}: ${opt.value}`;
