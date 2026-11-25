@@ -7,7 +7,7 @@ import { m } from './i18n';
 export const WB_STATUSES = ['OPEN', 'MONITORING', 'CLOSED'] as const;
 export const WB_SEVERITIES = ['LOW', 'NORMAL', 'HIGH', 'CRITICAL'] as const;
 export const WB_CATEGORIES = ['SOUTIEN', 'MEDIATION', 'SIGNALEMENT', 'SUIVI'] as const;
-export const WB_ALERT_EVENTS = ['BREAK_GLASS', 'EMERGENCY_READ', 'TEAM_READ', 'CASE_CHANGE', 'CONFIG_CHANGE', 'REPORT', 'REMINDER', 'MEMBERSHIP_CHANGE', 'PURGE_SOON'] as const;
+export const WB_ALERT_EVENTS = ['BREAK_GLASS', 'EMERGENCY_READ', 'TEAM_READ', 'CASE_CHANGE', 'CONFIG_CHANGE', 'REPORT', 'REMINDER', 'MEMBERSHIP_CHANGE', 'PURGE_SOON', 'UNUSUAL_ACCESS'] as const;
 export const WB_CASE_EVENTS = ['CREATED', 'STATUS', 'SEVERITY', 'ASSIGNEE', 'REVIEW', 'NOTE', 'RESOURCES_SENT', 'REMINDER', 'ATTACHMENT_ADDED', 'ATTACHMENT_REMOVED', 'VIEWED', 'TRASHED', 'RESTORED', 'EXTENDED', 'EXPORTED', 'TASK_ADDED', 'TASK_DONE', 'TASK_REOPENED', 'TASK_REMOVED', 'PURGE_REQUESTED'] as const;
 
 const STATUS_LABELS: Record<string, () => string> = {
@@ -38,6 +38,7 @@ const ALERT_EVENT_LABELS: Record<string, () => string> = {
   REMINDER: () => m.wb_alert_reminder(),
   MEMBERSHIP_CHANGE: () => m.wb_alert_membership_change(),
   PURGE_SOON: () => m.wb_alert_purge_soon(),
+  UNUSUAL_ACCESS: () => m.wb_alert_unusual_access(),
 };
 
 const SUMMARY_TEMPLATES: Record<string, () => string> = {

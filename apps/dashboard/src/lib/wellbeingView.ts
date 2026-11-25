@@ -230,3 +230,27 @@ footer{margin-top:32px;color:#555;font-size:12px}
 ${section(labels.summary, `<p>${e(content.summary)}</p>`)}${section(labels.notes, notes)}${section(labels.tasks, tasks)}${section(labels.attachments, attachments)}
 <footer>${e(labels.exported)}</footer></body></html>`;
 }
+
+const BOARD_STATUSES = ['OPEN', 'MONITORING', 'CLOSED'] as const;
+
+/** Colonnes de la vue par statut, dans l'ordre du suivi. */
+export function wbBoardColumns<T extends WbCaseView>(cases: T[]): Array<{ status: string; cases: T[] }> {
+  return BOARD_STATUSES.map((status) => ({ status, cases: cases.filter((c) => c.status === status) }));
+}
+
+/** Dossier voisin dans la liste affichée (`step` : 1 suivant, -1 précédent), sans en sortir. */
+export function wbNeighbourCaseId(cases: ReadonlyArray<{ id: string }>, currentId: string | null, step: 1 | -1): string | null {
+  if (cases.length === 0) return null;
+  const index = cases.findIndex((c) => c.id === currentId);
+  if (index === -1) return cases[0]!.id;
+  return cases[Math.min(cases.length - 1, Math.max(0, index + step))]!.id;
+}
+
+export type WbShortcut = 'next' | 'previous' | 'note' | 'discreet';
+const SHORTCUT_KEYS: Record<string, WbShortcut> = { j: 'next', k: 'previous', n: 'note', d: 'discreet' };
+
+/** Raccourci d'une touche ; `typing` : le focus est dans un champ de saisie. */
+export function wbShortcut(event: { key: string; ctrlKey: boolean; metaKey: boolean; altKey: boolean; typing: boolean }): WbShortcut | null {
+  if (event.typing || event.ctrlKey || event.metaKey || event.altKey) return null;
+  return SHORTCUT_KEYS[event.key] ?? null;
+}

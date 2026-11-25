@@ -1,6 +1,6 @@
 <script lang="ts">
   import { dateLocale, m } from '../lib/i18n';
-  import { onDestroy, onMount } from 'svelte';
+  import { onDestroy, onMount, tick } from 'svelte';
   import { dashboardFetch } from '../lib/api';
   import { dashboardStore } from '../lib/stores/dashboard.svelte';
   import { toast } from '../lib/stores/toast.svelte';
@@ -11,6 +11,7 @@
   import { WB_ALERT_EVENTS, wbCaseEventLabel, WB_CATEGORIES, WB_SEVERITIES, WB_STATUSES, wbAlertEventLabel, wbCategoryLabel, wbIsSummaryTemplate, wbSeverityLabel, wbStatusLabel, wbSummaryTemplate } from '../lib/wellbeingLabels';
   import WellbeingStats, { type WellbeingCellStats } from '../lib/components/wellbeing/WellbeingStats.svelte';
   import CaseTasks from '../lib/components/wellbeing/CaseTasks.svelte';
+  import CaseBoard from '../lib/components/wellbeing/CaseBoard.svelte';
   import { memberCaseModal } from '../lib/stores/memberCaseModal.svelte';
   import MemberName from '../lib/components/MemberName.svelte';
   import WellbeingMemberList from '../lib/components/WellbeingMemberList.svelte';
@@ -18,7 +19,7 @@
   import { Button, Callout, EmptyState, Field, FilterPills, Menu, Modal, SettingsGroup, SettingsRow, StatTile, Tabs, ToggleSwitch, type FilterOption, type MenuItem, type TabItem } from '../lib/components/ui';
   import Papicon from '../lib/components/Papicon.svelte';
   import Skeleton from '../lib/components/Skeleton.svelte';
-  import { WB_IDLE_LOCK_MS, wbCaseExportHtml, wbPurgeInfo, wbTaskProgress, wbCaseStats, wbCaseTimeline, wbFilterCases, wbIsReviewDue, wbLinkedCases, wbMergeHeader, wbReviewShortcut, wbSearchCases, wbSeverityAccent, wbSeverityTone, wbSortCases, wbStatusTone, type WbCaseFilter, type WbCaseSort } from '../lib/wellbeingView';
+  import { WB_IDLE_LOCK_MS, wbNeighbourCaseId, wbShortcut, wbCaseExportHtml, wbPurgeInfo, wbTaskProgress, wbCaseStats, wbCaseTimeline, wbFilterCases, wbIsReviewDue, wbLinkedCases, wbMergeHeader, wbReviewShortcut, wbSearchCases, wbSeverityAccent, wbSeverityTone, wbSortCases, wbStatusTone, type WbCaseFilter, type WbCaseSort } from '../lib/wellbeingView';
   import { authStore } from '../lib/stores/auth.svelte';
 
   type WellbeingStatus = {
@@ -141,12 +142,30 @@
     clearInterval(idleTimer);
   });
 
+  /** Le bot exige une connexion récente pour lire les dossiers. */
+  let reauthRequired = $state(false);
+  async function needsReauth(res: Response): Promise<boolean> {
+    if (res.status !== 403) return false;
+    const data = await res.clone().json().catch(() => ({}));
+    if (data.code !== 'WELLBEING_REAUTH') return false;
+    reauthRequired = true;
+    detail = null;
+    return true;
+  }
+
+  /** Vérification de l'historique du dossier ouvert : intact, vérifié depuis le chaînage, ou altéré. */
+  let integrity = $state<'ok' | 'partial' | 'broken' | null>(null);
+
   async function loadDetail(caseId: string) {
     try {
       const res = await dashboardFetch(`/wellbeing/cases/${caseId}`);
+      if (await needsReauth(res)) return;
       if (!res.ok) throw new Error('detail');
-      const { item } = await res.json();
-      if (selectedCaseId === caseId && !locked) detail = item;
+      const data = await res.json();
+      if (selectedCaseId === caseId && !locked) {
+        detail = data.item;
+        integrity = data.integrity ?? null;
+      }
     } catch {
       toast.error(m.toast_wb_load_failed());
     }
@@ -156,6 +175,7 @@
     if (caseId === selectedCaseId && detail) return;
     selectedCaseId = caseId;
     detail = null;
+    integrity = null;
     revealed = false;
     detailTab = 'timeline';
     void loadDetail(caseId);
@@ -279,6 +299,41 @@
 
   // Note on selected case
   let newNote = $state('');
+  /** Collègues de la cellule prévenus en privé de la note. */
+  let noteNotify = $state<string[]>([]);
+  let noteInput = $state<HTMLTextAreaElement>();
+
+  // Vue des dossiers : liste et fiche, ou colonnes par statut. Retenue par navigateur.
+  const VIEW_KEY = 'kotbo:wellbeing:view';
+  let caseView = $state<'list' | 'board'>(typeof localStorage !== 'undefined' && localStorage.getItem(VIEW_KEY) === 'board' ? 'board' : 'list');
+  function setCaseView(view: 'list' | 'board') {
+    caseView = view;
+    if (view === 'board' && caseFilter === 'trash') caseFilter = 'active';
+    try { localStorage.setItem(VIEW_KEY, view); } catch { /* stockage indisponible : réglage gardé pour la session */ }
+  }
+  const boardCases = $derived(wbSearchCases(cases, caseSearch));
+
+  /** Raccourcis : j/k dossier suivant ou précédent, n nouvelle note, d mode discret. */
+  function onShortcut(event: KeyboardEvent) {
+    if (activeTab !== 'cases' || locked || reauthRequired || newCaseOpen || breakGlassOpen) return;
+    const target = event.target as HTMLElement | null;
+    const typing = !!target && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
+    const action = wbShortcut({ key: event.key, ctrlKey: event.ctrlKey, metaKey: event.metaKey, altKey: event.altKey, typing });
+    if (!action) return;
+    if (action === 'next' || action === 'previous') {
+      if (caseView === 'list' && caseFilter === 'trash') return;
+      const id = wbNeighbourCaseId(caseView === 'board' ? boardCases : visibleCases, selectedCaseId, action === 'next' ? 1 : -1);
+      if (id) openCaseById(id);
+    } else if (action === 'note') {
+      if (!status?.canWriteCases || !selectedCase) return;
+      // Le champ de note reste utilisable en mode discret : rien n'est dévoilé.
+      detailTab = 'timeline';
+      void tick().then(() => noteInput?.focus());
+    } else {
+      setDiscreet(!discreet);
+    }
+    event.preventDefault();
+  }
   let addingNote = $state(false);
 
   // Onglet Réglages (propriétaire) : lu à la première ouverture.
@@ -377,11 +432,19 @@
 
       if (status?.hasCaseAccess) {
         const casesRes = await dashboardFetch('/wellbeing/cases');
-        if (casesRes.ok) {
+        if (await needsReauth(casesRes)) {
+          cases = [];
+        } else if (casesRes.ok) {
+          reauthRequired = false;
           const data = await casesRes.json();
           cases = data.cases ?? [];
-          const stillThere = selectedCaseId && cases.some((c) => c.id === selectedCaseId);
-          if (stillThere) {
+          // Lien direct (accueil, « Mes échéances ») : `?case=` ouvre ce dossier.
+          const linked = new URLSearchParams(window.location.search).get('case');
+          // Lu une fois : un rechargement plus tard ne ramène pas à ce dossier.
+          if (linked) history.replaceState(history.state, '', window.location.pathname);
+          if (linked && cases.some((c) => c.id === linked)) {
+            openCaseById(linked);
+          } else if (selectedCaseId && cases.some((c) => c.id === selectedCaseId)) {
             if (!detail && !locked) void loadDetail(selectedCaseId!);
           } else if (cases.length > 0) {
             openCaseById((wbFilterCases(cases, 'active')[0] ?? cases[0]).id);
@@ -571,12 +634,19 @@
   let updatingCase = $state(false);
 
   /** Statut ou gravité du dossier ouvert. Fermer un dossier le rend purgeable après un an. */
-  async function updateCase(patch: { status?: string; severity?: string; assigneeId?: string | null; reviewAt?: string | null }) {
-    const target = selectedCase;
-    if (!target || updatingCase) return;
+  type CasePatch = { status?: string; severity?: string; assigneeId?: string | null; reviewAt?: string | null };
+
+  /** Modification du dossier ouvert. */
+  function updateCase(patch: CasePatch) {
+    if (selectedCase) return patchCase(selectedCase.id, patch);
+  }
+
+  /** Modifie un dossier, ouvert ou non (vue en colonnes). */
+  async function patchCase(caseId: string, patch: CasePatch) {
+    if (updatingCase) return;
     updatingCase = true;
     try {
-      const res = await dashboardFetch(`/wellbeing/cases/${target.id}`, {
+      const res = await dashboardFetch(`/wellbeing/cases/${caseId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(patch),
@@ -592,10 +662,18 @@
     }
   }
 
+  const confirmClose = () => confirmDialog.ask({ title: m.wb_close_case_q(), description: m.wb_cases_retention(), confirmLabel: m.wb_close_case_confirm() });
+
+  /** Carte glissée dans une autre colonne : même confirmation qu'avec les boutons de la fiche. */
+  async function moveCase(caseId: string, status: string) {
+    if (status === 'CLOSED' && !(await confirmClose())) return;
+    await patchCase(caseId, { status });
+  }
+
   /** Fermer rend le dossier purgeable après un an : on le confirme. */
   async function pickStatus(code: string) {
     if (!selectedCase || code === selectedCase.status) return;
-    if (code === 'CLOSED' && !(await confirmDialog.ask({ title: m.wb_close_case_q(), description: m.wb_cases_retention(), confirmLabel: m.wb_close_case_confirm() }))) return;
+    if (code === 'CLOSED' && !(await confirmClose())) return;
     void updateCase({ status: code });
   }
 
@@ -641,6 +719,10 @@
     }
     try {
       const res = await dashboardFetch(`/wellbeing/cases/${target.id}/export`, { method: 'POST' });
+      if (await needsReauth(res)) {
+        win.close();
+        return;
+      }
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? '');
       const item = data.item;
@@ -801,10 +883,11 @@
       const res = await dashboardFetch(`/wellbeing/cases/${selectedCase.id}/notes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: newNote.trim() }),
+        body: JSON.stringify({ content: newNote.trim(), notifyUserIds: noteNotify }),
       });
       if (!res.ok) throw new Error('note');
       newNote = '';
+      noteNotify = [];
       await loadDetail(selectedCase.id);
     } catch {
       toast.error(m.toast_wb_note_failed());
@@ -980,6 +1063,11 @@
             {#if selectedCase.source === 'DISCORD'}
               <span class="flex items-center gap-1"><Papicon icon="MessageSquare" size={12} /> {m.wb_source_report()}</span>
             {/if}
+            {#if integrity === 'ok' || integrity === 'partial'}
+              <span class="flex items-center gap-1 text-on-success-container" title={integrity === 'ok' ? m.wb_integrity_ok_hint() : m.wb_integrity_partial_hint()}>
+                <Papicon icon="ShieldCheck" size={12} /> {integrity === 'ok' ? m.wb_integrity_ok() : m.wb_integrity_partial()}
+              </span>
+            {/if}
           </p>
         </div>
         <div class="flex flex-wrap items-center gap-2">
@@ -996,6 +1084,9 @@
         </div>
       </header>
 
+      {#if integrity === 'broken'}
+        <Callout variant="danger" title={m.wb_integrity_broken_title()}>{m.wb_integrity_broken_desc()}</Callout>
+      {/if}
       {#if selectedHeader?.subjectIsTeamMember}
         <Callout variant="info" title={m.wb_conflict_title()}>{m.wb_conflict_desc()}</Callout>
       {/if}
@@ -1091,7 +1182,11 @@
         <div class="space-y-3">
           {#if status?.canWriteCases}
             <form onsubmit={addNote} class="space-y-2">
-              <textarea bind:value={newNote} aria-label={m.a11y_wellbeing_note()} required rows={2} placeholder={m.wb_note_ph()} class="input w-full text-sm"></textarea>
+              <textarea bind:this={noteInput} bind:value={newNote} aria-label={m.a11y_wellbeing_note()} required rows={2} placeholder={m.wb_note_ph()} class="input w-full text-sm"></textarea>
+              <div class="space-y-1">
+                <label for="wb-note-notify" class="text-xs font-medium text-on-surface-variant">{m.wb_note_notify()}</label>
+                <WellbeingMemberList id="wb-note-notify" bind:ids={noteNotify} max={5} />
+              </div>
               <div class="flex justify-end">
                 <Button type="submit" size="sm" variant="primary" icon="Plus" loading={addingNote} disabled={!newNote.trim()}>{m.wb_note_add()}</Button>
               </div>
@@ -1225,6 +1320,13 @@
           actionLabel={status.canConfigure ? m.wb_configure() : undefined}
           onAction={status.canConfigure ? () => (activeTab = 'settings') : undefined}
         />
+      {:else if reauthRequired}
+        <section class="bg-surface-container-low/40 border border-outline-variant/30 rounded-xl p-8 text-center space-y-3 max-w-xl mx-auto">
+          <div class="h-12 w-12 mx-auto rounded-full flex items-center justify-center bg-primary/10 text-primary"><Papicon icon="lock" size={22} /></div>
+          <h2 class="text-base font-semibold text-on-surface">{m.wb_reauth_title()}</h2>
+          <p class="text-sm text-on-surface-variant">{m.wb_reauth_desc()}</p>
+          <Button variant="primary" icon="LogIn" onclick={() => void authStore.logout()}>{m.wb_reauth_action()}</Button>
+        </section>
       {:else if !status.hasCaseAccess}
         <section class="bg-surface-container-low/40 border border-outline-variant/30 rounded-xl p-6 space-y-4 max-w-2xl">
           <div class="flex items-start gap-3">
@@ -1246,10 +1348,28 @@
           <StatTile icon="Clock" tone="bg-warning/10 text-on-warning-container" value={stats.reviewDue} label={m.wb_stat_review_due()} />
           <StatTile icon="Check" tone="bg-success/10 text-on-success-container" value={stats.closed} label={m.wb_stat_closed()} />
         </div>
-        <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-6 items-start">
-          {@render caseList()}
-          {@render caseDetail()}
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <p class="text-2xs text-on-surface-variant flex items-center gap-1.5"><Papicon icon="Keyboard" size={12} /> {m.wb_shortcuts_hint()}</p>
+          <div role="group" aria-label={m.wb_view_label()} class="flex gap-1.5">
+            <Button size="sm" variant={caseView === 'list' ? 'secondary' : 'ghost'} icon="List" aria-pressed={caseView === 'list'} onclick={() => setCaseView('list')}>{m.wb_view_list()}</Button>
+            <Button size="sm" variant={caseView === 'board' ? 'secondary' : 'ghost'} icon="Columns" aria-pressed={caseView === 'board'} onclick={() => setCaseView('board')}>{m.wb_view_board()}</Button>
+          </div>
         </div>
+        {#if caseView === 'board'}
+          <div class="space-y-6">
+            <div class="flex flex-wrap items-center gap-3">
+              <input type="search" bind:value={caseSearch} class="input text-sm flex-1 min-w-48 max-w-md" aria-label={m.wb_search_label()} placeholder={m.wb_search_ph()} />
+              <p class="text-2xs text-on-surface-variant">{m.wb_board_hint()}</p>
+            </div>
+            <CaseBoard cases={boardCases} selectedId={selectedCaseId} canWrite={!!status.canWriteCases} onopen={openCaseById} onmove={(id, next) => void moveCase(id, next)} />
+            {@render caseDetail()}
+          </div>
+        {:else}
+          <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-6 items-start">
+            {@render caseList()}
+            {@render caseDetail()}
+          </div>
+        {/if}
       {/if}
     {:else if activeTab === 'stats'}
       {#if cellStats}
@@ -1404,6 +1524,8 @@
     {/if}
   {/if}
 </ModulePage>
+
+<svelte:window onkeydown={onShortcut} />
 
 <Modal bind:open={breakGlassOpen} title={m.wb_bg_modal_title()} size="sm">
   <form id="bg-form" onsubmit={activateBreakGlass} class="space-y-4">

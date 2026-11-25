@@ -10,6 +10,7 @@
   import RefreshButton from '../lib/components/RefreshButton.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
   import HomeTodo from '../lib/components/home/HomeTodo.svelte';
+  import HomeWellbeingAgenda from '../lib/components/home/HomeWellbeingAgenda.svelte';
   import HomeActivityCard from '../lib/components/home/HomeActivityCard.svelte';
   import TopList from '../lib/components/analytics/TopList.svelte';
   import Sparkline from '../lib/components/analytics/Sparkline.svelte';
@@ -976,6 +977,8 @@
   {/if}
 
   <HomeTodo refreshKey={todoRefreshKey} bind:count={todoCount} />
+
+  <HomeWellbeingAgenda />
 
   {#if visibleLayout.length === 0 && !isEditing}
     <div class="section-card p-6 flex flex-wrap items-center justify-between gap-3">

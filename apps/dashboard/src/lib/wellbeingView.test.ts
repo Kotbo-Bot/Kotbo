@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { WB_SEVERITIES, WB_STATUSES } from './wellbeingLabels';
-import { WB_IDLE_LOCK_MS, wbCaseExportHtml, wbPurgeInfo, wbTaskProgress, wbCaseStats, wbCaseTimeline, wbFilterCases, wbIsReviewDue, wbLinkedCases, wbMergeHeader, wbReviewShortcut, wbSearchCases, wbSeverityTone, wbSortCases, wbStatusTone, type WbCaseView } from './wellbeingView';
+import { WB_IDLE_LOCK_MS, wbBoardColumns, wbNeighbourCaseId, wbShortcut, wbCaseExportHtml, wbPurgeInfo, wbTaskProgress, wbCaseStats, wbCaseTimeline, wbFilterCases, wbIsReviewDue, wbLinkedCases, wbMergeHeader, wbReviewShortcut, wbSearchCases, wbSeverityTone, wbSortCases, wbStatusTone, type WbCaseView } from './wellbeingView';
 
 const NOW = new Date('2026-11-25T12:00:00Z');
 
@@ -230,5 +230,52 @@ describe('export imprimable', () => {
 
   test('reprend notes, tâches et documents', () => {
     for (const part of ['Notes', 'Rappeler', 'https://drive.google.com/x']) expect(html).toContain(part);
+  });
+});
+
+describe('vue en colonnes', () => {
+  test('une colonne par statut, dans l ordre du suivi, les dossiers à leur place', () => {
+    const columns = wbBoardColumns([
+      dossier({ id: 'a', status: 'CLOSED' }),
+      dossier({ id: 'b', status: 'OPEN' }),
+      dossier({ id: 'c', status: 'MONITORING' }),
+      dossier({ id: 'd', status: 'OPEN' }),
+    ]);
+    expect(columns.map((column) => column.status)).toEqual(['OPEN', 'MONITORING', 'CLOSED']);
+    expect(columns.map((column) => column.cases.map((c) => c.id))).toEqual([['b', 'd'], ['c'], ['a']]);
+  });
+});
+
+describe('navigation au clavier', () => {
+  const liste = [dossier({ id: 'a' }), dossier({ id: 'b' }), dossier({ id: 'c' })];
+
+  test('suivant et précédent, sans sortir de la liste', () => {
+    expect(wbNeighbourCaseId(liste, 'a', 1)).toBe('b');
+    expect(wbNeighbourCaseId(liste, 'c', 1)).toBe('c');
+    expect(wbNeighbourCaseId(liste, 'a', -1)).toBe('a');
+  });
+
+  test('sans dossier ouvert, on part du premier', () => {
+    expect(wbNeighbourCaseId(liste, null, 1)).toBe('a');
+    expect(wbNeighbourCaseId([], null, 1)).toBeNull();
+  });
+});
+
+describe('raccourcis clavier', () => {
+  const key = (over: Partial<Parameters<typeof wbShortcut>[0]> = {}) =>
+    ({ key: 'j', ctrlKey: false, metaKey: false, altKey: false, typing: false, ...over });
+
+  test('j, k, n et d', () => {
+    expect(wbShortcut(key({ key: 'j' }))).toBe('next');
+    expect(wbShortcut(key({ key: 'k' }))).toBe('previous');
+    expect(wbShortcut(key({ key: 'n' }))).toBe('note');
+    expect(wbShortcut(key({ key: 'd' }))).toBe('discreet');
+  });
+
+  test('rien pendant la saisie ni avec une touche de modification', () => {
+    expect(wbShortcut(key({ typing: true }))).toBeNull();
+    expect(wbShortcut(key({ ctrlKey: true }))).toBeNull();
+    expect(wbShortcut(key({ metaKey: true }))).toBeNull();
+    expect(wbShortcut(key({ key: 'x' }))).toBeNull();
   });
 });
