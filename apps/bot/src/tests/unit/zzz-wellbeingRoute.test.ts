@@ -85,6 +85,9 @@ let visibleCase: ReturnType<typeof makeCase> | null = makeCase();
 let activeBreakGlass: Record<string, unknown> | null = null;
 let breakGlassLog: Record<string, unknown> | null = null;
 let note: Record<string, unknown> | null = null;
+let signal: Record<string, unknown> | null = null;
+let ticket: Record<string, unknown> | null = null;
+let transferredCase: Record<string, unknown> | null = null;
 
 const mockDb = {
   dashboardAuditLog: {
@@ -108,6 +111,7 @@ const mockDb = {
   },
   wellbeingCase: {
     findFirst: mock(async (_args?: unknown) => visibleCase),
+    findUnique: mock(async (_args?: unknown) => transferredCase),
     findMany: mock(async (_args?: unknown) => []),
     findUniqueOrThrow: mock(async (_args?: unknown) => visibleCase ?? makeCase()),
     update: mock(async (args: { data: Record<string, unknown> }) => ({ ...visibleCase, ...args.data })),
@@ -121,6 +125,21 @@ const mockDb = {
   wellbeingCaseNote: {
     findFirst: mock(async (_args?: unknown) => note),
     update: mock(async (_args?: unknown) => note),
+  },
+  wellbeingReporterMessage: {
+    create: mock(async (args: { data: Record<string, unknown> }) => ({ id: 'msg-1', ...args.data })),
+  },
+  wellbeingDistressSignal: {
+    findFirst: mock(async (_args?: unknown) => signal),
+    findMany: mock(async (_args?: unknown) => []),
+    update: mock(async (_args?: unknown) => signal),
+    updateMany: mock(async (_args?: unknown) => ({ count: signal ? 1 : 0 })),
+  },
+  wellbeingPulseWeek: {
+    findMany: mock(async (_args?: unknown) => []),
+  },
+  ticket: {
+    findFirst: mock(async (_args?: unknown) => ticket),
   },
 };
 for (const dbPath of ['../../utils/db.ts', '../../utils/db.js']) {
@@ -141,6 +160,11 @@ mockModule('../../services/staff/wellbeingAlerts', {
   sendWellbeingDirect: mock(async () => {}),
 });
 mockModule('../../services/staff/wellbeingAbsence', { currentAbsence: mock(async () => null) });
+const applyCrisisProtocolIfDue = mock(async (..._args: unknown[]) => false);
+mockModule('../../services/staff/wellbeingCrisis', { applyCrisisProtocolIfDue, CRISIS_PROTOCOL_EVENT: 'CRISIS_PROTOCOL' });
+const closeTicket = mock(async (..._args: unknown[]) => null);
+mockModule('../../services/features/ticketService', { closeTicket });
+mockModule('../../commands/utility/wellbeing', { wellbeingPanelMessage: mock(() => ({ content: 'panel' })) });
 const requestDissolution = mock(async () => new Date(Date.now() + 24 * HOUR));
 mockModule('../../services/staff/wellbeingDissolution', {
   requestDissolution,
@@ -175,7 +199,12 @@ beforeEach(() => {
   activeBreakGlass = null;
   breakGlassLog = null;
   note = null;
+  signal = null;
+  ticket = null;
+  transferredCase = null;
   appendCaseEvents.mockClear();
+  applyCrisisProtocolIfDue.mockClear();
+  closeTicket.mockClear();
   requestDissolution.mockClear();
   for (const model of Object.values(mockDb)) {
     for (const fn of Object.values(model)) (fn as { mockClear: () => void }).mockClear();
@@ -315,13 +344,96 @@ describe('réponse au signaleur', () => {
     expect(mockDb.wellbeingCase.update).not.toHaveBeenCalled();
   });
 
-  test('enregistrée chiffrée pour un signalement', async () => {
+  test('enregistrée chiffrée pour un signalement, comme un message du fil', async () => {
     visibleCase = makeCase({ source: 'DISCORD', trackingCodeHash: 'empreinte' });
     const { status, json } = await call('POST', '/cases/case-1/reporter-reply', { message: 'Pris en compte' });
     expect(status).toBe(200);
-    const args = mockDb.wellbeingCase.update.mock.calls[0]?.[0] as { data: { reporterReply: string } };
-    expect(args.data.reporterReply).not.toContain('Pris en compte');
+    const args = mockDb.wellbeingReporterMessage.create.mock.calls[0]?.[0] as { data: { content: string; fromReporter: boolean } };
+    expect(args.data.fromReporter).toBe(false);
+    expect(args.data.content).not.toContain('Pris en compte');
     expect(json.item.trackingCodeHash).toBeUndefined();
+  });
+
+  test('un message vide est refusé', async () => {
+    visibleCase = makeCase({ source: 'DISCORD', trackingCodeHash: 'empreinte' });
+    const { status } = await call('POST', '/cases/case-1/reporter-reply', { message: '  ' });
+    expect(status).toBe(400);
+    expect(mockDb.wellbeingReporterMessage.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('protocole de crise et prise de nouvelles', () => {
+  test('passer un dossier en critique applique le protocole', async () => {
+    const { status } = await call('PATCH', '/cases/case-1', { severity: 'CRITICAL' });
+    expect(status).toBe(200);
+    expect(applyCrisisProtocolIfDue).toHaveBeenCalledTimes(1);
+    expect(applyCrisisProtocolIfDue.mock.calls[0]?.[1]).toBe('NORMAL');
+    expect(applyCrisisProtocolIfDue.mock.calls[0]?.[2]).toBe('CRITICAL');
+  });
+
+  test('fermer un dossier résolu programme la prise de nouvelles', async () => {
+    const { status } = await call('PATCH', '/cases/case-1', { status: 'CLOSED', closedReason: 'RESOLVED' });
+    expect(status).toBe(200);
+    const args = mockDb.wellbeingCase.update.mock.calls[0]?.[0] as { data: { followUpAt: Date | null } };
+    expect(args.data.followUpAt).toBeInstanceOf(Date);
+  });
+
+  test('rouvrir un dossier annule la prise de nouvelles', async () => {
+    visibleCase = makeCase({ status: 'CLOSED', closedReason: 'RESOLVED' });
+    await call('PATCH', '/cases/case-1', { status: 'OPEN' });
+    const args = mockDb.wellbeingCase.update.mock.calls[0]?.[0] as { data: { followUpAt: Date | null } };
+    expect(args.data.followUpAt).toBeNull();
+  });
+});
+
+describe('signaux de détresse', () => {
+  test('écarter un signal le marque traité', async () => {
+    signal = { id: 'sig-1', guildId: GUILD, userId: SUBJECT };
+    const { status } = await call('POST', '/signals/sig-1/dismiss');
+    expect(status).toBe(200);
+    const args = mockDb.wellbeingDistressSignal.updateMany.mock.calls[0]?.[0] as { where: { userId: unknown }; data: { outcome: string } };
+    expect(args.data.outcome).toBe('DISMISSED');
+    // Un signal sur soi-même n'est jamais modifiable par soi.
+    expect(args.where.userId).toEqual({ not: ALICE });
+  });
+
+  test("un dossier ouvert depuis un signal déjà traité est refusé", async () => {
+    const { status } = await call('POST', '/cases', { signalId: 'sig-1', subjectName: 'S', title: 'T', summary: 'R' });
+    expect(status).toBe(404);
+    expect(mockDb.wellbeingCase.create).not.toHaveBeenCalled();
+  });
+
+  test('la direction seule ne voit pas les signaux', async () => {
+    const { status } = await call('GET', '/signals', undefined, session(DIR));
+    expect(status).toBe(403);
+  });
+});
+
+describe('transfert de ticket', () => {
+  test('un ticket déjà transféré ne crée pas de second dossier', async () => {
+    ticket = { id: 't-1', guildId: GUILD, userId: SUBJECT, username: 'sujet', reason: 'Aide', description: 'D', ticketTypeLabel: null, status: 'OPEN' };
+    transferredCase = { id: 'case-1' };
+    const { status } = await call('POST', '/cases/from-ticket', { ticketId: 't-1' });
+    expect(status).toBe(409);
+    expect(mockDb.wellbeingCase.create).not.toHaveBeenCalled();
+  });
+
+  test('le ticket devient un dossier et peut être fermé', async () => {
+    ticket = { id: 't-1', guildId: GUILD, userId: SUBJECT, username: 'sujet', reason: 'Aide', description: 'D', ticketTypeLabel: null, status: 'OPEN' };
+    const { status } = await call('POST', '/cases/from-ticket', { ticketId: 't-1', closeTicket: true });
+    expect(status).toBe(201);
+    const args = mockDb.wellbeingCase.create.mock.calls[0]?.[0] as { data: { source: string; ticketId: string; summary: string } };
+    expect(args.data.source).toBe('TICKET');
+    expect(args.data.ticketId).toBe('t-1');
+    expect(args.data.summary).not.toContain('Aide');
+    expect(closeTicket).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('message permanent', () => {
+  test('refusé tant que les signalements Discord sont fermés', async () => {
+    const { status } = await call('POST', '/report-panel', { channelId: '300000000000000001' });
+    expect(status).toBe(400);
   });
 });
 

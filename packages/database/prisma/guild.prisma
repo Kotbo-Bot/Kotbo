@@ -594,6 +594,8 @@ model Guild {
   wellbeingConfig        WellbeingConfig?
   wellbeingCases         WellbeingCase[]
   wellbeingBreakGlassLogs WellbeingBreakGlassLog[]
+  wellbeingDistressSignals WellbeingDistressSignal[]
+  wellbeingPulseWeeks    WellbeingPulseWeek[]
   networkMemberships     GuildNetworkMember[]
   campaigns              Campaign[]
 

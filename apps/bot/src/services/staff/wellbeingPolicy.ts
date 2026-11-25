@@ -5,7 +5,7 @@
  * d'audit doit donc dire qui a été ajouté ou retiré, pas seulement combien :
  * sinon un ajout discret de soi-même à l'équipe passerait inaperçu.
  */
-import { createHash, randomInt } from 'node:crypto';
+import { createHash, createHmac, randomInt } from 'node:crypto';
 
 export interface WellbeingAccessLists {
   enabled: boolean;
@@ -20,6 +20,12 @@ export interface WellbeingAccessLists {
   breakGlassApproval?: boolean;
   reportEnabled?: boolean;
   staleCriticalDays?: number;
+  crisisProtocol?: boolean;
+  followUpDays?: number;
+  sanctionSignal?: boolean;
+  distressWatch?: boolean;
+  pulseEnabled?: boolean;
+  pulseRoleIds?: string[];
 }
 
 /**
@@ -34,13 +40,15 @@ export interface WellbeingAccessLists {
  * - MEMBERSHIP_CHANGE : rôle de la cellule ou de la direction donné ou retiré ;
  * - PURGE_SOON : des dossiers fermés seront effacés dans une semaine ;
  * - UNUSUAL_ACCESS : une personne ouvre beaucoup de dossiers en peu de temps ;
- * - DISSOLUTION : désactivation de la cellule demandée, annulée ou appliquée.
+ * - DISSOLUTION : désactivation de la cellule demandée, annulée ou appliquée ;
+ * - DISTRESS : un message aux mots de détresse attend d'être examiné ;
+ * - SANCTION_SIGNAL : une personne suivie par la cellule vient d'être sanctionnée.
  */
 export const WELLBEING_ALERT_EVENTS = [
-  'BREAK_GLASS', 'EMERGENCY_READ', 'TEAM_READ', 'CASE_CHANGE', 'CONFIG_CHANGE', 'REPORT', 'REMINDER', 'MEMBERSHIP_CHANGE', 'PURGE_SOON', 'UNUSUAL_ACCESS', 'DISSOLUTION',
+  'BREAK_GLASS', 'EMERGENCY_READ', 'TEAM_READ', 'CASE_CHANGE', 'CONFIG_CHANGE', 'REPORT', 'REMINDER', 'MEMBERSHIP_CHANGE', 'PURGE_SOON', 'UNUSUAL_ACCESS', 'DISSOLUTION', 'DISTRESS', 'SANCTION_SIGNAL',
 ] as const;
 export type WellbeingAlertEvent = (typeof WELLBEING_ALERT_EVENTS)[number];
-export const DEFAULT_ALERT_EVENTS: WellbeingAlertEvent[] = ['BREAK_GLASS', 'EMERGENCY_READ', 'CONFIG_CHANGE', 'REPORT', 'REMINDER', 'MEMBERSHIP_CHANGE', 'PURGE_SOON', 'UNUSUAL_ACCESS', 'DISSOLUTION'];
+export const DEFAULT_ALERT_EVENTS: WellbeingAlertEvent[] = ['BREAK_GLASS', 'EMERGENCY_READ', 'CONFIG_CHANGE', 'REPORT', 'REMINDER', 'MEMBERSHIP_CHANGE', 'PURGE_SOON', 'UNUSUAL_ACCESS', 'DISSOLUTION', 'DISTRESS'];
 /** Destinataires prévenus en message privé, au plus. */
 export const MAX_ALERT_USERS = 10;
 /** Une même personne qui recharge la page ne déclenche qu'une alerte de consultation par période. */
@@ -67,8 +75,10 @@ export interface AlertContext {
   stage?: 'requested' | 'approved' | 'rejected' | 'ended' | 'dissolution_requested' | 'dissolution_cancelled' | 'dissolution_applied';
   /** Signalement anonyme : l'alerte ne nomme personne. */
   anonymous?: boolean;
-  reminder?: 'review' | 'stale';
+  reminder?: 'review' | 'stale' | 'follow_up';
   days?: number;
+  /** Nouveau message d'un signaleur, reçu avec son code de suivi. */
+  followUp?: boolean;
   /** Changement d'appartenance : membre visé, sens, portée, et ajout annulé. */
   targetId?: string;
   change?: 'added' | 'removed';
@@ -102,6 +112,7 @@ export function alertText(event: WellbeingAlertEvent, ctx: AlertContext): string
     case 'CONFIG_CHANGE':
       return `Cellule bien-être : configuration modifiée par ${actor}.`;
     case 'REPORT':
+      if (ctx.followUp) return 'Cellule bien-être : nouveau message reçu sur un signalement, avec son code de suivi.';
       return ctx.anonymous
         ? 'Cellule bien-être : nouveau signalement anonyme reçu depuis Discord.'
         : `Cellule bien-être : nouveau signalement de ${actor} reçu depuis Discord.`;
@@ -126,9 +137,16 @@ export function alertText(event: WellbeingAlertEvent, ctx: AlertContext): string
     case 'PURGE_SOON':
       return `Cellule bien-être : ${ctx.caseCount ?? 0} dossier(s) fermé(s) seront effacés dans ${PURGE_NOTICE_DAYS} jours. Prolongez-les depuis le dashboard pour les garder.`;
     case 'REMINDER':
+      if (ctx.reminder === 'follow_up') {
+        return `Cellule bien-être : un dossier résolu il y a ${ctx.days ?? 0} jour(s) attend une prise de nouvelles.`;
+      }
       return ctx.reminder === 'stale'
         ? `Cellule bien-être : un dossier critique est sans activité depuis ${ctx.days ?? 0} jour(s).`
         : 'Cellule bien-être : un dossier arrive à son échéance de suivi.';
+    case 'DISTRESS':
+      return 'Cellule bien-être : un message aux mots de détresse a été repéré. Il attend dans les signaux de la page Bien-être.';
+    case 'SANCTION_SIGNAL':
+      return `Cellule bien-être : ${actor} vient de sanctionner une personne suivie par la cellule. Le référent est prévenu.`;
   }
 }
 
@@ -222,6 +240,17 @@ export function describeConfigChange(
       ? `Signalements Discord : ${after.reportEnabled ? 'ouverts' : 'fermés'}` : null,
     (prev.staleCriticalDays ?? 7) !== (after.staleCriticalDays ?? 7)
       ? `Relance des dossiers critiques : ${after.staleCriticalDays ? `${after.staleCriticalDays} jour(s)` : 'désactivée'}` : null,
+    (prev.crisisProtocol ?? true) !== (after.crisisProtocol ?? true)
+      ? `Protocole de crise : ${after.crisisProtocol ?? true ? 'activé' : 'désactivé'}` : null,
+    (prev.followUpDays ?? 30) !== (after.followUpDays ?? 30)
+      ? `Prise de nouvelles après clôture : ${after.followUpDays ? `${after.followUpDays} jour(s)` : 'désactivée'}` : null,
+    (prev.sanctionSignal ?? false) !== (after.sanctionSignal ?? false)
+      ? `Signal aux modérateurs : ${after.sanctionSignal ? 'activé' : 'désactivé'}` : null,
+    (prev.distressWatch ?? false) !== (after.distressWatch ?? false)
+      ? `Repérage des mots de détresse : ${after.distressWatch ? 'activé' : 'désactivé'}` : null,
+    (prev.pulseEnabled ?? false) !== (after.pulseEnabled ?? false)
+      ? `Météo du staff : ${after.pulseEnabled ? 'activée' : 'désactivée'}` : null,
+    listLine('Météo du staff', prev.pulseRoleIds ?? [], after.pulseRoleIds ?? [], nameOf),
   ].filter((line): line is string => line !== null);
   return lines.length > 0 ? lines.join(' · ') : 'Aucun changement';
 }
@@ -407,6 +436,8 @@ export interface WellbeingResource {
   url: string | null;
   phone: string | null;
   description: string | null;
+  /** Langue du public visé (code à deux lettres), ou `null` pour tous. */
+  locale: string | null;
 }
 
 export const MAX_RESOURCES = 10;
@@ -436,9 +467,21 @@ export function cleanResources(input: unknown): WellbeingResource[] {
       phone: text(item.phone, 30),
       url: safeUrl(item.url),
       description: text(item.description, 200),
+      locale: typeof item.locale === 'string' && /^[a-z]{2}$/.test(item.locale) ? item.locale : null,
     }))
     .filter((item) => item.label !== '')
     .slice(0, MAX_RESOURCES);
+}
+
+/**
+ * Ressources montrées à un membre selon sa langue (`fr`, `en-US`...) : celles
+ * de sa langue et celles pour tous. S'il n'en reste aucune, toutes : mieux
+ * vaut un numéro dans une autre langue que rien.
+ */
+export function resourcesForLocale(resources: readonly WellbeingResource[], locale: string | null | undefined): WellbeingResource[] {
+  const lang = (locale ?? '').slice(0, 2).toLowerCase();
+  const matching = resources.filter((r) => !r.locale || r.locale === lang);
+  return matching.length > 0 ? matching : [...resources];
 }
 
 /** Message privé envoyé au membre : les ressources, rien du dossier. */
@@ -872,6 +915,9 @@ export function weeklyDigestText(
     `- échéances de suivi cette semaine : ${counts.reviewsThisWeek}`,
     `- signalements à trier : ${counts.triage}`,
     `- dossiers critiques sans référent : ${counts.criticalUnassigned}`,
+    ...(counts.assigned >= REFERENT_OVERLOAD_ACTIVE
+      ? [`Vous suivez ${counts.assigned} dossiers : pensez à en confier à un collègue moins chargé.`]
+      : []),
     'Le détail est sur la page Bien-être du dashboard.',
   ].join('\n');
 }
@@ -896,10 +942,15 @@ export function digestCounts(
   };
 }
 
+/** Envoi hebdomadaire : le lundi, à partir de `hour` (UTC), une fois par semaine. */
+export function weeklyDue(lastSentAt: Date | null, now: Date, hour: number): boolean {
+  if (now.getUTCDay() !== 1 || now.getUTCHours() < hour) return false;
+  return !lastSentAt || now.getTime() - lastSentAt.getTime() >= DIGEST_INTERVAL_DAYS * DAY_MS;
+}
+
 /** Le résumé part le lundi, à partir de 8 h (UTC), une fois par semaine. */
 export function digestDue(lastSentAt: Date | null, now: Date): boolean {
-  if (now.getUTCDay() !== 1 || now.getUTCHours() < 8) return false;
-  return !lastSentAt || now.getTime() - lastSentAt.getTime() >= DIGEST_INTERVAL_DAYS * DAY_MS;
+  return weeklyDue(lastSentAt, now, 8);
 }
 
 // ── Dissolution différée ───────────────────────────────────────────────────
@@ -974,4 +1025,220 @@ export function alertPreviews(actorLabel: string, now: Date): Record<WellbeingAl
     .replace(/<@TARGET>/g, '@membre')
     .replace(/<t:\d+:R>/g, 'dans 2 heures');
   return Object.fromEntries(WELLBEING_ALERT_EVENTS.map((event) => [event, readable(alertText(event, ctx))])) as Record<WellbeingAlertEvent, string>;
+}
+
+// ── Protocole de crise ─────────────────────────────────────────────────────
+
+/**
+ * Étapes ajoutées au plan d'action d'un dossier qui devient critique, avec
+ * leur délai en heures. Elles se cochent comme toute tâche.
+ */
+export const CRISIS_PROTOCOL_TASKS: ReadonlyArray<{ label: string; dueHours: number }> = [
+  { label: 'Contacter la personne concernée et vérifier sa sécurité immédiate', dueHours: 2 },
+  { label: "Lui transmettre les ressources d'urgence (numéros d'écoute, secours)", dueHours: 2 },
+  { label: 'Prévenir la direction si un danger immédiat est en jeu', dueHours: 4 },
+  { label: 'Consigner les échanges dans une note du dossier', dueHours: 24 },
+  { label: 'Faire le point avec un autre membre de la cellule', dueHours: 48 },
+];
+/** Échéance de suivi d'un dossier critique qui n'en a pas. */
+export const CRISIS_REVIEW_HOURS = 48;
+
+/** Le dossier vient de devenir critique et le protocole ne lui a pas encore été appliqué. */
+export function crisisProtocolDue(
+  previousSeverity: string | null,
+  nextSeverity: string,
+  options: { enabled: boolean; applied: boolean },
+): boolean {
+  return options.enabled && !options.applied && nextSeverity === 'CRITICAL' && previousSeverity !== 'CRITICAL';
+}
+
+export function crisisTaskDrafts(now: Date): Array<{ label: string; dueAt: Date }> {
+  return CRISIS_PROTOCOL_TASKS.map((task) => ({ label: task.label, dueAt: new Date(now.getTime() + task.dueHours * 60 * 60 * 1000) }));
+}
+
+// ── Prise de nouvelles après clôture ───────────────────────────────────────
+
+export const MAX_FOLLOW_UP_DAYS = 180;
+
+/** Date du rappel « prendre des nouvelles » d'un dossier fermé, ou `null`. Seul un dossier résolu y a droit. */
+export function followUpDate(closedAt: Date, days: number, closedReason: string | null): Date | null {
+  if (closedReason !== 'RESOLVED' || days <= 0) return null;
+  return new Date(closedAt.getTime() + days * DAY_MS);
+}
+
+// ── Fil anonyme avec le signaleur ──────────────────────────────────────────
+
+/** Messages qu'un signaleur peut envoyer sur un même dossier. */
+export const MAX_REPORTER_MESSAGES = 20;
+/** Échanges montrés par `/bienetre suivi`. */
+export const TRACKING_THREAD_SIZE = 5;
+
+export function reporterCanWrite(item: { status: string; deletedAt: Date | null }, sentByReporter: number): boolean {
+  return item.status !== 'CLOSED' && !item.deletedAt && sentByReporter < MAX_REPORTER_MESSAGES;
+}
+
+/** Derniers échanges d'un signalement, du plus ancien au plus récent. */
+export function trackingThread<T extends { createdAt: Date }>(messages: readonly T[], size = TRACKING_THREAD_SIZE): T[] {
+  return [...messages].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime()).slice(-size);
+}
+
+// ── Transfert d'un ticket ──────────────────────────────────────────────────
+
+export function ticketCaseSummary(ticket: { reason: string; description: string; ticketTypeLabel: string | null; username: string }): string {
+  const header = `Ticket « ${ticket.ticketTypeLabel || 'sans type'} » ouvert par ${ticket.username}.`;
+  return [header, `Motif : ${ticket.reason}`, ticket.description].filter(Boolean).join('\n\n').slice(0, 4000);
+}
+
+// ── Mots de détresse ───────────────────────────────────────────────────────
+
+/**
+ * Formulations qui appellent l'attention de la cellule. Volontairement
+ * étroites : « mourir de rire », « en finir avec ce boss » ou « going to die
+ * in this raid » ne comptent pas.
+ * Le repérage ne crée jamais de dossier : il propose, la cellule juge.
+ */
+/** « mourir de rire », « crever de faim » : des expressions, pas de la détresse. */
+const NOT_LITERAL = String.raw`(?! de (rire|faim|chaud|froid|honte|fatigue|soif|ennui))`;
+const DISTRESS_PATTERNS: readonly RegExp[] = [
+  new RegExp(String.raw`\benvie de (mourir|crever|disparaitre)\b${NOT_LITERAL}`),
+  /\benvie d'en finir\b/,
+  new RegExp(String.raw`\b(veux|voudrais|prefererais) (mourir|disparaitre)\b${NOT_LITERAL}`),
+  /\b(veux|voudrais|envie de) me tuer\b/,
+  /\b(veux|envie de|besoin de) me faire du mal\b/,
+  /\bme (suicider|scarifier|foutre en l'air)\b/,
+  /\bsuicidaire\b/,
+  /\bplus (envie|la force|aucune raison) de vivre\b/,
+  /\ben finir avec (la vie|ma vie)\b/,
+  /\bkill myself\b/,
+  /\b(want|wanna) to die\b/,
+  /\bwant to hurt myself\b/,
+  /\bend it all\b/,
+  /\bsuicidal\b/,
+  /\bself[- ]?harm\b/,
+  /\bno reason to live\b/,
+];
+
+export function detectDistress(content: string): boolean {
+  const text = content
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[’`]/g, "'")
+    .toLowerCase();
+  return text.length > 0 && DISTRESS_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+/** Un même membre ne déclenche qu'un signal par jour : la cellule n'est pas noyée. */
+export const DISTRESS_COOLDOWN_MS = DAY_MS;
+/** Signaux examinés ou non, effacés après ce délai. */
+export const DISTRESS_SIGNAL_DAYS = 30;
+
+export function shouldSignalDistress(lastAt: number | undefined, now: number): boolean {
+  return lastAt === undefined || now - lastAt >= DISTRESS_COOLDOWN_MS;
+}
+
+// ── Charge des référents ───────────────────────────────────────────────────
+
+/** Au-delà de ce nombre de dossiers actifs, un référent est signalé comme surchargé. */
+export const REFERENT_OVERLOAD_ACTIVE = 8;
+
+export interface ReferentLoad {
+  userId: string;
+  active: number;
+  critical: number;
+  overloaded: boolean;
+}
+
+/** Dossiers actifs de chaque membre de la cellule, ceux sans dossier compris. */
+export function referentLoad(
+  cases: ReadonlyArray<{ status: string; severity: string; assigneeId: string | null }>,
+  teamIds: readonly string[],
+): ReferentLoad[] {
+  const load = new Map(teamIds.map((userId) => [userId, { userId, active: 0, critical: 0, overloaded: false }]));
+  for (const item of cases) {
+    if (item.status === 'CLOSED' || !item.assigneeId) continue;
+    const entry = load.get(item.assigneeId) ?? { userId: item.assigneeId, active: 0, critical: 0, overloaded: false };
+    entry.active += 1;
+    if (item.severity === 'CRITICAL') entry.critical += 1;
+    load.set(item.assigneeId, entry);
+  }
+  return [...load.values()]
+    .map((entry) => ({ ...entry, overloaded: entry.active >= REFERENT_OVERLOAD_ACTIVE }))
+    .sort((a, b) => b.active - a.active || b.critical - a.critical);
+}
+
+/** Membre le moins chargé et pas surchargé, hors personnes écartées (la personne concernée). */
+export function suggestAssignee(load: readonly ReferentLoad[], excludeIds: readonly string[]): string | null {
+  const candidates = load
+    .filter((entry) => !entry.overloaded && !excludeIds.includes(entry.userId))
+    .sort((a, b) => a.active - b.active || a.critical - b.critical);
+  return candidates[0]?.userId ?? null;
+}
+
+// ── Météo du staff ─────────────────────────────────────────────────────────
+
+/** Une semaine n'affiche sa moyenne qu'à partir de ce nombre de réponses : personne n'est reconnaissable. */
+export const PULSE_MIN_RESPONSES = 5;
+/** Membres interrogés au plus, par serveur et par semaine. */
+export const PULSE_MAX_RECIPIENTS = 200;
+export const PULSE_WEEKS_SHOWN = 8;
+export const PULSE_BUTTON_PREFIX = 'wellbeing:pulse:';
+
+/** Semaine ISO 8601 (`2026-W48`) : le sondage et ses réponses s'y rattachent. */
+export function pulseWeekKey(date: Date): string {
+  const day = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  const weekday = day.getUTCDay() || 7;
+  // Le jeudi de la semaine décide de son année.
+  day.setUTCDate(day.getUTCDate() + 4 - weekday);
+  const yearStart = new Date(Date.UTC(day.getUTCFullYear(), 0, 1));
+  const week = Math.ceil(((day.getTime() - yearStart.getTime()) / DAY_MS + 1) / 7);
+  return `${day.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
+}
+
+export function cleanPulseScore(input: string): 1 | 2 | 3 | 4 | 5 | null {
+  const score = Number(input);
+  return Number.isInteger(score) && score >= 1 && score <= 5 ? (score as 1 | 2 | 3 | 4 | 5) : null;
+}
+
+/**
+ * Empreinte d'un votant pour une semaine : elle empêche de voter deux fois,
+ * sans relier un vote à une personne (les notes sont de simples compteurs).
+ * Clé secrète : l'empreinte ne se recalcule pas à partir des membres du serveur.
+ */
+export function pulseVoterHash(guildId: string, week: string, userId: string): string {
+  const key = process.env.WELLBEING_ENCRYPTION_KEY || process.env.JWT_SECRET || 'kotbo-wellbeing-pulse';
+  return createHmac('sha256', key).update(`${guildId}:${week}:${userId}`).digest('hex');
+}
+
+export interface PulseWeekCounts {
+  week: string;
+  score1: number;
+  score2: number;
+  score3: number;
+  score4: number;
+  score5: number;
+}
+
+export function pulseSummary(weeks: readonly PulseWeekCounts[]): Array<{ week: string; responses: number; average: number | null }> {
+  return [...weeks]
+    .sort((a, b) => a.week.localeCompare(b.week))
+    .map((row) => {
+      const counts = [row.score1, row.score2, row.score3, row.score4, row.score5];
+      const responses = counts.reduce((sum, n) => sum + n, 0);
+      const total = counts.reduce((sum, n, index) => sum + n * (index + 1), 0);
+      return {
+        week: row.week,
+        responses,
+        average: responses >= PULSE_MIN_RESPONSES ? Math.round((total / responses) * 10) / 10 : null,
+      };
+    });
+}
+
+// ── Signal aux modérateurs ─────────────────────────────────────────────────
+
+/**
+ * Message privé au modérateur qui vient de sanctionner une personne suivie :
+ * ni le motif ni le contenu du dossier, seulement de passer par la cellule.
+ */
+export function sanctionModeratorText(): string {
+  return 'Cellule bien-être : la personne que vous venez de sanctionner est suivie par la cellule. Prenez contact avec la cellule avant toute suite à donner.';
 }
