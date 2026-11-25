@@ -434,7 +434,53 @@ export interface BroadcastSubscribeAllSummary {
   alreadySubscribed: number;
   skipped: number;
   failed: number;
+  pending?: number;
   results: BroadcastSubscribeResult[];
+}
+
+interface CachedSubscription {
+  guildName: string;
+  channelId: string;
+  channelName: string | null;
+  verifiedAt: number;
+}
+
+const SUBSCRIPTION_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+const RETRY_COOLDOWN_MS = 30 * 60 * 1000;
+const SYNC_BATCH_SIZE = 10;
+
+let trackedSourceChannelId: string | null = null;
+const confirmedSubscriptions = new Map<string, CachedSubscription>();
+const failedSubscriptionRetryAt = new Map<string, number>();
+let subscriptionSyncRunning = false;
+
+function ensureCacheSource(sourceChannelId: string): void {
+  if (trackedSourceChannelId === sourceChannelId) return;
+  trackedSourceChannelId = sourceChannelId;
+  confirmedSubscriptions.clear();
+  failedSubscriptionRetryAt.clear();
+}
+
+export function resetBroadcastSubscriptionCache(sourceChannelId: string | null = null): void {
+  trackedSourceChannelId = sourceChannelId;
+  confirmedSubscriptions.clear();
+  failedSubscriptionRetryAt.clear();
+}
+
+export function invalidateGuildSubscriptionCache(guildId: string): void {
+  confirmedSubscriptions.delete(guildId);
+  failedSubscriptionRetryAt.delete(guildId);
+}
+
+async function collectAllGuildIds(client: Client): Promise<string[]> {
+  const guildIds: string[] = client.shard
+    ? (await client.shard.broadcastEval((c) => [...c.guilds.cache.keys()])).flat()
+    : [...client.guilds.cache.keys()];
+  return [...new Set(guildIds)];
+}
+
+export async function countBroadcastGuilds(client: Client): Promise<number> {
+  return (await collectAllGuildIds(client)).length;
 }
 
 export async function getBroadcastSourceConfig(): Promise<BroadcastSourceConfig | null> {
@@ -454,6 +500,7 @@ export async function getBroadcastSourceConfig(): Promise<BroadcastSourceConfig 
 export async function setBroadcastSourceConfig(config: BroadcastSourceConfig | null): Promise<void> {
   if (!config) {
     await prisma.botGlobalConfig.deleteMany({ where: { key: BROADCAST_SOURCE_CHANNEL_KEY } });
+    resetBroadcastSubscriptionCache(null);
     return;
   }
   const value = JSON.stringify({ guildId: config.guildId, channelId: config.channelId });
@@ -462,6 +509,7 @@ export async function setBroadcastSourceConfig(config: BroadcastSourceConfig | n
     update: { value },
     create: { key: BROADCAST_SOURCE_CHANNEL_KEY, value },
   });
+  resetBroadcastSubscriptionCache(config.channelId);
 }
 
 /** Verifie que le salon source existe, est un salon d'annonce (type 5) et reste accessible au bot. */
@@ -520,7 +568,7 @@ export function buildUpdatesPageUrl(broadcastId?: string): string {
  * Publie l'annonce en Components V2 (avec repli sur Embed classique si refuse)
  * dans le salon d'annonces source puis la crossposte vers tous les abonnes.
  */
-export async function deliverBroadcastViaSource(
+async function sendAndCrosspostSource(
   client: Client,
   source: BroadcastSourceConfig,
   params: {
@@ -534,14 +582,9 @@ export async function deliverBroadcastViaSource(
     hasPoll?: boolean;
     feedbackLabel?: string | null;
   },
-): Promise<DeliveryResult[]> {
-  const updatesUrl = buildUpdatesPageUrl(params.broadcastId);
-  const linkLabel = params.hasPoll
-    ? '📊 Voter sur le dashboard'
-    : params.feedbackLabel
-      ? `💬 ${params.feedbackLabel}`.slice(0, 80)
-      : '📋 Voir sur le dashboard';
-
+  updatesUrl: string,
+  linkLabel: string,
+): Promise<DeliveryResult> {
   if (client.shard) {
     const results = await client.shard.broadcastEval<DeliveryResult | null, {
       guildId: string;
@@ -663,7 +706,7 @@ export async function deliverBroadcastViaSource(
     );
 
     const found = results.find((r) => r !== null);
-    return found ? [found] : [{
+    return found ?? {
       guildId: source.guildId,
       guildName: source.guildId,
       channelId: source.channelId,
@@ -671,12 +714,12 @@ export async function deliverBroadcastViaSource(
       status: 'FAILED',
       reason: 'Serveur source introuvable sur les shards.',
       messageId: null,
-    }];
+    };
   }
 
   const guild = client.guilds.cache.get(source.guildId);
   if (!guild) {
-    return [{
+    return {
       guildId: source.guildId,
       guildName: source.guildId,
       channelId: source.channelId,
@@ -684,12 +727,12 @@ export async function deliverBroadcastViaSource(
       status: 'FAILED',
       reason: 'Serveur source introuvable.',
       messageId: null,
-    }];
+    };
   }
 
   const ch = guild.channels.cache.get(source.channelId);
   if (!ch || ch.type !== ChannelType.GuildAnnouncement) {
-    return [{
+    return {
       guildId: guild.id,
       guildName: guild.name,
       channelId: source.channelId,
@@ -697,7 +740,7 @@ export async function deliverBroadcastViaSource(
       status: 'FAILED',
       reason: "Salon d'annonces source introuvable ou invalide.",
       messageId: null,
-    }];
+    };
   }
 
   try {
@@ -762,7 +805,7 @@ export async function deliverBroadcastViaSource(
     }
 
     await sent.crosspost();
-    return [{
+    return {
       guildId: guild.id,
       guildName: guild.name,
       channelId: ch.id,
@@ -770,9 +813,9 @@ export async function deliverBroadcastViaSource(
       status: 'SENT',
       reason: null,
       messageId: sent.id,
-    }];
+    };
   } catch (err) {
-    return [{
+    return {
       guildId: guild.id,
       guildName: guild.name,
       channelId: ch.id,
@@ -780,8 +823,47 @@ export async function deliverBroadcastViaSource(
       status: 'FAILED',
       reason: (err as Error).message?.slice(0, 300) ?? 'Erreur inconnue',
       messageId: null,
-    }];
+    };
   }
+}
+
+export async function deliverBroadcastViaSource(
+  client: Client,
+  source: BroadcastSourceConfig,
+  params: {
+    broadcastId?: string;
+    title: string;
+    message: string;
+    color: string;
+    thumbnailUrl: string | null;
+    imageUrl: string | null;
+    footerText: string;
+    hasPoll?: boolean;
+    feedbackLabel?: string | null;
+  },
+): Promise<DeliveryResult[]> {
+  const updatesUrl = buildUpdatesPageUrl(params.broadcastId);
+  const linkLabel = params.hasPoll
+    ? '📊 Voter sur le dashboard'
+    : params.feedbackLabel
+      ? `💬 ${params.feedbackLabel}`.slice(0, 80)
+      : '📋 Voir sur le dashboard';
+
+  // S'assurer avant le crosspost que chaque serveur connu est abonne au salon source.
+  const followerDeliveries = await ensureFollowerDeliveries(client, source);
+  const sourceDelivery = await sendAndCrosspostSource(client, source, params, updatesUrl, linkLabel);
+
+  if (sourceDelivery.status === 'SENT') {
+    return [sourceDelivery, ...followerDeliveries];
+  }
+  return [
+    sourceDelivery,
+    ...followerDeliveries.map((d) => ({
+      ...d,
+      status: 'FAILED' as const,
+      reason: sourceDelivery.reason,
+    })),
+  ];
 }
 
 /**
@@ -803,7 +885,7 @@ export async function notifyBroadcastToDashboardUsers(broadcast: {
 
   const hasPoll = broadcast.pollOptions.length > 0;
   const hasFeedback = Boolean(broadcast.feedbackLabel);
-  const plainPreview = broadcast.message
+  const plainPreview = resolveEmojiShortcodesToUnicode(broadcast.message)
     .replace(/<a?:(\w+):\d+>/g, ':$1:')
     .replace(/[#*_`~>|]/g, '')
     .trim()
@@ -1010,6 +1092,8 @@ export async function subscribeGuildToBroadcastSource(
   sourceChannelId: string,
   explicitChannelId?: string | null,
 ): Promise<BroadcastSubscribeResult> {
+  ensureCacheSource(sourceChannelId);
+
   const dbGuild = await prisma.guild.findUnique({
     where: { id: guildId },
     select: {
@@ -1031,6 +1115,8 @@ export async function subscribeGuildToBroadcastSource(
 
   const resolved = await resolveTargetChannelForFollow(client, guildId, sourceChannelId, candidates);
   if (!resolved) {
+    confirmedSubscriptions.delete(guildId);
+    failedSubscriptionRetryAt.set(guildId, Date.now() + RETRY_COOLDOWN_MS);
     return {
       guildId,
       guildName: guildId,
@@ -1042,6 +1128,8 @@ export async function subscribeGuildToBroadcastSource(
   }
 
   if (!resolved.channelId || resolved.skipReason) {
+    confirmedSubscriptions.delete(guildId);
+    failedSubscriptionRetryAt.set(guildId, Date.now() + RETRY_COOLDOWN_MS);
     return {
       guildId: resolved.guildId,
       guildName: resolved.guildName,
@@ -1060,6 +1148,13 @@ export async function subscribeGuildToBroadcastSource(
         create: { id: guildId, broadcastChannelId: resolved.channelId },
       }).catch(() => {});
     }
+    confirmedSubscriptions.set(guildId, {
+      guildName: resolved.guildName,
+      channelId: resolved.channelId,
+      channelName: resolved.channelName,
+      verifiedAt: Date.now(),
+    });
+    failedSubscriptionRetryAt.delete(guildId);
     return {
       guildId: resolved.guildId,
       guildName: resolved.guildName,
@@ -1084,6 +1179,14 @@ export async function subscribeGuildToBroadcastSource(
       }).catch(() => {});
     }
 
+    confirmedSubscriptions.set(guildId, {
+      guildName: resolved.guildName,
+      channelId: resolved.channelId,
+      channelName: resolved.channelName,
+      verifiedAt: Date.now(),
+    });
+    failedSubscriptionRetryAt.delete(guildId);
+
     return {
       guildId: resolved.guildId,
       guildName: resolved.guildName,
@@ -1093,6 +1196,8 @@ export async function subscribeGuildToBroadcastSource(
       reason: null,
     };
   } catch (err) {
+    confirmedSubscriptions.delete(guildId);
+    failedSubscriptionRetryAt.set(guildId, Date.now() + RETRY_COOLDOWN_MS);
     return {
       guildId: resolved.guildId,
       guildName: resolved.guildName,
@@ -1104,20 +1209,67 @@ export async function subscribeGuildToBroadcastSource(
   }
 }
 
+async function ensureFollowerDeliveries(
+  client: Client,
+  source: BroadcastSourceConfig,
+): Promise<DeliveryResult[]> {
+  ensureCacheSource(source.channelId);
+  const guildIds = (await collectAllGuildIds(client)).filter((id) => id !== source.guildId);
+  const now = Date.now();
+  const out: DeliveryResult[] = [];
+
+  for (const guildId of guildIds) {
+    const cached = confirmedSubscriptions.get(guildId);
+    if (cached && now - cached.verifiedAt < SUBSCRIPTION_CACHE_TTL_MS) {
+      out.push({
+        guildId,
+        guildName: cached.guildName,
+        channelId: cached.channelId,
+        channelName: cached.channelName,
+        status: 'SENT',
+        reason: null,
+        messageId: null,
+      });
+      continue;
+    }
+
+    const sub = await subscribeGuildToBroadcastSource(client, guildId, source.channelId);
+    out.push({
+      guildId: sub.guildId,
+      guildName: sub.guildName,
+      channelId: sub.channelId,
+      channelName: sub.channelName,
+      status: sub.status === 'SUBSCRIBED' || sub.status === 'ALREADY_SUBSCRIBED'
+        ? 'SENT'
+        : sub.status === 'SKIPPED'
+          ? 'SKIPPED'
+          : 'FAILED',
+      reason: sub.reason,
+      messageId: null,
+    });
+  }
+
+  return out;
+}
+
 /** Abonne tous les serveurs connus du bot au salon d'annonces source configure. */
 export async function subscribeAllGuildsToBroadcastSource(
   client: Client,
   sourceChannelId: string,
+  options?: { sourceGuildId?: string; maxImmediate?: number },
 ): Promise<BroadcastSubscribeAllSummary> {
-  const guildIds: string[] = client.shard
-    ? (await client.shard.broadcastEval((c) => [...c.guilds.cache.keys()])).flat()
-    : [...client.guilds.cache.keys()];
-
-  const uniqueIds = [...new Set(guildIds)];
+  ensureCacheSource(sourceChannelId);
+  const effectiveSourceGuildId = options?.sourceGuildId ?? (await getBroadcastSourceConfig())?.guildId ?? null;
+  const allIds = await collectAllGuildIds(client);
+  const targetIds = effectiveSourceGuildId ? allIds.filter((id) => id !== effectiveSourceGuildId) : allIds;
+  const batch = options?.maxImmediate && targetIds.length > options.maxImmediate
+    ? targetIds.slice(0, options.maxImmediate)
+    : targetIds;
+  const pending = targetIds.length - batch.length;
   const results: BroadcastSubscribeResult[] = [];
 
   // Traitement sequentiel : `client.rest` gere le rate-limit Discord sans saturer les webhooks.
-  for (const guildId of uniqueIds) {
+  for (const guildId of batch) {
     results.push(await subscribeGuildToBroadcastSource(client, guildId, sourceChannelId));
   }
 
@@ -1127,6 +1279,7 @@ export async function subscribeAllGuildsToBroadcastSource(
     alreadySubscribed: results.filter((r) => r.status === 'ALREADY_SUBSCRIBED').length,
     skipped: results.filter((r) => r.status === 'SKIPPED').length,
     failed: results.filter((r) => r.status === 'FAILED').length,
+    ...(pending > 0 ? { pending } : {}),
     results,
   };
 }
@@ -1134,12 +1287,53 @@ export async function subscribeAllGuildsToBroadcastSource(
 /** Abonne automatiquement un serveur nouvellement rejoint si un salon source est configure. */
 export async function subscribeGuildIfBroadcastSourceConfigured(client: Client, guildId: string): Promise<void> {
   const source = await getBroadcastSourceConfig();
-  if (!source) return;
+  if (!source || guildId === source.guildId) return;
   const res = await subscribeGuildToBroadcastSource(client, guildId, source.channelId);
   if (res.status === 'SUBSCRIBED') {
     logger.info('Broadcast', `Serveur ${res.guildName} (${guildId}) abonné automatiquement au salon source (${res.channelName ?? res.channelId}).`);
   } else if (res.status === 'FAILED') {
     logger.warn('Broadcast', `Abonnement auto échoué pour ${res.guildName} (${guildId}) : ${res.reason}`);
+  }
+}
+
+/**
+ * Rattrape progressivement les serveurs non encore abonnes au salon source
+ * (nouveaux droits accordes, redemarrage, ou lot differe apres selection de la source).
+ */
+export async function syncPendingBroadcastSubscriptions(
+  client: Client,
+  batchSize = SYNC_BATCH_SIZE,
+): Promise<{ checked: number; subscribed: number }> {
+  if (subscriptionSyncRunning) return { checked: 0, subscribed: 0 };
+  subscriptionSyncRunning = true;
+  try {
+    const source = await getBroadcastSourceConfig();
+    if (!source) return { checked: 0, subscribed: 0 };
+
+    ensureCacheSource(source.channelId);
+    const now = Date.now();
+    const guildIds = (await collectAllGuildIds(client)).filter((id) => id !== source.guildId);
+    const pendingIds = guildIds.filter((id) => {
+      const cached = confirmedSubscriptions.get(id);
+      if (cached && now - cached.verifiedAt < SUBSCRIPTION_CACHE_TTL_MS) return false;
+      const retryAt = failedSubscriptionRetryAt.get(id);
+      if (retryAt && now < retryAt) return false;
+      return true;
+    });
+
+    let subscribed = 0;
+    const batch = pendingIds.slice(0, batchSize);
+    for (const guildId of batch) {
+      const res = await subscribeGuildToBroadcastSource(client, guildId, source.channelId);
+      if (res.status === 'SUBSCRIBED') subscribed++;
+    }
+
+    if (subscribed > 0) {
+      logger.info('Broadcast', `Synchronisation progressive : ${subscribed} serveur(s) abonné(s) au salon source (${batch.length} vérifié(s)).`);
+    }
+    return { checked: batch.length, subscribed };
+  } finally {
+    subscriptionSyncRunning = false;
   }
 }
 
@@ -1209,6 +1403,10 @@ export function startBroadcastScheduler(client: Client): () => void {
           }).catch(() => {});
           logger.error('Broadcast', `Annonce programmee ${broadcast.id} en echec:`, err);
         }
+      }
+
+      if (client.shard || client.isReady()) {
+        await syncPendingBroadcastSubscriptions(client);
       }
     } catch (err) {
       logger.warn('Broadcast', `Tick du planificateur en echec: ${(err as Error).message}`);

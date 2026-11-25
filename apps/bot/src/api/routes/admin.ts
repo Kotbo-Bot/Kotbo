@@ -51,10 +51,12 @@ import {
 import {
   BroadcastValidationError,
   NO_BROADCAST_SOURCE_MESSAGE,
+  countBroadcastGuilds,
   deliverBroadcastViaSource,
   finalizeBroadcast,
   getBroadcastSourceConfig,
   getPollResults,
+  invalidateGuildSubscriptionCache,
   normalizeBroadcastContent,
   notifyBroadcastToDashboardUsers,
   setBroadcastSourceConfig,
@@ -1440,15 +1442,32 @@ export async function handleAdminRoutes(
 
         const config = { guildId, channelId };
         await setBroadcastSourceConfig(config);
+        const subscribeSummary = await subscribeAllGuildsToBroadcastSource(client, config.channelId, {
+          sourceGuildId: config.guildId,
+          maxImmediate: 25,
+        });
         await audit({
           action: 'broadcast.source.update',
           targetType: 'broadcast_source',
           targetId: channelId,
-          summary: `Salon d'annonces source défini : #${check.channelName} (${check.guildName})`,
-          metadata: config,
+          summary: `Salon d'annonces source défini : #${check.channelName} (${check.guildName}) — ${subscribeSummary.subscribed} abonné(s), ${subscribeSummary.alreadySubscribed} déjà abonné(s)`,
+          metadata: {
+            ...config,
+            subscribed: subscribeSummary.subscribed,
+            alreadySubscribed: subscribeSummary.alreadySubscribed,
+            skipped: subscribeSummary.skipped,
+            failed: subscribeSummary.failed,
+            pending: subscribeSummary.pending ?? 0,
+          },
         });
 
-        return reply(c, 200, { ok: true, sourceChannel: config, guildName: check.guildName, channelName: check.channelName });
+        return reply(c, 200, {
+          ok: true,
+          sourceChannel: config,
+          guildName: check.guildName,
+          channelName: check.channelName,
+          subscribeSummary,
+        });
       } catch (err) {
         logger.error('AdminAPI', 'PUT broadcast source error:', err);
         return fail(c, err, "Erreur lors de la configuration du salon d'annonces source", 'AdminAPI');
@@ -1463,7 +1482,9 @@ export async function handleAdminRoutes(
           return reply(c, 400, { error: "Aucun salon d'annonces source n'est configuré." });
         }
 
-        const summary = await subscribeAllGuildsToBroadcastSource(client, source.channelId);
+        const summary = await subscribeAllGuildsToBroadcastSource(client, source.channelId, {
+          sourceGuildId: source.guildId,
+        });
         await audit({
           action: 'broadcast.source.subscribe_all',
           targetType: 'broadcast_source',
@@ -1545,11 +1566,12 @@ export async function handleAdminRoutes(
           update: { broadcastChannelId: channelId },
           create: { id: guildId, broadcastChannelId: channelId },
         });
+        invalidateGuildSubscriptionCache(guildId);
 
         let subscription = null;
         if (channelId) {
           const source = await getBroadcastSourceConfig();
-          if (source) {
+          if (source && guildId !== source.guildId) {
             subscription = await subscribeGuildToBroadcastSource(client, guildId, source.channelId, channelId);
           }
         }
@@ -1627,7 +1649,7 @@ export async function handleAdminRoutes(
         if (conflict) {
           return reply(c, 400, { error: conflict });
         }
-        const totalTargeted = 1;
+        const totalTargeted = Math.max(1, await countBroadcastGuilds(client));
 
         // Simulation : on renvoie la cible et les avertissements sans rien envoyer.
         if (body.dryRun === true) {
@@ -1708,7 +1730,8 @@ export async function handleAdminRoutes(
           feedbackLabel: normalized.feedbackLabel,
         });
 
-        const { successCount, failCount } = await finalizeBroadcast(record.id, deliveries, totalTargeted);
+        const finalTotal = deliveries.length;
+        const { successCount, failCount } = await finalizeBroadcast(record.id, deliveries, finalTotal);
         await markBroadcastMediaUsed([normalized.imageUrl, normalized.thumbnailUrl]);
 
         if (successCount > 0) {
@@ -1725,7 +1748,7 @@ export async function handleAdminRoutes(
           action: 'broadcast.send',
           targetType: 'broadcast',
           targetId: record.id,
-          summary: `Annonce envoyée : ${successCount} succès, ${failCount} échec(s) sur ${totalTargeted} serveur(s)`,
+          summary: `Annonce envoyée : ${successCount} succès, ${failCount} échec(s) sur ${finalTotal} serveur(s)`,
           metadata: { target: normalized.target, channelPref: normalized.channelPref, hasImage: Boolean(normalized.imageUrl) },
           outcome: successCount > 0 ? 'OK' : 'FAILED',
         });
@@ -1735,7 +1758,7 @@ export async function handleAdminRoutes(
           broadcastId: record.id,
           successCount,
           failCount,
-          totalTargeted,
+          totalTargeted: finalTotal,
           warnings: normalized.warnings,
           // Detail borne : la page en affiche l'essentiel, le reste vient de
           // `/api/admin/broadcast/:id/deliveries` a la demande.
