@@ -17,6 +17,9 @@ export const RANK_CARD_BADGE_ICONS: Record<RankCardBadgeIconId, string> = {
   crown: 'M3 8l4.5 4L12 5l4.5 7L21 8l-2 10H5L3 8zM5 19.5h14V22H5z',
   gem: 'M6 3h12l4 6-10 12L2 9l4-6z',
   gift: 'M3 8h8v4H3zM13 8h8v4h-8zM4 13h7v8H4zM13 13h7v8h-7zM12 7.5C10 3 6 4 7.5 6.5 8.3 7.8 10.5 8 12 8c1.5 0 3.7-.2 4.5-1.5C18 4 14 3 12 7.5z',
+  // Silhouette et signe plus, sans chevauchement : le plus s'arrête au-dessus
+  // de l'épaule, que l'arc du buste n'atteint qu'à partir de y = 17.
+  referral: 'M9 3a4 4 0 1 0 0 8a4 4 0 1 0 0-8zM1 21a8 8 0 0 1 16 0zM19 7h2v3h3v2h-3v3h-2v-3h-3v-2h3z',
   bolt: 'M13 2L4 14h7l-1 8 9-12h-7l1-8z',
   shield: 'M12 2l8 3v6c0 5.5-3.4 9.7-8 11-4.6-1.3-8-5.5-8-11V5l8-3z',
   peak: 'M2 20L9 7l4 6 3-4 6 11H2z',
@@ -97,6 +100,17 @@ export const RANK_CARD_ACHIEVEMENTS: RankCardAchievement[] = [
     tier: 'gold',
     icon: 'gift',
     metric: 'giftsOffered',
+    threshold: 1,
+    revocable: false,
+  },
+  {
+    id: 'referrer',
+    label: { fr: 'Parrain', en: 'Referrer' },
+    description: { fr: 'Parrainer un serveur qui a payé son abonnement Kotbo.', en: 'Refer a server that paid for its Kotbo subscription.' },
+    title: { fr: 'Parrain', en: 'Referrer' },
+    tier: 'silver',
+    icon: 'referral',
+    metric: 'referrals',
     threshold: 1,
     revocable: false,
   },

@@ -16604,6 +16604,7 @@
   "bill_all_per_year": "per year",
   "bill_all_current": "Open server",
   "bill_all_manage": "Manage",
+  "bill_all_unreachable": "Kotbo is no longer on this server, or you left it: it can't be opened in the dashboard anymore.",
   "bill_all_err": "Couldn't load your paid servers.",
   "bill_title": "Billing",
   "bill_desc": "This server's plan decides which modules are available. Payment and invoices go through Stripe.",

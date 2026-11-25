@@ -50,6 +50,7 @@ const METRICS = {
   reputation: 57,
   starboard: 12,
   questsClaimed: 31,
+  referrals: 0,
   manual: 0,
 };
 

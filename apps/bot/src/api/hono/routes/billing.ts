@@ -1131,6 +1131,7 @@ export function createBillingRouter(client: Client): OpenAPIHono {
         stripeCurrentPeriodEnd: true,
         stripeCancelAtPeriodEnd: true,
         accessExpiresAt: true,
+        stripeCustomerId: true,
       },
     });
 
@@ -1170,11 +1171,43 @@ export function createBillingRouter(client: Client): OpenAPIHono {
         cancelAtPeriodEnd: row.stripeCancelAtPeriodEnd,
         accessExpiresAt: row.accessExpiresAt?.toISOString() ?? null,
         network: networkOf.get(row.id) ?? null,
+        // Factures et résiliation restent accessibles par le portail, même
+        // quand le serveur ne s'ouvre plus dans le dashboard.
+        hasPortal: Boolean(row.stripeCustomerId),
       };
     });
 
     guilds.sort((a, b) => a.name.localeCompare(b.name));
     return c.json({ guilds, totalMonthlyCents });
+  });
+
+  /**
+   * Portail Stripe d'un serveur que l'appelant paie, hors `GUARDED` : un bot
+   * retiré du serveur, ou un payeur qui l'a quitté, ne doit pas l'empêcher de
+   * consulter ses factures ni de résilier. Seul le payeur y a droit ; tout
+   * autre compte reçoit la même réponse qu'un serveur inconnu.
+   */
+  const OWNED_PORTAL = '/api/dashboard/billing/owned/:guildId/portal';
+  router.use(OWNED_PORTAL, rateLimit(dashboardSensitiveRateLimiter, 10, 60 * 1000));
+  router.post(OWNED_PORTAL, requireAuth, async (c) => {
+    if (!isBillingEnabled()) return c.json({ error: 'Facturation non configurée sur cette instance.' }, 503);
+
+    const guildId = c.req.param('guildId');
+    const guild = await prisma.guild.findUnique({
+      where: { id: guildId },
+      select: { billingOwnerId: true, stripeCustomerId: true },
+    });
+    if (!guild?.stripeCustomerId || guild.billingOwnerId !== c.var.auth.userId) {
+      return c.json({ error: "Aucun abonnement à ton nom sur ce serveur." }, 404);
+    }
+
+    try {
+      const url = await createPortalSession(guildId, guild.stripeCustomerId);
+      return c.json({ url }, 200);
+    } catch (err) {
+      logger.error('Billing', `Ouverture du portail impossible pour ${guildId}:`, err);
+      throw new HTTPException(502, { message: "Stripe n'a pas pu ouvrir le portail client." });
+    }
   });
 
   return router;

@@ -10,6 +10,7 @@ import {
   type RankCardAchievementMetrics,
 } from '@kotbo/shared';
 import prisma, { prismaRead } from '../../utils/db.js';
+import { countCompletedQuests } from '../features/rpg/rpgQuestStats.js';
 import { upsertRetryingRace } from '../../utils/upsertRetry.js';
 import { cache } from '../../utils/cache.js';
 import { logger } from '../../utils/logger.js';
@@ -188,10 +189,12 @@ const METRIC_READERS: Record<ComputedMetric, (userId: string) => Promise<number>
     return Math.max(0, result._sum.value ?? 0);
   },
   starboard: (userId) => prismaRead.starboardEntry.count({ where: { authorId: userId, postedAt: { not: null } } }),
-  questsClaimed: async (userId) => {
-    // Les quêtes répétables se paient plusieurs fois : le compteur de versements est le bon.
-    const total = await prismaRead.rpgQuestProgress.aggregate({ where: { userId, teamKey: '' }, _sum: { completions: true } });
-    return total._sum.completions ?? 0;
+  questsClaimed: countCompletedQuests,
+  referrals: async (userId) => {
+    // Import différé : le parrainage tire toute la facturation, que le calcul
+    // des succès n'a pas à charger pour les autres métriques.
+    const { countPaidReferrals } = await import('../billing/referralService.js');
+    return countPaidReferrals(userId);
   },
 };
 
