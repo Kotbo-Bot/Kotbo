@@ -37,6 +37,7 @@
   import { confirmDialog } from '../lib/stores/confirmDialog.svelte';
   import ModulePage from '../lib/components/ModulePage.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
+  import { StatTile } from '../lib/components/ui';
   import EmptyState from '../lib/components/EmptyState.svelte';
   import UserDisplay from '../lib/components/UserDisplay.svelte';
   import Skeleton from '../lib/components/Skeleton.svelte';
@@ -463,18 +464,6 @@
   {/if}
 {/snippet}
 
-{#snippet statTile(icon: string, tone: string, value: string, label: string)}
-  <div class="bg-surface-container-high/30 rounded-xl p-4 flex items-center gap-3">
-    <div class="h-9 w-9 rounded-lg flex items-center justify-center shrink-0 {tone}">
-      <Papicon {icon} size={20} />
-    </div>
-    <div class="flex flex-col min-w-0">
-      <span class="text-xl font-bold text-on-surface">{value}</span>
-      <span class="text-xs font-medium text-on-surface-variant">{label}</span>
-    </div>
-  </div>
-{/snippet}
-
 {#snippet suggestionCard(suggestion: SuggestionItem)}
   {@const score = suggestionScore(suggestion)}
   {@const stale = suggestion.status === 'PENDING' && isSuggestionStale(suggestion.createdAt, now)}
@@ -621,10 +610,10 @@
       {:else if activeTab === 'queue'}
         <div class="space-y-6">
           <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-            {@render statTile('Inbox', 'bg-warning/10 text-on-warning-container', String(data.stats.pending), m.suggestions_stat_pending())}
-            {@render statTile('Clock', 'bg-primary/10 text-primary', formatDelay(data.stats.avgResponseHours), m.suggestions_stat_delay({ days: SUGGESTION_STATS_DAYS }))}
-            {@render statTile('Check', 'bg-success/10 text-on-success-container', formatRate(data.stats.acceptanceRate), m.suggestions_stat_acceptance({ days: SUGGESTION_STATS_DAYS }))}
-            {@render statTile('Lightbulb', 'bg-secondary/10 text-secondary', String(data.stats.createdRecent), m.suggestions_stat_created({ days: SUGGESTION_STATS_DAYS }))}
+            <StatTile icon="Inbox" tone="bg-warning/10 text-on-warning-container" value={String(data.stats.pending)} label={m.suggestions_stat_pending()} />
+            <StatTile icon="Clock" tone="bg-primary/10 text-primary" value={formatDelay(data.stats.avgResponseHours)} label={m.suggestions_stat_delay({ days: SUGGESTION_STATS_DAYS })} />
+            <StatTile icon="Check" tone="bg-success/10 text-on-success-container" value={formatRate(data.stats.acceptanceRate)} label={m.suggestions_stat_acceptance({ days: SUGGESTION_STATS_DAYS })} />
+            <StatTile icon="Lightbulb" tone="bg-secondary/10 text-secondary" value={String(data.stats.createdRecent)} label={m.suggestions_stat_created({ days: SUGGESTION_STATS_DAYS })} />
           </div>
 
           {#if !data.config.channelId}

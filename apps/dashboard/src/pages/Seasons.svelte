@@ -22,6 +22,7 @@
   import { subscribeRealtime } from '../lib/stores/realtime.svelte';
   import ModulePage from '../lib/components/ModulePage.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
+  import { StatTile } from '../lib/components/ui';
   import EmptyState from '../lib/components/EmptyState.svelte';
   import UserDisplay from '../lib/components/UserDisplay.svelte';
   import Skeleton from '../lib/components/Skeleton.svelte';
@@ -357,18 +358,6 @@
   {/if}
 {/snippet}
 
-{#snippet statTile(icon: string, tone: string, value: string, label: string)}
-  <div class="bg-surface-container-high/30 rounded-xl p-4 flex items-center gap-3">
-    <div class="h-9 w-9 rounded-lg flex items-center justify-center shrink-0 {tone}">
-      <Papicon {icon} size={20} />
-    </div>
-    <div class="flex flex-col min-w-0">
-      <span class="text-xl font-bold text-on-surface truncate">{value}</span>
-      <span class="text-xs font-medium text-on-surface-variant">{label}</span>
-    </div>
-  </div>
-{/snippet}
-
 {#snippet statusPill(status: Season['status'])}
   <span class="text-2xs font-semibold px-2 py-0.5 rounded-full border {STATUS[status].cls}">{STATUS[status].label()}</span>
 {/snippet}
@@ -586,9 +575,9 @@
               </div>
 
               <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                {@render statTile('Users', 'bg-primary/10 text-primary', (data.activeTotals?.participants ?? data.activeLeaderboard.length).toLocaleString(dateLocale()), m.sea_stat_participants())}
-                {@render statTile('Zap', 'bg-success/10 text-on-success-container', (data.activeTotals?.totalXp ?? 0).toLocaleString(dateLocale()), m.sea_stat_xp())}
-                {@render statTile('Clock', 'bg-warning/10 text-on-warning-container', String(progress.daysLeft), m.sea_stat_days_left())}
+                <StatTile icon="Users" tone="bg-primary/10 text-primary" value={(data.activeTotals?.participants ?? data.activeLeaderboard.length).toLocaleString(dateLocale())} label={m.sea_stat_participants()} />
+                <StatTile icon="Zap" tone="bg-success/10 text-on-success-container" value={(data.activeTotals?.totalXp ?? 0).toLocaleString(dateLocale())} label={m.sea_stat_xp()} />
+                <StatTile icon="Clock" tone="bg-warning/10 text-on-warning-container" value={String(progress.daysLeft)} label={m.sea_stat_days_left()} />
               </div>
 
               <div class="space-y-2">

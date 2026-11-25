@@ -36,6 +36,7 @@
   import { memberCaseModal } from '../lib/stores/memberCaseModal.svelte';
   import ModulePage from '../lib/components/ModulePage.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
+  import { StatTile } from '../lib/components/ui';
   import EmptyState from '../lib/components/EmptyState.svelte';
   import UserDisplay from '../lib/components/UserDisplay.svelte';
   import Skeleton from '../lib/components/Skeleton.svelte';
@@ -464,18 +465,6 @@
   {/if}
 {/snippet}
 
-{#snippet statTile(icon: string, tone: string, value: number, label: string)}
-  <div class="bg-surface-container-high/30 rounded-xl p-4 flex items-center gap-3">
-    <div class="h-9 w-9 rounded-lg flex items-center justify-center shrink-0 {tone}">
-      <Papicon {icon} size={20} />
-    </div>
-    <div class="flex flex-col">
-      <span class="text-xl font-bold text-on-surface">{value}</span>
-      <span class="text-xs font-medium text-on-surface-variant">{label}</span>
-    </div>
-  </div>
-{/snippet}
-
 <ModulePage
   title={m.rep_page_title()}
   description={m.rep_page_desc()}
@@ -506,9 +495,9 @@
       {:else if activeTab === 'overview'}
         <div class="space-y-6">
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {@render statTile('Heart', 'bg-primary/10 text-primary', data.stats.totalVotes, m.rep_total_votes())}
-            {@render statTile('Star', 'bg-warning/10 text-on-warning-container', data.stats.votesLast7Days, m.rep_votes_last_7_days())}
-            {@render statTile('Users', 'bg-success/10 text-on-success-container', data.stats.activeGivers7Days, m.rep_status_active_givers())}
+            <StatTile icon="Heart" tone="bg-primary/10 text-primary" value={data.stats.totalVotes} label={m.rep_total_votes()} />
+            <StatTile icon="Star" tone="bg-warning/10 text-on-warning-container" value={data.stats.votesLast7Days} label={m.rep_votes_last_7_days()} />
+            <StatTile icon="Users" tone="bg-success/10 text-on-success-container" value={data.stats.activeGivers7Days} label={m.rep_status_active_givers()} />
           </div>
 
           {#if data.config.tiers.length === 0}

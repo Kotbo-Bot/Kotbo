@@ -42,6 +42,7 @@
   import { authStore } from '../lib/stores/auth.svelte';
   import ModulePage from '../lib/components/ModulePage.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
+  import { StatTile } from '../lib/components/ui';
   import EmptyState from '../lib/components/EmptyState.svelte';
   import UserDisplay from '../lib/components/UserDisplay.svelte';
   import Skeleton from '../lib/components/Skeleton.svelte';
@@ -530,18 +531,6 @@
   {/if}
 {/snippet}
 
-{#snippet statTile(icon: string, tone: string, value: string, label: string)}
-  <div class="bg-surface-container-high/30 rounded-xl p-4 flex items-center gap-3">
-    <div class="h-9 w-9 rounded-lg flex items-center justify-center shrink-0 {tone}">
-      <Papicon {icon} size={20} />
-    </div>
-    <div class="flex flex-col min-w-0">
-      <span class="text-xl font-bold text-on-surface">{value}</span>
-      <span class="text-xs font-medium text-on-surface-variant">{label}</span>
-    </div>
-  </div>
-{/snippet}
-
 {#snippet entryCard(entry: StarboardEntryItem)}
   {@const name = entry.authorName ?? m.starboard_member_left()}
   <li class="bg-surface-container-high/20 border border-outline-variant/10 rounded-xl p-4 space-y-3">
@@ -694,10 +683,10 @@
       {:else if activeTab === 'overview'}
         <div class="space-y-6">
           <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-            {@render statTile('Star', 'bg-warning/10 text-on-warning-container', String(data.stats.postedRecent), m.starboard_stat_posted({ days: STARBOARD_STATS_DAYS }))}
-            {@render statTile('TrendingUp', 'bg-primary/10 text-primary', formatScore(data.stats.avgPeakRecent), m.starboard_stat_avg({ days: STARBOARD_STATS_DAYS }))}
-            {@render statTile('Trophy', 'bg-success/10 text-on-success-container', formatScore(data.stats.bestPeakRecent), m.starboard_stat_best({ days: STARBOARD_STATS_DAYS }))}
-            {@render statTile('Eye', 'bg-secondary/10 text-secondary', String(data.stats.onBoard), m.starboard_stat_on_board())}
+            <StatTile icon="Star" tone="bg-warning/10 text-on-warning-container" value={String(data.stats.postedRecent)} label={m.starboard_stat_posted({ days: STARBOARD_STATS_DAYS })} />
+            <StatTile icon="TrendingUp" tone="bg-primary/10 text-primary" value={formatScore(data.stats.avgPeakRecent)} label={m.starboard_stat_avg({ days: STARBOARD_STATS_DAYS })} />
+            <StatTile icon="Trophy" tone="bg-success/10 text-on-success-container" value={formatScore(data.stats.bestPeakRecent)} label={m.starboard_stat_best({ days: STARBOARD_STATS_DAYS })} />
+            <StatTile icon="Eye" tone="bg-secondary/10 text-secondary" value={String(data.stats.onBoard)} label={m.starboard_stat_on_board()} />
           </div>
 
           {#each advice as code (code)}
