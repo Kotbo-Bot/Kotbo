@@ -948,3 +948,30 @@ export function journalCsv(rows: readonly JournalRow[]): string {
   const lines = rows.map((row) => [row.date.toISOString(), row.source, row.actor, row.action, row.details].map(cell).join(','));
   return ['date,source,auteur,action,details', ...lines].join('\r\n') + '\r\n';
 }
+
+// ── Aperçu des alertes ─────────────────────────────────────────────────────
+
+/**
+ * Texte de chaque alerte tel qu'il partira, sur un exemple : les mentions
+ * Discord deviennent des noms lisibles et les dates relatives une durée,
+ * pour l'afficher dans le dashboard.
+ */
+export function alertPreviews(actorLabel: string, now: Date): Record<WellbeingAlertEvent, string> {
+  const ctx: AlertContext = {
+    actorId: 'ACTOR',
+    caseCount: 3,
+    reason: 'Enquête sur un signalement',
+    expiresAt: new Date(now.getTime() + 2 * 60 * 60 * 1000),
+    action: 'modifié',
+    reminder: 'review',
+    days: 7,
+    targetId: 'TARGET',
+    change: 'added',
+    scope: 'team',
+  };
+  const readable = (text: string) => text
+    .replace(/<@ACTOR>/g, `@${actorLabel}`)
+    .replace(/<@TARGET>/g, '@membre')
+    .replace(/<t:\d+:R>/g, 'dans 2 heures');
+  return Object.fromEntries(WELLBEING_ALERT_EVENTS.map((event) => [event, readable(alertText(event, ctx))])) as Record<WellbeingAlertEvent, string>;
+}
