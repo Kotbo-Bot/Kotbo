@@ -21,10 +21,14 @@ describe('loadApplicationEmojis', () => {
   });
 
   test('adopte les IDs de l\'application courante', async () => {
-    await loadApplicationEmojis(clientWithEmojis([{ name: 'ktb_cross', id: '42' }]));
+    await loadApplicationEmojis(clientWithEmojis([
+      { name: 'ktb_cross', id: '42' },
+      { name: 'ktb_crown', id: '99' },
+    ]));
 
     expect(E.error).toBe('<:ktb_cross:42>');
     expect(resolveEmojiShortcodes(':ktb_cross:')).toBe('<:ktb_cross:42>');
+    expect(resolveEmojiShortcodes(':ktb_crown:')).toBe('<:ktb_crown:99>');
     // Un ID périmé stocké en base est réaligné sur l'application courante.
     expect(resolveEmojiShortcodes('<:ktb_cross:1519265262690373632>')).toBe('<:ktb_cross:42>');
   });
@@ -35,6 +39,7 @@ describe('loadApplicationEmojis', () => {
     expect(E.error).toBe('❌');
     // Sans cette résolution, le raccourci ressortirait tel quel devant les membres.
     expect(resolveEmojiShortcodes(':ktb_cross:')).toBe('❌');
+    expect(resolveEmojiShortcodes(':ktb_crown:')).toBe('👑');
   });
 
   test('purge les IDs codés en dur quand la récupération échoue', async () => {

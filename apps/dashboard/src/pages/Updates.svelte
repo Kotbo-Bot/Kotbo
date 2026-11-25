@@ -10,6 +10,7 @@
   import RefreshButton from '../lib/components/RefreshButton.svelte';
   import Skeleton from '../lib/components/Skeleton.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
+  import EmojiText from '../lib/components/EmojiText.svelte';
   import { Button } from '../lib/components/ui';
 
   interface PollResults {
@@ -68,10 +69,6 @@
 
   function isClosed(entry: UpdateEntry): boolean {
     return Boolean(entry.pollClosesAt && new Date(entry.pollClosesAt).getTime() <= Date.now());
-  }
-
-  function cleanMessage(text: string): string {
-    return text.replace(/<a?:(\w+):\d+>/g, ':$1:');
   }
 
   async function vote(entry: UpdateEntry, optionIndex: number) {
@@ -159,7 +156,7 @@
             <div class="flex-1 p-5 space-y-4">
               <div class="flex items-start justify-between gap-4">
                 <div class="space-y-1 min-w-0">
-                  <h2 class="text-base font-bold text-on-surface leading-snug">{entry.title}</h2>
+                  <h2 class="text-base font-bold text-on-surface leading-snug"><EmojiText value={entry.title} /></h2>
                   <p class="text-xs text-on-surface-variant">
                     {new Date(entry.finishedAt ?? entry.createdAt).toLocaleString(dateLocale(), {
                       day: '2-digit',
@@ -179,9 +176,7 @@
                 {/if}
               </div>
 
-              <div class="text-sm text-on-surface whitespace-pre-wrap leading-relaxed">
-                {cleanMessage(entry.message)}
-              </div>
+              <div class="text-sm text-on-surface whitespace-pre-wrap leading-relaxed"><EmojiText value={entry.message} /></div>
 
               {#if entry.imageUrl}
                 <img
@@ -284,7 +279,7 @@
 
               {#if entry.footerText}
                 <p class="text-2xs text-on-surface-variant pt-1 border-t border-outline-variant/15">
-                  {entry.footerText}
+                  <EmojiText value={entry.footerText} />
                 </p>
               {/if}
             </div>

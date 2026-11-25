@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import prisma from '../../../utils/db.js';
 import { getPollResults } from '../../../services/system/broadcastService.js';
+import { resolveEmojiShortcodes } from '../../../utils/emojis.js';
 import { dashboardAuth, fail, readBody, send } from '../../hono/dashboard/kit.js';
 
 /**
@@ -92,12 +93,12 @@ export function createUpdatesRouter() {
 
         return {
           id: log.id,
-          title: log.title,
-          message: log.message,
+          title: resolveEmojiShortcodes(log.title),
+          message: resolveEmojiShortcodes(log.message),
           color: log.color,
           thumbnailUrl: log.thumbnailUrl,
           imageUrl: log.imageUrl,
-          footerText: log.footerText,
+          footerText: log.footerText ? resolveEmojiShortcodes(log.footerText) : null,
           pollOptions: log.pollOptions,
           pollClosesAt: log.pollClosesAt?.toISOString() ?? null,
           feedbackLabel: log.feedbackLabel,
