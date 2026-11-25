@@ -585,6 +585,7 @@ export interface CellStatsCase {
   source: string;
   assigneeId: string | null;
   createdAt: Date;
+  closedReason?: string | null;
   events: ReadonlyArray<{ type: string; toValue: string | null; createdAt: Date }>;
 }
 
@@ -603,6 +604,12 @@ export function wellbeingCellStats(cases: readonly CellStatsCase[], now: Date) {
 
   const activeByCategory: Record<string, number> = {};
   for (const item of active) activeByCategory[item.category] = (activeByCategory[item.category] ?? 0) + 1;
+  // Fermés sans motif (avant les motifs, ou fermés depuis Discord) : comptés à part.
+  const closedByReason: Record<string, number> = {};
+  for (const item of cases.filter((c) => c.status === 'CLOSED')) {
+    const reason = item.closedReason ?? 'UNSPECIFIED';
+    closedByReason[reason] = (closedByReason[reason] ?? 0) + 1;
+  }
 
   const triageHours = cases
     .filter((item) => item.source === 'DISCORD')
@@ -639,6 +646,7 @@ export function wellbeingCellStats(cases: readonly CellStatsCase[], now: Date) {
     active: active.length,
     criticalUnassigned: active.filter((item) => item.severity === 'CRITICAL' && !item.assigneeId).length,
     activeByCategory,
+    closedByReason,
     medianTriageHours,
     months,
   };
@@ -791,4 +799,98 @@ export function agendaItems(
     .filter((task) => (task.assigneeId ?? active.get(task.caseId)?.assigneeId) === viewerId)
     .map((task) => item(task.caseId, 'task', task.dueAt!));
   return [...reviews, ...mine].sort((a, b) => a.dueAt.getTime() - b.dueAt.getTime());
+}
+
+// ── Motif de clôture ───────────────────────────────────────────────────────
+
+/** Comment un dossier se termine : le bilan les compte. */
+export const CLOSE_REASONS = ['RESOLVED', 'REFERRED', 'NO_FOLLOWUP', 'DUPLICATE'] as const;
+
+export function cleanCloseReason(input: unknown): (typeof CLOSE_REASONS)[number] | null {
+  return CLOSE_REASONS.find((reason) => reason === input) ?? null;
+}
+
+// ── Référent absent ────────────────────────────────────────────────────────
+
+/** Absence en cours, prise en compte ou validée (une simple demande ne suffit pas). */
+export function absenceActive(
+  absence: { status: string; isVoid: boolean; endedAt: Date | null; startDate: Date; endDate: Date | null; isIndefinite: boolean },
+  now: Date,
+): boolean {
+  if (!['APPROVED', 'ACKNOWLEDGED'].includes(absence.status) || absence.isVoid || absence.endedAt) return false;
+  if (absence.startDate.getTime() > now.getTime()) return false;
+  return absence.isIndefinite || !absence.endDate || absence.endDate.getTime() > now.getTime();
+}
+
+/** Qui reçoit la relance d'un dossier : le référent, ou son suppléant s'il est absent. */
+export function reminderRecipient(assigneeId: string | null, absentIds: ReadonlySet<string>, backupUserId: string | null): string | null {
+  if (!assigneeId) return null;
+  if (absentIds.has(assigneeId) && backupUserId && backupUserId !== assigneeId) return backupUserId;
+  return assigneeId;
+}
+
+// ── Correction d'une note ──────────────────────────────────────────────────
+
+/** Une note se corrige par son auteur, dans ce délai ; la version d'origine reste lisible. */
+export const NOTE_EDIT_HOURS = 48;
+
+export function canEditNote(note: { authorId: string; createdAt: Date }, editorId: string, now: Date): boolean {
+  return note.authorId === editorId && now.getTime() - note.createdAt.getTime() < NOTE_EDIT_HOURS * 60 * 60 * 1000;
+}
+
+// ── Résumé hebdomadaire ────────────────────────────────────────────────────
+
+/** Membres de la cellule parmi les membres du serveur : désignés, ou par rôle. */
+export function cellMemberIds(
+  lists: Pick<WellbeingAccessLists, 'teamUserIds' | 'teamRoleIds'>,
+  members: ReadonlyArray<{ id: string; roleIds: readonly string[] }>,
+): string[] {
+  const ids = new Set(lists.teamUserIds);
+  for (const member of members) if (member.roleIds.some((id) => lists.teamRoleIds.includes(id))) ids.add(member.id);
+  return [...ids];
+}
+
+/** Un résumé ne part qu'une fois par semaine et par serveur. */
+export const DIGEST_INTERVAL_DAYS = 6;
+
+/** Message privé du lundi : des chiffres, jamais de titre ni de personne. `null` s'il n'y a rien. */
+export function weeklyDigestText(
+  guildName: string,
+  counts: { assigned: number; reviewsThisWeek: number; triage: number; criticalUnassigned: number },
+): string | null {
+  if (Object.values(counts).every((value) => value === 0)) return null;
+  return [
+    `Cellule bien-être de ${guildName}, votre semaine :`,
+    `- dossiers dont vous êtes référent : ${counts.assigned}`,
+    `- échéances de suivi cette semaine : ${counts.reviewsThisWeek}`,
+    `- signalements à trier : ${counts.triage}`,
+    `- dossiers critiques sans référent : ${counts.criticalUnassigned}`,
+    'Le détail est sur la page Bien-être du dashboard.',
+  ].join('\n');
+}
+
+/**
+ * Chiffres du résumé d'une personne de la cellule. Les dossiers qui la
+ * concernent sont écartés, comme partout ailleurs (conflit d'intérêts).
+ */
+export function digestCounts(
+  cases: ReadonlyArray<{ status: string; severity: string; source: string; assigneeId: string | null; subjectUserId: string | null; reviewAt: Date | null }>,
+  memberId: string,
+  now: Date,
+) {
+  const visible = cases.filter((item) => item.status !== 'CLOSED' && !isCaseSubject(item.subjectUserId, memberId));
+  const mine = visible.filter((item) => item.assigneeId === memberId);
+  const weekEnd = now.getTime() + 7 * DAY_MS;
+  return {
+    assigned: mine.length,
+    reviewsThisWeek: mine.filter((item) => item.reviewAt && item.reviewAt.getTime() <= weekEnd).length,
+    triage: visible.filter((item) => item.source === 'DISCORD' && !item.assigneeId).length,
+    criticalUnassigned: visible.filter((item) => item.severity === 'CRITICAL' && !item.assigneeId).length,
+  };
+}
+
+/** Le résumé part le lundi, à partir de 8 h (UTC), une fois par semaine. */
+export function digestDue(lastSentAt: Date | null, now: Date): boolean {
+  if (now.getUTCDay() !== 1 || now.getUTCHours() < 8) return false;
+  return !lastSentAt || now.getTime() - lastSentAt.getTime() >= DIGEST_INTERVAL_DAYS * DAY_MS;
 }

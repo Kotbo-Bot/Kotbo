@@ -5818,6 +5818,8 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "resources": [],
     "accessReviewedAt": null,
     "accessReviewSentAt": null,
+    "backupUserId": null,
+    "digestSentAt": null,
     "createdAt": "__NOW__",
     "updatedAt": "__NOW__"
   },
@@ -5847,6 +5849,7 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "purgeRequestedAt": null,
     "purgeWarnedAt": null,
     "trackingCodeHash": null,
+    "closedReason": null,
     "createdAt": "__NOW__",
     "updatedAt": "__NOW__"
   },
@@ -5856,7 +5859,9 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "authorId": "",
     "authorName": "",
     "content": "",
-    "createdAt": "__NOW__"
+    "createdAt": "__NOW__",
+    "originalContent": null,
+    "editedAt": null
   },
   "WellbeingCaseAttachment": {
     "id": "",

@@ -26,6 +26,10 @@ model WellbeingConfig {
   // Revue périodique des accès : dernière confirmation du propriétaire, dernier rappel envoyé.
   accessReviewedAt   DateTime?
   accessReviewSentAt DateTime?
+  // Suppléant : reçoit les relances des dossiers dont le référent est absent.
+  backupUserId       String?
+  // Dernier résumé hebdomadaire envoyé aux membres de la cellule.
+  digestSentAt       DateTime?
 
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
 
@@ -68,6 +72,8 @@ model WellbeingCase {
   purgeWarnedAt        DateTime?
   // Signalement Discord : empreinte du code de suivi remis à son auteur (le code n'est pas gardé).
   trackingCodeHash     String?   @unique
+  // Motif de clôture (RESOLVED | REFERRED | NO_FOLLOWUP | DUPLICATE), vidé à la réouverture.
+  closedReason         String?
 
   guild  Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
   notes       WellbeingCaseNote[]
@@ -91,6 +97,9 @@ model WellbeingCaseNote {
   authorName String
   content    String
   createdAt  DateTime @default(now())
+  // Correction par l'auteur : la première version reste lisible, chiffrée comme la note.
+  originalContent String?
+  editedAt        DateTime?
 
   wellbeingCase WellbeingCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
 
@@ -141,7 +150,7 @@ model WellbeingCaseEvent {
   caseId    String
   actorId   String?
   actorName String
-  type      String   // CREATED | STATUS | SEVERITY | ASSIGNEE | REVIEW | NOTE | RESOURCES_SENT | REMINDER | ATTACHMENT_ADDED | ATTACHMENT_REMOVED | VIEWED | TRASHED | RESTORED | EXTENDED | EXPORTED | TASK_ADDED | TASK_DONE | TASK_REOPENED | TASK_REMOVED | PURGE_REQUESTED
+  type      String   // CREATED | STATUS | SEVERITY | ASSIGNEE | REVIEW | NOTE | RESOURCES_SENT | REMINDER | ATTACHMENT_ADDED | ATTACHMENT_REMOVED | VIEWED | TRASHED | RESTORED | EXTENDED | EXPORTED | TASK_ADDED | TASK_DONE | TASK_REOPENED | TASK_REMOVED | PURGE_REQUESTED | CLOSED_REASON | NOTE_EDITED
   fromValue String?
   toValue   String?
   createdAt DateTime @default(now())
