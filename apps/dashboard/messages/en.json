@@ -20256,6 +20256,7 @@
   "wb_tpl_soutien": "Situation:\nExpressed need:\nResources offered:",
   "wb_tpl_suivi": "Context:\nPoints to watch:\nNext step:",
   "wb_summary_template_error": "Fill in the outline: replace the headings with the actual situation before creating the case.",
+  "wb_subject_self_error": "That's you: a case about you would be hidden from you. Ask another unit member to open it.",
   "wb_agenda_title": "My wellbeing follow-ups ({count})",
   "wb_agenda_review": "Case follow-up",
   "wb_agenda_task": "Action plan task",

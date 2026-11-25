@@ -20260,6 +20260,7 @@
   "wb_tpl_soutien": "Situation :\nBesoin exprimé :\nRessources proposées :",
   "wb_tpl_suivi": "Contexte :\nPoints à surveiller :\nProchaine étape :",
   "wb_summary_template_error": "Complétez la trame : remplacez les intitulés par la situation réelle avant de créer le dossier.",
+  "wb_subject_self_error": "C'est vous : un dossier qui vous concerne vous serait masqué. Demandez à un autre membre de la cellule de l'ouvrir.",
   "wb_agenda_title": "Mes échéances bien-être ({count})",
   "wb_agenda_review": "Suivi d'un dossier",
   "wb_agenda_task": "Tâche d'un plan d'action",

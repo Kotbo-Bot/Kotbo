@@ -300,9 +300,14 @@ export function purgeApprovalError(
   return null;
 }
 
+/** La personne est-elle celle que le dossier concerne ? Elle ne le voit alors pas. */
+export function isCaseSubject(subjectUserId: string | null, userId: string | null): boolean {
+  return !!subjectUserId && !!userId && subjectUserId === userId;
+}
+
 /** La personne concernée ne suit pas son propre dossier. */
 export function assigneeConflict(subjectUserId: string | null, assigneeId: string | null): boolean {
-  return !!subjectUserId && !!assigneeId && subjectUserId === assigneeId;
+  return isCaseSubject(subjectUserId, assigneeId);
 }
 
 /** Une ouverture de dossier est tracée au plus une fois par période et par personne. */

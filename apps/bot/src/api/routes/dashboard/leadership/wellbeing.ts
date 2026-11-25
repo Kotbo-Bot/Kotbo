@@ -27,6 +27,7 @@ import {
   TASK_LABEL_MAX,
   accessReviewDue,
   assigneeConflict,
+  isCaseSubject,
   breakGlassScope,
   caseVisibilityWhere,
   endBreakGlassError,
@@ -617,6 +618,11 @@ export function createWellbeingRouter(client: Client) {
       const subjectUserId = bodyText(body?.subjectUserId, 20);
       if (!subjectName || !title || !summary) {
         return send(c, { error: 'Personne concernée, titre et résumé sont obligatoires.' }, 400);
+      }
+      // Un dossier sur soi-même serait aussitôt masqué à son auteur (conflit
+      // d'intérêts) : il le créerait sans pouvoir le suivre ni le fermer.
+      if (isCaseSubject(SNOWFLAKE_RE.test(subjectUserId) ? subjectUserId : null, user.userId)) {
+        return send(c, { error: "Vous ne pouvez pas ouvrir un dossier qui vous concerne : demandez à un autre membre de la cellule." }, 400);
       }
       const assigneeId = bodyText(body?.assigneeId, 20);
       if (assigneeId && !(await isTeamMemberId(state, assigneeId))) {

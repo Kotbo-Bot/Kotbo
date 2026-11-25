@@ -101,7 +101,8 @@
     {m.wb_panel_intro()}
   </p>
 
-  {#if canWrite}
+  <!-- Sur sa propre fiche, pas de note : le dossier serait aussitôt masqué à son auteur. -->
+  {#if canWrite && userId !== authStore.user?.id}
   <div>
     <label for="wb-quick-note" class="sr-only">{m.wb_panel_note_label()}</label>
     <textarea id="wb-quick-note" class="input min-h-[120px] resize-y" bind:value={text} placeholder={m.wb_panel_note_ph()}></textarea>
@@ -109,7 +110,7 @@
       <button class="btn-primary" disabled={busy || !text.trim()} onclick={addQuickNote}>{m.wb_panel_save()}</button>
     </div>
   </div>
-  {:else}
+  {:else if !canWrite}
   <p class="text-xs text-on-surface-variant">{m.wb_read_only_emergency()}</p>
   {/if}
 

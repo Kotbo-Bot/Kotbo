@@ -581,12 +581,18 @@
     }
   }
 
+  /**
+   * Un dossier sur soi-même serait aussitôt masqué à son auteur (conflit
+   * d'intérêts) : le bot le refuse, le formulaire le dit avant l'envoi.
+   */
+  const subjectIsSelf = $derived(!!newSubjectUserId && newSubjectUserId === viewerId);
+
   /** La trame proposée n'est pas un résumé : elle doit être remplie avant la création. */
   let summaryError = $state('');
 
   async function createCase(event: SubmitEvent) {
     event.preventDefault();
-    if (creatingCase) return;
+    if (creatingCase || subjectIsSelf) return;
     if (wbIsSummaryTemplate(newSummary)) {
       summaryError = m.wb_summary_template_error();
       return;
@@ -1554,7 +1560,7 @@
 
 <Modal bind:open={newCaseOpen} title={m.wb_new_modal_title()} size="md">
   <form id="wb-case-form" onsubmit={createCase} class="space-y-4">
-    <Field label={m.wb_member()} hint={m.wb_member_hint()}>
+    <Field label={m.wb_member()} hint={m.wb_member_hint()} error={subjectIsSelf ? m.wb_subject_self_error() : ''}>
       {#snippet children(id, describedBy)}
         <MemberSearchSelect {id} {describedBy} bind:value={newSubjectUserId} placeholder={m.wb_member_ph()}
           onselect={(member) => (newSubjectName = member.displayName || member.username)} />
