@@ -5,6 +5,7 @@
  * d'audit doit donc dire qui a été ajouté ou retiré, pas seulement combien :
  * sinon un ajout discret de soi-même à l'équipe passerait inaperçu.
  */
+import { createHash, randomInt } from 'node:crypto';
 
 export interface WellbeingAccessLists {
   enabled: boolean;
@@ -31,13 +32,14 @@ export interface WellbeingAccessLists {
  * - REPORT : signalement reçu depuis Discord ;
  * - REMINDER : dossier arrivé à échéance de suivi, ou critique et inactif ;
  * - MEMBERSHIP_CHANGE : rôle de la cellule ou de la direction donné ou retiré ;
- * - PURGE_SOON : des dossiers fermés seront effacés dans une semaine.
+ * - PURGE_SOON : des dossiers fermés seront effacés dans une semaine ;
+ * - UNUSUAL_ACCESS : une personne ouvre beaucoup de dossiers en peu de temps.
  */
 export const WELLBEING_ALERT_EVENTS = [
-  'BREAK_GLASS', 'EMERGENCY_READ', 'TEAM_READ', 'CASE_CHANGE', 'CONFIG_CHANGE', 'REPORT', 'REMINDER', 'MEMBERSHIP_CHANGE', 'PURGE_SOON',
+  'BREAK_GLASS', 'EMERGENCY_READ', 'TEAM_READ', 'CASE_CHANGE', 'CONFIG_CHANGE', 'REPORT', 'REMINDER', 'MEMBERSHIP_CHANGE', 'PURGE_SOON', 'UNUSUAL_ACCESS',
 ] as const;
 export type WellbeingAlertEvent = (typeof WELLBEING_ALERT_EVENTS)[number];
-export const DEFAULT_ALERT_EVENTS: WellbeingAlertEvent[] = ['BREAK_GLASS', 'EMERGENCY_READ', 'CONFIG_CHANGE', 'REPORT', 'REMINDER', 'MEMBERSHIP_CHANGE', 'PURGE_SOON'];
+export const DEFAULT_ALERT_EVENTS: WellbeingAlertEvent[] = ['BREAK_GLASS', 'EMERGENCY_READ', 'CONFIG_CHANGE', 'REPORT', 'REMINDER', 'MEMBERSHIP_CHANGE', 'PURGE_SOON', 'UNUSUAL_ACCESS'];
 /** Destinataires prévenus en message privé, au plus. */
 export const MAX_ALERT_USERS = 10;
 /** Une même personne qui recharge la page ne déclenche qu'une alerte de consultation par période. */
@@ -112,6 +114,8 @@ export function alertText(event: WellbeingAlertEvent, ctx: AlertContext): string
         ? `Cellule bien-être : ${author} a donné à ${target} un rôle de ${group} ; ajout annulé, seul le propriétaire du serveur peut le faire.`
         : `Cellule bien-être : ${author} a ajouté ${target} à ${group} (rôle Discord).`;
     }
+    case 'UNUSUAL_ACCESS':
+      return `Cellule bien-être : ${actor} a ouvert ${ctx.caseCount ?? 0} dossiers en ${UNUSUAL_ACCESS_WINDOW_MS / 60_000} minutes. Vérifiez que c'est attendu.`;
     case 'PURGE_SOON':
       return `Cellule bien-être : ${ctx.caseCount ?? 0} dossier(s) fermé(s) seront effacés dans ${PURGE_NOTICE_DAYS} jours. Prolongez-les depuis le dashboard pour les garder.`;
     case 'REMINDER':
@@ -633,4 +637,153 @@ export function wellbeingCellStats(cases: readonly CellStatsCase[], now: Date) {
     medianTriageHours,
     months,
   };
+}
+
+// ── Consultation inhabituelle ──────────────────────────────────────────────
+
+/** Dossiers ouverts par une même personne dans la fenêtre au-delà desquels la cellule est prévenue. */
+export const UNUSUAL_ACCESS_THRESHOLD = 10;
+export const UNUSUAL_ACCESS_WINDOW_MS = 10 * 60 * 1000;
+/** Une même personne ne déclenche pas plus d'une alerte par heure. */
+export const UNUSUAL_ACCESS_COOLDOWN_MS = 60 * 60 * 1000;
+
+export function isUnusualAccess(openedInWindow: number): boolean {
+  return openedInWindow >= UNUSUAL_ACCESS_THRESHOLD;
+}
+
+// ── Session récente ────────────────────────────────────────────────────────
+
+/** Ancienneté maximale de la connexion au dashboard pour lire les dossiers. */
+export const WELLBEING_SESSION_MAX_HOURS = 12;
+
+/** Connexion trop ancienne, ou de date inconnue : il faut se reconnecter. */
+export function wellbeingSessionExpired(sessionCreatedAt: number | undefined, now: number): boolean {
+  if (sessionCreatedAt === undefined) return true;
+  return now - sessionCreatedAt >= WELLBEING_SESSION_MAX_HOURS * 60 * 60 * 1000;
+}
+
+// ── Historique chaîné ──────────────────────────────────────────────────────
+
+export interface ChainedCaseEvent {
+  caseId: string;
+  type: string;
+  actorId: string | null;
+  actorName: string;
+  fromValue: string | null;
+  toValue: string | null;
+  createdAt: Date;
+}
+
+/**
+ * Empreinte d'une entrée d'historique, liée à la précédente : une entrée
+ * modifiée ou retirée directement en base casse la suite des empreintes.
+ */
+export function caseEventHash(previousHash: string | null, event: ChainedCaseEvent): string {
+  const fields = [previousHash ?? '', event.caseId, event.type, event.actorId ?? '', event.actorName,
+    event.fromValue ?? '', event.toValue ?? '', event.createdAt.toISOString()];
+  return createHash('sha256').update(JSON.stringify(fields)).digest('hex');
+}
+
+/**
+ * Vérifie l'historique d'un dossier, dans l'ordre chronologique. Les entrées
+ * écrites avant le chaînage (sans empreinte) ne sont admises qu'en tête :
+ * `partial` dit alors que seule la suite est garantie.
+ */
+export function verifyCaseEventChain(events: ReadonlyArray<ChainedCaseEvent & { hash: string | null }>): 'ok' | 'partial' | 'broken' {
+  let previous: string | null = null;
+  let chained = false;
+  let legacy = false;
+  for (const event of events) {
+    if (!event.hash) {
+      if (chained) return 'broken';
+      legacy = true;
+      continue;
+    }
+    if (caseEventHash(previous, event) !== event.hash) return 'broken';
+    previous = event.hash;
+    chained = true;
+  }
+  return legacy ? 'partial' : 'ok';
+}
+
+// ── Code de suivi d'un signalement ─────────────────────────────────────────
+
+/** Sans I, O, 0 ni 1 : un code recopié à la main ne se confond pas. */
+const TRACKING_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+export function generateTrackingCode(): string {
+  const pick = () => Array.from({ length: 5 }, () => TRACKING_ALPHABET[randomInt(TRACKING_ALPHABET.length)]).join('');
+  return `${pick()}-${pick()}`;
+}
+
+export function normalizeTrackingCode(input: string): string {
+  return input.toUpperCase().replace(/[\s-]/g, '');
+}
+
+/** Seule l'empreinte du code est gardée, liée au serveur : la base ne permet pas de le retrouver. */
+export function trackingCodeHash(guildId: string, code: string): string {
+  return createHash('sha256').update(`${guildId}:${normalizeTrackingCode(code)}`).digest('hex');
+}
+
+/** Ce que voit la personne qui a signalé : un état, jamais le contenu ni qui traite. */
+export function trackingStatus(
+  item: { status: string; assigneeId: string | null; deletedAt: Date | null } | null,
+): 'unknown' | 'received' | 'in_progress' | 'closed' {
+  if (!item) return 'unknown';
+  if (item.deletedAt || item.status === 'CLOSED') return 'closed';
+  if (item.assigneeId || item.status === 'MONITORING') return 'in_progress';
+  return 'received';
+}
+
+/** Une même personne ne vérifie un code qu'à ce rythme : deviner un code reste hors de portée. */
+export const TRACKING_LOOKUP_COOLDOWN_MS = 10 * 1000;
+
+// ── Mentions dans une note ─────────────────────────────────────────────────
+
+export const MAX_NOTE_MENTIONS = 5;
+
+export function cleanMentionIds(input: unknown): string[] {
+  if (!Array.isArray(input)) return [];
+  return [...new Set(input.filter((id): id is string => typeof id === 'string' && /^\d{17,20}$/.test(id)))].slice(0, MAX_NOTE_MENTIONS);
+}
+
+/** Message privé à un collègue mentionné : qui l'appelle, rien du dossier. */
+export function mentionText(actorId: string): string {
+  return `Cellule bien-être : <@${actorId}> vous signale une note dans un dossier. Ouvrez la page Bien-être du dashboard pour la lire.`;
+}
+
+// ── Mes échéances ──────────────────────────────────────────────────────────
+
+const AGENDA_DAYS = 7;
+
+export interface AgendaItem {
+  caseId: string;
+  kind: 'review' | 'task';
+  dueAt: Date;
+  overdue: boolean;
+}
+
+/**
+ * Échéances d'une personne de la cellule sur les 7 prochains jours, retards
+ * compris : suivi des dossiers dont elle est référente, et ses tâches (une
+ * tâche sans responsable revient au référent du dossier). Sans contenu.
+ */
+export function agendaItems(
+  cases: ReadonlyArray<{ id: string; status: string; assigneeId: string | null; reviewAt: Date | null }>,
+  tasks: ReadonlyArray<{ caseId: string; assigneeId: string | null; dueAt: Date | null; doneAt: Date | null }>,
+  viewerId: string,
+  now: Date,
+): AgendaItem[] {
+  const horizon = now.getTime() + AGENDA_DAYS * DAY_MS;
+  const active = new Map(cases.filter((item) => item.status !== 'CLOSED').map((item) => [item.id, item]));
+  const item = (caseId: string, kind: AgendaItem['kind'], dueAt: Date): AgendaItem =>
+    ({ caseId, kind, dueAt, overdue: dueAt.getTime() < now.getTime() });
+  const reviews = [...active.values()]
+    .filter((c) => c.assigneeId === viewerId && c.reviewAt && c.reviewAt.getTime() <= horizon)
+    .map((c) => item(c.id, 'review', c.reviewAt!));
+  const mine = tasks
+    .filter((task) => !task.doneAt && task.dueAt && task.dueAt.getTime() <= horizon && active.has(task.caseId))
+    .filter((task) => (task.assigneeId ?? active.get(task.caseId)?.assigneeId) === viewerId)
+    .map((task) => item(task.caseId, 'task', task.dueAt!));
+  return [...reviews, ...mine].sort((a, b) => a.dueAt.getTime() - b.dueAt.getTime());
 }

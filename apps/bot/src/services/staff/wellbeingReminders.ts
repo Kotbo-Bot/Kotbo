@@ -19,6 +19,7 @@ import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { isModuleEnabled } from '../core/moduleGate.js';
 import { sendWellbeingAlert } from './wellbeingAlerts.js';
+import { appendCaseEvents } from './wellbeingEvents.js';
 import { accessReviewMessage, purgeNoticeCutoff, shouldSendAccessReview, staleCutoff } from './wellbeingPolicy.js';
 
 const SYSTEM_ACTOR = 'Relance automatique';
@@ -27,9 +28,7 @@ async function remind(client: Client, item: { id: string; guildId: string; assig
   const config = await prisma.wellbeingConfig.findUnique({ where: { guildId: item.guildId } });
   if (!config?.enabled || !(await isModuleEnabled(item.guildId, 'wellbeing'))) return false;
   await sendWellbeingAlert(client, item.guildId, config, 'REMINDER', { actorId: '', ...ctx }, item.assigneeId ? [item.assigneeId] : []);
-  await prisma.wellbeingCaseEvent.create({
-    data: { caseId: item.id, actorId: null, actorName: SYSTEM_ACTOR, type: 'REMINDER', toValue: ctx.reminder },
-  });
+  await appendCaseEvents(item.id, [{ actorId: null, actorName: SYSTEM_ACTOR, type: 'REMINDER', toValue: ctx.reminder }]);
   return true;
 }
 

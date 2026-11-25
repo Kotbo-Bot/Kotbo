@@ -11,10 +11,10 @@ model WellbeingConfig {
   directorUserIds  String[] @default([])
   requireReason    Boolean  @default(true)
   // Alertes : salon et membres prévenus, et événements qui les déclenchent
-  // (BREAK_GLASS | EMERGENCY_READ | TEAM_READ | CASE_CHANGE | CONFIG_CHANGE | REPORT | REMINDER | MEMBERSHIP_CHANGE | PURGE_SOON).
+  // (BREAK_GLASS | EMERGENCY_READ | TEAM_READ | CASE_CHANGE | CONFIG_CHANGE | REPORT | REMINDER | MEMBERSHIP_CHANGE | PURGE_SOON | UNUSUAL_ACCESS).
   alertChannelId   String?
   alertUserIds     String[] @default([])
-  alertEvents      String[] @default(["BREAK_GLASS", "EMERGENCY_READ", "CONFIG_CHANGE", "REPORT", "REMINDER", "MEMBERSHIP_CHANGE", "PURGE_SOON"])
+  alertEvents      String[] @default(["BREAK_GLASS", "EMERGENCY_READ", "CONFIG_CHANGE", "REPORT", "REMINDER", "MEMBERSHIP_CHANGE", "PURGE_SOON", "UNUSUAL_ACCESS"])
   // Accès d'urgence validé par une seconde personne (direction ou cellule).
   breakGlassApproval Boolean @default(false)
   // Signalements depuis Discord (/bienetre signaler).
@@ -66,6 +66,8 @@ model WellbeingCase {
   purgeRequestedAt     DateTime?
   // Annonce de l'effacement d'un dossier fermé, envoyée une semaine avant.
   purgeWarnedAt        DateTime?
+  // Signalement Discord : empreinte du code de suivi remis à son auteur (le code n'est pas gardé).
+  trackingCodeHash     String?   @unique
 
   guild  Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
   notes       WellbeingCaseNote[]
@@ -143,6 +145,9 @@ model WellbeingCaseEvent {
   fromValue String?
   toValue   String?
   createdAt DateTime @default(now())
+  // Empreinte liée à l'entrée précédente du dossier : une entrée modifiée ou
+  // retirée en base casse la chaîne. Vide pour les entrées d'avant le chaînage.
+  hash      String?
 
   wellbeingCase WellbeingCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
 

@@ -5809,7 +5809,8 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
       "REPORT",
       "REMINDER",
       "MEMBERSHIP_CHANGE",
-      "PURGE_SOON"
+      "PURGE_SOON",
+      "UNUSUAL_ACCESS"
     ],
     "breakGlassApproval": false,
     "reportEnabled": false,
@@ -5845,6 +5846,7 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "purgeRequestedByName": null,
     "purgeRequestedAt": null,
     "purgeWarnedAt": null,
+    "trackingCodeHash": null,
     "createdAt": "__NOW__",
     "updatedAt": "__NOW__"
   },
@@ -5885,7 +5887,8 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "type": "",
     "fromValue": null,
     "toValue": null,
-    "createdAt": "__NOW__"
+    "createdAt": "__NOW__",
+    "hash": null
   },
   "WellbeingBreakGlassLog": {
     "id": "",

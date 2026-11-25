@@ -33,6 +33,14 @@ import {
   purgeApprovalError,
   purgeRequestPending,
   shouldRecordView,
+  UNUSUAL_ACCESS_COOLDOWN_MS,
+  UNUSUAL_ACCESS_WINDOW_MS,
+  agendaItems,
+  cleanMentionIds,
+  isUnusualAccess,
+  mentionText,
+  verifyCaseEventChain,
+  wellbeingSessionExpired,
   wellbeingCellStats,
   caseChangeEvents,
   cleanAlertEvents,
@@ -44,7 +52,8 @@ import {
   type CaseEventDraft,
   type CaseTracked,
 } from '../../../../services/staff/wellbeingPolicy.js';
-import { sendWellbeingAlert } from '../../../../services/staff/wellbeingAlerts.js';
+import { sendWellbeingAlert, sendWellbeingDirect } from '../../../../services/staff/wellbeingAlerts.js';
+import { appendCaseEvents } from '../../../../services/staff/wellbeingEvents.js';
 import { openCase, openCaseHeader, openNote, sealCaseFields, sealNote } from '../../../../services/staff/wellbeingCrypto.js';
 import { bodyText } from '../../../../utils/bodyText.js';
 
@@ -95,6 +104,19 @@ const CASE_LIST_SELECT = {
 function findVisibleCase(guildId: string, caseId: string, viewerId: string, options: { trashed?: boolean } = {}) {
   return prisma.wellbeingCase.findFirst({ where: { AND: [{ id: caseId }, caseVisibilityWhere(guildId, viewerId, options)] } });
 }
+
+/**
+ * Lire le contenu des dossiers exige une connexion récente : un poste resté
+ * connecté des jours ne donne pas accès à la cellule. Le dashboard reconnaît
+ * le code et propose de se reconnecter.
+ */
+function staleSession(c: Context): Response | null {
+  if (!wellbeingSessionExpired(c.var.dashboardUser.sessionCreatedAt, Date.now())) return null;
+  return c.json({ error: 'Reconnectez-vous pour ouvrir les dossiers de la cellule bien-être.', code: 'WELLBEING_REAUTH' }, 403);
+}
+
+/** Dernière alerte de consultation inhabituelle, par serveur et par personne. */
+const unusualAlertAt = new Map<string, number>();
 
 async function actorOf(discordGuild: Guild | null, userId: string) {
   const member = discordGuild ? await discordGuild.members.fetch(userId).catch(() => null) : null;
@@ -150,16 +172,13 @@ function actorName(c: Context): string {
 
 async function recordEvents(caseId: string, c: Context, drafts: Array<CaseEventDraft | { type: string; fromValue?: string | null; toValue?: string | null }>) {
   if (drafts.length === 0) return;
-  await prisma.wellbeingCaseEvent.createMany({
-    data: drafts.map((draft) => ({
-      caseId,
-      actorId: c.var.dashboardUser.userId,
-      actorName: actorName(c),
-      type: draft.type,
-      fromValue: draft.fromValue ?? null,
-      toValue: draft.toValue ?? null,
-    })),
-  });
+  await appendCaseEvents(caseId, drafts.map((draft) => ({
+    type: draft.type,
+    actorId: c.var.dashboardUser.userId,
+    actorName: actorName(c),
+    fromValue: draft.fromValue ?? null,
+    toValue: draft.toValue ?? null,
+  })));
 }
 
 function parseReviewAt(value: unknown): Date | null | undefined {
@@ -480,6 +499,8 @@ export function createWellbeingRouter(client: Client) {
       if (!state.canReadCases) {
         return send(c, { error: 'Espace cloisonné : accès réservé à la cellule bien-être (ou break-glass direction).' }, 403);
       }
+      const stale = staleSession(c);
+      if (stale) return stale;
       // Filtre optionnel : la fiche membre ne charge que les dossiers de la personne.
       const requested = c.req.query('subjectUserId');
       const subjectUserId = requested && SNOWFLAKE_RE.test(requested) ? requested : null;
@@ -515,6 +536,25 @@ export function createWellbeingRouter(client: Client) {
     }
   });
 
+  /**
+   * Beaucoup de dossiers ouverts en peu de temps par une même personne :
+   * compte inhabituel ou curiosité, la cellule est prévenue (une fois par heure).
+   */
+  async function checkUnusualAccess(c: Context, guildId: string, state: WellbeingState, now: Date) {
+    const userId = c.var.dashboardUser.userId;
+    const opened = await prisma.wellbeingCaseEvent.count({
+      where: { type: 'VIEWED', actorId: userId, createdAt: { gte: new Date(now.getTime() - UNUSUAL_ACCESS_WINDOW_MS) }, wellbeingCase: { guildId } },
+    });
+    if (!isUnusualAccess(opened)) return;
+    const key = `${guildId}:${userId}`;
+    const last = unusualAlertAt.get(key);
+    if (last !== undefined && now.getTime() - last < UNUSUAL_ACCESS_COOLDOWN_MS) return;
+    unusualAlertAt.set(key, now.getTime());
+    await audit(client, c, guildId, 'Consultation Cellule bien-être',
+      `Consultation inhabituelle : ${opened} dossiers ouverts en ${UNUSUAL_ACCESS_WINDOW_MS / 60_000} minutes.`, 'Sécurité');
+    void sendWellbeingAlert(client, guildId, state.config, 'UNUSUAL_ACCESS', { actorId: userId, caseCount: opened });
+  }
+
   // Contenu d'un dossier : chaque ouverture est tracée dans son historique.
   router.get(`${base}/cases/:caseId`, ...gate, async (c) => {
     const guildId = c.req.param('guildId');
@@ -524,6 +564,8 @@ export function createWellbeingRouter(client: Client) {
       if (!state.canReadCases) {
         return send(c, { error: 'Espace cloisonné : accès réservé à la cellule bien-être (ou break-glass direction).' }, 403);
       }
+      const stale = staleSession(c);
+      if (stale) return stale;
       const caseId = c.req.param('caseId');
       const scope = !state.isTeamMember && state.activeBreakGlass ? breakGlassScope(state.activeBreakGlass) : {};
       const found = await prisma.wellbeingCase.findFirst({
@@ -543,9 +585,10 @@ export function createWellbeingRouter(client: Client) {
         if (!state.isTeamMember) {
           await audit(client, c, guildId, 'Consultation Cellule bien-être', `Accès d'urgence : dossier ${caseId} ouvert.`, 'Sécurité');
         }
+        await checkUnusualAccess(c, guildId, state, now);
       }
       const item = await prisma.wellbeingCase.findUniqueOrThrow({ where: { id: caseId }, include: CASE_INCLUDE });
-      return send(c, { item: openCase(item) });
+      return send(c, { item: openCase(item), integrity: verifyCaseEventChain(item.events) });
     } catch (err) {
       logger.error('WellbeingAPI', 'Error reading case:', err);
       return fail(c, err, 'Erreur lors du chargement du dossier.', 'WellbeingAPI');
@@ -726,7 +769,7 @@ export function createWellbeingRouter(client: Client) {
       const caseId = c.req.param('caseId');
       const existing = await findVisibleCase(guildId, caseId, user.userId);
       if (!existing) return send(c, { error: 'Dossier introuvable.' }, 404);
-      const body = await readBody<{ content?: string }>(c);
+      const body = await readBody<{ content?: string; notifyUserIds?: unknown }>(c);
       const content = bodyText(body?.content, 4000);
       if (!content) return send(c, { error: 'Contenu requis.' }, 400);
       const note = await prisma.wellbeingCaseNote.create({
@@ -735,6 +778,12 @@ export function createWellbeingRouter(client: Client) {
       await prisma.wellbeingCase.update({ where: { id: caseId }, data: { lastActivityAt: new Date() } });
       await recordEvents(caseId, c, [{ type: 'NOTE' }]);
       void sendWellbeingAlert(client, guildId, state.config, 'CASE_CHANGE', { actorId: user.userId, action: 'annoté' });
+      // Collègues prévenus : de la cellule seulement, ni l'auteur ni la personne concernée.
+      const mentioned: string[] = [];
+      for (const id of cleanMentionIds(body?.notifyUserIds)) {
+        if (id !== user.userId && id !== existing.subjectUserId && await isTeamMemberId(state, id)) mentioned.push(id);
+      }
+      if (mentioned.length > 0) void sendWellbeingDirect(client, mentioned, mentionText(user.userId));
       return send(c, { note: openNote(note) }, 201);
     } catch (err) {
       logger.error('WellbeingAPI', 'Error adding case note:', err);
@@ -841,6 +890,8 @@ export function createWellbeingRouter(client: Client) {
     try {
       const state = await resolveWellbeingRole(client, guildId, user.userId);
       if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule bien-être.' }, 403);
+      const stale = staleSession(c);
+      if (stale) return stale;
       const caseId = c.req.param('caseId');
       const existing = await findVisibleCase(guildId, caseId, user.userId);
       if (!existing) return send(c, { error: 'Dossier introuvable.' }, 404);
@@ -1011,6 +1062,28 @@ export function createWellbeingRouter(client: Client) {
     } catch (err) {
       logger.error('WellbeingAPI', 'Error confirming access review:', err);
       return fail(c, err, 'Erreur lors de la confirmation.', 'WellbeingAPI');
+    }
+  });
+
+  // Mes échéances : suivis et tâches des 7 prochains jours, sans titre ni contenu.
+  router.get(`${base}/agenda`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    try {
+      const state = await resolveWellbeingRole(client, guildId, user.userId);
+      if (!state.canWriteCases) return send(c, { items: [] });
+      const cases = await prisma.wellbeingCase.findMany({
+        where: { AND: [caseVisibilityWhere(guildId, user.userId), { status: { not: 'CLOSED' } }] },
+        select: {
+          id: true, status: true, assigneeId: true, reviewAt: true,
+          tasks: { where: { doneAt: null, dueAt: { not: null } }, select: { caseId: true, assigneeId: true, dueAt: true, doneAt: true } },
+        },
+      });
+      const items = agendaItems(cases, cases.flatMap((item) => item.tasks), user.userId, new Date());
+      return send(c, { items: items.map((item) => ({ ...item, dueAt: item.dueAt.toISOString() })) });
+    } catch (err) {
+      logger.error('WellbeingAPI', 'Error loading agenda:', err);
+      return fail(c, err, 'Erreur lors du chargement des échéances.', 'WellbeingAPI');
     }
   });
 

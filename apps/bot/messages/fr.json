@@ -5432,11 +5432,20 @@
   "wbc_modal_title_anonymous": "Message anonyme à la cellule",
   "wbc_modal_label": "Que se passe-t-il ?",
   "wbc_modal_ph": "Décris la situation avec tes mots. Seule la cellule bien-être lira ce message.",
-  "wbc_sent": "Ton message a été transmis à la cellule bien-être. Elle pourra revenir vers toi en message privé.",
-  "wbc_sent_anonymous": "Ton message anonyme a été transmis à la cellule bien-être. Ton nom n'a pas été conservé, la cellule ne pourra donc pas te répondre.",
+  "wbc_sent": "Ton message a été transmis à la cellule bien-être. Elle pourra revenir vers toi en message privé.\nTon code de suivi : `{code}`. Garde-le : `/bienetre suivi` te dira où en est ton signalement.",
+  "wbc_sent_anonymous": "Ton message anonyme a été transmis à la cellule bien-être. Ton nom n'a pas été conservé, la cellule ne pourra donc pas te répondre.\nTon code de suivi : `{code}`. Garde-le : `/bienetre suivi` te dira où en est ton signalement, sans révéler qui tu es.",
   "wbc_reports_off": "La cellule bien-être ne reçoit pas de messages sur ce serveur pour le moment.",
   "wbc_cooldown": "Tu as déjà envoyé un message il y a peu. Réessaie dans quelques minutes.",
   "wbc_empty": "Ton message est vide.",
   "wbc_error": "Ton message n'a pas pu être transmis. Réessaie plus tard.",
-  "wbc_resources_none": "Aucune ressource d'aide n'est proposée sur ce serveur pour le moment."
+  "wbc_resources_none": "Aucune ressource d'aide n'est proposée sur ce serveur pour le moment.",
+  "wbc_track_name": "suivi",
+  "wbc_track_description": "Voir où en est un signalement grâce à son code de suivi",
+  "wbc_opt_code_name": "code",
+  "wbc_opt_code_description": "Le code reçu à l'envoi du signalement",
+  "wbc_track_cooldown": "Patiente quelques secondes avant de vérifier un autre code.",
+  "wbc_track_unknown": "Aucun signalement ne correspond à ce code sur ce serveur. Vérifie qu'il est bien recopié.",
+  "wbc_track_received": "Ton signalement a bien été reçu. Il attend qu'une personne de la cellule le prenne en charge.",
+  "wbc_track_in_progress": "Ton signalement est pris en charge par la cellule bien-être.",
+  "wbc_track_closed": "Le suivi de ton signalement est terminé."
 }
