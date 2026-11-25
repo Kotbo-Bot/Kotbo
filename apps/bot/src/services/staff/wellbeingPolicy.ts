@@ -60,7 +60,7 @@ export interface AlertContext {
   /** Geste sur un dossier : « créé », « modifié », « annoté », « supprimé ». */
   action?: string;
   /** Étape d'un accès d'urgence soumis à validation. */
-  stage?: 'requested' | 'approved' | 'rejected';
+  stage?: 'requested' | 'approved' | 'rejected' | 'ended';
   /** Signalement anonyme : l'alerte ne nomme personne. */
   anonymous?: boolean;
   reminder?: 'review' | 'stale';
@@ -85,6 +85,7 @@ export function alertText(event: WellbeingAlertEvent, ctx: AlertContext): string
         return `Cellule bien-être : ${actor} demande un accès d'urgence, à valider par une autre personne de la direction ou de la cellule. Motif : ${ctx.reason ?? 'non précisé'}`;
       }
       if (ctx.stage === 'rejected') return `Cellule bien-être : demande d'accès d'urgence refusée par ${actor}.`;
+      if (ctx.stage === 'ended') return `Cellule bien-être : accès d'urgence terminé par ${actor}.`;
       if (ctx.stage === 'approved') return `Cellule bien-être : accès d'urgence validé par ${actor}${until}.`;
       return `Cellule bien-être : accès d'urgence activé par ${actor}${until}. Motif : ${ctx.reason ?? 'non précisé'}`;
     }
@@ -211,9 +212,44 @@ export function describeConfigChange(
   return lines.length > 0 ? lines.join(' · ') : 'Aucun changement';
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 /** Un dossier fermé et inchangé avant cette date est supprimé. */
 export function closedCaseCutoff(now: Date): Date {
-  return new Date(now.getTime() - CLOSED_CASE_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+  return new Date(now.getTime() - CLOSED_CASE_RETENTION_DAYS * DAY_MS);
+}
+
+// ── Corbeille et conflit d'intérêts ───────────────────────────────────────
+
+/** Un dossier supprimé reste restaurable ce nombre de jours, puis il est purgé. */
+export const CASE_TRASH_DAYS = 30;
+
+/** Un dossier mis à la corbeille avant cette date est purgé. */
+export function trashCutoff(now: Date): Date {
+  return new Date(now.getTime() - CASE_TRASH_DAYS * DAY_MS);
+}
+
+/**
+ * Dossiers qu'une personne peut voir sur ce serveur : jamais ceux qui la
+ * concernent (conflit d'intérêts), et la corbeille à part. Le `OR` garde les
+ * dossiers sans membre lié, qu'un simple `not` écarterait (NULL en SQL).
+ */
+export function caseVisibilityWhere(guildId: string, viewerId: string, options: { trashed?: boolean } = {}) {
+  return {
+    guildId,
+    deletedAt: options.trashed ? { not: null } : null,
+    OR: [{ subjectUserId: null }, { subjectUserId: { not: viewerId } }],
+  };
+}
+
+/** La personne concernée ne suit pas son propre dossier. */
+export function assigneeConflict(subjectUserId: string | null, assigneeId: string | null): boolean {
+  return !!subjectUserId && !!assigneeId && subjectUserId === assigneeId;
+}
+
+/** Une ouverture de dossier est tracée au plus une fois par période et par personne. */
+export function shouldRecordView(lastViewedAt: Date | null, now: Date): boolean {
+  return shouldSendReadAlert(lastViewedAt?.getTime(), now.getTime());
 }
 
 // ── Historique ─────────────────────────────────────────────────────────────
@@ -269,6 +305,21 @@ export function decideBreakGlassError(
   if (!decider.canDecide) return 'forbidden';
   if (decider.userId === log.actorId) return 'self';
   if (log.status !== 'PENDING' || log.expiresAt.getTime() <= now.getTime()) return 'closed';
+  return null;
+}
+
+/**
+ * Raison de refuser la fin anticipée d'un accès (ou l'annulation d'une
+ * demande), ou `null`. L'auteur arrête le sien ; la cellule et le
+ * propriétaire révoquent celui des autres, pas un pair de la direction.
+ */
+export function endBreakGlassError(
+  log: { status: string; actorId: string; expiresAt: Date },
+  ender: { userId: string; isTeamMember: boolean; isOwner: boolean },
+  now: Date,
+): 'forbidden' | 'closed' | null {
+  if (ender.userId !== log.actorId && !ender.isTeamMember && !ender.isOwner) return 'forbidden';
+  if (!['APPROVED', 'PENDING'].includes(log.status) || log.expiresAt.getTime() <= now.getTime()) return 'closed';
   return null;
 }
 

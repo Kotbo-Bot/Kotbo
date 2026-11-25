@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { openCase, openNote, sealCaseFields, sealNote, sealWellbeing, openWellbeing } from '../../services/staff/wellbeingCrypto.js';
+import { openCase, openCaseHeader, openNote, sealCaseFields, sealNote, sealWellbeing, openWellbeing } from '../../services/staff/wellbeingCrypto.js';
 
 const saved = process.env.WELLBEING_ENCRYPTION_KEY;
 
@@ -34,6 +34,14 @@ describe('chiffrement des dossiers de la cellule', () => {
 
     const opened = openCase({ guildId, ...fields, notes: [{ caseId: 'dossier-1', content: sealNote('dossier-1', 'Note') }] });
     expect(opened).toMatchObject({ title: 'Titre', subjectName: 'alice', summary: 'Résumé', notes: [{ content: 'Note' }] });
+  });
+
+  test('l en-tête de la liste relit titre et personne concernée, sans résumé', () => {
+    const guildId = '100000000000000001';
+    const { title, subjectName } = sealCaseFields(guildId, { title: 'Titre', subjectName: 'alice', summary: 'R' });
+    const header = openCaseHeader({ guildId, title, subjectName, status: 'OPEN' });
+    expect(header).toEqual({ guildId, title: 'Titre', subjectName: 'alice', status: 'OPEN' });
+    expect('summary' in header).toBe(false);
   });
 
   test("une note déplacée vers un autre dossier reste illisible", () => {

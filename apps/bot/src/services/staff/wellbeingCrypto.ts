@@ -65,6 +65,11 @@ export function openAttachment<T extends { caseId: string; label: string; url: s
   };
 }
 
+/** En-tête d'un dossier pour la liste : titre et personne concernée, sans le contenu. */
+export function openCaseHeader<T extends { guildId: string; title: string; subjectName: string }>(item: T): T {
+  return { ...item, title: readable(item.guildId, item.title), subjectName: readable(item.guildId, item.subjectName) };
+}
+
 export function openCase<T extends CaseTextFields & {
   guildId: string;
   notes?: Array<{ caseId: string; content: string }>;
