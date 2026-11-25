@@ -6,6 +6,7 @@ import {
   assigneeConflict,
   caseVisibilityWhere,
   endBreakGlassError,
+  isCaseSubject,
   shouldRecordView,
   trashCutoff,
 } from '../../services/staff/wellbeingPolicy';
@@ -35,6 +36,12 @@ describe("conflit d'intérêts", () => {
 
   test('le filtre porte sur la personne qui consulte', () => {
     expect(caseVisibilityWhere('g1', 'u2').OR).toEqual([{ subjectUserId: null }, { subjectUserId: { not: 'u2' } }]);
+  });
+
+  test("on n'ouvre pas de dossier sur soi-même : on ne pourrait plus le voir", () => {
+    expect(isCaseSubject('u1', 'u1')).toBe(true);
+    expect(isCaseSubject('u1', 'u2')).toBe(false);
+    expect(isCaseSubject(null, 'u1')).toBe(false);
   });
 
   test('la personne concernée ne peut pas être référente de son propre dossier', () => {

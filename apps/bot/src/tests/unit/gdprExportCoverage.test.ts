@@ -52,7 +52,7 @@ const EXCLUDED_MEMBER_LISTS: Record<string, string> = {
 /** Champs au nom d'auteur d'action qui n'en sont pas : état de jeu, réglage. */
 const NOT_ACTOR_FIELDS = new Set([
   'killedBy', 'firstClearUserId', 'lastBumpUserId', 'countingLastUserId', 'oneWordStoryLastUserId',
-  'wordChainLastUserId', 'chiefStaffUserId', 'subjectUserId',
+  'wordChainLastUserId', 'chiefStaffUserId', 'subjectUserId', 'backupUserId',
 ]);
 
 const ACTOR_LIKE = /(By|ById|ByUserId|ByUsUserId|actorId|actorUserId|executorId|moderatorUserId|evaluatorId|mentorId|superiorUserId|authorUserId|LastUserId|UserId)$/;

@@ -54,6 +54,12 @@ describe('chiffrement des dossiers de la cellule', () => {
     expect(openCase({ guildId, ...fields, tasks: [{ caseId: 'dossier-2', label }] }).tasks?.[0]?.label).toBe('[contenu illisible]');
   });
 
+  test("la version d'origine d'une note corrigée se relit comme la note", () => {
+    const opened = openNote({ caseId: 'dossier-1', content: sealNote('dossier-1', 'Corrigée'), originalContent: sealNote('dossier-1', 'Première') });
+    expect(opened).toMatchObject({ content: 'Corrigée', originalContent: 'Première' });
+    expect(openNote({ caseId: 'dossier-1', content: sealNote('dossier-1', 'x'), originalContent: null }).originalContent).toBeNull();
+  });
+
   test("une note déplacée vers un autre dossier reste illisible", () => {
     const sealed = sealNote('dossier-1', 'Note');
     expect(openNote({ caseId: 'dossier-2', content: sealed }).content).toBe('[contenu illisible]');

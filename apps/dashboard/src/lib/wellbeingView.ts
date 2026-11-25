@@ -9,6 +9,10 @@ export interface WbNoteView {
   authorName: string;
   content: string;
   createdAt: string;
+  authorId?: string;
+  /** Note corrigée par son auteur : date de la correction et première version. */
+  editedAt?: string | null;
+  originalContent?: string | null;
 }
 
 export interface WbEventView {

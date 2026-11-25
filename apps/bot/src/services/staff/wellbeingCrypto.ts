@@ -51,8 +51,14 @@ export function sealNote(caseId: string, content: string): string {
   return box.seal(content, `case:${caseId}`);
 }
 
-export function openNote<T extends { caseId: string; content: string }>(note: T): T {
-  return { ...note, content: box.open(note.content, `case:${note.caseId}`) ?? UNREADABLE };
+export function openNote<T extends { caseId: string; content: string; originalContent?: string | null }>(note: T): T {
+  const context = `case:${note.caseId}`;
+  return {
+    ...note,
+    content: box.open(note.content, context) ?? UNREADABLE,
+    // Note corrigée : sa première version, chiffrée de la même façon.
+    ...(note.originalContent ? { originalContent: box.open(note.originalContent, context) ?? UNREADABLE } : {}),
+  };
 }
 
 /** Document joint : nom et lien chiffrés, liés à leur dossier comme une note. */

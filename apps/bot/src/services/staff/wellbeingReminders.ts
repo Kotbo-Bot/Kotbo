@@ -11,6 +11,8 @@
  *   une fois (PURGE_SOON) et peut le prolonger.
  * - Revue des accès : le propriétaire reçoit en privé, tous les 30 jours sans
  *   confirmation, la liste de qui lit les dossiers.
+ * - Référent absent : ses relances vont au suppléant de la cellule.
+ * - Résumé du lundi : chaque membre de la cellule reçoit ses chiffres de la semaine.
  *
  * Aucune relance ne dit quoi que ce soit du contenu d'un dossier.
  */
@@ -18,16 +20,29 @@ import type { Client } from 'discord.js';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { isModuleEnabled } from '../core/moduleGate.js';
-import { sendWellbeingAlert } from './wellbeingAlerts.js';
+import { sendWellbeingAlert, sendWellbeingDirect } from './wellbeingAlerts.js';
 import { appendCaseEvents } from './wellbeingEvents.js';
-import { accessReviewMessage, purgeNoticeCutoff, shouldSendAccessReview, staleCutoff } from './wellbeingPolicy.js';
+import {
+  accessReviewMessage,
+  cellMemberIds,
+  digestCounts,
+  digestDue,
+  purgeNoticeCutoff,
+  reminderRecipient,
+  shouldSendAccessReview,
+  staleCutoff,
+  weeklyDigestText,
+} from './wellbeingPolicy.js';
+import { currentAbsence } from './wellbeingAbsence.js';
 
 const SYSTEM_ACTOR = 'Relance automatique';
 
 async function remind(client: Client, item: { id: string; guildId: string; assigneeId: string | null }, ctx: { reminder: 'review' | 'stale'; days?: number }) {
   const config = await prisma.wellbeingConfig.findUnique({ where: { guildId: item.guildId } });
   if (!config?.enabled || !(await isModuleEnabled(item.guildId, 'wellbeing'))) return false;
-  await sendWellbeingAlert(client, item.guildId, config, 'REMINDER', { actorId: '', ...ctx }, item.assigneeId ? [item.assigneeId] : []);
+  const absent = item.assigneeId && (await currentAbsence(item.guildId, item.assigneeId)) ? new Set([item.assigneeId]) : new Set<string>();
+  const recipient = reminderRecipient(item.assigneeId, absent, config.backupUserId);
+  await sendWellbeingAlert(client, item.guildId, config, 'REMINDER', { actorId: '', ...ctx }, recipient ? [recipient] : []);
   await appendCaseEvents(item.id, [{ actorId: null, actorName: SYSTEM_ACTOR, type: 'REMINDER', toValue: ctx.reminder }]);
   return true;
 }
@@ -71,6 +86,7 @@ export async function runWellbeingReminders(client: Client, now: Date = new Date
     }
     await announcePurges(client, now);
     await sendAccessReviews(client, now);
+    await sendWeeklyDigests(client, now);
   } catch (error) {
     logger.error('Wellbeing', 'Relances de la cellule en échec :', error);
   }
@@ -125,5 +141,26 @@ async function sendAccessReviews(client: Client, now: Date): Promise<void> {
     // Marqué même sans message privé possible : le rappel ne repart pas chaque heure.
     await prisma.wellbeingConfig.update({ where: { guildId: config.guildId }, data: { accessReviewSentAt: now } });
     if (!sent) logger.warn('Wellbeing', `Revue des accès : message privé impossible au propriétaire de ${config.guildId}.`);
+  }
+}
+
+/** Résumé du lundi : à chaque membre de la cellule, ses chiffres, sans contenu. */
+async function sendWeeklyDigests(client: Client, now: Date): Promise<void> {
+  const configs = await prisma.wellbeingConfig.findMany({ where: { enabled: true } });
+  for (const config of configs) {
+    if (!digestDue(config.digestSentAt, now) || !(await isModuleEnabled(config.guildId, 'wellbeing'))) continue;
+    const guild = client.guilds.cache.get(config.guildId);
+    if (!guild) continue;
+    // Marqué d'abord : une erreur d'envoi ne fait pas repartir le résumé chaque heure.
+    await prisma.wellbeingConfig.update({ where: { guildId: config.guildId }, data: { digestSentAt: now } });
+    const members = guild.members.cache.map((member) => ({ id: member.id, roleIds: [...member.roles.cache.keys()] }));
+    const cases = await prisma.wellbeingCase.findMany({
+      where: { guildId: config.guildId, deletedAt: null, status: { not: 'CLOSED' } },
+      select: { status: true, severity: true, source: true, assigneeId: true, subjectUserId: true, reviewAt: true },
+    });
+    for (const memberId of cellMemberIds(config, members)) {
+      const text = weeklyDigestText(guild.name, digestCounts(cases, memberId, now));
+      if (text) await sendWellbeingDirect(client, [memberId], text);
+    }
   }
 }
