@@ -5835,6 +5835,9 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "reviewRemindedAt": null,
     "staleRemindedAt": null,
     "lastActivityAt": "__NOW__",
+    "deletedAt": null,
+    "deletedById": null,
+    "deletedByName": null,
     "createdAt": "__NOW__",
     "updatedAt": "__NOW__"
   },
@@ -5877,6 +5880,9 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "approvedById": null,
     "approvedByName": null,
     "decidedAt": null,
+    "endedById": null,
+    "endedByName": null,
+    "endedAt": null,
     "expiresAt": "__NOW__",
     "createdAt": "__NOW__"
   },

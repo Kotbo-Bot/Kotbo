@@ -53,6 +53,10 @@ model WellbeingCase {
   staleRemindedAt  DateTime?
   // Dernier geste réel (création, modification, note) : les relances ne le déplacent pas.
   lastActivityAt   DateTime @default(now())
+  // Corbeille : un dossier supprimé reste restaurable 30 jours, puis il est purgé.
+  deletedAt        DateTime?
+  deletedById      String?
+  deletedByName    String?
 
   guild  Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
   notes       WellbeingCaseNote[]
@@ -64,6 +68,7 @@ model WellbeingCase {
 
   @@index([guildId, status])
   @@index([status, reviewAt])
+  @@index([guildId, deletedAt])
   @@map("wellbeing_cases")
 }
 
@@ -104,7 +109,7 @@ model WellbeingCaseEvent {
   caseId    String
   actorId   String?
   actorName String
-  type      String   // CREATED | STATUS | SEVERITY | ASSIGNEE | REVIEW | NOTE | RESOURCES_SENT | REMINDER | ATTACHMENT_ADDED | ATTACHMENT_REMOVED
+  type      String   // CREATED | STATUS | SEVERITY | ASSIGNEE | REVIEW | NOTE | RESOURCES_SENT | REMINDER | ATTACHMENT_ADDED | ATTACHMENT_REMOVED | VIEWED | TRASHED | RESTORED
   fromValue String?
   toValue   String?
   createdAt DateTime @default(now())
@@ -124,11 +129,15 @@ model WellbeingBreakGlassLog {
   // Accès limité aux dossiers de ce membre, si renseigné.
   subjectUserId String?
   reason     String
-  // PENDING tant qu'une seconde personne n'a pas validé, puis APPROVED ou REJECTED.
+  // PENDING tant qu'une seconde personne n'a pas validé, puis APPROVED ou REJECTED ;
+  // ENDED quand l'accès (ou la demande) est arrêté avant son échéance.
   status         String    @default("APPROVED")
   approvedById   String?
   approvedByName String?
   decidedAt      DateTime?
+  endedById      String?
+  endedByName    String?
+  endedAt        DateTime?
   expiresAt  DateTime
   createdAt  DateTime @default(now())
 

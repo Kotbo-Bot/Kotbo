@@ -31,7 +31,7 @@ async function remind(client: Client, item: { id: string; guildId: string; assig
 export async function runWellbeingReminders(client: Client, now: Date = new Date()): Promise<void> {
   try {
     const due = await prisma.wellbeingCase.findMany({
-      where: { status: { not: 'CLOSED' }, reviewAt: { lte: now }, reviewRemindedAt: null },
+      where: { status: { not: 'CLOSED' }, deletedAt: null, reviewAt: { lte: now }, reviewRemindedAt: null },
       select: { id: true, guildId: true, assigneeId: true },
       take: 200,
     });
@@ -52,6 +52,7 @@ export async function runWellbeingReminders(client: Client, now: Date = new Date
           guildId,
           severity: 'CRITICAL',
           status: { not: 'CLOSED' },
+          deletedAt: null,
           lastActivityAt: { lt: cutoff },
           OR: [{ staleRemindedAt: null }, { staleRemindedAt: { lt: cutoff } }],
         },
