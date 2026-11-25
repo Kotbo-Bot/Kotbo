@@ -7,8 +7,8 @@ import { m } from './i18n';
 export const WB_STATUSES = ['OPEN', 'MONITORING', 'CLOSED'] as const;
 export const WB_SEVERITIES = ['LOW', 'NORMAL', 'HIGH', 'CRITICAL'] as const;
 export const WB_CATEGORIES = ['SOUTIEN', 'MEDIATION', 'SIGNALEMENT', 'SUIVI'] as const;
-export const WB_ALERT_EVENTS = ['BREAK_GLASS', 'EMERGENCY_READ', 'TEAM_READ', 'CASE_CHANGE', 'CONFIG_CHANGE', 'REPORT', 'REMINDER', 'MEMBERSHIP_CHANGE'] as const;
-export const WB_CASE_EVENTS = ['CREATED', 'STATUS', 'SEVERITY', 'ASSIGNEE', 'REVIEW', 'NOTE', 'RESOURCES_SENT', 'REMINDER', 'ATTACHMENT_ADDED', 'ATTACHMENT_REMOVED', 'VIEWED', 'TRASHED', 'RESTORED'] as const;
+export const WB_ALERT_EVENTS = ['BREAK_GLASS', 'EMERGENCY_READ', 'TEAM_READ', 'CASE_CHANGE', 'CONFIG_CHANGE', 'REPORT', 'REMINDER', 'MEMBERSHIP_CHANGE', 'PURGE_SOON'] as const;
+export const WB_CASE_EVENTS = ['CREATED', 'STATUS', 'SEVERITY', 'ASSIGNEE', 'REVIEW', 'NOTE', 'RESOURCES_SENT', 'REMINDER', 'ATTACHMENT_ADDED', 'ATTACHMENT_REMOVED', 'VIEWED', 'TRASHED', 'RESTORED', 'EXTENDED', 'EXPORTED', 'TASK_ADDED', 'TASK_DONE', 'TASK_REOPENED', 'TASK_REMOVED', 'PURGE_REQUESTED'] as const;
 
 const STATUS_LABELS: Record<string, () => string> = {
   OPEN: () => m.wb_status_open(),
@@ -37,12 +37,29 @@ const ALERT_EVENT_LABELS: Record<string, () => string> = {
   REPORT: () => m.wb_alert_report(),
   REMINDER: () => m.wb_alert_reminder(),
   MEMBERSHIP_CHANGE: () => m.wb_alert_membership_change(),
+  PURGE_SOON: () => m.wb_alert_purge_soon(),
+};
+
+const SUMMARY_TEMPLATES: Record<string, () => string> = {
+  SOUTIEN: () => m.wb_tpl_soutien(),
+  MEDIATION: () => m.wb_tpl_mediation(),
+  SIGNALEMENT: () => m.wb_tpl_signalement(),
+  SUIVI: () => m.wb_tpl_suivi(),
 };
 
 export const wbStatusLabel = (code: string): string => STATUS_LABELS[code]?.() ?? code;
 export const wbSeverityLabel = (code: string): string => SEVERITY_LABELS[code]?.() ?? code;
 export const wbCategoryLabel = (code: string): string => CATEGORY_LABELS[code]?.() ?? code;
 export const wbAlertEventLabel = (code: string): string => ALERT_EVENT_LABELS[code]?.() ?? code;
+
+/** Trame de résumé proposée à la création d'un dossier, selon sa catégorie. */
+export const wbSummaryTemplate = (category: string): string => SUMMARY_TEMPLATES[category]?.() ?? '';
+
+/** Résumé encore vide ou resté tel que la trame : changer de catégorie peut le remplacer. */
+export function wbIsSummaryTemplate(summary: string): boolean {
+  const text = summary.trim();
+  return text === '' || WB_CATEGORIES.some((category) => wbSummaryTemplate(category).trim() === text);
+}
 
 export interface WbCaseEvent {
   type: string;
@@ -80,6 +97,20 @@ export function wbCaseEventLabel(event: WbCaseEvent, formatDate: (iso: string) =
       return m.wb_ev_trashed();
     case 'RESTORED':
       return m.wb_ev_restored();
+    case 'EXTENDED':
+      return m.wb_ev_extended();
+    case 'EXPORTED':
+      return m.wb_ev_exported();
+    case 'TASK_ADDED':
+      return m.wb_ev_task_added();
+    case 'TASK_DONE':
+      return m.wb_ev_task_done();
+    case 'TASK_REOPENED':
+      return m.wb_ev_task_reopened();
+    case 'TASK_REMOVED':
+      return m.wb_ev_task_removed();
+    case 'PURGE_REQUESTED':
+      return m.wb_ev_purge_requested();
     default:
       return event.type;
   }

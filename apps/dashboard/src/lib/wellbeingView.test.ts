@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { WB_SEVERITIES, WB_STATUSES } from './wellbeingLabels';
-import { WB_IDLE_LOCK_MS, wbCaseStats, wbCaseTimeline, wbFilterCases, wbIsReviewDue, wbLinkedCases, wbMergeHeader, wbReviewShortcut, wbSearchCases, wbSeverityTone, wbSortCases, wbStatusTone, type WbCaseView } from './wellbeingView';
+import { WB_IDLE_LOCK_MS, wbCaseExportHtml, wbPurgeInfo, wbTaskProgress, wbCaseStats, wbCaseTimeline, wbFilterCases, wbIsReviewDue, wbLinkedCases, wbMergeHeader, wbReviewShortcut, wbSearchCases, wbSeverityTone, wbSortCases, wbStatusTone, type WbCaseView } from './wellbeingView';
 
 const NOW = new Date('2026-11-25T12:00:00Z');
 
@@ -179,5 +179,56 @@ describe("raccourcis d'échéance", () => {
 describe('verrouillage', () => {
   test("la page se verrouille après cinq minutes d'inactivité", () => {
     expect(WB_IDLE_LOCK_MS).toBe(5 * 60 * 1000);
+  });
+});
+
+describe('effacement prévu', () => {
+  test('un dossier fermé est effacé un an après sa dernière modification', () => {
+    const info = wbPurgeInfo(dossier({ status: 'CLOSED', updatedAt: '2026-01-10T00:00:00Z' }), NOW);
+    expect(info?.date.toISOString()).toBe('2027-01-10T00:00:00.000Z');
+    expect(info?.soon).toBe(false);
+  });
+
+  test('« bientôt » dans les sept derniers jours', () => {
+    expect(wbPurgeInfo(dossier({ status: 'CLOSED', updatedAt: '2025-11-28T00:00:00Z' }), NOW)?.soon).toBe(true);
+  });
+
+  test("un dossier actif n'a pas de date d'effacement", () => {
+    expect(wbPurgeInfo(dossier({ status: 'OPEN', updatedAt: '2025-01-01T00:00:00Z' }), NOW)).toBeNull();
+  });
+});
+
+describe("avancement du plan d'action", () => {
+  test('compte les tâches faites sur le total', () => {
+    expect(wbTaskProgress([{ doneAt: null }, { doneAt: '2026-11-20T00:00:00Z' }, { doneAt: null }])).toEqual({ done: 1, total: 3, percent: 33 });
+    expect(wbTaskProgress(undefined)).toEqual({ done: 0, total: 0, percent: 0 });
+  });
+});
+
+describe('export imprimable', () => {
+  const labels = { summary: 'Résumé', notes: 'Notes', tasks: 'Plan', attachments: 'Documents', exported: 'Exporté par Sam le 25/11' };
+  const html = wbCaseExportHtml({
+    title: 'Conflit <b>vocal</b>',
+    meta: ['Alex', 'Médiation'],
+    summary: '<script>alert(1)</script>',
+    notes: [{ author: 'Sam', date: '24/11', content: 'Appel fait & noté' }],
+    tasks: [{ label: 'Rappeler', done: true }],
+    attachments: [{ label: 'CR', url: 'https://drive.google.com/x' }],
+  }, labels, 'Sam · 25/11');
+
+  test('échappe tout le contenu du dossier', () => {
+    expect(html).not.toContain('<script>alert');
+    expect(html).toContain('&lt;script&gt;');
+    expect(html).toContain('Conflit &lt;b&gt;vocal&lt;/b&gt;');
+    expect(html).toContain('Appel fait &amp; noté');
+  });
+
+  test('porte le filigrane et la mention de qui a exporté', () => {
+    expect(html).toContain('Sam · 25/11');
+    expect(html).toContain('Exporté par Sam le 25/11');
+  });
+
+  test('reprend notes, tâches et documents', () => {
+    for (const part of ['Notes', 'Rappeler', 'https://drive.google.com/x']) expect(html).toContain(part);
   });
 });
