@@ -2,21 +2,19 @@
   import { dateLocale, m } from '../lib/i18n';
   import { onDestroy, onMount, tick } from 'svelte';
   import { dashboardFetch } from '../lib/api';
-  import { dashboardStore } from '../lib/stores/dashboard.svelte';
   import { toast } from '../lib/stores/toast.svelte';
   import { confirmDialog } from '../lib/stores/confirmDialog.svelte';
   import ModulePage from '../lib/components/ModulePage.svelte';
-  import MultiSelect from '../lib/components/MultiSelect.svelte';
   import MemberSearchSelect from '../lib/components/MemberSearchSelect.svelte';
-  import { WB_ALERT_EVENTS, WB_CLOSE_REASONS, wbCloseReasonLabel, wbCaseEventLabel, WB_CATEGORIES, WB_SEVERITIES, WB_STATUSES, wbAlertEventLabel, wbCategoryLabel, wbIsSummaryTemplate, wbSeverityLabel, wbStatusLabel, wbSummaryTemplate } from '../lib/wellbeingLabels';
+  import { WB_CLOSE_REASONS, wbCloseReasonLabel, wbCaseEventLabel, WB_CATEGORIES, WB_SEVERITIES, WB_STATUSES, wbCategoryLabel, wbIsSummaryTemplate, wbSeverityLabel, wbStatusLabel, wbSummaryTemplate } from '../lib/wellbeingLabels';
   import WellbeingStats, { type WellbeingCellStats } from '../lib/components/wellbeing/WellbeingStats.svelte';
   import CaseTasks from '../lib/components/wellbeing/CaseTasks.svelte';
   import CaseBoard from '../lib/components/wellbeing/CaseBoard.svelte';
+  import WellbeingSettings from '../lib/components/wellbeing/WellbeingSettings.svelte';
   import { memberCaseModal } from '../lib/stores/memberCaseModal.svelte';
   import MemberName from '../lib/components/MemberName.svelte';
   import WellbeingMemberList from '../lib/components/WellbeingMemberList.svelte';
-  import { channelDisplayName } from '../lib/channelUtils';
-  import { Button, Callout, EmptyState, Field, FilterPills, Menu, Modal, SettingsGroup, SettingsRow, StatTile, Tabs, ToggleSwitch, type FilterOption, type MenuItem, type TabItem } from '../lib/components/ui';
+  import { Button, Callout, EmptyState, Field, FilterPills, Menu, Modal, StatTile, Tabs, ToggleSwitch, type FilterOption, type MenuItem, type TabItem } from '../lib/components/ui';
   import Papicon from '../lib/components/Papicon.svelte';
   import Skeleton from '../lib/components/Skeleton.svelte';
   import { WB_IDLE_LOCK_MS, wbNeighbourCaseId, wbShortcut, wbCaseExportHtml, wbPurgeInfo, wbTaskProgress, wbCaseStats, wbCaseTimeline, wbFilterCases, wbIsReviewDue, wbLinkedCases, wbMergeHeader, wbReviewShortcut, wbSearchCases, wbSeverityAccent, wbSeverityTone, wbSortCases, wbStatusTone, type WbCaseFilter, type WbCaseSort } from '../lib/wellbeingView';
@@ -272,9 +270,7 @@
   const canEndLog = (log: any) => log.actorId === viewerId || !!status?.isTeamMember || !!status?.canConfigure;
   const isLiveLog = (log: any) => ['APPROVED', 'PENDING'].includes(log.status) && new Date(log.expiresAt) > new Date();
 
-  const discordRoles = $derived((dashboardStore.state.discordRoles ?? []) as Array<{ id: string; name: string }>);
 
-  const roleOptions = $derived(discordRoles.map((r) => ({ id: r.id, name: `@${r.name}` })));
 
   // Break-glass modal
   let breakGlassOpen = $state(false);
@@ -364,58 +360,6 @@
   }
   let addingNote = $state(false);
 
-  // Onglet Réglages (propriétaire) : lu à la première ouverture.
-  let configLoaded = $state(false);
-  let cfgAccessReviewedAt = $state<string | null>(null);
-  /** Suppléant des référents absents : un membre désigné de la cellule (au plus un). */
-  let cfgBackupIds = $state<string[]>([]);
-  let confirmingReview = $state(false);
-
-  /** Le propriétaire confirme que la composition de la cellule est toujours juste. */
-  async function confirmAccessReview() {
-    if (confirmingReview) return;
-    confirmingReview = true;
-    try {
-      const res = await dashboardFetch('/wellbeing/access-review', { method: 'POST' });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error ?? '');
-      cfgAccessReviewedAt = data.accessReviewedAt;
-      if (status) status = { ...status, accessReviewDue: false };
-      toast.success(m.toast_wb_review_confirmed());
-    } catch (err: any) {
-      toast.error(err?.message || m.toast_wb_save_failed());
-    } finally {
-      confirmingReview = false;
-    }
-  }
-  let cfgEnabled = $state(false);
-  let cfgRequireReason = $state(true);
-  let cfgTeamRoleIds = $state<string[]>([]);
-  let cfgDirectorRoleIds = $state<string[]>([]);
-  let cfgTeamUserIds = $state<string[]>([]);
-  let cfgDirectorUserIds = $state<string[]>([]);
-  /** Membres désignés un par un, par liste. */
-  const MAX_NAMED_MEMBERS = 25;
-  let cfgAlertChannelId = $state('');
-  let cfgAlertUserIds = $state<string[]>([]);
-  let cfgAlertEvents = $state<string[]>([]);
-  let cfgBreakGlassApproval = $state(false);
-  let cfgReportEnabled = $state(false);
-  let cfgStaleDays = $state(7);
-  /** Même plafond que le bot (MAX_ALERT_USERS). */
-  const MAX_ALERT_USERS = 10;
-
-  const alertChannels = $derived(
-    ((dashboardStore.state.discordChannels ?? []) as Array<{ id: string; name: string; type?: string }>)
-      .filter((c) => c.type === undefined || c.type === 'text' || c.type === 'announcement'),
-  );
-
-
-  function toggleAlertEvent(code: string, checked: boolean) {
-    cfgAlertEvents = checked ? [...new Set([...cfgAlertEvents, code])] : cfgAlertEvents.filter((e) => e !== code);
-  }
-  let savingConfig = $state(false);
-
   const tabItems = $derived.by<TabItem[]>(() => {
     if (!status) return [];
     const on = status.enabled;
@@ -433,9 +377,6 @@
     if (tabItems.length > 0 && !tabItems.some((tab) => tab.id === activeTab)) activeTab = 'cases';
   });
 
-  $effect(() => {
-    if (activeTab === 'settings' && !configLoaded) void loadConfig();
-  });
 
   // Bilan : relu à chaque ouverture de l'onglet, il ne coûte qu'une requête.
   let cellStats = $state<WellbeingCellStats | null>(null);
@@ -509,71 +450,6 @@
   onMount(() => {
     void loadAll();
   });
-
-  async function loadConfig() {
-    try {
-      const res = await dashboardFetch('/wellbeing/config');
-      if (!res.ok) throw new Error('config');
-      const { config } = await res.json();
-      cfgEnabled = config.enabled === true;
-      cfgRequireReason = config.requireReason !== false;
-      cfgTeamRoleIds = [...(config.teamRoleIds ?? [])];
-      cfgDirectorRoleIds = [...(config.directorRoleIds ?? [])];
-      cfgTeamUserIds = [...(config.teamUserIds ?? [])];
-      cfgDirectorUserIds = [...(config.directorUserIds ?? [])];
-      cfgAlertChannelId = config.alertChannelId ?? '';
-      cfgAlertUserIds = [...(config.alertUserIds ?? [])];
-      cfgAlertEvents = [...(config.alertEvents ?? [])];
-      cfgBreakGlassApproval = config.breakGlassApproval === true;
-      cfgReportEnabled = config.reportEnabled === true;
-      cfgStaleDays = typeof config.staleCriticalDays === 'number' ? config.staleCriticalDays : 7;
-      cfgBackupIds = config.backupUserId ? [config.backupUserId] : [];
-      cfgAccessReviewedAt = config.accessReviewedAt ?? null;
-      configLoaded = true;
-    } catch {
-      toast.error(m.toast_wb_management_only());
-    }
-  }
-
-  async function saveConfig(event: SubmitEvent) {
-    event.preventDefault();
-    savingConfig = true;
-    try {
-      const res = await dashboardFetch('/wellbeing/config', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          enabled: cfgEnabled,
-          requireReason: cfgRequireReason,
-          teamRoleIds: cfgTeamRoleIds,
-          directorRoleIds: cfgDirectorRoleIds,
-          teamUserIds: cfgTeamUserIds,
-          directorUserIds: cfgDirectorUserIds,
-          alertChannelId: cfgAlertChannelId || null,
-          alertUserIds: cfgAlertUserIds,
-          alertEvents: cfgAlertEvents,
-          breakGlassApproval: cfgBreakGlassApproval,
-          reportEnabled: cfgReportEnabled,
-          staleCriticalDays: Math.max(0, Math.min(90, Math.round(Number(cfgStaleDays) || 0))),
-          backupUserId: cfgBackupIds[0] ?? null,
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error ?? '');
-      // Désactiver une cellule active est différé : on le dit plutôt que « enregistré ».
-      if (!cfgEnabled && data.config?.dissolutionAt) {
-        toast.success(m.toast_wb_dissolution_scheduled({ date: formatDate(data.config.dissolutionAt) }));
-      } else {
-        toast.success(m.toast_wb_config_saved());
-      }
-      configLoaded = false;
-      await loadAll();
-    } catch (err: any) {
-      toast.error(err?.message || m.toast_wb_save_failed());
-    } finally {
-      savingConfig = false;
-    }
-  }
 
   async function activateBreakGlass(event: SubmitEvent) {
     event.preventDefault();
@@ -949,7 +825,6 @@
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? '');
       toast.success(m.toast_wb_dissolution_cancelled());
-      configLoaded = false;
       await loadAll();
     } catch (err: any) {
       toast.error(err?.message || m.toast_wb_save_failed());
@@ -1695,83 +1570,11 @@
         </section>
       </div>
     {:else if activeTab === 'settings'}
-      {#if !configLoaded}
-        <Skeleton height="320px" />
-      {:else}
-        <form onsubmit={saveConfig} class="space-y-6">
-          <SettingsGroup title={m.wb_review_title()} description={m.wb_review_desc()}>
-            <SettingsRow label={cfgAccessReviewedAt ? m.wb_review_last({ date: formatDay(cfgAccessReviewedAt) }) : m.wb_review_never()}
-              description={status?.accessReviewDue ? m.wb_review_due_desc() : m.wb_review_hint_ok()}>
-              <Button variant={status?.accessReviewDue ? 'primary' : 'secondary'} icon="Check" loading={confirmingReview} onclick={() => void confirmAccessReview()}>{m.wb_review_confirm()}</Button>
-            </SettingsRow>
-          </SettingsGroup>
-
-          <SettingsGroup title={m.wb_set_general()}>
-            <SettingsRow label={m.wb_cfg_enabled()} description={m.wb_desc()}>
-              <ToggleSwitch checked={cfgEnabled} onToggle={(v) => (cfgEnabled = v)} ariaLabel={m.wb_cfg_enabled()} />
-            </SettingsRow>
-            <SettingsRow label={m.wb_cfg_report_enabled()}>
-              <ToggleSwitch checked={cfgReportEnabled} onToggle={(v) => (cfgReportEnabled = v)} ariaLabel={m.wb_cfg_report_enabled()} />
-            </SettingsRow>
-            {#if cfgReportEnabled && (!cfgAlertEvents.includes('REPORT') || (!cfgAlertChannelId && cfgAlertUserIds.length === 0))}
-              <div class="px-4 pb-3"><Callout variant="warning">{m.wb_cfg_report_unnoticed()}</Callout></div>
-            {/if}
-            <SettingsRow label={m.wb_cfg_stale_days()} description={m.wb_cfg_stale_hint()} labelFor="wb-stale-days">
-              <input id="wb-stale-days" type="number" min="0" max="90" step="1" bind:value={cfgStaleDays} class="input w-24" />
-            </SettingsRow>
-          </SettingsGroup>
-
-          <SettingsGroup title={m.wb_set_team()} description={m.wb_cfg_named_advice()}>
-            <SettingsRow label={m.wb_cfg_team_members()} description={m.wb_cfg_named_hint()} labelFor="wb-team-users" stacked>
-              <WellbeingMemberList id="wb-team-users" bind:ids={cfgTeamUserIds} max={MAX_NAMED_MEMBERS} />
-            </SettingsRow>
-            <SettingsRow label={m.wb_cfg_team_roles()} description={m.wb_cfg_roles_hint()} labelFor="wb-team-roles" stacked>
-              <MultiSelect id="wb-team-roles" bind:values={cfgTeamRoleIds} options={roleOptions} placeholder={m.wb_role_search_ph()} />
-            </SettingsRow>
-            <SettingsRow label={m.wb_cfg_director_members()} description={m.wb_cfg_named_hint()} labelFor="wb-director-users" stacked>
-              <WellbeingMemberList id="wb-director-users" bind:ids={cfgDirectorUserIds} max={MAX_NAMED_MEMBERS} />
-            </SettingsRow>
-            <SettingsRow label={m.wb_cfg_director_roles()} description={m.wb_cfg_roles_hint()} labelFor="wb-director-roles" stacked>
-              <MultiSelect id="wb-director-roles" bind:values={cfgDirectorRoleIds} options={roleOptions} placeholder={m.wb_role_search_ph()} />
-            </SettingsRow>
-            <SettingsRow label={m.wb_cfg_backup()} description={m.wb_cfg_backup_hint()} labelFor="wb-backup-user" stacked>
-              <WellbeingMemberList id="wb-backup-user" bind:ids={cfgBackupIds} max={1} />
-            </SettingsRow>
-          </SettingsGroup>
-
-          <SettingsGroup title={m.wb_set_access()} description={m.wb_bg_modal_desc()}>
-            <SettingsRow label={m.wb_cfg_require_reason()}>
-              <ToggleSwitch checked={cfgRequireReason} onToggle={(v) => (cfgRequireReason = v)} ariaLabel={m.wb_cfg_require_reason()} />
-            </SettingsRow>
-            <SettingsRow label={m.wb_cfg_break_glass_approval()} description={m.wb_bg_approval_hint()}>
-              <ToggleSwitch checked={cfgBreakGlassApproval} onToggle={(v) => (cfgBreakGlassApproval = v)} ariaLabel={m.wb_cfg_break_glass_approval()} />
-            </SettingsRow>
-          </SettingsGroup>
-
-          <SettingsGroup title={m.wb_alerts_title()} description={m.wb_alerts_desc()}>
-            <SettingsRow label={m.wb_alerts_channel()} labelFor="wb-alert-channel" stacked>
-              <select id="wb-alert-channel" bind:value={cfgAlertChannelId} class="input w-full">
-                <option value="">{m.wb_alerts_channel_none()}</option>
-                {#each alertChannels as channel (channel.id)}
-                  <option value={channel.id}>{channelDisplayName(channel)}</option>
-                {/each}
-              </select>
-            </SettingsRow>
-            <SettingsRow label={m.wb_alerts_users({ max: MAX_ALERT_USERS })} labelFor="wb-alert-users" stacked>
-              <WellbeingMemberList id="wb-alert-users" bind:ids={cfgAlertUserIds} max={MAX_ALERT_USERS} />
-            </SettingsRow>
-            {#each WB_ALERT_EVENTS as code (code)}
-              <SettingsRow label={wbAlertEventLabel(code)}>
-                <ToggleSwitch size="sm" checked={cfgAlertEvents.includes(code)} onToggle={(v) => toggleAlertEvent(code, v)} ariaLabel={wbAlertEventLabel(code)} />
-              </SettingsRow>
-            {/each}
-          </SettingsGroup>
-
-          <div class="flex justify-end">
-            <Button variant="primary" type="submit" icon="Check" loading={savingConfig}>{m.common_save()}</Button>
-          </div>
-        </form>
-      {/if}
+      <WellbeingSettings
+        accessReviewDue={status.accessReviewDue}
+        onsaved={loadAll}
+        onreviewed={() => { if (status) status = { ...status, accessReviewDue: false }; }}
+      />
     {/if}
   {/if}
 </ModulePage>
