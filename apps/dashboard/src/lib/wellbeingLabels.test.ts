@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { WB_ALERT_EVENTS, WB_CASE_EVENTS, wbCaseEventLabel, wbSummaryTemplate, wbIsSummaryTemplate, WB_CATEGORIES, WB_SEVERITIES, WB_STATUSES, wbAlertEventLabel, wbCategoryLabel, wbSeverityLabel, wbStatusLabel } from './wellbeingLabels';
+import { WB_CLOSE_REASONS, wbCloseReasonLabel, WB_ALERT_EVENTS, WB_CASE_EVENTS, wbCaseEventLabel, wbSummaryTemplate, wbIsSummaryTemplate, WB_CATEGORIES, WB_SEVERITIES, WB_STATUSES, wbAlertEventLabel, wbCategoryLabel, wbSeverityLabel, wbStatusLabel } from './wellbeingLabels';
 
 describe('libellés de la cellule bien-être', () => {
   test('chaque code connu a un libellé lisible, jamais le code brut', () => {
@@ -61,5 +61,12 @@ describe('modèles de résumé par catégorie', () => {
     expect(wbIsSummaryTemplate('   ')).toBe(true);
     expect(wbIsSummaryTemplate(wbSummaryTemplate('MEDIATION'))).toBe(true);
     expect(wbIsSummaryTemplate(`${wbSummaryTemplate('MEDIATION')} et des précisions`)).toBe(false);
+  });
+});
+
+describe('motifs de clôture', () => {
+  test('chaque motif, et « sans motif », a un libellé', () => {
+    for (const code of [...WB_CLOSE_REASONS, 'UNSPECIFIED']) expect(wbCloseReasonLabel(code)).not.toBe(code);
+    expect([...WB_CLOSE_REASONS]).toEqual(['RESOLVED', 'REFERRED', 'NO_FOLLOWUP', 'DUPLICATE']);
   });
 });

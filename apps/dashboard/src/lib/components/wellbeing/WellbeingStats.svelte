@@ -10,6 +10,7 @@
     active: number;
     criticalUnassigned: number;
     activeByCategory: Record<string, number>;
+    closedByReason: Record<string, number>;
     medianTriageHours: number | null;
     months: Array<{ month: string; opened: number; closed: number }>;
   }
@@ -21,7 +22,7 @@
   import Papicon from '../Papicon.svelte';
   import { SERIES } from '../analytics/analyticsFormat';
   import { dateLocale, m } from '../../i18n';
-  import { WB_CATEGORIES, wbCategoryLabel } from '../../wellbeingLabels';
+  import { WB_CATEGORIES, WB_CLOSE_REASONS, wbCategoryLabel, wbCloseReasonLabel } from '../../wellbeingLabels';
 
   const { stats }: { stats: WellbeingCellStats } = $props();
 
@@ -34,6 +35,8 @@
     ],
   });
   const categoryMax = $derived(Math.max(1, ...Object.values(stats.activeByCategory)));
+  const reasons = $derived([...WB_CLOSE_REASONS, 'UNSPECIFIED'].map((code) => ({ code, count: stats.closedByReason?.[code] ?? 0 })).filter((entry) => entry.count > 0));
+  const reasonMax = $derived(Math.max(1, ...reasons.map((entry) => entry.count)));
 </script>
 
 <div class="space-y-6">
@@ -80,6 +83,25 @@
       </ul>
     </section>
   </div>
+
+  {#if reasons.length > 0}
+    <section class="bg-surface-container-low/40 border border-outline-variant/30 rounded-xl p-6 space-y-4">
+      <h3 class="text-base font-semibold flex items-center gap-2"><Papicon icon="Check" size={16} /> {m.wb_stats_by_reason()}</h3>
+      <ul class="space-y-3">
+        {#each reasons as entry (entry.code)}
+          <li class="space-y-1">
+            <div class="flex justify-between text-xs">
+              <span class="text-on-surface">{wbCloseReasonLabel(entry.code)}</span>
+              <span class="font-semibold text-on-surface">{entry.count}</span>
+            </div>
+            <div class="h-2 bg-surface-container-high rounded-full overflow-hidden" aria-hidden="true">
+              <div class="h-2 rounded-full bg-success transition-all duration-500" style="width: {(entry.count / reasonMax) * 100}%"></div>
+            </div>
+          </li>
+        {/each}
+      </ul>
+    </section>
+  {/if}
 
   <p class="text-xs text-on-surface-variant flex items-center gap-1.5"><Papicon icon="lock" size={12} /> {m.wb_stats_privacy()}</p>
 </div>

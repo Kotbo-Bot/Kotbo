@@ -8,7 +8,8 @@ export const WB_STATUSES = ['OPEN', 'MONITORING', 'CLOSED'] as const;
 export const WB_SEVERITIES = ['LOW', 'NORMAL', 'HIGH', 'CRITICAL'] as const;
 export const WB_CATEGORIES = ['SOUTIEN', 'MEDIATION', 'SIGNALEMENT', 'SUIVI'] as const;
 export const WB_ALERT_EVENTS = ['BREAK_GLASS', 'EMERGENCY_READ', 'TEAM_READ', 'CASE_CHANGE', 'CONFIG_CHANGE', 'REPORT', 'REMINDER', 'MEMBERSHIP_CHANGE', 'PURGE_SOON', 'UNUSUAL_ACCESS'] as const;
-export const WB_CASE_EVENTS = ['CREATED', 'STATUS', 'SEVERITY', 'ASSIGNEE', 'REVIEW', 'NOTE', 'RESOURCES_SENT', 'REMINDER', 'ATTACHMENT_ADDED', 'ATTACHMENT_REMOVED', 'VIEWED', 'TRASHED', 'RESTORED', 'EXTENDED', 'EXPORTED', 'TASK_ADDED', 'TASK_DONE', 'TASK_REOPENED', 'TASK_REMOVED', 'PURGE_REQUESTED'] as const;
+export const WB_CASE_EVENTS = ['CREATED', 'STATUS', 'SEVERITY', 'ASSIGNEE', 'REVIEW', 'NOTE', 'RESOURCES_SENT', 'REMINDER', 'ATTACHMENT_ADDED', 'ATTACHMENT_REMOVED', 'VIEWED', 'TRASHED', 'RESTORED', 'EXTENDED', 'EXPORTED', 'TASK_ADDED', 'TASK_DONE', 'TASK_REOPENED', 'TASK_REMOVED', 'PURGE_REQUESTED', 'CLOSED_REASON', 'NOTE_EDITED'] as const;
+export const WB_CLOSE_REASONS = ['RESOLVED', 'REFERRED', 'NO_FOLLOWUP', 'DUPLICATE'] as const;
 
 const STATUS_LABELS: Record<string, () => string> = {
   OPEN: () => m.wb_status_open(),
@@ -41,6 +42,14 @@ const ALERT_EVENT_LABELS: Record<string, () => string> = {
   UNUSUAL_ACCESS: () => m.wb_alert_unusual_access(),
 };
 
+const CLOSE_REASON_LABELS: Record<string, () => string> = {
+  RESOLVED: () => m.wb_close_resolved(),
+  REFERRED: () => m.wb_close_referred(),
+  NO_FOLLOWUP: () => m.wb_close_no_followup(),
+  DUPLICATE: () => m.wb_close_duplicate(),
+  UNSPECIFIED: () => m.wb_close_unspecified(),
+};
+
 const SUMMARY_TEMPLATES: Record<string, () => string> = {
   SOUTIEN: () => m.wb_tpl_soutien(),
   MEDIATION: () => m.wb_tpl_mediation(),
@@ -52,6 +61,8 @@ export const wbStatusLabel = (code: string): string => STATUS_LABELS[code]?.() ?
 export const wbSeverityLabel = (code: string): string => SEVERITY_LABELS[code]?.() ?? code;
 export const wbCategoryLabel = (code: string): string => CATEGORY_LABELS[code]?.() ?? code;
 export const wbAlertEventLabel = (code: string): string => ALERT_EVENT_LABELS[code]?.() ?? code;
+/** Motif de clôture ; `UNSPECIFIED` pour un dossier fermé sans motif. */
+export const wbCloseReasonLabel = (code: string): string => CLOSE_REASON_LABELS[code]?.() ?? code;
 
 /** Trame de résumé proposée à la création d'un dossier, selon sa catégorie. */
 export const wbSummaryTemplate = (category: string): string => SUMMARY_TEMPLATES[category]?.() ?? '';
@@ -112,6 +123,10 @@ export function wbCaseEventLabel(event: WbCaseEvent, formatDate: (iso: string) =
       return m.wb_ev_task_removed();
     case 'PURGE_REQUESTED':
       return m.wb_ev_purge_requested();
+    case 'CLOSED_REASON':
+      return m.wb_ev_closed_reason({ reason: wbCloseReasonLabel(to ?? '') });
+    case 'NOTE_EDITED':
+      return m.wb_ev_note_edited();
     default:
       return event.type;
   }
