@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { WB_SEVERITIES, WB_STATUSES } from './wellbeingLabels';
-import { WB_IDLE_LOCK_MS, wbCaseStats, wbCaseTimeline, wbFilterCases, wbIsReviewDue, wbLinkedCases, wbMergeHeader, wbReviewShortcut, wbSearchCases, wbSeverityTone, wbSortCases, wbStatusTone, type WbCaseView } from './wellbeingView';
+import { WB_IDLE_LOCK_MS, wbBoardColumns, wbNeighbourCaseId, wbShortcut, wbCaseExportHtml, wbPurgeInfo, wbTaskProgress, wbCaseStats, wbCaseTimeline, wbFilterCases, wbIsReviewDue, wbLinkedCases, wbMergeHeader, wbReviewShortcut, wbSearchCases, wbSeverityTone, wbSortCases, wbStatusTone, type WbCaseView } from './wellbeingView';
 
 const NOW = new Date('2026-11-25T12:00:00Z');
 
@@ -179,5 +179,103 @@ describe("raccourcis d'échéance", () => {
 describe('verrouillage', () => {
   test("la page se verrouille après cinq minutes d'inactivité", () => {
     expect(WB_IDLE_LOCK_MS).toBe(5 * 60 * 1000);
+  });
+});
+
+describe('effacement prévu', () => {
+  test('un dossier fermé est effacé un an après sa dernière modification', () => {
+    const info = wbPurgeInfo(dossier({ status: 'CLOSED', updatedAt: '2026-01-10T00:00:00Z' }), NOW);
+    expect(info?.date.toISOString()).toBe('2027-01-10T00:00:00.000Z');
+    expect(info?.soon).toBe(false);
+  });
+
+  test('« bientôt » dans les sept derniers jours', () => {
+    expect(wbPurgeInfo(dossier({ status: 'CLOSED', updatedAt: '2025-11-28T00:00:00Z' }), NOW)?.soon).toBe(true);
+  });
+
+  test("un dossier actif n'a pas de date d'effacement", () => {
+    expect(wbPurgeInfo(dossier({ status: 'OPEN', updatedAt: '2025-01-01T00:00:00Z' }), NOW)).toBeNull();
+  });
+});
+
+describe("avancement du plan d'action", () => {
+  test('compte les tâches faites sur le total', () => {
+    expect(wbTaskProgress([{ doneAt: null }, { doneAt: '2026-11-20T00:00:00Z' }, { doneAt: null }])).toEqual({ done: 1, total: 3, percent: 33 });
+    expect(wbTaskProgress(undefined)).toEqual({ done: 0, total: 0, percent: 0 });
+  });
+});
+
+describe('export imprimable', () => {
+  const labels = { summary: 'Résumé', notes: 'Notes', tasks: 'Plan', attachments: 'Documents', exported: 'Exporté par Sam le 25/11' };
+  const html = wbCaseExportHtml({
+    title: 'Conflit <b>vocal</b>',
+    meta: ['Alex', 'Médiation'],
+    summary: '<script>alert(1)</script>',
+    notes: [{ author: 'Sam', date: '24/11', content: 'Appel fait & noté' }],
+    tasks: [{ label: 'Rappeler', done: true }],
+    attachments: [{ label: 'CR', url: 'https://drive.google.com/x' }],
+  }, labels, 'Sam · 25/11');
+
+  test('échappe tout le contenu du dossier', () => {
+    expect(html).not.toContain('<script>alert');
+    expect(html).toContain('&lt;script&gt;');
+    expect(html).toContain('Conflit &lt;b&gt;vocal&lt;/b&gt;');
+    expect(html).toContain('Appel fait &amp; noté');
+  });
+
+  test('porte le filigrane et la mention de qui a exporté', () => {
+    expect(html).toContain('Sam · 25/11');
+    expect(html).toContain('Exporté par Sam le 25/11');
+  });
+
+  test('reprend notes, tâches et documents', () => {
+    for (const part of ['Notes', 'Rappeler', 'https://drive.google.com/x']) expect(html).toContain(part);
+  });
+});
+
+describe('vue en colonnes', () => {
+  test('une colonne par statut, dans l ordre du suivi, les dossiers à leur place', () => {
+    const columns = wbBoardColumns([
+      dossier({ id: 'a', status: 'CLOSED' }),
+      dossier({ id: 'b', status: 'OPEN' }),
+      dossier({ id: 'c', status: 'MONITORING' }),
+      dossier({ id: 'd', status: 'OPEN' }),
+    ]);
+    expect(columns.map((column) => column.status)).toEqual(['OPEN', 'MONITORING', 'CLOSED']);
+    expect(columns.map((column) => column.cases.map((c) => c.id))).toEqual([['b', 'd'], ['c'], ['a']]);
+  });
+});
+
+describe('navigation au clavier', () => {
+  const liste = [dossier({ id: 'a' }), dossier({ id: 'b' }), dossier({ id: 'c' })];
+
+  test('suivant et précédent, sans sortir de la liste', () => {
+    expect(wbNeighbourCaseId(liste, 'a', 1)).toBe('b');
+    expect(wbNeighbourCaseId(liste, 'c', 1)).toBe('c');
+    expect(wbNeighbourCaseId(liste, 'a', -1)).toBe('a');
+  });
+
+  test('sans dossier ouvert, on part du premier', () => {
+    expect(wbNeighbourCaseId(liste, null, 1)).toBe('a');
+    expect(wbNeighbourCaseId([], null, 1)).toBeNull();
+  });
+});
+
+describe('raccourcis clavier', () => {
+  const key = (over: Partial<Parameters<typeof wbShortcut>[0]> = {}) =>
+    ({ key: 'j', ctrlKey: false, metaKey: false, altKey: false, typing: false, ...over });
+
+  test('j, k, n et d', () => {
+    expect(wbShortcut(key({ key: 'j' }))).toBe('next');
+    expect(wbShortcut(key({ key: 'k' }))).toBe('previous');
+    expect(wbShortcut(key({ key: 'n' }))).toBe('note');
+    expect(wbShortcut(key({ key: 'd' }))).toBe('discreet');
+  });
+
+  test('rien pendant la saisie ni avec une touche de modification', () => {
+    expect(wbShortcut(key({ typing: true }))).toBeNull();
+    expect(wbShortcut(key({ ctrlKey: true }))).toBeNull();
+    expect(wbShortcut(key({ metaKey: true }))).toBeNull();
+    expect(wbShortcut(key({ key: 'x' }))).toBeNull();
   });
 });

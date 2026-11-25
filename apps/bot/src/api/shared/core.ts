@@ -818,6 +818,8 @@ export type AuthClaims = {
   username?: string;
   avatar?: string;
   discordToken?: string;
+  /** Ouverture de la session (ms) : la cellule bien-être exige une connexion récente. */
+  sessionCreatedAt?: number;
 };
 
 function legacyBearerAuthEnabled(): boolean {
@@ -840,7 +842,8 @@ export const verifyAuthHeaders = async (
   if (legacyBearerAuthEnabled() && authHeader?.startsWith('Bearer ')) {
     const token = authHeader.split(' ')[1];
     try {
-      return jwt.verify(token, getJwtSecret()) as AuthClaims;
+      const claims = jwt.verify(token, getJwtSecret()) as AuthClaims & { iat?: number };
+      return { ...claims, sessionCreatedAt: typeof claims.iat === 'number' ? claims.iat * 1000 : undefined };
     } catch {
       // Continue with the cookie session. Frontends may still send a harmless
       // compatibility marker in the Authorization header during migration.
@@ -855,6 +858,7 @@ export const verifyAuthHeaders = async (
     username: session.username,
     avatar: session.avatar ?? undefined,
     discordToken: session.discordAccessToken,
+    sessionCreatedAt: session.createdAt,
   };
 };
 

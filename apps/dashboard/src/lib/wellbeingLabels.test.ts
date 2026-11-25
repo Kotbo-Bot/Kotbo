@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { WB_ALERT_EVENTS, WB_CASE_EVENTS, wbCaseEventLabel, WB_CATEGORIES, WB_SEVERITIES, WB_STATUSES, wbAlertEventLabel, wbCategoryLabel, wbSeverityLabel, wbStatusLabel } from './wellbeingLabels';
+import { WB_ALERT_EVENTS, WB_CASE_EVENTS, wbCaseEventLabel, wbSummaryTemplate, wbIsSummaryTemplate, WB_CATEGORIES, WB_SEVERITIES, WB_STATUSES, wbAlertEventLabel, wbCategoryLabel, wbSeverityLabel, wbStatusLabel } from './wellbeingLabels';
 
 describe('libellés de la cellule bien-être', () => {
   test('chaque code connu a un libellé lisible, jamais le code brut', () => {
@@ -17,7 +17,7 @@ describe('libellés de la cellule bien-être', () => {
     expect([...WB_STATUSES]).toEqual(['OPEN', 'MONITORING', 'CLOSED']);
     expect([...WB_SEVERITIES]).toEqual(['LOW', 'NORMAL', 'HIGH', 'CRITICAL']);
     expect([...WB_CATEGORIES]).toEqual(['SOUTIEN', 'MEDIATION', 'SIGNALEMENT', 'SUIVI']);
-    expect([...WB_ALERT_EVENTS]).toEqual(['BREAK_GLASS', 'EMERGENCY_READ', 'TEAM_READ', 'CASE_CHANGE', 'CONFIG_CHANGE', 'REPORT', 'REMINDER', 'MEMBERSHIP_CHANGE']);
+    expect([...WB_ALERT_EVENTS]).toEqual(['BREAK_GLASS', 'EMERGENCY_READ', 'TEAM_READ', 'CASE_CHANGE', 'CONFIG_CHANGE', 'REPORT', 'REMINDER', 'MEMBERSHIP_CHANGE', 'PURGE_SOON', 'UNUSUAL_ACCESS']);
   });
 });
 
@@ -46,5 +46,20 @@ describe("historique d'un dossier", () => {
 
   test("une échéance affiche sa date", () => {
     expect(wbCaseEventLabel({ type: 'REVIEW', fromValue: null, toValue: '2026-12-01T00:00:00.000Z' }, date)).toContain('2026-12-01');
+  });
+});
+
+describe('modèles de résumé par catégorie', () => {
+  test('chaque catégorie propose un modèle, différent des autres', () => {
+    const templates = WB_CATEGORIES.map(wbSummaryTemplate);
+    for (const template of templates) expect(template.length).toBeGreaterThan(0);
+    expect(new Set(templates).size).toBe(WB_CATEGORIES.length);
+  });
+
+  test("un résumé vide ou resté sur un modèle peut être remplacé, pas un résumé écrit", () => {
+    expect(wbIsSummaryTemplate('')).toBe(true);
+    expect(wbIsSummaryTemplate('   ')).toBe(true);
+    expect(wbIsSummaryTemplate(wbSummaryTemplate('MEDIATION'))).toBe(true);
+    expect(wbIsSummaryTemplate(`${wbSummaryTemplate('MEDIATION')} et des précisions`)).toBe(false);
   });
 });

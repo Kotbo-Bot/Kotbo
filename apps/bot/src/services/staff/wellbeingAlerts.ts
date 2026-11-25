@@ -74,3 +74,17 @@ export async function sendWellbeingAlert(
     logger.error('Wellbeing', `Alerte ${event} en échec :`, error);
   }
 }
+
+/**
+ * Message privé à des personnes précises, hors des alertes configurées : rien
+ * ne part dans le salon d'alerte (mention d'un collègue dans une note).
+ */
+export async function sendWellbeingDirect(client: Client, userIds: readonly string[], content: string): Promise<void> {
+  const results = await Promise.allSettled([...new Set(userIds)].map(async (id) => {
+    const user = await client.users.fetch(id);
+    await user.send({ content, allowedMentions: { parse: [] } });
+  }));
+  for (const result of results) {
+    if (result.status === 'rejected') logger.warn('Wellbeing', 'Message privé de la cellule non remis :', result.reason);
+  }
+}

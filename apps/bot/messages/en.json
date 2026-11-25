@@ -5432,11 +5432,20 @@
   "wbc_modal_title_anonymous": "Anonymous message to the unit",
   "wbc_modal_label": "What is going on?",
   "wbc_modal_ph": "Describe the situation in your own words. Only the wellbeing unit will read this message.",
-  "wbc_sent": "Your message was sent to the wellbeing unit. They may reach out to you by direct message.",
-  "wbc_sent_anonymous": "Your anonymous message was sent to the wellbeing unit. Your name was not kept, so the unit cannot reply to you.",
+  "wbc_sent": "Your message was sent to the wellbeing unit. They may reach out to you by direct message.\nYour tracking code: `{code}`. Keep it: `/wellbeing track` tells you where your report stands.",
+  "wbc_sent_anonymous": "Your anonymous message was sent to the wellbeing unit. Your name was not kept, so the unit cannot reply to you.\nYour tracking code: `{code}`. Keep it: `/wellbeing track` tells you where your report stands, without revealing who you are.",
   "wbc_reports_off": "The wellbeing unit is not receiving messages on this server right now.",
   "wbc_cooldown": "You sent a message a short while ago. Please try again in a few minutes.",
   "wbc_empty": "Your message is empty.",
   "wbc_error": "Your message could not be sent. Please try again later.",
-  "wbc_resources_none": "No help resources are offered on this server right now."
+  "wbc_resources_none": "No help resources are offered on this server right now.",
+  "wbc_track_name": "track",
+  "wbc_track_description": "Check where a report stands with its tracking code",
+  "wbc_opt_code_name": "code",
+  "wbc_opt_code_description": "The code you received when sending the report",
+  "wbc_track_cooldown": "Wait a few seconds before checking another code.",
+  "wbc_track_unknown": "No report matches this code on this server. Check that it is copied correctly.",
+  "wbc_track_received": "Your report was received. It is waiting for someone in the unit to take it on.",
+  "wbc_track_in_progress": "Your report is being handled by the wellbeing unit.",
+  "wbc_track_closed": "Follow-up on your report is complete."
 }

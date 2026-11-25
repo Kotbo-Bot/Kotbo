@@ -173,3 +173,84 @@ export function wbCaseTimeline(c: WbCaseView): WbTimelineEntry[] {
     .map((event) => ({ kind: 'event', id: event.id, at: event.createdAt, event }));
   return [...notes, ...events].sort((a, b) => b.at.localeCompare(a.at));
 }
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+/** Mêmes durées que le bot (CLOSED_CASE_RETENTION_DAYS, PURGE_NOTICE_DAYS). */
+const RETENTION_DAYS = 365;
+const PURGE_NOTICE_DAYS = 7;
+
+/** Date d'effacement d'un dossier fermé, et si elle tombe dans la semaine. */
+export function wbPurgeInfo(c: WbCaseView, now: Date): { date: Date; soon: boolean } | null {
+  if (c.status !== 'CLOSED' || !c.updatedAt) return null;
+  const date = new Date(new Date(c.updatedAt).getTime() + RETENTION_DAYS * DAY_MS);
+  return { date, soon: date.getTime() - now.getTime() <= PURGE_NOTICE_DAYS * DAY_MS };
+}
+
+export function wbTaskProgress(tasks: ReadonlyArray<{ doneAt: string | null }> | undefined) {
+  const total = tasks?.length ?? 0;
+  const done = tasks?.filter((task) => task.doneAt).length ?? 0;
+  return { done, total, percent: total === 0 ? 0 : Math.round((done / total) * 100) };
+}
+
+export interface WbExportContent {
+  title: string;
+  meta: string[];
+  summary: string;
+  notes: Array<{ author: string; date: string; content: string }>;
+  tasks: Array<{ label: string; done: boolean }>;
+  attachments: Array<{ label: string; url: string }>;
+}
+
+const escapeHtml = (text: string) =>
+  text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+/**
+ * Page imprimable d'un dossier, filigranée au nom de qui l'exporte : une copie
+ * qui circule dit d'où elle sort. Tout le contenu est échappé.
+ */
+export function wbCaseExportHtml(
+  content: WbExportContent,
+  labels: { summary: string; notes: string; tasks: string; attachments: string; exported: string },
+  watermark: string,
+): string {
+  const e = escapeHtml;
+  const section = (title: string, body: string) => (body ? `<h2>${e(title)}</h2>${body}` : '');
+  const notes = content.notes.map((note) => `<div class="note"><p class="meta">${e(note.author)} · ${e(note.date)}</p><p>${e(note.content)}</p></div>`).join('');
+  const tasks = content.tasks.length ? `<ul>${content.tasks.map((task) => `<li>${task.done ? '[x]' : '[ ]'} ${e(task.label)}</li>`).join('')}</ul>` : '';
+  const attachments = content.attachments.length ? `<ul>${content.attachments.map((item) => `<li>${e(item.label)} : ${e(item.url)}</li>`).join('')}</ul>` : '';
+  const mark = e(watermark);
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${e(content.title)}</title><style>
+body{font:14px/1.5 system-ui,sans-serif;color:#111;max-width:760px;margin:32px auto;padding:0 24px;position:relative}
+h1{font-size:22px;margin:0 0 4px}h2{font-size:15px;margin:24px 0 8px;border-bottom:1px solid #ccc;padding-bottom:4px}
+p{white-space:pre-wrap;margin:4px 0}.meta{color:#555;font-size:12px}.note{margin:8px 0;padding-left:10px;border-left:3px solid #ccc}
+.mark{position:fixed;inset:0;display:flex;flex-wrap:wrap;align-content:space-around;justify-content:space-around;pointer-events:none;opacity:.08;font-size:28px;transform:rotate(-30deg);z-index:9}
+footer{margin-top:32px;color:#555;font-size:12px}
+</style></head><body><div class="mark" aria-hidden="true">${Array.from({ length: 12 }, () => `<span>${mark}</span>`).join('')}</div>
+<h1>${e(content.title)}</h1><p class="meta">${content.meta.map(e).join(' · ')}</p>
+${section(labels.summary, `<p>${e(content.summary)}</p>`)}${section(labels.notes, notes)}${section(labels.tasks, tasks)}${section(labels.attachments, attachments)}
+<footer>${e(labels.exported)}</footer></body></html>`;
+}
+
+const BOARD_STATUSES = ['OPEN', 'MONITORING', 'CLOSED'] as const;
+
+/** Colonnes de la vue par statut, dans l'ordre du suivi. */
+export function wbBoardColumns<T extends WbCaseView>(cases: T[]): Array<{ status: string; cases: T[] }> {
+  return BOARD_STATUSES.map((status) => ({ status, cases: cases.filter((c) => c.status === status) }));
+}
+
+/** Dossier voisin dans la liste affichée (`step` : 1 suivant, -1 précédent), sans en sortir. */
+export function wbNeighbourCaseId(cases: ReadonlyArray<{ id: string }>, currentId: string | null, step: 1 | -1): string | null {
+  if (cases.length === 0) return null;
+  const index = cases.findIndex((c) => c.id === currentId);
+  if (index === -1) return cases[0]!.id;
+  return cases[Math.min(cases.length - 1, Math.max(0, index + step))]!.id;
+}
+
+export type WbShortcut = 'next' | 'previous' | 'note' | 'discreet';
+const SHORTCUT_KEYS: Record<string, WbShortcut> = { j: 'next', k: 'previous', n: 'note', d: 'discreet' };
+
+/** Raccourci d'une touche ; `typing` : le focus est dans un champ de saisie. */
+export function wbShortcut(event: { key: string; ctrlKey: boolean; metaKey: boolean; altKey: boolean; typing: boolean }): WbShortcut | null {
+  if (event.typing || event.ctrlKey || event.metaKey || event.altKey) return null;
+  return SHORTCUT_KEYS[event.key] ?? null;
+}

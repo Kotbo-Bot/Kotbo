@@ -10,6 +10,7 @@
   import { dateLocale, m } from '../i18n';
   import { wbStatusLabel } from '../wellbeingLabels';
   import { Button } from './ui';
+  import { authStore } from '../stores/auth.svelte';
 
   let { userId, userName, canWrite = false }: { userId: string; userName: string; canWrite?: boolean } = $props();
 
@@ -27,6 +28,7 @@
     openingId = caseId;
     try {
       const res = await dashboardFetch(`/wellbeing/cases/${caseId}`);
+      if (await reauthAsked(res)) return;
       if (!res.ok) throw new Error('detail');
       const { item } = await res.json();
       contents = { ...contents, [caseId]: { summary: item.summary, notes: item.notes ?? [], createdByName: item.createdByName } };
@@ -42,9 +44,19 @@
 
   const fmt = (iso: string) => new Date(iso).toLocaleString(dateLocale(), { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
+  /** Le bot exige une connexion récente pour lire les dossiers de la cellule. */
+  let reauth = $state(false);
+  async function reauthAsked(res: Response): Promise<boolean> {
+    if (res.status !== 403) return false;
+    const data = await res.clone().json().catch(() => ({}));
+    reauth = data.code === 'WELLBEING_REAUTH';
+    return reauth;
+  }
+
   async function load() {
     try {
       const res = await dashboardFetch(`/wellbeing/cases?subjectUserId=${encodeURIComponent(userId)}`);
+      if (await reauthAsked(res)) return;
       if (res.ok) cases = (await res.json()).cases ?? [];
     } finally {
       loading = false;
@@ -101,7 +113,12 @@
   <p class="text-xs text-on-surface-variant">{m.wb_read_only_emergency()}</p>
   {/if}
 
-  {#if !loading && cases.length === 0}
+  {#if reauth}
+    <div class="rounded-lg bg-surface-container px-4 py-3 space-y-2">
+      <p class="text-sm text-on-surface-variant">{m.wb_reauth_desc()}</p>
+      <Button size="sm" variant="primary" icon="LogIn" onclick={() => void authStore.logout()}>{m.wb_reauth_action()}</Button>
+    </div>
+  {:else if !loading && cases.length === 0}
     <p class="text-sm text-on-surface-variant">{m.wb_panel_empty()}</p>
   {/if}
 

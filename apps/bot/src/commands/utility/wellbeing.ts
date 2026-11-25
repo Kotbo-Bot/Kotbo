@@ -13,13 +13,16 @@ import prisma from '../../utils/db.js';
 import { getEffectiveLocale, localized } from '../../utils/i18n.js';
 import * as m from '../../lib/paraglide/messages.js';
 import { cleanResources, resourcesMessage } from '../../services/staff/wellbeingPolicy.js';
-import { REPORT_MAX_LENGTH, REPORT_MODAL_PREFIX, reportsOpen, submitWellbeingReport } from '../../services/staff/wellbeingReport.js';
+import { REPORT_MAX_LENGTH, REPORT_MODAL_PREFIX, lookupWellbeingReport, reportsOpen, submitWellbeingReport } from '../../services/staff/wellbeingReport.js';
 
 const data = localized(new SlashCommandBuilder(), 'wbc')
   .addSubcommand((sub) =>
     localized(sub, 'wbc_report')
       .addBooleanOption((option) => localized(option, 'wbc_opt_anonymous').setRequired(false)))
-  .addSubcommand((sub) => localized(sub, 'wbc_resources'));
+  .addSubcommand((sub) => localized(sub, 'wbc_resources'))
+  .addSubcommand((sub) =>
+    localized(sub, 'wbc_track')
+      .addStringOption((option) => localized(option, 'wbc_opt_code').setRequired(true).setMinLength(10).setMaxLength(14)));
 
 async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   const guildId = interaction.guildId;
@@ -37,6 +40,19 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
         : m.wbc_resources_none({}, { locale }),
       allowedMentions: { parse: [] },
     });
+    return;
+  }
+
+  if (interaction.options.getSubcommand() === 'track') {
+    const status = await lookupWellbeingReport(guildId, interaction.user.id, interaction.options.getString('code', true));
+    const replies = {
+      cooldown: () => m.wbc_track_cooldown({}, { locale }),
+      unknown: () => m.wbc_track_unknown({}, { locale }),
+      received: () => m.wbc_track_received({}, { locale }),
+      in_progress: () => m.wbc_track_in_progress({}, { locale }),
+      closed: () => m.wbc_track_closed({}, { locale }),
+    };
+    await interaction.reply({ ...ephemeral, content: replies[status]() });
     return;
   }
 
@@ -67,16 +83,18 @@ export async function handleWellbeingReportModal(interaction: ModalSubmitInterac
   const locale = await getEffectiveLocale(interaction);
   const anonymous = interaction.customId.endsWith(':1');
   await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
-  const outcome = await submitWellbeingReport(
+  const result = await submitWellbeingReport(
     interaction.client,
     guildId,
     { id: interaction.user.id, username: interaction.user.username },
     interaction.fields.getTextInputValue('message'),
     anonymous,
-  ).catch(() => 'error' as const);
+  ).catch(() => ({ outcome: 'error' as const, code: undefined }));
+  const outcome = result.outcome;
+  const code = result.code ?? '';
 
   const replies = {
-    sent: () => (anonymous ? m.wbc_sent_anonymous({}, { locale }) : m.wbc_sent({}, { locale })),
+    sent: () => (anonymous ? m.wbc_sent_anonymous({ code }, { locale }) : m.wbc_sent({ code }, { locale })),
     disabled: () => m.wbc_reports_off({}, { locale }),
     cooldown: () => m.wbc_cooldown({}, { locale }),
     empty: () => m.wbc_empty({}, { locale }),

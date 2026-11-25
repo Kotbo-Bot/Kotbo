@@ -1,6 +1,6 @@
 <script lang="ts">
   import { dateLocale, m } from '../lib/i18n';
-  import { onDestroy, onMount } from 'svelte';
+  import { onDestroy, onMount, tick } from 'svelte';
   import { dashboardFetch } from '../lib/api';
   import { dashboardStore } from '../lib/stores/dashboard.svelte';
   import { toast } from '../lib/stores/toast.svelte';
@@ -8,14 +8,18 @@
   import ModulePage from '../lib/components/ModulePage.svelte';
   import MultiSelect from '../lib/components/MultiSelect.svelte';
   import MemberSearchSelect from '../lib/components/MemberSearchSelect.svelte';
-  import { WB_ALERT_EVENTS, wbCaseEventLabel, WB_CATEGORIES, WB_SEVERITIES, WB_STATUSES, wbAlertEventLabel, wbCategoryLabel, wbSeverityLabel, wbStatusLabel } from '../lib/wellbeingLabels';
+  import { WB_ALERT_EVENTS, wbCaseEventLabel, WB_CATEGORIES, WB_SEVERITIES, WB_STATUSES, wbAlertEventLabel, wbCategoryLabel, wbIsSummaryTemplate, wbSeverityLabel, wbStatusLabel, wbSummaryTemplate } from '../lib/wellbeingLabels';
+  import WellbeingStats, { type WellbeingCellStats } from '../lib/components/wellbeing/WellbeingStats.svelte';
+  import CaseTasks from '../lib/components/wellbeing/CaseTasks.svelte';
+  import CaseBoard from '../lib/components/wellbeing/CaseBoard.svelte';
+  import { memberCaseModal } from '../lib/stores/memberCaseModal.svelte';
   import MemberName from '../lib/components/MemberName.svelte';
   import WellbeingMemberList from '../lib/components/WellbeingMemberList.svelte';
   import { channelDisplayName } from '../lib/channelUtils';
   import { Button, Callout, EmptyState, Field, FilterPills, Menu, Modal, SettingsGroup, SettingsRow, StatTile, Tabs, ToggleSwitch, type FilterOption, type MenuItem, type TabItem } from '../lib/components/ui';
   import Papicon from '../lib/components/Papicon.svelte';
   import Skeleton from '../lib/components/Skeleton.svelte';
-  import { WB_IDLE_LOCK_MS, wbCaseStats, wbCaseTimeline, wbFilterCases, wbIsReviewDue, wbLinkedCases, wbMergeHeader, wbReviewShortcut, wbSearchCases, wbSeverityAccent, wbSeverityTone, wbSortCases, wbStatusTone, type WbCaseFilter, type WbCaseSort } from '../lib/wellbeingView';
+  import { WB_IDLE_LOCK_MS, wbNeighbourCaseId, wbShortcut, wbCaseExportHtml, wbPurgeInfo, wbTaskProgress, wbCaseStats, wbCaseTimeline, wbFilterCases, wbIsReviewDue, wbLinkedCases, wbMergeHeader, wbReviewShortcut, wbSearchCases, wbSeverityAccent, wbSeverityTone, wbSortCases, wbStatusTone, type WbCaseFilter, type WbCaseSort } from '../lib/wellbeingView';
   import { authStore } from '../lib/stores/auth.svelte';
 
   type WellbeingStatus = {
@@ -31,6 +35,8 @@
     breakGlassExpiresAt: string | null;
     /** Accès d'urgence en cours de la personne connectée, pour l'arrêter. */
     breakGlassLogId: string | null;
+    /** Propriétaire : la composition n'a pas été reconfirmée depuis 30 jours. */
+    accessReviewDue: boolean;
     /** Accès d'urgence soumis à la validation d'une seconde personne. */
     breakGlassApproval: boolean;
     reportEnabled: boolean;
@@ -51,7 +57,15 @@
   const selectedHeader = $derived(cases.find((c) => c.id === selectedCaseId) ?? null);
   const selectedCase = $derived(detail && detail.id === selectedCaseId ? detail : null);
 
-  type Tab = 'cases' | 'resources' | 'access' | 'settings';
+  type Tab = 'cases' | 'stats' | 'resources' | 'access' | 'settings';
+  type DetailTab = 'timeline' | 'tasks' | 'documents';
+  let detailTab = $state<DetailTab>('timeline');
+  const taskProgress = $derived(wbTaskProgress(selectedCase?.tasks));
+  const detailTabs = $derived<TabItem[]>(selectedCase ? [
+    { id: 'timeline', label: m.wb_detail_timeline(), icon: 'Clock' },
+    { id: 'tasks', label: m.wb_tasks_title(), icon: 'CheckSquare', badge: taskProgress.total ? `${taskProgress.done}/${taskProgress.total}` : undefined },
+    { id: 'documents', label: m.wb_attachments_title(), icon: 'Paperclip', badge: (selectedCase.attachments ?? []).length || undefined },
+  ] : []);
   type ListFilter = WbCaseFilter | 'trash';
   let activeTab = $state<Tab>('cases');
   let caseFilter = $state<ListFilter>('active');
@@ -59,6 +73,7 @@
   let caseSort = $state<WbCaseSort>('recent');
   const viewerId = $derived(authStore.user?.id);
   const now = new Date();
+  const purgeInfo = $derived(selectedCase ? wbPurgeInfo(selectedCase, now) : null);
   const stats = $derived(wbCaseStats(cases, now));
   const visibleCases = $derived(caseFilter === 'trash'
     ? wbSearchCases(trashCases, caseSearch)
@@ -79,6 +94,8 @@
     { value: 'review', label: () => m.wb_sort_review() },
   ];
   const REVIEW_SHORTCUTS = [3, 7, 30];
+  /** Même délai que le bot (PURGE_REQUEST_HOURS) : passé, une demande d'effacement est à refaire. */
+  const PURGE_REQUEST_MS = 72 * 60 * 60 * 1000;
 
   function pickFilter(value: ListFilter) {
     caseFilter = value;
@@ -125,12 +142,30 @@
     clearInterval(idleTimer);
   });
 
+  /** Le bot exige une connexion récente pour lire les dossiers. */
+  let reauthRequired = $state(false);
+  async function needsReauth(res: Response): Promise<boolean> {
+    if (res.status !== 403) return false;
+    const data = await res.clone().json().catch(() => ({}));
+    if (data.code !== 'WELLBEING_REAUTH') return false;
+    reauthRequired = true;
+    detail = null;
+    return true;
+  }
+
+  /** Vérification de l'historique du dossier ouvert : intact, vérifié depuis le chaînage, ou altéré. */
+  let integrity = $state<'ok' | 'partial' | 'broken' | null>(null);
+
   async function loadDetail(caseId: string) {
     try {
       const res = await dashboardFetch(`/wellbeing/cases/${caseId}`);
+      if (await needsReauth(res)) return;
       if (!res.ok) throw new Error('detail');
-      const { item } = await res.json();
-      if (selectedCaseId === caseId && !locked) detail = item;
+      const data = await res.json();
+      if (selectedCaseId === caseId && !locked) {
+        detail = data.item;
+        integrity = data.integrity ?? null;
+      }
     } catch {
       toast.error(m.toast_wb_load_failed());
     }
@@ -140,7 +175,9 @@
     if (caseId === selectedCaseId && detail) return;
     selectedCaseId = caseId;
     detail = null;
+    integrity = null;
     revealed = false;
+    detailTab = 'timeline';
     void loadDetail(caseId);
   }
 
@@ -262,10 +299,65 @@
 
   // Note on selected case
   let newNote = $state('');
+  /** Collègues de la cellule prévenus en privé de la note. */
+  let noteNotify = $state<string[]>([]);
+  let noteInput = $state<HTMLTextAreaElement>();
+
+  // Vue des dossiers : liste et fiche, ou colonnes par statut. Retenue par navigateur.
+  const VIEW_KEY = 'kotbo:wellbeing:view';
+  let caseView = $state<'list' | 'board'>(typeof localStorage !== 'undefined' && localStorage.getItem(VIEW_KEY) === 'board' ? 'board' : 'list');
+  function setCaseView(view: 'list' | 'board') {
+    caseView = view;
+    if (view === 'board' && caseFilter === 'trash') caseFilter = 'active';
+    try { localStorage.setItem(VIEW_KEY, view); } catch { /* stockage indisponible : réglage gardé pour la session */ }
+  }
+  const boardCases = $derived(wbSearchCases(cases, caseSearch));
+
+  /** Raccourcis : j/k dossier suivant ou précédent, n nouvelle note, d mode discret. */
+  function onShortcut(event: KeyboardEvent) {
+    if (activeTab !== 'cases' || locked || reauthRequired || newCaseOpen || breakGlassOpen) return;
+    const target = event.target as HTMLElement | null;
+    const typing = !!target && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
+    const action = wbShortcut({ key: event.key, ctrlKey: event.ctrlKey, metaKey: event.metaKey, altKey: event.altKey, typing });
+    if (!action) return;
+    if (action === 'next' || action === 'previous') {
+      if (caseView === 'list' && caseFilter === 'trash') return;
+      const id = wbNeighbourCaseId(caseView === 'board' ? boardCases : visibleCases, selectedCaseId, action === 'next' ? 1 : -1);
+      if (id) openCaseById(id);
+    } else if (action === 'note') {
+      if (!status?.canWriteCases || !selectedCase) return;
+      // Le champ de note reste utilisable en mode discret : rien n'est dévoilé.
+      detailTab = 'timeline';
+      void tick().then(() => noteInput?.focus());
+    } else {
+      setDiscreet(!discreet);
+    }
+    event.preventDefault();
+  }
   let addingNote = $state(false);
 
   // Onglet Réglages (propriétaire) : lu à la première ouverture.
   let configLoaded = $state(false);
+  let cfgAccessReviewedAt = $state<string | null>(null);
+  let confirmingReview = $state(false);
+
+  /** Le propriétaire confirme que la composition de la cellule est toujours juste. */
+  async function confirmAccessReview() {
+    if (confirmingReview) return;
+    confirmingReview = true;
+    try {
+      const res = await dashboardFetch('/wellbeing/access-review', { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? '');
+      cfgAccessReviewedAt = data.accessReviewedAt;
+      if (status) status = { ...status, accessReviewDue: false };
+      toast.success(m.toast_wb_review_confirmed());
+    } catch (err: any) {
+      toast.error(err?.message || m.toast_wb_save_failed());
+    } finally {
+      confirmingReview = false;
+    }
+  }
   let cfgEnabled = $state(false);
   let cfgRequireReason = $state(true);
   let cfgTeamRoleIds = $state<string[]>([]);
@@ -299,6 +391,7 @@
     const on = status.enabled;
     return [
       { id: 'cases', label: m.wb_tab_cases(), icon: 'folder', badge: on && status.hasCaseAccess ? stats.active || undefined : undefined },
+      ...(on && (status.isTeamMember || status.isDirector) ? [{ id: 'stats', label: m.wb_tab_stats(), icon: 'BarChart3' }] : []),
       ...(on && status.isTeamMember ? [{ id: 'resources', label: m.wb_tab_resources(), icon: 'heart', badge: resources.length || undefined }] : []),
       ...(on && (status.isDirector || status.isTeamMember) ? [{ id: 'access', label: m.wb_tab_access(), icon: 'eye', badge: pendingLogs.length || undefined }] : []),
       ...(status.canConfigure ? [{ id: 'settings', label: m.wb_tab_settings(), icon: 'settings' }] : []),
@@ -314,6 +407,17 @@
     if (activeTab === 'settings' && !configLoaded) void loadConfig();
   });
 
+  // Bilan : relu à chaque ouverture de l'onglet, il ne coûte qu'une requête.
+  let cellStats = $state<WellbeingCellStats | null>(null);
+  $effect(() => {
+    if (activeTab === 'stats') void loadStats();
+  });
+  async function loadStats() {
+    const res = await dashboardFetch('/wellbeing/stats');
+    if (res.ok) cellStats = (await res.json()).stats;
+    else toast.error(m.toast_wb_load_failed());
+  }
+
   async function loadAll() {
     loading = true;
     try {
@@ -328,11 +432,19 @@
 
       if (status?.hasCaseAccess) {
         const casesRes = await dashboardFetch('/wellbeing/cases');
-        if (casesRes.ok) {
+        if (await needsReauth(casesRes)) {
+          cases = [];
+        } else if (casesRes.ok) {
+          reauthRequired = false;
           const data = await casesRes.json();
           cases = data.cases ?? [];
-          const stillThere = selectedCaseId && cases.some((c) => c.id === selectedCaseId);
-          if (stillThere) {
+          // Lien direct (accueil, « Mes échéances ») : `?case=` ouvre ce dossier.
+          const linked = new URLSearchParams(window.location.search).get('case');
+          // Lu une fois : un rechargement plus tard ne ramène pas à ce dossier.
+          if (linked) history.replaceState(history.state, '', window.location.pathname);
+          if (linked && cases.some((c) => c.id === linked)) {
+            openCaseById(linked);
+          } else if (selectedCaseId && cases.some((c) => c.id === selectedCaseId)) {
             if (!detail && !locked) void loadDetail(selectedCaseId!);
           } else if (cases.length > 0) {
             openCaseById((wbFilterCases(cases, 'active')[0] ?? cases[0]).id);
@@ -385,6 +497,7 @@
       cfgBreakGlassApproval = config.breakGlassApproval === true;
       cfgReportEnabled = config.reportEnabled === true;
       cfgStaleDays = typeof config.staleCriticalDays === 'number' ? config.staleCriticalDays : 7;
+      cfgAccessReviewedAt = config.accessReviewedAt ?? null;
       configLoaded = true;
     } catch {
       toast.error(m.toast_wb_management_only());
@@ -468,9 +581,16 @@
     }
   }
 
+  /** La trame proposée n'est pas un résumé : elle doit être remplie avant la création. */
+  let summaryError = $state('');
+
   async function createCase(event: SubmitEvent) {
     event.preventDefault();
     if (creatingCase) return;
+    if (wbIsSummaryTemplate(newSummary)) {
+      summaryError = m.wb_summary_template_error();
+      return;
+    }
     creatingCase = true;
     try {
       const res = await dashboardFetch('/wellbeing/cases', {
@@ -514,12 +634,19 @@
   let updatingCase = $state(false);
 
   /** Statut ou gravité du dossier ouvert. Fermer un dossier le rend purgeable après un an. */
-  async function updateCase(patch: { status?: string; severity?: string; assigneeId?: string | null; reviewAt?: string | null }) {
-    const target = selectedCase;
-    if (!target || updatingCase) return;
+  type CasePatch = { status?: string; severity?: string; assigneeId?: string | null; reviewAt?: string | null };
+
+  /** Modification du dossier ouvert. */
+  function updateCase(patch: CasePatch) {
+    if (selectedCase) return patchCase(selectedCase.id, patch);
+  }
+
+  /** Modifie un dossier, ouvert ou non (vue en colonnes). */
+  async function patchCase(caseId: string, patch: CasePatch) {
+    if (updatingCase) return;
     updatingCase = true;
     try {
-      const res = await dashboardFetch(`/wellbeing/cases/${target.id}`, {
+      const res = await dashboardFetch(`/wellbeing/cases/${caseId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(patch),
@@ -535,10 +662,18 @@
     }
   }
 
+  const confirmClose = () => confirmDialog.ask({ title: m.wb_close_case_q(), description: m.wb_cases_retention(), confirmLabel: m.wb_close_case_confirm() });
+
+  /** Carte glissée dans une autre colonne : même confirmation qu'avec les boutons de la fiche. */
+  async function moveCase(caseId: string, status: string) {
+    if (status === 'CLOSED' && !(await confirmClose())) return;
+    await patchCase(caseId, { status });
+  }
+
   /** Fermer rend le dossier purgeable après un an : on le confirme. */
   async function pickStatus(code: string) {
     if (!selectedCase || code === selectedCase.status) return;
-    if (code === 'CLOSED' && !(await confirmDialog.ask({ title: m.wb_close_case_q(), description: m.wb_cases_retention(), confirmLabel: m.wb_close_case_confirm() }))) return;
+    if (code === 'CLOSED' && !(await confirmClose())) return;
     void updateCase({ status: code });
   }
 
@@ -546,9 +681,100 @@
     if (selectedCase && code !== selectedCase.severity) void updateCase({ severity: code });
   }
 
+  const openMember = $derived(selectedCase?.subjectUserId ? memberCaseModal.opener(selectedCase.subjectName) : undefined);
   const caseMenu = $derived<MenuItem[]>(selectedCase && status?.canWriteCases ? [
+    ...(openMember && selectedCase.subjectUserId ? [{ label: m.wb_open_member(), description: m.wb_open_member_desc(), icon: 'User', onselect: () => openMember(selectedCase.subjectUserId) }] : []),
+    { label: m.wb_export(), description: m.wb_export_desc(), icon: 'Printer', onselect: () => void exportCase() },
     { label: m.wb_delete_case(), description: m.wb_delete_case_warn(), icon: 'Trash', onselect: () => void deleteCase() },
   ] : []);
+
+  let extending = $state(false);
+  /** Repousse d'un an l'effacement d'un dossier fermé. */
+  async function extendCase() {
+    const target = selectedCase;
+    if (!target || extending) return;
+    extending = true;
+    try {
+      const res = await dashboardFetch(`/wellbeing/cases/${target.id}/extend`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? '');
+      applyItem(data.item);
+      toast.success(m.toast_wb_case_extended());
+    } catch (err: any) {
+      toast.error(err?.message || m.toast_wb_update_failed());
+    } finally {
+      extending = false;
+    }
+  }
+
+  /** Export imprimable, filigrané au nom de qui l'exporte ; l'export est tracé par le bot. */
+  async function exportCase() {
+    const target = selectedCase;
+    if (!target) return;
+    // Ouverte avant l'appel : un navigateur bloque une fenêtre ouverte après une attente.
+    const win = window.open('', '_blank');
+    if (!win) {
+      toast.error(m.toast_wb_export_blocked());
+      return;
+    }
+    try {
+      const res = await dashboardFetch(`/wellbeing/cases/${target.id}/export`, { method: 'POST' });
+      if (await needsReauth(res)) {
+        win.close();
+        return;
+      }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? '');
+      const item = data.item;
+      const when = formatDate(data.exportedAt);
+      win.document.write(wbCaseExportHtml({
+        title: item.title,
+        meta: [item.subjectName, wbCategoryLabel(item.category), wbStatusLabel(item.status), wbSeverityLabel(item.severity), formatDay(item.createdAt)],
+        summary: item.summary,
+        notes: (item.notes ?? []).map((note: any) => ({ author: note.authorName, date: formatDate(note.createdAt), content: note.content })),
+        tasks: (item.tasks ?? []).map((task: any) => ({ label: task.label, done: !!task.doneAt })),
+        attachments: (item.attachments ?? []).map((attachment: any) => ({ label: attachment.label, url: attachment.url })),
+      }, {
+        summary: m.wb_summary(),
+        notes: m.wb_export_notes(),
+        tasks: m.wb_tasks_title(),
+        attachments: m.wb_attachments_title(),
+        exported: m.wb_export_footer({ name: data.exportedBy, date: when }),
+      }, `${data.exportedBy} · ${when}`));
+      win.document.close();
+      win.focus();
+      win.print();
+      applyItem(item);
+    } catch (err: any) {
+      win.close();
+      toast.error(err?.message || m.toast_wb_update_failed());
+    }
+  }
+
+  let purgingId = $state<string | null>(null);
+  /** Effacement anticipé de la corbeille : `approve` valide la demande d'une autre personne. */
+  async function purgeStep(caseId: string, approve: boolean) {
+    if (purgingId) return;
+    if (approve && !(await confirmDialog.danger(m.wb_purge_q(), m.wb_purge_warn(), m.wb_purge_confirm()))) return;
+    purgingId = caseId;
+    try {
+      const res = await dashboardFetch(`/wellbeing/cases/${caseId}/${approve ? 'purge' : 'purge-request'}`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? '');
+      toast.success(approve ? m.toast_wb_case_purged() : m.toast_wb_purge_requested());
+      await loadTrash();
+    } catch (err: any) {
+      toast.error(err?.message || m.toast_wb_update_failed());
+    } finally {
+      purgingId = null;
+    }
+  }
+
+  /** Change la catégorie d'un nouveau dossier ; sa trame remplace un résumé encore vide ou resté tel quel. */
+  function pickCategory(code: string) {
+    newCategory = code;
+    if (wbIsSummaryTemplate(newSummary)) newSummary = wbSummaryTemplate(code);
+  }
 
   let deletingCase = $state(false);
 
@@ -657,10 +883,11 @@
       const res = await dashboardFetch(`/wellbeing/cases/${selectedCase.id}/notes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: newNote.trim() }),
+        body: JSON.stringify({ content: newNote.trim(), notifyUserIds: noteNotify }),
       });
       if (!res.ok) throw new Error('note');
       newNote = '';
+      noteNotify = [];
       await loadDetail(selectedCase.id);
     } catch {
       toast.error(m.toast_wb_note_failed());
@@ -767,7 +994,16 @@
             <li class="rounded-lg bg-surface-container-high/20 px-3 py-2.5 space-y-1.5">
               <p class="text-sm font-semibold text-on-surface line-clamp-2">{c.title}</p>
               <p class="text-xs text-on-surface-variant">{m.wb_trashed_by({ name: c.deletedByName ?? '-', date: formatDay(c.deletedAt) })}</p>
-              <Button size="sm" variant="secondary" icon="RotateCcw" loading={restoringId === c.id} onclick={() => void restoreCase(c.id)}>{m.wb_restore()}</Button>
+              <div class="flex flex-wrap gap-1.5">
+                <Button size="sm" variant="secondary" icon="RotateCcw" loading={restoringId === c.id} onclick={() => void restoreCase(c.id)}>{m.wb_restore()}</Button>
+                {#if !c.purgeRequestedById || (c.purgeRequestedAt && Date.now() - new Date(c.purgeRequestedAt).getTime() >= PURGE_REQUEST_MS)}
+                  <Button size="sm" variant="ghost" icon="trash" loading={purgingId === c.id} onclick={() => void purgeStep(c.id, false)}>{m.wb_purge_request()}</Button>
+                {:else if c.purgeRequestedById === viewerId}
+                  <span class="text-2xs text-on-surface-variant self-center">{m.wb_purge_waiting()}</span>
+                {:else}
+                  <Button size="sm" variant="danger" icon="trash" loading={purgingId === c.id} onclick={() => void purgeStep(c.id, true)}>{m.wb_purge_approve({ name: c.purgeRequestedByName ?? '-' })}</Button>
+                {/if}
+              </div>
             </li>
           {/each}
         </ul>
@@ -827,6 +1063,11 @@
             {#if selectedCase.source === 'DISCORD'}
               <span class="flex items-center gap-1"><Papicon icon="MessageSquare" size={12} /> {m.wb_source_report()}</span>
             {/if}
+            {#if integrity === 'ok' || integrity === 'partial'}
+              <span class="flex items-center gap-1 text-on-success-container" title={integrity === 'ok' ? m.wb_integrity_ok_hint() : m.wb_integrity_partial_hint()}>
+                <Papicon icon="ShieldCheck" size={12} /> {integrity === 'ok' ? m.wb_integrity_ok() : m.wb_integrity_partial()}
+              </span>
+            {/if}
           </p>
         </div>
         <div class="flex flex-wrap items-center gap-2">
@@ -843,11 +1084,22 @@
         </div>
       </header>
 
+      {#if integrity === 'broken'}
+        <Callout variant="danger" title={m.wb_integrity_broken_title()}>{m.wb_integrity_broken_desc()}</Callout>
+      {/if}
       {#if selectedHeader?.subjectIsTeamMember}
         <Callout variant="info" title={m.wb_conflict_title()}>{m.wb_conflict_desc()}</Callout>
       {/if}
       {#if !status?.canWriteCases}
         <Callout variant="info">{m.wb_read_only_emergency()}</Callout>
+      {/if}
+      {#if purgeInfo}
+        <Callout variant={purgeInfo.soon ? 'warning' : 'info'} title={m.wb_purge_date({ date: formatDay(purgeInfo.date.toISOString()) })}>
+          {m.wb_purge_date_desc()}
+          {#if status?.canWriteCases}
+            <div class="mt-3"><Button size="sm" variant="secondary" icon="Clock" loading={extending} onclick={() => void extendCase()}>{m.wb_extend()}</Button></div>
+          {/if}
+        </Callout>
       {/if}
 
       <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
@@ -924,82 +1176,91 @@
         </div>
       {/if}
 
-      <div class="space-y-3">
-        <h3 class="text-sm font-semibold flex items-center gap-2"><Papicon icon="Clock" size={15} /> {m.wb_timeline_title()}</h3>
-        {#if status?.canWriteCases}
-          <form onsubmit={addNote} class="space-y-2">
-            <textarea bind:value={newNote} aria-label={m.a11y_wellbeing_note()} required rows={2} placeholder={m.wb_note_ph()} class="input w-full text-sm"></textarea>
-            <div class="flex justify-end">
-              <Button type="submit" size="sm" variant="primary" icon="Plus" loading={addingNote} disabled={!newNote.trim()}>{m.wb_note_add()}</Button>
-            </div>
-          </form>
-        {/if}
-        {#if timeline.length === 0}
-          <p class="text-xs text-on-surface-variant">{m.wb_timeline_empty()}</p>
-        {:else}
-          <ol class="relative border-l border-outline-variant/50 ml-2 space-y-3">
-            {#each timeline as entry (entry.id)}
-              <li class="ml-4">
-                <span class="absolute -left-[5px] mt-1.5 h-2.5 w-2.5 rounded-full {entry.kind === 'note' ? 'bg-primary' : 'bg-outline-variant'}" aria-hidden="true"></span>
-                {#if entry.kind === 'note'}
-                  <div class="rounded-lg border border-outline-variant/40 bg-surface-container-lowest p-3 text-sm">
-                    <div class="flex flex-wrap justify-between gap-2 text-xs text-on-surface-variant mb-1">
-                      <span class="font-semibold text-on-surface">{entry.note.authorName}</span>
-                      <span>{formatDate(entry.at)}</span>
+      <div class="space-y-4 border-t border-outline-variant/30 pt-4">
+        <Tabs label={m.wb_detail_tabs_label()} tabs={detailTabs} active={detailTab} onchange={(id) => (detailTab = id as DetailTab)} />
+        {#if detailTab === 'timeline'}
+        <div class="space-y-3">
+          {#if status?.canWriteCases}
+            <form onsubmit={addNote} class="space-y-2">
+              <textarea bind:this={noteInput} bind:value={newNote} aria-label={m.a11y_wellbeing_note()} required rows={2} placeholder={m.wb_note_ph()} class="input w-full text-sm"></textarea>
+              <div class="space-y-1">
+                <label for="wb-note-notify" class="text-xs font-medium text-on-surface-variant">{m.wb_note_notify()}</label>
+                <WellbeingMemberList id="wb-note-notify" bind:ids={noteNotify} max={5} />
+              </div>
+              <div class="flex justify-end">
+                <Button type="submit" size="sm" variant="primary" icon="Plus" loading={addingNote} disabled={!newNote.trim()}>{m.wb_note_add()}</Button>
+              </div>
+            </form>
+          {/if}
+          {#if timeline.length === 0}
+            <p class="text-xs text-on-surface-variant">{m.wb_timeline_empty()}</p>
+          {:else}
+            <ol class="relative border-l border-outline-variant/50 ml-2 space-y-3">
+              {#each timeline as entry (entry.id)}
+                <li class="ml-4">
+                  <span class="absolute -left-[5px] mt-1.5 h-2.5 w-2.5 rounded-full {entry.kind === 'note' ? 'bg-primary' : 'bg-outline-variant'}" aria-hidden="true"></span>
+                  {#if entry.kind === 'note'}
+                    <div class="rounded-lg border border-outline-variant/40 bg-surface-container-lowest p-3 text-sm">
+                      <div class="flex flex-wrap justify-between gap-2 text-xs text-on-surface-variant mb-1">
+                        <span class="font-semibold text-on-surface">{entry.note.authorName}</span>
+                        <span>{formatDate(entry.at)}</span>
+                      </div>
+                      {#if contentHidden}
+                        <p class="text-xs italic text-on-surface-variant">{m.wb_discreet_note_hidden()}</p>
+                      {:else}
+                        <p class="whitespace-pre-wrap text-on-surface">{entry.note.content}</p>
+                      {/if}
                     </div>
-                    {#if contentHidden}
-                      <p class="text-xs italic text-on-surface-variant">{m.wb_discreet_note_hidden()}</p>
-                    {:else}
-                      <p class="whitespace-pre-wrap text-on-surface">{entry.note.content}</p>
-                    {/if}
-                  </div>
-                {:else}
-                  <p class="flex flex-wrap items-center gap-x-2 text-xs text-on-surface-variant">
-                    <span class="font-medium text-on-surface">{entry.event.actorName}</span>
-                    <span>{wbCaseEventLabel(entry.event, formatDay)}</span>
-                    {#if entry.event.type === 'ASSIGNEE' && entry.event.toValue}<MemberName userId={entry.event.toValue} />{/if}
-                    <span>· {formatDate(entry.at)}</span>
-                  </p>
-                {/if}
-              </li>
-            {/each}
-          </ol>
-        {/if}
-      </div>
-
-      <div class="space-y-2 border-t border-outline-variant/30 pt-4">
-        <h3 class="text-sm font-semibold flex items-center gap-2"><Papicon icon="Paperclip" size={15} /> {m.wb_attachments_title()}</h3>
-        <p class="text-xs text-on-surface-variant">{m.wb_attachments_desc()}</p>
-        {#if contentHidden && (selectedCase.attachments ?? []).length > 0}
-          <p class="text-xs italic text-on-surface-variant">{m.wb_discreet_attachments_hidden({ count: selectedCase.attachments.length })}</p>
+                  {:else}
+                    <p class="flex flex-wrap items-center gap-x-2 text-xs text-on-surface-variant">
+                      <span class="font-medium text-on-surface">{entry.event.actorName}</span>
+                      <span>{wbCaseEventLabel(entry.event, formatDay)}</span>
+                      {#if entry.event.type === 'ASSIGNEE' && entry.event.toValue}<MemberName userId={entry.event.toValue} />{/if}
+                      <span>· {formatDate(entry.at)}</span>
+                    </p>
+                  {/if}
+                </li>
+              {/each}
+            </ol>
+          {/if}
+        </div>
+        {:else if detailTab === 'tasks'}
+          <CaseTasks caseId={selectedCase.id} tasks={selectedCase.tasks ?? []} canWrite={!!status?.canWriteCases} hidden={contentHidden} onchange={applyItem} />
         {:else}
-          {#each selectedCase.attachments ?? [] as attachment (attachment.id)}
-            <div class="flex items-center justify-between gap-2 rounded-lg bg-surface-container-high/20 px-3 py-2 text-sm">
-              <span class="flex items-center gap-2 min-w-0">
-                <Papicon icon="file-text" size={14} />
-                {#if isDriveLink(attachment.url)}
-                  <a href={attachment.url} target="_blank" rel="noopener noreferrer" class="text-primary hover:underline truncate">{attachment.label}</a>
-                {:else}
-                  <span class="truncate text-on-surface-variant">{attachment.label}</span>
-                {/if}
-              </span>
-              <span class="flex items-center gap-1 shrink-0 text-xs text-on-surface-variant">
-                {attachment.addedByName}
-                {#if status?.canWriteCases}
-                  <Button size="sm" variant="ghost" icon="trash" loading={removingAttachmentId === attachment.id}
-                    aria-label={m.wb_attachment_remove({ name: attachment.label })}
-                    onclick={() => void removeAttachment(attachment.id)} />
-                {/if}
-              </span>
-            </div>
-          {/each}
-        {/if}
-        {#if status?.canWriteCases && (selectedCase.attachments ?? []).length < MAX_CASE_ATTACHMENTS}
-          <form onsubmit={addAttachment} class="grid grid-cols-1 sm:grid-cols-[1fr_2fr_auto] gap-2">
-            <input bind:value={newAttachmentLabel} maxlength={120} class="input text-sm" aria-label={m.wb_attachment_label()} placeholder={m.wb_attachment_label()} />
-            <input bind:value={newAttachmentUrl} type="url" required maxlength={500} class="input text-sm" aria-label={m.wb_attachment_url()} placeholder={m.wb_attachment_url_ph()} />
-            <Button type="submit" size="sm" variant="secondary" icon="Plus" loading={addingAttachment}>{m.common_add()}</Button>
-          </form>
+        <div class="space-y-2">
+          <p class="text-xs text-on-surface-variant">{m.wb_attachments_desc()}</p>
+          {#if contentHidden && (selectedCase.attachments ?? []).length > 0}
+            <p class="text-xs italic text-on-surface-variant">{m.wb_discreet_attachments_hidden({ count: selectedCase.attachments.length })}</p>
+          {:else}
+            {#each selectedCase.attachments ?? [] as attachment (attachment.id)}
+              <div class="flex items-center justify-between gap-2 rounded-lg bg-surface-container-high/20 px-3 py-2 text-sm">
+                <span class="flex items-center gap-2 min-w-0">
+                  <Papicon icon="file-text" size={14} />
+                  {#if isDriveLink(attachment.url)}
+                    <a href={attachment.url} target="_blank" rel="noopener noreferrer" class="text-primary hover:underline truncate">{attachment.label}</a>
+                  {:else}
+                    <span class="truncate text-on-surface-variant">{attachment.label}</span>
+                  {/if}
+                </span>
+                <span class="flex items-center gap-1 shrink-0 text-xs text-on-surface-variant">
+                  {attachment.addedByName}
+                  {#if status?.canWriteCases}
+                    <Button size="sm" variant="ghost" icon="trash" loading={removingAttachmentId === attachment.id}
+                      aria-label={m.wb_attachment_remove({ name: attachment.label })}
+                      onclick={() => void removeAttachment(attachment.id)} />
+                  {/if}
+                </span>
+              </div>
+            {/each}
+          {/if}
+          {#if status?.canWriteCases && (selectedCase.attachments ?? []).length < MAX_CASE_ATTACHMENTS}
+            <form onsubmit={addAttachment} class="grid grid-cols-1 sm:grid-cols-[1fr_2fr_auto] gap-2">
+              <input bind:value={newAttachmentLabel} maxlength={120} class="input text-sm" aria-label={m.wb_attachment_label()} placeholder={m.wb_attachment_label()} />
+              <input bind:value={newAttachmentUrl} type="url" required maxlength={500} class="input text-sm" aria-label={m.wb_attachment_url()} placeholder={m.wb_attachment_url_ph()} />
+              <Button type="submit" size="sm" variant="secondary" icon="Plus" loading={addingAttachment}>{m.common_add()}</Button>
+            </form>
+          {/if}
+        </div>
         {/if}
       </div>
     </section>
@@ -1014,7 +1275,7 @@
 >
   {#snippet actions()}
     {#if status?.enabled && status.canWriteCases}
-      <Button variant="primary" icon="plus" onclick={() => (newCaseOpen = true)}>{m.wb_new_case()}</Button>
+      <Button variant="primary" icon="plus" onclick={() => { if (wbIsSummaryTemplate(newSummary)) newSummary = wbSummaryTemplate(newCategory); newCaseOpen = true; }}>{m.wb_new_case()}</Button>
     {/if}
   {/snippet}
 
@@ -1035,6 +1296,12 @@
           {/if}
         </Callout>
       {/if}
+      {#if status.accessReviewDue && activeTab !== 'settings'}
+        <Callout variant="info" title={m.wb_review_due_title()} class="mb-4">
+          {m.wb_review_due_desc()}
+          <div class="mt-3"><Button size="sm" variant="secondary" icon="settings" onclick={() => (activeTab = 'settings')}>{m.wb_review_open()}</Button></div>
+        </Callout>
+      {/if}
       {#if pendingLogs.length > 0 && activeTab !== 'access'}
         <div class="space-y-3 mb-4">{@render pendingRequests()}</div>
       {/if}
@@ -1053,6 +1320,13 @@
           actionLabel={status.canConfigure ? m.wb_configure() : undefined}
           onAction={status.canConfigure ? () => (activeTab = 'settings') : undefined}
         />
+      {:else if reauthRequired}
+        <section class="bg-surface-container-low/40 border border-outline-variant/30 rounded-xl p-8 text-center space-y-3 max-w-xl mx-auto">
+          <div class="h-12 w-12 mx-auto rounded-full flex items-center justify-center bg-primary/10 text-primary"><Papicon icon="lock" size={22} /></div>
+          <h2 class="text-base font-semibold text-on-surface">{m.wb_reauth_title()}</h2>
+          <p class="text-sm text-on-surface-variant">{m.wb_reauth_desc()}</p>
+          <Button variant="primary" icon="LogIn" onclick={() => void authStore.logout()}>{m.wb_reauth_action()}</Button>
+        </section>
       {:else if !status.hasCaseAccess}
         <section class="bg-surface-container-low/40 border border-outline-variant/30 rounded-xl p-6 space-y-4 max-w-2xl">
           <div class="flex items-start gap-3">
@@ -1074,10 +1348,34 @@
           <StatTile icon="Clock" tone="bg-warning/10 text-on-warning-container" value={stats.reviewDue} label={m.wb_stat_review_due()} />
           <StatTile icon="Check" tone="bg-success/10 text-on-success-container" value={stats.closed} label={m.wb_stat_closed()} />
         </div>
-        <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-6 items-start">
-          {@render caseList()}
-          {@render caseDetail()}
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <p class="text-2xs text-on-surface-variant flex items-center gap-1.5"><Papicon icon="Keyboard" size={12} /> {m.wb_shortcuts_hint()}</p>
+          <div role="group" aria-label={m.wb_view_label()} class="flex gap-1.5">
+            <Button size="sm" variant={caseView === 'list' ? 'secondary' : 'ghost'} icon="List" aria-pressed={caseView === 'list'} onclick={() => setCaseView('list')}>{m.wb_view_list()}</Button>
+            <Button size="sm" variant={caseView === 'board' ? 'secondary' : 'ghost'} icon="Columns" aria-pressed={caseView === 'board'} onclick={() => setCaseView('board')}>{m.wb_view_board()}</Button>
+          </div>
         </div>
+        {#if caseView === 'board'}
+          <div class="space-y-6">
+            <div class="flex flex-wrap items-center gap-3">
+              <input type="search" bind:value={caseSearch} class="input text-sm flex-1 min-w-48 max-w-md" aria-label={m.wb_search_label()} placeholder={m.wb_search_ph()} />
+              <p class="text-2xs text-on-surface-variant">{m.wb_board_hint()}</p>
+            </div>
+            <CaseBoard cases={boardCases} selectedId={selectedCaseId} canWrite={!!status.canWriteCases} onopen={openCaseById} onmove={(id, next) => void moveCase(id, next)} />
+            {@render caseDetail()}
+          </div>
+        {:else}
+          <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-6 items-start">
+            {@render caseList()}
+            {@render caseDetail()}
+          </div>
+        {/if}
+      {/if}
+    {:else if activeTab === 'stats'}
+      {#if cellStats}
+        <WellbeingStats stats={cellStats} />
+      {:else}
+        <Skeleton height="320px" />
       {/if}
     {:else if activeTab === 'resources'}
       <section class="bg-surface-container-low/40 border border-outline-variant/30 rounded-xl p-6 space-y-4">
@@ -1153,6 +1451,13 @@
         <Skeleton height="320px" />
       {:else}
         <form onsubmit={saveConfig} class="space-y-6">
+          <SettingsGroup title={m.wb_review_title()} description={m.wb_review_desc()}>
+            <SettingsRow label={cfgAccessReviewedAt ? m.wb_review_last({ date: formatDay(cfgAccessReviewedAt) }) : m.wb_review_never()}
+              description={status?.accessReviewDue ? m.wb_review_due_desc() : m.wb_review_hint_ok()}>
+              <Button variant={status?.accessReviewDue ? 'primary' : 'secondary'} icon="Check" loading={confirmingReview} onclick={() => void confirmAccessReview()}>{m.wb_review_confirm()}</Button>
+            </SettingsRow>
+          </SettingsGroup>
+
           <SettingsGroup title={m.wb_set_general()}>
             <SettingsRow label={m.wb_cfg_enabled()} description={m.wb_desc()}>
               <ToggleSwitch checked={cfgEnabled} onToggle={(v) => (cfgEnabled = v)} ariaLabel={m.wb_cfg_enabled()} />
@@ -1220,6 +1525,8 @@
   {/if}
 </ModulePage>
 
+<svelte:window onkeydown={onShortcut} />
+
 <Modal bind:open={breakGlassOpen} title={m.wb_bg_modal_title()} size="sm">
   <form id="bg-form" onsubmit={activateBreakGlass} class="space-y-4">
     <Callout variant="warning">
@@ -1267,7 +1574,7 @@
       <p class="text-xs font-semibold text-on-surface-variant">{m.wb_category()}</p>
       <div role="group" aria-label={m.wb_category()} class="flex flex-wrap gap-1.5">
         {#each WB_CATEGORIES as code (code)}
-          <button type="button" aria-pressed={newCategory === code} onclick={() => (newCategory = code)}
+          <button type="button" aria-pressed={newCategory === code} onclick={() => pickCategory(code)}
             class="text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors {newCategory === code ? 'bg-primary/10 text-primary border border-primary/30' : 'border border-outline-variant/40 text-on-surface-variant hover:bg-surface-container-high/40'}">
             {wbCategoryLabel(code)}
           </button>
@@ -1285,9 +1592,10 @@
         {/each}
       </div>
     </div>
-    <Field label={m.wb_summary()} required>
-      {#snippet children(id)}
-        <textarea {id} bind:value={newSummary} required rows={4} class="input w-full" placeholder={m.wb_summary_ph()}></textarea>
+    <Field label={m.wb_summary()} required error={summaryError}>
+      {#snippet children(id, describedBy)}
+        <textarea {id} aria-describedby={describedBy} bind:value={newSummary} required rows={6} class="input w-full" placeholder={m.wb_summary_ph()}
+          oninput={() => (summaryError = '')}></textarea>
       {/snippet}
     </Field>
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">

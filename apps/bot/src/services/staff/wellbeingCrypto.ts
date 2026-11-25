@@ -70,10 +70,16 @@ export function openCaseHeader<T extends { guildId: string; title: string; subje
   return { ...item, title: readable(item.guildId, item.title), subjectName: readable(item.guildId, item.subjectName) };
 }
 
+/** Tâche du plan d'action : libellé chiffré et lié à son dossier, comme une note. */
+export function openTask<T extends { caseId: string; label: string }>(task: T): T {
+  return { ...task, label: box.open(task.label, `case:${task.caseId}`) ?? UNREADABLE };
+}
+
 export function openCase<T extends CaseTextFields & {
   guildId: string;
   notes?: Array<{ caseId: string; content: string }>;
   attachments?: Array<{ caseId: string; label: string; url: string }>;
+  tasks?: Array<{ caseId: string; label: string }>;
 }>(item: T): T {
   return {
     ...item,
@@ -82,5 +88,6 @@ export function openCase<T extends CaseTextFields & {
     summary: readable(item.guildId, item.summary),
     ...(item.notes ? { notes: item.notes.map((note) => openNote(note)) } : {}),
     ...(item.attachments ? { attachments: item.attachments.map((attachment) => openAttachment(attachment)) } : {}),
+    ...(item.tasks ? { tasks: item.tasks.map((task) => openTask(task)) } : {}),
   } as T;
 }
