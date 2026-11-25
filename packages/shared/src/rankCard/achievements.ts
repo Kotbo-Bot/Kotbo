@@ -106,7 +106,7 @@ export const RANK_CARD_ACHIEVEMENTS: RankCardAchievement[] = [
   {
     id: 'referrer',
     label: { fr: 'Parrain', en: 'Referrer' },
-    description: { fr: 'Parrainer un serveur qui paie son abonnement Kotbo.', en: 'Refer a server that pays for its Kotbo subscription.' },
+    description: { fr: 'Parrainer un serveur qui a payé son abonnement Kotbo.', en: 'Refer a server that paid for its Kotbo subscription.' },
     title: { fr: 'Parrain', en: 'Referrer' },
     tier: 'silver',
     icon: 'referral',
