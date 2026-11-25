@@ -5447,5 +5447,6 @@
   "wbc_track_unknown": "Aucun signalement ne correspond à ce code sur ce serveur. Vérifie qu'il est bien recopié.",
   "wbc_track_received": "Ton signalement a bien été reçu. Il attend qu'une personne de la cellule le prenne en charge.",
   "wbc_track_in_progress": "Ton signalement est pris en charge par la cellule bien-être.",
-  "wbc_track_closed": "Le suivi de ton signalement est terminé."
+  "wbc_track_closed": "Le suivi de ton signalement est terminé.",
+  "wbc_track_reply": "Message de la cellule bien-être :\n> {message}"
 }

@@ -11,10 +11,10 @@ model WellbeingConfig {
   directorUserIds  String[] @default([])
   requireReason    Boolean  @default(true)
   // Alertes : salon et membres prévenus, et événements qui les déclenchent
-  // (BREAK_GLASS | EMERGENCY_READ | TEAM_READ | CASE_CHANGE | CONFIG_CHANGE | REPORT | REMINDER | MEMBERSHIP_CHANGE | PURGE_SOON | UNUSUAL_ACCESS).
+  // (BREAK_GLASS | EMERGENCY_READ | TEAM_READ | CASE_CHANGE | CONFIG_CHANGE | REPORT | REMINDER | MEMBERSHIP_CHANGE | PURGE_SOON | UNUSUAL_ACCESS | DISSOLUTION).
   alertChannelId   String?
   alertUserIds     String[] @default([])
-  alertEvents      String[] @default(["BREAK_GLASS", "EMERGENCY_READ", "CONFIG_CHANGE", "REPORT", "REMINDER", "MEMBERSHIP_CHANGE", "PURGE_SOON", "UNUSUAL_ACCESS"])
+  alertEvents      String[] @default(["BREAK_GLASS", "EMERGENCY_READ", "CONFIG_CHANGE", "REPORT", "REMINDER", "MEMBERSHIP_CHANGE", "PURGE_SOON", "UNUSUAL_ACCESS", "DISSOLUTION"])
   // Accès d'urgence validé par une seconde personne (direction ou cellule).
   breakGlassApproval Boolean @default(false)
   // Signalements depuis Discord (/bienetre signaler).
@@ -30,6 +30,12 @@ model WellbeingConfig {
   backupUserId       String?
   // Dernier résumé hebdomadaire envoyé aux membres de la cellule.
   digestSentAt       DateTime?
+  // Désactivation demandée par le propriétaire : appliquée 24 h plus tard, annulable d'ici là.
+  // `dissolutionKind` : CONFIG (cellule désactivée) ou MODULE (module éteint).
+  dissolutionAt      DateTime?
+  dissolutionById    String?
+  dissolutionByName  String?
+  dissolutionKind    String?
 
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
 
@@ -74,6 +80,9 @@ model WellbeingCase {
   trackingCodeHash     String?   @unique
   // Motif de clôture (RESOLVED | REFERRED | NO_FOLLOWUP | DUPLICATE), vidé à la réouverture.
   closedReason         String?
+  // Message de la cellule à l'auteur du signalement, lu avec son code de suivi (chiffré).
+  reporterReply        String?
+  reporterReplyAt      DateTime?
 
   guild  Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
   notes       WellbeingCaseNote[]
@@ -150,7 +159,7 @@ model WellbeingCaseEvent {
   caseId    String
   actorId   String?
   actorName String
-  type      String   // CREATED | STATUS | SEVERITY | ASSIGNEE | REVIEW | NOTE | RESOURCES_SENT | REMINDER | ATTACHMENT_ADDED | ATTACHMENT_REMOVED | VIEWED | TRASHED | RESTORED | EXTENDED | EXPORTED | TASK_ADDED | TASK_DONE | TASK_REOPENED | TASK_REMOVED | PURGE_REQUESTED | CLOSED_REASON | NOTE_EDITED
+  type      String   // CREATED | STATUS | SEVERITY | ASSIGNEE | REVIEW | NOTE | RESOURCES_SENT | REMINDER | ATTACHMENT_ADDED | ATTACHMENT_REMOVED | VIEWED | TRASHED | RESTORED | EXTENDED | EXPORTED | TASK_ADDED | TASK_DONE | TASK_REOPENED | TASK_REMOVED | PURGE_REQUESTED | CLOSED_REASON | NOTE_EDITED | REPORTER_REPLY
   fromValue String?
   toValue   String?
   createdAt DateTime @default(now())

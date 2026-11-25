@@ -86,14 +86,20 @@ export function openCase<T extends CaseTextFields & {
   notes?: Array<{ caseId: string; content: string }>;
   attachments?: Array<{ caseId: string; label: string; url: string }>;
   tasks?: Array<{ caseId: string; label: string }>;
-}>(item: T): T {
+  reporterReply?: string | null;
+  trackingCodeHash?: string | null;
+}>(item: T): Omit<T, 'trackingCodeHash'> & { hasTrackingCode: boolean } {
+  // L'empreinte du code de suivi ne sort pas du bot : on dit seulement qu'il en existe une.
+  const { trackingCodeHash, ...rest } = item;
   return {
-    ...item,
+    ...rest,
+    hasTrackingCode: !!trackingCodeHash,
     title: readable(item.guildId, item.title),
     subjectName: readable(item.guildId, item.subjectName),
     summary: readable(item.guildId, item.summary),
     ...(item.notes ? { notes: item.notes.map((note) => openNote(note)) } : {}),
     ...(item.attachments ? { attachments: item.attachments.map((attachment) => openAttachment(attachment)) } : {}),
     ...(item.tasks ? { tasks: item.tasks.map((task) => openTask(task)) } : {}),
-  } as T;
+    ...(item.reporterReply ? { reporterReply: readable(item.guildId, item.reporterReply) } : {}),
+  } as Omit<T, 'trackingCodeHash'> & { hasTrackingCode: boolean };
 }

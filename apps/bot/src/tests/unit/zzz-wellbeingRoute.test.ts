@@ -87,7 +87,12 @@ let breakGlassLog: Record<string, unknown> | null = null;
 let note: Record<string, unknown> | null = null;
 
 const mockDb = {
-  dashboardAuditLog: { create: mock(async (_args?: unknown) => ({})) },
+  dashboardAuditLog: {
+    create: mock(async (_args?: unknown) => ({})),
+    findMany: mock(async (_args?: unknown) => [
+      { dateIso: new Date('2026-11-20T10:00:00Z'), user: 'alice', action: 'Consultation', details: '=SOMME(1)' },
+    ]),
+  },
   guild: { findUnique: mock(async (_args?: unknown) => null) },
   wellbeingConfig: {
     findUnique: mock(async (_args?: unknown) => CONFIG),
@@ -136,6 +141,12 @@ mockModule('../../services/staff/wellbeingAlerts', {
   sendWellbeingDirect: mock(async () => {}),
 });
 mockModule('../../services/staff/wellbeingAbsence', { currentAbsence: mock(async () => null) });
+const requestDissolution = mock(async () => new Date(Date.now() + 24 * HOUR));
+mockModule('../../services/staff/wellbeingDissolution', {
+  requestDissolution,
+  cancelDissolution: mock(async () => true),
+  applyDueDissolutions: mock(async () => {}),
+});
 
 const session = (userId: string, ageHours = 1) =>
   ({ userId, username: userId, createdAt: Date.now() - ageHours * HOUR } as unknown as AuthClaims);
@@ -165,6 +176,7 @@ beforeEach(() => {
   breakGlassLog = null;
   note = null;
   appendCaseEvents.mockClear();
+  requestDissolution.mockClear();
   for (const model of Object.values(mockDb)) {
     for (const fn of Object.values(model)) (fn as { mockClear: () => void }).mockClear();
   }
@@ -276,5 +288,49 @@ describe("arrêt d'un accès d'urgence", () => {
     const { status } = await call('POST', '/break-glass/log-1/end');
     expect(status).toBe(200);
     expect(mockDb.wellbeingBreakGlassLog.update).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('désactivation de la cellule', () => {
+  test('différée : la cellule reste active et la demande est enregistrée', async () => {
+    const { status, json } = await call('PUT', '/config', { enabled: false }, session(OWNER));
+    expect(status).toBe(200);
+    const args = mockDb.wellbeingConfig.upsert.mock.calls[0]?.[0] as { update: Record<string, unknown> };
+    expect('enabled' in args.update).toBe(false);
+    expect(requestDissolution).toHaveBeenCalledTimes(1);
+    expect(json.config.dissolutionAt).toBeTruthy();
+  });
+
+  test('vider la composition d une cellule active est refusé', async () => {
+    const { status } = await call('PUT', '/config', { teamUserIds: [], teamRoleIds: [] }, session(OWNER));
+    expect(status).toBe(400);
+    expect(mockDb.wellbeingConfig.upsert).not.toHaveBeenCalled();
+  });
+});
+
+describe('réponse au signaleur', () => {
+  test("refusée pour un dossier qui ne vient pas d'un signalement", async () => {
+    const { status } = await call('POST', '/cases/case-1/reporter-reply', { message: 'Pris en compte' });
+    expect(status).toBe(400);
+    expect(mockDb.wellbeingCase.update).not.toHaveBeenCalled();
+  });
+
+  test('enregistrée chiffrée pour un signalement', async () => {
+    visibleCase = makeCase({ source: 'DISCORD', trackingCodeHash: 'empreinte' });
+    const { status, json } = await call('POST', '/cases/case-1/reporter-reply', { message: 'Pris en compte' });
+    expect(status).toBe(200);
+    const args = mockDb.wellbeingCase.update.mock.calls[0]?.[0] as { data: { reporterReply: string } };
+    expect(args.data.reporterReply).not.toContain('Pris en compte');
+    expect(json.item.trackingCodeHash).toBeUndefined();
+  });
+});
+
+describe('journal de la cellule', () => {
+  test('exporté en CSV, sans formule exécutable', async () => {
+    setDashboardAccess(DASHBOARD_ACCESS_ADMIN, session(ALICE));
+    const { status, res, body } = await dashboardCall(createWellbeingRouter(client), 'GET', `/api/dashboard/guilds/${GUILD}/wellbeing/journal`);
+    expect(status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('text/csv');
+    expect(String(body)).toContain("\"'=SOMME(1)\"");
   });
 });

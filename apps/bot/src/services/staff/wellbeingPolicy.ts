@@ -33,13 +33,14 @@ export interface WellbeingAccessLists {
  * - REMINDER : dossier arrivé à échéance de suivi, ou critique et inactif ;
  * - MEMBERSHIP_CHANGE : rôle de la cellule ou de la direction donné ou retiré ;
  * - PURGE_SOON : des dossiers fermés seront effacés dans une semaine ;
- * - UNUSUAL_ACCESS : une personne ouvre beaucoup de dossiers en peu de temps.
+ * - UNUSUAL_ACCESS : une personne ouvre beaucoup de dossiers en peu de temps ;
+ * - DISSOLUTION : désactivation de la cellule demandée, annulée ou appliquée.
  */
 export const WELLBEING_ALERT_EVENTS = [
-  'BREAK_GLASS', 'EMERGENCY_READ', 'TEAM_READ', 'CASE_CHANGE', 'CONFIG_CHANGE', 'REPORT', 'REMINDER', 'MEMBERSHIP_CHANGE', 'PURGE_SOON', 'UNUSUAL_ACCESS',
+  'BREAK_GLASS', 'EMERGENCY_READ', 'TEAM_READ', 'CASE_CHANGE', 'CONFIG_CHANGE', 'REPORT', 'REMINDER', 'MEMBERSHIP_CHANGE', 'PURGE_SOON', 'UNUSUAL_ACCESS', 'DISSOLUTION',
 ] as const;
 export type WellbeingAlertEvent = (typeof WELLBEING_ALERT_EVENTS)[number];
-export const DEFAULT_ALERT_EVENTS: WellbeingAlertEvent[] = ['BREAK_GLASS', 'EMERGENCY_READ', 'CONFIG_CHANGE', 'REPORT', 'REMINDER', 'MEMBERSHIP_CHANGE', 'PURGE_SOON', 'UNUSUAL_ACCESS'];
+export const DEFAULT_ALERT_EVENTS: WellbeingAlertEvent[] = ['BREAK_GLASS', 'EMERGENCY_READ', 'CONFIG_CHANGE', 'REPORT', 'REMINDER', 'MEMBERSHIP_CHANGE', 'PURGE_SOON', 'UNUSUAL_ACCESS', 'DISSOLUTION'];
 /** Destinataires prévenus en message privé, au plus. */
 export const MAX_ALERT_USERS = 10;
 /** Une même personne qui recharge la page ne déclenche qu'une alerte de consultation par période. */
@@ -63,7 +64,7 @@ export interface AlertContext {
   /** Geste sur un dossier : « créé », « modifié », « annoté », « supprimé ». */
   action?: string;
   /** Étape d'un accès d'urgence soumis à validation. */
-  stage?: 'requested' | 'approved' | 'rejected' | 'ended';
+  stage?: 'requested' | 'approved' | 'rejected' | 'ended' | 'dissolution_requested' | 'dissolution_cancelled' | 'dissolution_applied';
   /** Signalement anonyme : l'alerte ne nomme personne. */
   anonymous?: boolean;
   reminder?: 'review' | 'stale';
@@ -113,6 +114,12 @@ export function alertText(event: WellbeingAlertEvent, ctx: AlertContext): string
       return ctx.reverted
         ? `Cellule bien-être : ${author} a donné à ${target} un rôle de ${group} ; ajout annulé, seul le propriétaire du serveur peut le faire.`
         : `Cellule bien-être : ${author} a ajouté ${target} à ${group} (rôle Discord).`;
+    }
+    case 'DISSOLUTION': {
+      if (ctx.stage === 'dissolution_cancelled') return `Cellule bien-être : la désactivation de la cellule a été annulée par ${actor}.`;
+      if (ctx.stage === 'dissolution_applied') return 'Cellule bien-être : la cellule est désactivée, comme demandé il y a 24 heures.';
+      const until = ctx.expiresAt ? ` <t:${Math.floor(ctx.expiresAt.getTime() / 1000)}:R>` : '';
+      return `Cellule bien-être : ${actor} a demandé la désactivation de la cellule. Elle prendra effet${until} ; le propriétaire peut l'annuler d'ici là.`;
     }
     case 'UNUSUAL_ACCESS':
       return `Cellule bien-être : ${actor} a ouvert ${ctx.caseCount ?? 0} dossiers en ${UNUSUAL_ACCESS_WINDOW_MS / 60_000} minutes. Vérifiez que c'est attendu.`;
@@ -893,4 +900,51 @@ export function digestCounts(
 export function digestDue(lastSentAt: Date | null, now: Date): boolean {
   if (now.getUTCDay() !== 1 || now.getUTCHours() < 8) return false;
   return !lastSentAt || now.getTime() - lastSentAt.getTime() >= DIGEST_INTERVAL_DAYS * DAY_MS;
+}
+
+// ── Dissolution différée ───────────────────────────────────────────────────
+
+/** Une désactivation de la cellule n'a d'effet qu'après ce délai, annoncé à la cellule. */
+export const DISSOLUTION_DELAY_HOURS = 24;
+
+export function dissolutionDate(now: Date): Date {
+  return new Date(now.getTime() + DISSOLUTION_DELAY_HOURS * 60 * 60 * 1000);
+}
+
+export function dissolutionDue(at: Date | null, now: Date): boolean {
+  return !!at && at.getTime() <= now.getTime();
+}
+
+/** Plus personne dans la cellule : c'est une dissolution, soumise au même délai. */
+export function emptiesComposition(lists: Pick<WellbeingAccessLists, 'teamUserIds' | 'teamRoleIds'>): boolean {
+  return lists.teamUserIds.length === 0 && lists.teamRoleIds.length === 0;
+}
+
+// ── Réponse au signaleur ───────────────────────────────────────────────────
+
+/** Message de la cellule lu par l'auteur d'un signalement avec son code de suivi. */
+export const REPORTER_REPLY_MAX = 500;
+
+// ── Journal exportable ─────────────────────────────────────────────────────
+
+export interface JournalRow {
+  date: Date;
+  source: string;
+  actor: string;
+  action: string;
+  details: string;
+}
+
+/**
+ * Journal de la cellule en CSV, pour un audit : accès, décisions et réglages,
+ * jamais le contenu d'un dossier. Une cellule qui commence par = + - @ est
+ * préfixée d'une apostrophe pour qu'un tableur ne l'exécute pas.
+ */
+export function journalCsv(rows: readonly JournalRow[]): string {
+  const cell = (value: string) => {
+    const safe = /^[=+\-@]/.test(value) ? `'${value}` : value;
+    return `"${safe.replace(/"/g, '""')}"`;
+  };
+  const lines = rows.map((row) => [row.date.toISOString(), row.source, row.actor, row.action, row.details].map(cell).join(','));
+  return ['date,source,auteur,action,details', ...lines].join('\r\n') + '\r\n';
 }

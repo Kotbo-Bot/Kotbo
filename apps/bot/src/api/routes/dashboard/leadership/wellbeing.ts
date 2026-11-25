@@ -26,7 +26,10 @@ import {
   MAX_CASE_TASKS,
   TASK_LABEL_MAX,
   accessReviewDue,
+  REPORTER_REPLY_MAX,
   assigneeConflict,
+  emptiesComposition,
+  journalCsv,
   canEditNote,
   cleanCloseReason,
   isCaseSubject,
@@ -59,7 +62,8 @@ import {
 import { sendWellbeingAlert, sendWellbeingDirect } from '../../../../services/staff/wellbeingAlerts.js';
 import { appendCaseEvents } from '../../../../services/staff/wellbeingEvents.js';
 import { currentAbsence } from '../../../../services/staff/wellbeingAbsence.js';
-import { openCase, openCaseHeader, openNote, sealCaseFields, sealNote } from '../../../../services/staff/wellbeingCrypto.js';
+import { cancelDissolution, requestDissolution } from '../../../../services/staff/wellbeingDissolution.js';
+import { openCase, openCaseHeader, openNote, sealCaseFields, sealNote, sealWellbeing } from '../../../../services/staff/wellbeingCrypto.js';
 import { bodyText } from '../../../../utils/bodyText.js';
 
 const CATEGORIES = ['SOUTIEN', 'MEDIATION', 'SIGNALEMENT', 'SUIVI'];
@@ -232,6 +236,9 @@ export function createWellbeingRouter(client: Client) {
         breakGlassLogId: state.activeBreakGlass?.id ?? null,
         // La revue des accès ne concerne que le propriétaire, seul à changer la composition.
         accessReviewDue: state.canConfigure && !!state.config?.enabled && accessReviewDue(state.config, new Date()),
+        // Désactivation demandée : visible de la cellule, annulable par le propriétaire.
+        dissolutionAt: state.config?.dissolutionAt?.toISOString() ?? null,
+        dissolutionByName: state.config?.dissolutionByName ?? null,
       });
     } catch (err) {
       logger.error('WellbeingAPI', 'Error fetching status:', err);
@@ -307,6 +314,16 @@ export function createWellbeingRouter(client: Client) {
       const requestedBackup = body?.backupUserId === undefined ? state.config?.backupUserId ?? null : bodyText(body.backupUserId, 20);
       const backupUserId = requestedBackup && teamUserIdsAfter.includes(requestedBackup) ? requestedBackup : null;
 
+      // Désactiver ou vider une cellule active ne se fait pas d'un clic : la
+      // désactivation est différée de 24 h et annoncée ; vider la composition
+      // est refusé, puisque c'est une désactivation qui ne dirait pas son nom.
+      const active = state.config?.enabled === true;
+      const teamRoleIdsAfter = body?.teamRoleIds !== undefined ? cleanIds(body.teamRoleIds) : (state.config?.teamRoleIds ?? []);
+      if (active && state.config && !emptiesComposition(state.config) && emptiesComposition({ teamUserIds: teamUserIdsAfter, teamRoleIds: teamRoleIdsAfter })) {
+        return send(c, { error: 'Pour vider la cellule, désactivez-la : la désactivation prend effet après 24 heures.' }, 400);
+      }
+      const disabling = active && body?.enabled === false;
+
       const config = await prisma.wellbeingConfig.upsert({
         where: { guildId },
         create: {
@@ -326,7 +343,7 @@ export function createWellbeingRouter(client: Client) {
           backupUserId,
         },
         update: {
-          ...(typeof body?.enabled === 'boolean' ? { enabled: body.enabled } : {}),
+          ...(typeof body?.enabled === 'boolean' && !disabling ? { enabled: body.enabled } : {}),
           ...(typeof body?.requireReason === 'boolean' ? { requireReason: body.requireReason } : {}),
           ...(typeof body?.breakGlassApproval === 'boolean' ? { breakGlassApproval: body.breakGlassApproval } : {}),
           ...(typeof body?.reportEnabled === 'boolean' ? { reportEnabled: body.reportEnabled } : {}),
@@ -357,8 +374,16 @@ export function createWellbeingRouter(client: Client) {
         alertEvents: [...new Set([...(state.config?.alertEvents ?? []), ...config.alertEvents])],
       }, 'CONFIG_CHANGE', { actorId: user.userId });
 
+      const dissolutionAt = disabling
+        ? await requestDissolution(client, guildId, { id: user.userId, name: actorName(c) }, 'CONFIG')
+        : config.dissolutionAt;
+      if (disabling && dissolutionAt) {
+        await audit(client, c, guildId, 'Configuration Cellule bien-être',
+          `Désactivation de la cellule demandée, effective le ${dissolutionAt.toISOString()} sauf annulation.`, 'Sécurité');
+      }
+
       const { resources: _resources, ...saved } = config;
-      return send(c, { config: saved });
+      return send(c, { config: { ...saved, dissolutionAt } });
     } catch (err) {
       logger.error('WellbeingAPI', 'Error saving config:', err);
       return fail(c, err, 'Erreur lors de la sauvegarde de la configuration.', 'WellbeingAPI');
@@ -1176,6 +1201,103 @@ export function createWellbeingRouter(client: Client) {
     } catch (err) {
       logger.error('WellbeingAPI', 'Error computing stats:', err);
       return fail(c, err, 'Erreur lors du calcul du bilan.', 'WellbeingAPI');
+    }
+  });
+
+  // Annuler une désactivation demandée : le propriétaire seul.
+  router.post(`${base}/dissolution/cancel`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    try {
+      const state = await resolveWellbeingRole(client, guildId, user.userId);
+      if (!state.canConfigure) return send(c, { error: 'Seul le propriétaire du serveur peut annuler la désactivation.' }, 403);
+      if (!(await cancelDissolution(client, guildId, { id: user.userId }))) {
+        return send(c, { error: 'Aucune désactivation en attente.' }, 409);
+      }
+      await audit(client, c, guildId, 'Configuration Cellule bien-être', 'Désactivation de la cellule annulée.', 'Sécurité');
+      return send(c, { ok: true });
+    } catch (err) {
+      logger.error('WellbeingAPI', 'Error cancelling dissolution:', err);
+      return fail(c, err, "Erreur lors de l'annulation.", 'WellbeingAPI');
+    }
+  });
+
+  // Réponse à l'auteur d'un signalement : il la lit avec son code de suivi,
+  // sans que la cellule sache qui il est.
+  router.post(`${base}/cases/:caseId/reporter-reply`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    try {
+      const state = await resolveWellbeingRole(client, guildId, user.userId);
+      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule bien-être.' }, 403);
+      const caseId = c.req.param('caseId');
+      const existing = await findVisibleCase(guildId, caseId, user.userId);
+      if (!existing) return send(c, { error: 'Dossier introuvable.' }, 404);
+      if (!existing.trackingCodeHash) return send(c, { error: "Ce dossier n'a pas de code de suivi : il ne vient pas d'un signalement Discord." }, 400);
+      const body = await readBody<{ message?: string }>(c);
+      const message = bodyText(body?.message, REPORTER_REPLY_MAX);
+      await prisma.wellbeingCase.update({
+        where: { id: caseId },
+        data: message
+          ? { reporterReply: sealWellbeing(guildId, message), reporterReplyAt: new Date(), lastActivityAt: new Date() }
+          : { reporterReply: null, reporterReplyAt: null },
+      });
+      await recordEvents(caseId, c, [{ type: 'REPORTER_REPLY', toValue: message ? 'SET' : 'CLEARED' }]);
+      return send(c, { item: await fullCase(caseId) });
+    } catch (err) {
+      logger.error('WellbeingAPI', 'Error replying to reporter:', err);
+      return fail(c, err, 'Erreur lors de la réponse au signaleur.', 'WellbeingAPI');
+    }
+  });
+
+  // Journal de la cellule en CSV, pour un audit : accès, décisions et réglages,
+  // jamais le contenu d'un dossier. Douze derniers mois.
+  router.get(`${base}/journal`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    try {
+      const state = await resolveWellbeingRole(client, guildId, user.userId);
+      if (!state.isTeamMember && !state.isDirector) return send(c, { error: 'Accès refusé.' }, 403);
+      const since = new Date(Date.now() - 365 * 24 * HOUR_MS);
+      const [entries, logs] = await Promise.all([
+        prisma.dashboardAuditLog.findMany({
+          where: { guildId, module: WELLBEING_AUDIT_MODULE, dateIso: { gte: since } },
+          orderBy: { dateIso: 'desc' },
+          take: 5000,
+          select: { dateIso: true, user: true, action: true, details: true },
+        }),
+        prisma.wellbeingBreakGlassLog.findMany({
+          where: { guildId, createdAt: { gte: since } },
+          orderBy: { createdAt: 'desc' },
+          take: 1000,
+        }),
+      ]);
+      const rows = [
+        ...entries.map((entry) => ({ date: entry.dateIso, source: 'audit', actor: entry.user, action: entry.action, details: entry.details ?? '' })),
+        ...logs.map((log) => ({
+          date: log.createdAt,
+          source: 'acces-urgence',
+          actor: log.actorName,
+          action: log.status,
+          details: [
+            `Motif : ${log.reason}`,
+            log.approvedByName ? `Décision : ${log.approvedByName}` : '',
+            log.endedByName ? `Arrêté par : ${log.endedByName}` : '',
+            `Échéance : ${log.expiresAt.toISOString()}`,
+          ].filter(Boolean).join(' · '),
+        })),
+      ].sort((a, b) => b.date.getTime() - a.date.getTime());
+      await audit(client, c, guildId, 'Journal Cellule bien-être', `Journal exporté (${rows.length} entrées).`, 'Sécurité');
+      return new Response(journalCsv(rows), {
+        headers: {
+          'Content-Type': 'text/csv; charset=utf-8',
+          'Content-Disposition': `attachment; filename="journal-cellule-bien-etre-${guildId}.csv"`,
+          'Cache-Control': 'no-store',
+        },
+      });
+    } catch (err) {
+      logger.error('WellbeingAPI', 'Error exporting journal:', err);
+      return fail(c, err, "Erreur lors de l'export du journal.", 'WellbeingAPI');
     }
   });
 
