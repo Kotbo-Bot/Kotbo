@@ -169,7 +169,7 @@
   }
 
   // ── Sections repliables ──
-  let open = $state<Record<WbSettingsSection | 'general', boolean>>({ review: false, general: false, team: false, direction: false, alerts: false, reports: false });
+  let open = $state<Record<WbSettingsSection | 'general', boolean>>({ review: false, general: false, team: false, direction: false, alerts: false, reports: false, care: false, signals: false, pulse: false });
 
   async function goTo(section: WbSettingsSection) {
     open = { ...open, [section]: true };
@@ -185,6 +185,7 @@
     backup: { ok: () => m.wb_check_backup_ok(), ko: () => m.wb_check_backup_ko() },
     review: { ok: () => m.wb_check_review_ok(), ko: () => m.wb_check_review_ko() },
     reports_noticed: { ok: () => m.wb_check_reports_ok(), ko: () => m.wb_check_reports_ko() },
+    distress_noticed: { ok: () => m.wb_check_distress_ok(), ko: () => m.wb_check_distress_ko() },
   };
   const ROW_LABELS = { team: () => m.wb_who_team(), direction: () => m.wb_who_direction(), owner: () => m.wb_who_owner(), backup: () => m.wb_who_backup() };
   const LEVEL_LABELS: Record<WbAccessLevel, () => string> = {
@@ -270,6 +271,38 @@
   {/if}
   <SettingsRow label={m.wb_cfg_stale_days()} description={m.wb_cfg_stale_hint()} labelFor="wb-stale-days">
     <input id="wb-stale-days" type="number" min="0" max="90" step="1" bind:value={form.staleCriticalDays} class="input w-24" />
+  </SettingsRow>
+{/snippet}
+
+{#snippet careFields()}
+  <SettingsRow label={m.wb_cfg_crisis()} description={m.wb_cfg_crisis_hint()}>
+    <ToggleSwitch checked={form.crisisProtocol} onToggle={(v) => (form.crisisProtocol = v)} ariaLabel={m.wb_cfg_crisis()} />
+  </SettingsRow>
+  <SettingsRow label={m.wb_cfg_follow_up()} description={m.wb_cfg_follow_up_hint()} labelFor="wb-follow-up-days">
+    <input id="wb-follow-up-days" type="number" min="0" max="180" step="1" bind:value={form.followUpDays} class="input w-24" />
+  </SettingsRow>
+{/snippet}
+
+{#snippet signalFields()}
+  <Callout variant="warning">{m.wb_cfg_signals_privacy()}</Callout>
+  <SettingsRow label={m.wb_cfg_sanction_signal()} description={m.wb_cfg_sanction_signal_hint()}>
+    <ToggleSwitch checked={form.sanctionSignal} onToggle={(v) => (form.sanctionSignal = v)} ariaLabel={m.wb_cfg_sanction_signal()} />
+  </SettingsRow>
+  <SettingsRow label={m.wb_cfg_distress()} description={m.wb_cfg_distress_hint()}>
+    <ToggleSwitch checked={form.distressWatch} onToggle={(v) => (form.distressWatch = v)} ariaLabel={m.wb_cfg_distress()} />
+  </SettingsRow>
+  {#if form.distressWatch && (!form.alertEvents.includes('DISTRESS') || (!form.alertChannelId && form.alertUserIds.length === 0))}
+    <Callout variant="warning">{m.wb_cfg_distress_unnoticed()}</Callout>
+  {/if}
+{/snippet}
+
+{#snippet pulseFields()}
+  <p class="text-xs text-on-surface-variant px-1">{m.wb_cfg_pulse_desc()}</p>
+  <SettingsRow label={m.wb_cfg_pulse()}>
+    <ToggleSwitch checked={form.pulseEnabled} onToggle={(v) => (form.pulseEnabled = v)} ariaLabel={m.wb_cfg_pulse()} />
+  </SettingsRow>
+  <SettingsRow label={m.wb_cfg_pulse_roles()} description={m.wb_cfg_pulse_roles_hint()} labelFor="wb-pulse-roles" stacked>
+    <MultiSelect id="wb-pulse-roles" bind:values={form.pulseRoleIds} options={roleOptions} placeholder={m.wb_role_search_ph()} />
   </SettingsRow>
 {/snippet}
 
@@ -430,6 +463,9 @@
     {@render section('direction', m.wb_set_access(), 'lock', directionFields)}
     {@render section('alerts', m.wb_alerts_title(), 'Bell', alertFields, wbStepComplete(form, 'alerts') ? '' : m.wb_badge_todo())}
     {@render section('reports', m.wb_set_reports(), 'MessageSquare', reportFields)}
+    {@render section('care', m.wb_set_care(), 'heart', careFields)}
+    {@render section('signals', m.wb_set_signals(), 'AlertTriangle', signalFields)}
+    {@render section('pulse', m.wb_set_pulse(), 'Sun', pulseFields, wbStepComplete(form, 'pulse') ? '' : m.wb_badge_todo())}
 
     <p class="text-xs text-on-surface-variant flex items-center gap-1.5"><Papicon icon="Info" size={12} /> {m.wb_settings_save_hint()}</p>
   </div>

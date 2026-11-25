@@ -100,3 +100,39 @@ describe('première configuration', () => {
     expect(wbStepComplete(form(), 'reports')).toBe(true);
   });
 });
+
+describe('accompagnement et repérage', () => {
+  test('défauts prudents : protocole de crise actif, repérages coupés', () => {
+    expect(wbConfigFromApi({})).toMatchObject({
+      crisisProtocol: true,
+      followUpDays: 30,
+      sanctionSignal: false,
+      distressWatch: false,
+      pulseEnabled: false,
+      pulseRoleIds: [],
+    });
+  });
+
+  test('le délai de prise de nouvelles est borné comme côté bot', () => {
+    expect(wbConfigToApi(form({ followUpDays: 999 })).followUpDays).toBe(180);
+    expect(wbConfigToApi(form({ followUpDays: -3 })).followUpDays).toBe(0);
+  });
+
+  test("les mots de détresse sans personne pour les recevoir sont un manque, s'ils sont repérés", () => {
+    const base = form({ teamUserIds: ['u1'], alertChannelId: 'c1', alertEvents: ['BREAK_GLASS'] });
+    const on = wbSecurityChecks({ ...base, distressWatch: true }, { accessReviewDue: false });
+    const check = on.find((item) => item.id === 'distress_noticed');
+    expect(check?.ok).toBe(false);
+    expect(check?.section).toBe('signals');
+    const noticed = wbSecurityChecks({ ...base, distressWatch: true, alertEvents: ['DISTRESS'] }, { accessReviewDue: false });
+    expect(noticed.find((item) => item.id === 'distress_noticed')?.ok).toBe(true);
+    const off = wbSecurityChecks(base, { accessReviewDue: false });
+    expect(off.some((item) => item.id === 'distress_noticed')).toBe(false);
+  });
+
+  test('la météo du staff sans rôle interrogé est à compléter', () => {
+    expect(wbStepComplete(form({ pulseEnabled: true, pulseRoleIds: [] }), 'pulse')).toBe(false);
+    expect(wbStepComplete(form({ pulseEnabled: true, pulseRoleIds: ['r1'] }), 'pulse')).toBe(true);
+    expect(wbStepComplete(form({ pulseEnabled: false }), 'pulse')).toBe(true);
+  });
+});

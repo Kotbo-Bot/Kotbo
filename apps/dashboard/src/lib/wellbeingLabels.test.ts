@@ -17,7 +17,7 @@ describe('libellés de la cellule bien-être', () => {
     expect([...WB_STATUSES]).toEqual(['OPEN', 'MONITORING', 'CLOSED']);
     expect([...WB_SEVERITIES]).toEqual(['LOW', 'NORMAL', 'HIGH', 'CRITICAL']);
     expect([...WB_CATEGORIES]).toEqual(['SOUTIEN', 'MEDIATION', 'SIGNALEMENT', 'SUIVI']);
-    expect([...WB_ALERT_EVENTS]).toEqual(['BREAK_GLASS', 'EMERGENCY_READ', 'TEAM_READ', 'CASE_CHANGE', 'CONFIG_CHANGE', 'REPORT', 'REMINDER', 'MEMBERSHIP_CHANGE', 'PURGE_SOON', 'UNUSUAL_ACCESS', 'DISSOLUTION']);
+    expect([...WB_ALERT_EVENTS]).toEqual(['BREAK_GLASS', 'EMERGENCY_READ', 'TEAM_READ', 'CASE_CHANGE', 'CONFIG_CHANGE', 'REPORT', 'REMINDER', 'MEMBERSHIP_CHANGE', 'PURGE_SOON', 'UNUSUAL_ACCESS', 'DISSOLUTION', 'DISTRESS', 'SANCTION_SIGNAL']);
   });
 });
 
@@ -68,5 +68,26 @@ describe('motifs de clôture', () => {
   test('chaque motif, et « sans motif », a un libellé', () => {
     for (const code of [...WB_CLOSE_REASONS, 'UNSPECIFIED']) expect(wbCloseReasonLabel(code)).not.toBe(code);
     expect([...WB_CLOSE_REASONS]).toEqual(['RESOLVED', 'REFERRED', 'NO_FOLLOWUP', 'DUPLICATE']);
+  });
+});
+
+describe('origines et gestes ajoutés', () => {
+  const date = (iso: string) => iso.slice(0, 10);
+
+  test("un dossier venu d'un ticket ou d'un signal se distingue d'un dossier créé à la main", () => {
+    const manual = wbCaseEventLabel({ type: 'CREATED', fromValue: null, toValue: null }, date);
+    const ticket = wbCaseEventLabel({ type: 'CREATED', fromValue: null, toValue: 'TICKET' }, date);
+    const signal = wbCaseEventLabel({ type: 'CREATED', fromValue: null, toValue: 'DISTRESS' }, date);
+    expect(new Set([manual, ticket, signal]).size).toBe(3);
+  });
+
+  test('le protocole de crise dit combien d étapes il a ajoutées', () => {
+    expect(wbCaseEventLabel({ type: 'CRISIS_PROTOCOL', fromValue: null, toValue: '5' }, date)).toContain('5');
+  });
+
+  test('un rappel de prise de nouvelles se distingue d une échéance', () => {
+    const review = wbCaseEventLabel({ type: 'REMINDER', fromValue: null, toValue: 'review' }, date);
+    const followUp = wbCaseEventLabel({ type: 'REMINDER', fromValue: null, toValue: 'follow_up' }, date);
+    expect(followUp).not.toBe(review);
   });
 });

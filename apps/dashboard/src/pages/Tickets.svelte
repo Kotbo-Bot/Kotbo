@@ -31,6 +31,7 @@
   import TicketMacros from '../lib/components/tickets/TicketMacros.svelte';
   import TicketSettings from '../lib/components/tickets/TicketSettings.svelte';
   import TicketMemberPanel from '../lib/components/tickets/TicketMemberPanel.svelte';
+  import TicketWellbeingTransfer from '../lib/components/tickets/TicketWellbeingTransfer.svelte';
   import type { InboxTicket, InboxView } from '../lib/api';
   import { resolveUserAvatarSrc } from '../lib/discordMedia';
   import { MessageList } from '@arcscord/discord-ui-svelte';
@@ -804,6 +805,12 @@
                 >
                   <Papicon icon="shield" size={12} /> {m.e1_tickets_btn_case()}
                 </button>
+              {/if}
+
+              {#if selectedTicketDetail?.id && (selectedTicketDetail.status === 'OPEN' || selectedTicketDetail.status === 'CLAIMED' || selectedTicketDetail.status === 'CLOSED')}
+                <TicketWellbeingTransfer ticketId={selectedTicketDetail.id}
+                  ticketOpen={selectedTicketDetail.status !== 'CLOSED'}
+                  ontransferred={() => void loadTicketsAndConfig()} />
               {/if}
 
               {#if selectedTicketDetail?.status === 'OPEN' || selectedTicketDetail?.status === 'CLAIMED'}

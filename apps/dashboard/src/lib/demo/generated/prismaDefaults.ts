@@ -5811,7 +5811,8 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
       "MEMBERSHIP_CHANGE",
       "PURGE_SOON",
       "UNUSUAL_ACCESS",
-      "DISSOLUTION"
+      "DISSOLUTION",
+      "DISTRESS"
     ],
     "breakGlassApproval": false,
     "reportEnabled": false,
@@ -5825,6 +5826,13 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "dissolutionById": null,
     "dissolutionByName": null,
     "dissolutionKind": null,
+    "crisisProtocol": true,
+    "followUpDays": 30,
+    "sanctionSignal": false,
+    "distressWatch": false,
+    "pulseEnabled": false,
+    "pulseRoleIds": [],
+    "pulseSentAt": null,
     "createdAt": "__NOW__",
     "updatedAt": "__NOW__"
   },
@@ -5841,6 +5849,7 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "createdById": "",
     "createdByName": "",
     "source": "DASHBOARD",
+    "ticketId": null,
     "assigneeId": null,
     "reviewAt": null,
     "reviewRemindedAt": null,
@@ -5855,10 +5864,45 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "purgeWarnedAt": null,
     "trackingCodeHash": null,
     "closedReason": null,
-    "reporterReply": null,
-    "reporterReplyAt": null,
+    "followUpAt": null,
+    "followUpSentAt": null,
     "createdAt": "__NOW__",
     "updatedAt": "__NOW__"
+  },
+  "WellbeingReporterMessage": {
+    "id": "",
+    "caseId": "",
+    "fromReporter": false,
+    "content": "",
+    "authorId": null,
+    "createdAt": "__NOW__"
+  },
+  "WellbeingDistressSignal": {
+    "id": "",
+    "guildId": "",
+    "userId": "",
+    "channelId": "",
+    "messageId": "",
+    "createdAt": "__NOW__",
+    "handledAt": null,
+    "handledById": null,
+    "handledByName": null,
+    "outcome": null,
+    "caseId": null
+  },
+  "WellbeingPulseWeek": {
+    "guildId": "",
+    "week": "",
+    "score1": 0,
+    "score2": 0,
+    "score3": 0,
+    "score4": 0,
+    "score5": 0
+  },
+  "WellbeingPulseVoter": {
+    "guildId": "",
+    "week": "",
+    "voterHash": ""
   },
   "WellbeingCaseNote": {
     "id": "",
