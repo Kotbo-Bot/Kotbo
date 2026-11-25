@@ -8,7 +8,7 @@ export const WB_STATUSES = ['OPEN', 'MONITORING', 'CLOSED'] as const;
 export const WB_SEVERITIES = ['LOW', 'NORMAL', 'HIGH', 'CRITICAL'] as const;
 export const WB_CATEGORIES = ['SOUTIEN', 'MEDIATION', 'SIGNALEMENT', 'SUIVI'] as const;
 export const WB_ALERT_EVENTS = ['BREAK_GLASS', 'EMERGENCY_READ', 'TEAM_READ', 'CASE_CHANGE', 'CONFIG_CHANGE', 'REPORT', 'REMINDER', 'MEMBERSHIP_CHANGE'] as const;
-export const WB_CASE_EVENTS = ['CREATED', 'STATUS', 'SEVERITY', 'ASSIGNEE', 'REVIEW', 'NOTE', 'RESOURCES_SENT', 'REMINDER', 'ATTACHMENT_ADDED', 'ATTACHMENT_REMOVED'] as const;
+export const WB_CASE_EVENTS = ['CREATED', 'STATUS', 'SEVERITY', 'ASSIGNEE', 'REVIEW', 'NOTE', 'RESOURCES_SENT', 'REMINDER', 'ATTACHMENT_ADDED', 'ATTACHMENT_REMOVED', 'VIEWED', 'TRASHED', 'RESTORED'] as const;
 
 const STATUS_LABELS: Record<string, () => string> = {
   OPEN: () => m.wb_status_open(),
@@ -74,6 +74,12 @@ export function wbCaseEventLabel(event: WbCaseEvent, formatDate: (iso: string) =
       return m.wb_ev_attachment_added();
     case 'ATTACHMENT_REMOVED':
       return m.wb_ev_attachment_removed();
+    case 'VIEWED':
+      return to === 'EMERGENCY' ? m.wb_ev_viewed_emergency() : m.wb_ev_viewed();
+    case 'TRASHED':
+      return m.wb_ev_trashed();
+    case 'RESTORED':
+      return m.wb_ev_restored();
     default:
       return event.type;
   }

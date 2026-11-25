@@ -32,6 +32,12 @@ describe("historique d'un dossier", () => {
     }
   });
 
+  test("une ouverture sous accès d'urgence se distingue d'une ouverture par la cellule", () => {
+    const cellule = wbCaseEventLabel({ type: 'VIEWED', fromValue: null, toValue: null }, date);
+    const urgence = wbCaseEventLabel({ type: 'VIEWED', fromValue: null, toValue: 'EMERGENCY' }, date);
+    expect(urgence).not.toBe(cellule);
+  });
+
   test('un changement de statut nomme les deux statuts', () => {
     const label = wbCaseEventLabel({ type: 'STATUS', fromValue: 'OPEN', toValue: 'CLOSED' }, date);
     expect(label).toContain(wbStatusLabel('OPEN'));

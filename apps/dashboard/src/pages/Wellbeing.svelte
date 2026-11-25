@@ -1,6 +1,6 @@
 <script lang="ts">
   import { dateLocale, m } from '../lib/i18n';
-  import { onMount } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import { dashboardFetch } from '../lib/api';
   import { dashboardStore } from '../lib/stores/dashboard.svelte';
   import { toast } from '../lib/stores/toast.svelte';
@@ -15,7 +15,7 @@
   import { Button, Callout, EmptyState, Field, FilterPills, Menu, Modal, SettingsGroup, SettingsRow, StatTile, Tabs, ToggleSwitch, type FilterOption, type MenuItem, type TabItem } from '../lib/components/ui';
   import Papicon from '../lib/components/Papicon.svelte';
   import Skeleton from '../lib/components/Skeleton.svelte';
-  import { wbCaseStats, wbCaseTimeline, wbFilterCases, wbIsReviewDue, wbSeverityAccent, wbSeverityTone, wbStatusTone, type WbCaseFilter } from '../lib/wellbeingView';
+  import { WB_IDLE_LOCK_MS, wbCaseStats, wbCaseTimeline, wbFilterCases, wbIsReviewDue, wbLinkedCases, wbMergeHeader, wbReviewShortcut, wbSearchCases, wbSeverityAccent, wbSeverityTone, wbSortCases, wbStatusTone, type WbCaseFilter, type WbCaseSort } from '../lib/wellbeingView';
   import { authStore } from '../lib/stores/auth.svelte';
 
   type WellbeingStatus = {
@@ -29,6 +29,8 @@
     /** Sous accès d'urgence, la direction lit sans écrire. */
     canWriteCases: boolean;
     breakGlassExpiresAt: string | null;
+    /** Accès d'urgence en cours de la personne connectée, pour l'arrêter. */
+    breakGlassLogId: string | null;
     /** Accès d'urgence soumis à la validation d'une seconde personne. */
     breakGlassApproval: boolean;
     reportEnabled: boolean;
@@ -38,24 +40,172 @@
 
   let loading = $state(true);
   let status = $state<WellbeingStatus | null>(null);
+  /** En-têtes des dossiers : la liste ne porte pas leur contenu. */
   let cases = $state<any[]>([]);
+  let trashCases = $state<any[]>([]);
   let logs = $state<any[]>([]);
   let selectedCaseId = $state<string | null>(null);
+  /** Dossier ouvert avec son contenu, lu à part : chaque ouverture est tracée côté bot. */
+  let detail = $state<any | null>(null);
 
-  const selectedCase = $derived(cases.find((c) => c.id === selectedCaseId) ?? null);
+  const selectedHeader = $derived(cases.find((c) => c.id === selectedCaseId) ?? null);
+  const selectedCase = $derived(detail && detail.id === selectedCaseId ? detail : null);
 
   type Tab = 'cases' | 'resources' | 'access' | 'settings';
+  type ListFilter = WbCaseFilter | 'trash';
   let activeTab = $state<Tab>('cases');
-  let caseFilter = $state<WbCaseFilter>('active');
+  let caseFilter = $state<ListFilter>('active');
+  let caseSearch = $state('');
+  let caseSort = $state<WbCaseSort>('recent');
+  const viewerId = $derived(authStore.user?.id);
   const now = new Date();
   const stats = $derived(wbCaseStats(cases, now));
-  const visibleCases = $derived(wbFilterCases(cases, caseFilter));
+  const visibleCases = $derived(caseFilter === 'trash'
+    ? wbSearchCases(trashCases, caseSearch)
+    : wbSortCases(wbSearchCases(wbFilterCases(cases, caseFilter, viewerId), caseSearch), caseSort));
+  const linkedCases = $derived(selectedHeader ? wbLinkedCases(cases, selectedHeader) : []);
   const timeline = $derived(selectedCase ? wbCaseTimeline(selectedCase) : []);
-  const filterOptions = $derived<FilterOption<WbCaseFilter>[]>([
+  const filterOptions = $derived<FilterOption<ListFilter>[]>([
+    ...(status?.reportEnabled || stats.triage > 0 ? [{ value: 'triage' as const, label: m.wb_filter_triage(), count: stats.triage }] : []),
     { value: 'active', label: m.wb_filter_active(), count: stats.active },
+    { value: 'mine', label: m.wb_filter_mine(), count: wbFilterCases(cases, 'mine', viewerId).length },
     { value: 'closed', label: m.wb_filter_closed(), count: stats.closed },
     { value: 'all', label: m.wb_filter_all(), count: cases.length },
+    ...(status?.canWriteCases ? [{ value: 'trash' as const, label: m.wb_filter_trash() }] : []),
   ]);
+  const SORT_OPTIONS: Array<{ value: WbCaseSort; label: () => string }> = [
+    { value: 'recent', label: () => m.wb_sort_recent() },
+    { value: 'severity', label: () => m.wb_sort_severity() },
+    { value: 'review', label: () => m.wb_sort_review() },
+  ];
+  const REVIEW_SHORTCUTS = [3, 7, 30];
+
+  function pickFilter(value: ListFilter) {
+    caseFilter = value;
+    if (value === 'trash') void loadTrash();
+  }
+
+  // Mode discret : le contenu du dossier n'est rendu qu'à la demande, pour le partage d'écran.
+  const DISCREET_KEY = 'kotbo:wellbeing:discreet';
+  let discreet = $state(typeof localStorage === 'undefined' || localStorage.getItem(DISCREET_KEY) !== 'off');
+  let revealed = $state(false);
+  function setDiscreet(value: boolean) {
+    discreet = value;
+    try { localStorage.setItem(DISCREET_KEY, value ? 'on' : 'off'); } catch { /* stockage indisponible : réglage gardé pour la session */ }
+  }
+  const contentHidden = $derived(discreet && !revealed);
+
+  // Verrouillage : après une inactivité, ou quand l'onglet passe en arrière-plan en mode discret, le dossier ouvert quitte la page.
+  let locked = $state(false);
+  let lastActivity = Date.now();
+  function lock() {
+    if (!detail && !selectedCaseId) return;
+    locked = true;
+    detail = null;
+    revealed = false;
+  }
+  function unlock() {
+    locked = false;
+    lastActivity = Date.now();
+    if (selectedCaseId) void loadDetail(selectedCaseId);
+  }
+  const markActivity = () => { lastActivity = Date.now(); };
+  const onVisibility = () => { if (document.hidden && discreet) lock(); };
+  const ACTIVITY_EVENTS = ['pointerdown', 'pointermove', 'keydown', 'scroll'] as const;
+  let idleTimer: ReturnType<typeof setInterval> | undefined;
+  onMount(() => {
+    for (const type of ACTIVITY_EVENTS) window.addEventListener(type, markActivity, { passive: true });
+    document.addEventListener('visibilitychange', onVisibility);
+    idleTimer = setInterval(() => { if (!locked && Date.now() - lastActivity > WB_IDLE_LOCK_MS) lock(); }, 15_000);
+  });
+  onDestroy(() => {
+    if (typeof window === 'undefined') return;
+    for (const type of ACTIVITY_EVENTS) window.removeEventListener(type, markActivity);
+    document.removeEventListener('visibilitychange', onVisibility);
+    clearInterval(idleTimer);
+  });
+
+  async function loadDetail(caseId: string) {
+    try {
+      const res = await dashboardFetch(`/wellbeing/cases/${caseId}`);
+      if (!res.ok) throw new Error('detail');
+      const { item } = await res.json();
+      if (selectedCaseId === caseId && !locked) detail = item;
+    } catch {
+      toast.error(m.toast_wb_load_failed());
+    }
+  }
+
+  function openCaseById(caseId: string) {
+    if (caseId === selectedCaseId && detail) return;
+    selectedCaseId = caseId;
+    detail = null;
+    revealed = false;
+    void loadDetail(caseId);
+  }
+
+  /** Dossier renvoyé par l'API après un geste : il devient le dossier ouvert et met son en-tête à jour. */
+  function applyItem(item: any) {
+    if (item.id === selectedCaseId) detail = item;
+    cases = cases.map((c) => (c.id === item.id ? wbMergeHeader(c, item) : c));
+  }
+
+  /** En-tête d'un dossier complet, pour l'ajouter à la liste. */
+  function headerOf(item: any) {
+    const { summary: _summary, notes: _notes, events: _events, attachments: _attachments, ...header } = item;
+    return { ...header, subjectIsTeamMember: false };
+  }
+
+  async function loadTrash() {
+    const res = await dashboardFetch('/wellbeing/cases?trash=1');
+    if (res.ok) trashCases = (await res.json()).cases ?? [];
+    else toast.error(m.toast_wb_load_failed());
+  }
+
+  let restoringId = $state<string | null>(null);
+  async function restoreCase(caseId: string) {
+    if (restoringId) return;
+    restoringId = caseId;
+    try {
+      const res = await dashboardFetch(`/wellbeing/cases/${caseId}/restore`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? '');
+      trashCases = trashCases.filter((c) => c.id !== caseId);
+      cases = [headerOf(data.item), ...cases];
+      caseFilter = 'active';
+      selectedCaseId = data.item.id;
+      detail = data.item;
+      revealed = false;
+      toast.success(m.toast_wb_case_restored());
+    } catch (err: any) {
+      toast.error(err?.message || m.toast_wb_update_failed());
+    } finally {
+      restoringId = null;
+    }
+  }
+
+  let endingLogId = $state<string | null>(null);
+  /** Arrête un accès d'urgence (le sien, ou celui d'un autre pour la cellule et le propriétaire), ou annule une demande. */
+  async function endBreakGlass(logId: string) {
+    if (endingLogId) return;
+    if (!(await confirmDialog.ask({ title: m.wb_bg_end_q(), description: m.wb_bg_end_desc(), confirmLabel: m.wb_bg_end_confirm() }))) return;
+    endingLogId = logId;
+    try {
+      const res = await dashboardFetch(`/wellbeing/break-glass/${logId}/end`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? '');
+      toast.success(m.toast_wb_bg_ended());
+      detail = null;
+      await loadAll();
+    } catch (err: any) {
+      toast.error(err?.message || m.toast_wb_decide_failed());
+    } finally {
+      endingLogId = null;
+    }
+  }
+
+  const canEndLog = (log: any) => log.actorId === viewerId || !!status?.isTeamMember || !!status?.canConfigure;
+  const isLiveLog = (log: any) => ['APPROVED', 'PENDING'].includes(log.status) && new Date(log.expiresAt) > new Date();
 
   const discordRoles = $derived((dashboardStore.state.discordRoles ?? []) as Array<{ id: string; name: string }>);
 
@@ -71,11 +221,13 @@
     PENDING: () => m.wb_log_status_PENDING(),
     APPROVED: () => m.wb_log_status_APPROVED(),
     REJECTED: () => m.wb_log_status_REJECTED(),
+    ENDED: () => m.wb_log_status_ENDED(),
   };
   const LOG_TONES: Record<string, string> = {
     PENDING: 'bg-warning/10 text-on-warning-container border border-warning/20',
     APPROVED: 'bg-success/10 text-on-success-container border border-success/20',
     REJECTED: 'bg-error/10 text-on-error-container border border-error/20',
+    ENDED: 'bg-surface-container-high/40 text-on-surface-variant border border-outline-variant/30',
   };
 
   // Ressources d'aide (cellule)
@@ -179,10 +331,19 @@
         if (casesRes.ok) {
           const data = await casesRes.json();
           cases = data.cases ?? [];
-          if (!selectedCaseId && cases.length > 0) selectedCaseId = (wbFilterCases(cases, 'active')[0] ?? cases[0]).id;
+          const stillThere = selectedCaseId && cases.some((c) => c.id === selectedCaseId);
+          if (stillThere) {
+            if (!detail && !locked) void loadDetail(selectedCaseId!);
+          } else if (cases.length > 0) {
+            openCaseById((wbFilterCases(cases, 'active')[0] ?? cases[0]).id);
+          } else {
+            selectedCaseId = null;
+          }
         }
       } else {
         cases = [];
+        selectedCaseId = null;
+        detail = null;
       }
 
       if (status?.isTeamMember) {
@@ -328,8 +489,10 @@
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? '');
-      cases = [data.item, ...cases];
+      cases = [headerOf(data.item), ...cases];
       selectedCaseId = data.item.id;
+      detail = data.item;
+      revealed = true;
       newCaseOpen = false;
       newSubjectUserId = '';
       newSubjectName = '';
@@ -363,8 +526,7 @@
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? '');
-      const { item } = data;
-      cases = cases.map((c) => (c.id === item.id ? item : c));
+      applyItem(data.item);
       toast.success(m.toast_wb_case_updated());
     } catch (err: any) {
       toast.error(err?.message || m.toast_wb_update_failed());
@@ -400,20 +562,13 @@
       if (!res.ok) throw new Error('delete');
       cases = cases.filter((c) => c.id !== target.id);
       selectedCaseId = null;
-      toast.success(m.toast_wb_case_deleted());
+      detail = null;
+      toast.success(m.toast_wb_case_trashed());
     } catch {
       toast.error(m.toast_wb_delete_failed());
     } finally {
       deletingCase = false;
     }
-  }
-
-  /** Relit un dossier après un geste qui ajoute une entrée d'historique. */
-  async function refreshCase(caseId: string) {
-    const res = await dashboardFetch('/wellbeing/cases');
-    if (!res.ok) return;
-    const fresh = ((await res.json()).cases ?? []).find((c: any) => c.id === caseId);
-    if (fresh) cases = cases.map((c) => (c.id === caseId ? fresh : c));
   }
 
   async function sendResources() {
@@ -425,7 +580,7 @@
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? '');
       toast.success(m.toast_wb_resources_sent());
-      await refreshCase(target.id);
+      await loadDetail(target.id);
     } catch (err: any) {
       toast.error(err?.message || m.toast_wb_resources_send_failed());
     } finally {
@@ -446,7 +601,7 @@
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? '');
-      cases = cases.map((c) => (c.id === data.item.id ? data.item : c));
+      applyItem(data.item);
       newAttachmentLabel = '';
       newAttachmentUrl = '';
       toast.success(m.toast_wb_attachment_added());
@@ -466,7 +621,7 @@
       const res = await dashboardFetch(`/wellbeing/cases/${target.id}/attachments/${attachmentId}`, { method: 'DELETE' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? '');
-      cases = cases.map((c) => (c.id === data.item.id ? data.item : c));
+      applyItem(data.item);
     } catch (err: any) {
       toast.error(err?.message || m.toast_wb_attachment_failed());
     } finally {
@@ -505,10 +660,8 @@
         body: JSON.stringify({ content: newNote.trim() }),
       });
       if (!res.ok) throw new Error('note');
-      const { note } = await res.json();
-      cases = cases.map((c) => (c.id === selectedCase.id ? { ...c, notes: [...(c.notes ?? []), note] } : c));
       newNote = '';
-      await refreshCase(selectedCase.id);
+      await loadDetail(selectedCase.id);
     } catch {
       toast.error(m.toast_wb_note_failed());
     } finally {
@@ -551,6 +704,9 @@
       {/if}
       {#if log.actorId === authStore.user?.id}
         <p class="mt-2 text-xs">{m.wb_pending_own()}</p>
+        <div class="flex gap-2 mt-3">
+          <Button size="sm" variant="ghost" icon="X" loading={endingLogId === log.id} onclick={() => void endBreakGlass(log.id)}>{m.wb_bg_cancel_request()}</Button>
+        </div>
       {:else}
         <div class="flex gap-2 mt-3">
           <Button size="sm" variant="primary" icon="Check" loading={decidingLogId === log.id} onclick={() => void decideBreakGlass(log.id, true)}>{m.wb_pending_approve()}</Button>
@@ -561,40 +717,69 @@
   {/each}
 {/snippet}
 
+{#snippet caseRow(c: any)}
+  {@const selected = selectedCaseId === c.id}
+  <button
+    type="button"
+    aria-current={selected ? 'true' : undefined}
+    onclick={() => openCaseById(c.id)}
+    class="w-full text-left rounded-lg border-l-4 {wbSeverityAccent(c.severity)} px-3 py-2.5 transition-colors {selected ? 'bg-primary/10 ring-1 ring-primary/30' : 'bg-surface-container-high/20 hover:bg-surface-container-high/40'}"
+  >
+    <div class="flex items-start justify-between gap-2">
+      <span class="text-sm font-semibold text-on-surface line-clamp-2">{c.title}</span>
+      {@render pill(wbStatusLabel(c.status), wbStatusTone(c.status))}
+    </div>
+    <p class="text-xs text-on-surface-variant mt-1 truncate">{c.subjectName} · {wbCategoryLabel(c.category)}</p>
+    <div class="flex flex-wrap items-center gap-1.5 mt-1.5">
+      {@render pill(wbSeverityLabel(c.severity), wbSeverityTone(c.severity))}
+      {#if c.source === 'DISCORD'}
+        <span class="text-2xs font-semibold flex items-center gap-1 text-primary"><Papicon icon="MessageSquare" size={11} /> {m.wb_source_report()}</span>
+      {/if}
+      {#if c.assigneeId && c.assigneeId === viewerId}
+        <span class="text-2xs font-semibold flex items-center gap-1 text-on-surface-variant"><Papicon icon="User" size={11} /> {m.wb_assigned_to_me()}</span>
+      {/if}
+      {#if wbIsReviewDue(c, now)}
+        <span class="text-2xs font-semibold flex items-center gap-1 text-on-warning-container"><Papicon icon="Clock" size={11} /> {m.wb_review_due_badge()}</span>
+      {/if}
+    </div>
+  </button>
+{/snippet}
+
 {#snippet caseList()}
   <section class="bg-surface-container-low/40 border border-outline-variant/30 rounded-xl p-4 space-y-3 lg:sticky lg:top-4">
-    <div class="flex flex-wrap items-center justify-between gap-2">
-      <h3 class="text-base font-semibold flex items-center gap-2"><Papicon icon="folder" size={16} /> {m.wb_cases_title()}</h3>
+    <h3 class="text-base font-semibold flex items-center gap-2"><Papicon icon="folder" size={16} /> {m.wb_cases_title()}</h3>
+    <div class="flex flex-wrap gap-2">
+      <input type="search" bind:value={caseSearch} class="input text-sm flex-1 min-w-36" aria-label={m.wb_search_label()} placeholder={m.wb_search_ph()} />
+      {#if caseFilter !== 'trash'}
+        <select bind:value={caseSort} class="input text-sm w-auto" aria-label={m.wb_sort_label()}>
+          {#each SORT_OPTIONS as option (option.value)}<option value={option.value}>{option.label()}</option>{/each}
+        </select>
+      {/if}
     </div>
-    <FilterPills label={m.wb_filter_label()} options={filterOptions} value={caseFilter} onchange={(value) => (caseFilter = value)} />
-    {#if cases.length === 0}
+    <FilterPills label={m.wb_filter_label()} options={filterOptions} value={caseFilter} onchange={pickFilter} />
+    {#if caseFilter === 'trash'}
+      <p class="text-2xs text-on-surface-variant">{m.wb_trash_desc()}</p>
+      {#if visibleCases.length === 0}
+        <EmptyState icon="trash" title={m.wb_trash_empty()} reason="all-clear" />
+      {:else}
+        <ul class="space-y-1.5 max-h-[70vh] overflow-y-auto pr-1">
+          {#each visibleCases as c (c.id)}
+            <li class="rounded-lg bg-surface-container-high/20 px-3 py-2.5 space-y-1.5">
+              <p class="text-sm font-semibold text-on-surface line-clamp-2">{c.title}</p>
+              <p class="text-xs text-on-surface-variant">{m.wb_trashed_by({ name: c.deletedByName ?? '-', date: formatDay(c.deletedAt) })}</p>
+              <Button size="sm" variant="secondary" icon="RotateCcw" loading={restoringId === c.id} onclick={() => void restoreCase(c.id)}>{m.wb_restore()}</Button>
+            </li>
+          {/each}
+        </ul>
+      {/if}
+    {:else if cases.length === 0}
       <EmptyState icon="folder" title={m.wb_cases_empty()} reason="accumulating" />
     {:else if visibleCases.length === 0}
       <p class="text-sm text-on-surface-variant py-6 text-center">{m.wb_cases_filtered_empty()}</p>
     {:else}
       <ul class="space-y-1.5 max-h-[70vh] overflow-y-auto pr-1">
         {#each visibleCases as c (c.id)}
-          {@const selected = selectedCaseId === c.id}
-          <li>
-            <button
-              type="button"
-              aria-current={selected ? 'true' : undefined}
-              onclick={() => (selectedCaseId = c.id)}
-              class="w-full text-left rounded-lg border-l-4 {wbSeverityAccent(c.severity)} px-3 py-2.5 transition-colors {selected ? 'bg-primary/10 ring-1 ring-primary/30' : 'bg-surface-container-high/20 hover:bg-surface-container-high/40'}"
-            >
-              <div class="flex items-start justify-between gap-2">
-                <span class="text-sm font-semibold text-on-surface line-clamp-2">{c.title}</span>
-                {@render pill(wbStatusLabel(c.status), wbStatusTone(c.status))}
-              </div>
-              <p class="text-xs text-on-surface-variant mt-1 truncate">{c.subjectName} · {wbCategoryLabel(c.category)}</p>
-              <div class="flex flex-wrap items-center gap-1.5 mt-1.5">
-                {@render pill(wbSeverityLabel(c.severity), wbSeverityTone(c.severity))}
-                {#if wbIsReviewDue(c, now)}
-                  <span class="text-2xs font-semibold flex items-center gap-1 text-on-warning-container"><Papicon icon="Clock" size={11} /> {m.wb_review_due_badge()}</span>
-                {/if}
-              </div>
-            </button>
-          </li>
+          <li>{@render caseRow(c)}</li>
         {/each}
       </ul>
     {/if}
@@ -602,10 +787,29 @@
   </section>
 {/snippet}
 
+{#snippet hiddenContent()}
+  <div class="rounded-xl border border-dashed border-outline-variant/60 p-6 text-center space-y-3">
+    <p class="text-sm text-on-surface-variant flex items-center justify-center gap-2"><Papicon icon="EyeOff" size={16} /> {m.wb_discreet_hidden()}</p>
+    <Button size="sm" variant="secondary" icon="eye" onclick={() => (revealed = true)}>{m.wb_discreet_reveal()}</Button>
+  </div>
+{/snippet}
+
 {#snippet caseDetail()}
-  {#if !selectedCase}
+  {#if locked}
+    <section class="bg-surface-container-low/40 border border-outline-variant/30 rounded-xl p-8 text-center space-y-3">
+      <div class="h-12 w-12 mx-auto rounded-full flex items-center justify-center bg-primary/10 text-primary"><Papicon icon="lock" size={22} /></div>
+      <h2 class="text-base font-semibold text-on-surface">{m.wb_locked_page_title()}</h2>
+      <p class="text-sm text-on-surface-variant">{m.wb_locked_page_desc()}</p>
+      <Button variant="primary" icon="Unlock" onclick={unlock}>{m.wb_unlock()}</Button>
+    </section>
+  {:else if !selectedCaseId}
     <section class="bg-surface-container-low/40 border border-outline-variant/30 rounded-xl p-6">
       <EmptyState icon="file-text" title={m.wb_case_select()} reason="nothing-matches" />
+    </section>
+  {:else if !selectedCase}
+    <section class="bg-surface-container-low/40 border border-outline-variant/30 rounded-xl p-6 space-y-4">
+      <Skeleton height="60px" />
+      <Skeleton height="200px" />
     </section>
   {:else}
     <section class="bg-surface-container-low/40 border border-outline-variant/30 rounded-xl p-6 space-y-5">
@@ -620,18 +824,28 @@
             <span class="flex items-center gap-1"><Papicon icon="User" size={12} /> {selectedCase.subjectName}</span>
             <span class="flex items-center gap-1"><Papicon icon="Tag" size={12} /> {wbCategoryLabel(selectedCase.category)}</span>
             <span class="flex items-center gap-1"><Papicon icon="Calendar" size={12} /> {formatDay(selectedCase.createdAt)}</span>
+            {#if selectedCase.source === 'DISCORD'}
+              <span class="flex items-center gap-1"><Papicon icon="MessageSquare" size={12} /> {m.wb_source_report()}</span>
+            {/if}
           </p>
         </div>
-        {#if status?.canWriteCases}
-          <div class="flex flex-wrap items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="flex items-center gap-2 text-xs text-on-surface-variant">
+            <ToggleSwitch size="sm" checked={discreet} onToggle={setDiscreet} ariaLabel={m.wb_discreet_label()} />
+            {m.wb_discreet_label()}
+          </span>
+          {#if status?.canWriteCases}
             {#if selectedCase.subjectUserId && resources.length > 0}
               <Button size="sm" variant="secondary" icon="heart" loading={sendingResources} onclick={() => void sendResources()}>{m.wb_send_resources()}</Button>
             {/if}
             <Menu items={caseMenu} label={m.wb_case_actions({ name: selectedCase.title })} />
-          </div>
-        {/if}
+          {/if}
+        </div>
       </header>
 
+      {#if selectedHeader?.subjectIsTeamMember}
+        <Callout variant="info" title={m.wb_conflict_title()}>{m.wb_conflict_desc()}</Callout>
+      {/if}
       {#if !status?.canWriteCases}
         <Callout variant="info">{m.wb_read_only_emergency()}</Callout>
       {/if}
@@ -652,8 +866,13 @@
                 {/if}
               </div>
             {:else if status?.canWriteCases}
-              <MemberSearchSelect {id} {describedBy} bind:value={assigneeCandidate} placeholder={m.wb_member_ph()}
-                onselect={(member) => { assigneeCandidate = ''; void updateCase({ assigneeId: member.id }); }} />
+              <div class="space-y-1.5">
+                <MemberSearchSelect {id} {describedBy} bind:value={assigneeCandidate} placeholder={m.wb_member_ph()}
+                  onselect={(member) => { assigneeCandidate = ''; void updateCase({ assigneeId: member.id }); }} />
+                {#if viewerId && viewerId !== selectedCase?.subjectUserId}
+                  <Button size="sm" variant="ghost" icon="User" disabled={updatingCase} onclick={() => void updateCase({ assigneeId: viewerId })}>{m.wb_assign_me()}</Button>
+                {/if}
+              </div>
             {:else}
               <p class="text-sm text-on-surface-variant min-h-9 flex items-center">{m.wb_assignee_none()}</p>
             {/if}
@@ -661,22 +880,49 @@
         </Field>
         <Field label={m.wb_review_at()} hint={m.wb_review_hint()}>
           {#snippet children(id, describedBy)}
-            <div class="flex items-center gap-2">
-              <input {id} aria-describedby={describedBy} type="date" class="input w-full" disabled={updatingCase || !status?.canWriteCases}
-                value={selectedCase?.reviewAt ? selectedCase.reviewAt.slice(0, 10) : ''}
-                onchange={(e) => void updateCase({ reviewAt: e.currentTarget.value || null })} />
-              {#if selectedCase?.reviewAt && status?.canWriteCases}
-                <Button size="sm" variant="ghost" icon="X" disabled={updatingCase} aria-label={m.wb_review_clear()} onclick={() => void updateCase({ reviewAt: null })} />
+            <div class="space-y-1.5">
+              <div class="flex items-center gap-2">
+                <input {id} aria-describedby={describedBy} type="date" class="input w-full" disabled={updatingCase || !status?.canWriteCases}
+                  value={selectedCase?.reviewAt ? selectedCase.reviewAt.slice(0, 10) : ''}
+                  onchange={(e) => void updateCase({ reviewAt: e.currentTarget.value || null })} />
+                {#if selectedCase?.reviewAt && status?.canWriteCases}
+                  <Button size="sm" variant="ghost" icon="X" disabled={updatingCase} aria-label={m.wb_review_clear()} onclick={() => void updateCase({ reviewAt: null })} />
+                {/if}
+              </div>
+              {#if status?.canWriteCases}
+                <div role="group" aria-label={m.wb_review_shortcuts()} class="flex flex-wrap gap-1.5">
+                  {#each REVIEW_SHORTCUTS as days (days)}
+                    <Button size="sm" variant="ghost" disabled={updatingCase} onclick={() => void updateCase({ reviewAt: wbReviewShortcut(new Date(), days) })}>{m.wb_review_in_days({ days })}</Button>
+                  {/each}
+                </div>
               {/if}
             </div>
           {/snippet}
         </Field>
       </div>
 
-      <div class="space-y-1.5">
-        <h3 class="text-xs font-semibold text-on-surface-variant">{m.wb_summary()}</h3>
-        <p class="text-sm whitespace-pre-wrap text-on-surface bg-surface-container-lowest rounded-lg p-3 border border-outline-variant/40">{selectedCase.summary}</p>
-      </div>
+      {#if linkedCases.length > 0}
+        <div class="space-y-1.5">
+          <h3 class="text-xs font-semibold text-on-surface-variant flex items-center gap-1.5"><Papicon icon="Link" size={13} /> {m.wb_linked_title({ count: linkedCases.length })}</h3>
+          <div class="flex flex-wrap gap-1.5">
+            {#each linkedCases as linked (linked.id)}
+              <button type="button" onclick={() => openCaseById(linked.id)}
+                class="text-xs px-2.5 py-1 rounded-lg border border-outline-variant/40 text-on-surface hover:bg-surface-container-high/40 flex items-center gap-1.5">
+                {linked.title} {@render pill(wbStatusLabel(linked.status), wbStatusTone(linked.status))}
+              </button>
+            {/each}
+          </div>
+        </div>
+      {/if}
+
+      {#if contentHidden}
+        {@render hiddenContent()}
+      {:else}
+        <div class="space-y-1.5">
+          <h3 class="text-xs font-semibold text-on-surface-variant">{m.wb_summary()}</h3>
+          <p class="text-sm whitespace-pre-wrap text-on-surface bg-surface-container-lowest rounded-lg p-3 border border-outline-variant/40">{selectedCase.summary}</p>
+        </div>
+      {/if}
 
       <div class="space-y-3">
         <h3 class="text-sm font-semibold flex items-center gap-2"><Papicon icon="Clock" size={15} /> {m.wb_timeline_title()}</h3>
@@ -701,14 +947,18 @@
                       <span class="font-semibold text-on-surface">{entry.note.authorName}</span>
                       <span>{formatDate(entry.at)}</span>
                     </div>
-                    <p class="whitespace-pre-wrap text-on-surface">{entry.note.content}</p>
+                    {#if contentHidden}
+                      <p class="text-xs italic text-on-surface-variant">{m.wb_discreet_note_hidden()}</p>
+                    {:else}
+                      <p class="whitespace-pre-wrap text-on-surface">{entry.note.content}</p>
+                    {/if}
                   </div>
                 {:else}
                   <p class="flex flex-wrap items-center gap-x-2 text-xs text-on-surface-variant">
                     <span class="font-medium text-on-surface">{entry.event.actorName}</span>
                     <span>{wbCaseEventLabel(entry.event, formatDay)}</span>
                     {#if entry.event.type === 'ASSIGNEE' && entry.event.toValue}<MemberName userId={entry.event.toValue} />{/if}
-                    <span class="opacity-70">· {formatDate(entry.at)}</span>
+                    <span>· {formatDate(entry.at)}</span>
                   </p>
                 {/if}
               </li>
@@ -720,26 +970,30 @@
       <div class="space-y-2 border-t border-outline-variant/30 pt-4">
         <h3 class="text-sm font-semibold flex items-center gap-2"><Papicon icon="Paperclip" size={15} /> {m.wb_attachments_title()}</h3>
         <p class="text-xs text-on-surface-variant">{m.wb_attachments_desc()}</p>
-        {#each selectedCase.attachments ?? [] as attachment (attachment.id)}
-          <div class="flex items-center justify-between gap-2 rounded-lg bg-surface-container-high/20 px-3 py-2 text-sm">
-            <span class="flex items-center gap-2 min-w-0">
-              <Papicon icon="file-text" size={14} />
-              {#if isDriveLink(attachment.url)}
-                <a href={attachment.url} target="_blank" rel="noopener noreferrer" class="text-primary hover:underline truncate">{attachment.label}</a>
-              {:else}
-                <span class="truncate text-on-surface-variant">{attachment.label}</span>
-              {/if}
-            </span>
-            <span class="flex items-center gap-1 shrink-0 text-xs text-on-surface-variant">
-              {attachment.addedByName}
-              {#if status?.canWriteCases}
-                <Button size="sm" variant="ghost" icon="trash" loading={removingAttachmentId === attachment.id}
-                  aria-label={m.wb_attachment_remove({ name: attachment.label })}
-                  onclick={() => void removeAttachment(attachment.id)} />
-              {/if}
-            </span>
-          </div>
-        {/each}
+        {#if contentHidden && (selectedCase.attachments ?? []).length > 0}
+          <p class="text-xs italic text-on-surface-variant">{m.wb_discreet_attachments_hidden({ count: selectedCase.attachments.length })}</p>
+        {:else}
+          {#each selectedCase.attachments ?? [] as attachment (attachment.id)}
+            <div class="flex items-center justify-between gap-2 rounded-lg bg-surface-container-high/20 px-3 py-2 text-sm">
+              <span class="flex items-center gap-2 min-w-0">
+                <Papicon icon="file-text" size={14} />
+                {#if isDriveLink(attachment.url)}
+                  <a href={attachment.url} target="_blank" rel="noopener noreferrer" class="text-primary hover:underline truncate">{attachment.label}</a>
+                {:else}
+                  <span class="truncate text-on-surface-variant">{attachment.label}</span>
+                {/if}
+              </span>
+              <span class="flex items-center gap-1 shrink-0 text-xs text-on-surface-variant">
+                {attachment.addedByName}
+                {#if status?.canWriteCases}
+                  <Button size="sm" variant="ghost" icon="trash" loading={removingAttachmentId === attachment.id}
+                    aria-label={m.wb_attachment_remove({ name: attachment.label })}
+                    onclick={() => void removeAttachment(attachment.id)} />
+                {/if}
+              </span>
+            </div>
+          {/each}
+        {/if}
         {#if status?.canWriteCases && (selectedCase.attachments ?? []).length < MAX_CASE_ATTACHMENTS}
           <form onsubmit={addAttachment} class="grid grid-cols-1 sm:grid-cols-[1fr_2fr_auto] gap-2">
             <input bind:value={newAttachmentLabel} maxlength={120} class="input text-sm" aria-label={m.wb_attachment_label()} placeholder={m.wb_attachment_label()} />
@@ -774,6 +1028,11 @@
       {#if status.breakGlassExpiresAt && !status.isTeamMember}
         <Callout variant="warning" title={m.wb_break_glass_active_title()} class="mb-4">
           {m.wb_break_glass_active_desc({ time: new Date(status.breakGlassExpiresAt).toLocaleTimeString(dateLocale()) })}
+          {#if status.breakGlassLogId}
+            <div class="mt-3">
+              <Button size="sm" variant="secondary" icon="lock" loading={endingLogId === status.breakGlassLogId} onclick={() => void endBreakGlass(status!.breakGlassLogId!)}>{m.wb_bg_end_now()}</Button>
+            </div>
+          {/if}
         </Callout>
       {/if}
       {#if pendingLogs.length > 0 && activeTab !== 'access'}
@@ -874,7 +1133,15 @@
                   <span class="flex items-center gap-2 text-xs text-on-surface-variant shrink-0">
                     {@render pill(LOG_STATUS[log.status]?.() ?? log.status, LOG_TONES[log.status] ?? wbStatusTone(''))}
                     {formatDate(log.createdAt)}
+                    {#if log.status === 'APPROVED' && isLiveLog(log) && canEndLog(log)}
+                      <Button size="sm" variant="danger" icon="X" loading={endingLogId === log.id} onclick={() => void endBreakGlass(log.id)}>
+                        {log.actorId === viewerId ? m.wb_bg_end_now() : m.wb_bg_revoke()}
+                      </Button>
+                    {/if}
                   </span>
+                  {#if log.endedByName}
+                    <p class="w-full text-xs text-on-surface-variant">{m.wb_bg_ended_by({ name: log.endedByName, date: formatDate(log.endedAt) })}</p>
+                  {/if}
                 </li>
               {/each}
             </ul>
@@ -1032,6 +1299,11 @@
       <Field label={m.wb_review_at()} hint={m.wb_review_hint()}>
         {#snippet children(id, describedBy)}
           <input {id} aria-describedby={describedBy} type="date" bind:value={newReviewAt} class="input w-full" />
+          <div role="group" aria-label={m.wb_review_shortcuts()} class="flex flex-wrap gap-1.5 mt-1.5">
+            {#each REVIEW_SHORTCUTS as days (days)}
+              <Button size="sm" variant="ghost" onclick={() => (newReviewAt = wbReviewShortcut(new Date(), days))}>{m.wb_review_in_days({ days })}</Button>
+            {/each}
+          </div>
         {/snippet}
       </Field>
     </div>
