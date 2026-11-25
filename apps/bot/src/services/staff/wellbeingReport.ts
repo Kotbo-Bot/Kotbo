@@ -13,7 +13,7 @@
 import type { Client } from 'discord.js';
 import prisma from '../../utils/db.js';
 import { sendWellbeingAlert } from './wellbeingAlerts.js';
-import { sealCaseFields } from './wellbeingCrypto.js';
+import { openWellbeing, sealCaseFields } from './wellbeingCrypto.js';
 import { appendCaseEvents } from './wellbeingEvents.js';
 import {
   REPORT_COOLDOWN_MS,
@@ -101,17 +101,20 @@ export async function lookupWellbeingReport(
   guildId: string,
   userId: string,
   code: string,
-): Promise<ReturnType<typeof trackingStatus> | 'cooldown'> {
+): Promise<{ status: ReturnType<typeof trackingStatus> | 'cooldown'; reply?: string }> {
   const key = `${guildId}:${userId}`;
   const now = Date.now();
   const last = lastLookup.get(key);
-  if (last !== undefined && now - last < TRACKING_LOOKUP_COOLDOWN_MS) return 'cooldown';
+  if (last !== undefined && now - last < TRACKING_LOOKUP_COOLDOWN_MS) return { status: 'cooldown' };
   lastLookup.set(key, now);
   for (const [k, at] of lastLookup) if (now - at >= TRACKING_LOOKUP_COOLDOWN_MS) lastLookup.delete(k);
 
   const item = await prisma.wellbeingCase.findUnique({
     where: { trackingCodeHash: trackingCodeHash(guildId, code) },
-    select: { guildId: true, status: true, assigneeId: true, deletedAt: true },
+    select: { guildId: true, status: true, assigneeId: true, deletedAt: true, reporterReply: true },
   });
-  return trackingStatus(item && item.guildId === guildId ? item : null);
+  const found = item && item.guildId === guildId ? item : null;
+  // Message de la cellule, s'il y en a un et que le dossier n'est pas à la corbeille.
+  const reply = found?.reporterReply && !found.deletedAt ? openWellbeing(guildId, found.reporterReply) ?? undefined : undefined;
+  return { status: trackingStatus(found), reply };
 }

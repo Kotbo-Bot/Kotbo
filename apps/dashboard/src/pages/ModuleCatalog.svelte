@@ -17,9 +17,9 @@
    * de modules ne se parcourt pas en scrollant des vignettes de 250 px.
    */
   import { fly, slide } from 'svelte/transition';
-  import { MODULE_CATEGORIES, type ModuleCategory } from '@kotbo/contracts';
+  import { MODULE_CATEGORIES, isRestrictedModule, type ModuleCategory } from '@kotbo/contracts';
   import { dashboardStore } from '../lib/stores/dashboard.svelte';
-  import { applyGuildPreset, updateModuleStatus } from '../lib/api';
+  import { applyGuildPreset, dashboardFetch, updateModuleStatus } from '../lib/api';
   import { confirmDialog } from '../lib/stores/confirmDialog.svelte';
   import { toast } from '../lib/stores/toast.svelte';
   import ToggleSwitch from '../lib/components/ToggleSwitch.svelte';
@@ -27,7 +27,7 @@
   import FilterPills, { type FilterOption } from '../lib/components/ui/FilterPills.svelte';
   import Button from '../lib/components/ui/Button.svelte';
   import RolePermissionSettings from '../lib/components/RolePermissionSettings.svelte';
-  import { m } from '../lib/i18n';
+  import { dateLocale, m } from '../lib/i18n';
   import { moduleDescription, moduleName } from '../lib/moduleLabels';
 
   interface ModuleRow {
@@ -210,6 +210,32 @@
       }
     }
 
+    // Module confidentiel (cellule bien-être) : seul le propriétaire l'éteint, et
+    // l'extinction est différée de 24 h, annoncée à la cellule. Il reste allumé
+    // d'ici là : pas d'affichage optimiste, la réponse dit ce qui se passe.
+    if (next === 'inactive' && isRestrictedModule(mod.id)) {
+      pending = { ...pending, [mod.id]: true };
+      try {
+        const res = await dashboardFetch(`/modules/${mod.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'inactive' }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          toast.error(data.error || m.mc_toast_toggle_error({ name: nameOf(mod.id) }));
+        } else if (data.pending) {
+          toast.success(m.mc_toast_disable_deferred({ name: nameOf(mod.id), date: new Date(data.dissolutionAt).toLocaleString(dateLocale()) }));
+        } else {
+          toast.success(m.mc_toast_disabled({ name: nameOf(mod.id) }));
+          await dashboardStore.refresh();
+        }
+      } finally {
+        pending = { ...pending, [mod.id]: false };
+      }
+      return;
+    }
+
     const missingRequirements = next === 'active'
       ? (mod.requires ?? []).filter((key) => moduleById.get(key)?.status !== 'active')
       : [];
@@ -227,6 +253,7 @@
       toast.error(m.mc_toast_toggle_error({ name: nameOf(mod.id) }));
       return;
     }
+
 
     if (missingRequirements.length > 0) {
       toast.success(m.mc_toast_enabled_with_deps({

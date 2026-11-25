@@ -5447,5 +5447,6 @@
   "wbc_track_unknown": "No report matches this code on this server. Check that it is copied correctly.",
   "wbc_track_received": "Your report was received. It is waiting for someone in the unit to take it on.",
   "wbc_track_in_progress": "Your report is being handled by the wellbeing unit.",
-  "wbc_track_closed": "Follow-up on your report is complete."
+  "wbc_track_closed": "Follow-up on your report is complete.",
+  "wbc_track_reply": "Message from the wellbeing unit:\n> {message}"
 }

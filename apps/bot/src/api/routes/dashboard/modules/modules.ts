@@ -6,6 +6,8 @@ import { CoreModuleError, PlanLockedError, setDashboardModuleStatus } from '../.
 import { logger } from '../../../../utils/logger.js';
 import { getGuildName, type ModuleStatus, pushAudit } from '../../../shared.js';
 import { auditUserOf, fail, guildRoute, readBody, send } from '../../../hono/dashboard/kit.js';
+import { canonicalModuleKey, isRestrictedModule } from '@kotbo/contracts';
+import { requestDissolution } from '../../../../services/staff/wellbeingDissolution.js';
 
 export function createModuleToggleRouter(client: Client) {
   const router = new Hono();
@@ -40,7 +42,33 @@ export function createModuleToggleRouter(client: Client) {
     const guildId = c.req.param('guildId');
     try {
       const body = (await readBody<{ status: ModuleStatus }>(c)) ?? { status: 'inactive' };
-      const result = await setDashboardModuleStatus(guildId, c.req.param('moduleId'), body.status === 'active');
+      const moduleKey = canonicalModuleKey(c.req.param('moduleId'));
+
+      // Module confidentiel (cellule bien-être) : l'éteindre coupe la cellule de
+      // ses dossiers. Seul le propriétaire le peut, et l'extinction est différée
+      // de 24 h, annoncée à la cellule, comme sa désactivation dans ses réglages.
+      if (body.status !== 'active' && isRestrictedModule(moduleKey)) {
+        const user = c.var.dashboardUser;
+        if (client.guilds.cache.get(guildId)?.ownerId !== user.userId) {
+          return send(c, { error: 'Seul le propriétaire du serveur peut éteindre ce module.', code: 'owner_only' }, 403);
+        }
+        const at = await requestDissolution(client, guildId, { id: user.userId, name: auditUserOf(c) }, 'MODULE');
+        if (at) {
+          await pushAudit(guildId, {
+            user: auditUserOf(c),
+            action: 'Mise à jour module',
+            context: getGuildName(client, guildId),
+            module: moduleKey,
+            eventType: 'Manuel',
+            details: `Extinction demandée, effective le ${at.toISOString()} sauf annulation.`,
+            channelId: null,
+          });
+          return send(c, { ok: true, pending: true, moduleKey, dissolutionAt: at.toISOString() }, 202);
+        }
+        // Cellule jamais configurée : il n'y a rien à protéger, l'extinction est immédiate.
+      }
+
+      const result = await setDashboardModuleStatus(guildId, moduleKey, body.status === 'active');
 
       // La cascade fait partie du journal : sans elle, un module éteint « tout
       // seul » n'aurait aucune trace expliquant pourquoi.

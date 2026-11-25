@@ -44,7 +44,7 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
   }
 
   if (interaction.options.getSubcommand() === 'track') {
-    const status = await lookupWellbeingReport(guildId, interaction.user.id, interaction.options.getString('code', true));
+    const { status, reply } = await lookupWellbeingReport(guildId, interaction.user.id, interaction.options.getString('code', true));
     const replies = {
       cooldown: () => m.wbc_track_cooldown({}, { locale }),
       unknown: () => m.wbc_track_unknown({}, { locale }),
@@ -52,7 +52,8 @@ async function execute(interaction: ChatInputCommandInteraction): Promise<void> 
       in_progress: () => m.wbc_track_in_progress({}, { locale }),
       closed: () => m.wbc_track_closed({}, { locale }),
     };
-    await interaction.reply({ ...ephemeral, content: replies[status]() });
+    const content = reply ? `${replies[status]()}\n\n${m.wbc_track_reply({ message: reply }, { locale })}` : replies[status]();
+    await interaction.reply({ ...ephemeral, content, allowedMentions: { parse: [] } });
     return;
   }
 

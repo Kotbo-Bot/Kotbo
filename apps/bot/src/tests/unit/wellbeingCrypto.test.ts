@@ -60,6 +60,15 @@ describe('chiffrement des dossiers de la cellule', () => {
     expect(openNote({ caseId: 'dossier-1', content: sealNote('dossier-1', 'x'), originalContent: null }).originalContent).toBeNull();
   });
 
+  test("l'empreinte du code de suivi ne sort pas, la réponse au signaleur se relit", () => {
+    const guildId = '100000000000000001';
+    const fields = sealCaseFields(guildId, { title: 'T', subjectName: 'S', summary: 'R' });
+    const opened = openCase({ guildId, ...fields, trackingCodeHash: 'abc', reporterReply: sealWellbeing(guildId, 'Pris en compte') });
+    expect('trackingCodeHash' in opened).toBe(false);
+    expect(opened.hasTrackingCode).toBe(true);
+    expect(opened.reporterReply).toBe('Pris en compte');
+  });
+
   test("une note déplacée vers un autre dossier reste illisible", () => {
     const sealed = sealNote('dossier-1', 'Note');
     expect(openNote({ caseId: 'dossier-2', content: sealed }).content).toBe('[contenu illisible]');

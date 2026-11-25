@@ -38,6 +38,9 @@
     breakGlassLogId: string | null;
     /** Propriétaire : la composition n'a pas été reconfirmée depuis 30 jours. */
     accessReviewDue: boolean;
+    /** Désactivation de la cellule demandée par le propriétaire, effective à cette date. */
+    dissolutionAt: string | null;
+    dissolutionByName: string | null;
     /** Accès d'urgence soumis à la validation d'une seconde personne. */
     breakGlassApproval: boolean;
     reportEnabled: boolean;
@@ -555,11 +558,18 @@
           backupUserId: cfgBackupIds[0] ?? null,
         }),
       });
-      if (!res.ok) throw new Error('save');
-      toast.success(m.toast_wb_config_saved());
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? '');
+      // Désactiver une cellule active est différé : on le dit plutôt que « enregistré ».
+      if (!cfgEnabled && data.config?.dissolutionAt) {
+        toast.success(m.toast_wb_dissolution_scheduled({ date: formatDate(data.config.dissolutionAt) }));
+      } else {
+        toast.success(m.toast_wb_config_saved());
+      }
+      configLoaded = false;
       await loadAll();
-    } catch {
-      toast.error(m.toast_wb_save_failed());
+    } catch (err: any) {
+      toast.error(err?.message || m.toast_wb_save_failed());
     } finally {
       savingConfig = false;
     }
@@ -929,6 +939,72 @@
     }
   }
 
+  let cancellingDissolution = $state(false);
+  /** Le propriétaire annule la désactivation demandée. */
+  async function cancelDissolution() {
+    if (cancellingDissolution) return;
+    cancellingDissolution = true;
+    try {
+      const res = await dashboardFetch('/wellbeing/dissolution/cancel', { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? '');
+      toast.success(m.toast_wb_dissolution_cancelled());
+      configLoaded = false;
+      await loadAll();
+    } catch (err: any) {
+      toast.error(err?.message || m.toast_wb_save_failed());
+    } finally {
+      cancellingDissolution = false;
+    }
+  }
+
+  // Réponse à l'auteur d'un signalement, lue avec son code de suivi (même plafond que le bot).
+  const REPORTER_REPLY_MAX = 500;
+  let reporterReplyText = $state('');
+  let savingReply = $state(false);
+  async function saveReporterReply(clear = false) {
+    const target = selectedCase;
+    if (!target || savingReply) return;
+    savingReply = true;
+    try {
+      const res = await dashboardFetch(`/wellbeing/cases/${target.id}/reporter-reply`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: clear ? '' : reporterReplyText.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? '');
+      applyItem(data.item);
+      reporterReplyText = '';
+      toast.success(clear ? m.toast_wb_reply_cleared() : m.toast_wb_reply_saved());
+    } catch (err: any) {
+      toast.error(err?.message || m.toast_wb_update_failed());
+    } finally {
+      savingReply = false;
+    }
+  }
+
+  let exportingJournal = $state(false);
+  /** Journal de la cellule en CSV, sans contenu de dossier, pour un audit externe. */
+  async function exportJournal() {
+    if (exportingJournal) return;
+    exportingJournal = true;
+    try {
+      const res = await dashboardFetch('/wellbeing/journal');
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? '');
+      const url = URL.createObjectURL(await res.blob());
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `journal-cellule-bien-etre-${new Date().toISOString().slice(0, 10)}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      toast.error(err?.message || m.toast_wb_load_failed());
+    } finally {
+      exportingJournal = false;
+    }
+  }
+
   // Correction d'une note par son auteur, dans le même délai que le bot (NOTE_EDIT_HOURS).
   const NOTE_EDIT_MS = 48 * 60 * 60 * 1000;
   let editingNoteId = $state<string | null>(null);
@@ -1251,6 +1327,31 @@
         </Field>
       </div>
 
+      {#if selectedCase.hasTrackingCode}
+        <div class="rounded-xl border border-outline-variant/40 p-4 space-y-2">
+          <h3 class="text-sm font-semibold flex items-center gap-2"><Papicon icon="MessageSquare" size={15} /> {m.wb_reply_title()}</h3>
+          <p class="text-xs text-on-surface-variant">{m.wb_reply_desc()}</p>
+          {#if selectedCase.reporterReply && !contentHidden}
+            <div class="rounded-lg bg-surface-container-high/30 p-3 text-sm space-y-1">
+              <p class="whitespace-pre-wrap text-on-surface">{selectedCase.reporterReply}</p>
+              <p class="text-2xs text-on-surface-variant">{m.wb_reply_sent({ date: formatDate(selectedCase.reporterReplyAt) })}</p>
+            </div>
+          {/if}
+          {#if status?.canWriteCases}
+            <textarea bind:value={reporterReplyText} maxlength={REPORTER_REPLY_MAX} rows={2} class="input w-full text-sm"
+              aria-label={m.wb_reply_label()} placeholder={m.wb_reply_ph()}></textarea>
+            <div class="flex flex-wrap justify-end gap-2">
+              {#if selectedCase.reporterReply}
+                <Button size="sm" variant="ghost" icon="trash" disabled={savingReply} onclick={() => void saveReporterReply(true)}>{m.wb_reply_clear()}</Button>
+              {/if}
+              <Button size="sm" variant="primary" icon="Send" loading={savingReply} disabled={!reporterReplyText.trim()} onclick={() => void saveReporterReply()}>
+                {selectedCase.reporterReply ? m.wb_reply_replace() : m.wb_reply_save()}
+              </Button>
+            </div>
+          {/if}
+        </div>
+      {/if}
+
       {#if linkedCases.length > 0}
         <div class="space-y-1.5">
           <h3 class="text-xs font-semibold text-on-surface-variant flex items-center gap-1.5"><Papicon icon="Link" size={13} /> {m.wb_linked_title({ count: linkedCases.length })}</h3>
@@ -1419,6 +1520,14 @@
           {/if}
         </Callout>
       {/if}
+      {#if status.dissolutionAt}
+        <Callout variant="danger" title={m.wb_dissolution_title({ date: formatDate(status.dissolutionAt) })} class="mb-4">
+          {m.wb_dissolution_desc({ name: status.dissolutionByName ?? '-' })}
+          {#if status.canConfigure}
+            <div class="mt-3"><Button size="sm" variant="secondary" icon="RotateCcw" loading={cancellingDissolution} onclick={() => void cancelDissolution()}>{m.wb_dissolution_cancel()}</Button></div>
+          {/if}
+        </Callout>
+      {/if}
       {#if status.accessReviewDue && activeTab !== 'settings'}
         <Callout variant="info" title={m.wb_review_due_title()} class="mb-4">
           {m.wb_review_due_desc()}
@@ -1549,7 +1658,11 @@
           <div class="space-y-3">{@render pendingRequests()}</div>
         {/if}
         <section class="bg-surface-container-low/40 border border-outline-variant/30 rounded-xl p-6 space-y-4">
-          <h3 class="text-base font-semibold flex items-center gap-2"><Papicon icon="eye" size={16} /> {m.wb_logs_title()}</h3>
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <h3 class="text-base font-semibold flex items-center gap-2"><Papicon icon="eye" size={16} /> {m.wb_logs_title()}</h3>
+            <Button size="sm" variant="secondary" icon="Download" loading={exportingJournal} onclick={() => void exportJournal()}>{m.wb_journal_export()}</Button>
+          </div>
+          <p class="text-xs text-on-surface-variant">{m.wb_journal_desc()}</p>
           {#if logs.length === 0}
             <EmptyState icon="eye" title={m.wb_access_empty()} reason="accumulating" />
           {:else}

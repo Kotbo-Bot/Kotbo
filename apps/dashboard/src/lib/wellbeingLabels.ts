@@ -7,8 +7,8 @@ import { m } from './i18n';
 export const WB_STATUSES = ['OPEN', 'MONITORING', 'CLOSED'] as const;
 export const WB_SEVERITIES = ['LOW', 'NORMAL', 'HIGH', 'CRITICAL'] as const;
 export const WB_CATEGORIES = ['SOUTIEN', 'MEDIATION', 'SIGNALEMENT', 'SUIVI'] as const;
-export const WB_ALERT_EVENTS = ['BREAK_GLASS', 'EMERGENCY_READ', 'TEAM_READ', 'CASE_CHANGE', 'CONFIG_CHANGE', 'REPORT', 'REMINDER', 'MEMBERSHIP_CHANGE', 'PURGE_SOON', 'UNUSUAL_ACCESS'] as const;
-export const WB_CASE_EVENTS = ['CREATED', 'STATUS', 'SEVERITY', 'ASSIGNEE', 'REVIEW', 'NOTE', 'RESOURCES_SENT', 'REMINDER', 'ATTACHMENT_ADDED', 'ATTACHMENT_REMOVED', 'VIEWED', 'TRASHED', 'RESTORED', 'EXTENDED', 'EXPORTED', 'TASK_ADDED', 'TASK_DONE', 'TASK_REOPENED', 'TASK_REMOVED', 'PURGE_REQUESTED', 'CLOSED_REASON', 'NOTE_EDITED'] as const;
+export const WB_ALERT_EVENTS = ['BREAK_GLASS', 'EMERGENCY_READ', 'TEAM_READ', 'CASE_CHANGE', 'CONFIG_CHANGE', 'REPORT', 'REMINDER', 'MEMBERSHIP_CHANGE', 'PURGE_SOON', 'UNUSUAL_ACCESS', 'DISSOLUTION'] as const;
+export const WB_CASE_EVENTS = ['CREATED', 'STATUS', 'SEVERITY', 'ASSIGNEE', 'REVIEW', 'NOTE', 'RESOURCES_SENT', 'REMINDER', 'ATTACHMENT_ADDED', 'ATTACHMENT_REMOVED', 'VIEWED', 'TRASHED', 'RESTORED', 'EXTENDED', 'EXPORTED', 'TASK_ADDED', 'TASK_DONE', 'TASK_REOPENED', 'TASK_REMOVED', 'PURGE_REQUESTED', 'CLOSED_REASON', 'NOTE_EDITED', 'REPORTER_REPLY'] as const;
 export const WB_CLOSE_REASONS = ['RESOLVED', 'REFERRED', 'NO_FOLLOWUP', 'DUPLICATE'] as const;
 
 const STATUS_LABELS: Record<string, () => string> = {
@@ -40,6 +40,7 @@ const ALERT_EVENT_LABELS: Record<string, () => string> = {
   MEMBERSHIP_CHANGE: () => m.wb_alert_membership_change(),
   PURGE_SOON: () => m.wb_alert_purge_soon(),
   UNUSUAL_ACCESS: () => m.wb_alert_unusual_access(),
+  DISSOLUTION: () => m.wb_alert_dissolution(),
 };
 
 const CLOSE_REASON_LABELS: Record<string, () => string> = {
@@ -127,6 +128,8 @@ export function wbCaseEventLabel(event: WbCaseEvent, formatDate: (iso: string) =
       return m.wb_ev_closed_reason({ reason: wbCloseReasonLabel(to ?? '') });
     case 'NOTE_EDITED':
       return m.wb_ev_note_edited();
+    case 'REPORTER_REPLY':
+      return to === 'CLEARED' ? m.wb_ev_reporter_reply_cleared() : m.wb_ev_reporter_reply();
     default:
       return event.type;
   }
