@@ -44,6 +44,16 @@ describe('chiffrement des dossiers de la cellule', () => {
     expect('summary' in header).toBe(false);
   });
 
+  test("le libellé d'une tâche est chiffré et lié à son dossier", () => {
+    const guildId = '100000000000000001';
+    const fields = sealCaseFields(guildId, { title: 'T', subjectName: 'S', summary: 'R' });
+    const label = sealNote('dossier-1', 'Appeler la personne');
+    expect(label).not.toContain('Appeler');
+    const opened = openCase({ guildId, ...fields, tasks: [{ caseId: 'dossier-1', label }] });
+    expect(opened.tasks?.[0]?.label).toBe('Appeler la personne');
+    expect(openCase({ guildId, ...fields, tasks: [{ caseId: 'dossier-2', label }] }).tasks?.[0]?.label).toBe('[contenu illisible]');
+  });
+
   test("une note déplacée vers un autre dossier reste illisible", () => {
     const sealed = sealNote('dossier-1', 'Note');
     expect(openNote({ caseId: 'dossier-2', content: sealed }).content).toBe('[contenu illisible]');

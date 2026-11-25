@@ -23,11 +23,17 @@ import {
   DEFAULT_ALERT_EVENTS,
   WELLBEING_AUDIT_MODULE,
   MAX_ALERT_USERS,
+  MAX_CASE_TASKS,
+  TASK_LABEL_MAX,
+  accessReviewDue,
   assigneeConflict,
   breakGlassScope,
   caseVisibilityWhere,
   endBreakGlassError,
+  purgeApprovalError,
+  purgeRequestPending,
   shouldRecordView,
+  wellbeingCellStats,
   caseChangeEvents,
   cleanAlertEvents,
   cleanResources,
@@ -53,6 +59,7 @@ const CASE_INCLUDE = {
   notes: { orderBy: { createdAt: 'asc' as const } },
   events: { orderBy: { createdAt: 'asc' as const } },
   attachments: { orderBy: { createdAt: 'asc' as const } },
+  tasks: { orderBy: { createdAt: 'asc' as const } },
 };
 
 /**
@@ -76,6 +83,9 @@ const CASE_LIST_SELECT = {
   updatedAt: true,
   deletedAt: true,
   deletedByName: true,
+  purgeRequestedById: true,
+  purgeRequestedByName: true,
+  purgeRequestedAt: true,
 } as const;
 
 /**
@@ -192,6 +202,8 @@ export function createWellbeingRouter(client: Client) {
         canWriteCases: state.canWriteCases,
         breakGlassExpiresAt: state.activeBreakGlass?.expiresAt.toISOString() ?? null,
         breakGlassLogId: state.activeBreakGlass?.id ?? null,
+        // La revue des accès ne concerne que le propriétaire, seul à changer la composition.
+        accessReviewDue: state.canConfigure && !!state.config?.enabled && accessReviewDue(state.config, new Date()),
       });
     } catch (err) {
       logger.error('WellbeingAPI', 'Error fetching status:', err);
@@ -794,6 +806,232 @@ export function createWellbeingRouter(client: Client) {
     } catch (err) {
       logger.error('WellbeingAPI', 'Error removing attachment:', err);
       return fail(c, err, 'Erreur lors du retrait du document.', 'WellbeingAPI');
+    }
+  });
+
+  /** Relit un dossier complet après un geste. */
+  const fullCase = async (caseId: string) =>
+    openCase(await prisma.wellbeingCase.findUniqueOrThrow({ where: { id: caseId }, include: CASE_INCLUDE }));
+
+  // Prolonger un dossier fermé : son effacement repart pour un an.
+  router.post(`${base}/cases/:caseId/extend`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    try {
+      const state = await resolveWellbeingRole(client, guildId, user.userId);
+      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule bien-être.' }, 403);
+      const caseId = c.req.param('caseId');
+      const existing = await findVisibleCase(guildId, caseId, user.userId);
+      if (!existing) return send(c, { error: 'Dossier introuvable.' }, 404);
+      if (existing.status !== 'CLOSED') return send(c, { error: 'Seul un dossier fermé a une date d\'effacement.' }, 400);
+      await prisma.wellbeingCase.update({ where: { id: caseId }, data: { purgeWarnedAt: null } });
+      await recordEvents(caseId, c, [{ type: 'EXTENDED' }]);
+      await audit(client, c, guildId, 'Conservation Cellule bien-être', `Dossier ${caseId} prolongé d'un an.`);
+      return send(c, { item: await fullCase(caseId) });
+    } catch (err) {
+      logger.error('WellbeingAPI', 'Error extending case:', err);
+      return fail(c, err, 'Erreur lors de la prolongation du dossier.', 'WellbeingAPI');
+    }
+  });
+
+  // Export imprimable : tracé, et filigrané côté page au nom de qui l'exporte.
+  router.post(`${base}/cases/:caseId/export`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    try {
+      const state = await resolveWellbeingRole(client, guildId, user.userId);
+      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule bien-être.' }, 403);
+      const caseId = c.req.param('caseId');
+      const existing = await findVisibleCase(guildId, caseId, user.userId);
+      if (!existing) return send(c, { error: 'Dossier introuvable.' }, 404);
+      const exportedAt = new Date();
+      await recordEvents(caseId, c, [{ type: 'EXPORTED' }]);
+      await audit(client, c, guildId, 'Export Cellule bien-être', `Dossier ${caseId} exporté.`, 'Sécurité');
+      void sendWellbeingAlert(client, guildId, state.config, 'CASE_CHANGE', { actorId: user.userId, action: 'exporté' });
+      return send(c, { item: await fullCase(caseId), exportedBy: actorName(c), exportedById: user.userId, exportedAt: exportedAt.toISOString() });
+    } catch (err) {
+      logger.error('WellbeingAPI', 'Error exporting case:', err);
+      return fail(c, err, "Erreur lors de l'export du dossier.", 'WellbeingAPI');
+    }
+  });
+
+  // Plan d'action : tâches du dossier.
+  router.post(`${base}/cases/:caseId/tasks`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    try {
+      const state = await resolveWellbeingRole(client, guildId, user.userId);
+      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule bien-être.' }, 403);
+      const caseId = c.req.param('caseId');
+      const existing = await findVisibleCase(guildId, caseId, user.userId);
+      if (!existing) return send(c, { error: 'Dossier introuvable.' }, 404);
+      const count = await prisma.wellbeingCaseTask.count({ where: { caseId } });
+      if (count >= MAX_CASE_TASKS) return send(c, { error: `Un plan d'action compte au plus ${MAX_CASE_TASKS} tâches.` }, 400);
+      const body = await readBody<{ label?: string; assigneeId?: string | null; dueAt?: string | null }>(c);
+      const label = bodyText(body?.label, TASK_LABEL_MAX);
+      if (!label) return send(c, { error: 'Libellé requis.' }, 400);
+      const assigneeId = bodyText(body?.assigneeId, 20);
+      if (assigneeId && !(await isTeamMemberId(state, assigneeId))) {
+        return send(c, { error: 'Le responsable doit faire partie de la cellule.' }, 400);
+      }
+      if (assigneeConflict(existing.subjectUserId, assigneeId || null)) {
+        return send(c, { error: 'La personne concernée ne peut pas suivre son propre dossier.' }, 400);
+      }
+      await prisma.wellbeingCaseTask.create({
+        data: {
+          caseId,
+          label: sealNote(caseId, label),
+          assigneeId: assigneeId || null,
+          dueAt: parseReviewAt(body?.dueAt) ?? null,
+          createdById: user.userId,
+          createdByName: actorName(c),
+        },
+      });
+      await prisma.wellbeingCase.update({ where: { id: caseId }, data: { lastActivityAt: new Date() } });
+      await recordEvents(caseId, c, [{ type: 'TASK_ADDED' }]);
+      return send(c, { item: await fullCase(caseId) }, 201);
+    } catch (err) {
+      logger.error('WellbeingAPI', 'Error adding task:', err);
+      return fail(c, err, "Erreur lors de l'ajout de la tâche.", 'WellbeingAPI');
+    }
+  });
+
+  router.patch(`${base}/cases/:caseId/tasks/:taskId`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    try {
+      const state = await resolveWellbeingRole(client, guildId, user.userId);
+      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule bien-être.' }, 403);
+      const caseId = c.req.param('caseId');
+      const task = await prisma.wellbeingCaseTask.findFirst({
+        where: { id: c.req.param('taskId'), caseId, wellbeingCase: caseVisibilityWhere(guildId, user.userId) },
+      });
+      if (!task) return send(c, { error: 'Tâche introuvable.' }, 404);
+      const body = await readBody<{ done?: boolean }>(c);
+      if (typeof body?.done !== 'boolean') return send(c, { error: 'État attendu.' }, 400);
+      if (body.done !== !!task.doneAt) {
+        await prisma.wellbeingCaseTask.update({
+          where: { id: task.id },
+          data: body.done ? { doneAt: new Date(), doneById: user.userId } : { doneAt: null, doneById: null },
+        });
+        await prisma.wellbeingCase.update({ where: { id: caseId }, data: { lastActivityAt: new Date() } });
+        await recordEvents(caseId, c, [{ type: body.done ? 'TASK_DONE' : 'TASK_REOPENED' }]);
+      }
+      return send(c, { item: await fullCase(caseId) });
+    } catch (err) {
+      logger.error('WellbeingAPI', 'Error updating task:', err);
+      return fail(c, err, 'Erreur lors de la mise à jour de la tâche.', 'WellbeingAPI');
+    }
+  });
+
+  router.delete(`${base}/cases/:caseId/tasks/:taskId`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    try {
+      const state = await resolveWellbeingRole(client, guildId, user.userId);
+      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule bien-être.' }, 403);
+      const caseId = c.req.param('caseId');
+      const { count } = await prisma.wellbeingCaseTask.deleteMany({
+        where: { id: c.req.param('taskId'), caseId, wellbeingCase: caseVisibilityWhere(guildId, user.userId) },
+      });
+      if (count === 0) return send(c, { error: 'Tâche introuvable.' }, 404);
+      await recordEvents(caseId, c, [{ type: 'TASK_REMOVED' }]);
+      return send(c, { item: await fullCase(caseId) });
+    } catch (err) {
+      logger.error('WellbeingAPI', 'Error removing task:', err);
+      return fail(c, err, 'Erreur lors du retrait de la tâche.', 'WellbeingAPI');
+    }
+  });
+
+  // Effacement anticipé de la corbeille : une personne demande, une autre valide.
+  router.post(`${base}/cases/:caseId/purge-request`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    try {
+      const state = await resolveWellbeingRole(client, guildId, user.userId);
+      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule bien-être.' }, 403);
+      const caseId = c.req.param('caseId');
+      const existing = await findVisibleCase(guildId, caseId, user.userId, { trashed: true });
+      if (!existing) return send(c, { error: 'Dossier introuvable dans la corbeille.' }, 404);
+      const now = new Date();
+      // Une demande en cours n'est pas remplacée : elle se valide ou expire.
+      if (purgeRequestPending(existing, now)) {
+        return send(c, { error: "Une demande d'effacement est déjà en attente de validation pour ce dossier." }, 409);
+      }
+      await prisma.wellbeingCase.update({
+        where: { id: caseId },
+        data: { purgeRequestedById: user.userId, purgeRequestedByName: actorName(c), purgeRequestedAt: now },
+      });
+      await recordEvents(caseId, c, [{ type: 'PURGE_REQUESTED' }]);
+      await audit(client, c, guildId, 'Suppression Cellule bien-être', `Effacement définitif du dossier ${caseId} demandé, à valider par une autre personne.`, 'Sécurité');
+      void sendWellbeingAlert(client, guildId, state.config, 'CASE_CHANGE', { actorId: user.userId, action: 'proposé à l\'effacement définitif' });
+      return send(c, { ok: true });
+    } catch (err) {
+      logger.error('WellbeingAPI', 'Error requesting purge:', err);
+      return fail(c, err, "Erreur lors de la demande d'effacement.", 'WellbeingAPI');
+    }
+  });
+
+  router.post(`${base}/cases/:caseId/purge`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    try {
+      const state = await resolveWellbeingRole(client, guildId, user.userId);
+      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule bien-être.' }, 403);
+      const caseId = c.req.param('caseId');
+      const existing = await findVisibleCase(guildId, caseId, user.userId, { trashed: true });
+      if (!existing) return send(c, { error: 'Dossier introuvable dans la corbeille.' }, 404);
+      const error = purgeApprovalError(existing, user.userId, new Date());
+      if (error === 'self') return send(c, { error: 'Une autre personne de la cellule doit valider votre demande.' }, 403);
+      if (error === 'expired') return send(c, { error: 'La demande a expiré : il faut la refaire.' }, 409);
+      if (error) return send(c, { error: "Aucune demande d'effacement en cours pour ce dossier." }, 409);
+      await prisma.wellbeingCase.delete({ where: { id: caseId } });
+      await audit(client, c, guildId, 'Suppression Cellule bien-être',
+        `Dossier ${caseId} effacé définitivement (demande de ${existing.purgeRequestedByName ?? existing.purgeRequestedById}).`, 'Sécurité');
+      void sendWellbeingAlert(client, guildId, state.config, 'CASE_CHANGE', { actorId: user.userId, action: 'effacé définitivement' });
+      return send(c, { ok: true });
+    } catch (err) {
+      logger.error('WellbeingAPI', 'Error purging case:', err);
+      return fail(c, err, "Erreur lors de l'effacement du dossier.", 'WellbeingAPI');
+    }
+  });
+
+  // Revue des accès : le propriétaire confirme la composition de la cellule.
+  router.post(`${base}/access-review`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    try {
+      const state = await resolveWellbeingRole(client, guildId, user.userId);
+      if (!state.canConfigure) return send(c, { error: 'Seul le propriétaire du serveur confirme la composition.' }, 403);
+      if (!state.config) return send(c, { error: 'Cellule non configurée.' }, 404);
+      const now = new Date();
+      await prisma.wellbeingConfig.update({ where: { guildId }, data: { accessReviewedAt: now, accessReviewSentAt: null } });
+      await audit(client, c, guildId, 'Revue des accès Cellule bien-être', 'Composition de la cellule et de la direction confirmée.');
+      return send(c, { accessReviewedAt: now.toISOString() });
+    } catch (err) {
+      logger.error('WellbeingAPI', 'Error confirming access review:', err);
+      return fail(c, err, 'Erreur lors de la confirmation.', 'WellbeingAPI');
+    }
+  });
+
+  // Bilan sans contenu : chiffres de la cellule, lisibles par la direction aussi.
+  router.get(`${base}/stats`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    try {
+      const state = await resolveWellbeingRole(client, guildId, user.userId);
+      if (!state.isTeamMember && !state.isDirector) return send(c, { error: 'Accès refusé.' }, 403);
+      const cases = await prisma.wellbeingCase.findMany({
+        where: caseVisibilityWhere(guildId, user.userId),
+        select: {
+          status: true, severity: true, category: true, source: true, assigneeId: true, createdAt: true,
+          events: { where: { type: { in: ['STATUS', 'ASSIGNEE'] } }, select: { type: true, toValue: true, createdAt: true }, orderBy: { createdAt: 'asc' } },
+        },
+      });
+      return send(c, { stats: wellbeingCellStats(cases, new Date()) });
+    } catch (err) {
+      logger.error('WellbeingAPI', 'Error computing stats:', err);
+      return fail(c, err, 'Erreur lors du calcul du bilan.', 'WellbeingAPI');
     }
   });
 

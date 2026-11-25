@@ -30,13 +30,14 @@ export interface WellbeingAccessLists {
  * - CONFIG_CHANGE : composition ou réglages de la cellule modifiés ;
  * - REPORT : signalement reçu depuis Discord ;
  * - REMINDER : dossier arrivé à échéance de suivi, ou critique et inactif ;
- * - MEMBERSHIP_CHANGE : rôle de la cellule ou de la direction donné ou retiré.
+ * - MEMBERSHIP_CHANGE : rôle de la cellule ou de la direction donné ou retiré ;
+ * - PURGE_SOON : des dossiers fermés seront effacés dans une semaine.
  */
 export const WELLBEING_ALERT_EVENTS = [
-  'BREAK_GLASS', 'EMERGENCY_READ', 'TEAM_READ', 'CASE_CHANGE', 'CONFIG_CHANGE', 'REPORT', 'REMINDER', 'MEMBERSHIP_CHANGE',
+  'BREAK_GLASS', 'EMERGENCY_READ', 'TEAM_READ', 'CASE_CHANGE', 'CONFIG_CHANGE', 'REPORT', 'REMINDER', 'MEMBERSHIP_CHANGE', 'PURGE_SOON',
 ] as const;
 export type WellbeingAlertEvent = (typeof WELLBEING_ALERT_EVENTS)[number];
-export const DEFAULT_ALERT_EVENTS: WellbeingAlertEvent[] = ['BREAK_GLASS', 'EMERGENCY_READ', 'CONFIG_CHANGE', 'REPORT', 'REMINDER', 'MEMBERSHIP_CHANGE'];
+export const DEFAULT_ALERT_EVENTS: WellbeingAlertEvent[] = ['BREAK_GLASS', 'EMERGENCY_READ', 'CONFIG_CHANGE', 'REPORT', 'REMINDER', 'MEMBERSHIP_CHANGE', 'PURGE_SOON'];
 /** Destinataires prévenus en message privé, au plus. */
 export const MAX_ALERT_USERS = 10;
 /** Une même personne qui recharge la page ne déclenche qu'une alerte de consultation par période. */
@@ -111,6 +112,8 @@ export function alertText(event: WellbeingAlertEvent, ctx: AlertContext): string
         ? `Cellule bien-être : ${author} a donné à ${target} un rôle de ${group} ; ajout annulé, seul le propriétaire du serveur peut le faire.`
         : `Cellule bien-être : ${author} a ajouté ${target} à ${group} (rôle Discord).`;
     }
+    case 'PURGE_SOON':
+      return `Cellule bien-être : ${ctx.caseCount ?? 0} dossier(s) fermé(s) seront effacés dans ${PURGE_NOTICE_DAYS} jours. Prolongez-les depuis le dashboard pour les garder.`;
     case 'REMINDER':
       return ctx.reminder === 'stale'
         ? `Cellule bien-être : un dossier critique est sans activité depuis ${ctx.days ?? 0} jour(s).`
@@ -219,6 +222,24 @@ export function closedCaseCutoff(now: Date): Date {
   return new Date(now.getTime() - CLOSED_CASE_RETENTION_DAYS * DAY_MS);
 }
 
+/** Date d'effacement d'un dossier fermé, comptée depuis sa dernière modification. */
+export function casePurgeDate(updatedAt: Date): Date {
+  return new Date(updatedAt.getTime() + CLOSED_CASE_RETENTION_DAYS * DAY_MS);
+}
+
+/** La cellule est prévenue ce nombre de jours avant l'effacement d'un dossier fermé. */
+export const PURGE_NOTICE_DAYS = 7;
+
+/** Un dossier fermé modifié avant cette date sera effacé dans `PURGE_NOTICE_DAYS` jours ou moins. */
+export function purgeNoticeCutoff(now: Date): Date {
+  return closedCaseCutoff(new Date(now.getTime() + PURGE_NOTICE_DAYS * DAY_MS));
+}
+
+/** Seul un dossier annoncé avant cette date peut être effacé : le préavis est toujours tenu. */
+export function purgeWarnedCutoff(now: Date): Date {
+  return new Date(now.getTime() - PURGE_NOTICE_DAYS * DAY_MS);
+}
+
 // ── Corbeille et conflit d'intérêts ───────────────────────────────────────
 
 /** Un dossier supprimé reste restaurable ce nombre de jours, puis il est purgé. */
@@ -240,6 +261,39 @@ export function caseVisibilityWhere(guildId: string, viewerId: string, options: 
     deletedAt: options.trashed ? { not: null } : null,
     OR: [{ subjectUserId: null }, { subjectUserId: { not: viewerId } }],
   };
+}
+
+/** Une demande d'effacement anticipé attend sa seconde clé ce nombre d'heures. */
+export const PURGE_REQUEST_HOURS = 72;
+
+interface PurgeRequestState {
+  deletedAt: Date | null;
+  purgeRequestedById: string | null;
+  purgeRequestedAt: Date | null;
+}
+
+const purgeRequestExpired = (requestedAt: Date, now: Date) =>
+  now.getTime() - requestedAt.getTime() >= PURGE_REQUEST_HOURS * 60 * 60 * 1000;
+
+/** Une demande d'effacement attend sa validation : elle ne peut pas être remplacée. */
+export function purgeRequestPending(item: PurgeRequestState, now: Date): boolean {
+  return !!item.purgeRequestedById && !!item.purgeRequestedAt && !purgeRequestExpired(item.purgeRequestedAt, now);
+}
+
+/**
+ * Raison de refuser l'effacement définitif d'un dossier de la corbeille avant
+ * son délai, ou `null`. Une seconde personne de la cellule doit valider.
+ */
+export function purgeApprovalError(
+  item: PurgeRequestState,
+  approverId: string,
+  now: Date,
+): 'not_trashed' | 'not_requested' | 'self' | 'expired' | null {
+  if (!item.deletedAt) return 'not_trashed';
+  if (!item.purgeRequestedById || !item.purgeRequestedAt) return 'not_requested';
+  if (item.purgeRequestedById === approverId) return 'self';
+  if (purgeRequestExpired(item.purgeRequestedAt, now)) return 'expired';
+  return null;
 }
 
 /** La personne concernée ne suit pas son propre dossier. */
@@ -385,6 +439,9 @@ export function resourcesMessage(guildName: string, resources: readonly Wellbein
 /** Hôtes acceptés : Drive et les éditeurs Docs, Sheets, Slides, Forms. */
 const DRIVE_HOSTS = new Set(['drive.google.com', 'docs.google.com']);
 export const MAX_CASE_ATTACHMENTS = 20;
+/** Plan d'action : tâches par dossier et longueur d'un libellé. */
+export const MAX_CASE_TASKS = 30;
+export const TASK_LABEL_MAX = 200;
 export const ATTACHMENT_LABEL_MAX = 120;
 
 /**
@@ -468,3 +525,112 @@ export function shouldRevertCellRoleGrant(executorId: string | null, ownerId: st
   return executorId !== ownerId;
 }
 
+
+// ── Revue périodique des accès ─────────────────────────────────────────────
+
+/** Le propriétaire reconfirme la composition de la cellule à ce rythme. */
+export const ACCESS_REVIEW_DAYS = 30;
+
+interface AccessReviewState {
+  createdAt: Date;
+  accessReviewedAt: Date | null;
+  accessReviewSentAt: Date | null;
+}
+
+/** Composition non confirmée depuis `ACCESS_REVIEW_DAYS` jours (ou depuis la création). */
+export function accessReviewDue(config: AccessReviewState, now: Date): boolean {
+  const since = config.accessReviewedAt ?? config.createdAt;
+  return now.getTime() - since.getTime() >= ACCESS_REVIEW_DAYS * DAY_MS;
+}
+
+/** Rappel au propriétaire : quand la revue est due, au plus une fois par période. */
+export function shouldSendAccessReview(config: AccessReviewState, now: Date): boolean {
+  if (!accessReviewDue(config, now)) return false;
+  return !config.accessReviewSentAt || now.getTime() - config.accessReviewSentAt.getTime() >= ACCESS_REVIEW_DAYS * DAY_MS;
+}
+
+/** Message privé au propriétaire : qui lit les dossiers aujourd'hui. */
+export function accessReviewMessage(
+  guildName: string,
+  lists: Pick<WellbeingAccessLists, 'teamUserIds' | 'teamRoleIds' | 'directorUserIds' | 'directorRoleIds'>,
+  nameOf: (id: string) => string,
+): string {
+  const line = (label: string, ids: readonly string[]) => `- ${label} : ${ids.length > 0 ? ids.map(nameOf).join(', ') : 'aucun'}`;
+  return [
+    `Revue des accès de la cellule bien-être de ${guildName}.`,
+    'Ces personnes peuvent lire les dossiers confidentiels ou demander un accès d\'urgence :',
+    line('Membres de la cellule', lists.teamUserIds),
+    line('Rôles de la cellule', lists.teamRoleIds),
+    line('Membres de la direction', lists.directorUserIds),
+    line('Rôles de la direction', lists.directorRoleIds),
+    'Si c\'est toujours juste, confirmez-le dans l\'onglet Réglages de la page Bien-être du dashboard ; sinon, retirez qui n\'en a plus besoin.',
+  ].join('\n');
+}
+
+// ── Bilan de la cellule ────────────────────────────────────────────────────
+
+export interface CellStatsCase {
+  status: string;
+  severity: string;
+  category: string;
+  source: string;
+  assigneeId: string | null;
+  createdAt: Date;
+  events: ReadonlyArray<{ type: string; toValue: string | null; createdAt: Date }>;
+}
+
+const MONTHS_IN_STATS = 6;
+const monthKey = (date: Date) => date.toISOString().slice(0, 7);
+
+/**
+ * Chiffres du bilan, sans contenu : dossiers ouverts et fermés, charge active,
+ * délai médian de prise en charge des signalements Discord, six derniers mois.
+ */
+export function wellbeingCellStats(cases: readonly CellStatsCase[], now: Date) {
+  const since = now.getTime() - 30 * DAY_MS;
+  const closedAt = (item: CellStatsCase) =>
+    [...item.events].reverse().find((event) => event.type === 'STATUS' && event.toValue === 'CLOSED')?.createdAt ?? null;
+  const active = cases.filter((item) => item.status !== 'CLOSED');
+
+  const activeByCategory: Record<string, number> = {};
+  for (const item of active) activeByCategory[item.category] = (activeByCategory[item.category] ?? 0) + 1;
+
+  const triageHours = cases
+    .filter((item) => item.source === 'DISCORD')
+    .map((item) => {
+      const first = item.events.find((event) => event.type === 'ASSIGNEE' && event.toValue);
+      return first ? (first.createdAt.getTime() - item.createdAt.getTime()) / 3_600_000 : null;
+    })
+    .filter((hours): hours is number => hours !== null)
+    .sort((a, b) => a - b);
+  const middle = Math.floor(triageHours.length / 2);
+  const medianTriageHours = triageHours.length === 0
+    ? null
+    : Math.round(triageHours.length % 2 ? triageHours[middle]! : (triageHours[middle - 1]! + triageHours[middle]!) / 2);
+
+  const months = Array.from({ length: MONTHS_IN_STATS }, (_, index) => {
+    const date = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - (MONTHS_IN_STATS - 1 - index), 1));
+    return { month: monthKey(date), opened: 0, closed: 0 };
+  });
+  const byMonth = new Map(months.map((entry) => [entry.month, entry]));
+  for (const item of cases) {
+    const opened = byMonth.get(monthKey(item.createdAt));
+    if (opened) opened.opened += 1;
+    const closed = closedAt(item);
+    const closedEntry = closed && item.status === 'CLOSED' ? byMonth.get(monthKey(closed)) : undefined;
+    if (closedEntry) closedEntry.closed += 1;
+  }
+
+  return {
+    openedLast30: cases.filter((item) => item.createdAt.getTime() >= since).length,
+    closedLast30: cases.filter((item) => {
+      const closed = closedAt(item);
+      return item.status === 'CLOSED' && !!closed && closed.getTime() >= since;
+    }).length,
+    active: active.length,
+    criticalUnassigned: active.filter((item) => item.severity === 'CRITICAL' && !item.assigneeId).length,
+    activeByCategory,
+    medianTriageHours,
+    months,
+  };
+}

@@ -5808,12 +5808,15 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
       "CONFIG_CHANGE",
       "REPORT",
       "REMINDER",
-      "MEMBERSHIP_CHANGE"
+      "MEMBERSHIP_CHANGE",
+      "PURGE_SOON"
     ],
     "breakGlassApproval": false,
     "reportEnabled": false,
     "staleCriticalDays": 7,
     "resources": [],
+    "accessReviewedAt": null,
+    "accessReviewSentAt": null,
     "createdAt": "__NOW__",
     "updatedAt": "__NOW__"
   },
@@ -5838,6 +5841,10 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "deletedAt": null,
     "deletedById": null,
     "deletedByName": null,
+    "purgeRequestedById": null,
+    "purgeRequestedByName": null,
+    "purgeRequestedAt": null,
+    "purgeWarnedAt": null,
     "createdAt": "__NOW__",
     "updatedAt": "__NOW__"
   },
@@ -5856,6 +5863,18 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "url": "",
     "addedById": "",
     "addedByName": "",
+    "createdAt": "__NOW__"
+  },
+  "WellbeingCaseTask": {
+    "id": "",
+    "caseId": "",
+    "label": "",
+    "assigneeId": null,
+    "dueAt": null,
+    "doneAt": null,
+    "doneById": null,
+    "createdById": "",
+    "createdByName": "",
     "createdAt": "__NOW__"
   },
   "WellbeingCaseEvent": {

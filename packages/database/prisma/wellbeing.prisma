@@ -11,10 +11,10 @@ model WellbeingConfig {
   directorUserIds  String[] @default([])
   requireReason    Boolean  @default(true)
   // Alertes : salon et membres prévenus, et événements qui les déclenchent
-  // (BREAK_GLASS | EMERGENCY_READ | TEAM_READ | CASE_CHANGE | CONFIG_CHANGE | REPORT | REMINDER | MEMBERSHIP_CHANGE).
+  // (BREAK_GLASS | EMERGENCY_READ | TEAM_READ | CASE_CHANGE | CONFIG_CHANGE | REPORT | REMINDER | MEMBERSHIP_CHANGE | PURGE_SOON).
   alertChannelId   String?
   alertUserIds     String[] @default([])
-  alertEvents      String[] @default(["BREAK_GLASS", "EMERGENCY_READ", "CONFIG_CHANGE", "REPORT", "REMINDER", "MEMBERSHIP_CHANGE"])
+  alertEvents      String[] @default(["BREAK_GLASS", "EMERGENCY_READ", "CONFIG_CHANGE", "REPORT", "REMINDER", "MEMBERSHIP_CHANGE", "PURGE_SOON"])
   // Accès d'urgence validé par une seconde personne (direction ou cellule).
   breakGlassApproval Boolean @default(false)
   // Signalements depuis Discord (/bienetre signaler).
@@ -23,6 +23,9 @@ model WellbeingConfig {
   staleCriticalDays Int     @default(7)
   // Ressources d'aide : [{ label, url?, phone?, description? }].
   resources        Json     @default("[]")
+  // Revue périodique des accès : dernière confirmation du propriétaire, dernier rappel envoyé.
+  accessReviewedAt   DateTime?
+  accessReviewSentAt DateTime?
 
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
 
@@ -57,9 +60,16 @@ model WellbeingCase {
   deletedAt        DateTime?
   deletedById      String?
   deletedByName    String?
+  // Effacement anticipé de la corbeille, à valider par une seconde personne.
+  purgeRequestedById   String?
+  purgeRequestedByName String?
+  purgeRequestedAt     DateTime?
+  // Annonce de l'effacement d'un dossier fermé, envoyée une semaine avant.
+  purgeWarnedAt        DateTime?
 
   guild  Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
   notes       WellbeingCaseNote[]
+  tasks       WellbeingCaseTask[]
   events      WellbeingCaseEvent[]
   attachments WellbeingCaseAttachment[]
 
@@ -103,13 +113,33 @@ model WellbeingCaseAttachment {
   @@map("wellbeing_case_attachments")
 }
 
+// Plan d'action d'un dossier : tâches cochées au fil du suivi. Le libellé est
+// chiffré et lié à son dossier, comme une note.
+model WellbeingCaseTask {
+  id            String    @id @default(cuid())
+  caseId        String
+  label         String
+  assigneeId    String?
+  dueAt         DateTime?
+  doneAt        DateTime?
+  doneById      String?
+  createdById   String
+  createdByName String
+  createdAt     DateTime  @default(now())
+
+  wellbeingCase WellbeingCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@index([caseId, createdAt])
+  @@map("wellbeing_case_tasks")
+}
+
 // Historique d'un dossier : qui a changé quoi, et quand. Aucun contenu.
 model WellbeingCaseEvent {
   id        String   @id @default(cuid())
   caseId    String
   actorId   String?
   actorName String
-  type      String   // CREATED | STATUS | SEVERITY | ASSIGNEE | REVIEW | NOTE | RESOURCES_SENT | REMINDER | ATTACHMENT_ADDED | ATTACHMENT_REMOVED | VIEWED | TRASHED | RESTORED
+  type      String   // CREATED | STATUS | SEVERITY | ASSIGNEE | REVIEW | NOTE | RESOURCES_SENT | REMINDER | ATTACHMENT_ADDED | ATTACHMENT_REMOVED | VIEWED | TRASHED | RESTORED | EXTENDED | EXPORTED | TASK_ADDED | TASK_DONE | TASK_REOPENED | TASK_REMOVED | PURGE_REQUESTED
   fromValue String?
   toValue   String?
   createdAt DateTime @default(now())
