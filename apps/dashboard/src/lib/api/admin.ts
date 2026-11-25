@@ -354,6 +354,7 @@ export interface BroadcastSubscribeAllSummary {
   alreadySubscribed: number;
   skipped: number;
   failed: number;
+  pending?: number;
   results: BroadcastSubscribeResult[];
 }
 
@@ -502,7 +503,7 @@ export async function fetchBroadcastChannels(): Promise<{ guilds: BroadcastGuild
 export async function setBroadcastSource(
   guildId: string | null,
   channelId: string | null,
-): Promise<{ ok: boolean; sourceChannel: BroadcastSourceConfig | null }> {
+): Promise<{ ok: boolean; sourceChannel: BroadcastSourceConfig | null; subscribeSummary?: BroadcastSubscribeAllSummary | null }> {
   const response = await authorizedFetch(`${API_BASE_URL}/api/admin/broadcast/source`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },

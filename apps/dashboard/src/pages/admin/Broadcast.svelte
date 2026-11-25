@@ -149,7 +149,7 @@
 
   // ── Dérivés ───────────────────────────────────────────────────────────────
   const needsConfigCount = $derived(
-    guilds.filter((g) => g.channelStatus !== "OK").length,
+    guilds.filter((g) => g.id !== sourceChannel?.guildId && g.channelStatus !== "OK").length,
   );
   /** Serveurs que le dernier abonnement n'a pas pu atteindre : ils ne recevront pas les annonces. */
   const unsubscribed = $derived(
@@ -160,7 +160,7 @@
 
   const channelConfigList = $derived(
     guilds
-      .filter((g) => channelFilter === "ALL" || g.channelStatus !== "OK")
+      .filter((g) => channelFilter === "ALL" || (g.id !== sourceChannel?.guildId && g.channelStatus !== "OK"))
       .filter(
         (g) =>
           g.name.toLowerCase().includes(channelSearch.toLowerCase()) ||
@@ -844,7 +844,23 @@
         sourceChannelId = "";
         subscribeSummary = null;
         toast.success(m.abc_source_removed());
+      } else if (res.subscribeSummary) {
+        subscribeSummary = res.subscribeSummary;
+        await reloadAll();
+        if (res.subscribeSummary.total > 0) {
+          toast.success(
+            m.abc_subscribe_all_done({
+              subscribed: res.subscribeSummary.subscribed,
+              already: res.subscribeSummary.alreadySubscribed,
+              skipped: res.subscribeSummary.skipped,
+              failed: res.subscribeSummary.failed,
+            }),
+          );
+        } else {
+          toast.success(m.abc_source_saved());
+        }
       } else {
+        await reloadAll();
         toast.success(m.abc_source_saved());
       }
     } catch (err) {
@@ -2269,16 +2285,20 @@
                   </p>
                   <AdminBadge
                     size="sm"
-                    label={guild.channelStatus === "OK"
-                      ? "Configuré"
-                      : guild.channelStatus === "MISSING"
-                        ? "Salon supprimé"
-                        : "Non configuré"}
-                    tone={guild.channelStatus === "OK"
-                      ? "success"
-                      : guild.channelStatus === "MISSING"
-                        ? "danger"
-                        : "warning"}
+                    label={sourceChannel?.guildId === guild.id
+                      ? "Salon source"
+                      : guild.channelStatus === "OK"
+                        ? "Configuré"
+                        : guild.channelStatus === "MISSING"
+                          ? "Salon supprimé"
+                          : "Non configuré"}
+                    tone={sourceChannel?.guildId === guild.id
+                      ? "info"
+                      : guild.channelStatus === "OK"
+                        ? "success"
+                        : guild.channelStatus === "MISSING"
+                          ? "danger"
+                          : "warning"}
                   />
                 </div>
                 {#if sourceChannel && guild.id !== sourceChannel.guildId}
