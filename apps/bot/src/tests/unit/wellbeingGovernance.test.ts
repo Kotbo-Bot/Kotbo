@@ -4,6 +4,7 @@ import {
   DISSOLUTION_DELAY_HOURS,
   REPORTER_REPLY_MAX,
   WELLBEING_ALERT_EVENTS,
+  alertPreviews,
   alertText,
   dissolutionDate,
   dissolutionDue,
@@ -67,5 +68,17 @@ describe('journal exportable', () => {
     const csv = journalCsv(rows);
     expect(csv).toContain('"\'=HYPERLINK(""x"")"');
     expect(csv).toContain('"Accès d\'urgence : dossier c1 ouvert."');
+  });
+});
+
+describe('aperçu des alertes', () => {
+  test('un texte lisible par événement, sans mention ni date Discord brute', () => {
+    const previews = alertPreviews('alice', NOW);
+    expect(Object.keys(previews).sort()).toEqual([...WELLBEING_ALERT_EVENTS].sort());
+    for (const text of Object.values(previews)) {
+      expect(text).not.toContain('<@');
+      expect(text).not.toContain('<t:');
+    }
+    expect(previews.BREAK_GLASS).toContain('@alice');
   });
 });

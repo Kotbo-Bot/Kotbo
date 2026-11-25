@@ -27,6 +27,7 @@ import {
   TASK_LABEL_MAX,
   accessReviewDue,
   REPORTER_REPLY_MAX,
+  alertPreviews,
   assigneeConflict,
   emptiesComposition,
   journalCsv,
@@ -1201,6 +1202,20 @@ export function createWellbeingRouter(client: Client) {
     } catch (err) {
       logger.error('WellbeingAPI', 'Error computing stats:', err);
       return fail(c, err, 'Erreur lors du calcul du bilan.', 'WellbeingAPI');
+    }
+  });
+
+  // Aperçu des alertes pour l'onglet Réglages : le texte exact de chaque événement.
+  router.get(`${base}/alert-preview`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    try {
+      const state = await resolveWellbeingRole(client, guildId, user.userId);
+      if (!state.canConfigure) return send(c, { error: 'Réservé au propriétaire du serveur.' }, 403);
+      return send(c, { previews: alertPreviews(actorName(c), new Date()) });
+    } catch (err) {
+      logger.error('WellbeingAPI', 'Error building alert previews:', err);
+      return fail(c, err, "Erreur lors de l'aperçu des alertes.", 'WellbeingAPI');
     }
   });
 
