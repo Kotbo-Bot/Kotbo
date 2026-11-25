@@ -54,6 +54,8 @@ export type RankCardAchievementMetric =
   | 'reputation'
   | 'starboard'
   | 'questsClaimed'
+  /** Serveurs parrainés qui ont payé au moins une facture. */
+  | 'referrals'
   /** Jamais calculé : attribué et retiré à la main depuis le panel admin. */
   | 'manual';
 
@@ -89,6 +91,7 @@ export type RankCardBadgeIconId =
   | 'crown'
   | 'gem'
   | 'gift'
+  | 'referral'
   | 'bolt'
   | 'shield'
   | 'peak'

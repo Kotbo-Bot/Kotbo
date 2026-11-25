@@ -16604,6 +16604,7 @@
   "bill_all_per_year": "par an",
   "bill_all_current": "Serveur ouvert",
   "bill_all_manage": "Gérer",
+  "bill_all_unreachable": "Kotbo n'est plus sur ce serveur, ou tu l'as quitté : il ne s'ouvre plus dans le tableau de bord.",
   "bill_all_err": "Impossible de charger la liste de tes serveurs payants.",
   "bill_title": "Facturation",
   "bill_desc": "L'offre de ce serveur décide des modules disponibles. Le paiement et les factures passent par Stripe.",

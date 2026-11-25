@@ -159,6 +159,12 @@ describe('rankCardAchievementsFromMetrics', () => {
     expect(ids).toEqual(['supporter_1', 'supporter_6']);
   });
 
+  test('un filleul qui a paye ouvre le succes Parrain', () => {
+    const ids = rankCardAchievementsFromMetrics({ referrals: 1 }).map((achievement) => achievement.id);
+    expect(ids).toEqual(['referrer']);
+    expect(getRankCardAchievement('referrer')?.revocable).toBe(false);
+  });
+
   test('un succes manuel n est jamais atteint par une metrique', () => {
     expect(rankCardAchievementsFromMetrics({ manual: 1000 })).toEqual([]);
   });

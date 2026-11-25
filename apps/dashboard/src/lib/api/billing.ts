@@ -74,6 +74,8 @@ export interface BillingOverviewGuild {
   cancelAtPeriodEnd: boolean;
   accessExpiresAt: string | null;
   network: { name: string; role: string } | null;
+  /** Un client Stripe existe : factures et résiliation passent par le portail. */
+  hasPortal: boolean;
 }
 
 export interface BillingOverview {
@@ -124,6 +126,18 @@ export async function transferSubscription(
     silent: true,
     errorContext: 'API Error (Transfer):',
   });
+}
+
+/**
+ * Portail Stripe d'un serveur payé par l'utilisateur, sans l'ouvrir dans le
+ * dashboard : il sert quand Kotbo n'y est plus ou que le payeur l'a quitté.
+ */
+export async function openOwnedGuildPortal(guildId: string): Promise<string | null> {
+  const result = await apiRequest<{ url?: string }>(`/api/dashboard/billing/owned/${guildId}/portal`, {
+    method: 'POST',
+    errorContext: 'API Error (Owned portal):',
+  });
+  return result?.url ?? null;
 }
 
 /** Portail Stripe : factures, moyen de paiement, changement d'offre, résiliation. */

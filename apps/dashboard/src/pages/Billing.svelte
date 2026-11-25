@@ -16,7 +16,7 @@
    *     jours pour corriger sa carte avant la coupure.
    */
   import { onMount } from 'svelte';
-  import { fetchBillingOverview, fetchBillingStatus, openBillingPortal, startCheckout, transferSubscription } from '../lib/api';
+  import { fetchBillingOverview, fetchBillingStatus, openBillingPortal, openOwnedGuildPortal, startCheckout, transferSubscription } from '../lib/api';
   import { authStore } from '../lib/stores/auth.svelte';
   import ConfirmModal from '../lib/components/ConfirmModal.svelte';
   import type { BillingInterval, BillingOverview, BillingStatus, PlanCard, PlanKey } from '../lib/api/billing';
@@ -160,8 +160,25 @@
     }
   }
 
-  function openGuildBilling(guildId: string) {
+  // Serveur de la liste dont le portail Stripe est en cours d'ouverture.
+  let openingPortalFor = $state<string | null>(null);
+
+  async function openGuildBilling(guildId: string) {
     if (guildId === authStore.selectedGuildId) return;
+    // Hors de la session (Kotbo retiré, serveur quitté), le sélectionner
+    // laissait tout le dashboard en 404. Le payeur garde ses factures et la
+    // résiliation par le portail Stripe, ouvert sans changer de serveur.
+    if (!authStore.guilds.some((guild) => guild.id === guildId)) {
+      openingPortalFor = guildId;
+      const url = await openOwnedGuildPortal(guildId).catch(() => null);
+      openingPortalFor = null;
+      if (!url) {
+        toast.error(m.bill_err_portal());
+        return;
+      }
+      window.location.href = url;
+      return;
+    }
     authStore.setGuild(guildId);
     void load();
   }
@@ -313,6 +330,7 @@
       <div class="divide-y divide-outline-variant rounded-lg border border-outline-variant overflow-hidden bg-surface-container-lowest">
         {#each overview.guilds as g (g.guildId)}
           {@const info = g.status ? STATUS_LABELS[g.status] ?? null : null}
+          {@const openable = authStore.guilds.some((guild) => guild.id === g.guildId)}
           <div class="flex flex-wrap items-center justify-between gap-3 px-3.5 py-2.5 text-sm">
             <div class="flex items-center gap-2.5 min-w-0">
               {#if g.iconUrl}
@@ -329,6 +347,9 @@
                     <span class="text-2xs px-2 py-0.5 rounded-full bg-primary/15 text-primary">{g.network.name}</span>
                   {/if}
                 </div>
+                {#if !openable}
+                  <div class="text-2xs text-on-surface-variant">{m.bill_all_unreachable()}</div>
+                {/if}
                 {#if g.currentPeriodEnd}
                   <div class="text-2xs text-on-surface-variant">
                     {g.cancelAtPeriodEnd
@@ -346,8 +367,8 @@
               {/if}
               {#if g.guildId === authStore.selectedGuildId}
                 <span class="text-2xs text-on-surface-variant">{m.bill_all_current()}</span>
-              {:else}
-                <Button size="sm" variant="secondary" onclick={() => openGuildBilling(g.guildId)}>{m.bill_all_manage()}</Button>
+              {:else if openable || g.hasPortal}
+                <Button size="sm" variant="secondary" loading={openingPortalFor === g.guildId} onclick={() => openGuildBilling(g.guildId)}>{m.bill_all_manage()}</Button>
               {/if}
             </div>
           </div>

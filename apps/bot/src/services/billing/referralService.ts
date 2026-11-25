@@ -10,7 +10,7 @@
  */
 
 import { Prisma } from '@prisma/client';
-import prisma from '../../utils/db.js';
+import prisma, { prismaRead } from '../../utils/db.js';
 import { randomBlock } from './giftService.js';
 
 const CODE_PREFIX = 'KOTBO-';
@@ -59,4 +59,30 @@ export async function resolveReferralCode(
 /** Serveurs dont l'essai a réellement démarré avec ce code. */
 export async function countReferrals(code: string): Promise<number> {
   return prisma.billingTrial.count({ where: { referralCode: code, subscriptionId: { not: null } } });
+}
+
+/**
+ * Serveurs parrainés qui ont réellement payé, pour le succès « Parrain ».
+ *
+ * Un essai démarré ne suffit pas : résilié avant sa première facture, il ne
+ * coûte rien, et un second compte Discord donnerait le succès gratuitement. La
+ * facture à 0 € de l'essai est écartée pour la même raison.
+ */
+export async function countPaidReferrals(discordUserId: string): Promise<number> {
+  const own = await prismaRead.referralCode.findUnique({ where: { discordUserId }, select: { code: true } });
+  if (!own) return 0;
+
+  const trials = await prismaRead.billingTrial.findMany({
+    where: { referralCode: own.code, subscriptionId: { not: null } },
+    select: { subscriptionId: true },
+  });
+  const subscriptionIds = trials.flatMap((trial) => (trial.subscriptionId ? [trial.subscriptionId] : []));
+  if (subscriptionIds.length === 0) return 0;
+
+  const paid = await prismaRead.billingInvoice.findMany({
+    where: { subscriptionId: { in: subscriptionIds }, status: 'paid', amountPaidCents: { gt: 0 } },
+    distinct: ['subscriptionId'],
+    select: { subscriptionId: true },
+  });
+  return paid.length;
 }
