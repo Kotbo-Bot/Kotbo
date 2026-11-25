@@ -11,6 +11,7 @@ export { default as FilterPills, type FilterOption } from './FilterPills.svelte'
 export { default as Callout } from './Callout.svelte';
 export { default as Field } from './Field.svelte';
 export { default as Menu, type MenuItem } from './Menu.svelte';
+export { default as StatTile } from './StatTile.svelte';
 
 export { default as SettingsRow } from '../management/SettingsRow.svelte';
 export { default as SettingsGroup } from '../management/SettingsGroup.svelte';

@@ -9,6 +9,7 @@
   import { MediaQuery } from 'svelte/reactivity';
   import { FUN_GAMES, activeGames, type FunGame, type FunGameId } from '../lib/funGames';
   import Papicon from '../lib/components/Papicon.svelte';
+  import { StatTile } from '../lib/components/ui';
   import InlineFeedback from '../lib/components/InlineFeedback.svelte';
   import SearchableSelect from '../lib/components/SearchableSelect.svelte';
   import Skeleton from '../lib/components/Skeleton.svelte';
@@ -286,18 +287,6 @@
   }
 </script>
 
-{#snippet statTile(icon: string, tone: string, value: string, label: string)}
-  <div class="bg-surface-container-high/30 rounded-xl p-4 flex items-center gap-3">
-    <div class="h-9 w-9 rounded-lg flex items-center justify-center shrink-0 {tone}">
-      <Papicon {icon} size={20} />
-    </div>
-    <div class="flex flex-col min-w-0">
-      <span class="text-xl font-bold text-on-surface truncate">{value}</span>
-      <span class="text-xs font-medium text-on-surface-variant">{label}</span>
-    </div>
-  </div>
-{/snippet}
-
 {#snippet sectionHeader(icon: string, title: string, description: string)}
   <div class="border-b border-outline-variant/15 pb-3">
     <h3 class="text-lg font-semibold flex items-center gap-2"><Papicon {icon} size={18} /> {title}</h3>
@@ -429,9 +418,9 @@
       {:else if activeTab === 'overview'}
         <div class="space-y-6">
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {@render statTile('Gamepad2', 'bg-primary/10 text-primary', `${running.length} / ${FUN_GAMES.length}`, m.fun_active_summary())}
-            {@render statTile('Binary', 'bg-warning/10 text-on-warning-container', savedConfig.funCountingChannelId ? String(gameState.countingCurrent) : '-', m.fun_stat_counting())}
-            {@render statTile('Shield', 'bg-secondary/10 text-secondary', savedConfig.funPunitiveMode ? m.fun_status_on() : m.fun_status_off(), m.fun_punitive_title())}
+            <StatTile icon="Gamepad2" tone="bg-primary/10 text-primary" value={`${running.length} / ${FUN_GAMES.length}`} label={m.fun_active_summary()} />
+            <StatTile icon="Binary" tone="bg-warning/10 text-on-warning-container" value={savedConfig.funCountingChannelId ? String(gameState.countingCurrent) : '-'} label={m.fun_stat_counting()} />
+            <StatTile icon="Shield" tone="bg-secondary/10 text-secondary" value={savedConfig.funPunitiveMode ? m.fun_status_on() : m.fun_status_off()} label={m.fun_punitive_title()} />
           </div>
 
           {#if running.length === 0}
