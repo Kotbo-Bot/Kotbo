@@ -14,6 +14,8 @@
   import Papicon from '../lib/components/Papicon.svelte';
   import EmojiText from '../lib/components/EmojiText.svelte';
   import EmojiPicker from '../lib/components/EmojiPicker.svelte';
+  import DiscordEmbedPreview from '../lib/components/DiscordEmbedPreview.svelte';
+  import { mergeEntities, toPreviewMarkdown } from '../lib/components/discord/previewEntities.svelte';
   import SearchableSelect from '../lib/components/SearchableSelect.svelte';
   import ModulePage from '../lib/components/ModulePage.svelte';
   import RolePermissionSettings from '../lib/components/RolePermissionSettings.svelte';
@@ -63,6 +65,20 @@
   let draftDescription = $state('');
   let draftEmoji = $state('');
   let draftEnabled = $state(true);
+
+  const rulePreview = $derived.by(() => {
+    const rawTitle = draftEmoji
+      ? `${draftEmoji} ${draftTitle || m.regulation_preview_title_ph()}`
+      : (draftTitle || m.regulation_preview_title_ph());
+    const rawBody = draftDescription || m.regulation_preview_desc_ph();
+    const titlePrepared = toPreviewMarkdown(rawTitle, { mentions: false });
+    const bodyPrepared = toPreviewMarkdown(rawBody, { mentions: false });
+    return {
+      title: titlePrepared.markdown,
+      body: bodyPrepared.markdown,
+      entities: mergeEntities([titlePrepared.entities, bodyPrepared.entities]),
+    };
+  });
   let draggingRuleId = $state<string | null>(null);
   let dragOverRuleId = $state<string | null>(null);
   let featureConfig = $state<any>(null);
@@ -716,13 +732,13 @@
         <ToggleSwitch checked={draftEnabled} ariaLabel={m.regulation_field_active_title()} onToggle={(v) => (draftEnabled = v)} />
       </div>
 
-      <div class="rounded-xl border border-outline-variant/20 bg-surface-container-low/40 p-4">
-        <p class="text-xs font-medium text-on-surface-variant mb-2">{m.regulation_preview_badge()}</p>
-        <p class="flex items-center gap-2 text-body-sm font-semibold text-on-surface min-w-0 wrap-break-word">
-          {#if draftEmoji}<EmojiText value={draftEmoji} class="shrink-0" />{/if}
-          <EmojiText value={draftTitle || m.regulation_preview_title_ph()} />
-        </p>
-        <p class="mt-1 whitespace-pre-wrap text-xs text-on-surface-variant leading-relaxed"><EmojiText value={draftDescription || m.regulation_preview_desc_ph()} /></p>
+      <div class="space-y-1.5">
+        <p class="text-xs font-medium text-on-surface-variant">{m.regulation_preview_badge()}</p>
+        <DiscordEmbedPreview
+          title={rulePreview.title}
+          body={rulePreview.body}
+          entities={rulePreview.entities}
+        />
       </div>
     </div>
 

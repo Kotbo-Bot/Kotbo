@@ -34,6 +34,9 @@
   import ShieldCard from '../../lib/components/security/ShieldCard.svelte';
   import Callout from '../../lib/components/ui/Callout.svelte';
   import MemberName from '../../lib/components/MemberName.svelte';
+  import { Markdown } from '@arcscord/discord-ui-svelte';
+  import DiscordScope from '../../lib/components/discord/DiscordScope.svelte';
+  import { toPreviewMarkdown } from '../../lib/components/discord/previewEntities.svelte';
   import { formatRelative } from '../../lib/components/staff/format';
   import { useUnsavedChanges } from '../../lib/useUnsavedChanges.svelte';
 
@@ -888,9 +891,12 @@
                     </p>
                     <p class="mt-1 text-xs text-on-surface-variant leading-relaxed">{report.reason}</p>
                     {#if report.messageContent}
-                      <p class="mt-2 text-xs text-on-surface-variant bg-surface-container/60 rounded px-2.5 py-1.5 font-mono break-words">
-                        {report.messageContent}
-                      </p>
+                      {@const preview = toPreviewMarkdown(report.messageContent, { mentions: false })}
+                      <div class="mt-2">
+                        <DiscordScope class="arx-discord-snippet" entities={preview.entities}>
+                          <Markdown content={preview.markdown} />
+                        </DiscordScope>
+                      </div>
                     {/if}
                     {#if report.channelId}
                       <p class="mt-1 text-2xs text-on-surface-variant">{m.arx_in_channel({ channel: channelName(report.channelId) })}</p>
@@ -1165,3 +1171,10 @@
   {/if}
   {/snippet}
 </SecurityPage>
+
+<style>
+  :global(.arcscord-discord-ui.arx-discord-snippet) {
+    border-radius: 0.5rem;
+    padding: 0.5rem 0.75rem;
+  }
+</style>

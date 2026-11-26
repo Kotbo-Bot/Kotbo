@@ -34,6 +34,9 @@
   import WellbeingMemberList from '../WellbeingMemberList.svelte';
   import Papicon from '../Papicon.svelte';
   import Skeleton from '../Skeleton.svelte';
+  import { Markdown } from '@arcscord/discord-ui-svelte';
+  import DiscordScope from '../discord/DiscordScope.svelte';
+  import { toPreviewMarkdown } from '../discord/previewEntities.svelte';
   import { Button, Callout, SettingsRow, ToggleSwitch } from '../ui';
 
   const {
@@ -253,9 +256,13 @@
           <ToggleSwitch size="sm" checked={form.alertEvents.includes(code)} onToggle={(v) => toggleEvent(code, v)} ariaLabel={wbAlertEventLabel(code)} />
         </div>
         {#if previews[code]}
-          <p class="text-2xs text-on-surface-variant bg-surface-container-high/30 rounded-md px-2 py-1.5 {form.alertEvents.includes(code) ? '' : 'opacity-60'}">
-            <span class="font-semibold">{m.wb_alert_preview()}</span> {previews[code]}
-          </p>
+          {@const preview = toPreviewMarkdown(previews[code])}
+          <div class="space-y-1 {form.alertEvents.includes(code) ? '' : 'opacity-60'}">
+            <p class="text-2xs font-semibold text-on-surface-variant">{m.wb_alert_preview()}</p>
+            <DiscordScope class="wb-alert-preview" entities={preview.entities}>
+              <Markdown content={preview.markdown} />
+            </DiscordScope>
+          </div>
         {/if}
       </li>
     {/each}
@@ -470,3 +477,10 @@
     <p class="text-xs text-on-surface-variant flex items-center gap-1.5"><Papicon icon="Info" size={12} /> {m.wb_settings_save_hint()}</p>
   </div>
 {/if}
+
+<style>
+  :global(.arcscord-discord-ui.wb-alert-preview) {
+    border-radius: 0.5rem;
+    padding: 0.5rem 0.75rem;
+  }
+</style>
