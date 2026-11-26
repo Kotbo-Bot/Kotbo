@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { dialogFocus } from '../lib/actions/dialogFocus';
   import { router } from 'tinro';
   import { authStore } from '../lib/stores/auth.svelte';
@@ -49,11 +50,53 @@
     { id: 'liveStats', colSpan: 3, rowSpan: 1, visible: true },
     { id: 'pulse', colSpan: 1, rowSpan: 1, visible: true },
     { id: 'analytics', colSpan: 2, rowSpan: 1, visible: true },
-    { id: 'moderation', colSpan: 1, rowSpan: 1, visible: true },
-    { id: 'shield', colSpan: 1, rowSpan: 1, visible: true },
-    { id: 'myTasks', colSpan: 1, rowSpan: 1, visible: true },
-    { id: 'audit', colSpan: 2, rowSpan: 1, visible: true },
-    { id: 'climate', colSpan: 1, rowSpan: 1, visible: true },
+  ];
+
+  type HomeTemplate = {
+    id: string;
+    name: string;
+    description: string;
+    icon: string;
+    layout: LayoutItem[];
+  };
+
+  const HOME_TEMPLATES: HomeTemplate[] = [
+    {
+      id: 'essential',
+      name: 'Essentiel',
+      description: 'Vue synthétique en un écran : stats live, pouls et tendances.',
+      icon: 'sparkles',
+      layout: DEFAULT_LAYOUT,
+    },
+    {
+      id: 'moderation',
+      name: 'Modération & Staff',
+      description: 'Bouclier, tickets, tâches d’équipe et suivi des sanctions.',
+      icon: 'shield',
+      layout: [
+        { id: 'liveStats', colSpan: 3, rowSpan: 1, visible: true },
+        { id: 'shield', colSpan: 1, rowSpan: 1, visible: true },
+        { id: 'tickets', colSpan: 1, rowSpan: 1, visible: true },
+        { id: 'myTasks', colSpan: 1, rowSpan: 1, visible: true },
+        { id: 'moderation', colSpan: 2, rowSpan: 1, visible: true },
+        { id: 'staff', colSpan: 1, rowSpan: 1, visible: true },
+      ],
+    },
+    {
+      id: 'community',
+      name: 'Communauté & Vie',
+      description: 'Pouls, climat social, événements, sondages, niveaux et économie.',
+      icon: 'users',
+      layout: [
+        { id: 'pulse', colSpan: 1, rowSpan: 1, visible: true },
+        { id: 'climate', colSpan: 2, rowSpan: 1, visible: true },
+        { id: 'events', colSpan: 1, rowSpan: 1, visible: true },
+        { id: 'polls', colSpan: 1, rowSpan: 1, visible: true },
+        { id: 'leveling', colSpan: 1, rowSpan: 1, visible: true },
+        { id: 'economy', colSpan: 2, rowSpan: 1, visible: true },
+        { id: 'boosts', colSpan: 1, rowSpan: 1, visible: true },
+      ],
+    },
   ];
 
   const MODULE_CATALOG = [
@@ -456,6 +499,13 @@
     }
   }
 
+  function applyBuiltInTemplate(template: HomeTemplate) {
+    const allowed = template.layout.filter((item) => canUseWidget(item.id));
+    userLayout = completeLayout(allowed);
+    showPresetsModal = false;
+    toast.success(`Modèle « ${template.name} » appliqué`);
+  }
+
   async function applyPreset(presetId: string) {
     try {
       const { applyLayoutPreset } = await import('../lib/api');
@@ -693,8 +743,8 @@
   const COMPACT_MODULES = new Set(['actions', 'liveStats', 'clockWeather']);
 
   function getModuleMinHeight(id: string): string {
-    if (COMPACT_MODULES.has(id)) return 'min-h-[80px]';
-    return 'min-h-[180px]';
+    if (COMPACT_MODULES.has(id)) return 'min-h-[72px]';
+    return 'min-h-[136px]';
   }
 
   function getListCount(baseCount: number, colSpan: number, rowSpan: number): number {
@@ -806,6 +856,44 @@
     return 'text-error';
   }
 
+  /** Courbe monotone cubique (Fritsch–Carlson) pour le fond du widget Pulse. */
+  function smoothPulsePath(values: number[]): string {
+    if (values.length < 2) return '';
+    const maxV = Math.max(...values);
+    const minV = Math.min(...values);
+    const spanV = maxV - minV || 1;
+    const pts = values.map((v, i) => ({
+      x: (i / (values.length - 1)) * 100,
+      y: 38 - ((v - minV) / spanV) * 24,
+    }));
+    const n = pts.length;
+    const dx: number[] = [];
+    const slopes: number[] = [];
+    for (let i = 0; i < n - 1; i += 1) {
+      const d = pts[i + 1]!.x - pts[i]!.x;
+      dx.push(d);
+      slopes.push((pts[i + 1]!.y - pts[i]!.y) / d);
+    }
+    const tangents: number[] = [slopes[0]!];
+    for (let i = 1; i < n - 1; i += 1) {
+      if (slopes[i - 1]! * slopes[i]! <= 0) {
+        tangents.push(0);
+      } else {
+        tangents.push((3 * (dx[i - 1]! + dx[i]!)) / ((2 * dx[i]! + dx[i - 1]!) / slopes[i - 1]! + (dx[i]! + 2 * dx[i - 1]!) / slopes[i]!));
+      }
+    }
+    tangents.push(slopes[n - 2]!);
+
+    let path = `M${pts[0]!.x.toFixed(2)},${pts[0]!.y.toFixed(2)}`;
+    for (let i = 0; i < n - 1; i += 1) {
+      const third = dx[i]! / 3;
+      const p0 = pts[i]!;
+      const p1 = pts[i + 1]!;
+      path += ` C${(p0.x + third).toFixed(2)},${(p0.y + tangents[i]! * third).toFixed(2)},${(p1.x - third).toFixed(2)},${(p1.y - tangents[i + 1]! * third).toFixed(2)},${p1.x.toFixed(2)},${p1.y.toFixed(2)}`;
+    }
+    return path;
+  }
+
   function formatEventDate(iso: string): string {
     return new Date(iso).toLocaleDateString(dateLocale(), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
   }
@@ -845,6 +933,137 @@
   const errorModules = $derived(dashboardStore.state.modules.filter(m => m.status === 'error'));
 
   const pendingAbsences = $derived(staffStore.pendingAbsences);
+
+  const DAILY_GREETING_PHOTOS = [
+    {
+      src: '/greeting/day-0.jpg',
+      author: 'Yang Zhiyuan (Unsplash)',
+      url: 'https://unsplash.com/photos/misty-mountains-shrouded-in-blue-twilight-fog-1758637689971-fe6124e7cabd',
+    },
+    {
+      src: '/greeting/day-1.jpg',
+      author: 'Chensiyuan (Wikimedia Commons)',
+      url: 'https://commons.wikimedia.org/wiki/File:1_pano_cuiping_yangshuo_2016.jpg',
+    },
+    {
+      src: '/greeting/day-2.jpg',
+      author: 'Kreuzschnabel (Wikimedia Commons)',
+      url: 'https://commons.wikimedia.org/wiki/File:2013_Rainbow_over_Washfold.jpg',
+    },
+    {
+      src: '/greeting/day-3.jpg',
+      author: 'Kreuzschnabel (Wikimedia Commons)',
+      url: 'https://commons.wikimedia.org/wiki/File:2015_Ribblehead_Viaduct_1.jpg',
+    },
+    {
+      src: '/greeting/day-4.jpg',
+      author: 'Kreuzschnabel (Wikimedia Commons)',
+      url: 'https://commons.wikimedia.org/wiki/File:2015_Swaledale_from_Kisdon_Hill.jpg',
+    },
+    {
+      src: '/greeting/day-5.jpg',
+      author: 'Kreuzschnabel (Wikimedia Commons)',
+      url: 'https://commons.wikimedia.org/wiki/File:2013_Cogden_Bridge.jpg',
+    },
+    {
+      src: '/greeting/day-6.jpg',
+      author: 'Moahim (Wikimedia Commons)',
+      url: 'https://commons.wikimedia.org/wiki/File:2018_-_Ch%C3%A2teau_fort_de_Lourdes.jpg',
+    },
+  ] as const;
+
+  interface GreetingPhoto {
+    src: string;
+    author: string;
+    url: string;
+  }
+
+  const fallbackDailyPhoto = $derived.by((): GreetingPhoto => {
+    const now = new Date();
+    const startOfYear = new Date(now.getFullYear(), 0, 0);
+    const dayOfYear = Math.floor((now.getTime() - startOfYear.getTime()) / 86_400_000);
+    return DAILY_GREETING_PHOTOS[dayOfYear % DAILY_GREETING_PHOTOS.length]!;
+  });
+
+  let fetchedDailyPhoto = $state<GreetingPhoto | null>(null);
+  const dailyPhoto = $derived(fetchedDailyPhoto ?? fallbackDailyPhoto);
+
+  function stripHtmlTags(raw: string): string {
+    return raw.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+  }
+
+  async function loadDailyPhoto() {
+    if (typeof window === 'undefined') return;
+    const now = new Date();
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    const dateKey = `${yyyy}-${mm}-${dd}`;
+    const cacheKey = `kotbo_daily_landscape_${dateKey}`;
+
+    try {
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        const parsed = JSON.parse(cached) as GreetingPhoto;
+        if (parsed?.src && parsed?.author && parsed?.url) {
+          fetchedDailyPhoto = parsed;
+          return;
+        }
+      }
+    } catch { /* ignore cache errors */ }
+
+    try {
+      const endpoint = 'https://commons.wikimedia.org/w/api.php?action=query&generator=categorymembers&gcmtitle=Category:Featured_pictures_of_landscapes&gcmtype=file&gcmlimit=50&prop=imageinfo&iiprop=url|extmetadata&iiurlwidth=1280&format=json&origin=*';
+      const res = await fetch(endpoint);
+      if (!res.ok) return;
+      const data = await res.json() as {
+        query?: {
+          pages?: Record<string, {
+            title?: string;
+            imageinfo?: Array<{
+              thumburl?: string;
+              url?: string;
+              descriptionurl?: string;
+              extmetadata?: { Artist?: { value?: string }; Categories?: { value?: string } };
+            }>;
+          }>;
+        };
+      };
+      const animalRe = /\b(bird|aves|animal|insect|mammal|fish|frog|spider|turkey|deer|horse|dog|cat|butterfly)\b/i;
+      const candidates = Object.values(data.query?.pages ?? {}).filter((p) => {
+        const info = p.imageinfo?.[0];
+        const src = info?.thumburl || info?.url;
+        if (!src || !p.title || !/\.(jpe?g|png|webp)$/i.test(p.title)) return false;
+        const meta = `${p.title} ${info?.extmetadata?.Categories?.value ?? ''}`;
+        return !animalRe.test(meta);
+      });
+      if (candidates.length === 0) return;
+
+      const startOfYear = new Date(yyyy, 0, 0);
+      const dayOfYear = Math.floor((now.getTime() - startOfYear.getTime()) / 86_400_000);
+      const picked = candidates[dayOfYear % candidates.length]!;
+      const info = picked.imageinfo![0]!;
+      const src = (info.thumburl || info.url)!;
+
+      const rawArtist = info.extmetadata?.Artist?.value ?? '';
+      const author = stripHtmlTags(rawArtist) || 'Wikimedia Commons';
+      const photo: GreetingPhoto = {
+        src,
+        author: `${author} (Wikimedia Commons)`,
+        url: info.descriptionurl || 'https://commons.wikimedia.org/wiki/Category:Featured_pictures_of_landscapes',
+      };
+      fetchedDailyPhoto = photo;
+      try {
+        localStorage.setItem(cacheKey, JSON.stringify(photo));
+      } catch { /* ignore storage quota */ }
+    } catch {
+      // Hors-ligne ou limite reseau : le repli local par jour reste actif.
+    }
+  }
+
+  onMount(() => {
+    void loadDailyPhoto();
+  });
 
   const dynamicGreeting = $derived.by(() => {
     const name = authStore.user?.username || m.home_manager();
@@ -931,29 +1150,62 @@
   }
 </script>
 
-<div class="space-y-5 {isEditing ? 'pb-28' : 'pb-10'}">
+<div class="space-y-3.5 {isEditing ? 'pb-28' : 'pb-6'}">
 
-  <header>
-    <div class="flex items-center justify-between gap-3">
-      <h1 class="min-w-0 text-2xl font-semibold font-headline text-on-surface">{isEditing ? m.home_edit_title() : dynamicGreeting}</h1>
+  <!-- Première ligne façon tafac : GreetingCard (1/3) + « À traiter » (2/3) côte à côte. -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-3.5 items-stretch">
+    <header
+      class="section-card relative overflow-hidden p-5 flex flex-col justify-between gap-3"
+    >
+      <img
+        src={dailyPhoto.src}
+        alt=""
+        aria-hidden="true"
+        class="pointer-events-none absolute inset-0 w-full h-full object-cover object-center opacity-85"
+      />
+      <div
+        aria-hidden="true"
+        class="pointer-events-none absolute inset-0"
+        style="background: linear-gradient(to top, color-mix(in srgb, var(--surface-container-lowest) 94%, transparent) 0%, color-mix(in srgb, var(--surface-container-lowest) 68%, transparent) 58%, color-mix(in srgb, var(--surface-container-lowest) 12%, transparent) 100%);"
+      ></div>
+
+      <div class="relative z-10 min-w-0 space-y-1 mt-auto pt-6">
+        <h1 class="min-w-0 text-2xl sm:text-[1.65rem] font-bold tracking-tight font-headline text-on-surface leading-tight">
+          {isEditing ? m.home_edit_title() : dynamicGreeting}
+        </h1>
+        <p class="text-sm font-medium text-on-surface-variant leading-snug">
+          {isEditing ? m.home_edit_hint() : dynamicSubtitle}
+        </p>
+      </div>
+
       {#if !isEditing}
-        <div class="flex items-center gap-1 shrink-0">
-          <!-- L'accueil est la page la plus vue du dashboard : le vote y est à
-               portée sans rien masquer. Jamais en marque blanche. -->
-          {#if brandingStore.loaded && !brandingStore.isWhiteLabel}
-            <Button variant="ghost" size="sm" icon="star" href={TOPGG_VOTE_URL} target="_blank" title={m.navbar_vote_topgg()}>
-              {$isMobile ? m.home_vote_short() : m.home_vote()}
+        <div class="relative z-10 flex flex-wrap items-center justify-between gap-2 pt-1">
+          <div class="flex flex-wrap items-center gap-1.5">
+            <Button variant="secondary" size="sm" icon="sliders" onclick={startEditing} data-tour="home-customize">
+              {m.home_customize()}
             </Button>
-          {/if}
-          <Button variant="ghost" size="sm" icon="sliders" onclick={startEditing} data-tour="home-customize">
-            {m.home_customize()}
-          </Button>
-          <RefreshButton onClick={handleRefresh} ariaLabel={m.home_refresh_aria()} />
+            {#if brandingStore.loaded && !brandingStore.isWhiteLabel}
+              <Button variant="ghost" size="sm" icon="star" href={TOPGG_VOTE_URL} target="_blank" title={m.navbar_vote_topgg()}>
+                {$isMobile ? m.home_vote_short() : m.home_vote()}
+              </Button>
+            {/if}
+          </div>
+          <a
+            href={dailyPhoto.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="text-2xs text-on-surface-variant hover:text-on-surface transition-colors"
+          >
+            Photo : {dailyPhoto.author}
+          </a>
         </div>
       {/if}
+    </header>
+
+    <div class="lg:col-span-2 min-w-0 flex flex-col [&>*]:h-full">
+      <HomeTodo refreshKey={todoRefreshKey} bind:count={todoCount} />
     </div>
-    <p class="text-sm text-on-surface-variant mt-1">{isEditing ? m.home_edit_hint() : dynamicSubtitle}</p>
-  </header>
+  </div>
 
   {#if dashboardStore.state.error === 'api_unreachable'}
     <Callout variant="warning" title={m.home_api_restarting()}>
@@ -976,8 +1228,6 @@
     </Callout>
   {/if}
 
-  <HomeTodo refreshKey={todoRefreshKey} bind:count={todoCount} />
-
   <HomeWellbeingAgenda />
 
   {#if visibleLayout.length === 0 && !isEditing}
@@ -988,7 +1238,7 @@
   {/if}
 
   <!-- Bento Grid -->
-  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" role="list">
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5" role="list">
     {#each visibleLayout as item, index (item.id)}
       <div
         role="listitem"
@@ -1017,7 +1267,7 @@
           </div>
 
           <!-- Edit toolbar -->
-          <div class="absolute top-2.5 right-2.5 z-10 flex items-center gap-1 bg-surface-container/90 px-1.5 py-1 rounded-md shadow-sm border border-outline-variant/60">
+          <div class="absolute top-2.5 right-2.5 z-30 flex items-center gap-1 bg-surface-container-highest px-1.5 py-1 rounded-xl shadow-md border border-outline-variant">
             <button
               onclick={() => moveModule(item.id, -1)}
               disabled={index === 0}
@@ -1071,7 +1321,7 @@
               tabindex="-1"
               aria-label={m.home_resize_width()}
               onmousedown={(e) => handleResizeStart(e, item.id, 'col')}
-              class="absolute top-0 right-0 w-2 h-full cursor-col-resize z-20 group/resize hover:bg-primary/20 transition-colors rounded-r-lg"
+              class="absolute inset-y-5 right-0.5 w-1.5 cursor-col-resize z-20 group/resize hover:bg-primary/20 transition-colors rounded-full"
               title={m.home_resize_width()}
             >
               <div class="absolute top-1/2 right-0.5 -translate-y-1/2 w-0.5 h-8 bg-primary/40 rounded-full opacity-0 group-hover/resize:opacity-100 transition-opacity"></div>
@@ -1082,7 +1332,7 @@
               tabindex="-1"
               aria-label={m.home_resize_height()}
               onmousedown={(e) => handleResizeStart(e, item.id, 'row')}
-              class="absolute bottom-0 left-0 w-full h-2 cursor-row-resize z-20 group/resize hover:bg-primary/20 transition-colors rounded-b-lg"
+              class="absolute inset-x-5 bottom-0.5 h-1.5 cursor-row-resize z-20 group/resize hover:bg-primary/20 transition-colors rounded-full"
               title={m.home_resize_height()}
             >
               <div class="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-primary/40 rounded-full opacity-0 group-hover/resize:opacity-100 transition-opacity"></div>
@@ -1592,23 +1842,21 @@
           {@const economy = homeWidgets?.economy}
           <div class="flex flex-col h-full justify-between">
             <div class="flex items-center justify-between mb-3 shrink-0">
-              <div class="flex items-center gap-2.5">
-                <h3 class="text-sm font-medium text-on-surface">{m.home_mod_economy_title()}</h3>
-              </div>
-              <button onclick={() => router.goto('/economy')} class="text-2xs text-primary hover:underline cursor-pointer">{m.home_manage()}</button>
+              <h3 class="text-sm font-medium text-on-surface-variant">{m.home_mod_economy_title()}</h3>
+              <button onclick={() => router.goto('/economy')} class="text-2xs font-medium text-primary hover:underline cursor-pointer">{m.home_manage()}</button>
             </div>
-            <div class="space-y-2.5 grow flex flex-col justify-center">
-              <div class="grid grid-cols-2 gap-2">
-                <div class="px-3 py-2 rounded-lg bg-warning/5 border border-warning/10">
-                  <p class="text-lg font-semibold text-on-surface">{economy ? formatNumber(economy.totalBalance) : '-'}</p>
-                  <p class="text-2xs text-on-surface-variant">{m.home_in_circulation()}</p>
+            <div class="space-y-3 grow flex flex-col justify-end">
+              <dl class="grid grid-cols-2 divide-x divide-outline-variant">
+                <div class="pr-3 min-w-0">
+                  <dd class="text-2xl font-bold tabular-nums text-on-surface">{economy ? formatNumber(economy.totalBalance) : '-'}</dd>
+                  <dt class="text-2xs text-on-surface-variant truncate">{m.home_in_circulation()}</dt>
                 </div>
-                <div class="px-3 py-2 rounded-lg bg-success/5 border border-success/10">
-                  <p class="text-lg font-semibold text-on-surface">{economy ? formatNumber(economy.activePlayers) : '-'}</p>
-                  <p class="text-2xs text-on-surface-variant">{m.home_active_7d()}</p>
+                <div class="pl-3 min-w-0">
+                  <dd class="text-2xl font-bold tabular-nums text-on-surface">{economy ? formatNumber(economy.activePlayers) : '-'}</dd>
+                  <dt class="text-2xs text-on-surface-variant truncate">{m.home_active_7d()}</dt>
                 </div>
-              </div>
-              <p class="text-2xs text-on-surface-variant text-center">
+              </dl>
+              <p class="text-2xs text-on-surface-variant">
                 {#if !economy}
                   {m.home_economy_hint()}
                 {:else if !economy.enabled}
@@ -1623,23 +1871,21 @@
           {@const leveling = homeWidgets?.leveling}
           <div class="flex flex-col h-full justify-between">
             <div class="flex items-center justify-between mb-3 shrink-0">
-              <div class="flex items-center gap-2.5">
-                <h3 class="text-sm font-medium text-on-surface">{m.home_mod_leveling_title()}</h3>
-              </div>
-              <button onclick={() => router.goto('/leveling')} class="text-2xs text-primary hover:underline cursor-pointer">{m.home_leaderboard()}</button>
+              <h3 class="text-sm font-medium text-on-surface-variant">{m.home_mod_leveling_title()}</h3>
+              <button onclick={() => router.goto('/leveling')} class="text-2xs font-medium text-primary hover:underline cursor-pointer">{m.home_leaderboard()}</button>
             </div>
-            <div class="space-y-2 grow flex flex-col justify-center">
-              <div class="grid grid-cols-2 gap-2">
-                <div class="px-3 py-2 rounded-lg bg-indigo-500/5 border border-indigo-500/10">
-                  <p class="text-lg font-semibold text-on-surface">{leveling?.averageLevel ?? '-'}</p>
-                  <p class="text-2xs text-on-surface-variant">{m.home_avg_level()}</p>
+            <div class="space-y-3 grow flex flex-col justify-end">
+              <dl class="grid grid-cols-2 divide-x divide-outline-variant">
+                <div class="pr-3 min-w-0">
+                  <dd class="text-2xl font-bold tabular-nums text-on-surface">{leveling?.averageLevel ?? '-'}</dd>
+                  <dt class="text-2xs text-on-surface-variant truncate">{m.home_avg_level()}</dt>
                 </div>
-                <div class="px-3 py-2 rounded-lg bg-purple-500/5 border border-purple-500/10">
-                  <p class="text-lg font-semibold text-on-surface">{leveling ? formatNumber(leveling.activeMembers) : '-'}</p>
-                  <p class="text-2xs text-on-surface-variant">{m.home_active_7d()}</p>
+                <div class="pl-3 min-w-0">
+                  <dd class="text-2xl font-bold tabular-nums text-on-surface">{leveling ? formatNumber(leveling.activeMembers) : '-'}</dd>
+                  <dt class="text-2xs text-on-surface-variant truncate">{m.home_active_7d()}</dt>
                 </div>
-              </div>
-              <p class="text-2xs text-on-surface-variant text-center">
+              </dl>
+              <p class="text-2xs text-on-surface-variant">
                 {#if !leveling}
                   {m.home_leveling_hint()}
                 {:else if !leveling.enabled}
@@ -1654,49 +1900,45 @@
           {@const tickets = homeWidgets?.tickets}
           <div class="flex flex-col h-full justify-between">
             <div class="flex items-center justify-between mb-3 shrink-0">
-              <div class="flex items-center gap-2.5">
-                <h3 class="text-sm font-medium text-on-surface">Tickets</h3>
-              </div>
-              <button onclick={() => router.goto('/tickets')} class="text-2xs text-primary hover:underline cursor-pointer">{m.home_see_everything()}</button>
+              <h3 class="text-sm font-medium text-on-surface-variant">Tickets</h3>
+              <button onclick={() => router.goto('/tickets')} class="text-2xs font-medium text-primary hover:underline cursor-pointer">{m.home_see_everything()}</button>
             </div>
-            <div class="space-y-2 grow flex flex-col justify-center">
-              <div class="grid grid-cols-3 gap-2">
-                <div class="px-2 py-2 rounded-lg bg-blue-500/5 border border-blue-500/10 text-center">
-                  <p class="text-lg font-semibold text-on-surface">{tickets ? formatNumber(tickets.open) : '-'}</p>
-                  <p class="text-2xs text-on-surface-variant">{m.home_open_tickets()}</p>
+            <div class="grow flex flex-col justify-end">
+              <dl class="grid grid-cols-3 divide-x divide-outline-variant">
+                <div class="pr-2 min-w-0">
+                  <dd class="text-2xl font-bold tabular-nums text-on-surface">{tickets ? formatNumber(tickets.open) : '-'}</dd>
+                  <dt class="text-2xs text-on-surface-variant truncate">{m.home_open_tickets()}</dt>
                 </div>
-                <div class="px-2 py-2 rounded-lg bg-warning/5 border border-warning/10 text-center">
-                  <p class="text-lg font-semibold text-on-surface">{tickets ? formatNumber(tickets.claimed) : '-'}</p>
-                  <p class="text-2xs text-on-surface-variant">{m.home_in_progress()}</p>
+                <div class="px-2 min-w-0">
+                  <dd class="text-2xl font-bold tabular-nums text-warning">{tickets ? formatNumber(tickets.claimed) : '-'}</dd>
+                  <dt class="text-2xs text-on-surface-variant truncate">{m.home_in_progress()}</dt>
                 </div>
-                <div class="px-2 py-2 rounded-lg bg-success/5 border border-success/10 text-center">
-                  <p class="text-lg font-semibold text-on-surface">{tickets ? formatNumber(tickets.closedRecently) : '-'}</p>
-                  <p class="text-2xs text-on-surface-variant">{m.home_closed_7d()}</p>
+                <div class="pl-2 min-w-0">
+                  <dd class="text-2xl font-bold tabular-nums text-success">{tickets ? formatNumber(tickets.closedRecently) : '-'}</dd>
+                  <dt class="text-2xs text-on-surface-variant truncate">{m.home_closed_7d()}</dt>
                 </div>
-              </div>
+              </dl>
             </div>
           </div>
         {:else if item.id === 'invites'}
           {@const invites = homeWidgets?.invites}
           <div class="flex flex-col h-full justify-between">
             <div class="flex items-center justify-between mb-3 shrink-0">
-              <div class="flex items-center gap-2.5">
-                <h3 class="text-sm font-medium text-on-surface">{m.home_mod_invites_title()}</h3>
-              </div>
-              <button onclick={() => router.goto('/invitations')} class="text-2xs text-primary hover:underline cursor-pointer">{m.home_details()}</button>
+              <h3 class="text-sm font-medium text-on-surface-variant">{m.home_mod_invites_title()}</h3>
+              <button onclick={() => router.goto('/invitations')} class="text-2xs font-medium text-primary hover:underline cursor-pointer">{m.home_details()}</button>
             </div>
-            <div class="space-y-2 grow flex flex-col justify-center">
-              <div class="grid grid-cols-2 gap-2">
-                <div class="px-3 py-2 rounded-lg bg-teal-500/5 border border-teal-500/10">
-                  <p class="text-lg font-semibold text-on-surface">{invites ? formatNumber(invites.activeCodes) : '-'}</p>
-                  <p class="text-2xs text-on-surface-variant">{m.home_active_invites()}</p>
+            <div class="space-y-3 grow flex flex-col justify-end">
+              <dl class="grid grid-cols-2 divide-x divide-outline-variant">
+                <div class="pr-3 min-w-0">
+                  <dd class="text-2xl font-bold tabular-nums text-on-surface">{invites ? formatNumber(invites.activeCodes) : '-'}</dd>
+                  <dt class="text-2xs text-on-surface-variant truncate">{m.home_active_invites()}</dt>
                 </div>
-                <div class="px-3 py-2 rounded-lg bg-success/5 border border-success/10">
-                  <p class="text-lg font-semibold text-on-surface">{invites?.retentionPercent == null ? '-' : `${invites.retentionPercent}%`}</p>
-                  <p class="text-2xs text-on-surface-variant">{m.home_retention()}</p>
+                <div class="pl-3 min-w-0">
+                  <dd class="text-2xl font-bold tabular-nums text-success">{invites?.retentionPercent == null ? '-' : `${invites.retentionPercent}%`}</dd>
+                  <dt class="text-2xs text-on-surface-variant truncate">{m.home_retention()}</dt>
                 </div>
-              </div>
-              <p class="text-2xs text-on-surface-variant text-center">
+              </dl>
+              <p class="text-2xs text-on-surface-variant">
                 {#if invites}
                   {m.home_invites_joined({ n: invites.joinedRecently })}
                 {:else}
@@ -1710,23 +1952,20 @@
           {@const maxEvents = displayRowSpan(item) >= 2 ? 5 : 3}
           <div class="flex flex-col h-full justify-between">
             <div class="flex items-center justify-between mb-3 shrink-0">
-              <div class="flex items-center gap-2.5">
-                <h3 class="text-sm font-medium text-on-surface">{m.home_mod_events_title()}</h3>
-              </div>
-              <button onclick={() => router.goto('/events')} class="text-2xs text-primary hover:underline cursor-pointer">{m.home_see_everything()}</button>
+              <h3 class="text-sm font-medium text-on-surface-variant">{m.home_mod_events_title()}</h3>
+              <button onclick={() => router.goto('/events')} class="text-2xs font-medium text-primary hover:underline cursor-pointer">{m.home_see_everything()}</button>
             </div>
-            <div class="space-y-2 grow flex flex-col {upcomingEvents.length > 0 ? '' : 'justify-center'}">
+            <div class="grow flex flex-col {upcomingEvents.length > 0 ? 'divide-y divide-outline-variant' : 'justify-center'}">
               {#if upcomingEvents.length === 0}
                 <div class="flex flex-col items-center justify-center py-4 text-center text-on-surface-variant">
-                  <Papicon icon="calendar" size={18} class="mb-1 text-error/50" />
-                  <p class="text-2xs">{m.home_no_upcoming_events()}</p>
+                  <p class="text-xs font-medium">{m.home_no_upcoming_events()}</p>
                   <p class="text-2xs mt-0.5">{m.home_create_event_hint()}</p>
                 </div>
               {:else}
                 {#each upcomingEvents.slice(0, maxEvents) as evt (evt.id)}
                   <button
                     onclick={() => router.goto('/events')}
-                    class="w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg bg-error/5 border border-error/10 hover:border-error/30 transition-colors text-left cursor-pointer"
+                    class="w-full flex items-center justify-between gap-2 py-2 -mx-1.5 px-1.5 rounded-lg hover:bg-surface-hover transition-colors text-left cursor-pointer"
                   >
                     <div class="min-w-0">
                       <p class="text-xs font-medium text-on-surface truncate">{evt.title}</p>
@@ -1734,7 +1973,7 @@
                         {evt.startsAt ? formatEventDate(evt.startsAt) : evt.type}
                       </p>
                     </div>
-                    <span class="text-2xs font-medium uppercase tracking-wide px-1.5 py-0.5 rounded shrink-0 {evt.status === 'ONGOING' ? 'bg-success/10 text-success' : 'bg-blue-500/10 text-blue-400'}">
+                    <span class="text-2xs font-semibold px-2 py-0.5 rounded-full shrink-0 {evt.status === 'ONGOING' ? 'bg-success/10 text-on-success-container' : 'bg-surface-container text-on-surface-variant'}">
                       {evt.status === 'ONGOING' ? m.ev_status_ongoing() : m.ev_status_published()}
                     </span>
                   </button>
@@ -1747,23 +1986,20 @@
           {@const maxPolls = displayRowSpan(item) >= 2 ? 5 : 3}
           <div class="flex flex-col h-full justify-between">
             <div class="flex items-center justify-between mb-3 shrink-0">
-              <div class="flex items-center gap-2.5">
-                <h3 class="text-sm font-medium text-on-surface">{m.home_mod_polls_title()}</h3>
-              </div>
-              <button onclick={() => router.goto('/staff-management/polls')} class="text-2xs text-primary hover:underline cursor-pointer">{m.home_see_everything()}</button>
+              <h3 class="text-sm font-medium text-on-surface-variant">{m.home_mod_polls_title()}</h3>
+              <button onclick={() => router.goto('/staff-management/polls')} class="text-2xs font-medium text-primary hover:underline cursor-pointer">{m.home_see_everything()}</button>
             </div>
-            <div class="space-y-2 grow flex flex-col {openPolls.length > 0 ? '' : 'justify-center'}">
+            <div class="grow flex flex-col {openPolls.length > 0 ? 'divide-y divide-outline-variant' : 'justify-center'}">
               {#if openPolls.length === 0}
                 <div class="flex flex-col items-center justify-center py-4 text-center text-on-surface-variant">
-                  <Papicon icon="bar-chart" size={18} class="mb-1 text-violet-500/50" />
-                  <p class="text-2xs">{m.home_no_active_polls()}</p>
+                  <p class="text-xs font-medium">{m.home_no_active_polls()}</p>
                   <p class="text-2xs mt-0.5">{m.home_polls_hint()}</p>
                 </div>
               {:else}
                 {#each openPolls.slice(0, maxPolls) as poll (poll.id)}
-                  <div class="px-2.5 py-2 rounded-lg bg-violet-500/5 border border-violet-500/10">
+                  <div class="py-2">
                     <p class="text-xs font-medium text-on-surface truncate">{poll.title}</p>
-                    <p class="text-2xs text-on-surface-variant">
+                    <p class="text-2xs text-on-surface-variant tabular-nums">
                       {m.home_poll_votes({ n: poll.voteCount })}{poll.closesAt ? ` · ${m.home_poll_closes({ date: formatEventDate(poll.closesAt) })}` : ''}
                     </p>
                   </div>
@@ -1773,24 +2009,34 @@
           </div>
         {:else if item.id === 'pulse'}
           {@const pulse = homeWidgets?.pulse}
-          <div class="flex flex-col h-full justify-between">
-            <div class="flex items-center justify-between mb-3 shrink-0">
-              <h3 class="text-sm font-medium text-on-surface">{m.home_mod_pulse_title()}</h3>
-              <button onclick={() => router.goto('/pulse')} class="text-2xs text-primary hover:underline cursor-pointer">{m.home_pulse_open()}</button>
+          <div class="relative flex flex-col h-full justify-between">
+            {#if pulse && pulse.history.length > 1}
+              {@const linePath = smoothPulsePath(pulse.history)}
+              <div class="pointer-events-none absolute -inset-5 overflow-hidden rounded-[inherit]" aria-hidden="true">
+                <svg viewBox="0 0 100 100" preserveAspectRatio="none" class="w-full h-full">
+                  <defs>
+                    <linearGradient id="pulse-bg-grad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stop-color="var(--primary-color)" stop-opacity="0.14" />
+                      <stop offset="100%" stop-color="var(--primary-color)" stop-opacity="0" />
+                    </linearGradient>
+                  </defs>
+                  <path d="{linePath} L 100,100 L 0,100 Z" fill="url(#pulse-bg-grad)" />
+                  <path d={linePath} fill="none" stroke="var(--primary-color)" stroke-width="2" vector-effect="non-scaling-stroke" opacity="0.75" />
+                </svg>
+              </div>
+            {/if}
+            <div class="relative z-10 flex items-center justify-between mb-3 shrink-0">
+              <h3 class="text-sm font-medium text-on-surface-variant">{m.home_mod_pulse_title()}</h3>
+              <button onclick={() => router.goto('/pulse')} class="text-2xs font-medium text-primary hover:underline cursor-pointer">{m.home_pulse_open()}</button>
             </div>
-            <div class="grow flex flex-col justify-center gap-2">
+            <div class="relative z-10 grow flex flex-col justify-end gap-1.5">
               {#if pulse && !pulse.hasData}
                 <p class="text-2xs text-on-surface-variant text-center">{m.home_pulse_no_data()}</p>
               {:else}
-                <div class="flex items-end justify-between gap-3">
-                  <div>
-                    <p class="text-3xl font-semibold leading-none {pulse?.score == null ? 'text-on-surface' : pulseTone(pulse.score)}">{pulse?.score ?? '-'}<span class="text-sm text-on-surface-variant font-normal">/100</span></p>
-                    {#if pulse && pulse.trendDelta !== 0}
-                      <p class="text-2xs mt-1 {pulse.trendDelta > 0 ? 'text-success' : 'text-error'}">{pulse.trendDelta > 0 ? '+' : ''}{pulse.trendDelta}</p>
-                    {/if}
-                  </div>
-                  {#if pulse && pulse.history.length > 1}
-                    <Sparkline values={pulse.history} width={120} height={36} />
+                <div class="flex items-baseline gap-2.5">
+                  <p class="text-3xl font-bold tabular-nums leading-none {pulse?.score == null ? 'text-on-surface' : pulseTone(pulse.score)}">{pulse?.score ?? '-'}<span class="text-sm text-on-surface-variant font-normal">/100</span></p>
+                  {#if pulse && pulse.trendDelta !== 0}
+                    <span class="text-2xs font-semibold tabular-nums {pulse.trendDelta > 0 ? 'text-success' : 'text-error'}">{pulse.trendDelta > 0 ? '+' : ''}{pulse.trendDelta}</span>
                   {/if}
                 </div>
                 <p class="text-2xs {pulse && pulse.alertCount > 0 ? 'text-warning' : 'text-on-surface-variant'}">
@@ -1804,20 +2050,20 @@
           {@const shieldPending = shield ? shield.openWaves + shield.pendingVision : 0}
           <div class="flex flex-col h-full justify-between">
             <div class="flex items-center justify-between mb-3 shrink-0">
-              <h3 class="text-sm font-medium text-on-surface">{m.home_mod_shield_title()}</h3>
-              <button onclick={() => router.goto('/security/raid-protection')} class="text-2xs text-primary hover:underline cursor-pointer">{m.home_details()}</button>
+              <h3 class="text-sm font-medium text-on-surface-variant">{m.home_mod_shield_title()}</h3>
+              <button onclick={() => router.goto('/security/raid-protection')} class="text-2xs font-medium text-primary hover:underline cursor-pointer">{m.home_details()}</button>
             </div>
-            <div class="grow flex flex-col justify-center gap-2">
-              <div class="grid grid-cols-2 gap-2">
-                <div class="px-3 py-2 rounded-lg bg-warning/5 border border-warning/10">
-                  <p class="text-lg font-semibold text-on-surface">{shield ? formatNumber(shield.jailed) : '-'}</p>
-                  <p class="text-2xs text-on-surface-variant">{m.home_shield_jailed()}</p>
+            <div class="grow flex flex-col justify-end gap-3">
+              <dl class="grid grid-cols-2 divide-x divide-outline-variant">
+                <div class="pr-3 min-w-0">
+                  <dd class="text-2xl font-bold tabular-nums text-on-surface">{shield ? formatNumber(shield.jailed) : '-'}</dd>
+                  <dt class="text-2xs text-on-surface-variant truncate">{m.home_shield_jailed()}</dt>
                 </div>
-                <div class="px-3 py-2 rounded-lg bg-error/5 border border-error/10">
-                  <p class="text-lg font-semibold text-on-surface">{shield ? formatNumber(shield.jailedRecently) : '-'}</p>
-                  <p class="text-2xs text-on-surface-variant">{m.home_shield_jailed_7d()}</p>
+                <div class="pl-3 min-w-0">
+                  <dd class="text-2xl font-bold tabular-nums text-on-surface">{shield ? formatNumber(shield.jailedRecently) : '-'}</dd>
+                  <dt class="text-2xs text-on-surface-variant truncate">{m.home_shield_jailed_7d()}</dt>
                 </div>
-              </div>
+              </dl>
               {#if shield && shield.openWaves > 0}
                 <p class="text-2xs text-warning">{m.home_shield_waves()} : {shield.openWaves}</p>
               {/if}
@@ -1825,7 +2071,7 @@
                 <p class="text-2xs text-warning">{m.home_shield_vision()} : {shield.pendingVision}</p>
               {/if}
               {#if shield && shieldPending === 0}
-                <p class="text-2xs text-on-surface-variant text-center">{shield.configured ? m.home_shield_calm() : m.home_shield_not_configured()}</p>
+                <p class="text-2xs text-on-surface-variant">{shield.configured ? m.home_shield_calm() : m.home_shield_not_configured()}</p>
               {/if}
             </div>
           </div>
@@ -1833,33 +2079,37 @@
           {@const tasks = homeWidgets?.myTasks}
           <div class="flex flex-col h-full justify-between">
             <div class="flex items-center justify-between mb-3 shrink-0">
-              <h3 class="text-sm font-medium text-on-surface">{m.home_mod_mytasks_title()}</h3>
-              <button onclick={() => router.goto('/doing-lists')} class="text-2xs text-primary hover:underline cursor-pointer">{m.home_see_everything()}</button>
+              <h3 class="text-sm font-medium text-on-surface-variant">{m.home_mod_mytasks_title()}</h3>
+              <button onclick={() => router.goto('/doing-lists')} class="text-2xs font-medium text-primary hover:underline cursor-pointer">{m.home_see_everything()}</button>
             </div>
-            <div class="grow flex flex-col gap-2 {tasks && tasks.isStaff && tasks.next.length > 0 ? '' : 'justify-center'}">
+            <div class="grow flex flex-col gap-3 {tasks && tasks.isStaff && tasks.next.length > 0 ? 'justify-between' : 'justify-center'}">
               {#if tasks && !tasks.isStaff}
                 <p class="text-2xs text-on-surface-variant text-center">{m.home_tasks_not_staff()}</p>
               {:else if tasks && tasks.open === 0}
                 <p class="text-2xs text-on-surface-variant text-center">{m.home_tasks_none()}</p>
               {:else}
-                <div class="grid grid-cols-2 gap-2">
-                  <div class="px-3 py-2 rounded-lg bg-blue-500/5 border border-blue-500/10">
-                    <p class="text-lg font-semibold text-on-surface">{tasks ? formatNumber(tasks.open) : '-'}</p>
-                    <p class="text-2xs text-on-surface-variant">{m.home_tasks_open()}</p>
+                <dl class="grid grid-cols-2 divide-x divide-outline-variant">
+                  <div class="pr-3 min-w-0">
+                    <dd class="text-2xl font-bold tabular-nums text-on-surface">{tasks ? formatNumber(tasks.open) : '-'}</dd>
+                    <dt class="text-2xs text-on-surface-variant truncate">{m.home_tasks_open()}</dt>
                   </div>
-                  <div class="px-3 py-2 rounded-lg {tasks && tasks.overdue > 0 ? 'bg-error/5 border-error/10' : 'bg-success/5 border-success/10'} border">
-                    <p class="text-lg font-semibold text-on-surface">{tasks ? formatNumber(tasks.overdue) : '-'}</p>
-                    <p class="text-2xs text-on-surface-variant">{m.home_tasks_overdue()}</p>
+                  <div class="pl-3 min-w-0">
+                    <dd class="text-2xl font-bold tabular-nums {tasks && tasks.overdue > 0 ? 'text-error' : 'text-success'}">{tasks ? formatNumber(tasks.overdue) : '-'}</dd>
+                    <dt class="text-2xs text-on-surface-variant truncate">{m.home_tasks_overdue()}</dt>
                   </div>
-                </div>
-                {#each (tasks?.next ?? []).slice(0, displayRowSpan(item) >= 2 ? 3 : 2) as task (task.id)}
-                  <div class="px-2.5 py-1.5 rounded-lg bg-surface-container/60">
-                    <p class="text-xs font-medium text-on-surface truncate">{task.title}</p>
-                    {#if task.dueAt}
-                      <p class="text-2xs {new Date(task.dueAt) < new Date() ? 'text-error' : 'text-on-surface-variant'}">{m.home_tasks_due({ date: formatEventDate(task.dueAt) })}</p>
-                    {/if}
+                </dl>
+                {#if (tasks?.next ?? []).length > 0}
+                  <div class="divide-y divide-outline-variant border-t border-outline-variant">
+                    {#each (tasks?.next ?? []).slice(0, displayRowSpan(item) >= 2 ? 3 : 2) as task (task.id)}
+                      <div class="py-1.5">
+                        <p class="text-xs font-medium text-on-surface truncate">{task.title}</p>
+                        {#if task.dueAt}
+                          <p class="text-2xs {new Date(task.dueAt) < new Date() ? 'text-error' : 'text-on-surface-variant'}">{m.home_tasks_due({ date: formatEventDate(task.dueAt) })}</p>
+                        {/if}
+                      </div>
+                    {/each}
                   </div>
-                {/each}
+                {/if}
               {/if}
             </div>
           </div>
@@ -1867,19 +2117,19 @@
           {@const boosts = homeWidgets?.boosts}
           <div class="flex flex-col h-full justify-between">
             <div class="flex items-center justify-between mb-3 shrink-0">
-              <h3 class="text-sm font-medium text-on-surface">{m.home_mod_boosts_title()}</h3>
-              <button onclick={() => router.goto('/analytics')} class="text-2xs text-primary hover:underline cursor-pointer">{m.home_details()}</button>
+              <h3 class="text-sm font-medium text-on-surface-variant">{m.home_mod_boosts_title()}</h3>
+              <button onclick={() => router.goto('/analytics')} class="text-2xs font-medium text-primary hover:underline cursor-pointer">{m.home_details()}</button>
             </div>
-            <div class="grow flex flex-col justify-center gap-2">
+            <div class="grow flex flex-col justify-end gap-1.5">
               {#if boosts && !boosts.hasData}
                 <p class="text-2xs text-on-surface-variant text-center">{m.home_boosts_no_data()}</p>
               {:else}
-                <div class="flex items-center justify-between gap-2">
-                  <p class="text-lg font-semibold text-purple-400 flex items-center gap-1.5">
-                    <Papicon icon="star" size={14} />{boosts?.tier == null ? '-' : m.home_boosts_level({ n: boosts.tier })}
+                <div class="flex items-baseline justify-between gap-2">
+                  <p class="text-2xl font-bold tabular-nums text-on-surface">
+                    {boosts?.tier == null ? '-' : m.home_boosts_level({ n: boosts.tier })}
                   </p>
                   {#if boosts?.delta != null && boosts.delta !== 0}
-                    <span class="text-2xs {boosts.delta > 0 ? 'text-success' : 'text-error'}">{boosts.delta > 0 ? '+' : ''}{boosts.delta} · {m.home_boosts_delta()}</span>
+                    <span class="text-2xs font-semibold tabular-nums {boosts.delta > 0 ? 'text-success' : 'text-error'}">{boosts.delta > 0 ? '+' : ''}{boosts.delta} · {m.home_boosts_delta()}</span>
                   {/if}
                 </div>
                 <p class="text-xs text-on-surface">
@@ -1896,26 +2146,36 @@
           </div>
         {:else if item.id === 'climate'}
           {@const climate = homeWidgets?.climate}
-          <div class="flex flex-col h-full justify-between">
-            <div class="flex items-center justify-between mb-3 shrink-0">
-              <h3 class="text-sm font-medium text-on-surface">{m.home_mod_climate_title()}</h3>
-              <button onclick={() => router.goto('/analytics')} class="text-2xs text-primary hover:underline cursor-pointer">{m.home_details()}</button>
+          <div class="relative flex flex-col h-full justify-between">
+            {#if climate && climate.history.length > 1}
+              {@const cPath = smoothPulsePath(climate.history)}
+              <div class="pointer-events-none absolute -inset-5 overflow-hidden rounded-[inherit]" aria-hidden="true">
+                <svg viewBox="0 0 100 100" preserveAspectRatio="none" class="w-full h-full">
+                  <defs>
+                    <linearGradient id="climate-bg-grad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stop-color="var(--series-2, var(--primary-color))" stop-opacity="0.14" />
+                      <stop offset="100%" stop-color="var(--series-2, var(--primary-color))" stop-opacity="0" />
+                    </linearGradient>
+                  </defs>
+                  <path d="{cPath} L 100,100 L 0,100 Z" fill="url(#climate-bg-grad)" />
+                  <path d={cPath} fill="none" stroke="var(--series-2, var(--primary-color))" stroke-width="2" vector-effect="non-scaling-stroke" opacity="0.75" />
+                </svg>
+              </div>
+            {/if}
+            <div class="relative z-10 flex items-center justify-between mb-3 shrink-0">
+              <h3 class="text-sm font-medium text-on-surface-variant">{m.home_mod_climate_title()}</h3>
+              <button onclick={() => router.goto('/analytics')} class="text-2xs font-medium text-primary hover:underline cursor-pointer">{m.home_details()}</button>
             </div>
-            <div class="grow flex flex-col justify-center gap-2">
+            <div class="relative z-10 grow flex flex-col justify-end gap-1.5">
               {#if climate && !climate.enabled && climate.analyzed === 0}
                 <p class="text-2xs text-on-surface-variant text-center">{m.home_climate_disabled()}</p>
               {:else}
-                <div class="flex items-end justify-between gap-3">
-                  <div>
-                    <p class="text-lg font-semibold text-on-surface">{climate?.toxicPercent == null ? '-' : `${climate.toxicPercent}%`}</p>
-                    <p class="text-2xs text-on-surface-variant">{m.home_climate_toxic()}</p>
-                  </div>
-                  {#if climate && climate.history.length > 1}
-                    <Sparkline values={climate.history} width={100} height={32} color="var(--series-2)" />
-                  {/if}
+                <div>
+                  <p class="text-3xl font-bold tabular-nums leading-none text-on-surface">{climate?.toxicPercent == null ? '-' : `${climate.toxicPercent}%`}</p>
+                  <p class="text-2xs text-on-surface-variant mt-1">{m.home_climate_toxic()}</p>
                 </div>
                 {#if climate}
-                  <p class="text-2xs text-on-surface-variant">{m.home_climate_emotion()} : <span class="text-on-surface">{emotionLabel(climate.dominantEmotion)}</span> · {m.home_climate_analyzed({ n: climate.analyzed })}</p>
+                  <p class="text-2xs text-on-surface-variant">{m.home_climate_emotion()} : <span class="text-on-surface font-medium">{emotionLabel(climate.dominantEmotion)}</span> · {m.home_climate_analyzed({ n: climate.analyzed })}</p>
                 {/if}
               {/if}
             </div>
@@ -1923,40 +2183,37 @@
         {:else if item.id === 'staffServer'}
           <div class="flex flex-col h-full justify-between">
             <div class="flex items-center justify-between mb-3 shrink-0">
-              <div class="flex items-center gap-2.5">
-                <h3 class="text-sm font-medium text-on-surface">{m.home_mod_staffserver_title()}</h3>
-              </div>
-              <button onclick={() => router.goto('/staff-server')} class="text-2xs text-primary hover:underline cursor-pointer">{m.home_manage()}</button>
+              <h3 class="text-sm font-medium text-on-surface-variant">{m.home_mod_staffserver_title()}</h3>
+              <button onclick={() => router.goto('/staff-server')} class="text-2xs font-medium text-primary hover:underline cursor-pointer">{m.home_manage()}</button>
             </div>
             {#if staffServerLinks.length > 0}
               {@const link = staffServerLinks[0]}
-              <div class="space-y-2 grow flex flex-col justify-center">
+              <div class="space-y-3 grow flex flex-col justify-end">
                 <div class="flex items-center gap-2">
-                  <span class="w-2 h-2 rounded-full {link.enabled ? 'bg-emerald-400' : 'bg-red-400'}"></span>
-                  <p class="text-sm font-medium text-on-surface truncate">{link.otherGuildName}</p>
-                  <span class="text-xs font-medium px-1 py-0.5 rounded bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20">
+                  <span class="w-2 h-2 rounded-full {link.enabled ? 'bg-success' : 'bg-error'}"></span>
+                  <p class="text-sm font-semibold text-on-surface truncate">{link.otherGuildName}</p>
+                  <span class="text-2xs font-semibold px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant">
                     {link.isMain ? 'Staff' : m.home_main_label()}
                   </span>
                 </div>
-                <div class="grid grid-cols-2 gap-2">
-                  <div class="px-3 py-2 rounded-lg bg-blue-500/5 border border-blue-500/10">
-                    <p class="text-xs font-semibold text-on-surface">{SYNC_MODE_LABELS[link.syncMode] ?? link.syncMode}</p>
-                    <p class="text-2xs text-on-surface-variant">{m.home_sync_mode()}</p>
+                <dl class="grid grid-cols-2 divide-x divide-outline-variant">
+                  <div class="pr-3 min-w-0">
+                    <dd class="text-sm font-semibold text-on-surface truncate">{SYNC_MODE_LABELS[link.syncMode] ?? link.syncMode}</dd>
+                    <dt class="text-2xs text-on-surface-variant truncate">{m.home_sync_mode()}</dt>
                   </div>
-                  <div class="px-3 py-2 rounded-lg bg-success/5 border border-success/10">
-                    <p class="text-lg font-semibold text-on-surface">{link.roleMappings?.length ?? 0}</p>
-                    <p class="text-2xs text-on-surface-variant">{m.home_mapped_roles()}</p>
+                  <div class="pl-3 min-w-0">
+                    <dd class="text-2xl font-bold tabular-nums text-on-surface">{link.roleMappings?.length ?? 0}</dd>
+                    <dt class="text-2xs text-on-surface-variant truncate">{m.home_mapped_roles()}</dt>
                   </div>
-                </div>
-                <p class="text-2xs text-on-surface-variant text-center">
+                </dl>
+                <p class="text-2xs text-on-surface-variant">
                   {link.enabled ? m.home_link_active() : m.home_link_disabled()}
                 </p>
               </div>
             {:else}
               <div class="space-y-2 grow flex flex-col justify-center">
                 <div class="flex flex-col items-center justify-center py-4 text-center text-on-surface-variant">
-                  <Papicon icon="shield" size={18} class="mb-1 text-blue-500/50" />
-                  <p class="text-2xs">{m.home_no_staff_server()}</p>
+                  <p class="text-xs font-medium">{m.home_no_staff_server()}</p>
                   <p class="text-2xs mt-0.5">{m.home_link_staff_hint()}</p>
                 </div>
               </div>
@@ -1983,8 +2240,10 @@
       {#if $isMobile}
         <!-- Sur telephone, la barre doit tenir sur une ligne au-dessus des onglets. -->
         <Button size="sm" variant="secondary" icon="add" aria-label={m.home_add_module()} onclick={() => (showAddModuleModal = true)} />
+        <Button size="sm" variant="secondary" icon="layers" aria-label={m.home_layout_presets()} onclick={() => { showPresetsModal = true; void loadPresets(); }} />
       {:else}
         <Button size="sm" variant="secondary" icon="add" onclick={() => (showAddModuleModal = true)}>{m.home_add_module()}</Button>
+        <Button size="sm" variant="secondary" icon="layers" onclick={() => { showPresetsModal = true; void loadPresets(); }}>Modèles</Button>
       {/if}
       <Menu items={editMenu} label={m.home_edit_more()} />
       <Button size="sm" variant="ghost" onclick={cancelEditing}>{m.common_cancel()}</Button>
@@ -2077,6 +2336,30 @@
           >
             <Papicon icon="close" size={16} />
           </button>
+        </div>
+
+        <!-- Built-in templates -->
+        <div class="mb-4">
+          <h3 class="text-xs font-medium text-on-surface mb-2.5 flex items-center gap-2">
+            <Papicon icon="layers" size={14} class="text-primary" /> Modèles prêts à l’emploi
+          </h3>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            {#each HOME_TEMPLATES as tpl (tpl.id)}
+              <button
+                type="button"
+                onclick={() => applyBuiltInTemplate(tpl)}
+                class="section-card p-3.5 text-left transition-colors hover:!border-primary/50 flex flex-col justify-between gap-2 cursor-pointer"
+              >
+                <div class="flex items-center gap-2">
+                  <span class="w-7 h-7 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                    <Papicon icon={tpl.icon} size={14} />
+                  </span>
+                  <span class="text-xs font-semibold text-on-surface">{tpl.name}</span>
+                </div>
+                <p class="text-2xs text-on-surface-variant leading-relaxed">{tpl.description}</p>
+              </button>
+            {/each}
+          </div>
         </div>
 
         <!-- Save current layout as preset -->

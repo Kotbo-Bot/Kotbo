@@ -340,34 +340,55 @@
         </div>
       </div>
     {:else}
-      <ul class="flex flex-col -mx-2">
+      <!-- Tous les sujets visibles d'un coup : icone + compteur en ancre visuelle a gauche, puces de detail au milieu, 1 clic pour agir. -->
+      <ul class="flex flex-col divide-y divide-outline-variant">
         {#each visibleTasks as task (task.key)}
           {@const tone = SEVERITY_CLASS[task.severity]}
           {@const detail = detailOf(task)}
           {@const title = TASK_TITLE[task.key]()}
-          <li class="flex items-center gap-1 rounded-lg hover:bg-surface-container-high transition-colors group">
-            <a href={task.href} class="flex-1 min-w-0 flex items-center gap-3 pl-2 py-2.5 rounded-lg">
-              <span class="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 {tone.tile}" aria-hidden="true">
+          {@const previews = (task.preview ?? []).slice(0, 2)}
+          <li class="flex items-center gap-2 py-2.5 first:pt-0.5 last:pb-0.5 group">
+            <a href={task.href} class="flex-1 min-w-0 flex items-center gap-3 rounded-xl px-2 py-1.5 -mx-2 hover:bg-surface-hover transition-colors">
+              <span class="relative w-9 h-9 rounded-xl flex items-center justify-center shrink-0 {tone.tile}" aria-hidden="true">
                 <Papicon icon={TASK_ICON[task.key]} size={18} />
+                <span class="absolute -top-1.5 -right-1.5 min-w-[1.15rem] h-[1.15rem] px-1 rounded-full bg-surface-container-lowest border border-outline-variant text-2xs font-bold tabular-nums text-on-surface flex items-center justify-center shadow-xs">
+                  {task.count}
+                </span>
               </span>
+
               <span class="flex-1 min-w-0">
                 <span class="flex items-center gap-2">
-                  <span class="text-sm font-medium text-on-surface truncate">{title}</span>
+                  <span class="text-sm font-semibold text-on-surface truncate group-hover:text-primary transition-colors">{title}</span>
                   {#if task.severity !== 'info'}
-                    <span class="text-2xs font-medium px-1.5 py-0.5 rounded {tone.badge} shrink-0">{tone.label()}</span>
+                    <span class="text-2xs font-semibold px-1.5 py-0.5 rounded-full {tone.badge} shrink-0">{tone.label()}</span>
                   {/if}
                 </span>
-                {#if detail}
-                  <span class="block text-xs text-on-surface-variant truncate" title={detail}>{detail}</span>
+                {#if previews.length > 0}
+                  <span class="flex flex-wrap items-center gap-1.5 mt-1">
+                    {#each previews as previewItem, idx (idx)}
+                      <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-surface-container-high border border-outline-variant text-2xs font-medium text-on-surface max-w-[13rem]">
+                        <span class="truncate">{previewItem.label}</span>
+                        {#if previewItem.at && (task.key === 'meetings_upcoming' || task.key === 'staff_tasks_mine')}
+                          <span class="shrink-0 opacity-75">· {relativeTo(previewItem.at)}</span>
+                        {/if}
+                      </span>
+                    {/each}
+                    {#if task.oldestAt}
+                      <span class="text-2xs text-on-surface-variant">{m.home_todo_oldest({ age: ageOf(task.oldestAt) })}</span>
+                    {/if}
+                  </span>
+                {:else if detail}
+                  <span class="block text-xs text-on-surface-variant truncate mt-0.5" title={detail}>{detail}</span>
                 {/if}
               </span>
-              <span class="text-sm font-semibold tabular-nums text-on-surface shrink-0">{task.count}</span>
-              <span class="text-on-surface-variant opacity-60 group-hover:opacity-100 transition-opacity shrink-0" aria-hidden="true">
+
+              <span class="text-on-surface-variant opacity-50 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all shrink-0" aria-hidden="true">
                 <Papicon icon="chevron-right" size={16} />
               </span>
             </a>
+
             {#if prefsReady}
-              <span class="pr-1 shrink-0">
+              <span class="shrink-0">
                 <Menu items={taskMenu(task)} label={m.home_todo_menu({ title })} />
               </span>
             {/if}
