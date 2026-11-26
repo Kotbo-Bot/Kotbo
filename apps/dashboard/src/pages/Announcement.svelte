@@ -14,7 +14,22 @@
   import ModulePage from '../lib/components/ModulePage.svelte';
   import { createAsyncActionState } from '../lib/asyncAction.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
-  import EmojiText from '../lib/components/EmojiText.svelte';
+  import {
+    ActionRow,
+    Avatar,
+    Button as DiscordButton,
+    Embed,
+    LinkButton,
+    Markdown,
+    MessageFrame,
+    MessageHeader,
+    SelectMenu,
+    type EmbedView,
+    type MessageAuthor,
+    type SelectMenuView,
+  } from '@arcscord/discord-ui-svelte';
+  import DiscordScope from '../lib/components/discord/DiscordScope.svelte';
+  import { mergeEntities, toPreviewMarkdown } from '../lib/components/discord/previewEntities.svelte';
   import InlineFeedback from '../lib/components/InlineFeedback.svelte';
   import ToggleSwitch from '../lib/components/ToggleSwitch.svelte';
   import SearchableSelect from '../lib/components/SearchableSelect.svelte';
@@ -305,6 +320,92 @@
     { value: 4320, label: m.announcements_thread_archive_3d() },
     { value: 10080, label: m.announcements_thread_archive_7d() },
   ]);
+
+  const threadBotAuthor: MessageAuthor = {
+    id: 'kotbo',
+    displayName: 'Kotbo',
+    avatarUrl: '/favicon.svg',
+    bot: true,
+  };
+  const threadPreviewTimestamp = new Date().toISOString();
+
+  function parseSelectEmoji(raw: string): { name: string; image?: string } | undefined {
+    const trimmed = raw.trim();
+    if (!trimmed) return undefined;
+    const match = trimmed.match(/^<(a?):(\w+):(\d+)>$/);
+    if (match) {
+      return {
+        name: match[2],
+        image: `https://cdn.discordapp.com/emojis/${match[3]}.${match[1] ? 'gif' : 'webp'}?size=48`,
+      };
+    }
+    return { name: trimmed };
+  }
+
+  const threadPreview = $derived.by(() => {
+    const titlePrepared = toPreviewMarkdown(
+      previewText(threadConfig.embedTitle) || m.announcements_thread_embed_title_fallback(),
+      { mentions: false },
+    );
+    const descPrepared = toPreviewMarkdown(
+      previewText(threadConfig.embedDescription) || m.announcements_thread_embed_desc_fallback(),
+    );
+    const pages = threadPages.length > 0
+      ? threadPages
+      : [{
+          localId: 'example',
+          label: m.announcements_thread_example(),
+          emoji: '',
+          summary: null as string | null,
+          actionType: 'EMBED' as const,
+          linkMode: 'url' as const,
+          linkChannelId: null as string | null,
+          linkUrl: null as string | null,
+        }];
+
+    const embed: EmbedView = {
+      id: 'welcome-thread',
+      color: threadConfig.embedColor || '#5865F2',
+      title: titlePrepared.markdown,
+      description: descPrepared.markdown,
+      ...(threadConfig.embedThumbnailUrl
+        ? { thumbnail: { id: 'wt-thumb', url: threadConfig.embedThumbnailUrl, alt: '' } }
+        : {}),
+      ...(threadConfig.embedImageUrl
+        ? { image: { id: 'wt-img', url: threadConfig.embedImageUrl, alt: '' } }
+        : {}),
+    };
+
+    const entities = mergeEntities([
+      titlePrepared.entities,
+      descPrepared.entities,
+      ...pages
+        .filter((page) => Boolean(page.emoji))
+        .map((page) => toPreviewMarkdown(page.emoji, { mentions: false }).entities),
+    ]);
+
+    const buttonRows: typeof pages[] = [];
+    for (let i = 0; i < pages.length; i += 5) {
+      buttonRows.push(pages.slice(i, i + 5));
+    }
+
+    const selectMenu: SelectMenuView = {
+      id: 'welcome-thread-select',
+      kind: 'string-select',
+      placeholder: threadConfig.menuPlaceholder || m.announcements_thread_placeholder_default(),
+      options: pages.map((page, index) => {
+        const emoji = parseSelectEmoji(page.emoji);
+        return {
+          value: page.localId || String(index),
+          label: page.label || m.announcements_thread_nameless_page(),
+          ...(page.summary ? { description: page.summary } : {}),
+          ...(emoji ? { emoji } : {}),
+        };
+      }),
+    };
+
+    return { embed, entities, buttonRows, selectMenu };
+  });
 
   const threadActionState = createAsyncActionState();
   let threadLoading = $state(false);
@@ -1430,36 +1531,45 @@
                         <!-- Preview -->
                         <div class="space-y-1.5">
                           <span class="text-xs font-semibold text-on-surface-variant ml-2">{m.announcements_thread_embed_preview_label()}</span>
-                          <div class="p-5 rounded-lg bg-surface-container-high/35 border-l-4 relative overflow-hidden" style="border-left-color: {threadConfig.embedColor || '#5865F2'}">
-                            <div class="flex gap-4">
-                              {#if threadConfig.embedThumbnailUrl}
-                                <img src={threadConfig.embedThumbnailUrl} alt="" class="w-16 h-16 rounded-lg object-cover shrink-0 order-2 ml-auto" />
-                              {/if}
-                              <div class="flex-1 min-w-0">
-                                <p class="text-sm font-bold text-on-surface">{previewText(threadConfig.embedTitle) || m.announcements_thread_embed_title_fallback()}</p>
-                                <p class="mt-1 text-xs text-on-surface-variant/80 whitespace-pre-wrap leading-relaxed">{previewText(threadConfig.embedDescription) || m.announcements_thread_embed_desc_fallback()}</p>
-                              </div>
-                            </div>
-                            {#if threadConfig.embedImageUrl}
-                              <img src={threadConfig.embedImageUrl} alt="" class="mt-3 w-full max-w-sm rounded-lg object-cover" />
-                            {/if}
-                            {#if threadConfig.menuStyle === 'buttons'}
-                              <div class="flex flex-wrap gap-2 mt-4">
-                                {#each (threadPages.length > 0 ? threadPages : [{ localId: 'x', label: m.announcements_thread_example(), emoji: '', actionType: 'EMBED' }]) as page}
-                                  <span class="text-2xs font-semibold px-3 py-2 rounded-lg border {page.actionType === 'ROLE' ? 'bg-success/10 border-success/20 text-success' : page.actionType === 'LINK' ? 'bg-sky-500/10 border-sky-500/20 text-sky-500' : 'bg-surface-container-high border-outline-variant/15 text-on-surface-variant/80'}">
-                                    {#if page.emoji}<EmojiText value={page.emoji} /> {/if}{page.label || m.announcements_thread_nameless_page()}{#if page.actionType === 'ROLE'}<Papicon icon="user" size={11} class="inline-block ml-1 align-[-1px]" />{:else if page.actionType === 'LINK'}<Papicon icon="link" size={11} class="inline-block ml-1 align-[-1px]" />{/if}
-                                  </span>
+                          <DiscordScope class="thread-menu-preview" entities={threadPreview.entities}>
+                            <MessageFrame>
+                              {#snippet avatar()}<Avatar author={threadBotAuthor} />{/snippet}
+                              {#snippet header()}<MessageHeader author={threadBotAuthor} timestamp={threadPreviewTimestamp} />{/snippet}
+                              <Embed embed={threadPreview.embed} />
+                              {#if threadConfig.menuStyle === 'buttons'}
+                                {#each threadPreview.buttonRows as row, rowIndex (rowIndex)}
+                                  <ActionRow>
+                                    {#each row as page (page.localId)}
+                                      {@const label = page.label || m.announcements_thread_nameless_page()}
+                                      {#if page.actionType === 'LINK'}
+                                        {@const href = page.linkMode === 'channel' && page.linkChannelId
+                                          ? discordChannelLink(page.linkChannelId)
+                                          : (page.linkUrl || 'https://discord.com')}
+                                        {#if page.emoji}
+                                          {#snippet emoji()}<Markdown inline content={page.emoji} />{/snippet}
+                                          <LinkButton {label} url={href} {emoji} />
+                                        {:else}
+                                          <LinkButton {label} url={href} />
+                                        {/if}
+                                      {:else}
+                                        {@const variant = page.actionType === 'ROLE' ? 'success' : 'secondary'}
+                                        {#if page.emoji}
+                                          {#snippet emoji()}<Markdown inline content={page.emoji} />{/snippet}
+                                          <DiscordButton {label} {variant} {emoji} />
+                                        {:else}
+                                          <DiscordButton {label} {variant} />
+                                        {/if}
+                                      {/if}
+                                    {/each}
+                                  </ActionRow>
                                 {/each}
-                              </div>
-                            {:else}
-                              <div class="mt-4 text-2xs font-semibold px-3 py-2.5 rounded-lg bg-surface-container-high border border-outline-variant/15 text-on-surface-variant max-w-xs">
-                                <span class="flex items-center justify-between gap-2">
-                                  {threadConfig.menuPlaceholder || m.announcements_thread_placeholder_default()}
-                                  <Papicon icon="chevron-down" size={13} />
-                                </span>
-                              </div>
-                            {/if}
-                          </div>
+                              {:else}
+                                <ActionRow>
+                                  <SelectMenu menu={threadPreview.selectMenu} />
+                                </ActionRow>
+                              {/if}
+                            </MessageFrame>
+                          </DiscordScope>
                         </div>
                       </div>
                     {/if}
@@ -1847,3 +1957,10 @@
     </div>
   {/if}
 </ModulePage>
+
+<style>
+  :global(.arcscord-discord-ui.thread-menu-preview) {
+    border-radius: 0.75rem;
+    padding: 0.5rem 0;
+  }
+</style>

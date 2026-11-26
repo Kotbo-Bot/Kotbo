@@ -42,7 +42,9 @@
     type AbsenceSuperior,
     type PlanningExtra,
   } from '../lib/api';
-  import { parseDiscordEmojisAndMarkdown } from '../lib/emojiParser';
+  import { Markdown } from '@arcscord/discord-ui-svelte';
+  import DiscordScope from '../lib/components/discord/DiscordScope.svelte';
+  import { toPreviewMarkdown } from '../lib/components/discord/previewEntities.svelte';
   import { timezoneStore } from '../lib/stores/timezone.svelte';
   import { formatWallClockInTimezone, parseDateTimeInTimezone } from '@kotbo/contracts';
   import TimezoneHint from '../lib/components/TimezoneHint.svelte';
@@ -2191,11 +2193,10 @@
 
       {#if raw.description || raw.reason}
         {#if type === 'meeting'}
-          <div class="p-4 bg-[#2f3136] rounded-lg text-body-sm">
-            <div class="text-[#dcddde] leading-relaxed whitespace-pre-wrap wrap-break-word discord-preview">
-              {@html parseDiscordEmojisAndMarkdown(raw.description || '')}
-            </div>
-          </div>
+          {@const preview = toPreviewMarkdown(raw.description || '', { mentions: false })}
+          <DiscordScope class="planning-discord-preview" entities={preview.entities}>
+            <Markdown content={preview.markdown} />
+          </DiscordScope>
         {:else}
           <p class="p-3 bg-surface-container rounded-lg text-body-sm text-on-surface whitespace-pre-wrap wrap-break-word">{raw.description || raw.reason}</p>
         {/if}
@@ -2816,5 +2817,9 @@
     display: flex;
     align-items: flex-start;
     gap: 0.375rem;
+  }
+  :global(.arcscord-discord-ui.planning-discord-preview) {
+    border-radius: 0.5rem;
+    padding: 0.75rem 1rem;
   }
 </style>
