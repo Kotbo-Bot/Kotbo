@@ -499,7 +499,8 @@
   gap: 0.125rem;
   padding: 0.25rem;
   background: var(--surface-container);
-  border-radius: 9999px;
+  /* 1.25rem garde une forme pilule sur une ligne tout en restant concentrique si la barre passe sur plusieurs lignes (9999px coupe les coins). */
+  border-radius: 1.25rem;
   border: 1px solid var(--outline-variant);
   max-width: 100%;
 }
