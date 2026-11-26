@@ -79,7 +79,7 @@
     use:portal
     role="dialog"
     aria-label={label}
-    class="anchored-popover fixed rounded-xl border border-outline-variant bg-surface-container-lowest shadow-xl"
+    class="anchored-popover fixed border border-outline-variant bg-surface-container-lowest"
     style="top: {position.top}px; left: {position.left}px; width: {width}px;"
   >
     {@render children()}
@@ -92,5 +92,8 @@
     max-width: calc(100vw - 1rem);
     max-height: calc(100vh - 1rem);
     overflow-y: auto;
+    border-radius: var(--radius-card);
+    corner-shape: superellipse(1.3);
+    box-shadow: var(--shadow-float), var(--glass-quiet-rim);
   }
 </style>
