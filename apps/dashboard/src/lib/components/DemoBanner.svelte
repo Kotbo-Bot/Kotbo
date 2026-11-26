@@ -15,25 +15,20 @@
 </script>
 
 {#if DEMO_MODE && !dismissed}
-  <div data-tour="demo-banner" class="relative z-20 mb-6 rounded-xl bg-surface-container-low border border-primary/30 text-on-surface p-3 sm:px-4 sm:py-3 shadow-sm transition-all">
-    <div class="flex flex-wrap items-center justify-between gap-3 text-xs sm:text-sm">
-      <div class="flex items-center gap-2.5 min-w-0">
-        <span class="inline-flex items-center justify-center w-6 h-6 rounded-md bg-primary/20 text-primary shrink-0">
-          <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-          </svg>
+  <div data-tour="demo-banner" class="section-card relative z-20 mb-5 px-4 py-2.5 text-on-surface">
+    <div class="flex items-center justify-between gap-3 text-xs">
+      <div class="flex items-center gap-2.5 min-w-0 flex-1">
+        <span class="px-2.5 py-0.5 rounded-full bg-primary/15 text-primary text-xs font-semibold shrink-0">
+          {m.demo_mode()}
         </span>
-        <div class="min-w-0">
-          <span class="font-semibold text-primary">{m.demo_mode()}</span>
-          <span class="text-on-surface-variant hidden md:inline">{m.demo_description()}</span>
-        </div>
+        <span class="text-on-surface-variant hidden md:block truncate">{m.demo_description()}</span>
       </div>
 
-      <div class="flex items-center gap-2 shrink-0 ml-auto">
+      <div class="flex items-center gap-1.5 shrink-0">
         <button
           type="button"
           onclick={() => demoTour.start()}
-          class="px-2.5 py-1 rounded-md text-xs font-medium text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest transition-colors cursor-pointer"
+          class="btn btn-ghost btn-sm"
         >
           {m.demo_tour_restart()}
         </button>
@@ -41,7 +36,7 @@
         <button
           type="button"
           onclick={handleReset}
-          class="px-2.5 py-1 rounded-md text-xs font-medium text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest transition-colors cursor-pointer"
+          class="btn btn-ghost btn-sm"
           title={m.demo_reset_title()}
         >
           {m.demo_reset()}
@@ -51,7 +46,7 @@
           href={DEMO_INVITE_URL}
           target="_blank"
           rel="noopener noreferrer"
-          class="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold bg-primary text-on-primary hover:opacity-90 transition-opacity shadow-xs"
+          class="btn btn-primary btn-sm"
         >
           <span>{m.demo_add_kotbo()}</span>
           <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -64,7 +59,7 @@
         <button
           type="button"
           onclick={() => (dismissed = true)}
-          class="p-1 rounded-md text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest transition-colors cursor-pointer"
+          class="btn btn-ghost btn-sm btn-icon"
           aria-label="{m.demo_dismiss()}"
         >
           <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

@@ -303,7 +303,8 @@
   .tour-ring {
     position: fixed;
     z-index: 9996;
-    border-radius: 0.75rem;
+    border-radius: 1rem;
+    corner-shape: superellipse(1.3);
     border: 2px solid var(--color-primary);
     pointer-events: none;
     transition: top 0.2s ease, left 0.2s ease, width 0.2s ease, height 0.2s ease;
@@ -312,11 +313,12 @@
   .tour-bubble {
     position: fixed;
     z-index: 9997;
-    padding: 1rem;
-    border-radius: 0.75rem;
+    padding: 1rem 1.125rem;
+    border-radius: var(--radius-card);
+    corner-shape: superellipse(1.3);
     border: 1px solid var(--outline-variant);
     background: var(--surface-container-lowest);
-    box-shadow: 0 12px 32px rgb(0 0 0 / 0.35);
+    box-shadow: var(--shadow-float);
     outline: none;
     transition: top 0.2s ease, left 0.2s ease;
   }
