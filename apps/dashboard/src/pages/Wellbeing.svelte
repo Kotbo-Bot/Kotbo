@@ -14,6 +14,8 @@
   import ReportPanelPublisher from '../lib/components/wellbeing/ReportPanelPublisher.svelte';
   import CaseBoard from '../lib/components/wellbeing/CaseBoard.svelte';
   import WellbeingSettings from '../lib/components/wellbeing/WellbeingSettings.svelte';
+  import NetworkReferent from '../lib/components/wellbeing/NetworkReferent.svelte';
+  import NetworkCases from '../lib/components/wellbeing/NetworkCases.svelte';
   import { memberCaseModal } from '../lib/stores/memberCaseModal.svelte';
   import MemberName from '../lib/components/MemberName.svelte';
   import WellbeingMemberList from '../lib/components/WellbeingMemberList.svelte';
@@ -1229,6 +1231,10 @@
         </Field>
       </div>
 
+      <NetworkReferent caseId={selectedCase.id} subjectUserId={selectedCase.subjectUserId ?? null}
+        referentId={selectedCase.networkReferentId ?? null} referentGuildId={selectedCase.networkReferentGuildId ?? null}
+        canWrite={!!status?.canWriteCases} onchange={applyItem} />
+
       {#if selectedCase.hasTrackingCode}
         <ReporterThread caseId={selectedCase.id} messages={selectedCase.reporterMessages ?? []} canWrite={!!status?.canWriteCases} hidden={contentHidden} onchange={applyItem} />
       {/if}
@@ -1457,6 +1463,7 @@
       {:else}
         {#if status.canWriteCases}
           <DistressSignals bind:this={signalsPanel} onopen={(signal) => void openCaseFromSignal(signal)} />
+          <NetworkCases hidden={contentHidden} />
         {/if}
         <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <StatTile icon="folder" tone="bg-primary/10 text-primary" value={stats.active} label={m.wb_stat_active()} />

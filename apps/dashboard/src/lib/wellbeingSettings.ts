@@ -24,6 +24,7 @@ export interface WbConfigForm {
   distressWatch: boolean;
   pulseEnabled: boolean;
   pulseRoleIds: string[];
+  networkPool: boolean;
 }
 
 const ids = (value: unknown): string[] => (Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : []);
@@ -50,6 +51,7 @@ export function wbConfigFromApi(config: Record<string, unknown>): WbConfigForm {
     distressWatch: config.distressWatch === true,
     pulseEnabled: config.pulseEnabled === true,
     pulseRoleIds: ids(config.pulseRoleIds),
+    networkPool: config.networkPool === true,
   };
 }
 

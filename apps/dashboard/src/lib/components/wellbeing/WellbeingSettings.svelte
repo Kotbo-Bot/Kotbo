@@ -281,6 +281,9 @@
   <SettingsRow label={m.wb_cfg_follow_up()} description={m.wb_cfg_follow_up_hint()} labelFor="wb-follow-up-days">
     <input id="wb-follow-up-days" type="number" min="0" max="180" step="1" bind:value={form.followUpDays} class="input w-24" />
   </SettingsRow>
+  <SettingsRow label={m.wb_cfg_network_pool()} description={m.wb_cfg_network_pool_hint()}>
+    <ToggleSwitch checked={form.networkPool} onToggle={(v) => (form.networkPool = v)} ariaLabel={m.wb_cfg_network_pool()} />
+  </SettingsRow>
 {/snippet}
 
 {#snippet signalFields()}

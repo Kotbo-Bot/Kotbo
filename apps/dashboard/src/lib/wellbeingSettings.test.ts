@@ -113,6 +113,11 @@ describe('accompagnement et repérage', () => {
     });
   });
 
+  test('les référents ne sont partagés avec le réseau que sur demande', () => {
+    expect(wbConfigFromApi({}).networkPool).toBe(false);
+    expect(wbConfigFromApi({ networkPool: true }).networkPool).toBe(true);
+  });
+
   test('le délai de prise de nouvelles est borné comme côté bot', () => {
     expect(wbConfigToApi(form({ followUpDays: 999 })).followUpDays).toBe(180);
     expect(wbConfigToApi(form({ followUpDays: -3 })).followUpDays).toBe(0);

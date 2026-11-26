@@ -38,6 +38,16 @@ describe("historique d'un dossier", () => {
     expect(urgence).not.toBe(cellule);
   });
 
+  test('les gestes du référent du réseau se distinguent de ceux de la cellule', () => {
+    const view = (toValue: string | null) => wbCaseEventLabel({ type: 'VIEWED', fromValue: null, toValue }, date);
+    const note = (toValue: string | null) => wbCaseEventLabel({ type: 'NOTE', fromValue: null, toValue }, date);
+    expect(view('NETWORK')).not.toBe(view(null));
+    expect(note('NETWORK')).not.toBe(note(null));
+    const set = wbCaseEventLabel({ type: 'NETWORK_REFERENT', fromValue: null, toValue: '1' }, date);
+    const cleared = wbCaseEventLabel({ type: 'NETWORK_REFERENT', fromValue: '1', toValue: null }, date);
+    expect(set).not.toBe(cleared);
+  });
+
   test('un changement de statut nomme les deux statuts', () => {
     const label = wbCaseEventLabel({ type: 'STATUS', fromValue: 'OPEN', toValue: 'CLOSED' }, date);
     expect(label).toContain(wbStatusLabel('OPEN'));
