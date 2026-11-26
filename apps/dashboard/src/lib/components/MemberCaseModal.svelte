@@ -26,6 +26,8 @@
   import { serverDetailsModal } from '../stores/serverDetailsModal.svelte';
   import MemberWellbeingPanel from './MemberWellbeingPanel.svelte';
   import MemberCaseLayoutEditor from './MemberCaseLayoutEditor.svelte';
+  import StaffCaseTab from './staff/StaffCaseTab.svelte';
+  import { staff } from './staff/staffStore.svelte';
   import { dashboardFetch, fetchMemberCase, fetchMemberDetailedAnalytics, updateSanctionReport, linkMemberAccount, unlinkMemberAccount, updateMemberNote, runMemberCaseAction, searchMessages, formatMessageSearchTotal, fetchMessageLogChannels } from '../api';
   import { toDateTimeLocal, typeLabel as formatTypeLabel } from '../sanctions/formatters';
   import { buildReportRuleOptions, getRuleIdsFromBrokenRules, getRulesFromBrokenRules, buildBrokenRulesPayload } from '../sanctions/reportRules';
@@ -119,6 +121,16 @@
     } catch { /* disposition par défaut */ }
   }
   $effect(() => { void open; untrack(loadLayout); });
+
+  const staffGuildId = $derived(caseGuildId || authStore.selectedGuildId);
+  const hasStaffAccess = $derived(staff.isAdmin || !!staff.directoryAccess.canView || !!staff.rolesAccess.canView);
+  const isStaffMember = $derived(
+    hasStaffAccess && !!userId && (!!staff.memberByUserId(userId) || !!caseData?.profile?.staffGrade)
+  );
+  $effect(() => {
+    if (!open || !userId || !staffGuildId || !hasStaffAccess) return;
+    void staff.ensureLoaded(staffGuildId);
+  });
 
   // Onglet Bien-être : seulement pour la cellule, et sur le serveur sélectionné.
   let wellbeingAccess = $state(false);
@@ -801,7 +813,11 @@
   );
 
   const tabs: { id: MemberCaseTab; label: string; icon: string; count?: () => number }[] = $derived([
-    ...(extraTab ? [{ id: 'extra' as const, label: extraTab.label, icon: extraTab.icon }] : []),
+    ...(extraTab
+      ? [{ id: 'extra' as const, label: extraTab.label, icon: extraTab.icon }]
+      : isStaffMember
+        ? [{ id: 'extra' as const, label: m.sx_case_tab(), icon: 'shield' }]
+        : []),
     { id: 'resume', label: m.mcm_tab_summary(), icon: 'layout' },
     { id: 'identite', label: m.mcm_tab_identity(), icon: 'user' },
     { id: 'activite', label: m.mcm_tab_activity(), icon: 'trending-up' },
@@ -1245,8 +1261,12 @@
               <Callout variant="danger" icon="alert-octagon" title={m.mcm_dc_title()}>{m.mcm_dc_desc()}</Callout>
             {/if}
 
-            {#if activeTab === 'extra' && extraTab}
-              {@render extraTab.content()}
+            {#if activeTab === 'extra'}
+              {#if extraTab}
+                {@render extraTab.content()}
+              {:else if userId && isStaffMember}
+                <StaffCaseTab {userId} />
+              {/if}
 
             {:else if activeTab === 'resume'}
               <!-- Chiffres -->

@@ -390,6 +390,20 @@ class StaffStore {
     ]);
   }
 
+  /** Charge les données nécessaires à l'onglet Staff d'une fiche membre hors page Staff. */
+  async ensureLoaded(guildId: string): Promise<void> {
+    if (!guildId || !authStore.token) return;
+    if (this.guildId !== guildId) this.reset(guildId);
+    await Promise.all([
+      this.loadMembers(),
+      this.loadRoles(),
+      this.loadConfig(),
+      this.loadHierarchies(),
+      this.loadLeadership(),
+      this.loadDiscordLists(),
+    ]);
+  }
+
   async loadTab(tab: StaffTab, force = false): Promise<void> {
     switch (tab) {
       case 'members':
