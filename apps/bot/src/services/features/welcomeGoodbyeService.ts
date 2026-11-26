@@ -1,10 +1,13 @@
 import { Client, AttachmentBuilder, GuildMember, PermissionFlagsBits } from 'discord.js';
-import { createCanvas, loadImage } from '@napi-rs/canvas';
+import { createCanvas, loadImage, type Image } from '@napi-rs/canvas';
 import prisma from '../../utils/db.js';
 import { canvasFont, ensureCanvasFonts } from '../../utils/canvasFonts.js';
+import { fetchExternal } from '../../utils/http.js';
 import { logger } from '../../utils/logger.js';
 import { isAutoGrantableRole } from '../../utils/adminLockPermissions.js';
 import { resolvePlaceholders, type PlaceholderMember } from '../../utils/placeholders.js';
+import { assertWebhookUrlReachable } from '../integrations/outgoingWebhookSecurity.js';
+import { sniffImage } from '../site/siteUploads.js';
 import type { ExperimentVariant } from './welcomeExperimentMath.js';
 
 type DepartedMember = PlaceholderMember & Pick<GuildMember, 'guild'>;
@@ -61,7 +64,7 @@ export async function handleGuildMemberAdd(member: GuildMember, _client: Client,
 
     // Si la bannière image est activée, la générer
     if (variant?.imageEnabled ?? config.welcomeImageEnabled) {
-      const buffer = await generateWelcomeCard(member);
+      const buffer = await generateWelcomeCard(member, 'BIENVENUE !', config.welcomeImageUrl);
       const attachment = new AttachmentBuilder(buffer, { name: 'welcome-card.png' });
       options.files = [attachment];
     }
@@ -105,7 +108,7 @@ export async function handleGuildBoost(newMember: GuildMember, _client: Client) 
     const options: { content: string; files?: AttachmentBuilder[] } = { content: text };
 
     if (config.boostImageEnabled) {
-      const buffer = await generateWelcomeCard(newMember, 'MERCI !');
+      const buffer = await generateWelcomeCard(newMember, 'MERCI !', config.boostImageUrl);
       const attachment = new AttachmentBuilder(buffer, { name: 'boost-card.png' });
       options.files = [attachment];
     }
@@ -180,10 +183,34 @@ export async function applyJoinAutoRole(member: GuildMember) {
   }
 }
 
+const MAX_BACKGROUND_BYTES = 8 * 1024 * 1024;
+
+async function loadBackgroundImage(rawUrl?: string | null): Promise<Image | null> {
+  const trimmed = rawUrl?.trim();
+  if (!trimmed) return null;
+  try {
+    const safeUrl = await assertWebhookUrlReachable(trimmed);
+    const response = await fetchExternal(safeUrl, { redirect: 'error' }, 5000);
+    if (!response.ok) return null;
+    const bytes = Buffer.from(await response.arrayBuffer());
+    if (bytes.length === 0 || bytes.length > MAX_BACKGROUND_BYTES) return null;
+    const kind = sniffImage(bytes);
+    if (!kind || kind === 'avif') return null;
+    return await loadImage(bytes);
+  } catch (err) {
+    logger.warn('WelcomeGoodbyeService', `Fond personnalisé ignoré (${trimmed}) :`, err);
+    return null;
+  }
+}
+
 /**
  * Génère une carte de bienvenue au format PNG avec Canvas
  */
-export async function generateWelcomeCard(member: GuildMember, titleText = 'BIENVENUE !'): Promise<Buffer> {
+export async function generateWelcomeCard(
+  member: GuildMember,
+  titleText = 'BIENVENUE !',
+  backgroundUrl?: string | null,
+): Promise<Buffer> {
   ensureCanvasFonts();
 
   const W = 800, H = 300;
@@ -196,6 +223,19 @@ export async function generateWelcomeCard(member: GuildMember, titleText = 'BIEN
   bg.addColorStop(1, '#161a29');
   ctx.fillStyle = bg;
   roundRect(ctx, 0, 0, W, H, 16, bg);
+
+  const bgImage = await loadBackgroundImage(backgroundUrl);
+  if (bgImage) {
+    ctx.save();
+    roundRectPath(ctx, 0, 0, W, H, 16);
+    ctx.clip();
+    const scale = Math.max(W / bgImage.width, H / bgImage.height);
+    const drawW = bgImage.width * scale;
+    const drawH = bgImage.height * scale;
+    ctx.globalAlpha = 0.5;
+    ctx.drawImage(bgImage, (W - drawW) / 2, (H - drawH) / 2, drawW, drawH);
+    ctx.restore();
+  }
 
   // Bordure brillante discrète
   ctx.strokeStyle = 'rgba(88, 101, 242, 0.3)';
@@ -255,7 +295,7 @@ export async function generateWelcomeCard(member: GuildMember, titleText = 'BIEN
 
 // Helper rectangle arrondi
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function roundRect(ctx: any, x: number, y: number, w: number, h: number, r: number, fill: string | CanvasGradient) {
+function roundRectPath(ctx: any, x: number, y: number, w: number, h: number, r: number) {
   ctx.beginPath();
   ctx.moveTo(x + r, y);
   ctx.lineTo(x + w - r, y);
@@ -267,6 +307,11 @@ function roundRect(ctx: any, x: number, y: number, w: number, h: number, r: numb
   ctx.lineTo(x, y + r);
   ctx.quadraticCurveTo(x, y, x + r, y);
   ctx.closePath();
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function roundRect(ctx: any, x: number, y: number, w: number, h: number, r: number, fill: string | CanvasGradient) {
+  roundRectPath(ctx, x, y, w, h, r);
   ctx.fillStyle = fill;
   ctx.fill();
 }

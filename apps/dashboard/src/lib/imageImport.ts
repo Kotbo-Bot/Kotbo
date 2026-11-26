@@ -1,9 +1,10 @@
 /**
  * Image importée depuis l'ordinateur, prête à envoyer en data URI.
  *
- * Hors GIF (dont l'animation serait perdue), l'image est redimensionnée et
- * réencodée en WebP dans le navigateur : un avatar pris au téléphone pèse
- * plusieurs Mo pour 512 pixels utiles, et l'API refuse au-delà de 8 Mo.
+ * Hors GIF (dont l'animation serait perdue), l'image est redimensionnée puis
+ * réencodée dans le navigateur : PNG pour garder la transparence (Discord
+ * aplatit le WebP sur fond noir), JPEG pour les photos JPEG, avec repli en
+ * WebP si le PNG dépasse 8 Mo.
  */
 export const IMAGE_IMPORT_MAX_BYTES = 8 * 1024 * 1024;
 const ACCEPTED = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
@@ -25,6 +26,10 @@ function readAsDataUrl(file: Blob): Promise<string> {
   });
 }
 
+function canvasToBlob(canvas: HTMLCanvasElement, mime: string, quality?: number): Promise<Blob | null> {
+  return new Promise((resolve) => canvas.toBlob(resolve, mime, quality));
+}
+
 export async function importImageFile(file: File, maxDimension: number): Promise<{ dataUrl: string } | { error: ImageImportError }> {
   if (!ACCEPTED.includes(file.type)) return { error: 'unsupported' };
   if (file.type === 'image/gif') {
@@ -38,7 +43,12 @@ export async function importImageFile(file: File, maxDimension: number): Promise
     canvas.height = size.height;
     canvas.getContext('2d')?.drawImage(bitmap, 0, 0, size.width, size.height);
     bitmap.close();
-    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/webp', 0.9));
+    let blob = file.type === 'image/jpeg'
+      ? await canvasToBlob(canvas, 'image/jpeg', 0.9)
+      : await canvasToBlob(canvas, 'image/png');
+    if (blob && blob.size > IMAGE_IMPORT_MAX_BYTES && file.type !== 'image/jpeg') {
+      blob = await canvasToBlob(canvas, 'image/webp', 0.9);
+    }
     if (!blob) return { error: 'unreadable' };
     if (blob.size > IMAGE_IMPORT_MAX_BYTES) return { error: 'too_large' };
     return { dataUrl: await readAsDataUrl(blob) };

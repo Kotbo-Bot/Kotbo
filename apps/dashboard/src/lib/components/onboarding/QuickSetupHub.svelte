@@ -8,39 +8,39 @@
   compte peut ouvrir apparaissent.
 -->
 <script lang="ts">
-  import Papicon from '../Papicon.svelte';
-  import SectionCard from '../SectionCard.svelte';
-  import { navigationStore } from '../../stores/navigation.svelte';
-  import { m } from '../../i18n';
+  import Papicon from "../Papicon.svelte";
+  import SectionCard from "../SectionCard.svelte";
+  import { navigationStore } from "../../stores/navigation.svelte";
+  import { m } from "../../i18n";
 
   const ASSISTANTS = [
     {
-      href: '/security/quick-setup',
-      icon: 'shield',
+      href: "/security/quick-setup",
+      icon: "shield",
       title: m.qsh_security,
       description: m.qsh_security_desc,
     },
     {
-      href: '/economy-setup',
-      icon: 'coins',
+      href: "/economy-setup",
+      icon: "coins",
       title: m.qsh_economy,
       description: m.qsh_economy_desc,
     },
     {
-      href: '/leveling',
-      icon: 'trophy',
+      href: "/leveling",
+      icon: "trophy",
       title: m.qsh_levels,
       description: m.qsh_levels_desc,
     },
     {
-      href: '/prestige',
-      icon: 'crown',
+      href: "/prestige",
+      icon: "crown",
       title: m.qsh_prestige,
       description: m.qsh_prestige_desc,
     },
     {
-      href: '/channel-health',
-      icon: 'activity',
+      href: "/channel-health",
+      icon: "activity",
       title: m.qsh_channel_health,
       description: m.qsh_channel_health_desc,
     },
@@ -48,7 +48,9 @@
 
   // `allItems` porte deja les droits du compte et les modules eteints.
   const available = $derived(
-    ASSISTANTS.filter((assistant) => navigationStore.allItems.some((item) => item.href === assistant.href)),
+    ASSISTANTS.filter((assistant) =>
+      navigationStore.allItems.some((item) => item.href === assistant.href),
+    ),
   );
 </script>
 
@@ -65,14 +67,24 @@
           href={assistant.href}
           class="group flex items-center gap-3.5 px-5 py-3.5 transition-colors hover:bg-surface-hover"
         >
-          <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-surface-container text-on-surface-variant group-hover:bg-primary/15 group-hover:text-primary transition-colors">
+          <span
+            class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-surface-container text-on-surface-variant group-hover:bg-primary/15 group-hover:text-primary transition-colors"
+          >
             <Papicon icon={assistant.icon} size={17} />
           </span>
           <span class="min-w-0 flex-1">
-            <span class="block text-sm font-semibold text-on-surface">{assistant.title()}</span>
-            <span class="mt-0.5 block text-body-sm text-on-surface-variant">{assistant.description()}</span>
+            <span class="block text-sm font-semibold text-on-surface"
+              >{assistant.title()}</span
+            >
+            <span class="mt-0.5 block text-body-sm text-on-surface-variant"
+              >{assistant.description()}</span
+            >
           </span>
-          <Papicon icon="arrow-right" size={14} class="shrink-0 text-on-surface-variant transition-transform group-hover:translate-x-0.5 group-hover:text-on-surface" />
+          <Papicon
+            icon="arrow-right"
+            size={14}
+            class="shrink-0 text-on-surface-variant transition-transform group-hover:translate-x-0.5 group-hover:text-on-surface"
+          />
         </a>
       {/each}
     </div>
