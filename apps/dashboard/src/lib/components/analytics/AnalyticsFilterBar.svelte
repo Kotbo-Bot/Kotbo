@@ -134,10 +134,12 @@
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
-    padding: 0.875rem 1rem;
-    border-radius: 0.75rem;
+    padding: 0.875rem 1.125rem;
+    border-radius: var(--radius-card);
+    corner-shape: superellipse(1.3);
     border: 1px solid var(--color-outline-variant);
-    background: var(--color-surface-container-low);
+    background: var(--surface-card);
+    box-shadow: var(--glass-quiet-shadow), var(--glass-quiet-rim);
   }
 
   .filter-bar__select {
