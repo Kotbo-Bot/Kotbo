@@ -26,6 +26,7 @@
   import BotInviteModal from '../lib/components/onboarding/BotInviteModal.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
 
+  import { DEMO_MODE } from '../lib/demo/mode';
   import { errorMessage } from '@kotbo/shared';
   let servers = $state<ManageableServer[]>([]);
   let clientId = $state('');
@@ -37,7 +38,17 @@
   let inviteModalOpen = $state(false);
   let selectedServerForInvite = $state<ManageableServer | null>(null);
 
+  async function installInDemo(server: ManageableServer) {
+    await fetch(`/api/demo/guilds/${server.id}/install`, { method: 'POST' });
+    toast.success(`Kotbo ajouté sur ${server.name}`);
+    enterServer(server.id);
+  }
+
   function openInviteModal(server: ManageableServer | null) {
+    if (DEMO_MODE && server) {
+      void installInDemo(server);
+      return;
+    }
     selectedServerForInvite = server;
     inviteModalOpen = true;
   }

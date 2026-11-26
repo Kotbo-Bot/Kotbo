@@ -25,9 +25,14 @@ export type DemoRequest = {
 
 export type DemoHandler = (req: DemoRequest) => unknown;
 
-type Route = { method: string; pattern: RegExp; keys: string[]; handler: DemoHandler };
+type Route = { method: string; path: string; pattern: RegExp; keys: string[]; handler: DemoHandler };
 
 const routes: Route[] = [];
+
+/** Liste des routes déclarées (utile pour les tests de couverture démo). */
+export function listDemoRoutes(): Array<{ method: string; path: string; keys: string[] }> {
+  return routes.map(({ method, path, keys }) => ({ method, path, keys: [...keys] }));
+}
 
 /** Message rendu par une route absente de la démo (conservé pour compatibilité). */
 export const DEMO_UNAVAILABLE =
@@ -46,7 +51,7 @@ export function route(method: string, path: string, handler: DemoHandler): void 
       keys.push(key);
       return '([^/]+)';
     });
-  routes.push({ method: method.toUpperCase(), pattern: new RegExp(`^${source}/?$`), keys, handler });
+  routes.push({ method: method.toUpperCase(), path, pattern: new RegExp(`^${source}/?$`), keys, handler });
   // Les routes à segments fixes passent avant les routes à paramètre, quel que soit
   // l'ordre de déclaration : `/tickets/macros` ne doit pas tomber sur `/tickets/:ticketId`.
   routes.sort((a, b) => a.keys.length - b.keys.length);

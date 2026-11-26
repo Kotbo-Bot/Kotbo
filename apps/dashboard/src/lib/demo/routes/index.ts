@@ -46,6 +46,7 @@ import { registerWorkflowRoutes } from './workflows';
 import { registerProgressionRoutes } from './progression';
 import { registerClanRoutes } from './clans';
 import { registerRpgRoutes } from './rpg';
+import { registerOnboardingRoutes } from './onboarding';
 
 export function registerDemoRoutes(): void {
   // Avant les routes Analytics historiques : la première route qui correspond gagne.
@@ -91,4 +92,5 @@ export function registerDemoRoutes(): void {
   registerLogsRoutes();
   registerModulesRoutes();
   registerPulseRoutes();
+  registerOnboardingRoutes();
 }
