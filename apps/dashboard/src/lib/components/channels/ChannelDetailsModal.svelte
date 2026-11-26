@@ -18,6 +18,10 @@
   import { memberAvatarSrc } from '../../discordMedia';
   import { channelDetailsModal } from '../../stores/channelDetailsModal.svelte';
   import { memberCaseModal } from '../../stores/memberCaseModal.svelte';
+  import { dashboardStore } from '../../stores/dashboard.svelte';
+  import { Message } from '@arcscord/discord-ui-svelte';
+  import DiscordScope from '../discord/DiscordScope.svelte';
+  import { toLoggedMessageView } from '../../loggedMessageView';
   import { fetchChannelDetails } from '../../api';
   import { m, dateLocale } from '../../i18n';
   import { errorMessage } from '@kotbo/shared';
@@ -494,18 +498,39 @@
           {#if details.content.logging.available && details.content.recentMessages.length > 0}
             <ul class="max-h-96 divide-y divide-outline-variant overflow-y-auto">
               {#each details.content.recentMessages as msg, i (i)}
-                <li class="px-5 py-3">
+                {@const prepared = toLoggedMessageView(
+                  {
+                    id: msg.id ?? `recent-${i}`,
+                    authorId: msg.authorId,
+                    authorName: msg.authorName,
+                    authorAvatar: msg.authorAvatar,
+                    isBot: msg.isBot,
+                    content: msg.content ? truncate(msg.content, 240) : '',
+                    createdAt: msg.createdAt,
+                    editedAt: msg.editedAt,
+                  },
+                  {
+                    roles: dashboardStore.state.discordRoles,
+                    channels: dashboardStore.state.discordChannels,
+                  },
+                )}
+                <li class="px-5 py-3 space-y-1.5">
                   <div class="flex flex-wrap items-center gap-2 text-xs text-on-surface-variant">
-                    <img src={memberAvatarSrc(msg.authorAvatar, msg.authorName, msg.authorId)} alt="" class="h-5 w-5 rounded-md object-cover" />
-                    <span class="font-medium text-on-surface">{msg.authorName}</span>
                     <MemberTag userId={msg.authorId} />
-                    {#if msg.isBot}<span class="badge badge-info">BOT</span>{/if}
-                    <span>{formatDateTime(msg.createdAt)}</span>
-                    {#if msg.editedAt}<span class="text-warning">{m.chd_edited()}</span>{/if}
+                    {#if msg.hasAttachment || msg.embedCount > 0}
+                      <span class="text-primary">{m.chd_has_media()}</span>
+                    {/if}
                   </div>
-                  <p class="mt-1 text-sm text-on-surface wrap-break-word">{truncate(msg.content, 240) || m.chd_empty_message()}</p>
-                  {#if msg.hasAttachment || msg.embedCount > 0}
-                    <p class="mt-1 text-xs text-primary">{m.chd_has_media()}</p>
+                  <DiscordScope class="chd-discord-message" entities={prepared.entities}>
+                    <Message
+                      message={prepared.view}
+                      onUserClick={!msg.isBot && memberCaseModal.canOpen
+                        ? () => openMember(msg.authorId, msg.authorName)
+                        : undefined}
+                    />
+                  </DiscordScope>
+                  {#if !msg.content}
+                    <p class="text-xs italic text-on-surface-variant">{m.chd_empty_message()}</p>
                   {/if}
                 </li>
               {/each}
@@ -565,14 +590,37 @@
               {#if details.moderation.recentDeleted.length > 0}
                 <ul class="max-h-96 divide-y divide-outline-variant overflow-y-auto">
                   {#each details.moderation.recentDeleted as msg, i (i)}
-                    <li class="px-5 py-3">
+                    {@const prepared = toLoggedMessageView(
+                      {
+                        id: msg.id ?? `deleted-${i}`,
+                        authorId: msg.authorId,
+                        authorName: msg.authorName,
+                        authorAvatar: msg.authorAvatar,
+                        isBot: msg.isBot,
+                        content: msg.content ? truncate(msg.content, 240) : '',
+                        createdAt: msg.deletedAt,
+                      },
+                      {
+                        roles: dashboardStore.state.discordRoles,
+                        channels: dashboardStore.state.discordChannels,
+                      },
+                    )}
+                    <li class="px-5 py-3 space-y-1.5">
                       <div class="flex flex-wrap items-center gap-2 text-xs text-on-surface-variant">
-                        <img src={memberAvatarSrc(msg.authorAvatar, msg.authorName, msg.authorId)} alt="" class="h-5 w-5 rounded-md object-cover" />
-                        <span class="font-medium text-on-surface">{msg.authorName}</span>
                         <MemberTag userId={msg.authorId} />
                         <span>{m.chd_deleted_at({ date: formatDateTime(msg.deletedAt) })}</span>
                       </div>
-                      <p class="mt-1 text-sm text-on-surface wrap-break-word">{truncate(msg.content, 240) || m.chd_empty_message()}</p>
+                      <DiscordScope class="chd-discord-message" entities={prepared.entities}>
+                        <Message
+                          message={prepared.view}
+                          onUserClick={!msg.isBot && memberCaseModal.canOpen
+                            ? () => openMember(msg.authorId, msg.authorName)
+                            : undefined}
+                        />
+                      </DiscordScope>
+                      {#if !msg.content}
+                        <p class="text-xs italic text-on-surface-variant">{m.chd_empty_message()}</p>
+                      {/if}
                     </li>
                   {/each}
                 </ul>
@@ -669,3 +717,10 @@
     </div>
   {/if}
 </DetailSheet>
+
+<style>
+  :global(.arcscord-discord-ui.chd-discord-message) {
+    border-radius: 0.5rem;
+    padding: 0.25rem 0;
+  }
+</style>

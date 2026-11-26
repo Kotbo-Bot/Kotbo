@@ -4,6 +4,10 @@
   import BoosterBadge from './BoosterBadge.svelte';
   import HintTip from './economy/HintTip.svelte';
   import { Tabs, Button, Callout, SectionCard, EmptyState, Field } from './ui';
+  import { Markdown, Message } from '@arcscord/discord-ui-svelte';
+  import DiscordScope from './discord/DiscordScope.svelte';
+  import { mergeEntities, toPreviewMarkdown } from './discord/previewEntities.svelte';
+  import { buildGuildEntities, toLoggedMessageView } from '../loggedMessageView';
   import { memberAvatarSrc } from '../discordMedia';
   import MemberContentPanel from './analytics/MemberContentPanel.svelte';
   import MetricTabs from './analytics/MetricTabs.svelte';
@@ -815,6 +819,10 @@
   ]);
 
   const displayName = $derived(caseData?.profile?.displayName || caseData?.profile?.globalName || userName);
+  const guildEntities = $derived(buildGuildEntities({
+    roles: dashboardStore.state.discordRoles,
+    channels: dashboardStore.state.discordChannels,
+  }));
   const activeSanctionCount = $derived(sanctions.filter((s) => s.status === 'ACTIVE').length);
   const riskTone = $derived(moderationRiskScore < 30 ? 'success' : moderationRiskScore < 70 ? 'warning' : 'error');
   const visibleTabs = $derived.by(() => {
@@ -1332,12 +1340,21 @@
                   {#if recent.length}
                     <ul class="divide-y divide-outline-variant">
                       {#each recent as msg, i (i)}
-                        <li class="px-5 py-3">
+                        <li class="px-5 py-3 space-y-1.5">
                           <div class="flex items-center justify-between gap-2 text-xs text-on-surface-variant">
                             <span class="font-medium text-primary">#{msg.channelName}</span>
                             <span>{formatRelative(msg.dateIso)}</span>
                           </div>
-                          <p class="mt-1 line-clamp-2 text-sm text-on-surface">{msg.content || m.mcm_empty_content()}</p>
+                          {#if msg.content}
+                            <DiscordScope
+                              class="mcm-discord-snippet"
+                              entities={mergeEntities([guildEntities, toPreviewMarkdown(msg.content, { mentions: false }).entities])}
+                            >
+                              <Markdown content={msg.content} />
+                            </DiscordScope>
+                          {:else}
+                            <p class="mt-1 text-sm text-on-surface-variant italic">{m.mcm_empty_content()}</p>
+                          {/if}
                         </li>
                       {/each}
                     </ul>
@@ -1732,14 +1749,27 @@
               {:else}
                 <ul class="section-card divide-y divide-outline-variant overflow-hidden">
                   {#each messagesList as msg (msg.id)}
-                    <li class="px-5 py-4 {msg.deletedAt ? 'bg-error/5' : ''}">
+                    {@const prepared = toLoggedMessageView(
+                      {
+                        id: msg.id,
+                        authorId: userId,
+                        authorName: displayName,
+                        authorAvatar: caseData?.profile?.avatarUrl ?? null,
+                        isBot: Boolean(caseData?.profile?.bot),
+                        content: msg.content || '',
+                        createdAt: msg.createdAt,
+                        editedAt: msg.editedAt,
+                        attachments: Array.isArray(msg.attachments) ? msg.attachments : null,
+                      },
+                      {
+                        roles: dashboardStore.state.discordRoles,
+                        channels: dashboardStore.state.discordChannels,
+                      },
+                    )}
+                    <li class="px-5 py-4 space-y-2 {msg.deletedAt ? 'bg-error/5' : ''}">
                       <div class="flex flex-wrap items-center justify-between gap-2">
                         <div class="flex flex-wrap items-center gap-2 text-xs text-on-surface-variant">
                           <span class="font-medium text-primary">#{msg.channelName}</span>
-                          <span>{formatDateTime(msg.createdAt)}</span>
-                          {#if msg.editedAt}
-                            <span class="badge badge-warning" title={m.mcm_edited_on({ date: formatDateTime(msg.editedAt) })}>{m.mcm_edited()}</span>
-                          {/if}
                           {#if msg.deletedAt}
                             <span class="badge badge-danger" title={m.mcm_deleted_on({ date: formatDateTime(msg.deletedAt) })}>{m.mcm_deleted()}</span>
                           {/if}
@@ -1748,23 +1778,13 @@
                           <Button size="sm" variant="ghost" icon="arrow-up-right" aria-label={m.mcx_open_in_discord()} title={m.mcx_open_in_discord()} href="https://discord.com/channels/{authStore.selectedGuildId}/{msg.channelId}/{msg.messageId}" target="_blank" />
                         {/if}
                       </div>
-                      <p class="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-on-surface">
-                        {msg.content || (msg.hasAttachment ? m.mcm_empty_with_attachments() : m.mcm_empty_content())}
-                      </p>
-                      {#if Array.isArray(msg.attachments) && msg.attachments.length > 0}
-                        <div class="mt-3 flex flex-wrap gap-2">
-                          {#each msg.attachments as att, ai (ai)}
-                            {#if att.contentType?.startsWith('image/')}
-                              <a href={att.url} target="_blank" rel="noopener noreferrer" class="block max-h-40 max-w-60 overflow-hidden rounded-lg border border-outline-variant">
-                                <img src={att.url} alt={att.name} class="h-full w-full object-cover" />
-                              </a>
-                            {:else}
-                              <a href={att.url} target="_blank" rel="noopener noreferrer" class="mc-role text-primary">
-                                <Papicon icon="file" size={13} /><span class="max-w-40 truncate" title={att.name}>{att.name}</span>
-                              </a>
-                            {/if}
-                          {/each}
-                        </div>
+                      <DiscordScope class="mcm-discord-message" entities={prepared.entities}>
+                        <Message message={prepared.view} />
+                      </DiscordScope>
+                      {#if !msg.content && !(Array.isArray(msg.attachments) && msg.attachments.length > 0)}
+                        <p class="text-xs italic text-on-surface-variant">
+                          {msg.hasAttachment ? m.mcm_empty_with_attachments() : m.mcm_empty_content()}
+                        </p>
                       {/if}
                     </li>
                   {/each}
@@ -2563,4 +2583,14 @@
   }
   .mc-table tbody tr:last-child td { border-bottom: none; }
   .mc-table tbody tr:hover { background: var(--surface-hover); }
+
+  :global(.arcscord-discord-ui.mcm-discord-snippet) {
+    border-radius: 0.5rem;
+    padding: 0.5rem 0.75rem;
+  }
+
+  :global(.arcscord-discord-ui.mcm-discord-message) {
+    border-radius: 0.5rem;
+    padding: 0.25rem 0;
+  }
 </style>
