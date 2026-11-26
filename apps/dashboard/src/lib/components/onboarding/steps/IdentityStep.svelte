@@ -103,10 +103,10 @@
         type="button"
         onclick={() => { language = option.key; celebrateStep(); }}
         aria-pressed={language === option.key}
-        class="text-left rounded-2xl border p-4 transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40
+        class="section-card text-left p-4 transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40
         {language === option.key
-          ? 'border-primary bg-primary/[0.05] shadow-sm shadow-primary/10'
-          : 'border-outline-variant/40 hover:border-primary/45 hover:bg-surface-container-low/50'}"
+          ? '!border-primary bg-primary/[0.06] ring-1 ring-primary/25'
+          : 'hover:!border-primary/45'}"
       >
         <div class="flex items-center gap-2.5">
           <span class="text-xl leading-none">{option.flag}</span>
@@ -130,7 +130,7 @@
       <select
         id="timezone"
         bind:value={timezone}
-        class="flex-1 min-w-0 rounded-xl border border-field-border bg-surface-container-low/40 px-4 py-2.5 text-sm text-on-surface focus:outline-none focus:border-primary/50"
+        class="input flex-1 min-w-0"
       >
         {#each COMMON_TIMEZONES as zone (zone.value)}
           <option value={zone.value}>{zone.label}</option>
@@ -183,7 +183,7 @@
       type="button"
       onclick={apply}
       disabled={onboardingData.busy}
-      class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-on-primary text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-40"
+      class="btn btn-primary"
     >
       {onboardingData.busy ? 'Enregistrement…' : 'Continuer'}
       <Papicon icon="ChevronRight" size={15} />

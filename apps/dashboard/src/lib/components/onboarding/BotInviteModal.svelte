@@ -2,6 +2,8 @@
   import Modal from '../Modal.svelte';
   import Papicon from '../Papicon.svelte';
   import { Button, Callout } from '../ui';
+  import { DEMO_MODE } from '../../demo/mode';
+  import { toast } from '../../stores/toast.svelte';
   import {
     ADMIN_INVITE_PERMISSIONS,
     DETAILED_INVITE_PERMISSIONS,
@@ -38,6 +40,12 @@
   }
 
   function inviteWithAdmin() {
+    if (DEMO_MODE) {
+      onInviteStarted(guild?.id);
+      toast.success(guild ? `Kotbo ajouté sur ${guild.name}` : 'Kotbo ajouté en mode démonstration');
+      handleClose();
+      return;
+    }
     const url = buildBotInviteUrl(clientId, ADMIN_INVITE_PERMISSIONS, guild?.id);
     onInviteStarted(guild?.id);
     window.open(url, '_blank', 'noopener,noreferrer');
@@ -46,6 +54,12 @@
 
   function inviteWithDetailed() {
     if (!acknowledgedRisks) return;
+    if (DEMO_MODE) {
+      onInviteStarted(guild?.id);
+      toast.success(guild ? `Kotbo ajouté sur ${guild.name}` : 'Kotbo ajouté en mode démonstration');
+      handleClose();
+      return;
+    }
     const url = buildBotInviteUrl(clientId, DETAILED_INVITE_PERMISSIONS, guild?.id);
     onInviteStarted(guild?.id);
     window.open(url, '_blank', 'noopener,noreferrer');
@@ -61,15 +75,15 @@
   subtitle="Choisissez les autorisations accordées au bot sur Discord."
 >
   <div class="space-y-4">
-    <div class="rounded-xl border border-outline-variant bg-surface-container-low/50 p-4 space-y-3 text-left">
+    <div class="section-card p-4 space-y-3 text-left">
       <div class="flex items-start gap-3">
-        <div class="w-9 h-9 rounded-lg bg-surface-container text-on-surface-variant flex items-center justify-center shrink-0 mt-0.5">
+        <div class="w-9 h-9 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0 mt-0.5">
           <Papicon icon="shield" size={17} />
         </div>
         <div class="min-w-0 flex-1">
           <div class="flex items-center gap-2 flex-wrap">
             <h3 class="text-sm font-semibold text-on-surface">Permission Administrateur</h3>
-            <span class="rounded-md bg-primary/10 px-2 py-0.5 text-2xs font-medium text-primary">
+            <span class="rounded-full bg-primary/10 px-2.5 py-0.5 text-2xs font-medium text-primary">
               Recommandé
             </span>
           </div>

@@ -39,14 +39,14 @@
   type="button"
   {onclick}
   aria-pressed={selected}
-  class="choice group relative w-full text-left rounded-2xl border p-5 transition-all duration-200
+  class="choice section-card group relative w-full text-left p-5 transition-all duration-200
          focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40
          {selected
-           ? 'border-primary bg-primary/[0.05] shadow-sm shadow-primary/10'
-           : 'border-outline-variant/40 hover:border-primary/45 hover:bg-surface-container-low/50'}"
+           ? '!border-primary bg-primary/[0.06] ring-1 ring-primary/25'
+           : 'hover:!border-primary/45'}"
 >
   {#if badge}
-    <span class="absolute top-4 right-4 text-xs font-semibold px-2 py-0.5 rounded-full bg-primary/15 text-primary">
+    <span class="absolute top-4 right-4 text-xs font-semibold px-2.5 py-0.5 rounded-full bg-primary/15 text-primary">
       {badge}
     </span>
   {/if}
@@ -54,7 +54,7 @@
   <div class="flex items-start gap-3.5">
     {#if icon}
       <div
-        class="icon w-10 h-10 shrink-0 rounded-xl flex items-center justify-center transition-colors
+        class="icon w-10 h-10 shrink-0 rounded-full flex items-center justify-center transition-colors
         {selected ? 'bg-primary/15 text-primary' : 'bg-surface-container text-on-surface-variant'}"
       >
         <Papicon {icon} size={18} />
@@ -72,7 +72,7 @@
       </div>
 
       {#if pitch}
-        <p class="mt-0.5 text-body-sm font-medium text-on-surface-variant/75">{pitch}</p>
+        <p class="mt-0.5 text-body-sm font-medium text-on-surface-variant">{pitch}</p>
       {/if}
       {#if detail}
         <p class="mt-2 text-body-sm text-on-surface-variant leading-relaxed">{detail}</p>

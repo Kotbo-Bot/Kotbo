@@ -60,9 +60,9 @@
   {:else}
     <div class="space-y-2.5">
       {#each bots as bot (bot.id)}
-        <div class="rounded-2xl border border-outline-variant/35 bg-surface-container-lowest/40 p-4">
+        <div class="section-card p-4">
           <div class="flex items-start gap-3.5">
-            <img src={bot.avatarUrl} alt="" class="w-10 h-10 rounded-xl shrink-0 bg-surface-container" />
+            <img src={bot.avatarUrl} alt="" class="w-10 h-10 rounded-full shrink-0 bg-surface-container" />
 
             <div class="min-w-0 flex-1">
               <div class="flex items-baseline gap-2 flex-wrap">
@@ -104,8 +104,7 @@
       type="button"
       onclick={() => wizard.complete('migration-bots')}
       disabled={loading}
-      class="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-on-primary
-             hover:brightness-110 transition disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+      class="btn btn-primary"
     >
       Continuer
       <Papicon icon="ChevronRight" size={15} />

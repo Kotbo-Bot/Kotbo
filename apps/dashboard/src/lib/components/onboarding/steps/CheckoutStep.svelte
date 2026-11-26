@@ -353,7 +353,7 @@
         type="button"
         onclick={finishWithoutBilling}
         disabled={onboardingData.busy}
-        class="inline-flex items-center px-4 py-2.5 rounded-xl border border-outline-variant/40 text-sm font-medium text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low/60 transition-colors disabled:opacity-40"
+        class="btn btn-secondary"
       >
         {m.obx_co_free()}
       </button>
@@ -361,7 +361,7 @@
         type="button"
         onclick={goToCheckout}
         disabled={onboardingData.busy}
-        class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-on-primary text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-40"
+        class="btn btn-primary"
       >
         {onboardingData.busy ? m.obx_co_opening() : trialDays > 0 ? m.obx_co_trial({ days: trialDays }) : m.obx_co_start()}
         <Papicon icon="ChevronRight" size={15} />
@@ -371,7 +371,7 @@
         type="button"
         onclick={finishWithoutBilling}
         disabled={onboardingData.busy}
-        class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-on-primary text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-40"
+        class="btn btn-primary"
       >
         {m.obx_co_dashboard()}
         <Papicon icon="ChevronRight" size={15} />

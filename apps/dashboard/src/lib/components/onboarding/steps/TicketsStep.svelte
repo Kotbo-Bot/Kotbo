@@ -126,17 +126,17 @@
     </p>
   {/if}
 
-  <div class="grid gap-2 sm:grid-cols-2">
+  <div class="grid gap-2.5 sm:grid-cols-2">
     {#each TICKET_PRESETS as preset (preset.key)}
       {@const selected = keys.includes(preset.key)}
       <button
         type="button"
         onclick={() => toggle(preset.key)}
         aria-pressed={selected}
-        class="text-left rounded-xl border p-3.5 transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40
+        class="section-card text-left p-3.5 transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40
         {selected
-          ? 'border-primary bg-primary/[0.05]'
-          : 'border-outline-variant/35 hover:border-primary/40 hover:bg-surface-container-low/40'}"
+          ? '!border-primary bg-primary/[0.06] ring-1 ring-primary/25'
+          : 'hover:!border-primary/45'}"
       >
         <div class="flex items-center gap-2">
           <span class="text-[15px] leading-none">{preset.emoji}</span>
@@ -202,7 +202,7 @@
     <button
       type="button"
       onclick={skip}
-      class="text-body-sm font-medium text-on-surface-variant hover:text-on-surface transition-colors"
+      class="btn btn-ghost"
     >
       {m.obx_skip()}
     </button>
@@ -210,7 +210,7 @@
       type="button"
       onclick={apply}
       disabled={onboardingData.busy}
-      class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-on-primary text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-40"
+      class="btn btn-primary"
     >
       {onboardingData.busy ? m.obx_saving() : m.common_save()}
       <Papicon icon="ChevronRight" size={15} />

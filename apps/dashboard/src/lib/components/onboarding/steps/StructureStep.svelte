@@ -439,7 +439,7 @@
       <button
         type="button"
         onclick={() => wizard.complete('structure')}
-        class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-on-primary text-sm font-semibold hover:opacity-90 transition-opacity"
+        class="btn btn-primary"
       >
         {m.obx_continue()}
         <Papicon icon="ChevronRight" size={15} />
@@ -448,7 +448,7 @@
       <button
         type="button"
         onclick={() => wizard.next()}
-        class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-on-primary text-sm font-semibold hover:opacity-90 transition-opacity"
+        class="btn btn-primary"
       >
         {m.obx_continue()}
         <Papicon icon="ChevronRight" size={15} />
@@ -458,7 +458,7 @@
         <button
           type="button"
           onclick={skip}
-          class="text-body-sm font-medium text-on-surface-variant hover:text-on-surface transition-colors"
+          class="btn btn-ghost"
         >
           {m.obx_skip()}
         </button>
@@ -467,7 +467,7 @@
         type="button"
         onclick={apply}
         disabled={onboardingData.busy || blocked}
-        class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-on-primary text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
+        class="btn btn-primary"
       >
         {onboardingData.busy
           ? m.obx_in_progress()

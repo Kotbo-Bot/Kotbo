@@ -78,7 +78,7 @@
       type="button"
       onclick={apply}
       disabled={onboardingData.busy}
-      class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-on-primary text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-40"
+      class="btn btn-primary"
     >
       {onboardingData.busy ? 'Enregistrement…' : 'Appliquer'}
       <Papicon icon="ChevronRight" size={15} />

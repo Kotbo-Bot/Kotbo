@@ -87,7 +87,7 @@
   });
 </script>
 
-<div class="rounded-2xl border border-primary/30 bg-primary/[0.03] overflow-hidden">
+<div class="section-card !border-primary/30 bg-primary/[0.03] overflow-hidden">
   <!-- Compteur -->
   <div class="px-5 pt-5 pb-4">
     <div class="flex items-baseline justify-between gap-4 mb-3">
@@ -95,11 +95,11 @@
         {finished ? m.obx_bs_done() : m.obx_bs_running()}
       </p>
       <p class="text-body-sm font-semibold tabular-nums text-primary">
-        {revealed}<span class="text-on-surface-variant/45"> / {total}</span>
+        {revealed}<span class="text-on-surface-variant"> / {total}</span>
       </p>
     </div>
 
-    <div class="h-1.5 rounded-full bg-outline-variant/25 overflow-hidden">
+    <div class="h-1.5 rounded-full bg-outline-variant overflow-hidden">
       <div
         class="h-full rounded-full bg-primary transition-[width] duration-200 ease-out"
         style="width: {total ? (revealed / total) * 100 : 0}%"
@@ -115,14 +115,14 @@
   >
     {#each shown as item, index (item.key + index)}
       <div class="row flex items-center gap-2.5">
-        <span class="w-5 h-5 shrink-0 rounded-md bg-primary/15 text-primary flex items-center justify-center">
+        <span class="w-5 h-5 shrink-0 rounded-full bg-primary/15 text-primary flex items-center justify-center">
           <Papicon icon={icons[item.kind] ?? 'circle'} size={11} />
         </span>
-        <span class="text-body-sm text-on-surface-variant/85 truncate flex-1 min-w-0">{item.name}</span>
+        <span class="text-body-sm text-on-surface truncate flex-1 min-w-0">{item.name}</span>
         {#if item.mode === 'adopt'}
           <!-- Il existait avant Kotbo : rien n'a ete cree, seul le branchement
                est nouveau. La coche verte de la creation mentirait. -->
-          <span class="shrink-0 text-2xs font-medium text-on-surface-variant/45">{m.obx_mp_linked()}</span>
+          <span class="shrink-0 text-2xs font-medium text-on-surface-variant">{m.obx_mp_linked()}</span>
         {:else}
           <Papicon icon="check" size={12} class="shrink-0 text-success" />
         {/if}

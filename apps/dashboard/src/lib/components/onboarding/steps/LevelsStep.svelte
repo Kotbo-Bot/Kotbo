@@ -304,7 +304,7 @@
     <button
       type="button"
       onclick={skip}
-      class="text-body-sm font-medium text-on-surface-variant hover:text-on-surface transition-colors"
+      class="btn btn-ghost"
     >
       {m.obx_skip()}
     </button>
@@ -312,7 +312,7 @@
       type="button"
       onclick={apply}
       disabled={onboardingData.busy}
-      class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-on-primary text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-40"
+      class="btn btn-primary"
     >
       {onboardingData.busy ? m.obx_saving() : m.obx_lv_apply()}
       <Papicon icon="ChevronRight" size={15} />

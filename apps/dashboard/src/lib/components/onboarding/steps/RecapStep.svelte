@@ -151,31 +151,31 @@
         { value: built.channels, label: m.onb_recap_channels(), icon: 'message-circle' },
         { value: built.modules, label: m.onb_recap_modules(), icon: 'toggle-right' },
       ] as tile (tile.label)}
-        <div class="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest/50 p-4 text-center">
-          <span class="inline-flex w-8 h-8 rounded-lg bg-primary/10 text-primary items-center justify-center mb-2">
+        <div class="section-card p-4 text-center">
+          <span class="inline-flex w-8 h-8 rounded-full bg-primary/10 text-primary items-center justify-center mb-2">
             <Papicon icon={tile.icon} size={15} />
           </span>
           <p class="text-[26px] font-semibold leading-none text-on-surface">
             <CountUp value={tile.value} />
           </p>
-          <p class="mt-1.5 text-xs text-on-surface-variant/55">{tile.label}</p>
+          <p class="mt-1.5 text-xs text-on-surface-variant">{tile.label}</p>
         </div>
       {/each}
     </div>
   {/if}
 
   {#if lines.length}
-    <div class="mt-4 rounded-2xl border border-outline-variant/30 bg-surface-container-lowest/40 divide-y divide-outline-variant/20">
+    <div class="section-card-flush mt-4 divide-y divide-outline-variant">
       {#each lines as line, index (line.label)}
         <div
           class="row flex items-center gap-3 px-4 py-2.5"
           style="animation-delay: {700 + index * 70}ms"
         >
-          <span class="w-6 h-6 shrink-0 rounded-md bg-primary/10 text-primary flex items-center justify-center">
+          <span class="w-6 h-6 shrink-0 rounded-full bg-primary/10 text-primary flex items-center justify-center">
             <Papicon icon={line.icon} size={12} />
           </span>
           <span class="text-body-sm font-medium text-on-surface flex-1 min-w-0 truncate">{line.label}</span>
-          <span class="text-xs text-on-surface-variant/55 shrink-0">{line.value}</span>
+          <span class="text-xs text-on-surface-variant shrink-0">{line.value}</span>
           <Papicon icon="check" size={13} class="shrink-0 text-success" />
         </div>
       {/each}
@@ -250,8 +250,7 @@
     <button
       type="button"
       onclick={() => wizard.complete('recap')}
-      class="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-on-primary
-             hover:brightness-110 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+      class="btn btn-primary"
     >
       {m.onb_recap_continue()}
       <Papicon icon="ChevronRight" size={15} />
