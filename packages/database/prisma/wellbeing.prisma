@@ -48,6 +48,9 @@ model WellbeingConfig {
   pulseEnabled       Boolean  @default(false)
   pulseRoleIds       String[] @default([])
   pulseSentAt        DateTime?
+  // Référents partagés avec les autres cellules du réseau de serveurs qui
+  // partagent aussi : un dossier peut être confié à l'un de leurs membres.
+  networkPool        Boolean  @default(false)
 
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
 
@@ -97,6 +100,10 @@ model WellbeingCase {
   // Dossier résolu : rappel de prendre des nouvelles, et sa date d'envoi.
   followUpAt           DateTime?
   followUpSentAt       DateTime?
+  // Référent du réseau : membre de la cellule d'un autre serveur du réseau,
+  // qui lit et annote ce dossier depuis la cellule de son serveur.
+  networkReferentId      String?
+  networkReferentGuildId String?
 
   guild  Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
   reporterMessages WellbeingReporterMessage[]
@@ -112,6 +119,7 @@ model WellbeingCase {
   @@index([status, reviewAt])
   @@index([guildId, deletedAt])
   @@index([status, followUpAt])
+  @@index([networkReferentId])
   @@map("wellbeing_cases")
 }
 
@@ -242,7 +250,7 @@ model WellbeingCaseEvent {
   caseId    String
   actorId   String?
   actorName String
-  type      String   // CREATED | STATUS | SEVERITY | ASSIGNEE | REVIEW | NOTE | RESOURCES_SENT | REMINDER | ATTACHMENT_ADDED | ATTACHMENT_REMOVED | VIEWED | TRASHED | RESTORED | EXTENDED | EXPORTED | TASK_ADDED | TASK_DONE | TASK_REOPENED | TASK_REMOVED | PURGE_REQUESTED | CLOSED_REASON | NOTE_EDITED | REPORTER_REPLY
+  type      String   // CREATED | STATUS | SEVERITY | ASSIGNEE | REVIEW | NOTE | RESOURCES_SENT | REMINDER | ATTACHMENT_ADDED | ATTACHMENT_REMOVED | VIEWED | TRASHED | RESTORED | EXTENDED | EXPORTED | TASK_ADDED | TASK_DONE | TASK_REOPENED | TASK_REMOVED | PURGE_REQUESTED | CLOSED_REASON | NOTE_EDITED | REPORTER_REPLY | NETWORK_REFERENT
   fromValue String?
   toValue   String?
   createdAt DateTime @default(now())

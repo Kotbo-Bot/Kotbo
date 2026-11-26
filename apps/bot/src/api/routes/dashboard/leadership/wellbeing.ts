@@ -7,12 +7,12 @@
  * exiger la validation d'une seconde personne et se limiter à un membre.
  */
 import { Hono, type Context } from 'hono';
-import type { Client, Guild } from 'discord.js';
+import type { Client } from 'discord.js';
 import type { Prisma } from '@prisma/client';
 import prisma from '../../../../utils/db.js';
 import { logger } from '../../../../utils/logger.js';
-import { getGuildName, pushAudit } from '../../../shared.js';
-import { auditUserOf, fail, guildRoute, readBody, send } from '../../../hono/dashboard/kit.js';
+import { getGuildName } from '../../../shared.js';
+import { fail, guildRoute, readBody, send } from '../../../hono/dashboard/kit.js';
 import {
   ATTACHMENT_LABEL_MAX,
   BREAK_GLASS_HOURS,
@@ -48,14 +48,12 @@ import {
   isUnusualAccess,
   mentionText,
   verifyCaseEventChain,
-  wellbeingSessionExpired,
   wellbeingCellStats,
   caseChangeEvents,
   cleanAlertEvents,
   cleanResources,
   decideBreakGlassError,
   describeConfigChange,
-  resolveWellbeingAccess,
   resourcesMessage,
   MAX_FOLLOW_UP_DAYS,
   PULSE_WEEKS_SHOWN,
@@ -69,7 +67,6 @@ import {
   type CaseTracked,
 } from '../../../../services/staff/wellbeingPolicy.js';
 import { sendWellbeingAlert, sendWellbeingDirect } from '../../../../services/staff/wellbeingAlerts.js';
-import { appendCaseEvents } from '../../../../services/staff/wellbeingEvents.js';
 import { currentAbsence } from '../../../../services/staff/wellbeingAbsence.js';
 import { cancelDissolution, requestDissolution } from '../../../../services/staff/wellbeingDissolution.js';
 import { openCase, openCaseHeader, openNote, sealCaseFields, sealNote, sealWellbeing } from '../../../../services/staff/wellbeingCrypto.js';
@@ -78,107 +75,28 @@ import { closeTicket } from '../../../../services/features/ticketService.js';
 import { wellbeingPanelMessage } from '../../../../commands/utility/wellbeing.js';
 import { resolveGuildLocale } from '../../../../utils/i18n.js';
 import { bodyText } from '../../../../utils/bodyText.js';
+import {
+  CASE_INCLUDE,
+  CASE_LIST_SELECT,
+  SNOWFLAKE_RE,
+  actorName,
+  audit,
+  findVisibleCase,
+  isTeamMemberId,
+  recordEvents,
+  resolveWellbeingRole,
+  staleSession,
+  type WellbeingState,
+} from './wellbeingShared.js';
 
 const CATEGORIES = ['SOUTIEN', 'MEDIATION', 'SIGNALEMENT', 'SUIVI'];
 const SEVERITIES = ['LOW', 'NORMAL', 'HIGH', 'CRITICAL'];
 const STATUSES = ['OPEN', 'MONITORING', 'CLOSED'];
-const SNOWFLAKE_RE = /^\d{17,20}$/;
 const HOUR_MS = 60 * 60 * 1000;
 const MAX_STALE_DAYS = 90;
 
-const CASE_INCLUDE = {
-  notes: { orderBy: { createdAt: 'asc' as const } },
-  events: { orderBy: { createdAt: 'asc' as const } },
-  attachments: { orderBy: { createdAt: 'asc' as const } },
-  tasks: { orderBy: { createdAt: 'asc' as const } },
-  reporterMessages: { orderBy: { createdAt: 'asc' as const } },
-};
-
-/**
- * La liste ne porte que l'en-tête des dossiers : le contenu se lit dossier par
- * dossier (GET /cases/:caseId), ce qui laisse une trace de qui a ouvert quoi.
- */
-const CASE_LIST_SELECT = {
-  id: true,
-  guildId: true,
-  subjectUserId: true,
-  subjectName: true,
-  title: true,
-  category: true,
-  severity: true,
-  status: true,
-  source: true,
-  assigneeId: true,
-  reviewAt: true,
-  lastActivityAt: true,
-  createdAt: true,
-  updatedAt: true,
-  deletedAt: true,
-  deletedByName: true,
-  purgeRequestedById: true,
-  purgeRequestedByName: true,
-  purgeRequestedAt: true,
-} as const;
-
-/**
- * Dossier de ce serveur que la personne peut voir : ni un dossier qui la
- * concerne (conflit d'intérêts), ni un dossier en corbeille sauf demande.
- */
-function findVisibleCase(guildId: string, caseId: string, viewerId: string, options: { trashed?: boolean } = {}) {
-  return prisma.wellbeingCase.findFirst({ where: { AND: [{ id: caseId }, caseVisibilityWhere(guildId, viewerId, options)] } });
-}
-
-/**
- * Lire le contenu des dossiers exige une connexion récente : un poste resté
- * connecté des jours ne donne pas accès à la cellule. Le dashboard reconnaît
- * le code et propose de se reconnecter.
- */
-function staleSession(c: Context): Response | null {
-  if (!wellbeingSessionExpired(c.var.dashboardUser.sessionCreatedAt, Date.now())) return null;
-  return c.json({ error: 'Reconnectez-vous pour ouvrir les dossiers de la cellule bien-être.', code: 'WELLBEING_REAUTH' }, 403);
-}
-
 /** Dernière alerte de consultation inhabituelle, par serveur et par personne. */
 const unusualAlertAt = new Map<string, number>();
-
-async function actorOf(discordGuild: Guild | null, userId: string) {
-  const member = discordGuild ? await discordGuild.members.fetch(userId).catch(() => null) : null;
-  return {
-    userId,
-    roleIds: new Set(member ? member.roles.cache.map((r) => r.id) : []),
-    isOwner: discordGuild?.ownerId === userId,
-  };
-}
-
-async function resolveWellbeingRole(client: Client, guildId: string, userId: string) {
-  const config = await prisma.wellbeingConfig.findUnique({ where: { guildId } });
-  const discordGuild = client.guilds.cache.get(guildId) ?? await client.guilds.fetch(guildId).catch(() => null);
-  const actor = await actorOf(discordGuild, userId);
-
-  const base = resolveWellbeingAccess(config, actor, false);
-  // Seul un accès validé et non échu compte : une demande en attente n'ouvre rien.
-  const activeBreakGlass = base.isDirector && !base.isTeamMember
-    ? await prisma.wellbeingBreakGlassLog.findFirst({
-        where: { guildId, actorId: userId, status: 'APPROVED', expiresAt: { gt: new Date() } },
-        orderBy: { expiresAt: 'desc' },
-      })
-    : null;
-
-  return {
-    ...resolveWellbeingAccess(config, actor, !!activeBreakGlass),
-    config,
-    discordGuild,
-    activeBreakGlass,
-  };
-}
-
-type WellbeingState = Awaited<ReturnType<typeof resolveWellbeingRole>>;
-
-/** Un référent doit appartenir à la cellule : il lit le dossier qu'on lui confie. */
-async function isTeamMemberId(state: WellbeingState, userId: string): Promise<boolean> {
-  if (!SNOWFLAKE_RE.test(userId)) return false;
-  return resolveWellbeingAccess(state.config, await actorOf(state.discordGuild, userId), false).isTeamMember;
-}
 
 /** Id d'un dossier de ce serveur, ou null : un id inconnu n'entre pas au journal. */
 async function caseIdOfGuild(guildId: string, caseId: unknown): Promise<string | null> {
@@ -188,39 +106,11 @@ async function caseIdOfGuild(guildId: string, caseId: unknown): Promise<string |
   return found?.id ?? null;
 }
 
-function actorName(c: Context): string {
-  const user = c.var.dashboardUser;
-  return user.username ?? user.userId;
-}
-
-async function recordEvents(caseId: string, c: Context, drafts: Array<CaseEventDraft | { type: string; fromValue?: string | null; toValue?: string | null }>) {
-  if (drafts.length === 0) return;
-  await appendCaseEvents(caseId, drafts.map((draft) => ({
-    type: draft.type,
-    actorId: c.var.dashboardUser.userId,
-    actorName: actorName(c),
-    fromValue: draft.fromValue ?? null,
-    toValue: draft.toValue ?? null,
-  })));
-}
-
 function parseReviewAt(value: unknown): Date | null | undefined {
   if (value === undefined) return undefined;
   if (value === null || value === '') return null;
   const date = new Date(bodyText(value, 40));
   return Number.isNaN(date.getTime()) ? undefined : date;
-}
-
-async function audit(client: Client, c: Context, guildId: string, action: string, details: string, eventType = 'Manuel') {
-  await pushAudit(guildId, {
-    user: auditUserOf(c),
-    action,
-    context: getGuildName(client, guildId),
-    module: WELLBEING_AUDIT_MODULE,
-    eventType,
-    details,
-    channelId: null,
-  });
 }
 
 export function createWellbeingRouter(client: Client) {
@@ -290,6 +180,7 @@ export function createWellbeingRouter(client: Client) {
         distressWatch: false,
         pulseEnabled: false,
         pulseRoleIds: [],
+        networkPool: false,
         resources: [],
       };
       return send(c, { config });
@@ -327,6 +218,7 @@ export function createWellbeingRouter(client: Client) {
         distressWatch?: boolean;
         pulseEnabled?: boolean;
         pulseRoleIds?: string[];
+        networkPool?: boolean;
       }>(c);
       const cleanIds = (arr: unknown) =>
         Array.isArray(arr) ? arr.filter((x): x is string => typeof x === 'string' && SNOWFLAKE_RE.test(x)) : [];
@@ -352,6 +244,7 @@ export function createWellbeingRouter(client: Client) {
         ...(typeof body?.sanctionSignal === 'boolean' ? { sanctionSignal: body.sanctionSignal } : {}),
         ...(typeof body?.distressWatch === 'boolean' ? { distressWatch: body.distressWatch } : {}),
         ...(typeof body?.pulseEnabled === 'boolean' ? { pulseEnabled: body.pulseEnabled } : {}),
+        ...(typeof body?.networkPool === 'boolean' ? { networkPool: body.networkPool } : {}),
         ...(followUpDays !== undefined ? { followUpDays } : {}),
         ...(pulseRoleIds !== undefined ? { pulseRoleIds } : {}),
       };

@@ -17,6 +17,7 @@ import { createLeadershipRouter } from '../../routes/dashboard/leadership.js';
 import { createStaffRouter } from '../../routes/dashboard/leadership/staff.js';
 import { createTutoringRouter } from '../../routes/dashboard/leadership/tutoring.js';
 import { createWellbeingRouter } from '../../routes/dashboard/leadership/wellbeing.js';
+import { createWellbeingNetworkRouter } from '../../routes/dashboard/leadership/wellbeingNetwork.js';
 import { createMemberCaseLayoutsRouter } from '../../routes/dashboard/leadership/memberCaseLayouts.js';
 import { createDoingListsRouter } from '../../routes/dashboard/doingLists.js';
 import { createRecruitmentRouter } from '../../routes/dashboard/recruitment.js';
@@ -192,6 +193,7 @@ export function createDashboardRouter(client: Client) {
   router.route('/', createDoingListsRouter(client));
   router.route('/', createTutoringRouter(client));
   router.route('/', createWellbeingRouter(client));
+  router.route('/', createWellbeingNetworkRouter(client));
   router.route('/', createMemberCaseLayoutsRouter(client));
   router.route('/', createStaffRouter(client));
   router.route('/', createLeadershipRouter(client));

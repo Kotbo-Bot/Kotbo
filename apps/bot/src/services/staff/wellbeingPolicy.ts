@@ -26,6 +26,7 @@ export interface WellbeingAccessLists {
   distressWatch?: boolean;
   pulseEnabled?: boolean;
   pulseRoleIds?: string[];
+  networkPool?: boolean;
 }
 
 /**
@@ -251,6 +252,8 @@ export function describeConfigChange(
     (prev.pulseEnabled ?? false) !== (after.pulseEnabled ?? false)
       ? `Météo du staff : ${after.pulseEnabled ? 'activée' : 'désactivée'}` : null,
     listLine('Météo du staff', prev.pulseRoleIds ?? [], after.pulseRoleIds ?? [], nameOf),
+    (prev.networkPool ?? false) !== (after.networkPool ?? false)
+      ? `Référents du réseau : ${after.networkPool ? 'partagés' : 'plus partagés'}` : null,
   ].filter((line): line is string => line !== null);
   return lines.length > 0 ? lines.join(' · ') : 'Aucun changement';
 }
