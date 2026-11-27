@@ -5,7 +5,7 @@ import type { MemberCaseLogEntry, MemberCaseResponse, SanctionItem, SanctionRepo
 import { route } from '../backend';
 import { demoDb } from '../db';
 import { MEMBERS, ROLES, VOICE_CHANNELS, ago, avatarOf, role, ME, HOUR, DAY, channelByName, personById, personByName, type DemoPerson } from '../fixtures';
-import { DEMO_GUILD_ID } from '../mode';
+import { DEMO_GUILD_ID, DEMO_GUILD_NAME } from '../mode';
 import { sanctionsSeed, auditSeed } from '../stories';
 import { interactionEdges, messagesOf, type DemoMessage } from '../activity';
 import { inviteOf } from './analytics';
@@ -174,6 +174,36 @@ function graphAround(userId: string): MemberCaseResponse['interactionGraph'] {
 }
 
 export function registerMembersRoutes(): void {
+  // « Mon espace » et le profil public : sans ces routes, les deux pages plantent en démo.
+  const PROFILE = 'me/profile';
+  const myProfile = () => demoDb.get(PROFILE, () => ({ bio: 'Je veille sur l’atelier : events le vendredi, tickets le reste du temps.', isProfilePrivate: false }));
+  route('GET', '/api/public/profile/:userId', ({ params }) => {
+    const person = personById(params.userId) ?? MEMBERS[0];
+    const own = myProfile();
+    return {
+      userId: params.userId,
+      username: person.username,
+      displayName: person.displayName,
+      avatar: avatarOf(person),
+      bio: own.bio,
+      isPrivate: own.isProfilePrivate,
+      messageCount: 4821,
+      voiceTimeSeconds: 96_400,
+      accountCreatedAt: ago(900 * DAY),
+      guildJoinedAt: ago(410 * DAY),
+      lastSeenAt: ago(2 * HOUR),
+      roles: ROLES.slice(0, 4).map((r) => ({ id: r.id, name: r.name })),
+      eventParticipations: [{ title: 'Soirée quiz', type: 'QUIZ', score: 120, date: ago(6 * DAY) }],
+    };
+  });
+  route('PATCH', '/api/public/profile/:userId', ({ body }) => {
+    const next = { ...myProfile(), ...(body as object) };
+    demoDb.set(PROFILE, next);
+    return { profile: next };
+  });
+  route('GET', '/api/user/me/tickets', () => ({
+    tickets: [{ id: 'demo-ticket', reason: 'Rôle événement manquant', guildName: DEMO_GUILD_NAME, status: 'OPEN', createdAt: ago(DAY) }],
+  }));
   // GET /api/dashboard/guilds/:id/members/search
   route('GET', '/api/dashboard/guilds/:id/members/search', ({ query }) => {
     const q = (query.get('q') ?? '').trim().toLowerCase();
