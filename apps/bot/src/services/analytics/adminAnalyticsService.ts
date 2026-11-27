@@ -24,7 +24,8 @@ import { logger } from '../../utils/logger.js';
 import { getKnownGuildNames, guildNameCache } from '../core/serverTagService.js';
 import {
   ANALYTICS_DIMENSIONS,
-  ONBOARDING_STEPS,
+  ONBOARDING_FUNNEL_STEPS,
+  funnelStepOf,
   SIZE_BUCKETS,
   normalizeInviteContent,
   normalizePlanKey,
@@ -398,7 +399,8 @@ const STEP_TRACK_MAP: Record<string, string | null> = {
 };
 
 function isStepEligible(step: OnboardingStep, serverKind: string | null, tracks: string[]): boolean {
-  if (step === 'migration-bots' || step === 'migration-findings') {
+  // La reprise (`kind` compris) n'est proposée qu'à un serveur déjà en place.
+  if (step === 'kind' || step === 'migration-bots' || step === 'migration-findings') {
     return serverKind === 'existing';
   }
   const requiredTrack = STEP_TRACK_MAP[step];
@@ -443,18 +445,18 @@ export async function getOnboardingFunnelStats(options: {
   const backtrackCounts = new Map<string, number>();
   for (const ev of backEvents) {
     const meta = ev.metadata as { from?: string; step?: string } | null;
-    const fromStep = meta?.from;
+    const fromStep = meta?.from ? funnelStepOf(meta.from) : undefined;
     if (fromStep) {
       backtrackCounts.set(fromStep, (backtrackCounts.get(fromStep) || 0) + 1);
     }
   }
 
   const stepDurations = new Map<string, number[]>();
-  for (const s of ONBOARDING_STEPS) {
+  for (const s of ONBOARDING_FUNNEL_STEPS) {
     stepDurations.set(s, []);
   }
 
-  const stepsData: OnboardingStepStats[] = ONBOARDING_STEPS.map((step) => {
+  const stepsData: OnboardingStepStats[] = ONBOARDING_FUNNEL_STEPS.map((step) => {
     let eligible = 0;
     let reached = 0;
     let dropOffCount = 0;
@@ -464,10 +466,10 @@ export async function getOnboardingFunnelStats(options: {
       if (eligibleForGuild) {
         eligible += 1;
         const stepsObj = (g.onboardingSteps as Record<string, string> | null) ?? {};
-        if (stepsObj[step]) {
+        if (Object.keys(stepsObj).some((seen) => funnelStepOf(seen) === step)) {
           reached += 1;
         }
-        if (g.onboardingLastStep === step && !g.onboardingCompletedAt) {
+        if (g.onboardingLastStep && funnelStepOf(g.onboardingLastStep) === step && !g.onboardingCompletedAt) {
           dropOffCount += 1;
         }
       }

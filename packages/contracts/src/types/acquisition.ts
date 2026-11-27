@@ -301,11 +301,9 @@ export type AnalyticsDimension = (typeof ANALYTICS_DIMENSIONS)[number];
 export const ONBOARDING_STEPS = [
   'welcome',
   'kind',
-  // Premier écran depuis la fusion avec `welcome`, `kind` et `identity`. Les
-  // écrans fusionnés restent dans la liste : les données déjà mesurées les citent.
-  'tracks',
   'migration-bots',
   'migration-findings',
+  'tracks',
   'identity',
   'theme',
   'tickets',
@@ -338,6 +336,34 @@ export const ONBOARDING_STEPS = [
 ] as const;
 
 export type OnboardingStep = (typeof ONBOARDING_STEPS)[number];
+
+/**
+ * Les écrans fusionnés depuis, et celui qui a repris leur contenu.
+ *
+ * Ils restent dans `ONBOARDING_STEPS` : les parcours déjà mesurés les citent.
+ * L'entonnoir ne les liste plus et reverse leurs passages sur l'écran repreneur,
+ * sans quoi ils s'afficheraient à zéro et l'historique serait perdu.
+ */
+export const ONBOARDING_MERGED_STEPS: Partial<Record<OnboardingStep, OnboardingStep>> = {
+  welcome: 'tracks',
+  identity: 'tracks',
+  'map-staff': 'map-access',
+  'map-tickets': 'map-access',
+  'map-welcome': 'map-access',
+  'map-stats': 'map-access',
+  'map-text': 'map-access',
+  'map-fun': 'map-access',
+  'map-voice': 'map-access',
+  recap: 'checkout',
+};
+
+/** Les écrans que le parcours traverse aujourd'hui, dans l'ordre. */
+export const ONBOARDING_FUNNEL_STEPS = ONBOARDING_STEPS.filter((step) => !(step in ONBOARDING_MERGED_STEPS));
+
+/** Sous quel écran actuel compter un écran enregistré. Un inconnu reste tel quel. */
+export function funnelStepOf(step: string): string {
+  return ONBOARDING_MERGED_STEPS[step as OnboardingStep] ?? step;
+}
 
 const ONBOARDING_ORDER = new Map<string, number>(
   ONBOARDING_STEPS.map((step, index) => [step, index]),
