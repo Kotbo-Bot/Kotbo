@@ -1,18 +1,20 @@
 <!--
-  Fiches confidentielles : ce que la cellule sait d'une personne, en notes
-  datées, sans rien à traiter. Chaque note a sa date d'effacement et se
-  prolonge avec un motif. Les dossiers de la personne s'ouvrent depuis sa fiche.
+  Page par personne : à gauche les personnes suivies (une fiche, des
+  dossiers, ou les deux) ; à droite la personne choisie, ses notes en haut,
+  ses dossiers en dessous, qui se déplient sur place avec tout leur détail.
+  Chaque note a sa date d'effacement et se prolonge avec un motif.
 -->
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, type Snippet } from 'svelte';
   import { dashboardFetch, type GuildMemberSearchResult } from '../../api';
   import { dateLocale, m } from '../../i18n';
   import { toast } from '../../stores/toast.svelte';
   import { authStore } from '../../stores/auth.svelte';
   import { confirmDialog } from '../../stores/confirmDialog.svelte';
   import { memberIdentities } from '../../stores/memberIdentities.svelte';
-  import { wbStatusLabel } from '../../wellbeingLabels';
-  import { wbStatusTone } from '../../wellbeingView';
+  import { wbSeverityLabel, wbStatusLabel } from '../../wellbeingLabels';
+  import { wbSeverityTone, wbStatusTone } from '../../wellbeingView';
+  import { wbPeople, type WbPersonCase } from '../../wellbeingPeople';
   import MemberSearchSelect from '../MemberSearchSelect.svelte';
   import Papicon from '../Papicon.svelte';
   import { Button, Callout, EmptyState } from '../ui';
@@ -20,14 +22,16 @@
   type ProfileHeader = { id: string; subjectUserId: string; subjectName: string; subjectLeftAt: string | null; noteCount: number; nextExpiry: string | null };
   type ProfileNote = { id: string; authorId: string; authorName: string; content: string; sensitive: boolean; createdAt: string; expiresAt: string; extendedAt: string | null; extendedByName: string | null; extendedReason: string | null };
   type Profile = { id: string; subjectUserId: string; subjectName: string; subjectLeftAt: string | null; notes: ProfileNote[] };
-  type CaseHeader = { id: string; title: string; status: string; subjectUserId?: string | null };
+  type CaseHeader = WbPersonCase & { title: string; severity: string; updatedAt?: string };
 
   const {
     cases,
     hidden,
     initialSubjectId = null,
     checkReauth,
-    onopencase,
+    selectedCaseId,
+    caseDetail,
+    onselectcase,
     onnewcase,
   }: {
     /** En-têtes des dossiers déjà chargés par la page. */
@@ -38,7 +42,11 @@
     initialSubjectId?: string | null;
     /** Connexion trop ancienne : la page propose de se reconnecter. */
     checkReauth: (res: Response) => Promise<boolean>;
-    onopencase: (caseId: string) => void;
+    /** Dossier déplié : son détail complet s'affiche sous sa ligne. */
+    selectedCaseId: string | null;
+    caseDetail: Snippet;
+    /** Déplie un dossier (son ouverture est tracée), ou replie avec null. */
+    onselectcase: (caseId: string | null) => void;
     onnewcase: (prefill: { subjectUserId: string; subjectName: string }) => void;
   } = $props();
 
@@ -61,7 +69,8 @@
   let reason = $state('');
 
   const formatDate = (iso: string) => new Date(iso).toLocaleDateString(dateLocale());
-  const visible = $derived(profiles.filter((item) => item.subjectName.toLowerCase().includes(search.trim().toLowerCase())));
+  const people = $derived(wbPeople(profiles, cases));
+  const visible = $derived(people.filter((person) => person.name.toLowerCase().includes(search.trim().toLowerCase())));
   /** Sa propre fiche ne s'ouvre pas : le bot la refuse, la page le dit avant. */
   const isSelf = $derived(!!subject && subject.userId === authStore.user?.id);
   const subjectCases = $derived(subject ? cases.filter((item) => item.subjectUserId === subject?.userId) : []);
@@ -178,7 +187,7 @@
   <section class="space-y-3" aria-labelledby="wb-profiles-title">
     <div class="space-y-1">
       <h2 id="wb-profiles-title" class="text-sm font-semibold flex items-center gap-2 text-on-surface">
-        <Papicon icon="StickyNote" size={15} /> {m.wb_profiles_title({ count: profiles.length })}
+        <Papicon icon="StickyNote" size={15} /> {m.wb_profiles_title({ count: people.length })}
       </h2>
       <p class="text-xs text-on-surface-variant">{m.wb_profiles_desc()}</p>
     </div>
@@ -186,17 +195,17 @@
       <label for="wb-profile-pick" class="text-xs font-medium text-on-surface-variant">{m.wb_profiles_open()}</label>
       <MemberSearchSelect id="wb-profile-pick" bind:value={pickedId} placeholder={m.wb_profiles_open_ph()} onselect={pick} />
     </div>
-    {#if profiles.length > 0}
+    {#if people.length > 0}
       <label for="wb-profile-search" class="sr-only">{m.wb_profiles_search()}</label>
       <input id="wb-profile-search" type="search" class="input w-full" placeholder={m.wb_profiles_search()} bind:value={search} />
       <ul class="space-y-1.5">
-        {#each visible as item (item.id)}
+        {#each visible as person (person.userId)}
           <li>
-            <button type="button" class="w-full rounded-lg border px-3 py-2 text-left text-sm {subject?.userId === item.subjectUserId ? 'border-primary/40 bg-primary/5' : 'border-outline-variant/30 bg-surface-container-lowest'}"
-              aria-current={subject?.userId === item.subjectUserId} onclick={() => void open(item.subjectUserId, item.subjectName)}>
-              <span class="font-semibold text-on-surface">{item.subjectName}</span>
+            <button type="button" class="w-full rounded-lg border px-3 py-2 text-left text-sm {subject?.userId === person.userId ? 'border-primary/40 bg-primary/5' : 'border-outline-variant/30 bg-surface-container-lowest'}"
+              aria-current={subject?.userId === person.userId} onclick={() => void open(person.userId, person.name)}>
+              <span class="font-semibold text-on-surface">{person.name}</span>
               <span class="block text-2xs text-on-surface-variant">
-                {m.wb_profiles_count({ count: item.noteCount })}{#if item.nextExpiry} · {m.wb_profiles_next_expiry({ date: formatDate(item.nextExpiry) })}{/if}{#if item.subjectLeftAt} · {m.wb_profiles_left()}{/if}
+                {m.wb_profiles_count({ count: person.noteCount })} · {m.wb_people_cases({ count: person.activeCases })}{#if person.nextExpiry} · {m.wb_profiles_next_expiry({ date: formatDate(person.nextExpiry) })}{/if}{#if person.leftAt} · {m.wb_profiles_left()}{/if}
               </span>
             </button>
           </li>
@@ -224,21 +233,6 @@
       {#if isSelf}
         <Callout variant="info" title={m.wb_profiles_self_title()}>{m.wb_profiles_self_desc()}</Callout>
       {:else}
-      {#if subjectCases.length > 0}
-        <div class="space-y-1.5">
-          <p class="text-xs font-medium text-on-surface-variant">{m.wb_profiles_cases({ count: subjectCases.length })}</p>
-          <ul class="flex flex-wrap gap-2">
-            {#each subjectCases as item (item.id)}
-              <li>
-                <button type="button" class="rounded-lg border border-outline-variant/30 px-2.5 py-1 text-xs flex items-center gap-1.5" onclick={() => onopencase(item.id)}>
-                  {item.title} <span class="rounded-full px-1.5 py-0.5 text-2xs {wbStatusTone(item.status)}">{wbStatusLabel(item.status)}</span>
-                </button>
-              </li>
-            {/each}
-          </ul>
-        </div>
-      {/if}
-
       {#if loading}
         <p class="text-sm text-on-surface-variant flex items-center gap-2"><Papicon icon="Loader" size={14} /> {m.wb_profiles_loading()}</p>
       {:else if hidden}
@@ -296,6 +290,31 @@
           </div>
         </div>
       {/if}
+
+      <div class="space-y-2 border-t border-outline-variant/30 pt-4">
+        <h4 class="text-sm font-semibold text-on-surface flex items-center gap-2"><Papicon icon="folder" size={14} /> {m.wb_profiles_cases({ count: subjectCases.length })}</h4>
+        {#if subjectCases.length === 0}
+          <p class="text-sm text-on-surface-variant">{m.wb_people_no_case()}</p>
+        {/if}
+        <ul class="space-y-2">
+          {#each subjectCases as item (item.id)}
+            <li class="space-y-3">
+              <button type="button" class="w-full rounded-lg border px-3 py-2 text-left text-sm flex flex-wrap items-center justify-between gap-2 {selectedCaseId === item.id ? 'border-primary/40 bg-primary/5' : 'border-outline-variant/30 bg-surface-container-lowest'}"
+                aria-expanded={selectedCaseId === item.id} onclick={() => onselectcase(selectedCaseId === item.id ? null : item.id)}>
+                <span class="font-semibold text-on-surface min-w-0 truncate">{item.title}</span>
+                <span class="flex items-center gap-1.5 text-2xs">
+                  <span class="rounded-full px-2 py-0.5 {wbSeverityTone(item.severity)}">{wbSeverityLabel(item.severity)}</span>
+                  <span class="rounded-full px-2 py-0.5 {wbStatusTone(item.status)}">{wbStatusLabel(item.status)}</span>
+                  <Papicon icon={selectedCaseId === item.id ? 'ChevronUp' : 'ChevronDown'} size={14} />
+                </span>
+              </button>
+              {#if selectedCaseId === item.id}
+                {@render caseDetail()}
+              {/if}
+            </li>
+          {/each}
+        </ul>
+      </div>
       {/if}
     {/if}
   </section>
