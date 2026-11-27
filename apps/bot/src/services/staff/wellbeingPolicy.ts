@@ -727,6 +727,16 @@ export function isUnusualAccess(openedInWindow: number): boolean {
   return openedInWindow >= UNUSUAL_ACCESS_THRESHOLD;
 }
 
+/**
+ * Compteur gardé en mémoire (horodatage en ms par clé) : passé `max` entrées,
+ * celles plus anciennes que `maxAgeMs` sont oubliées, pour qu'il ne grossisse
+ * pas sans fin.
+ */
+export function forgetStale(map: Map<string, number>, now: number, maxAgeMs: number, max = 500): void {
+  if (map.size <= max) return;
+  for (const [key, at] of map) if (now - at > maxAgeMs) map.delete(key);
+}
+
 /** Ouvertures (horodatages en ms) encore dans la fenêtre de consultation inhabituelle. */
 export function openingsInWindow(times: readonly number[], now: number): number[] {
   return times.filter((at) => now - at <= UNUSUAL_ACCESS_WINDOW_MS);
@@ -918,21 +928,41 @@ export function cellMemberIds(
   return [...ids];
 }
 
+/** Délai minimal entre deux chargements complets des membres d'un serveur. */
+export const MEMBER_LOAD_INTERVAL_MS = 10 * 60 * 1000;
+
+/**
+ * Faut-il charger tous les membres du serveur pour connaître la cellule ? Seuls
+ * les rôles l'exigent (un membre absent du cache n'y serait pas compté), et
+ * seulement si le cache est incomplet, sans recommencer avant 10 minutes.
+ */
+export function shouldLoadAllMembers(state: {
+  teamRoleIds: readonly string[];
+  cacheSize: number;
+  memberCount: number;
+  lastLoadedAt: number | undefined;
+  now: number;
+}): boolean {
+  if (state.teamRoleIds.length === 0 || state.cacheSize >= state.memberCount) return false;
+  return state.lastLoadedAt === undefined || state.now - state.lastLoadedAt >= MEMBER_LOAD_INTERVAL_MS;
+}
+
 /** Un résumé ne part qu'une fois par semaine et par serveur. */
 export const DIGEST_INTERVAL_DAYS = 6;
 
 /** Message privé du lundi : des chiffres, jamais de titre ni de personne. `null` s'il n'y a rien. */
 export function weeklyDigestText(
   guildName: string,
-  counts: { assigned: number; reviewsThisWeek: number; triage: number; criticalUnassigned: number },
+  counts: { assigned: number; reviewsThisWeek: number; triage: number; criticalUnassigned: number; notesExpiring?: number },
 ): string | null {
-  if (Object.values(counts).every((value) => value === 0)) return null;
+  if (Object.values(counts).every((value) => !value)) return null;
   return [
     `Cellule de suivi de ${guildName}, votre semaine :`,
     `- dossiers dont vous êtes référent : ${counts.assigned}`,
     `- échéances de suivi cette semaine : ${counts.reviewsThisWeek}`,
     `- signalements à trier : ${counts.triage}`,
     `- dossiers critiques sans référent : ${counts.criticalUnassigned}`,
+    ...(counts.notesExpiring ? [`- notes de fiche effacées cette semaine : ${counts.notesExpiring} (à prolonger avec un motif si besoin)`] : []),
     ...(counts.assigned >= REFERENT_OVERLOAD_ACTIVE
       ? [`Vous suivez ${counts.assigned} dossiers : pensez à en confier à un collègue moins chargé.`]
       : []),
@@ -948,6 +978,7 @@ export function digestCounts(
   cases: ReadonlyArray<{ status: string; severity: string; source: string; assigneeId: string | null; subjectUserId: string | null; reviewAt: Date | null }>,
   memberId: string,
   now: Date,
+  profileNotes: ReadonlyArray<{ subjectUserId: string; expiresAt: Date }> = [],
 ) {
   const visible = cases.filter((item) => item.status !== 'CLOSED' && !isCaseSubject(item.subjectUserId, memberId));
   const mine = visible.filter((item) => item.assigneeId === memberId);
@@ -957,6 +988,7 @@ export function digestCounts(
     reviewsThisWeek: mine.filter((item) => item.reviewAt && item.reviewAt.getTime() <= weekEnd).length,
     triage: visible.filter((item) => item.source === 'DISCORD' && !item.assigneeId).length,
     criticalUnassigned: visible.filter((item) => item.severity === 'CRITICAL' && !item.assigneeId).length,
+    notesExpiring: profileNotes.filter((note) => !isCaseSubject(note.subjectUserId, memberId) && note.expiresAt.getTime() <= weekEnd).length,
   };
 }
 

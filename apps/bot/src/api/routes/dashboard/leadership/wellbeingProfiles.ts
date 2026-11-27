@@ -12,7 +12,7 @@ import prisma from '../../../../utils/db.js';
 import { logger } from '../../../../utils/logger.js';
 import { bodyText } from '../../../../utils/bodyText.js';
 import { fail, guildRoute, readBody, send } from '../../../hono/dashboard/kit.js';
-import { isCaseSubject, shouldRecordView } from '../../../../services/staff/wellbeingPolicy.js';
+import { READ_ALERT_COOLDOWN_MS, forgetStale, isCaseSubject, shouldRecordView } from '../../../../services/staff/wellbeingPolicy.js';
 import {
   PROFILE_EXTEND_REASON_MAX,
   PROFILE_NOTE_MAX,
@@ -36,7 +36,7 @@ import {
 const NOT_FOUND = 'Fiche introuvable.';
 
 /** Dernière consultation tracée, par serveur, par personne et par fiche. */
-const lastViewAt = new Map<string, Date>();
+const lastViewAt = new Map<string, number>();
 
 /** Personne visée par l'URL : un id invalide est introuvable, sa propre fiche est refusée en le disant. */
 type Subject = { ok: true; id: string } | { ok: false; status: 403 | 404; error: string };
@@ -98,8 +98,10 @@ export function createWellbeingProfilesRouter(client: Client) {
 
       const key = `${guildId}:${user.userId}:${profile.id}`;
       const now = new Date();
-      if (shouldRecordView(lastViewAt.get(key) ?? null, now)) {
-        lastViewAt.set(key, now);
+      const last = lastViewAt.get(key);
+      if (shouldRecordView(last === undefined ? null : new Date(last), now)) {
+        lastViewAt.set(key, now.getTime());
+        forgetStale(lastViewAt, now.getTime(), READ_ALERT_COOLDOWN_MS);
         await audit(client, c, guildId, 'Consultation fiche Cellule de suivi', `Fiche ${profile.id} ouverte.`, 'Sécurité');
         recordProfileOpening(guildId, user.userId, now);
         await checkUnusualAccess(client, c, guildId, state.config, now);

@@ -20,6 +20,16 @@ describe('personnes suivies', () => {
     expect(person).toMatchObject({ userId: 'u2', name: 'Sam', noteCount: 0, activeCases: 1 });
   });
 
+  test('un seul nom par personne : celui de la fiche, sinon celui du dossier le plus récent', () => {
+    const withProfile = wbPeople([profile({ subjectName: 'Alex (pseudo actuel)' })], [dossier({ subjectName: 'Alex' })]);
+    expect(withProfile[0]?.name).toBe('Alex (pseudo actuel)');
+    const casesOnly = wbPeople([], [
+      dossier({ id: 'old', subjectUserId: 'u5', subjectName: 'Ancien', updatedAt: '2026-01-01T00:00:00Z' }),
+      dossier({ id: 'new', subjectUserId: 'u5', subjectName: 'Récent', updatedAt: '2026-11-01T00:00:00Z' }),
+    ]);
+    expect(casesOnly[0]?.name).toBe('Récent');
+  });
+
   test('un signalement anonyme, sans personne, reste aux dossiers', () => {
     expect(wbPeople([], [dossier({ subjectUserId: null })])).toEqual([]);
   });

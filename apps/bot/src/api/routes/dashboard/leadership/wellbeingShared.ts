@@ -12,6 +12,7 @@ import {
   UNUSUAL_ACCESS_WINDOW_MS,
   WELLBEING_AUDIT_MODULE,
   caseVisibilityWhere,
+  forgetStale,
   isUnusualAccess,
   openingsInWindow,
   resolveWellbeingAccess,
@@ -149,6 +150,10 @@ const profileOpenings = new Map<string, number[]>();
 export function recordProfileOpening(guildId: string, userId: string, now: Date): void {
   const key = `${guildId}:${userId}`;
   profileOpenings.set(key, [...openingsInWindow(profileOpenings.get(key) ?? [], now.getTime()), now.getTime()]);
+  // Une personne sans ouverture récente n'a plus rien à compter.
+  if (profileOpenings.size > 500) {
+    for (const [other, times] of profileOpenings) if (openingsInWindow(times, now.getTime()).length === 0) profileOpenings.delete(other);
+  }
 }
 
 /**
@@ -167,6 +172,7 @@ export async function checkUnusualAccess(client: Client, c: Context, guildId: st
   const last = unusualAlertAt.get(key);
   if (last !== undefined && now.getTime() - last < UNUSUAL_ACCESS_COOLDOWN_MS) return;
   unusualAlertAt.set(key, now.getTime());
+  forgetStale(unusualAlertAt, now.getTime(), UNUSUAL_ACCESS_COOLDOWN_MS);
   await audit(client, c, guildId, 'Consultation Cellule de suivi',
     `Consultation inhabituelle : ${opened} dossiers ou fiches ouverts en ${UNUSUAL_ACCESS_WINDOW_MS / 60_000} minutes.`, 'Sécurité');
   void sendWellbeingAlert(client, guildId, config, 'UNUSUAL_ACCESS', { actorId: userId, caseCount: opened });

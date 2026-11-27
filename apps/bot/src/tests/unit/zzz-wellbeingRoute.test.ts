@@ -148,6 +148,7 @@ const mockDb = {
     upsert: mock(async (args: { create: Record<string, unknown> }) => ({ id: 'profile-1', subjectLeftAt: null, ...args.create })),
   },
   wellbeingProfileNote: {
+    findMany: mock(async (_args?: unknown) => []),
     findFirst: mock(async (_args?: unknown) => profileNote),
     create: mock(async (args: { data: Record<string, unknown> }) => ({ id: 'pnote-new', createdAt: new Date(), ...args.data })),
     update: mock(async (args: { data: Record<string, unknown> }) => ({ ...profileNote, ...args.data })),
@@ -569,6 +570,17 @@ describe('colonnes ajoutées par la cellule', () => {
     const { status } = await call('PATCH', '/cases/case-1', { stage: 'inconnue' });
     expect(status).toBe(400);
     expect(mockDb.wellbeingCase.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('bilan de la cellule', () => {
+  test('les fiches comptent sans la sienne, et les étapes apparaissent', async () => {
+    const { status, json } = await call('GET', '/stats');
+    expect(status).toBe(200);
+    const args = mockDb.wellbeingProfileNote.findMany.mock.calls[0]?.[0] as { where: { profile: Record<string, unknown> } };
+    expect(args.where.profile).toEqual({ guildId: GUILD, subjectUserId: { not: ALICE } });
+    expect(json.profiles).toEqual({ people: 0, notes: 0, sensitive: 0, expiringSoon: 0 });
+    expect(json.stages).toEqual([]);
   });
 });
 

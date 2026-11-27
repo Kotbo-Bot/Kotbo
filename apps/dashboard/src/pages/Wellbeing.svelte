@@ -7,7 +7,7 @@
   import ModulePage from '../lib/components/ModulePage.svelte';
   import MemberSearchSelect from '../lib/components/MemberSearchSelect.svelte';
   import { WB_CLOSE_REASONS, wbCloseReasonLabel, wbCaseEventLabel, WB_CATEGORIES, WB_SEVERITIES, WB_STATUSES, wbCategoryLabel, wbIsSummaryTemplate, wbSeverityLabel, wbStatusLabel, wbSummaryTemplate } from '../lib/wellbeingLabels';
-  import WellbeingStats, { type WellbeingCellStats, type WellbeingPulseWeek, type WellbeingReferentLoad } from '../lib/components/wellbeing/WellbeingStats.svelte';
+  import WellbeingStats, { type WellbeingCellStats, type WellbeingProfileStats, type WellbeingPulseWeek, type WellbeingReferentLoad, type WellbeingStageCount } from '../lib/components/wellbeing/WellbeingStats.svelte';
   import CaseTasks from '../lib/components/wellbeing/CaseTasks.svelte';
   import ReporterThread from '../lib/components/wellbeing/ReporterThread.svelte';
   import DistressSignals, { type DistressSignal } from '../lib/components/wellbeing/DistressSignals.svelte';
@@ -474,6 +474,8 @@
   $effect(() => {
     if (activeTab === 'stats') void loadStats();
   });
+  let cellProfiles = $state<WellbeingProfileStats | null>(null);
+  let cellStages = $state<WellbeingStageCount[]>([]);
   async function loadStats() {
     const res = await dashboardFetch('/wellbeing/stats');
     if (res.ok) {
@@ -481,6 +483,8 @@
       cellStats = data.stats;
       cellLoad = data.load ?? [];
       cellPulse = data.pulse ?? null;
+      cellProfiles = data.profiles ?? null;
+      cellStages = data.stages ?? [];
     } else {
       toast.error(m.toast_wb_load_failed());
     }
@@ -1633,7 +1637,7 @@
         onnewcase={(prefill) => void openNewCase(prefill)} />
     {:else if activeTab === 'stats'}
       {#if cellStats}
-        <WellbeingStats stats={cellStats} load={cellLoad} pulse={cellPulse} />
+        <WellbeingStats stats={cellStats} load={cellLoad} pulse={cellPulse} profiles={cellProfiles} stages={cellStages} />
       {:else}
         <Skeleton height="320px" />
       {/if}

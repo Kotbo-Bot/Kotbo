@@ -12,9 +12,10 @@ import {
   profileExtendError,
   profileNoteDeleteError,
   profileNameChange,
+  profileStats,
   shortenedExpiry,
 } from '../../services/staff/wellbeingProfilePolicy';
-import { UNUSUAL_ACCESS_WINDOW_MS, alertText, describeConfigChange, openingsInWindow } from '../../services/staff/wellbeingPolicy';
+import { UNUSUAL_ACCESS_WINDOW_MS, alertText, describeConfigChange, digestCounts, forgetStale, openingsInWindow, weeklyDigestText } from '../../services/staff/wellbeingPolicy';
 import { isSynced } from '../../services/network/networkScope';
 import { openProfileNote, openWellbeing, sealProfileNote } from '../../services/staff/wellbeingCrypto';
 
@@ -103,6 +104,47 @@ describe('baisse de la durée réglée', () => {
   });
 });
 
+describe('bilan des fiches', () => {
+  const soon = new Date(NOW.getTime() + 10 * 24 * 3_600_000);
+  const later = new Date(NOW.getTime() + 200 * 24 * 3_600_000);
+
+  test('personnes, notes, notes sensibles et effacements sous 30 jours', () => {
+    const notes = [
+      { profileId: 'p1', expiresAt: soon, sensitive: true },
+      { profileId: 'p1', expiresAt: later, sensitive: false },
+      { profileId: 'p2', expiresAt: later, sensitive: false },
+    ];
+    expect(profileStats(notes, NOW)).toEqual({ people: 2, notes: 3, sensitive: 1, expiringSoon: 1 });
+  });
+
+  test('aucune note, aucun chiffre', () => {
+    expect(profileStats([], NOW)).toEqual({ people: 0, notes: 0, sensitive: 0, expiringSoon: 0 });
+  });
+});
+
+describe('résumé du lundi', () => {
+  const inFiveDays = new Date(NOW.getTime() + 5 * 24 * 3_600_000);
+  const notes = [
+    { subjectUserId: 'autre', expiresAt: inFiveDays },
+    { subjectUserId: 'moi', expiresAt: inFiveDays },
+    { subjectUserId: 'autre', expiresAt: new Date(NOW.getTime() + 60 * 24 * 3_600_000) },
+  ];
+
+  test('les notes effacées dans la semaine sont comptées, pas celles qui concernent la personne', () => {
+    expect(digestCounts([], 'moi', NOW, notes).notesExpiring).toBe(1);
+  });
+
+  test('le résumé les signale, sans rien dire de leur contenu', () => {
+    const text = weeklyDigestText('Serveur', { assigned: 0, reviewsThisWeek: 0, triage: 0, criticalUnassigned: 0, notesExpiring: 2 });
+    expect(text).toContain('notes de fiche effacées cette semaine : 2');
+  });
+
+  test('sans note, la ligne n apparaît pas', () => {
+    const text = weeklyDigestText('Serveur', { assigned: 1, reviewsThisWeek: 0, triage: 0, criticalUnassigned: 0, notesExpiring: 0 });
+    expect(text).not.toContain('notes de fiche');
+  });
+});
+
 describe('nom de la personne', () => {
   test('un pseudo changé sur Discord remplace celui de la fiche', () => {
     expect(profileNameChange('ancien', 'nouveau')).toBe('nouveau');
@@ -146,6 +188,22 @@ describe('consultation inhabituelle', () => {
   test("l'alerte parle de dossiers et de fiches, sans les nommer", () => {
     const text = alertText('UNUSUAL_ACCESS', { actorId: '200000000000000001', caseCount: 12 });
     expect(text).toContain('12 dossiers ou fiches');
+  });
+});
+
+describe('compteurs en mémoire', () => {
+  test('au-delà du plafond, les entrées trop anciennes sont oubliées', () => {
+    const now = NOW.getTime();
+    const map = new Map<string, number>([['vieux', now - 2 * 3_600_000], ['recent', now - 60_000]]);
+    forgetStale(map, now, 3_600_000, 1);
+    expect([...map.keys()]).toEqual(['recent']);
+  });
+
+  test('sous le plafond, rien ne bouge', () => {
+    const now = NOW.getTime();
+    const map = new Map<string, number>([['vieux', now - 2 * 3_600_000]]);
+    forgetStale(map, now, 3_600_000, 10);
+    expect(map.size).toBe(1);
   });
 });
 

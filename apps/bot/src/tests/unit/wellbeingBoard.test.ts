@@ -4,6 +4,7 @@ import {
   cleanBoardColumns,
   describeBoardColumns,
   stageChange,
+  stageCounts,
   stageLabel,
 } from '../../services/staff/wellbeingBoardPolicy';
 
@@ -45,6 +46,20 @@ describe('colonnes ajoutées par la cellule', () => {
     expect(describeBoardColumns([{ id: 'a', label: 'À contacter' }, { id: 'b', label: 'En médiation' }]))
       .toBe('Colonnes du suivi : À contacter, En médiation');
     expect(describeBoardColumns([])).toBe('Colonnes du suivi : aucune');
+  });
+});
+
+describe('bilan par étape', () => {
+  test('les dossiers actifs de chaque étape, dans l ordre des colonnes', () => {
+    const columns = [{ id: 'a', label: 'À contacter' }, { id: 'b', label: 'En médiation' }];
+    const cases = [
+      { status: 'OPEN', stage: 'b' },
+      { status: 'MONITORING', stage: 'b' },
+      { status: 'CLOSED', stage: 'a' },
+      { status: 'OPEN', stage: null },
+      { status: 'OPEN', stage: 'supprimee' },
+    ];
+    expect(stageCounts(cases, columns)).toEqual([{ label: 'À contacter', count: 0 }, { label: 'En médiation', count: 2 }]);
   });
 });
 
