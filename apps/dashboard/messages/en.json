@@ -8724,6 +8724,7 @@
   "news_table_col_status": "Status",
   "news_table_col_actions": "Actions",
   "news_empty_title": "No articles",
+  "news_load_error": "Could not load the news.",
   "news_empty_desc": "Write your first announcement or release note.",
   "news_config_badge": "Editorial Configuration",
   "news_config_title": "News channels & RSS feeds",

@@ -28,12 +28,14 @@
   import { DEMO_BASE } from '../lib/demo/mode';
   import InlineFeedback from '../lib/components/InlineFeedback.svelte';
   import Skeleton from '../lib/components/Skeleton.svelte';
+  import { errorMessage } from '@kotbo/shared';
   import SearchableSelect from '../lib/components/SearchableSelect.svelte';
 
   const { serverId = '' }: { serverId?: string } = $props();
 
   // State management
   let articles = $state<any[]>([]);
+  let articlesError = $state('');
   let loading = $state(false);
   let showEditor = $state(false);
   let isEditing = $state(false);
@@ -156,13 +158,14 @@
 
   async function loadArticles() {
     loading = true;
+    articlesError = '';
     try {
       // dashboardRequest renvoie null quand aucun serveur n'est sélectionné
       const result = isPublicView ? await fetchPublicNews(guildId) : await fetchNews();
       articles = Array.isArray(result) ? result : [];
     } catch (err) {
-      console.error(err);
       articles = [];
+      articlesError = errorMessage(err) || m.news_load_error();
     } finally {
       loading = false;
     }
@@ -619,6 +622,11 @@
                   <Skeleton width="8%" height="32px" radius="8px" />
                 </div>
               {/each}
+            </div>
+          {:else if articlesError}
+            <div class="rounded-lg border border-error/20 bg-error/5 p-6 text-center">
+              <p class="text-error font-bold text-sm">{articlesError}</p>
+              <button onclick={loadArticles} class="mt-3 text-xs font-semibold text-primary">{m.common_retry()}</button>
             </div>
           {:else if filteredArticles.length > 0}
             {#if isPublicView}

@@ -8724,6 +8724,7 @@
   "news_table_col_status": "État",
   "news_table_col_actions": "Actions",
   "news_empty_title": "Aucun article",
+  "news_load_error": "Impossible de charger les nouveautés.",
   "news_empty_desc": "Écris ta première annonce ou note de version.",
   "news_config_badge": "Configuration éditoriale",
   "news_config_title": "Salons actualité et flux RSS",
