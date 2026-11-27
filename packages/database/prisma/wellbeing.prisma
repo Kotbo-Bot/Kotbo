@@ -53,8 +53,6 @@ model WellbeingConfig {
   networkPool        Boolean  @default(false)
   // Durée de vie d'une note de fiche, en mois (1 à 36) ; 3 mois après le départ du serveur.
   profileRetentionMonths Int  @default(12)
-  // Étapes ajoutées par la cellule à la vue en colonnes : [{ id, label }].
-  boardColumns       Json     @default("[]")
 
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
 
@@ -108,8 +106,6 @@ model WellbeingCase {
   // qui lit et annote ce dossier depuis la cellule de son serveur.
   networkReferentId      String?
   networkReferentGuildId String?
-  // Étape de travail (colonne ajoutée par la cellule) ; le statut ne change pas.
-  stage                  String?
 
   guild  Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
   reporterMessages WellbeingReporterMessage[]
@@ -304,7 +300,7 @@ model WellbeingCaseEvent {
   caseId    String
   actorId   String?
   actorName String
-  type      String   // CREATED | STATUS | SEVERITY | ASSIGNEE | REVIEW | NOTE | RESOURCES_SENT | REMINDER | ATTACHMENT_ADDED | ATTACHMENT_REMOVED | VIEWED | TRASHED | RESTORED | EXTENDED | EXPORTED | TASK_ADDED | TASK_DONE | TASK_REOPENED | TASK_REMOVED | PURGE_REQUESTED | CLOSED_REASON | NOTE_EDITED | REPORTER_REPLY | NETWORK_REFERENT | STAGE
+  type      String   // CREATED | STATUS | SEVERITY | ASSIGNEE | REVIEW | NOTE | RESOURCES_SENT | REMINDER | ATTACHMENT_ADDED | ATTACHMENT_REMOVED | VIEWED | TRASHED | RESTORED | EXTENDED | EXPORTED | TASK_ADDED | TASK_DONE | TASK_REOPENED | TASK_REMOVED | PURGE_REQUESTED | CLOSED_REASON | NOTE_EDITED | REPORTER_REPLY | NETWORK_REFERENT
   fromValue String?
   toValue   String?
   createdAt DateTime @default(now())

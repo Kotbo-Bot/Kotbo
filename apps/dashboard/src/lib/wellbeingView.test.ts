@@ -241,27 +241,8 @@ describe('vue en colonnes', () => {
       dossier({ id: 'c', status: 'MONITORING' }),
       dossier({ id: 'd', status: 'OPEN' }),
     ]);
-    expect(columns.map((column) => column.key)).toEqual(['status:OPEN', 'status:MONITORING', 'status:CLOSED']);
+    expect(columns.map((column) => column.status)).toEqual(['OPEN', 'MONITORING', 'CLOSED']);
     expect(columns.map((column) => column.cases.map((c) => c.id))).toEqual([['b', 'd'], ['c'], ['a']]);
-  });
-
-  test('les colonnes de la cellule se placent entre Ouvert et Sous surveillance', () => {
-    const columns = wbBoardColumns([
-      dossier({ id: 'a', status: 'OPEN', stage: 'contact' }),
-      dossier({ id: 'b', status: 'MONITORING', stage: 'mediation' }),
-      dossier({ id: 'c', status: 'OPEN' }),
-    ], [{ id: 'contact', label: 'À contacter' }, { id: 'mediation', label: 'En médiation' }]);
-    expect(columns.map((column) => column.key)).toEqual(['status:OPEN', 'stage:contact', 'stage:mediation', 'status:MONITORING', 'status:CLOSED']);
-    expect(columns.map((column) => column.cases.map((c) => c.id))).toEqual([['c'], ['a'], ['b'], [], []]);
-    expect(columns[1]).toMatchObject({ kind: 'stage', stage: 'contact', label: 'À contacter' });
-  });
-
-  test("un dossier clos, ou dont l'étape a disparu, revient à la colonne de son statut", () => {
-    const columns = wbBoardColumns([
-      dossier({ id: 'a', status: 'CLOSED', stage: 'contact' }),
-      dossier({ id: 'b', status: 'OPEN', stage: 'supprimee' }),
-    ], [{ id: 'contact', label: 'À contacter' }]);
-    expect(columns.map((column) => column.cases.map((c) => c.id))).toEqual([['b'], [], [], ['a']]);
   });
 });
 

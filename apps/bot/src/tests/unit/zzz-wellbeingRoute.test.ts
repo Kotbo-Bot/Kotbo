@@ -119,7 +119,6 @@ const mockDb = {
     update: mock(async (args: { data: Record<string, unknown> }) => ({ ...visibleCase, ...args.data })),
     create: mock(async (args: { data: Record<string, unknown> }) => ({ ...makeCase(), ...args.data })),
     delete: mock(async (_args?: unknown) => visibleCase),
-    updateMany: mock(async (_args?: unknown) => ({ count: 0 })),
   },
   wellbeingCaseEvent: {
     findFirst: mock(async (_args?: unknown) => null),
@@ -548,39 +547,6 @@ describe('référents du réseau', () => {
     networkRefs = [{ id: 'case-1', guildId: OTHER }];
     const { status } = await networkCall('GET', '/network/cases', undefined, session(EXT, 13));
     expect(status).toBe(403);
-  });
-});
-
-describe('colonnes ajoutées par la cellule', () => {
-  test('la cellule enregistre ses colonnes, nettoyées', async () => {
-    const { status } = await call('PUT', '/board-columns', { columns: [{ label: ' À contacter ' }, { label: '' }] });
-    expect(status).toBe(200);
-    const args = mockDb.wellbeingConfig.update.mock.calls[0]?.[0] as { data: { boardColumns: Array<{ label: string }> } };
-    expect(args.data.boardColumns.map((column) => column.label)).toEqual(['À contacter']);
-    // Les dossiers d'une colonne supprimée retournent à leur statut.
-    expect(mockDb.wellbeingCase.updateMany).toHaveBeenCalled();
-  });
-
-  test('la direction sans la cellule ne touche pas aux colonnes', async () => {
-    expect((await call('PUT', '/board-columns', { columns: [] }, session(DIR))).status).toBe(403);
-  });
-
-  test('une étape inconnue est refusée', async () => {
-    const { status } = await call('PATCH', '/cases/case-1', { stage: 'inconnue' });
-    expect(status).toBe(400);
-    expect(mockDb.wellbeingCase.update).not.toHaveBeenCalled();
-  });
-});
-
-describe('membres de la cellule proposés dans les listes', () => {
-  test('la cellule reçoit ses membres, sans personne d autre', async () => {
-    const { status, json } = await call('GET', '/team');
-    expect(status).toBe(200);
-    expect(json.members.map((member: { id: string }) => member.id).sort()).toEqual([ALICE, BOB].sort());
-  });
-
-  test('la direction sans la cellule ne reçoit rien', async () => {
-    expect((await call('GET', '/team', undefined, session(DIR))).status).toBe(403);
   });
 });
 
