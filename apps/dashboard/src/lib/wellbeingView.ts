@@ -180,6 +180,48 @@ export function wbCaseTimeline(c: WbCaseView): WbTimelineEntry[] {
   return [...notes, ...events].sort((a, b) => b.at.localeCompare(a.at));
 }
 
+/** Actions à la suite au-delà desquelles l'historique les replie en une ligne. */
+const GROUP_MIN = 3;
+
+export type WbCompactEntry =
+  | WbTimelineEntry
+  | { kind: 'group'; id: string; count: number; at: string; entries: Array<Extract<WbTimelineEntry, { kind: 'event' }>> };
+
+/**
+ * Historique réduit : les notes restent toujours visibles ; une suite d'au
+ * moins trois actions (consultations, changements de statut...) devient une
+ * ligne repliée, sauf si elle est dépliée (`expanded`, par identifiant de
+ * groupe). `notesOnly` cache toutes les actions.
+ */
+export function wbCompactTimeline(
+  entries: readonly WbTimelineEntry[],
+  options: { notesOnly: boolean; expanded: readonly string[] },
+): WbCompactEntry[] {
+  if (options.notesOnly) return entries.filter((entry) => entry.kind === 'note');
+  const result: WbCompactEntry[] = [];
+  let run: Array<Extract<WbTimelineEntry, { kind: 'event' }>> = [];
+  const flush = () => {
+    // Repéré par sa plus ancienne action : une action plus récente ne le replie pas.
+    const id = run.length > 0 ? `group:${run[run.length - 1]!.id}` : '';
+    if (run.length >= GROUP_MIN && !options.expanded.includes(id)) {
+      result.push({ kind: 'group', id, count: run.length, at: run[0]!.at, entries: run });
+    } else {
+      result.push(...run);
+    }
+    run = [];
+  };
+  for (const entry of entries) {
+    if (entry.kind === 'event') {
+      run.push(entry);
+      continue;
+    }
+    flush();
+    result.push(entry);
+  }
+  flush();
+  return result;
+}
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** Mêmes durées que le bot (CLOSED_CASE_RETENTION_DAYS, PURGE_NOTICE_DAYS). */
 const RETENTION_DAYS = 365;

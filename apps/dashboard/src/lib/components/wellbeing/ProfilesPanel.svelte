@@ -57,6 +57,8 @@
   let profiles = $state<ProfileHeader[]>([]);
   let search = $state('');
   let pickedId = $state('');
+  /** Recherche d'un membre du serveur, ouverte seulement pour commencer une fiche. */
+  let picking = $state(false);
   let subject = $state<{ userId: string; name: string } | null>(null);
   let profile = $state<Profile | null>(null);
   let loading = $state(false);
@@ -111,6 +113,7 @@
 
   function pick(member: GuildMemberSearchResult) {
     pickedId = '';
+    picking = false;
     void open(member.id, member.displayName || member.username);
   }
 
@@ -186,18 +189,25 @@
 <div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
   <section class="space-y-3" aria-labelledby="wb-profiles-title">
     <div class="space-y-1">
-      <h2 id="wb-profiles-title" class="text-sm font-semibold flex items-center gap-2 text-on-surface">
-        <Papicon icon="StickyNote" size={15} /> {m.wb_profiles_title({ count: people.length })}
-      </h2>
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <h2 id="wb-profiles-title" class="text-sm font-semibold flex items-center gap-2 text-on-surface">
+          <Papicon icon="StickyNote" size={15} /> {m.wb_profiles_title({ count: people.length })}
+        </h2>
+        <Button size="sm" variant={picking ? 'ghost' : 'secondary'} icon={picking ? 'X' : 'UserPlus'} aria-expanded={picking}
+          onclick={() => { picking = !picking; pickedId = ''; }}>{picking ? m.common_cancel() : m.wb_profiles_new()}</Button>
+      </div>
       <p class="text-xs text-on-surface-variant">{m.wb_profiles_desc()}</p>
     </div>
-    <div class="space-y-1.5">
-      <label for="wb-profile-pick" class="text-xs font-medium text-on-surface-variant">{m.wb_profiles_open()}</label>
-      <MemberSearchSelect id="wb-profile-pick" bind:value={pickedId} placeholder={m.wb_profiles_open_ph()} onselect={pick} />
-    </div>
+    {#if picking}
+      <div class="space-y-1.5 rounded-lg border border-primary/30 bg-primary/5 p-3">
+        <label for="wb-profile-pick" class="text-xs font-medium text-on-surface">{m.wb_profiles_open()}</label>
+        <MemberSearchSelect id="wb-profile-pick" bind:value={pickedId} placeholder={m.wb_profiles_open_ph()} onselect={pick} />
+        <p class="text-2xs text-on-surface-variant">{m.wb_profiles_open_hint()}</p>
+      </div>
+    {/if}
     {#if people.length > 0}
-      <label for="wb-profile-search" class="sr-only">{m.wb_profiles_search()}</label>
-      <input id="wb-profile-search" type="search" class="input w-full" placeholder={m.wb_profiles_search()} bind:value={search} />
+      <label for="wb-profile-search" class="text-xs font-medium text-on-surface-variant">{m.wb_profiles_search()}</label>
+      <input id="wb-profile-search" type="search" class="input w-full" placeholder={m.wb_profiles_search_ph()} bind:value={search} />
       <ul class="space-y-1.5">
         {#each visible as person (person.userId)}
           <li>

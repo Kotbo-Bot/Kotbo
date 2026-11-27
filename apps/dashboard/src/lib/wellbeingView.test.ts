@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { WB_SEVERITIES, WB_STATUSES } from './wellbeingLabels';
-import { WB_IDLE_LOCK_MS, wbBoardColumns, wbNeighbourCaseId, wbShortcut, wbCaseExportHtml, wbPurgeInfo, wbTaskProgress, wbCaseStats, wbCaseTimeline, wbFilterCases, wbIsReviewDue, wbLinkedCases, wbMergeHeader, wbReviewShortcut, wbSearchCases, wbSeverityTone, wbSortCases, wbStatusTone, type WbCaseView } from './wellbeingView';
+import { WB_IDLE_LOCK_MS, wbBoardColumns, wbCompactTimeline, wbNeighbourCaseId, wbShortcut, wbCaseExportHtml, wbPurgeInfo, wbTaskProgress, wbCaseStats, wbCaseTimeline, wbFilterCases, wbIsReviewDue, wbLinkedCases, wbMergeHeader, wbReviewShortcut, wbSearchCases, wbSeverityTone, wbSortCases, wbStatusTone, type WbCaseView } from './wellbeingView';
 
 const NOW = new Date('2026-11-25T12:00:00Z');
 
@@ -262,6 +262,29 @@ describe('vue en colonnes', () => {
       dossier({ id: 'b', status: 'OPEN', stage: 'supprimee' }),
     ], [{ id: 'contact', label: 'À contacter' }]);
     expect(columns.map((column) => column.cases.map((c) => c.id))).toEqual([['b'], [], [], ['a']]);
+  });
+});
+
+describe('historique réduit', () => {
+  const note = (id: string) => ({ kind: 'note' as const, id, at: id, note: { id, authorName: 'a', content: 'x', createdAt: id } });
+  const event = (id: string) => ({ kind: 'event' as const, id, at: id, event: { id, type: 'VIEWED', actorName: 'a', fromValue: null, toValue: null, createdAt: id } });
+
+  test('trois actions ou plus à la suite se replient en une ligne, les notes restent', () => {
+    const entries = [note('n1'), event('e1'), event('e2'), event('e3'), note('n2'), event('e4'), event('e5')];
+    const compact = wbCompactTimeline(entries, { notesOnly: false, expanded: [] });
+    expect(compact.map((item) => item.kind)).toEqual(['note', 'group', 'note', 'event', 'event']);
+    const group = compact[1];
+    expect(group).toMatchObject({ kind: 'group', id: 'group:e3', count: 3 });
+  });
+
+  test('un groupe déplié montre ses actions', () => {
+    const entries = [event('e1'), event('e2'), event('e3')];
+    expect(wbCompactTimeline(entries, { notesOnly: false, expanded: ['group:e3'] }).map((item) => item.id)).toEqual(['e1', 'e2', 'e3']);
+  });
+
+  test('« notes seulement » cache toutes les actions', () => {
+    const entries = [note('n1'), event('e1'), note('n2')];
+    expect(wbCompactTimeline(entries, { notesOnly: true, expanded: [] }).map((item) => item.id)).toEqual(['n1', 'n2']);
   });
 });
 
