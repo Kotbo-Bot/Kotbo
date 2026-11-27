@@ -21,6 +21,8 @@
   import { saveRpgItem } from '../../../api';
   import ToggleCard from '../ToggleCard.svelte';
   import Papicon from '../../Papicon.svelte';
+  import DiscordPreview from '../DiscordPreview.svelte';
+  import DiscordEmbed from '../DiscordEmbed.svelte';
   import EmojiText from '../../EmojiText.svelte';
   import WizardShell from '../WizardShell.svelte';
 
@@ -146,31 +148,18 @@
   </p>
 
   {#snippet preview()}
-    <div class="rounded-xl overflow-hidden border border-black/25 shadow-sm">
-      <div class="flex items-center gap-2 px-3.5 py-2.5 bg-[#2b2d31] border-b border-black/25">
-        <Papicon icon="shopping-bag" size={13} class="text-[#80848e]" />
-        <span class="text-body-sm font-semibold text-[#dbdee1] truncate">
-          {m.onb_economy_shop_preview_title()}
-        </span>
-      </div>
-
-      <div class="bg-[#313338] px-3.5 py-3 space-y-2 min-h-[200px]">
-        {#each chosen as item (item.key)}
-          <div class="flex items-center gap-2.5 rounded-md bg-[#2b2d31] px-2.5 py-2">
-            <span class="text-[17px] leading-none shrink-0">{item.emoji}</span>
-            <div class="min-w-0 flex-1">
-              <p class="text-body-sm font-medium text-[#f2f3f5] truncate">{item.name}</p>
-              <p class="text-2xs text-[#949ba4] truncate">{effectOf(item)}</p>
-            </div>
-            <span class="shrink-0 text-xs font-semibold tabular-nums text-[#f0b232]">
-              <EmojiText value={emoji} /> {priceOf(item).toLocaleString(dateLocale())}
-            </span>
-          </div>
-        {:else}
-          <p class="text-xs text-[#949ba4] py-8 text-center">{m.onb_economy_shop_empty()}</p>
-        {/each}
-      </div>
-    </div>
+    <DiscordPreview channel={m.bot_ch_economy({}, bot())}>
+      <DiscordEmbed
+        color="#f0b232"
+        title={m.onb_economy_shop_preview_title()}
+        description={chosen.length > 0 ? undefined : m.onb_economy_shop_empty()}
+        fields={chosen.map((item) => ({
+          emoji: item.emoji,
+          name: item.name,
+          value: `${effectOf(item)} · ${priceOf(item).toLocaleString(dateLocale())} ${emoji} ${currency}`,
+        }))}
+      />
+    </DiscordPreview>
   {/snippet}
 
   {#snippet footer()}

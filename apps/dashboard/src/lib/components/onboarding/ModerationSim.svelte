@@ -17,13 +17,15 @@
    * moderation retire vraiment le plus souvent, et c'est lisible sans avoir a
    * censurer des insultes sur le premier ecran que voit un nouveau client.
    *
-   * Les couleurs sont ecrites en dur, hors des jetons du tableau de bord : ce
-   * cadre imite Discord, il ne suit pas le theme de Kotbo.
+   * Le salon est rendu par @arcscord/discord-ui, comme les autres apercus :
+   * les messages ressemblent a Discord sans qu'on l'imite a la main.
    */
   import { m } from '../../i18n';
   import { bot } from '../../stores/botLocale.svelte';
   import type { ModerationLevel } from '../../onboarding';
   import Papicon from '../Papicon.svelte';
+  import { Avatar, ChannelHeader, Markdown, MessageFrame, MessageHeader } from '@arcscord/discord-ui-svelte';
+  import DiscordScope from '../discord/DiscordScope.svelte';
 
   const { level, autoplay = true }: { level: ModerationLevel; autoplay?: boolean } = $props();
 
@@ -32,8 +34,6 @@
   type Line = {
     author: string;
     color: string;
-    /** Initiale affichee a la place d'un avatar : aucun visage invente. */
-    initial: string;
     text: string;
     /** Mention de compte trop recent, affichee sous le pseudo. */
     fresh?: boolean;
@@ -48,7 +48,6 @@
     {
       author: 'Maë',
       color: '#3ba55d',
-      initial: 'M',
       get text() { return m.bot_sim_patch({}, bot()); },
       verdict: KEPT,
       reason: () => m.onb_sim_passes(),
@@ -56,7 +55,6 @@
     {
       author: 'promo_bot',
       color: '#faa61a',
-      initial: 'P',
       get text() { return m.bot_sim_promo({}, bot()); },
       // Un lien d'invitation saute a tous les niveaux : c'est precisement ce que
       // « le strict necessaire » veut dire.
@@ -66,7 +64,6 @@
     {
       author: 'Tom',
       color: '#5865f2',
-      initial: 'T',
       get text() { return m.bot_sim_opinion({}, bot()); },
       verdict: KEPT,
       reason: () => m.onb_sim_passes(),
@@ -74,7 +71,6 @@
     {
       author: 'kkkkk',
       color: '#eb459e',
-      initial: 'K',
       text: 'AAAAAAAA AAAAAAAA AAAAAAAA AAAAAAAA AAAAAAAA',
       verdict: { light: 'kept', standard: 'deleted', strict: 'deleted' },
       reason: () => m.onb_sim_reason_spam(),
@@ -82,7 +78,6 @@
     {
       author: 'kkkkk',
       color: '#eb459e',
-      initial: 'K',
       get text() { return m.bot_sim_flood({}, bot()); },
       verdict: { light: 'kept', standard: 'deleted', strict: 'deleted' },
       reason: () => m.onb_sim_reason_flood(),
@@ -90,7 +85,6 @@
     {
       author: 'user_84021',
       color: '#747f8d',
-      initial: 'U',
       get text() { return m.bot_sim_hello({}, bot()); },
       fresh: true,
       // Le seul cas ou « strict » se distingue : un compte de quelques heures
@@ -108,6 +102,7 @@
 
   /** Rythme du defile. Assez lent pour lire chaque message, assez court pour ne pas lasser. */
   const STEP_MS = 620;
+  const timestamp = new Date().toISOString();
   /** Delai entre l'apparition d'un message et le verdict de Kotbo. */
   const VERDICT_MS = 480;
 
@@ -165,80 +160,104 @@
   });
 </script>
 
-<div class="rounded-xl overflow-hidden border border-black/25 shadow-sm">
-  <div class="flex items-center justify-between gap-2 px-3.5 py-2.5 bg-[#2b2d31] border-b border-black/25">
-    <span class="flex items-center gap-2 min-w-0">
-      <span class="text-[#80848e] text-[17px] leading-none font-medium">#</span>
-      <span class="text-body-sm font-semibold text-[#dbdee1] truncate">{m.bot_ch_general({}, bot())}</span>
-    </span>
-    <button
-      type="button"
-      onclick={play}
-      class="shrink-0 inline-flex items-center gap-1 text-2xs font-medium text-[#949ba4] hover:text-[#dbdee1] transition-colors"
-    >
-      <Papicon icon="refresh-cw" size={11} />
-      {m.onb_sim_replay()}
-    </button>
-  </div>
+<DiscordScope class="moderation-sim">
+  <ChannelHeader name={m.bot_ch_general({}, bot())}>
+    {#snippet actions()}
+      <button type="button" onclick={play} class="replay">
+        <Papicon icon="refresh-cw" size={11} />
+        {m.onb_sim_replay()}
+      </button>
+    {/snippet}
+  </ChannelHeader>
 
-  <div class="bg-[#313338] px-3.5 py-3 space-y-2.5 min-h-[260px]" aria-live="polite">
+  <div class="scene" aria-live="polite">
     {#each LINES.slice(0, shown) as line, index (index)}
       {@const verdict = index < judged ? line.verdict[level] : 'kept'}
-      <div class="line flex gap-2.5">
-        <span
-          class="w-7 h-7 rounded-full shrink-0 flex items-center justify-center text-2xs font-bold text-white"
-          style="background-color: {line.color}"
-        >
-          {line.initial}
-        </span>
-
-        <div class="min-w-0 flex-1">
-          <div class="flex items-center gap-1.5 flex-wrap">
-            <span class="text-body-sm font-medium text-[#f2f3f5]">{line.author}</span>
-            {#if line.fresh}
-              <span class="text-xs font-semibold px-1 py-px rounded bg-[#4e5058] text-[#dbdee1]">
-                nouveau
-              </span>
-            {/if}
-          </div>
-
-          <p
-            class="text-body-sm leading-[1.4] break-words transition-all duration-300
-            {verdict === 'kept' ? 'text-[#dbdee1]' : 'text-[#72767d] line-through decoration-[#f23f43]/60'}"
-          >
-            {line.text}
-          </p>
-
+      {@const author = { id: line.author, displayName: line.author, avatarFallback: { background: line.color } }}
+      <div class="line" class:struck={verdict !== 'kept'}>
+        <MessageFrame>
+          {#snippet avatar()}<Avatar {author} />{/snippet}
+          {#snippet header()}
+            <MessageHeader {author} {timestamp} />
+            {#if line.fresh}<span class="fresh">{m.onb_sim_new_member()}</span>{/if}
+          {/snippet}
+          <div class="text"><Markdown content={line.text} /></div>
           {#if verdict !== 'kept'}
-            <p class="verdict mt-1 inline-flex items-center gap-1.5 rounded px-1.5 py-0.5 text-2xs font-medium
-              {verdict === 'deleted' ? 'bg-[#f23f43]/15 text-[#f77f81]' : 'bg-[#faa61a]/15 text-[#f0b232]'}">
+            <p class="verdict" class:held={verdict === 'held'}>
               <Papicon icon={verdict === 'deleted' ? 'trash' : 'clock'} size={10} />
               {verdict === 'deleted' ? m.onb_sim_deleted_by() : m.onb_sim_held()}
-              <span class="text-[#949ba4]">· {line.reason()}</span>
+              <span class="reason">· {line.reason()}</span>
             </p>
           {/if}
-        </div>
+        </MessageFrame>
       </div>
     {/each}
 
     {#if shown === 0}
-      <p class="text-xs text-[#949ba4] py-6 text-center">{m.onb_sim_title()}…</p>
+      <p class="waiting">{m.onb_sim_title()}…</p>
     {/if}
   </div>
-</div>
+</DiscordScope>
 
 <p class="mt-2.5 text-xs leading-relaxed text-on-surface-variant">
   {CAPTIONS[level]()}
 </p>
 
 <style>
-  .line {
-    animation: appear 240ms ease-out both;
+  /* Les couleurs sont celles de Discord en sombre : le cadre ne suit pas le theme de Kotbo. */
+  :global(.arcscord-discord-ui.moderation-sim) {
+    border-radius: 0.75rem;
+    overflow: hidden;
+    border: 1px solid rgb(0 0 0 / 0.25);
+  }
+
+  .scene { min-height: 260px; padding: 0.5rem 0; }
+
+  .line { animation: appear 240ms ease-out both; }
+  .text { transition: opacity 300ms ease; overflow-wrap: anywhere; }
+  .struck .text { opacity: 0.55; text-decoration: line-through; text-decoration-color: rgb(242 63 67 / 0.6); }
+
+  .fresh {
+    margin-left: 0.375rem;
+    padding: 0 0.25rem;
+    border-radius: 0.25rem;
+    background: #4e5058;
+    color: #dbdee1;
+    font-size: 0.6875rem;
+    font-weight: 600;
   }
 
   .verdict {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.375rem;
+    margin-top: 0.25rem;
+    padding: 0.125rem 0.375rem;
+    border-radius: 0.25rem;
+    background: rgb(242 63 67 / 0.15);
+    color: #f77f81;
+    font-size: 0.6875rem;
+    font-weight: 500;
     animation: appear 200ms ease-out both;
   }
+  .verdict.held { background: rgb(250 166 26 / 0.15); color: #f0b232; }
+  .reason { color: #949ba4; }
+
+  .replay {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 0.25rem;
+    min-height: 1.75rem;
+    color: #949ba4;
+    font-size: 0.6875rem;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .replay:hover { color: #dbdee1; }
+
+  .waiting { padding: 1.5rem 0; text-align: center; color: #949ba4; font-size: 0.75rem; }
 
   @keyframes appear {
     from { opacity: 0; transform: translateY(5px); }
