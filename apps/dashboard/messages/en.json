@@ -20518,6 +20518,8 @@
   "wb_custom_crisis_reset": "Back to the default protocol",
   "wb_custom_step_label": "Step",
   "wb_custom_step_hours": "Deadline in hours",
+  "wb_custom_unit_hours": "hours",
+  "wb_custom_unit_days": "days",
   "wb_custom_add_step": "Add a step",
   "wb_custom_plans_title": "Action plan templates",
   "wb_custom_plans_desc": "Task lists to apply in one click from a case's action plan.",

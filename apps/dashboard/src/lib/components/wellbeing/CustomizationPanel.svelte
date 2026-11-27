@@ -111,9 +111,12 @@
     {/if}
     <ul class="space-y-2">
       {#each crisisTasks as task, index (index)}
-        <li class="grid grid-cols-[1fr_7rem_auto] items-center gap-2">
+        <li class="grid grid-cols-[1fr_auto_auto] items-center gap-2">
           <input bind:value={task.label} maxlength={200} class="input text-sm" aria-label={m.wb_custom_step_label()} placeholder={m.wb_custom_step_label()} />
-          <input bind:value={task.dueHours} type="number" min={1} max={168} class="input text-sm" aria-label={m.wb_custom_step_hours()} title={m.wb_custom_step_hours()} />
+          <span class="flex items-center gap-1.5">
+            <input bind:value={task.dueHours} type="number" min={1} max={168} class="input text-sm w-20" aria-label={m.wb_custom_step_hours()} title={m.wb_custom_step_hours()} />
+            <span class="text-xs text-on-surface-variant w-12">{m.wb_custom_unit_hours()}</span>
+          </span>
           {@render removeButton(task.label, () => (crisisTasks = crisisTasks.filter((_, i) => i !== index)))}
         </li>
       {/each}
@@ -141,10 +144,13 @@
           </div>
           <ul class="space-y-1.5">
             {#each plan.tasks as task, taskIndex (taskIndex)}
-              <li class="grid grid-cols-[1fr_5rem_auto] items-center gap-2">
+              <li class="grid grid-cols-[1fr_auto_auto] items-center gap-2">
                 <input bind:value={task.label} maxlength={200} class="input text-sm" aria-label={m.wb_custom_plan_task()} placeholder={m.wb_custom_plan_task()} />
-                <input value={task.dueDays ?? ''} oninput={(event) => (task.dueDays = daysOf(event.currentTarget.value))} type="number" min={0} max={90}
-                  class="input text-sm" aria-label={m.wb_custom_plan_days()} title={m.wb_custom_plan_days()} />
+                <span class="flex items-center gap-1.5">
+                  <input value={task.dueDays ?? ''} oninput={(event) => (task.dueDays = daysOf(event.currentTarget.value))} type="number" min={0} max={90}
+                    class="input text-sm w-20" aria-label={m.wb_custom_plan_days()} title={m.wb_custom_plan_days()} />
+                  <span class="text-xs text-on-surface-variant">{m.wb_custom_unit_days()}</span>
+                </span>
                 {@render removeButton(task.label, () => (plan.tasks = plan.tasks.filter((_, i) => i !== taskIndex)))}
               </li>
             {/each}
