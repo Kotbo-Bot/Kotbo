@@ -1,6 +1,7 @@
 import { describe, test, expect } from 'bun:test';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { dirname, join } from 'node:path';
 
 /**
  * Garde-fou d'accessibilite (RGAA), comme uxGuard.test.ts : un cliquet qui ne
@@ -13,6 +14,13 @@ import { join } from 'node:path';
  *   la fenetre du dessus prend le nom de celle du dessous.
  */
 const SRC = join(import.meta.dir, '..');
+const require = createRequire(import.meta.url);
+const KOTBO_UI_DIST = join(dirname(require.resolve('@kotbo/ui/package.json')), 'dist');
+
+function kotboUiSource(relPath: string): string {
+  const full = join(KOTBO_UI_DIST, relPath);
+  return existsSync(full) ? readFileSync(full, 'utf-8') : '';
+}
 
 function svelteFiles(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
@@ -215,11 +223,11 @@ describe("garde-fou d'accessibilite", () => {
   test('la liste de MultiSelect ne contient que des options (RGAA 7.1)', () => {
     // Un listbox ne porte que des role="option" : le message « aucun resultat »
     // y etait lu comme un element de liste.
-    const text = sources.find(({ file }) => file.endsWith('components/MultiSelect.svelte'))?.text ?? '';
+    const text = kotboUiSource('ui/MultiSelect.svelte') || fileText('components/MultiSelect.svelte');
     const start = text.indexOf('role="listbox"');
     const listbox = text.slice(start, text.indexOf('{/each}', start));
     expect(start).toBeGreaterThan(-1);
-    expect(listbox).not.toContain('d4_no_result_for');
+    expect(listbox).not.toContain('select_no_result_for');
   });
 
   const fileText = (suffix: string) => sources.find(({ file }) => file.endsWith(suffix))?.text ?? '';
@@ -227,7 +235,7 @@ describe("garde-fou d'accessibilite", () => {
   test('les icones Papicon sont decoratives (RGAA 1.2)', () => {
     // Aucun appel ne leur donne de nom : c'est le bouton ou le texte voisin qui
     // porte le sens. Sans aria-hidden, chaque svg est annonce comme une image vide.
-    const papicon = fileText('components/Papicon.svelte');
+    const papicon = kotboUiSource('icons/Papicon.svelte') || fileText('components/Papicon.svelte');
     expect(openingTags(papicon, 'svg').every((tag) => /aria-hidden="true"/.test(tag))).toBe(true);
     expect(openingTags(papicon, 'LucideComponent').every((tag) => /aria-hidden="true"/.test(tag))).toBe(true);
   });

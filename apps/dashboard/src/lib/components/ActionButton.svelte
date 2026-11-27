@@ -1,10 +1,6 @@
-<!--
-  Ancienne API de bouton, gardee pour ses nombreux appels : elle rend
-  desormais le Button des primitives. Pour du code neuf, importer
-  `Button` depuis `lib/components/ui`.
--->
 <script lang="ts">
-  import Button from './ui/Button.svelte';
+  import type { Snippet } from 'svelte';
+  import { ActionButton as KotboActionButton } from '@kotbo/ui';
 
   type ButtonVariant = 'primary' | 'success' | 'muted' | 'danger' | 'neutral' | 'warning';
   type ButtonSize = 'sm' | 'md' | 'lg';
@@ -21,6 +17,7 @@
     icon = '',
     label,
     className = '',
+    children,
   }: {
     onClick?: (event: MouseEvent) => void;
     onclick?: (event: MouseEvent) => void;
@@ -33,31 +30,21 @@
     icon?: string;
     label: string;
     className?: string;
-    children?: import('svelte').Snippet;
+    children?: Snippet;
   } = $props();
-
-  // Succes et avertissement n'ont jamais ete que des teintes : le libelle
-  // porte le sens, le bouton reste une action secondaire.
-  const VARIANTS = {
-    primary: 'primary',
-    neutral: 'secondary',
-    success: 'secondary',
-    warning: 'secondary',
-    muted: 'ghost',
-    danger: 'danger',
-  } as const;
 </script>
 
-<Button
+<KotboActionButton
+  {onClick}
+  {onclick}
   {type}
-  variant={VARIANTS[variant]}
-  size={size === 'sm' ? 'sm' : 'md'}
-  {icon}
+  {variant}
+  {size}
   {fullWidth}
   {disabled}
-  title={title || undefined}
-  class={className}
-  onclick={onClick ?? onclick}
->
+  {title}
+  {icon}
   {label}
-</Button>
+  {className}
+  {children}
+/>

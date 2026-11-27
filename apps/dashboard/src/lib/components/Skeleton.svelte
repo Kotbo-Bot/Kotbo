@@ -1,31 +1,25 @@
 <script lang="ts">
-  const { 
-    class: className = '', 
-    width = 'w-full', 
-    height = 'h-4', 
+  import { Skeleton as KotboSkeleton } from '@kotbo/ui';
+
+  const {
+    class: className = '',
+    width = 'w-full',
+    height = 'h-4',
     rounded = 'rounded-lg',
     circle = false,
     radius = '',
     style = '',
     ...rest
+  }: {
+    class?: string;
+    width?: string;
+    height?: string;
+    rounded?: string;
+    circle?: boolean;
+    radius?: string;
+    style?: string;
+    [key: string]: unknown;
   } = $props();
-
-  const isTailwindWidth = $derived(width.startsWith('w-') || width.startsWith('max-w-') || width.startsWith('min-w-'));
-  const isTailwindHeight = $derived(height.startsWith('h-') || height.startsWith('max-h-') || height.startsWith('min-h-'));
-
-  const computedStyle = $derived(
-    [
-      radius ? `border-radius: ${radius}` : '',
-      !isTailwindWidth ? `width: ${width}` : '',
-      !isTailwindHeight ? `height: ${height}` : '',
-      style
-    ].filter(Boolean).join('; ')
-  );
 </script>
 
-<div 
-  class="animate-pulse bg-surface-container-highest/60 {circle ? 'rounded-full' : rounded} {isTailwindWidth ? width : ''} {isTailwindHeight ? height : ''} {className}"
-  style={computedStyle}
-  aria-hidden="true"
-  {...rest}
-></div>
+<KotboSkeleton class={className} {width} {height} {rounded} {circle} {radius} {style} {...rest} />

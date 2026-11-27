@@ -1,7 +1,11 @@
 <script lang="ts">
+  import { FormTextarea as KotboFormTextarea } from '@kotbo/ui';
+
   let {
     id = '',
     ariaLabel,
+    describedBy = undefined,
+    'aria-describedby': ariaDescribedBy = undefined,
     value = $bindable(''),
     rows = 3,
     placeholder = '',
@@ -12,8 +16,9 @@
     onchange,
   }: {
     id?: string;
-    /** Nom accessible quand aucun <label for> ne vise le champ (RGAA 11.1). */
     ariaLabel?: string;
+    describedBy?: string | undefined;
+    'aria-describedby'?: string | undefined;
     value?: string;
     rows?: number;
     placeholder?: string;
@@ -25,15 +30,17 @@
   } = $props();
 </script>
 
-<textarea
+<KotboFormTextarea
   {id}
-  aria-label={ariaLabel}
+  {ariaLabel}
+  {describedBy}
+  aria-describedby={ariaDescribedBy}
   bind:value
   {rows}
   {placeholder}
   {disabled}
   {readonly}
-  oninput={oninput}
-  onchange={onchange}
-  class="input {className}"
-></textarea>
+  {className}
+  {oninput}
+  {onchange}
+/>
