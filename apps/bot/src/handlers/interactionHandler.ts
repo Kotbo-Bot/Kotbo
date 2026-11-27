@@ -652,12 +652,7 @@ export async function handleButton(interaction: Interaction, client: Client): Pr
     return;
   }
 
-  // Cellule de suivi : message permanent (écrire, ressources) et météo du staff (en MP).
-  if (customId.startsWith('wellbeing:pulse:')) {
-    const { handlePulseButton } = await import('../services/staff/wellbeingPulse.js');
-    await handlePulseButton(interaction);
-    return;
-  }
+  // Cellule de suivi : message permanent (écrire, ressources).
   if (customId.startsWith('wellbeing:open:') || customId === 'wellbeing:resources') {
     const { handleWellbeingPanelButton } = await import('../commands/utility/wellbeing.js');
     await handleWellbeingPanelButton(interaction);

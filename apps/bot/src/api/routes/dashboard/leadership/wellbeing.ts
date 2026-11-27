@@ -113,8 +113,6 @@ export function createWellbeingRouter(client: Client) {
         followUpDays: 30,
         sanctionSignal: false,
         distressWatch: false,
-        pulseEnabled: false,
-        pulseRoleIds: [],
         networkPool: false,
         profileRetentionMonths: PROFILE_RETENTION_DEFAULT_MONTHS,
         resources: [],
@@ -152,8 +150,6 @@ export function createWellbeingRouter(client: Client) {
         followUpDays?: number;
         sanctionSignal?: boolean;
         distressWatch?: boolean;
-        pulseEnabled?: boolean;
-        pulseRoleIds?: string[];
         networkPool?: boolean;
         profileRetentionMonths?: number;
       }>(c);
@@ -173,19 +169,13 @@ export function createWellbeingRouter(client: Client) {
         ? Math.min(Math.max(body.followUpDays, 0), MAX_FOLLOW_UP_DAYS)
         : undefined;
       const profileRetentionMonths = cleanProfileRetention(body?.profileRetentionMonths);
-      // Les rôles interrogés par la météo du staff doivent exister sur le serveur.
-      const pulseRoleIds = body?.pulseRoleIds !== undefined
-        ? cleanIds(body.pulseRoleIds).filter((id) => state.discordGuild?.roles.cache.has(id))
-        : undefined;
       const toggles = {
         ...(typeof body?.crisisProtocol === 'boolean' ? { crisisProtocol: body.crisisProtocol } : {}),
         ...(typeof body?.sanctionSignal === 'boolean' ? { sanctionSignal: body.sanctionSignal } : {}),
         ...(typeof body?.distressWatch === 'boolean' ? { distressWatch: body.distressWatch } : {}),
-        ...(typeof body?.pulseEnabled === 'boolean' ? { pulseEnabled: body.pulseEnabled } : {}),
         ...(typeof body?.networkPool === 'boolean' ? { networkPool: body.networkPool } : {}),
         ...(profileRetentionMonths !== undefined ? { profileRetentionMonths } : {}),
         ...(followUpDays !== undefined ? { followUpDays } : {}),
-        ...(pulseRoleIds !== undefined ? { pulseRoleIds } : {}),
       };
       // Le suppléant est un membre désigné de la cellule ; il perd ce rôle s'il en sort.
       const teamUserIdsAfter = body?.teamUserIds !== undefined ? cleanIds(body.teamUserIds) : (state.config?.teamUserIds ?? []);

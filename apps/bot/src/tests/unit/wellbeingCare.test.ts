@@ -26,12 +26,7 @@ import {
 } from '../../services/staff/wellbeingWorkloadPolicy';
 import {
   DISTRESS_COOLDOWN_MS,
-  PULSE_MIN_RESPONSES,
-  cleanPulseScore,
   detectDistress,
-  pulseSummary,
-  pulseVoterHash,
-  pulseWeekKey,
   shouldSignalDistress,
 } from '../../services/staff/wellbeingWatchPolicy';
 
@@ -223,46 +218,13 @@ describe('charge des référents', () => {
   });
 });
 
-describe('météo du staff', () => {
-  test('la semaine suit la norme ISO', () => {
-    expect(pulseWeekKey(new Date('2026-11-25T12:00:00Z'))).toBe('2026-W48');
-    expect(pulseWeekKey(new Date('2027-01-01T12:00:00Z'))).toBe('2026-W53');
-    expect(pulseWeekKey(new Date('2026-01-01T12:00:00Z'))).toBe('2026-W01');
-  });
-
-  test('le sondage part le lundi à partir de l’heure prévue, une fois par semaine', () => {
+describe('envoi hebdomadaire', () => {
+  test('part le lundi à partir de l’heure prévue, une fois par semaine', () => {
     const monday = new Date('2026-11-23T10:00:00Z');
     expect(weeklyDue(null, monday, 10)).toBe(true);
     expect(weeklyDue(null, new Date('2026-11-23T09:00:00Z'), 10)).toBe(false);
     expect(weeklyDue(null, new Date('2026-11-24T10:00:00Z'), 10)).toBe(false);
     expect(weeklyDue(new Date(monday.getTime() - HOUR), monday, 10)).toBe(false);
-  });
-
-  test('seule une note de 1 à 5 est acceptée', () => {
-    expect(cleanPulseScore('3')).toBe(3);
-    expect(cleanPulseScore('0')).toBeNull();
-    expect(cleanPulseScore('6')).toBeNull();
-    expect(cleanPulseScore('x')).toBeNull();
-  });
-
-  test("l'empreinte du votant dépend du serveur et de la semaine", () => {
-    const a = pulseVoterHash('g1', '2026-W48', 'u1');
-    expect(a).toBe(pulseVoterHash('g1', '2026-W48', 'u1'));
-    expect(a).not.toBe(pulseVoterHash('g1', '2026-W49', 'u1'));
-    expect(a).not.toBe(pulseVoterHash('g2', '2026-W48', 'u1'));
-    expect(a).not.toContain('u1');
-  });
-
-  test('une semaine sans assez de réponses ne montre pas de moyenne', () => {
-    const summary = pulseSummary([
-      { week: '2026-W47', score1: 0, score2: 1, score3: 1, score4: 1, score5: 0 },
-      { week: '2026-W48', score1: 1, score2: 0, score3: 0, score4: 3, score5: 1 },
-    ]);
-    expect(PULSE_MIN_RESPONSES).toBe(5);
-    expect(summary).toEqual([
-      { week: '2026-W47', responses: 3, average: null },
-      { week: '2026-W48', responses: 5, average: 3.6 },
-    ]);
   });
 });
 

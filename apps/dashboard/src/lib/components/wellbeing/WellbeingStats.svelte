@@ -33,12 +33,6 @@
     label: string;
     count: number;
   }
-  /** Météo du staff : une moyenne seulement à partir de cinq réponses. */
-  export interface WellbeingPulseWeek {
-    week: string;
-    responses: number;
-    average: number | null;
-  }
 </script>
 
 <script lang="ts">
@@ -55,14 +49,12 @@
   const {
     stats,
     load = [],
-    pulse = null,
     profiles = null,
     stages = [],
     tags = [],
   }: {
     stats: WellbeingCellStats;
     load?: WellbeingReferentLoad[];
-    pulse?: WellbeingPulseWeek[] | null;
     profiles?: WellbeingProfileStats | null;
     stages?: WellbeingStageCount[];
     /** Dossiers actifs par étiquette de la cellule. */
@@ -70,12 +62,6 @@
   } = $props();
 
   const loadMax = $derived(Math.max(1, ...load.map((entry) => entry.active)));
-  const pulseChart = $derived(pulse ? {
-    labels: pulse.map((entry) => entry.week.slice(5)),
-    datasets: [
-      { label: m.wb_pulse_average(), data: pulse.map((entry) => entry.average), backgroundColor: SERIES[0], borderRadius: 4, borderSkipped: false, maxBarThickness: 28 },
-    ],
-  } : null);
 
   const monthLabel = (month: string) => new Date(`${month}-01T00:00:00Z`).toLocaleDateString(dateLocale(), { month: 'short', timeZone: 'UTC' });
   const chartData = $derived({
@@ -226,30 +212,6 @@
     </section>
   {/if}
 
-  {#if pulse && pulseChart}
-    <section class="bg-surface-container-low/40 border border-outline-variant/30 rounded-xl p-6 space-y-4">
-      <div>
-        <h3 class="text-base font-semibold flex items-center gap-2"><Papicon icon="Sun" size={16} /> {m.wb_pulse_title()}</h3>
-        <p class="text-xs text-on-surface-variant mt-1">{m.wb_pulse_desc()}</p>
-      </div>
-      {#if pulse.some((entry) => entry.average !== null)}
-        <div role="img" aria-label={m.wb_pulse_title()}>
-          <Chart type="bar" data={pulseChart} height={200} />
-        </div>
-      {:else}
-        <p class="text-sm text-on-surface-variant">{m.wb_pulse_not_enough()}</p>
-      {/if}
-      <table class="sr-only">
-        <caption>{m.wb_pulse_title()}</caption>
-        <thead><tr><th scope="col">{m.wb_pulse_week()}</th><th scope="col">{m.wb_pulse_average()}</th><th scope="col">{m.wb_pulse_responses()}</th></tr></thead>
-        <tbody>
-          {#each pulse as entry (entry.week)}
-            <tr><th scope="row">{entry.week}</th><td>{entry.average ?? '-'}</td><td>{entry.responses}</td></tr>
-          {/each}
-        </tbody>
-      </table>
-    </section>
-  {/if}
 
   <p class="text-xs text-on-surface-variant flex items-center gap-1.5"><Papicon icon="lock" size={12} /> {m.wb_stats_privacy()}</p>
 </div>

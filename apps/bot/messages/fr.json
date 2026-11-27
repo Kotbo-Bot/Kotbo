@@ -5463,9 +5463,5 @@
   "wbc_panel_write": "Écrire à la cellule",
   "wbc_panel_write_anonymous": "Écrire anonymement",
   "wbc_panel_resources": "Ressources d'aide",
-  "wbc_pulse_question": "**Météo du staff de {guild}**\nComment te sens-tu dans ton rôle cette semaine, de 1 (difficile) à 5 (très bien) ? Ta réponse est anonyme : seule une moyenne est montrée, et seulement à partir de cinq réponses.",
-  "wbc_pulse_thanks": "Merci, ta réponse a été comptée anonymement.",
-  "wbc_pulse_already": "Tu as déjà répondu cette semaine.",
-  "wbc_pulse_closed": "Ce sondage n'est plus ouvert.",
   "wbc_distress_dm": "Un de tes messages laisse penser que tu traverses un moment difficile. Tu peux en parler : voici des ressources d'aide. Si tu es en danger immédiat, appelle les secours."
 }

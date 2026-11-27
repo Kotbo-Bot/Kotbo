@@ -97,10 +97,8 @@ describe("accès du référent du réseau", () => {
 });
 
 describe('cloisonnement des données du réseau', () => {
-  test('signaux de détresse et météo du staff restent sur leur serveur', () => {
+  test('les signaux de détresse restent sur leur serveur', () => {
     // Partagés, les signaux d'un sous-serveur iraient à la cellule du principal.
-    for (const model of ['WellbeingDistressSignal', 'WellbeingPulseWeek', 'WellbeingPulseVoter']) {
-      expect(isSynced(model)).toBe(false);
-    }
+    expect(isSynced('WellbeingDistressSignal')).toBe(false);
   });
 });

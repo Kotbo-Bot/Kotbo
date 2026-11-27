@@ -173,7 +173,7 @@
   }
 
   // ── Sections repliables ──
-  let open = $state<Record<WbSettingsSection | 'general', boolean>>({ review: false, general: false, team: false, direction: false, alerts: false, reports: false, care: false, signals: false, pulse: false });
+  let open = $state<Record<WbSettingsSection | 'general', boolean>>({ review: false, general: false, team: false, direction: false, alerts: false, reports: false, care: false, signals: false });
 
   async function goTo(section: WbSettingsSection) {
     open = { ...open, [section]: true };
@@ -308,16 +308,6 @@
   {#if form.distressWatch && (!form.alertEvents.includes('DISTRESS') || (!form.alertChannelId && form.alertUserIds.length === 0))}
     <Callout variant="warning">{m.wb_cfg_distress_unnoticed()}</Callout>
   {/if}
-{/snippet}
-
-{#snippet pulseFields()}
-  <p class="text-xs text-on-surface-variant px-1">{m.wb_cfg_pulse_desc()}</p>
-  <SettingsRow label={m.wb_cfg_pulse()}>
-    <ToggleSwitch checked={form.pulseEnabled} onToggle={(v) => (form.pulseEnabled = v)} ariaLabel={m.wb_cfg_pulse()} />
-  </SettingsRow>
-  <SettingsRow label={m.wb_cfg_pulse_roles()} description={m.wb_cfg_pulse_roles_hint()} labelFor="wb-pulse-roles" stacked>
-    <MultiSelect id="wb-pulse-roles" bind:values={form.pulseRoleIds} options={roleOptions} placeholder={m.wb_role_search_ph()} />
-  </SettingsRow>
 {/snippet}
 
 {#snippet whoCanDoWhat()}
@@ -479,7 +469,6 @@
     {@render section('reports', m.wb_set_reports(), 'MessageSquare', reportFields)}
     {@render section('care', m.wb_set_care(), 'heart', careFields)}
     {@render section('signals', m.wb_set_signals(), 'AlertTriangle', signalFields)}
-    {@render section('pulse', m.wb_set_pulse(), 'Sun', pulseFields, wbStepComplete(form, 'pulse') ? '' : m.wb_badge_todo())}
 
     <p class="text-xs text-on-surface-variant flex items-center gap-1.5"><Papicon icon="Info" size={12} /> {m.wb_settings_save_hint()}</p>
   </div>

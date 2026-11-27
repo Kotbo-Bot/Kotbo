@@ -146,9 +146,6 @@ const mockDb = {
     update: mock(async (_args?: unknown) => signal),
     updateMany: mock(async (_args?: unknown) => ({ count: signal ? 1 : 0 })),
   },
-  wellbeingPulseWeek: {
-    findMany: mock(async (_args?: unknown) => []),
-  },
   wellbeingProfile: {
     findMany: mock(async (_args?: unknown) => []),
     findUnique: mock(async (_args?: unknown) => profile),

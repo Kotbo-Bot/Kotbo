@@ -5,7 +5,7 @@
  * ne les garde pas indéfiniment. Un dossier fermé et inchangé depuis la durée
  * de conservation est supprimé avec ses notes, comme un dossier resté en
  * corbeille au-delà de son délai de restauration. Les signaux de détresse
- * et les empreintes de vote de la météo du staff suivent le même principe.
+ * suivent le même principe.
  *
  * Une note de fiche est effacée à son échéance, une fois annoncée ; une fiche
  * sans note disparaît avec elle.
@@ -20,7 +20,7 @@ import {
   purgeWarnedCutoff,
   trashCutoff,
 } from './wellbeingRetentionPolicy.js';
-import { DISTRESS_SIGNAL_DAYS, pulseWeekKey } from './wellbeingWatchPolicy.js';
+import { DISTRESS_SIGNAL_DAYS } from './wellbeingWatchPolicy.js';
 
 export async function pruneClosedWellbeingCases(now: Date = new Date()): Promise<void> {
   try {
@@ -46,8 +46,6 @@ export async function pruneClosedWellbeingCases(now: Date = new Date()): Promise
     await prisma.wellbeingDistressSignal.deleteMany({
       where: { createdAt: { lt: new Date(now.getTime() - DISTRESS_SIGNAL_DAYS * 24 * 60 * 60 * 1000) } },
     });
-    // Météo du staff : qui a voté n'a plus d'utilité une fois la semaine passée.
-    await prisma.wellbeingPulseVoter.deleteMany({ where: { week: { not: pulseWeekKey(now) } } });
     await pruneExpiredProfileNotes(now);
   } catch (error) {
     logger.error('Wellbeing', 'Purge des dossiers fermés en échec :', error);

@@ -25,8 +25,6 @@ export interface WellbeingAccessLists {
   followUpDays?: number;
   sanctionSignal?: boolean;
   distressWatch?: boolean;
-  pulseEnabled?: boolean;
-  pulseRoleIds?: string[];
   networkPool?: boolean;
   profileRetentionMonths?: number;
 }
@@ -126,9 +124,6 @@ export function describeConfigChange(
       ? `Signal aux modérateurs : ${after.sanctionSignal ? 'activé' : 'désactivé'}` : null,
     (prev.distressWatch ?? false) !== (after.distressWatch ?? false)
       ? `Repérage des mots de détresse : ${after.distressWatch ? 'activé' : 'désactivé'}` : null,
-    (prev.pulseEnabled ?? false) !== (after.pulseEnabled ?? false)
-      ? `Météo du staff : ${after.pulseEnabled ? 'activée' : 'désactivée'}` : null,
-    listLine('Météo du staff', prev.pulseRoleIds ?? [], after.pulseRoleIds ?? [], nameOf),
     (prev.networkPool ?? false) !== (after.networkPool ?? false)
       ? `Référents du réseau : ${after.networkPool ? 'partagés' : 'plus partagés'}` : null,
     // À la création de la cellule, la durée par défaut n'est pas un changement.

@@ -5463,9 +5463,5 @@
   "wbc_panel_write": "Write to the unit",
   "wbc_panel_write_anonymous": "Write anonymously",
   "wbc_panel_resources": "Help resources",
-  "wbc_pulse_question": "**{guild} staff check-in**\nHow do you feel in your role this week, from 1 (hard) to 5 (great)? Your answer is anonymous: only an average is shown, and only once five people have answered.",
-  "wbc_pulse_thanks": "Thank you, your answer was counted anonymously.",
-  "wbc_pulse_already": "You already answered this week.",
-  "wbc_pulse_closed": "This check-in is no longer open.",
   "wbc_distress_dm": "One of your messages suggests you may be going through a hard time. You are not alone: here are some help resources. If you are in immediate danger, call emergency services."
 }
