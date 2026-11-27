@@ -80,10 +80,13 @@ function networkScopeExtension(base: PrismaClient) {
   });
 }
 
+// `<Prisma.PrismaClientOptions>` est obligatoire à chaque `new PrismaClient` passé
+// comme `PrismaClient` : sinon TypeScript infère un type par jeu d'options puis le
+// compare modèle par modèle (typecheck : +1 Go de RAM, durée doublée ou plus).
 export const prisma: PrismaClient =
   globalForPrisma.prisma ||
   withInstrumentation(
-    new PrismaClient({
+    new PrismaClient<Prisma.PrismaClientOptions>({
       adapter,
       log: process.env.LOG_LEVEL === 'debug' ? ['error', 'warn'] : ['error'],
     }),
@@ -119,7 +122,7 @@ export const prismaRead: PrismaClient = readReplicaUrl
         max: readPoolSize,
         idleTimeoutMillis: POOL_IDLE_TIMEOUT_MS,
       });
-      const client = withInstrumentation(new PrismaClient({
+      const client = withInstrumentation(new PrismaClient<Prisma.PrismaClientOptions>({
         adapter: readAdapter,
         log: ['error'],
       }));
