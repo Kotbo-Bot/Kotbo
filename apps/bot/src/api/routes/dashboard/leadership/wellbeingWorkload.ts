@@ -12,7 +12,8 @@ import { agendaItems, wellbeingCellStats, referentLoad, suggestAssignee } from '
 import { PULSE_WEEKS_SHOWN, pulseSummary } from '../../../../services/staff/wellbeingWatchPolicy.js';
 import { profileStats } from '../../../../services/staff/wellbeingProfilePolicy.js';
 import { cleanBoardColumns, stageCounts } from '../../../../services/staff/wellbeingBoardPolicy.js';
-import { newColumnId, resolveWellbeingRole, SNOWFLAKE_RE, teamIdsOf } from './wellbeingShared.js';
+import { customizationOf, newColumnId, resolveWellbeingRole, SNOWFLAKE_RE, teamIdsOf } from './wellbeingShared.js';
+import { tagCounts } from '../../../../services/staff/wellbeingCustomPolicy.js';
 
 export function createWellbeingWorkloadRouter(client: Client) {
   const router = new Hono();
@@ -52,7 +53,7 @@ export function createWellbeingWorkloadRouter(client: Client) {
         prisma.wellbeingCase.findMany({
           where: caseVisibilityWhere(guildId, user.userId),
           select: {
-            status: true, severity: true, category: true, source: true, assigneeId: true, createdAt: true, closedReason: true, stage: true,
+            status: true, severity: true, category: true, source: true, assigneeId: true, createdAt: true, closedReason: true, stage: true, tagIds: true,
             events: { where: { type: { in: ['STATUS', 'ASSIGNEE'] } }, select: { type: true, toValue: true, createdAt: true }, orderBy: { createdAt: 'asc' } },
           },
         }),
@@ -68,6 +69,7 @@ export function createWellbeingWorkloadRouter(client: Client) {
         stats: wellbeingCellStats(cases, now),
         profiles: profileStats(profileNotes, now),
         stages: stageCounts(cases, cleanBoardColumns(state.config?.boardColumns, newColumnId)),
+        tags: tagCounts(cases, customizationOf(state.config).tags),
         load: referentLoad(cases, await teamIdsOf(state)),
         pulse: state.config?.pulseEnabled || pulseWeeks.length > 0 ? pulseSummary(pulseWeeks) : null,
       });

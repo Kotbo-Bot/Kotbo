@@ -14,7 +14,8 @@
   import MemberSearchSelect from '../MemberSearchSelect.svelte';
   import { Button, Callout, Field, Modal } from '../ui';
   import { WB_SEVERITIES, wbSeverityLabel } from '../../wellbeingLabels';
-  import { wbCategories, wbCategoryTemplate, wbIsCategoryTemplate } from '../../wellbeingCustom';
+  import { wbCategories, wbCategoryPlan, wbCategoryTemplate, wbIsCategoryTemplate } from '../../wellbeingCustom';
+  import TagPicker from './TagPicker.svelte';
   import { wbCustom } from '../../stores/wellbeingCustomization.svelte';
   import { WB_REVIEW_SHORTCUTS, wbReviewShortcut, wbSeverityTone } from '../../wellbeingView';
 
@@ -44,6 +45,9 @@
   let summary = $state('');
   let assigneeId = $state('');
   let reviewAt = $state('');
+  let tagIds = $state<string[]>([]);
+  /** Plan type que la catégorie choisie ajoutera au dossier. */
+  const categoryPlan = $derived(wbCategoryPlan(wbCustom.value, category));
   let creating = $state(false);
   /** Signal de détresse d'où vient le dossier : il sera marqué traité. */
   let signalId = $state('');
@@ -114,6 +118,7 @@
           assigneeId: assigneeId || undefined,
           reviewAt: reviewAt || undefined,
           signalId: signalId || undefined,
+          tagIds,
         }),
       });
       const data = await res.json();
@@ -126,6 +131,7 @@
       summary = '';
       assigneeId = '';
       reviewAt = '';
+      tagIds = [];
       signalId = '';
       oncreated(data.item, fromSignal);
       toast.success(m.toast_wb_file_created());
@@ -168,6 +174,9 @@
           </button>
         {/each}
       </div>
+      {#if categoryPlan}
+        <p class="text-2xs text-on-surface-variant">{m.wb_new_plan_hint({ name: categoryPlan.label })}</p>
+      {/if}
     </div>
     <div class="space-y-1.5">
       <p class="text-xs font-semibold text-on-surface-variant">{m.wb_severity_label()}</p>
@@ -180,6 +189,7 @@
         {/each}
       </div>
     </div>
+    <TagPicker {tagIds} canWrite={true} onchange={(ids) => (tagIds = ids)} />
     <Field label={m.wb_summary()} required error={summaryError}>
       {#snippet children(id, describedBy)}
         <textarea {id} aria-describedby={describedBy} bind:value={summary} required rows={6} class="input w-full" placeholder={m.wb_summary_ph()}

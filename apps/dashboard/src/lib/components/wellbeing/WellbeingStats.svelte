@@ -58,14 +58,16 @@
     pulse = null,
     profiles = null,
     stages = [],
+    tags = [],
   }: {
     stats: WellbeingCellStats;
     load?: WellbeingReferentLoad[];
     pulse?: WellbeingPulseWeek[] | null;
     profiles?: WellbeingProfileStats | null;
     stages?: WellbeingStageCount[];
+    /** Dossiers actifs par étiquette de la cellule. */
+    tags?: WellbeingStageCount[];
   } = $props();
-  const stageMax = $derived(Math.max(1, ...stages.map((entry) => entry.count)));
 
   const loadMax = $derived(Math.max(1, ...load.map((entry) => entry.active)));
   const pulseChart = $derived(pulse ? {
@@ -92,6 +94,26 @@
   const reasons = $derived([...WB_CLOSE_REASONS, 'UNSPECIFIED'].map((code) => ({ code, count: stats.closedByReason?.[code] ?? 0 })).filter((entry) => entry.count > 0));
   const reasonMax = $derived(Math.max(1, ...reasons.map((entry) => entry.count)));
 </script>
+
+{#snippet countBars(icon: string, title: string, entries: WellbeingStageCount[])}
+  {@const max = Math.max(1, ...entries.map((entry) => entry.count))}
+  <section class="bg-surface-container-low/40 border border-outline-variant/30 rounded-xl p-6 space-y-4">
+    <h3 class="text-base font-semibold flex items-center gap-2"><Papicon {icon} size={16} /> {title}</h3>
+    <ul class="space-y-3">
+      {#each entries as entry (entry.label)}
+        <li class="space-y-1">
+          <div class="flex justify-between text-xs">
+            <span class="text-on-surface">{entry.label}</span>
+            <span class="font-semibold text-on-surface">{entry.count}</span>
+          </div>
+          <div class="h-2 bg-surface-container-high rounded-full overflow-hidden" aria-hidden="true">
+            <div class="h-2 rounded-full bg-primary transition-all duration-500" style="width: {(entry.count / max) * 100}%"></div>
+          </div>
+        </li>
+      {/each}
+    </ul>
+  </section>
+{/snippet}
 
 <div class="space-y-6">
   <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -138,7 +160,7 @@
     </section>
   </div>
 
-  {#if (profiles && profiles.notes > 0) || stages.length > 0}
+  {#if (profiles && profiles.notes > 0) || stages.length > 0 || tags.length > 0}
     <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
       {#if profiles && profiles.notes > 0}
         <section class="bg-surface-container-low/40 border border-outline-variant/30 rounded-xl p-6 space-y-4">
@@ -152,22 +174,10 @@
         </section>
       {/if}
       {#if stages.length > 0}
-        <section class="bg-surface-container-low/40 border border-outline-variant/30 rounded-xl p-6 space-y-4">
-          <h3 class="text-base font-semibold flex items-center gap-2"><Papicon icon="Columns" size={16} /> {m.wb_stats_stages()}</h3>
-          <ul class="space-y-3">
-            {#each stages as entry (entry.label)}
-              <li class="space-y-1">
-                <div class="flex justify-between text-xs">
-                  <span class="text-on-surface">{entry.label}</span>
-                  <span class="font-semibold text-on-surface">{entry.count}</span>
-                </div>
-                <div class="h-2 bg-surface-container-high rounded-full overflow-hidden" aria-hidden="true">
-                  <div class="h-2 rounded-full bg-primary transition-all duration-500" style="width: {(entry.count / stageMax) * 100}%"></div>
-                </div>
-              </li>
-            {/each}
-          </ul>
-        </section>
+        {@render countBars('Columns', m.wb_stats_stages(), stages)}
+      {/if}
+      {#if tags.length > 0}
+        {@render countBars('Tag', m.wb_stats_by_tag(), tags)}
       {/if}
     </div>
   {/if}

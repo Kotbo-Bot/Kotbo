@@ -4,6 +4,7 @@ import {
   wbCaseTags,
   wbCategories,
   wbCategoryName,
+  wbCategoryPlan,
   wbCategoryTemplate,
   wbFilterByTag,
   wbIsCategoryTemplate,
@@ -39,6 +40,16 @@ describe('catégories de la cellule', () => {
     expect(wbIsCategoryTemplate(settings, ' Contexte : ')).toBe(true);
     expect(wbIsCategoryTemplate(settings, '')).toBe(true);
     expect(wbIsCategoryTemplate(settings, 'Contexte : appel du 12')).toBe(false);
+  });
+});
+
+describe('plan relié à une catégorie', () => {
+  test('le plan relié est retrouvé, un plan supprimé ne l’est plus', () => {
+    const plan = { id: 'p', label: 'Médiation', tasks: [{ label: 'A', dueDays: null }] };
+    const settings = custom({ categories: [{ id: 'abc', label: 'Médiation', template: '', planId: 'p' }], taskPlans: [plan] });
+    expect(wbCategoryPlan(settings, 'abc')).toEqual(plan);
+    expect(wbCategoryPlan({ ...settings, taskPlans: [] }, 'abc')).toBeNull();
+    expect(wbCategoryPlan(settings, 'SOUTIEN')).toBeNull();
   });
 });
 

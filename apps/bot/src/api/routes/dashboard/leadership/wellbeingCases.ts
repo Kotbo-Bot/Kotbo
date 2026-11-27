@@ -32,6 +32,7 @@ import { closeTicket } from '../../../../services/features/ticketService.js';
 import { bodyText } from '../../../../utils/bodyText.js';
 import { STAGE_EVENT, cleanBoardColumns, stageChange, stageLabel } from '../../../../services/staff/wellbeingBoardPolicy.js';
 import { TAGS_EVENT, caseCategoryIds, cleanTagIds, tagNames } from '../../../../services/staff/wellbeingCustomPolicy.js';
+import { addPlanTasks } from '../../../../services/staff/wellbeingTaskPlans.js';
 import {
   actorName,
   audit,
@@ -168,6 +169,7 @@ export function createWellbeingCasesRouter(client: Client) {
     reviewAt: Date | null;
     source?: string;
     ticketId?: string;
+    tagIds?: unknown;
   }
 
   /**
@@ -191,7 +193,8 @@ export function createWellbeingCasesRouter(client: Client) {
     if (assigneeConflict(input.subjectUserId, input.assigneeId)) {
       return { error: 'La personne concernée ne peut pas suivre son propre dossier.' };
     }
-    const categories = caseCategoryIds(customizationOf(state.config).categories);
+    const custom = customizationOf(state.config);
+    const categories = caseCategoryIds(custom.categories);
     const created = await prisma.wellbeingCase.create({
       data: {
         guildId,
@@ -205,6 +208,7 @@ export function createWellbeingCasesRouter(client: Client) {
         reviewAt: input.reviewAt,
         ...(input.source ? { source: input.source } : {}),
         ...(input.ticketId ? { ticketId: input.ticketId } : {}),
+        tagIds: cleanTagIds(input.tagIds, custom.tags),
       },
     });
     await recordEvents(created.id, c, [
@@ -212,8 +216,12 @@ export function createWellbeingCasesRouter(client: Client) {
       ...(input.assigneeId ? [{ type: 'ASSIGNEE', toValue: input.assigneeId }] : []),
       ...(input.reviewAt ? [{ type: 'REVIEW', toValue: input.reviewAt.toISOString() }] : []),
     ]);
+    // Catégorie reliée à un plan type : ses tâches arrivent avec le dossier.
+    const planId = custom.categories.find((category) => category.id === created.category)?.planId;
+    const plan = custom.taskPlans.find((item) => item.id === planId);
+    if (plan) await addPlanTasks(created.id, plan, { id: user.userId, name: actorName(c) });
     await applyCrisisProtocolIfDue(created, null, created.severity, state.config?.crisisProtocol ?? true, { id: user.userId, name: actorName(c) },
-      customizationOf(state.config).crisisTasks);
+      custom.crisisTasks);
     void sendWellbeingAlert(client, guildId, state.config, 'CASE_CHANGE', { actorId: user.userId, action: 'créé' },
       input.assigneeId ? [input.assigneeId] : []);
     return { id: created.id };
@@ -235,6 +243,7 @@ export function createWellbeingCasesRouter(client: Client) {
         assigneeId?: string | null;
         reviewAt?: string | null;
         signalId?: string;
+        tagIds?: unknown;
       }>(c);
       // Dossier ouvert depuis un signal de détresse : le signal est marqué traité.
       const signalId = bodyText(body?.signalId, 64);
@@ -249,6 +258,7 @@ export function createWellbeingCasesRouter(client: Client) {
         title: bodyText(body?.title, 160),
         summary: bodyText(body?.summary, 4000),
         category: body?.category ?? '',
+        tagIds: body?.tagIds,
         severity: body?.severity ?? '',
         assigneeId: bodyText(body?.assigneeId, 20) || null,
         reviewAt: parseReviewAt(body?.reviewAt) ?? null,
