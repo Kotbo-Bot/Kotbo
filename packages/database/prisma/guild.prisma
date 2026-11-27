@@ -997,6 +997,11 @@ model MemberProfile {
   presenceTrackingOptOut Boolean @default(false)
   presenceOptOutAt DateTime?
 
+  // Rappel de bump : le membre ne veut plus être mentionné par le rappel qui
+  // suit son bump (`/bump-ping desactiver`). Le rappel part quand même, son
+  // nom reste affiché sans notification. Propre au serveur, comme le reste.
+  bumpReminderPingOptOut Boolean @default(false)
+
   // Salons vocaux temporaires : membres pour lesquels ce membre, propriétaire,
   // ne veut plus qu'on lui demande en MP d'appliquer un changement de mode
   // d'écriture à leur exception (`["<userId>", ...]`). `null` = aucun.
