@@ -9,7 +9,6 @@ import { logger } from '../../../../utils/logger.js';
 import { fail, guildRoute, send } from '../../../hono/dashboard/kit.js';
 import { caseVisibilityWhere } from '../../../../services/staff/wellbeingCasePolicy.js';
 import { agendaItems, wellbeingCellStats, referentLoad, suggestAssignee } from '../../../../services/staff/wellbeingWorkloadPolicy.js';
-import { PULSE_WEEKS_SHOWN, pulseSummary } from '../../../../services/staff/wellbeingWatchPolicy.js';
 import { profileStats } from '../../../../services/staff/wellbeingProfilePolicy.js';
 import { cleanBoardColumns, stageCounts } from '../../../../services/staff/wellbeingBoardPolicy.js';
 import { customizationOf, newColumnId, resolveWellbeingRole, SNOWFLAKE_RE, teamIdsOf } from './wellbeingShared.js';
@@ -49,7 +48,7 @@ export function createWellbeingWorkloadRouter(client: Client) {
     try {
       const state = await resolveWellbeingRole(client, guildId, user.userId);
       if (!state.isTeamMember && !state.isDirector) return send(c, { error: 'Accès refusé.' }, 403);
-      const [cases, pulseWeeks, profileNotes] = await Promise.all([
+      const [cases, profileNotes] = await Promise.all([
         prisma.wellbeingCase.findMany({
           where: caseVisibilityWhere(guildId, user.userId),
           select: {
@@ -57,7 +56,6 @@ export function createWellbeingWorkloadRouter(client: Client) {
             events: { where: { type: { in: ['STATUS', 'ASSIGNEE'] } }, select: { type: true, toValue: true, createdAt: true }, orderBy: { createdAt: 'asc' } },
           },
         }),
-        prisma.wellbeingPulseWeek.findMany({ where: { guildId }, orderBy: { week: 'desc' }, take: PULSE_WEEKS_SHOWN }),
         // Sa propre fiche n'entre pas dans ses chiffres, comme ses dossiers.
         prisma.wellbeingProfileNote.findMany({
           where: { profile: { guildId, subjectUserId: { not: user.userId } } },
@@ -71,7 +69,6 @@ export function createWellbeingWorkloadRouter(client: Client) {
         stages: stageCounts(cases, cleanBoardColumns(state.config?.boardColumns, newColumnId)),
         tags: tagCounts(cases, customizationOf(state.config).tags),
         load: referentLoad(cases, await teamIdsOf(state)),
-        pulse: state.config?.pulseEnabled || pulseWeeks.length > 0 ? pulseSummary(pulseWeeks) : null,
       });
     } catch (err) {
       logger.error('WellbeingAPI', 'Error computing stats:', err);

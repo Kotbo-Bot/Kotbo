@@ -14,7 +14,6 @@
  * - Référent absent : ses relances vont au suppléant de la cellule.
  * - Résumé du lundi : chaque membre de la cellule reçoit ses chiffres de la semaine.
  * - Dossier résolu depuis `followUpDays` : le référent est invité à prendre des nouvelles.
- * - Météo du staff : le sondage anonyme du lundi part aux rôles choisis.
  * - Désactivation demandée par le propriétaire : appliquée une fois ses 24 h écoulées.
  *
  * Aucune relance ne dit quoi que ce soit du contenu d'un dossier.
@@ -35,7 +34,6 @@ import { digestCounts, digestDue, reminderRecipient, weeklyDigestText } from './
 import { currentAbsence } from './wellbeingAbsence.js';
 import { applyDueDissolutions } from './wellbeingDissolution.js';
 import { setDashboardModuleStatus } from '../core/moduleActivationService.js';
-import { sendWeeklyPulses } from './wellbeingPulse.js';
 
 const SYSTEM_ACTOR = 'Relance automatique';
 
@@ -93,7 +91,6 @@ export async function runWellbeingReminders(client: Client, now: Date = new Date
     await announceProfilePurges(client, now);
     await sendAccessReviews(client, now);
     await sendWeeklyDigests(client, now);
-    await sendWeeklyPulses(client, now);
     await applyDueDissolutions(client, now, (guildId, active) => setDashboardModuleStatus(guildId, 'wellbeing', active));
   } catch (error) {
     logger.error('Wellbeing', 'Relances de la cellule en échec :', error);

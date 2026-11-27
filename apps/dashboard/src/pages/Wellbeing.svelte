@@ -13,7 +13,7 @@
   import CaseTimeline from '../lib/components/wellbeing/CaseTimeline.svelte';
   import CaseAttachments from '../lib/components/wellbeing/CaseAttachments.svelte';
   import CaseFollowUp from '../lib/components/wellbeing/CaseFollowUp.svelte';
-  import WellbeingStats, { type WellbeingCellStats, type WellbeingProfileStats, type WellbeingPulseWeek, type WellbeingReferentLoad, type WellbeingStageCount } from '../lib/components/wellbeing/WellbeingStats.svelte';
+  import WellbeingStats, { type WellbeingCellStats, type WellbeingProfileStats, type WellbeingReferentLoad, type WellbeingStageCount } from '../lib/components/wellbeing/WellbeingStats.svelte';
   import CaseTasks from '../lib/components/wellbeing/CaseTasks.svelte';
   import ReporterThread from '../lib/components/wellbeing/ReporterThread.svelte';
   import DistressSignals, { type DistressSignal } from '../lib/components/wellbeing/DistressSignals.svelte';
@@ -391,7 +391,6 @@
   // Bilan : relu à chaque ouverture de l'onglet, il ne coûte qu'une requête.
   let cellStats = $state<WellbeingCellStats | null>(null);
   let cellLoad = $state<WellbeingReferentLoad[]>([]);
-  let cellPulse = $state<WellbeingPulseWeek[] | null>(null);
   $effect(() => {
     if (activeTab === 'stats') void loadStats();
   });
@@ -404,7 +403,6 @@
       const data = await res.json();
       cellStats = data.stats;
       cellLoad = data.load ?? [];
-      cellPulse = data.pulse ?? null;
       cellProfiles = data.profiles ?? null;
       cellStages = data.stages ?? [];
       cellTags = data.tags ?? [];
@@ -1205,7 +1203,7 @@
         onnewcase={(prefill) => void openNewCase(prefill)} />
     {:else if activeTab === 'stats'}
       {#if cellStats}
-        <WellbeingStats stats={cellStats} load={cellLoad} pulse={cellPulse} profiles={cellProfiles} stages={cellStages} tags={cellTags} />
+        <WellbeingStats stats={cellStats} load={cellLoad} profiles={cellProfiles} stages={cellStages} tags={cellTags} />
       {:else}
         <Skeleton height="320px" />
       {/if}

@@ -44,10 +44,6 @@ model WellbeingConfig {
   sanctionSignal     Boolean  @default(false)
   // Repérer les mots de détresse dans les messages du serveur.
   distressWatch      Boolean  @default(false)
-  // Météo du staff : sondage anonyme du lundi aux membres de ces rôles.
-  pulseEnabled       Boolean  @default(false)
-  pulseRoleIds       String[] @default([])
-  pulseSentAt        DateTime?
   // Référents partagés avec les autres cellules du réseau de serveurs qui
   // partagent aussi : un dossier peut être confié à l'un de leurs membres.
   networkPool        Boolean  @default(false)
@@ -229,33 +225,6 @@ model WellbeingDistressSignal {
   @@index([guildId, handledAt])
   @@index([createdAt])
   @@map("wellbeing_distress_signals")
-}
-
-// Météo du staff : compteurs de notes par semaine, sans lien avec qui a voté.
-model WellbeingPulseWeek {
-  guildId String
-  week    String
-  score1  Int    @default(0)
-  score2  Int    @default(0)
-  score3  Int    @default(0)
-  score4  Int    @default(0)
-  score5  Int    @default(0)
-
-  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
-
-  @@id([guildId, week])
-  @@map("wellbeing_pulse_weeks")
-}
-
-// Qui a déjà répondu cette semaine, par empreinte : un seul vote par personne.
-// Effacé une fois la semaine passée.
-model WellbeingPulseVoter {
-  guildId   String
-  week      String
-  voterHash String
-
-  @@id([guildId, week, voterHash])
-  @@map("wellbeing_pulse_voters")
 }
 
 model WellbeingCaseNote {
