@@ -517,6 +517,16 @@ describe('référents du réseau', () => {
     expect(args.data.content).not.toContain('Premier échange');
   });
 
+  test("la liste ne livre au référent que ce qu'il affiche, rien de la cellule d'origine", async () => {
+    networkRefs = [{ id: 'case-1', guildId: OTHER }];
+    const { status } = await networkCall('GET', '/network/cases', undefined, session(EXT));
+    expect(status).toBe(200);
+    const args = mockDb.wellbeingCase.findMany.mock.calls.at(-1)?.[0] as { select: Record<string, boolean> };
+    expect(Object.keys(args.select).sort()).toEqual(
+      ['category', 'guildId', 'id', 'severity', 'status', 'subjectName', 'title', 'updatedAt'],
+    );
+  });
+
   test('une connexion ancienne doit être renouvelée', async () => {
     networkRefs = [{ id: 'case-1', guildId: OTHER }];
     const { status } = await networkCall('GET', '/network/cases', undefined, session(EXT, 13));

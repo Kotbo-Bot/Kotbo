@@ -26,7 +26,6 @@ import { sendWellbeingAlert, sendWellbeingDirect } from '../../../../services/st
 import { openCase, openCaseHeader, openNote, sealNote } from '../../../../services/staff/wellbeingCrypto.js';
 import {
   CASE_INCLUDE,
-  CASE_LIST_SELECT,
   SNOWFLAKE_RE,
   actorName,
   audit,
@@ -37,6 +36,21 @@ import {
 } from './wellbeingShared.js';
 
 const NOT_FOUND = 'Dossier introuvable, ou plus partagé avec votre cellule.';
+
+/**
+ * En-tête d'un dossier vu par le référent du réseau : ni le référent local,
+ * ni l'origine, ni les demandes de purge, qui restent à la cellule d'origine.
+ */
+const NETWORK_LIST_SELECT = {
+  id: true,
+  guildId: true,
+  title: true,
+  subjectName: true,
+  category: true,
+  severity: true,
+  status: true,
+  updatedAt: true,
+} as const;
 
 export function createWellbeingNetworkRouter(client: Client) {
   const router = new Hono();
@@ -111,7 +125,7 @@ export function createWellbeingNetworkRouter(client: Client) {
       if (refs.length === 0) return send(c, { cases: [] });
       const cases = await prisma.wellbeingCase.findMany({
         where: { id: { in: refs.map((ref) => ref.id) } },
-        select: CASE_LIST_SELECT,
+        select: NETWORK_LIST_SELECT,
         orderBy: { updatedAt: 'desc' },
       });
       return send(c, { cases: cases.map((item) => ({ ...openCaseHeader(item), guildName: getGuildName(client, item.guildId) })) });
