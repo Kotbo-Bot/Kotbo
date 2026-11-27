@@ -12,7 +12,8 @@ import prisma from '../../../../utils/db.js';
 import { logger } from '../../../../utils/logger.js';
 import { bodyText } from '../../../../utils/bodyText.js';
 import { fail, guildRoute, readBody, send } from '../../../hono/dashboard/kit.js';
-import { READ_ALERT_COOLDOWN_MS, forgetStale, isCaseSubject, shouldRecordView } from '../../../../services/staff/wellbeingPolicy.js';
+import { READ_ALERT_COOLDOWN_MS, forgetStale } from '../../../../services/staff/wellbeingAlertPolicy.js';
+import { isCaseSubject, shouldRecordView } from '../../../../services/staff/wellbeingCasePolicy.js';
 import {
   PROFILE_EXTEND_REASON_MAX,
   PROFILE_NOTE_MAX,

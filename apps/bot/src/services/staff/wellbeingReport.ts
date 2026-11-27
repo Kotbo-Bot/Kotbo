@@ -27,7 +27,7 @@ import {
   trackingCodeHash,
   trackingStatus,
   trackingThread,
-} from './wellbeingPolicy.js';
+} from './wellbeingReportPolicy.js';
 
 export const REPORT_MODAL_PREFIX = 'wellbeing:report:';
 export const REPORT_MAX_LENGTH = 2000;

@@ -51,6 +51,9 @@ export type WbCaseSort = 'recent' | 'severity' | 'review';
 /** Inactivité au-delà de laquelle la page masque le dossier ouvert. */
 export const WB_IDLE_LOCK_MS = 5 * 60 * 1000;
 
+/** Raccourcis d'échéance de suivi, en jours. */
+export const WB_REVIEW_SHORTCUTS = [3, 7, 30] as const;
+
 export type WbTimelineEntry =
   | { kind: 'note'; id: string; at: string; note: WbNoteView }
   | { kind: 'event'; id: string; at: string; event: WbEventView };

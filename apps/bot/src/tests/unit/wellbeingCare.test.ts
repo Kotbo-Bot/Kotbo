@@ -1,33 +1,37 @@
 import { describe, expect, test } from 'bun:test';
+import { DEFAULT_ALERT_EVENTS, WELLBEING_ALERT_EVENTS, alertText } from '../../services/staff/wellbeingAlertPolicy';
 import {
   CRISIS_PROTOCOL_TASKS,
   CRISIS_REVIEW_HOURS,
-  DEFAULT_ALERT_EVENTS,
-  DISTRESS_COOLDOWN_MS,
-  MAX_REPORTER_MESSAGES,
-  PULSE_MIN_RESPONSES,
-  REFERENT_OVERLOAD_ACTIVE,
-  WELLBEING_ALERT_EVENTS,
-  alertText,
-  cleanPulseScore,
-  cleanResources,
   crisisProtocolDue,
   crisisTaskDrafts,
-  detectDistress,
   followUpDate,
+  ticketCaseSummary,
+} from '../../services/staff/wellbeingCasePolicy';
+import {
+  MAX_REPORTER_MESSAGES,
+  cleanResources,
+  reporterCanWrite,
+  resourcesForLocale,
+  trackingThread,
+} from '../../services/staff/wellbeingReportPolicy';
+import {
+  REFERENT_OVERLOAD_ACTIVE,
+  referentLoad,
+  suggestAssignee,
+  weeklyDigestText,
+  weeklyDue,
+} from '../../services/staff/wellbeingWorkloadPolicy';
+import {
+  DISTRESS_COOLDOWN_MS,
+  PULSE_MIN_RESPONSES,
+  cleanPulseScore,
+  detectDistress,
   pulseSummary,
   pulseVoterHash,
   pulseWeekKey,
-  referentLoad,
-  reporterCanWrite,
-  resourcesForLocale,
   shouldSignalDistress,
-  suggestAssignee,
-  ticketCaseSummary,
-  trackingThread,
-  weeklyDigestText,
-  weeklyDue,
-} from '../../services/staff/wellbeingPolicy';
+} from '../../services/staff/wellbeingWatchPolicy';
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
@@ -246,7 +250,7 @@ describe('météo du staff', () => {
 
 describe('signal aux modérateurs', () => {
   test('le message au modérateur ne dit rien du dossier', async () => {
-    const { sanctionModeratorText } = await import('../../services/staff/wellbeingPolicy');
+    const { sanctionModeratorText } = await import('../../services/staff/wellbeingWatchPolicy');
     const text = sanctionModeratorText();
     expect(text).toContain('cellule');
     expect(text).not.toContain('<@');

@@ -13,7 +13,14 @@
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { profilePurgeWarnedCutoff } from './wellbeingProfilePolicy.js';
-import { CASE_TRASH_DAYS, CLOSED_CASE_RETENTION_DAYS, DISTRESS_SIGNAL_DAYS, closedCaseCutoff, pulseWeekKey, purgeWarnedCutoff, trashCutoff } from './wellbeingPolicy.js';
+import {
+  CASE_TRASH_DAYS,
+  CLOSED_CASE_RETENTION_DAYS,
+  closedCaseCutoff,
+  purgeWarnedCutoff,
+  trashCutoff,
+} from './wellbeingRetentionPolicy.js';
+import { DISTRESS_SIGNAL_DAYS, pulseWeekKey } from './wellbeingWatchPolicy.js';
 
 export async function pruneClosedWellbeingCases(now: Date = new Date()): Promise<void> {
   try {

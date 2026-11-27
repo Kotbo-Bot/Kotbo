@@ -14,9 +14,9 @@ import {
   cleanAlertEvents,
   shouldSendReadAlert,
   type AlertContext,
-  type WellbeingAccessLists,
   type WellbeingAlertEvent,
-} from './wellbeingPolicy.js';
+} from './wellbeingAlertPolicy.js';
+import { type WellbeingAccessLists } from './wellbeingAccessPolicy.js';
 
 const READ_EVENTS: ReadonlySet<WellbeingAlertEvent> = new Set(['TEAM_READ', 'EMERGENCY_READ']);
 const lastReadAlert = new Map<string, number>();

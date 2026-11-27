@@ -3,20 +3,20 @@ import {
   DEFAULT_ALERT_EVENTS,
   UNUSUAL_ACCESS_THRESHOLD,
   WELLBEING_ALERT_EVENTS,
-  WELLBEING_SESSION_MAX_HOURS,
-  agendaItems,
   alertText,
-  caseEventHash,
   cleanMentionIds,
-  generateTrackingCode,
   isUnusualAccess,
   mentionText,
+} from '../../services/staff/wellbeingAlertPolicy';
+import { WELLBEING_SESSION_MAX_HOURS, wellbeingSessionExpired } from '../../services/staff/wellbeingAccessPolicy';
+import { caseEventHash, verifyCaseEventChain } from '../../services/staff/wellbeingCasePolicy';
+import {
+  generateTrackingCode,
   normalizeTrackingCode,
   trackingCodeHash,
   trackingStatus,
-  verifyCaseEventChain,
-  wellbeingSessionExpired,
-} from '../../services/staff/wellbeingPolicy';
+} from '../../services/staff/wellbeingReportPolicy';
+import { agendaItems } from '../../services/staff/wellbeingWorkloadPolicy';
 
 const HOUR = 3_600_000;
 const NOW = new Date('2026-11-25T12:00:00Z');

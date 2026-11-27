@@ -11,7 +11,7 @@ import type { Client } from 'discord.js';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
 import { sendWellbeingAlert } from './wellbeingAlerts.js';
-import { dissolutionDate } from './wellbeingPolicy.js';
+import { dissolutionDate } from './wellbeingAccessPolicy.js';
 
 export type DissolutionKind = 'CONFIG' | 'MODULE';
 

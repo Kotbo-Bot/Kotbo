@@ -9,7 +9,7 @@
 import prisma from '../../utils/db.js';
 import { sealNote } from './wellbeingCrypto.js';
 import { appendCaseEvents } from './wellbeingEvents.js';
-import { CRISIS_REVIEW_HOURS, MAX_CASE_TASKS, crisisProtocolDue, crisisTaskDrafts } from './wellbeingPolicy.js';
+import { CRISIS_REVIEW_HOURS, MAX_CASE_TASKS, crisisProtocolDue, crisisTaskDrafts } from './wellbeingCasePolicy.js';
 
 export const CRISIS_PROTOCOL_EVENT = 'CRISIS_PROTOCOL';
 

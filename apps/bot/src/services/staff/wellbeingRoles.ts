@@ -6,7 +6,7 @@
 import type { Client, Guild } from 'discord.js';
 import prisma from '../../utils/db.js';
 import { logger } from '../../utils/logger.js';
-import { shouldLoadAllMembers, type WellbeingActor } from './wellbeingPolicy.js';
+import { shouldLoadAllMembers, type WellbeingActor } from './wellbeingAccessPolicy.js';
 
 export const CELL_ROLE_REFUSAL =
   'Ce rôle donne accès à la cellule de suivi : seul le propriétaire du serveur peut le donner ou le retirer, depuis Discord.';

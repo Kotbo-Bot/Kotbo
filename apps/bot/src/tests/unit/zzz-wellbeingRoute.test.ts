@@ -11,7 +11,7 @@ import type { Client } from 'discord.js';
 import { DASHBOARD_ACCESS_ADMIN, type AuthClaims } from '../../api/shared.js';
 import { completeModuleMock } from '../helpers/moduleMock.js';
 import { dashboardCall, mockDashboardGate, setDashboardAccess } from '../helpers/honoDashboard.js';
-import { caseVisibilityWhere } from '../../services/staff/wellbeingPolicy.js';
+import { caseVisibilityWhere } from '../../services/staff/wellbeingCasePolicy.js';
 
 process.env.WELLBEING_ENCRYPTION_KEY = 'cle-de-test-bien-etre';
 

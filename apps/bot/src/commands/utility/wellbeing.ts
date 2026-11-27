@@ -15,7 +15,12 @@ import {
 import prisma from '../../utils/db.js';
 import { getEffectiveLocale, localized, type BotLocale } from '../../utils/i18n.js';
 import * as m from '../../lib/paraglide/messages.js';
-import { REPORTER_REPLY_MAX, cleanResources, resourcesForLocale, resourcesMessage } from '../../services/staff/wellbeingPolicy.js';
+import {
+  REPORTER_REPLY_MAX,
+  cleanResources,
+  resourcesForLocale,
+  resourcesMessage,
+} from '../../services/staff/wellbeingReportPolicy.js';
 import {
   REPORT_MAX_LENGTH,
   REPORT_MODAL_PREFIX,
