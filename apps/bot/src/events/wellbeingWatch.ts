@@ -11,7 +11,8 @@
  *
  * Toujours actif avec le module : quand une personne qui a une fiche quitte
  * le serveur, ses notes ne vivent plus que 3 mois ; si elle revient, les
- * nouvelles notes retrouvent la durée réglée.
+ * nouvelles notes retrouvent la durée réglée. Module éteint, le rattrapage
+ * horaire (wellbeingProfiles.ts) s'en charge.
  */
 import { Events, type Client, type GuildMember, type Message, type PartialGuildMember } from 'discord.js';
 import prisma from '../utils/db.js';
@@ -30,7 +31,7 @@ import {
   sanctionModeratorText,
   shouldSignalDistress,
 } from '../services/staff/wellbeingPolicy.js';
-import { departureCap } from '../services/staff/wellbeingProfilePolicy.js';
+import { markProfileBack, markProfileLeft } from '../services/staff/wellbeingProfiles.js';
 
 /** Dernier signal par serveur et par membre : un par jour au plus. */
 const lastDistress = new Map<string, number>();
@@ -90,19 +91,7 @@ async function onMemberLeave(member: GuildMember | PartialGuildMember) {
     where: { guildId_subjectUserId: { guildId: member.guild.id, subjectUserId: member.id } },
     select: { id: true },
   });
-  if (!profile) return;
-  const now = new Date();
-  await prisma.wellbeingProfile.update({ where: { id: profile.id }, data: { subjectLeftAt: now } });
-  const cap = departureCap(now);
-  await prisma.wellbeingProfileNote.updateMany({ where: { profileId: profile.id, expiresAt: { gt: cap } }, data: { expiresAt: cap } });
-}
-
-/** Retour sur le serveur : les notes déjà raccourcies le restent. */
-async function onMemberJoin(member: GuildMember) {
-  await prisma.wellbeingProfile.updateMany({
-    where: { guildId: member.guild.id, subjectUserId: member.id, subjectLeftAt: { not: null } },
-    data: { subjectLeftAt: null },
-  });
+  if (profile) await markProfileLeft(profile.id, new Date());
 }
 
 /** `client` est limité au module bien-être (`scopeClientToModule`). */
@@ -116,7 +105,7 @@ export function registerWellbeingWatch(client: Client): void {
   });
 
   client.on(Events.GuildMemberAdd, (member) => {
-    void onMemberJoin(member).catch((error) => logger.error('Wellbeing', 'Retour d\'une personne suivie en échec :', error));
+    void markProfileBack(member.guild.id, member.id).catch((error) => logger.error('Wellbeing', 'Retour d\'une personne suivie en échec :', error));
   });
 
   client.on(Events.MessageCreate, (message) => {

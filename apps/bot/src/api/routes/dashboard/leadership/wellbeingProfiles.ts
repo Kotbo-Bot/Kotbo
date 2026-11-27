@@ -18,6 +18,7 @@ import {
   PROFILE_NOTE_MAX,
   PROFILE_RETENTION_DEFAULT_MONTHS,
   profileExtendError,
+  profileNoteDeleteError,
   profileNoteExpiry,
 } from '../../../../services/staff/wellbeingProfilePolicy.js';
 import { openProfileHeader, openProfileNote, sealProfileNote, sealWellbeing } from '../../../../services/staff/wellbeingCrypto.js';
@@ -167,6 +168,32 @@ export function createWellbeingProfilesRouter(client: Client) {
     } catch (err) {
       logger.error('WellbeingAPI', 'Error extending profile note:', err);
       return fail(c, err, 'Erreur lors de la prolongation de la note.', 'WellbeingAPI');
+    }
+  });
+
+  router.delete(`${base}/:subjectUserId/notes/:noteId`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    try {
+      const state = await resolveWellbeingRole(client, guildId, user.userId);
+      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule bien-être.' }, 403);
+      const subjectUserId = subjectOf(c);
+      if (!subjectUserId) return send(c, { error: NOT_FOUND }, 404);
+      const profile = await prisma.wellbeingProfile.findUnique({ where: { guildId_subjectUserId: { guildId, subjectUserId } } });
+      if (!profile) return send(c, { error: NOT_FOUND }, 404);
+      const existing = await prisma.wellbeingProfileNote.findFirst({ where: { id: c.req.param('noteId'), profileId: profile.id } });
+      if (!existing) return send(c, { error: 'Note introuvable.' }, 404);
+      const error = profileNoteDeleteError(existing.authorId, user.userId);
+      if (error) return send(c, { error }, 403);
+
+      // Effacée pour de bon, sans corbeille : le journal garde seulement qu'elle a existé.
+      await prisma.wellbeingProfileNote.delete({ where: { id: existing.id } });
+      await audit(client, c, guildId, 'Effacement note de fiche Cellule bien-être',
+        `Note ${existing.id} de la fiche ${profile.id} effacée par son auteur.`, 'Sécurité');
+      return send(c, { ok: true });
+    } catch (err) {
+      logger.error('WellbeingAPI', 'Error deleting profile note:', err);
+      return fail(c, err, "Erreur lors de l'effacement de la note.", 'WellbeingAPI');
     }
   });
 

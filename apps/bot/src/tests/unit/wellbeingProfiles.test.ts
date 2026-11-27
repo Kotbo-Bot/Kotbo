@@ -9,6 +9,8 @@ import {
   profileNoteExpiry,
   profilePurgeNoticeCutoff,
   profileExtendError,
+  profileNoteDeleteError,
+  shortenedExpiry,
 } from '../../services/staff/wellbeingProfilePolicy';
 import { alertText, describeConfigChange } from '../../services/staff/wellbeingPolicy';
 import { isSynced } from '../../services/network/networkScope';
@@ -57,6 +59,38 @@ describe('durée de conservation des notes de fiche', () => {
     expect(profileExtendError('')).not.toBeNull();
     expect(profileExtendError('   ')).not.toBeNull();
     expect(profileExtendError('Suivi en cours avec la modération')).toBeNull();
+  });
+});
+
+describe('baisse de la durée réglée', () => {
+  const written = new Date('2026-01-10T00:00:00Z');
+
+  test('une note existante ne vit pas plus que la nouvelle durée, comptée depuis son écriture', () => {
+    const note = { createdAt: written, extendedAt: null, expiresAt: addMonths(written, 24) };
+    expect(shortenedExpiry(note, 12, NOW)).toEqual(addMonths(written, 12));
+  });
+
+  test('une note prolongée compte depuis sa prolongation', () => {
+    const extendedAt = new Date('2026-10-01T00:00:00Z');
+    const note = { createdAt: written, extendedAt, expiresAt: addMonths(extendedAt, 24) };
+    expect(shortenedExpiry(note, 12, NOW)).toEqual(addMonths(extendedAt, 12));
+  });
+
+  test("le préavis d'une semaine est toujours tenu", () => {
+    const note = { createdAt: written, extendedAt: null, expiresAt: addMonths(written, 24) };
+    expect(shortenedExpiry(note, 3, NOW)).toEqual(profilePurgeNoticeCutoff(NOW));
+  });
+
+  test("une note déjà plus courte n'est jamais rallongée", () => {
+    const note = { createdAt: written, extendedAt: null, expiresAt: new Date('2026-12-20T00:00:00Z') };
+    expect(shortenedExpiry(note, 12, NOW)).toBeNull();
+  });
+});
+
+describe('effacement à la main', () => {
+  test("seul l'auteur d'une note l'efface", () => {
+    expect(profileNoteDeleteError('author', 'author')).toBeNull();
+    expect(profileNoteDeleteError('author', 'other')).not.toBeNull();
   });
 });
 

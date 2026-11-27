@@ -68,3 +68,25 @@ export function profilePurgeWarnedCutoff(now: Date): Date {
 export function profileExtendError(reason: string): string | null {
   return reason.trim() ? null : 'Indiquez pourquoi cette note doit être gardée plus longtemps.';
 }
+
+/**
+ * Nouvelle échéance d'une note quand le propriétaire baisse la durée réglée :
+ * la note ne vit pas plus que cette durée depuis son écriture ou sa dernière
+ * prolongation, préavis d'une semaine tenu. null si elle n'a pas à changer :
+ * une hausse ne rallonge rien, garder plus longtemps se justifie note par note.
+ */
+export function shortenedExpiry(
+  note: { createdAt: Date; extendedAt: Date | null; expiresAt: Date },
+  retentionMonths: number,
+  now: Date,
+): Date | null {
+  const target = addMonths(note.extendedAt ?? note.createdAt, retentionMonths);
+  const notice = profilePurgeNoticeCutoff(now);
+  const next = target > notice ? target : notice;
+  return next < note.expiresAt ? next : null;
+}
+
+/** Refus d'effacer une note, ou null : seul son auteur revient sur ce qu'il a écrit. */
+export function profileNoteDeleteError(authorId: string, userId: string): string | null {
+  return authorId === userId ? null : "Seule la personne qui a écrit cette note peut l'effacer.";
+}

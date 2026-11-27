@@ -26,6 +26,7 @@ import { isModuleEnabled } from '../core/moduleGate.js';
 import { sendWellbeingAlert, sendWellbeingDirect } from './wellbeingAlerts.js';
 import { appendCaseEvents } from './wellbeingEvents.js';
 import { profilePurgeNoticeCutoff } from './wellbeingProfilePolicy.js';
+import { reconcileProfileDepartures } from './wellbeingProfiles.js';
 import {
   accessReviewMessage,
   cellMemberIds,
@@ -93,6 +94,8 @@ export async function runWellbeingReminders(client: Client, now: Date = new Date
     }
     await sendFollowUps(client, now);
     await announcePurges(client, now);
+    // Avant l'annonce : un départ manqué raccourcit des notes, à annoncer dans la foulée.
+    await reconcileProfileDepartures(client, now);
     await announceProfilePurges(client, now);
     await sendAccessReviews(client, now);
     await sendWeeklyDigests(client, now);

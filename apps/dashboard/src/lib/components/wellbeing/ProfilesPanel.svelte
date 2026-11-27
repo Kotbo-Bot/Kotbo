@@ -8,6 +8,8 @@
   import { dashboardFetch, type GuildMemberSearchResult } from '../../api';
   import { dateLocale, m } from '../../i18n';
   import { toast } from '../../stores/toast.svelte';
+  import { authStore } from '../../stores/auth.svelte';
+  import { confirmDialog } from '../../stores/confirmDialog.svelte';
   import { wbStatusLabel } from '../../wellbeingLabels';
   import { wbStatusTone } from '../../wellbeingView';
   import MemberSearchSelect from '../MemberSearchSelect.svelte';
@@ -15,7 +17,7 @@
   import { Button, EmptyState } from '../ui';
 
   type ProfileHeader = { id: string; subjectUserId: string; subjectName: string; subjectLeftAt: string | null; noteCount: number; nextExpiry: string | null };
-  type ProfileNote = { id: string; authorName: string; content: string; createdAt: string; expiresAt: string; extendedAt: string | null; extendedByName: string | null; extendedReason: string | null };
+  type ProfileNote = { id: string; authorId: string; authorName: string; content: string; createdAt: string; expiresAt: string; extendedAt: string | null; extendedByName: string | null; extendedReason: string | null };
   type Profile = { id: string; subjectUserId: string; subjectName: string; subjectLeftAt: string | null; notes: ProfileNote[] };
   type CaseHeader = { id: string; title: string; status: string; subjectUserId?: string | null };
 
@@ -105,6 +107,24 @@
         : { id: data.note.profileId, subjectUserId: subject.userId, subjectName: subject.name, subjectLeftAt: null, notes: [data.note] };
       text = '';
       toast.success(m.toast_wb_note_saved());
+      void loadList();
+    } catch (err: any) {
+      toast.error(err?.message || m.toast_wb_update_failed());
+    } finally {
+      saving = false;
+    }
+  }
+
+  async function remove(note: ProfileNote) {
+    if (!subject || !profile || saving) return;
+    if (!(await confirmDialog.danger(m.wb_profiles_delete_q(), m.wb_profiles_delete_warn(), m.wb_profiles_delete_confirm()))) return;
+    saving = true;
+    try {
+      const res = await dashboardFetch(`/wellbeing/profiles/${subject.userId}/notes/${note.id}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? '');
+      profile = { ...profile, notes: profile.notes.filter((item) => item.id !== note.id) };
+      toast.success(m.toast_wb_profile_note_deleted());
       void loadList();
     } catch (err: any) {
       toast.error(err?.message || m.toast_wb_update_failed());
@@ -223,7 +243,10 @@
                     </div>
                   </div>
                 {:else}
-                  <div class="flex justify-end">
+                  <div class="flex justify-end gap-2">
+                    {#if note.authorId === authStore.user?.id}
+                      <Button size="sm" variant="ghost" icon="Trash2" disabled={saving} onclick={() => void remove(note)}>{m.wb_profiles_delete()}</Button>
+                    {/if}
                     <Button size="sm" variant="ghost" icon="Clock" onclick={() => { extendingId = note.id; reason = ''; }}>{m.wb_profiles_extend()}</Button>
                   </div>
                 {/if}

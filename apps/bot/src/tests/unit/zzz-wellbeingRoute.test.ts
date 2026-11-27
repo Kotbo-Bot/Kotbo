@@ -150,6 +150,7 @@ const mockDb = {
     findFirst: mock(async (_args?: unknown) => profileNote),
     create: mock(async (args: { data: Record<string, unknown> }) => ({ id: 'pnote-new', createdAt: new Date(), ...args.data })),
     update: mock(async (args: { data: Record<string, unknown> }) => ({ ...profileNote, ...args.data })),
+    delete: mock(async (_args?: unknown) => profileNote),
   },
   ticket: {
     findFirst: mock(async (_args?: unknown) => ticket),
@@ -596,6 +597,16 @@ describe('fiches confidentielles', () => {
     const { status } = await profileCall('POST', `/profiles/${SUBJECT}/notes/pnote-1/extend`, { reason: ' ' });
     expect(status).toBe(400);
     expect(mockDb.wellbeingProfileNote.update).not.toHaveBeenCalled();
+  });
+
+  test("seul l'auteur efface sa note, et l'effacement entre au journal", async () => {
+    profile = { id: 'profile-1', guildId: GUILD, subjectUserId: SUBJECT, subjectName: 'Sujet', subjectLeftAt: null };
+    profileNote = { id: 'pnote-1', profileId: 'profile-1', authorId: BOB, content: 'x', expiresAt: new Date() };
+    expect((await profileCall('DELETE', `/profiles/${SUBJECT}/notes/pnote-1`)).status).toBe(403);
+    expect(mockDb.wellbeingProfileNote.delete).not.toHaveBeenCalled();
+    expect((await profileCall('DELETE', `/profiles/${SUBJECT}/notes/pnote-1`, undefined, session(BOB))).status).toBe(200);
+    expect(mockDb.wellbeingProfileNote.delete).toHaveBeenCalledTimes(1);
+    expect(mockDb.dashboardAuditLog.create).toHaveBeenCalled();
   });
 
   test('une prolongation motivée repart pour la durée réglée et annule l annonce', async () => {

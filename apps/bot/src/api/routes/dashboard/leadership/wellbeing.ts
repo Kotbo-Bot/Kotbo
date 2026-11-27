@@ -76,6 +76,7 @@ import { wellbeingPanelMessage } from '../../../../commands/utility/wellbeing.js
 import { resolveGuildLocale } from '../../../../utils/i18n.js';
 import { bodyText } from '../../../../utils/bodyText.js';
 import { PROFILE_RETENTION_DEFAULT_MONTHS, cleanProfileRetention } from '../../../../services/staff/wellbeingProfilePolicy.js';
+import { applyProfileRetention } from '../../../../services/staff/wellbeingProfiles.js';
 import {
   CASE_INCLUDE,
   CASE_LIST_SELECT,
@@ -304,6 +305,15 @@ export function createWellbeingRouter(client: Client) {
           ...toggles,
         },
       });
+
+      // Une durée baissée vaut aussi pour les notes déjà écrites ; une hausse ne rallonge rien.
+      if (state.config && config.profileRetentionMonths < state.config.profileRetentionMonths) {
+        const shortened = await applyProfileRetention(guildId, config.profileRetentionMonths);
+        if (shortened > 0) {
+          await audit(client, c, guildId, 'Configuration Cellule bien-être',
+            `${shortened} note(s) de fiche ramenée(s) à ${config.profileRetentionMonths} mois.`, 'Sécurité');
+        }
+      }
 
       await audit(client, c, guildId, 'Configuration Cellule bien-être', describeConfigChange(state.config, config, (id) => {
         const role = state.discordGuild?.roles.cache.get(id);
