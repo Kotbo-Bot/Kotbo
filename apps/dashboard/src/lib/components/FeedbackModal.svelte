@@ -1,9 +1,8 @@
 <script lang="ts">
-  import { explainDisabled } from '../actions/explainDisabled';
   import Papicon from './Papicon.svelte';
-  import FormSelect from './FormSelect.svelte';
   import FormTextarea from './FormTextarea.svelte';
-  import ActionButton from './ActionButton.svelte';
+  import Button from './ui/Button.svelte';
+  import Segmented from './ui/Segmented.svelte';
   import Modal from './Modal.svelte';
   import MyFeedbacks from './MyFeedbacks.svelte';
   import { feedbackModal } from '../stores/feedbackModal.svelte';
@@ -20,13 +19,17 @@
 
   const isOpen = $derived(feedbackModal.open);
 
+  // Le brouillon survit à une fermeture accidentelle : il ne part qu'après envoi.
   $effect(() => {
-    if (isOpen) {
-      type = 'retour';
-      message = '';
-      view = 'send';
-    }
+    if (isOpen) view = 'send';
   });
+
+  const TYPES = [
+    { id: 'retour', icon: 'MessageCircle', label: m.d1_fb_opt_feedback },
+    { id: 'bloquage', icon: 'bug_report', label: m.d1_fb_opt_bug },
+    { id: 'suggestion', icon: 'lightbulb', label: m.d1_fb_opt_suggestion },
+    { id: 'autre', icon: 'more-horizontal', label: m.d1_fb_opt_other },
+  ] as const;
 
   function closeModal() {
     feedbackModal.close();
@@ -53,6 +56,8 @@
         guildId: authStore.selectedGuildId
       });
       toast.success(m.d1_fb_feedback_sent());
+      type = 'retour';
+      message = '';
       closeModal();
     } catch (err) {
       toast.error(errorMessage(err) || m.d1_fb_send_feedback_failed());
@@ -69,82 +74,68 @@
   subtitle={m.d1_fb_subtitle_feedback()}
   size="md"
 >
-  <!-- Premium background mesh glow -->
-  <div class="absolute inset-0 pointer-events-none opacity-[0.03] dark:opacity-[0.05] overflow-hidden">
-    <div class="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] bg-primary rounded-full blur-[100px]"></div>
-    <div class="absolute bottom-[20%] right-[-10%] w-[50%] h-[50%] bg-secondary rounded-full blur-none hidden"></div>
-  </div>
-
-  <div class="flex gap-1 px-6 pt-4 relative z-10" role="tablist">
-    {#each [['send', m.d1_fb_tab_send()], ['mine', m.d1_fb_tab_mine()]] as [id, label] (id)}
-      <button
-        type="button"
-        role="tab"
-        aria-selected={view === id}
-        onclick={() => (view = id as 'send' | 'mine')}
-        class="rounded-full border px-3 h-7 text-xs font-semibold transition
-          {view === id ? 'border-primary bg-primary/12 text-primary' : 'border-outline-variant/30 text-on-surface-variant hover:border-primary/40'}"
-      >{label}</button>
-    {/each}
+  <div class="px-6 pt-4">
+    <Segmented
+      stretch
+      label={m.d1_fb_title_feedback()}
+      options={[
+        { value: 'send', label: m.d1_fb_tab_send() },
+        { value: 'mine', label: m.d1_fb_tab_mine() },
+      ]}
+      value={view}
+      onchange={(next) => (view = next)}
+    />
   </div>
 
   {#if view === 'mine'}
-    <MyFeedbacks />
+    <MyFeedbacks onwrite={() => (view = 'send')} />
   {:else}
-  <!-- Form Content -->
-    <form onsubmit={handleSubmit} class="p-6 space-y-5 relative z-10">
-      <!-- Type Selection -->
+    <form onsubmit={handleSubmit} class="p-6 space-y-5">
+      <fieldset>
+        <legend class="text-body-sm font-semibold text-on-surface mb-2">{m.d1_fb_type_label()}</legend>
+        <div class="grid grid-cols-2 gap-2">
+          {#each TYPES as option (option.id)}
+            <label
+              class="flex min-h-12 cursor-pointer items-center gap-2.5 rounded-2xl border px-3 py-2 text-sm font-medium text-on-surface transition-colors has-focus-visible:outline-2 has-focus-visible:outline-primary
+                {type === option.id ? 'border-primary bg-primary/10' : 'border-outline-variant hover:bg-surface-hover'}"
+            >
+              <input type="radio" name="feedback-type" value={option.id} bind:group={type} class="sr-only" />
+              <Papicon icon={option.icon} size={16} class="shrink-0" />
+              <span>{option.label()}</span>
+            </label>
+          {/each}
+        </div>
+      </fieldset>
+
       <div class="space-y-2">
-        <label for="feedback-type" class="text-body-sm font-medium text-on-surface-variant">{m.d1_fb_type_label()}</label>
-        <FormSelect id="feedback-type" bind:value={type} className="w-full rounded-lg border border-field-border bg-surface-container-low px-4 py-3 text-sm text-on-surface outline-hidden focus:border-primary/40 focus:ring-4 focus:ring-primary/10 transition-all duration-300">
-          <option value="retour">{m.d1_fb_opt_feedback()}</option>
-          <option value="bloquage">{m.d1_fb_opt_bug()}</option>
-          <option value="suggestion">{m.d1_fb_opt_suggestion()}</option>
-          <option value="autre">{m.d1_fb_opt_other()}</option>
-        </FormSelect>
+        <div class="flex items-center justify-between">
+          <label for="feedback-message" class="text-body-sm font-semibold text-on-surface">{m.d1_fb_field_message()}</label>
+          <span class="text-2xs tabular-nums {message.length > 1900 ? 'text-error' : 'text-on-surface-variant'}">
+            {message.length} / 2000
+          </span>
+        </div>
+        <FormTextarea
+          id="feedback-message"
+          bind:value={message}
+          rows={5}
+          placeholder={m.d1_fb_ph_message()}
+          disabled={isSending}
+          className="input w-full resize-none text-sm leading-relaxed"
+        />
       </div>
 
-        <!-- Description Textarea (original) -->
-        <div class="space-y-2">
-          <div class="flex items-center justify-between">
-            <label for="feedback-message" class="text-body-sm font-medium text-on-surface-variant">{m.d1_fb_field_message()}</label>
-            <span class="text-2xs font-bold {message.length > 1900 ? 'text-error' : 'text-on-surface-variant'}">
-              {message.length} / 2000
-            </span>
-          </div>
-          <FormTextarea
-            id="feedback-message"
-            bind:value={message}
-            rows={5}
-            placeholder={m.d1_fb_ph_message()}
-            disabled={isSending}
-            className="w-full rounded-lg border border-field-border bg-surface-container-low px-4 py-3 text-sm text-on-surface outline-hidden focus:border-primary/40 focus:ring-4 focus:ring-primary/10 transition-all duration-300 resize-none font-medium leading-relaxed placeholder:text-on-surface-variant/40"
-          />
-        </div>
-
-      <!-- Actions -->
-      <div class="flex items-center gap-3 justify-end pt-3 border-t border-outline-variant/20">
-        <ActionButton
-          label={m.d1_fb_cancel()}
-          variant="muted"
-          size="md"
-          onClick={closeModal}
-          disabled={isSending}
-        />
-        <button
+      <div class="flex items-center justify-end gap-2">
+        <Button variant="ghost" onclick={closeModal} disabled={isSending}>{m.d1_fb_cancel()}</Button>
+        <Button
           type="submit"
-          disabled={isSending}
-          use:explainDisabled={!message.trim() ? m.common_reason_fill_field() : ''}
-          class="px-5 py-2.5 text-xs rounded-xl font-semibold bg-primary text-on-primary border border-primary hover:bg-primary-container active:scale-95 transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-60 flex items-center gap-2"
+          variant="primary"
+          icon="send"
+          loading={isSending}
+          disabled={!message.trim()}
+          disabledReason={m.common_reason_fill_field()}
         >
-          {#if isSending}
-            <div class="w-4 h-4 border-2 border-on-primary border-t-transparent rounded-full animate-spin"></div>
-            <span>{m.d1_fb_sending()}</span>
-          {:else}
-            <Papicon icon="send" size={12} />
-            <span>{m.d1_fb_submit()}</span>
-          {/if}
-        </button>
+          {m.d1_fb_submit()}
+        </Button>
       </div>
     </form>
   {/if}

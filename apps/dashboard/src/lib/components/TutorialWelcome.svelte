@@ -6,6 +6,8 @@
   import { router } from 'tinro';
   import { brandingStore } from '../stores/branding.svelte';
   import { m } from '../i18n';
+  import Papicon from './Papicon.svelte';
+  import Button from './ui/Button.svelte';
 
   const show = $derived(onboardingStore.showWelcome);
 
@@ -24,6 +26,13 @@
   function later() {
     onboardingStore.dismissWelcome();
   }
+
+  /** Annoncer le contenu de la configuration : on s'engage plus volontiers quand on voit la fin. */
+  const steps = [
+    { icon: 'file-text', label: m.d1_tw_item_rules, desc: m.d1_tw_item_rules_desc },
+    { icon: 'hash', label: m.d1_tw_item_channels, desc: m.d1_tw_item_channels_desc },
+    { icon: 'users', label: m.d1_tw_item_staff, desc: m.d1_tw_item_staff_desc },
+  ];
 </script>
 
 {#if show}
@@ -38,7 +47,7 @@
     ></div>
 
     <div
-      class="tutorial-welcome-panel relative w-full max-w-md max-h-[92dvh] overflow-y-auto bg-surface-container-lowest border border-outline-variant rounded-2xl shadow-xl p-6 sm:p-8"
+      class="tutorial-welcome-panel tafac-panel relative w-full max-w-md max-h-[92dvh] overflow-y-auto p-6"
       use:dialogFocus={{ onEscape: later }}
       role="dialog"
       aria-modal="true"
@@ -46,30 +55,31 @@
       tabindex="-1"
       transition:scale={{ duration: 200, easing: cubicOut, start: 0.96 }}
     >
-      <img src={brandingStore.logoUrl || '/favicon.svg'} alt="" class="w-10 h-10 rounded-xl mb-5" />
+      <div class="flex flex-col items-center text-center">
+        <img src={brandingStore.logoUrl || '/favicon.svg'} alt="" class="w-14 h-14 rounded-2xl mb-4 shadow-md" />
+        <h1 id="tutorial-welcome-title" class="text-2xl font-bold text-on-surface tracking-tight font-headline">
+          {m.d1_tw_welcome_title()}
+        </h1>
+        <p class="mt-2 text-sm text-on-surface-variant leading-relaxed">{m.d1_tw_welcome_desc()}</p>
+      </div>
 
-      <h1 id="tutorial-welcome-title" class="text-2xl font-semibold text-on-surface tracking-tight font-headline">
-        {m.d1_tw_welcome_title()}
-      </h1>
-      <p class="mt-2 text-sm text-on-surface-variant leading-relaxed">
-        {m.d1_tw_welcome_desc()}
-      </p>
+      <ul class="mt-5 list-rows rounded-2xl bg-surface-container-low border border-outline-variant">
+        {#each steps as step (step.icon)}
+          <li class="list-row">
+            <span class="list-row__text">
+              <span class="icon-disc" aria-hidden="true"><Papicon icon={step.icon} size={16} /></span>
+              <span class="min-w-0">
+                <span class="list-row__label">{step.label()}</span>
+                <span class="list-row__desc">{step.desc()}</span>
+              </span>
+            </span>
+          </li>
+        {/each}
+      </ul>
 
-      <div class="mt-8 flex flex-col-reverse sm:flex-row gap-2 sm:justify-end">
-        <button
-          type="button"
-          onclick={later}
-          class="min-h-11 px-4 rounded-xl text-sm font-medium text-on-surface-variant hover:text-on-surface hover:bg-surface-container transition-colors"
-        >
-          {m.d1_tw_skip()}
-        </button>
-        <button
-          type="button"
-          onclick={start}
-          class="min-h-11 px-5 rounded-xl bg-primary text-on-primary text-sm font-semibold hover:opacity-90 transition-opacity"
-        >
-          {m.d1_tw_continue()}
-        </button>
+      <div class="mt-5 flex flex-col gap-1.5">
+        <Button variant="primary" fullWidth iconRight="arrow-right" onclick={start}>{m.d1_tw_continue()}</Button>
+        <Button variant="ghost" fullWidth onclick={later}>{m.d1_tw_skip()}</Button>
       </div>
     </div>
   </div>

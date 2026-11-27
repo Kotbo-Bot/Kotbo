@@ -2,6 +2,7 @@
   /** « Mes retours » : statut de chaque retour envoyé et conversation avec l'équipe. */
   import { onMount } from 'svelte';
   import Papicon from './Papicon.svelte';
+  import Button from './ui/Button.svelte';
   import FormTextarea from './FormTextarea.svelte';
   import { toast } from '../stores/toast.svelte';
   import { errorMessage } from '@kotbo/shared';
@@ -22,6 +23,9 @@
     DONE: m.d1_fb_status_DONE,
     DECLINED: m.d1_fb_status_DECLINED,
   };
+
+  /** Revenir à l'envoi : un historique vide ne doit pas être un cul-de-sac. */
+  const { onwrite }: { onwrite: () => void } = $props();
 
   let items = $state<FeedbackSummary[]>([]);
   let loading = $state(true);
@@ -104,7 +108,11 @@
   {:else if failed}
     <p class="text-body-sm text-error">{m.d1_fb_mine_load_failed()}</p>
   {:else if items.length === 0}
-    <p class="text-body-sm text-on-surface-variant">{m.d1_fb_mine_empty()}</p>
+    <div class="flex flex-col items-center gap-3 py-8 text-center">
+      <span class="icon-disc" aria-hidden="true"><Papicon icon="MessageCircle" size={16} /></span>
+      <p class="text-sm text-on-surface-variant">{m.d1_fb_mine_empty()}</p>
+      <Button variant="primary" size="sm" icon="edit" onclick={onwrite}>{m.d1_fb_write()}</Button>
+    </div>
   {:else}
     <ul class="space-y-1.5 max-h-80 overflow-y-auto">
       {#each items as item (item.id)}
