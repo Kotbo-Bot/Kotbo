@@ -405,7 +405,7 @@ async function emitSanctionReportReminder(params: SanctionReportReminderInput) {
       title: 'Rapport de sanction requis',
       message: `Vous devez remplir un rapport pour la sanction appliquée à ${params.targetTag || params.targetUserId}.`,
       severity: 'WARNING',
-      link: '/sanctions',
+      link: `/security/sanctions?sanction=${encodeURIComponent(params.sanctionId)}`,
       data: { sanctionId: params.sanctionId },
     }).catch(() => null);
 
@@ -1867,7 +1867,7 @@ export async function checkMissingReports() {
             title: 'RAPPEL : Rapport manquant (3 jours+)',
             message: `Le rapport pour la sanction sur ${sanction.targetTag ?? sanction.targetUserId} est toujours manquant.`,
             severity: 'ERROR',
-            link: '/sanctions',
+            link: `/security/sanctions?sanction=${encodeURIComponent(sanction.id)}`,
             data: { sanctionId: sanction.id },
           });
         } catch (error) {
