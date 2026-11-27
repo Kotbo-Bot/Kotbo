@@ -122,6 +122,18 @@ describe('notify', () => {
     expect(sentJson()).not.toContain('dash.example');
   });
 
+  test('rapport de sanction requis : garde le lien vers le dashboard même sans fiche StaffMember', async () => {
+    state.isStaff = false;
+    const result = await notify({
+      ...base,
+      kind: 'moderation.sanction_report_required',
+      link: '/security/sanctions?sanction=s-1',
+    }, T0);
+    expect(result.dm).toBe('queued');
+    expect(state.queue).toHaveLength(1);
+    expect(state.queue[0].link).toBe('https://dash.example/security/sanctions?sanction=s-1&guild=g1');
+  });
+
   test('même groupKey non lue : on incrémente au lieu d\'empiler', async () => {
     state.existingGroup = { id: 'n-old' };
     await notify({ ...base, kind: 'recruitment.application_received', groupKey: 'recruitment.application_received' }, T0);

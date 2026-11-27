@@ -336,6 +336,12 @@ export async function muteCategoryDm(userId: string, category: NotificationCateg
 
 // ─── Point d'entrée ─────────────────────────────────────────────────────────
 
+// Un modérateur Discord sans fiche StaffMember doit quand même recevoir le lien pour remplir son rapport.
+const MODERATOR_REPORT_KINDS = new Set<NotificationKind>([
+  'moderation.sanction_report_required',
+  'moderation.sanction_report_overdue',
+]);
+
 export async function notify(input: NotifyInput, now = new Date()): Promise<NotifyResult> {
   const meta = getNotificationKind(input.kind);
   const prefs = meta.mandatory ? DEFAULT_NOTIFICATION_CHANNEL_PREFS : await getChannelPrefs(input.userId, meta.category);
@@ -353,7 +359,8 @@ export async function notify(input: NotifyInput, now = new Date()): Promise<Noti
 
   if (input.dm === false || !prefs.dm) return { notification, dm: 'off' };
 
-  // Un membre hors staff n'a pas accès au dashboard : seul un lien absolu (site, recours…) lui sert.
+  // Un membre hors staff n'a pas accès au dashboard : seul un lien absolu (site, recours…) lui sert,
+  // sauf pour les rappels de rapport destinés au modérateur qui vient d'appliquer la sanction.
   const external = !!input.link && /^https?:\/\//.test(input.link);
   const item: DmItem = {
     guildId: input.guildId,
@@ -361,7 +368,7 @@ export async function notify(input: NotifyInput, now = new Date()): Promise<Noti
     title: input.title,
     message: input.message,
     severity: input.severity ?? 'INFO',
-    link: input.link && (isStaff || external) ? dashboardLink(input.link, input.guildId) : null,
+    link: input.link && (isStaff || external || MODERATOR_REPORT_KINDS.has(input.kind)) ? dashboardLink(input.link, input.guildId) : null,
   };
 
   if (prefs.digest && !meta.mandatory) {
