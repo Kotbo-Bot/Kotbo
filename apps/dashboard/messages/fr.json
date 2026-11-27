@@ -20438,6 +20438,8 @@
   "wb_profiles_note_label": "Ajouter une note",
   "wb_profiles_note_hint": "N'écrivez que ce qui sert au suivi. La personne peut demander à lire ce qui la concerne.",
   "wb_profiles_note_add": "Enregistrer la note",
+  "wb_profiles_self_title": "Cette fiche vous concerne",
+  "wb_profiles_self_desc": "Seuls les autres membres de la cellule peuvent tenir votre fiche ou ouvrir un dossier sur vous : vous ne lisez ni n'écrivez ce qui vous concerne.",
   "wb_profiles_sensitive_label": "Contient des informations sensibles (santé, vie privée)",
   "wb_profiles_sensitive_hint": "La note est gardée 3 mois au plus et reste masquée jusqu'à un clic.",
   "wb_profiles_sensitive_badge": "Sensible",

@@ -575,10 +575,17 @@ describe('fiches confidentielles', () => {
     expect(args.where).toMatchObject({ guildId: GUILD, subjectUserId: { not: ALICE } });
   });
 
-  test('personne ne lit ni n annote sa propre fiche', async () => {
-    expect((await profileCall('GET', `/profiles/${ALICE}`)).status).toBe(404);
-    expect((await profileCall('POST', `/profiles/${ALICE}/notes`, { content: 'x', subjectName: 'alice' })).status).toBe(404);
+  test('personne ne lit ni n annote sa propre fiche, et le refus le dit', async () => {
+    const read = await profileCall('GET', `/profiles/${ALICE}`);
+    expect(read.status).toBe(403);
+    expect(read.json.error).toContain('vous concerne');
+    expect((await profileCall('POST', `/profiles/${ALICE}/notes`, { content: 'x', subjectName: 'alice' })).status).toBe(403);
+    expect(mockDb.wellbeingProfile.findUnique).not.toHaveBeenCalled();
     expect(mockDb.wellbeingProfileNote.create).not.toHaveBeenCalled();
+  });
+
+  test('un identifiant invalide reste introuvable', async () => {
+    expect((await profileCall('GET', '/profiles/pas-un-id')).status).toBe(404);
   });
 
   test('une note est chiffrée et reçoit sa date d effacement', async () => {

@@ -11,6 +11,7 @@ import {
   profilePurgeNoticeCutoff,
   profileExtendError,
   profileNoteDeleteError,
+  profileNameChange,
   shortenedExpiry,
 } from '../../services/staff/wellbeingProfilePolicy';
 import { UNUSUAL_ACCESS_WINDOW_MS, alertText, describeConfigChange, openingsInWindow } from '../../services/staff/wellbeingPolicy';
@@ -99,6 +100,19 @@ describe('baisse de la durée réglée', () => {
   test("une note déjà plus courte n'est jamais rallongée", () => {
     const note = { createdAt: written, extendedAt: null, expiresAt: new Date('2026-12-20T00:00:00Z') };
     expect(shortenedExpiry(note, 12, NOW)).toBeNull();
+  });
+});
+
+describe('nom de la personne', () => {
+  test('un pseudo changé sur Discord remplace celui de la fiche', () => {
+    expect(profileNameChange('ancien', 'nouveau')).toBe('nouveau');
+  });
+
+  test('un nom identique, vide ou illisible ne réécrit rien', () => {
+    expect(profileNameChange('même', 'même')).toBeNull();
+    expect(profileNameChange('ancien', '  ')).toBeNull();
+    // Un nom illisible (clé changée) est remplacé : le pseudo actuel vaut mieux.
+    expect(profileNameChange(null, 'actuel')).toBe('actuel');
   });
 });
 

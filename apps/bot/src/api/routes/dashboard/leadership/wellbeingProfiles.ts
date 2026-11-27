@@ -17,6 +17,7 @@ import {
   PROFILE_EXTEND_REASON_MAX,
   PROFILE_NOTE_MAX,
   PROFILE_RETENTION_DEFAULT_MONTHS,
+  PROFILE_SELF_REFUSAL,
   profileExtendError,
   profileNoteDeleteError,
   profileNoteExpiry,
@@ -37,11 +38,14 @@ const NOT_FOUND = 'Fiche introuvable.';
 /** Dernière consultation tracée, par serveur, par personne et par fiche. */
 const lastViewAt = new Map<string, Date>();
 
-/** Personne visée par l'URL, ou null : un id invalide ou soi-même n'ouvre rien. */
-function subjectOf(c: Context): string | null {
+/** Personne visée par l'URL : un id invalide est introuvable, sa propre fiche est refusée en le disant. */
+type Subject = { ok: true; id: string } | { ok: false; status: 403 | 404; error: string };
+
+function subjectOf(c: Context): Subject {
   const subjectUserId = c.req.param('subjectUserId') ?? '';
-  if (!SNOWFLAKE_RE.test(subjectUserId)) return null;
-  return isCaseSubject(subjectUserId, c.var.dashboardUser.userId) ? null : subjectUserId;
+  if (!SNOWFLAKE_RE.test(subjectUserId)) return { ok: false, status: 404, error: NOT_FOUND };
+  if (isCaseSubject(subjectUserId, c.var.dashboardUser.userId)) return { ok: false, status: 403, error: PROFILE_SELF_REFUSAL };
+  return { ok: true, id: subjectUserId };
 }
 
 export function createWellbeingProfilesRouter(client: Client) {
@@ -83,8 +87,9 @@ export function createWellbeingProfilesRouter(client: Client) {
       if (stale) return stale;
       const state = await resolveWellbeingRole(client, guildId, user.userId);
       if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule de suivi.' }, 403);
-      const subjectUserId = subjectOf(c);
-      if (!subjectUserId) return send(c, { error: NOT_FOUND }, 404);
+      const subject = subjectOf(c);
+      if (!subject.ok) return send(c, { error: subject.error }, subject.status);
+      const subjectUserId = subject.id;
       const profile = await prisma.wellbeingProfile.findUnique({
         where: { guildId_subjectUserId: { guildId, subjectUserId } },
         include: { notes: { orderBy: { createdAt: 'asc' } } },
@@ -112,8 +117,9 @@ export function createWellbeingProfilesRouter(client: Client) {
     try {
       const state = await resolveWellbeingRole(client, guildId, user.userId);
       if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule de suivi.' }, 403);
-      const subjectUserId = subjectOf(c);
-      if (!subjectUserId) return send(c, { error: NOT_FOUND }, 404);
+      const subject = subjectOf(c);
+      if (!subject.ok) return send(c, { error: subject.error }, subject.status);
+      const subjectUserId = subject.id;
       const body = await readBody<{ content?: string; subjectName?: string; sensitive?: boolean }>(c);
       const sensitive = body?.sensitive === true;
       const content = bodyText(body?.content, PROFILE_NOTE_MAX);
@@ -150,8 +156,9 @@ export function createWellbeingProfilesRouter(client: Client) {
     try {
       const state = await resolveWellbeingRole(client, guildId, user.userId);
       if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule de suivi.' }, 403);
-      const subjectUserId = subjectOf(c);
-      if (!subjectUserId) return send(c, { error: NOT_FOUND }, 404);
+      const subject = subjectOf(c);
+      if (!subject.ok) return send(c, { error: subject.error }, subject.status);
+      const subjectUserId = subject.id;
       const profile = await prisma.wellbeingProfile.findUnique({ where: { guildId_subjectUserId: { guildId, subjectUserId } } });
       if (!profile) return send(c, { error: NOT_FOUND }, 404);
       const existing = await prisma.wellbeingProfileNote.findFirst({ where: { id: c.req.param('noteId'), profileId: profile.id } });
@@ -189,8 +196,9 @@ export function createWellbeingProfilesRouter(client: Client) {
     try {
       const state = await resolveWellbeingRole(client, guildId, user.userId);
       if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule de suivi.' }, 403);
-      const subjectUserId = subjectOf(c);
-      if (!subjectUserId) return send(c, { error: NOT_FOUND }, 404);
+      const subject = subjectOf(c);
+      if (!subject.ok) return send(c, { error: subject.error }, subject.status);
+      const subjectUserId = subject.id;
       const profile = await prisma.wellbeingProfile.findUnique({ where: { guildId_subjectUserId: { guildId, subjectUserId } } });
       if (!profile) return send(c, { error: NOT_FOUND }, 404);
       const existing = await prisma.wellbeingProfileNote.findFirst({ where: { id: c.req.param('noteId'), profileId: profile.id } });
