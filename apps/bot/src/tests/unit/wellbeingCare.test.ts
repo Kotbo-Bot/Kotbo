@@ -1,33 +1,34 @@
 import { describe, expect, test } from 'bun:test';
+import { DEFAULT_ALERT_EVENTS, WELLBEING_ALERT_EVENTS, alertText } from '../../services/staff/wellbeingAlertPolicy';
 import {
   CRISIS_PROTOCOL_TASKS,
   CRISIS_REVIEW_HOURS,
-  DEFAULT_ALERT_EVENTS,
-  DISTRESS_COOLDOWN_MS,
-  MAX_REPORTER_MESSAGES,
-  PULSE_MIN_RESPONSES,
-  REFERENT_OVERLOAD_ACTIVE,
-  WELLBEING_ALERT_EVENTS,
-  alertText,
-  cleanPulseScore,
-  cleanResources,
   crisisProtocolDue,
   crisisTaskDrafts,
-  detectDistress,
   followUpDate,
-  pulseSummary,
-  pulseVoterHash,
-  pulseWeekKey,
-  referentLoad,
+  ticketCaseSummary,
+} from '../../services/staff/wellbeingCasePolicy';
+import {
+  MAX_REPORTER_MESSAGES,
+  REPORT_PANEL_TEMPLATES,
+  cleanPanelTemplate,
+  cleanResources,
   reporterCanWrite,
   resourcesForLocale,
-  shouldSignalDistress,
-  suggestAssignee,
-  ticketCaseSummary,
   trackingThread,
+} from '../../services/staff/wellbeingReportPolicy';
+import {
+  REFERENT_OVERLOAD_ACTIVE,
+  referentLoad,
+  suggestAssignee,
   weeklyDigestText,
   weeklyDue,
-} from '../../services/staff/wellbeingPolicy';
+} from '../../services/staff/wellbeingWorkloadPolicy';
+import {
+  DISTRESS_COOLDOWN_MS,
+  detectDistress,
+  shouldSignalDistress,
+} from '../../services/staff/wellbeingWatchPolicy';
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
@@ -119,6 +120,22 @@ describe('fil anonyme avec le signaleur', () => {
   });
 });
 
+describe('modèles du message permanent', () => {
+  test('un modèle connu est gardé', () => {
+    for (const template of REPORT_PANEL_TEMPLATES) expect(cleanPanelTemplate(template)).toBe(template);
+  });
+
+  test('un modèle inconnu ou absent devient le modèle par défaut', () => {
+    expect(cleanPanelTemplate('inconnu')).toBe('listening');
+    expect(cleanPanelTemplate(undefined)).toBe('listening');
+    expect(cleanPanelTemplate(3)).toBe('listening');
+  });
+
+  test('le modèle par défaut vient en premier', () => {
+    expect(REPORT_PANEL_TEMPLATES[0]).toBe('listening');
+  });
+});
+
 describe('transfert d’un ticket', () => {
   test('le résumé reprend le motif et la description, dans la limite', () => {
     const summary = ticketCaseSummary({ reason: 'Harcèlement', description: 'x'.repeat(5000), ticketTypeLabel: 'Aide', username: 'alice' });
@@ -201,52 +218,19 @@ describe('charge des référents', () => {
   });
 });
 
-describe('météo du staff', () => {
-  test('la semaine suit la norme ISO', () => {
-    expect(pulseWeekKey(new Date('2026-11-25T12:00:00Z'))).toBe('2026-W48');
-    expect(pulseWeekKey(new Date('2027-01-01T12:00:00Z'))).toBe('2026-W53');
-    expect(pulseWeekKey(new Date('2026-01-01T12:00:00Z'))).toBe('2026-W01');
-  });
-
-  test('le sondage part le lundi à partir de l’heure prévue, une fois par semaine', () => {
+describe('envoi hebdomadaire', () => {
+  test('part le lundi à partir de l’heure prévue, une fois par semaine', () => {
     const monday = new Date('2026-11-23T10:00:00Z');
     expect(weeklyDue(null, monday, 10)).toBe(true);
     expect(weeklyDue(null, new Date('2026-11-23T09:00:00Z'), 10)).toBe(false);
     expect(weeklyDue(null, new Date('2026-11-24T10:00:00Z'), 10)).toBe(false);
     expect(weeklyDue(new Date(monday.getTime() - HOUR), monday, 10)).toBe(false);
   });
-
-  test('seule une note de 1 à 5 est acceptée', () => {
-    expect(cleanPulseScore('3')).toBe(3);
-    expect(cleanPulseScore('0')).toBeNull();
-    expect(cleanPulseScore('6')).toBeNull();
-    expect(cleanPulseScore('x')).toBeNull();
-  });
-
-  test("l'empreinte du votant dépend du serveur et de la semaine", () => {
-    const a = pulseVoterHash('g1', '2026-W48', 'u1');
-    expect(a).toBe(pulseVoterHash('g1', '2026-W48', 'u1'));
-    expect(a).not.toBe(pulseVoterHash('g1', '2026-W49', 'u1'));
-    expect(a).not.toBe(pulseVoterHash('g2', '2026-W48', 'u1'));
-    expect(a).not.toContain('u1');
-  });
-
-  test('une semaine sans assez de réponses ne montre pas de moyenne', () => {
-    const summary = pulseSummary([
-      { week: '2026-W47', score1: 0, score2: 1, score3: 1, score4: 1, score5: 0 },
-      { week: '2026-W48', score1: 1, score2: 0, score3: 0, score4: 3, score5: 1 },
-    ]);
-    expect(PULSE_MIN_RESPONSES).toBe(5);
-    expect(summary).toEqual([
-      { week: '2026-W47', responses: 3, average: null },
-      { week: '2026-W48', responses: 5, average: 3.6 },
-    ]);
-  });
 });
 
 describe('signal aux modérateurs', () => {
   test('le message au modérateur ne dit rien du dossier', async () => {
-    const { sanctionModeratorText } = await import('../../services/staff/wellbeingPolicy');
+    const { sanctionModeratorText } = await import('../../services/staff/wellbeingWatchPolicy');
     const text = sanctionModeratorText();
     expect(text).toContain('cellule');
     expect(text).not.toContain('<@');

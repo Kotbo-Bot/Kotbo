@@ -596,7 +596,6 @@ model Guild {
   wellbeingProfiles      WellbeingProfile[]
   wellbeingBreakGlassLogs WellbeingBreakGlassLog[]
   wellbeingDistressSignals WellbeingDistressSignal[]
-  wellbeingPulseWeeks    WellbeingPulseWeek[]
   networkMemberships     GuildNetworkMember[]
   campaigns              Campaign[]
 

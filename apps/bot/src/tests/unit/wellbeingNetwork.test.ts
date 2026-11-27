@@ -5,7 +5,7 @@ import {
   networkReferentError,
   sharesNetworkPool,
 } from '../../services/staff/wellbeingNetworkPolicy';
-import { describeConfigChange } from '../../services/staff/wellbeingPolicy';
+import { describeConfigChange } from '../../services/staff/wellbeingAccessPolicy';
 import { isSynced } from '../../services/network/networkScope';
 
 const HOME = '900000000000000001';
@@ -97,10 +97,8 @@ describe("accès du référent du réseau", () => {
 });
 
 describe('cloisonnement des données du réseau', () => {
-  test('signaux de détresse et météo du staff restent sur leur serveur', () => {
+  test('les signaux de détresse restent sur leur serveur', () => {
     // Partagés, les signaux d'un sous-serveur iraient à la cellule du principal.
-    for (const model of ['WellbeingDistressSignal', 'WellbeingPulseWeek', 'WellbeingPulseVoter']) {
-      expect(isSynced(model)).toBe(false);
-    }
+    expect(isSynced('WellbeingDistressSignal')).toBe(false);
   });
 });

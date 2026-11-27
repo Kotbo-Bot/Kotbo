@@ -4,7 +4,7 @@
  * suppléant de la cellule.
  */
 import prisma from '../../utils/db.js';
-import { absenceActive } from './wellbeingPolicy.js';
+import { absenceActive } from './wellbeingWorkloadPolicy.js';
 
 export async function currentAbsence(guildId: string, userId: string, now: Date = new Date()) {
   const absences = await prisma.staffAbsence.findMany({

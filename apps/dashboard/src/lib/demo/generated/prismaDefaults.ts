@@ -5830,12 +5830,14 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "followUpDays": 30,
     "sanctionSignal": false,
     "distressWatch": false,
-    "pulseEnabled": false,
-    "pulseRoleIds": [],
-    "pulseSentAt": null,
     "networkPool": false,
     "profileRetentionMonths": 12,
     "boardColumns": [],
+    "caseCategories": [],
+    "crisisTasks": [],
+    "taskPlans": [],
+    "caseTags": [],
+    "noteTemplates": [],
     "createdAt": "__NOW__",
     "updatedAt": "__NOW__"
   },
@@ -5872,8 +5874,34 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "networkReferentId": null,
     "networkReferentGuildId": null,
     "stage": null,
+    "tagIds": [],
     "createdAt": "__NOW__",
     "updatedAt": "__NOW__"
+  },
+  "WellbeingProfile": {
+    "id": "",
+    "guildId": "",
+    "subjectUserId": "",
+    "subjectName": "",
+    "subjectLeftAt": null,
+    "tagIds": [],
+    "createdAt": "__NOW__",
+    "updatedAt": "__NOW__"
+  },
+  "WellbeingProfileNote": {
+    "id": "",
+    "profileId": "",
+    "authorId": "",
+    "authorName": "",
+    "content": "",
+    "expiresAt": "__NOW__",
+    "sensitive": false,
+    "purgeWarnedAt": null,
+    "extendedAt": null,
+    "extendedById": null,
+    "extendedByName": null,
+    "extendedReason": null,
+    "createdAt": "__NOW__"
   },
   "WellbeingReporterMessage": {
     "id": "",
@@ -5895,44 +5923,6 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "handledByName": null,
     "outcome": null,
     "caseId": null
-  },
-  "WellbeingPulseWeek": {
-    "guildId": "",
-    "week": "",
-    "score1": 0,
-    "score2": 0,
-    "score3": 0,
-    "score4": 0,
-    "score5": 0
-  },
-  "WellbeingPulseVoter": {
-    "guildId": "",
-    "week": "",
-    "voterHash": ""
-  },
-  "WellbeingProfile": {
-    "id": "",
-    "guildId": "",
-    "subjectUserId": "",
-    "subjectName": "",
-    "subjectLeftAt": null,
-    "createdAt": "__NOW__",
-    "updatedAt": "__NOW__"
-  },
-  "WellbeingProfileNote": {
-    "id": "",
-    "profileId": "",
-    "authorId": "",
-    "authorName": "",
-    "content": "",
-    "expiresAt": "__NOW__",
-    "sensitive": false,
-    "purgeWarnedAt": null,
-    "extendedAt": null,
-    "extendedById": null,
-    "extendedByName": null,
-    "extendedReason": null,
-    "createdAt": "__NOW__"
   },
   "WellbeingCaseNote": {
     "id": "",

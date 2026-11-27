@@ -22,8 +22,6 @@ export interface WbConfigForm {
   followUpDays: number;
   sanctionSignal: boolean;
   distressWatch: boolean;
-  pulseEnabled: boolean;
-  pulseRoleIds: string[];
   networkPool: boolean;
   profileRetentionMonths: number;
 }
@@ -50,8 +48,6 @@ export function wbConfigFromApi(config: Record<string, unknown>): WbConfigForm {
     followUpDays: typeof config.followUpDays === 'number' ? config.followUpDays : 30,
     sanctionSignal: config.sanctionSignal === true,
     distressWatch: config.distressWatch === true,
-    pulseEnabled: config.pulseEnabled === true,
-    pulseRoleIds: ids(config.pulseRoleIds),
     networkPool: config.networkPool === true,
     profileRetentionMonths: typeof config.profileRetentionMonths === 'number' ? config.profileRetentionMonths : WB_PROFILE_RETENTION.default,
   };
@@ -75,7 +71,7 @@ export function wbConfigToApi(form: WbConfigForm) {
 
 // ── Sections et parcours ───────────────────────────────────────────────────
 
-export type WbSettingsSection = 'review' | 'team' | 'direction' | 'alerts' | 'reports' | 'care' | 'signals' | 'pulse';
+export type WbSettingsSection = 'review' | 'team' | 'direction' | 'alerts' | 'reports' | 'care' | 'signals';
 
 export const WB_SETUP_STEPS = ['team', 'direction', 'alerts', 'reports', 'summary'] as const;
 export type WbSetupStep = (typeof WB_SETUP_STEPS)[number];
@@ -90,12 +86,11 @@ const hasAlertRecipients = (form: WbConfigForm) => !!form.alertChannelId || form
 
 /**
  * L'essentiel d'une étape (ou d'une section) est rempli ; direction et
- * signalements sont facultatifs. La météo du staff, activée, demande des rôles.
+ * signalements sont facultatifs.
  */
-export function wbStepComplete(form: WbConfigForm, step: WbSetupStep | 'pulse'): boolean {
+export function wbStepComplete(form: WbConfigForm, step: WbSetupStep): boolean {
   if (step === 'team') return hasTeam(form);
   if (step === 'alerts') return hasAlertRecipients(form);
-  if (step === 'pulse') return !form.pulseEnabled || form.pulseRoleIds.length > 0;
   return true;
 }
 

@@ -5,9 +5,15 @@
   import { toast } from '../lib/stores/toast.svelte';
   import { confirmDialog } from '../lib/stores/confirmDialog.svelte';
   import ModulePage from '../lib/components/ModulePage.svelte';
-  import MemberSearchSelect from '../lib/components/MemberSearchSelect.svelte';
-  import { WB_CLOSE_REASONS, wbCloseReasonLabel, wbCaseEventLabel, WB_CATEGORIES, WB_SEVERITIES, WB_STATUSES, wbCategoryLabel, wbIsSummaryTemplate, wbSeverityLabel, wbStatusLabel, wbSummaryTemplate } from '../lib/wellbeingLabels';
-  import WellbeingStats, { type WellbeingCellStats, type WellbeingProfileStats, type WellbeingPulseWeek, type WellbeingReferentLoad, type WellbeingStageCount } from '../lib/components/wellbeing/WellbeingStats.svelte';
+  import { WB_CLOSE_REASONS, wbCloseReasonLabel, WB_SEVERITIES, WB_STATUSES, wbSeverityLabel, wbStatusLabel } from '../lib/wellbeingLabels';
+  import { WB_EMPTY_CUSTOMIZATION, wbCaseTags, wbCategoryName, wbFilterByTag, type WbCustomization } from '../lib/wellbeingCustom';
+  import { wbCustom } from '../lib/stores/wellbeingCustomization.svelte';
+  import CustomizationPanel from '../lib/components/wellbeing/CustomizationPanel.svelte';
+  import TagPicker from '../lib/components/wellbeing/TagPicker.svelte';
+  import CaseTimeline from '../lib/components/wellbeing/CaseTimeline.svelte';
+  import CaseAttachments from '../lib/components/wellbeing/CaseAttachments.svelte';
+  import CaseFollowUp from '../lib/components/wellbeing/CaseFollowUp.svelte';
+  import WellbeingStats, { type WellbeingCellStats, type WellbeingProfileStats, type WellbeingReferentLoad, type WellbeingStageCount } from '../lib/components/wellbeing/WellbeingStats.svelte';
   import CaseTasks from '../lib/components/wellbeing/CaseTasks.svelte';
   import ReporterThread from '../lib/components/wellbeing/ReporterThread.svelte';
   import DistressSignals, { type DistressSignal } from '../lib/components/wellbeing/DistressSignals.svelte';
@@ -17,13 +23,16 @@
   import NetworkReferent from '../lib/components/wellbeing/NetworkReferent.svelte';
   import NetworkCases from '../lib/components/wellbeing/NetworkCases.svelte';
   import ProfilesPanel from '../lib/components/wellbeing/ProfilesPanel.svelte';
+  import NewCaseModal, { type NewCasePrefill } from '../lib/components/wellbeing/NewCaseModal.svelte';
+  import BreakGlassModal from '../lib/components/wellbeing/BreakGlassModal.svelte';
+  import AccessLog from '../lib/components/wellbeing/AccessLog.svelte';
+  import ResourcesEditor, { type WellbeingResource } from '../lib/components/wellbeing/ResourcesEditor.svelte';
   import { memberCaseModal } from '../lib/stores/memberCaseModal.svelte';
   import MemberName from '../lib/components/MemberName.svelte';
-  import WellbeingMemberList from '../lib/components/WellbeingMemberList.svelte';
-  import { Button, Callout, EmptyState, Field, FilterPills, Menu, Modal, StatTile, Tabs, ToggleSwitch, type FilterOption, type MenuItem, type TabItem } from '../lib/components/ui';
+  import { Button, Callout, EmptyState, FilterPills, Menu, Modal, StatTile, Tabs, ToggleSwitch, type FilterOption, type MenuItem, type TabItem } from '../lib/components/ui';
   import Papicon from '../lib/components/Papicon.svelte';
   import Skeleton from '../lib/components/Skeleton.svelte';
-  import { WB_IDLE_LOCK_MS, wbNeighbourCaseId, wbShortcut, wbCaseExportHtml, wbPurgeInfo, wbTaskProgress, wbCaseStats, wbCaseTimeline, wbCompactTimeline, wbFilterCases, wbIsReviewDue, wbLinkedCases, wbMergeHeader, wbReviewShortcut, wbSearchCases, wbSeverityAccent, wbSeverityTone, wbSortCases, wbStatusTone, type WbBoardStage, type WbBoardTarget, type WbCaseFilter, type WbCaseSort } from '../lib/wellbeingView';
+  import { WB_IDLE_LOCK_MS, wbNeighbourCaseId, wbShortcut, wbCaseExportHtml, wbPurgeInfo, wbTaskProgress, wbCaseStats, wbFilterCases, wbIsReviewDue, wbLinkedCases, wbMergeHeader, wbSearchCases, wbSeverityAccent, wbSeverityTone, wbSortCases, wbStatusTone, type WbBoardStage, type WbBoardTarget, type WbCaseFilter, type WbCaseSort } from '../lib/wellbeingView';
   import { authStore } from '../lib/stores/auth.svelte';
   import { isMobile } from '../lib/stores/media.svelte';
 
@@ -44,19 +53,14 @@
     accessReviewDue: boolean;
     /** Étapes ajoutées par la cellule à la vue en colonnes. */
     boardColumns?: WbBoardStage[];
+    /** Catégories, protocole de crise, plans types et étiquettes de la cellule. */
+    customization?: WbCustomization | null;
     /** Désactivation de la cellule demandée par le propriétaire, effective à cette date. */
     dissolutionAt: string | null;
     dissolutionByName: string | null;
     /** Accès d'urgence soumis à la validation d'une seconde personne. */
     breakGlassApproval: boolean;
     reportEnabled: boolean;
-  };
-
-  type Resource = { label: string; phone: string | null; url: string | null; description: string | null; locale: string | null };
-  /** Langues proposées pour une ressource ; vide : pour tout le monde. */
-  const RESOURCE_LOCALES = ['fr', 'en', 'de', 'es', 'it', 'pt'] as const;
-  const languageName = (code: string) => {
-    try { return new Intl.DisplayNames([dateLocale()], { type: 'language' }).of(code) ?? code; } catch { return code; }
   };
 
   let loading = $state(true);
@@ -72,7 +76,7 @@
   const selectedHeader = $derived(cases.find((c) => c.id === selectedCaseId) ?? null);
   const selectedCase = $derived(detail && detail.id === selectedCaseId ? detail : null);
 
-  type Tab = 'cases' | 'profiles' | 'stats' | 'resources' | 'access' | 'settings';
+  type Tab = 'cases' | 'profiles' | 'stats' | 'resources' | 'custom' | 'access' | 'settings';
   type DetailTab = 'timeline' | 'tasks' | 'documents';
   let detailTab = $state<DetailTab>('timeline');
   /** Petit écran : la fiche remplace la liste après un choix. */
@@ -92,24 +96,17 @@
   let caseFilter = $state<ListFilter>('active');
   let caseSearch = $state('');
   let caseSort = $state<WbCaseSort>('recent');
+  /** Étiquette choisie pour filtrer la liste et les colonnes ; `null` : toutes. */
+  let tagFilter = $state<string | null>(null);
+  const tags = $derived(wbCustom.value.tags);
   const viewerId = $derived(authStore.user?.id);
   const now = new Date();
   const purgeInfo = $derived(selectedCase ? wbPurgeInfo(selectedCase, now) : null);
   const stats = $derived(wbCaseStats(cases, now));
   const visibleCases = $derived(caseFilter === 'trash'
     ? wbSearchCases(trashCases, caseSearch)
-    : wbSortCases(wbSearchCases(wbFilterCases(cases, caseFilter, viewerId), caseSearch), caseSort));
+    : wbSortCases(wbFilterByTag(wbSearchCases(wbFilterCases(cases, caseFilter, viewerId), caseSearch), tagFilter), caseSort));
   const linkedCases = $derived(selectedHeader ? wbLinkedCases(cases, selectedHeader) : []);
-  const timeline = $derived(selectedCase ? wbCaseTimeline(selectedCase) : []);
-  /** Historique réduit : notes seules, ou actions à la suite repliées ; le choix est gardé. */
-  const NOTES_ONLY_KEY = 'kotbo:wellbeing:notes-only';
-  let timelineNotesOnly = $state(typeof localStorage !== 'undefined' && localStorage.getItem(NOTES_ONLY_KEY) === '1');
-  let expandedGroups = $state<string[]>([]);
-  const compactTimeline = $derived(wbCompactTimeline(timeline, { notesOnly: timelineNotesOnly, expanded: expandedGroups }));
-  function setNotesOnly(value: boolean) {
-    timelineNotesOnly = value;
-    try { localStorage.setItem(NOTES_ONLY_KEY, value ? '1' : '0'); } catch { /* stockage indisponible : réglage gardé pour la session */ }
-  }
   const filterOptions = $derived<FilterOption<ListFilter>[]>([
     ...(status?.reportEnabled || stats.triage > 0 ? [{ value: 'triage' as const, label: m.wb_filter_triage(), count: stats.triage }] : []),
     { value: 'active', label: m.wb_filter_active(), count: stats.active },
@@ -123,7 +120,6 @@
     { value: 'severity', label: () => m.wb_sort_severity() },
     { value: 'review', label: () => m.wb_sort_review() },
   ];
-  const REVIEW_SHORTCUTS = [3, 7, 30];
   /** Même délai que le bot (PURGE_REQUEST_HOURS) : passé, une demande d'effacement est à refaire. */
   const PURGE_REQUEST_MS = 72 * 60 * 60 * 1000;
 
@@ -211,9 +207,7 @@
     detail = null;
     integrity = null;
     absence = null;
-    editingNoteId = null;
     revealed = false;
-    expandedGroups = [];
     detailTab = 'timeline';
     void loadDetail(caseId);
   }
@@ -294,104 +288,30 @@
     }
   }
 
-  const canEndLog = (log: any) => log.actorId === viewerId || !!status?.isTeamMember || !!status?.canConfigure;
-  const isLiveLog = (log: any) => ['APPROVED', 'PENDING'].includes(log.status) && new Date(log.expiresAt) > new Date();
-
-
-
-  // Break-glass modal
+  // Accès d'urgence : demande et seconde clé
   let breakGlassOpen = $state(false);
-  let breakGlassReason = $state('');
-  let breakGlassSubjectUserId = $state('');
   let decidingLogId = $state<string | null>(null);
   const pendingLogs = $derived(logs.filter((log) => log.status === 'PENDING' && new Date(log.expiresAt) > new Date()));
-  const LOG_STATUS: Record<string, () => string> = {
-    PENDING: () => m.wb_log_status_PENDING(),
-    APPROVED: () => m.wb_log_status_APPROVED(),
-    REJECTED: () => m.wb_log_status_REJECTED(),
-    ENDED: () => m.wb_log_status_ENDED(),
-  };
-  const LOG_TONES: Record<string, string> = {
-    PENDING: 'bg-warning/10 text-on-warning-container border border-warning/20',
-    APPROVED: 'bg-success/10 text-on-success-container border border-success/20',
-    REJECTED: 'bg-error/10 text-on-error-container border border-error/20',
-    ENDED: 'bg-surface-container-high/40 text-on-surface-variant border border-outline-variant/30',
-  };
 
   // Ressources d'aide (cellule)
-  let resources = $state<Resource[]>([]);
-  let savingResources = $state(false);
+  let resources = $state<WellbeingResource[]>([]);
   let sendingResources = $state(false);
-  let assigneeCandidate = $state('');
   /** Membres de la cellule : seuls choix possibles pour un référent ou un collègue à prévenir. */
   let team = $state<Array<{ id: string; name: string }>>([]);
   /** La cellule sans la personne concernée, ni soi-même si `withSelf` est faux. */
   const teamFor = (subjectUserId: string | null | undefined, withSelf = true) =>
     team.filter((member) => member.id !== subjectUserId && (withSelf || member.id !== viewerId));
 
-  // Documents Google Drive du dossier ouvert
-  let newAttachmentLabel = $state('');
-  let newAttachmentUrl = $state('');
-  let addingAttachment = $state(false);
-  let removingAttachmentId = $state<string | null>(null);
-  /** Même plafond que le bot (MAX_CASE_ATTACHMENTS). */
-  const MAX_CASE_ATTACHMENTS = 20;
-  /** Un lien illisible (clé changée) ne devient jamais un href. */
-  const isDriveLink = (url: string) => /^https:\/\/(drive|docs)\.google\.com\//.test(url);
-  let breakGlassSubmitting = $state(false);
-
-  // New case modal
+  // Fenêtre de création d'un dossier
   let newCaseOpen = $state(false);
-  // Membre choisi : lie le dossier à sa fiche. Le nom reste modifiable, ou libre hors serveur.
-  let newSubjectUserId = $state('');
-  let newSubjectName = $state('');
-  let newTitle = $state('');
-  let newCategory = $state('SOUTIEN');
-  let newSeverity = $state('NORMAL');
-  let newSummary = $state('');
-  let newAssigneeId = $state('');
-  let newReviewAt = $state('');
-  let creatingCase = $state(false);
-  /** Signal de détresse d'où vient le dossier : il sera marqué traité. */
-  let newSignalId = $state('');
-  /** Référent proposé par le bot : le membre de la cellule le moins chargé. */
-  let suggestedAssigneeId = $state('');
+  let newCaseModal = $state<{ openWith: (prefill?: NewCasePrefill) => Promise<void> }>();
   let signalsPanel = $state<{ reload: () => Promise<void> }>();
-
-  /** Ouvre la fenêtre de création, avec le référent le moins chargé proposé. */
-  async function openNewCase(prefill: { subjectUserId?: string; subjectName?: string; severity?: string; signalId?: string } = {}) {
-    // Un brouillon venu d'un signal puis abandonné ne doit pas servir à un autre dossier.
-    if (newSignalId && !prefill.signalId) {
-      newSubjectUserId = '';
-      newSubjectName = '';
-      newSeverity = 'NORMAL';
-    }
-    newSignalId = prefill.signalId ?? '';
-    if (prefill.subjectUserId !== undefined) newSubjectUserId = prefill.subjectUserId;
-    if (prefill.subjectName !== undefined) newSubjectName = prefill.subjectName;
-    if (prefill.severity) newSeverity = prefill.severity;
-    if (wbIsSummaryTemplate(newSummary)) newSummary = wbSummaryTemplate(newCategory);
-    newCaseOpen = true;
-    const query = newSubjectUserId ? `?subjectUserId=${encodeURIComponent(newSubjectUserId)}` : '';
-    const res = await dashboardFetch(`/wellbeing/assignee-suggestion${query}`).catch(() => null);
-    const suggested = res?.ok ? (await res.json()).userId : null;
-    suggestedAssigneeId = typeof suggested === 'string' ? suggested : '';
-    if (suggestedAssigneeId && !newAssigneeId) newAssigneeId = suggestedAssigneeId;
-  }
-
-  // Le référent proposé ne peut pas être la personne concernée, choisie après coup.
-  $effect(() => {
-    if (newAssigneeId && newAssigneeId === suggestedAssigneeId && newAssigneeId === newSubjectUserId) newAssigneeId = '';
-  });
-
+  const openNewCase = (prefill?: NewCasePrefill) => newCaseModal?.openWith(prefill);
   const openCaseFromSignal = (signal: DistressSignal) =>
     openNewCase({ subjectUserId: signal.userId, subjectName: signal.userName, severity: 'HIGH', signalId: signal.id });
 
-  // Note on selected case
-  let newNote = $state('');
-  /** Collègues de la cellule prévenus en privé de la note. */
-  let noteNotify = $state<string[]>([]);
-  let noteInput = $state<HTMLTextAreaElement>();
+  /** Historique du dossier ouvert : le raccourci « n » y place le curseur. */
+  let timelinePanel = $state<{ focusNote: () => Promise<void> }>();
 
   // Vue des dossiers : liste et fiche, ou colonnes par statut. Retenue par navigateur.
   const VIEW_KEY = 'kotbo:wellbeing:view';
@@ -401,7 +321,7 @@
     if (view === 'board' && caseFilter === 'trash') caseFilter = 'active';
     try { localStorage.setItem(VIEW_KEY, view); } catch { /* stockage indisponible : réglage gardé pour la session */ }
   }
-  const boardCases = $derived(wbSearchCases(cases, caseSearch));
+  const boardCases = $derived(wbFilterByTag(wbSearchCases(cases, caseSearch), tagFilter));
   /** Étapes de la vue en colonnes, propres à la cellule. */
   let boardStages = $state<WbBoardStage[]>([]);
 
@@ -440,13 +360,13 @@
       if (!status?.canWriteCases || !selectedCase) return;
       // Le champ de note reste utilisable en mode discret : rien n'est dévoilé.
       detailTab = 'timeline';
-      void tick().then(() => noteInput?.focus());
+      // L'historique se monte au prochain rendu s'il n'était pas l'onglet ouvert.
+      void tick().then(() => timelinePanel?.focusNote());
     } else {
       setDiscreet(!discreet);
     }
     event.preventDefault();
   }
-  let addingNote = $state(false);
 
   const tabItems = $derived.by<TabItem[]>(() => {
     if (!status) return [];
@@ -456,6 +376,7 @@
       { id: 'cases', label: m.wb_tab_cases(), icon: 'folder', badge: on && status.hasCaseAccess ? stats.active || undefined : undefined },
       ...(on && (status.isTeamMember || status.isDirector) ? [{ id: 'stats', label: m.wb_tab_stats(), icon: 'BarChart3' }] : []),
       ...(on && status.isTeamMember ? [{ id: 'resources', label: m.wb_tab_resources(), icon: 'heart', badge: resources.length || undefined }] : []),
+      ...(on && status.isTeamMember ? [{ id: 'custom', label: m.wb_tab_custom(), icon: 'SlidersHorizontal' }] : []),
       ...(on && (status.isDirector || status.isTeamMember) ? [{ id: 'access', label: m.wb_tab_access(), icon: 'eye', badge: pendingLogs.length || undefined }] : []),
       ...(status.canConfigure ? [{ id: 'settings', label: m.wb_tab_settings(), icon: 'settings' }] : []),
     ];
@@ -470,21 +391,21 @@
   // Bilan : relu à chaque ouverture de l'onglet, il ne coûte qu'une requête.
   let cellStats = $state<WellbeingCellStats | null>(null);
   let cellLoad = $state<WellbeingReferentLoad[]>([]);
-  let cellPulse = $state<WellbeingPulseWeek[] | null>(null);
   $effect(() => {
     if (activeTab === 'stats') void loadStats();
   });
   let cellProfiles = $state<WellbeingProfileStats | null>(null);
   let cellStages = $state<WellbeingStageCount[]>([]);
+  let cellTags = $state<WellbeingStageCount[]>([]);
   async function loadStats() {
     const res = await dashboardFetch('/wellbeing/stats');
     if (res.ok) {
       const data = await res.json();
       cellStats = data.stats;
       cellLoad = data.load ?? [];
-      cellPulse = data.pulse ?? null;
       cellProfiles = data.profiles ?? null;
       cellStages = data.stages ?? [];
+      cellTags = data.tags ?? [];
     } else {
       toast.error(m.toast_wb_load_failed());
     }
@@ -502,6 +423,7 @@
       if (!stRes.ok) throw new Error('status');
       status = await stRes.json();
       boardStages = status?.boardColumns ?? [];
+      wbCustom.value = status?.customization ?? WB_EMPTY_CUSTOMIZATION;
       // La cellule arrive sur ses personnes suivies ; un lien vers un dossier ramène aux dossiers.
       if (status?.isTeamMember && !new URLSearchParams(window.location.search).has('case') && activeTab === 'cases' && !initialTabChosen) {
         activeTab = 'profiles';
@@ -571,30 +493,6 @@
     void loadAll();
   });
 
-  async function activateBreakGlass(event: SubmitEvent) {
-    event.preventDefault();
-    if (breakGlassSubmitting) return;
-    breakGlassSubmitting = true;
-    try {
-      const res = await dashboardFetch('/wellbeing/break-glass', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason: breakGlassReason.trim(), subjectUserId: breakGlassSubjectUserId || undefined }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? '');
-      breakGlassOpen = false;
-      breakGlassReason = '';
-      breakGlassSubjectUserId = '';
-      toast.success(data.pending ? m.toast_wb_break_glass_pending() : m.toast_wb_break_glass_on());
-      await loadAll();
-    } catch (err: any) {
-      toast.error(err?.message || m.toast_wb_break_glass_failed());
-    } finally {
-      breakGlassSubmitting = false;
-    }
-  }
-
   /** Seconde clé : valider ou refuser la demande d'une autre personne. */
   async function decideBreakGlass(logId: string, approve: boolean) {
     if (decidingLogId) return;
@@ -616,61 +514,14 @@
     }
   }
 
-  /**
-   * Un dossier sur soi-même serait aussitôt masqué à son auteur (conflit
-   * d'intérêts) : le bot le refuse, le formulaire le dit avant l'envoi.
-   */
-  const subjectIsSelf = $derived(!!newSubjectUserId && newSubjectUserId === viewerId);
-
-  /** La trame proposée n'est pas un résumé : elle doit être remplie avant la création. */
-  let summaryError = $state('');
-
-  async function createCase(event: SubmitEvent) {
-    event.preventDefault();
-    if (creatingCase || subjectIsSelf) return;
-    if (wbIsSummaryTemplate(newSummary)) {
-      summaryError = m.wb_summary_template_error();
-      return;
-    }
-    creatingCase = true;
-    try {
-      const res = await dashboardFetch('/wellbeing/cases', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          subjectUserId: newSubjectUserId || undefined,
-          subjectName: newSubjectName.trim(),
-          title: newTitle.trim(),
-          category: newCategory,
-          severity: newSeverity,
-          summary: newSummary.trim(),
-          assigneeId: newAssigneeId || undefined,
-          reviewAt: newReviewAt || undefined,
-          signalId: newSignalId || undefined,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? '');
-      cases = [headerOf(data.item), ...cases];
-      selectedCaseId = data.item.id;
-      detail = data.item;
-      revealed = true;
-      newCaseOpen = false;
-      newSubjectUserId = '';
-      newSubjectName = '';
-      newTitle = '';
-      newSummary = '';
-      newAssigneeId = '';
-      newReviewAt = '';
-      if (newSignalId) void signalsPanel?.reload();
-      newSignalId = '';
-      toast.success(m.toast_wb_file_created());
-      void refreshCaseList();
-    } catch (err: any) {
-      toast.error(err?.message || m.toast_wb_create_failed());
-    } finally {
-      creatingCase = false;
-    }
+  /** Dossier créé depuis la fenêtre : il rejoint la liste et s'ouvre, dévoilé. */
+  function onCaseCreated(item: any, fromSignal: boolean) {
+    cases = [headerOf(item), ...cases];
+    selectedCaseId = item.id;
+    detail = item;
+    revealed = true;
+    if (fromSignal) void signalsPanel?.reload();
+    void refreshCaseList();
   }
 
   const formatDate = (iso: string) => new Date(iso).toLocaleString(dateLocale());
@@ -679,7 +530,7 @@
   let updatingCase = $state(false);
 
   /** Statut ou gravité du dossier ouvert. Fermer un dossier le rend purgeable après un an. */
-  type CasePatch = { status?: string; severity?: string; assigneeId?: string | null; reviewAt?: string | null; closedReason?: string; stage?: string | null };
+  type CasePatch = { status?: string; severity?: string; assigneeId?: string | null; reviewAt?: string | null; closedReason?: string; stage?: string | null; tagIds?: string[] };
 
   /** Modification du dossier ouvert. */
   function updateCase(patch: CasePatch) {
@@ -801,7 +652,7 @@
       const when = formatDate(data.exportedAt);
       win.document.write(wbCaseExportHtml({
         title: item.title,
-        meta: [item.subjectName, wbCategoryLabel(item.category), wbStatusLabel(item.status), wbSeverityLabel(item.severity), formatDay(item.createdAt)],
+        meta: [item.subjectName, wbCategoryName(wbCustom.value, item.category), wbStatusLabel(item.status), wbSeverityLabel(item.severity), formatDay(item.createdAt)],
         summary: item.summary,
         notes: (item.notes ?? []).map((note: any) => ({ author: note.authorName, date: formatDate(note.createdAt), content: note.content })),
         tasks: (item.tasks ?? []).map((task: any) => ({ label: task.label, done: !!task.doneAt })),
@@ -842,12 +693,6 @@
     }
   }
 
-  /** Change la catégorie d'un nouveau dossier ; sa trame remplace un résumé encore vide ou resté tel quel. */
-  function pickCategory(code: string) {
-    newCategory = code;
-    if (wbIsSummaryTemplate(newSummary)) newSummary = wbSummaryTemplate(code);
-  }
-
   let deletingCase = $state(false);
 
   async function deleteCase() {
@@ -886,67 +731,6 @@
     }
   }
 
-  async function addAttachment(event: SubmitEvent) {
-    event.preventDefault();
-    const target = selectedCase;
-    if (!target || addingAttachment) return;
-    addingAttachment = true;
-    try {
-      const res = await dashboardFetch(`/wellbeing/cases/${target.id}/attachments`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ label: newAttachmentLabel.trim(), url: newAttachmentUrl.trim() }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error ?? '');
-      applyItem(data.item);
-      newAttachmentLabel = '';
-      newAttachmentUrl = '';
-      toast.success(m.toast_wb_attachment_added());
-    } catch (err: any) {
-      toast.error(err?.message || m.toast_wb_attachment_failed());
-    } finally {
-      addingAttachment = false;
-    }
-  }
-
-  async function removeAttachment(attachmentId: string) {
-    const target = selectedCase;
-    if (!target || removingAttachmentId) return;
-    if (!(await confirmDialog.danger(m.wb_attachment_remove_q(), m.wb_attachment_remove_warn()))) return;
-    removingAttachmentId = attachmentId;
-    try {
-      const res = await dashboardFetch(`/wellbeing/cases/${target.id}/attachments/${attachmentId}`, { method: 'DELETE' });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error ?? '');
-      applyItem(data.item);
-    } catch (err: any) {
-      toast.error(err?.message || m.toast_wb_attachment_failed());
-    } finally {
-      removingAttachmentId = null;
-    }
-  }
-
-  async function saveResources() {
-    if (savingResources) return;
-    savingResources = true;
-    try {
-      const res = await dashboardFetch('/wellbeing/resources', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ resources }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error ?? '');
-      resources = data.resources ?? [];
-      toast.success(m.toast_wb_resources_saved());
-    } catch (err: any) {
-      toast.error(err?.message || m.toast_wb_resources_save_failed());
-    } finally {
-      savingResources = false;
-    }
-  }
-
   let cancellingDissolution = $state(false);
   /** Le propriétaire annule la désactivation demandée. */
   async function cancelDissolution() {
@@ -965,78 +749,6 @@
     }
   }
 
-  let exportingJournal = $state(false);
-  /** Journal de la cellule en CSV, sans contenu de dossier, pour un audit externe. */
-  async function exportJournal() {
-    if (exportingJournal) return;
-    exportingJournal = true;
-    try {
-      const res = await dashboardFetch('/wellbeing/journal');
-      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? '');
-      const url = URL.createObjectURL(await res.blob());
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `journal-cellule-bien-etre-${new Date().toISOString().slice(0, 10)}.csv`;
-      link.click();
-      URL.revokeObjectURL(url);
-    } catch (err: any) {
-      toast.error(err?.message || m.toast_wb_load_failed());
-    } finally {
-      exportingJournal = false;
-    }
-  }
-
-  // Correction d'une note par son auteur, dans le même délai que le bot (NOTE_EDIT_HOURS).
-  const NOTE_EDIT_MS = 48 * 60 * 60 * 1000;
-  let editingNoteId = $state<string | null>(null);
-  let editingText = $state('');
-  let savingNote = $state(false);
-  let originalShown = $state<Record<string, boolean>>({});
-  const canEditNote = (note: any) => !!status?.canWriteCases && note.authorId === viewerId && Date.now() - new Date(note.createdAt).getTime() < NOTE_EDIT_MS;
-
-  async function saveNoteEdit() {
-    const target = selectedCase;
-    const noteId = editingNoteId;
-    if (!target || !noteId || !editingText.trim() || savingNote) return;
-    savingNote = true;
-    try {
-      const res = await dashboardFetch(`/wellbeing/cases/${target.id}/notes/${noteId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: editingText.trim() }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error ?? '');
-      applyItem(data.item);
-      editingNoteId = null;
-      toast.success(m.toast_wb_note_edited());
-    } catch (err: any) {
-      toast.error(err?.message || m.toast_wb_note_failed());
-    } finally {
-      savingNote = false;
-    }
-  }
-
-  async function addNote(event: SubmitEvent) {
-    event.preventDefault();
-    if (!selectedCase || !newNote.trim() || addingNote) return;
-    addingNote = true;
-    try {
-      const res = await dashboardFetch(`/wellbeing/cases/${selectedCase.id}/notes`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: newNote.trim(), notifyUserIds: noteNotify }),
-      });
-      if (!res.ok) throw new Error('note');
-      newNote = '';
-      noteNotify = [];
-      await loadDetail(selectedCase.id);
-    } catch {
-      toast.error(m.toast_wb_note_failed());
-    } finally {
-      addingNote = false;
-    }
-  }
 </script>
 
 {#snippet pill(text: string, tone: string)}
@@ -1098,7 +810,14 @@
       <span class="text-sm font-semibold text-on-surface line-clamp-2">{c.title}</span>
       {@render pill(wbStatusLabel(c.status), wbStatusTone(c.status))}
     </div>
-    <p class="text-xs text-on-surface-variant mt-1 truncate">{c.subjectName} · {wbCategoryLabel(c.category)}</p>
+    <p class="text-xs text-on-surface-variant mt-1 truncate">{c.subjectName} · {wbCategoryName(wbCustom.value, c.category)}</p>
+    {#if c.tagIds?.length}
+      <div class="flex flex-wrap gap-1 mt-1">
+        {#each wbCaseTags(wbCustom.value, c.tagIds) as tag (tag.id)}
+          <span class="text-2xs font-semibold px-1.5 py-0.5 rounded-full bg-primary/10 text-primary">{tag.label}</span>
+        {/each}
+      </div>
+    {/if}
     <div class="flex flex-wrap items-center gap-1.5 mt-1.5">
       {@render pill(wbSeverityLabel(c.severity), wbSeverityTone(c.severity))}
       {#if c.source === 'DISCORD'}
@@ -1119,6 +838,12 @@
     <h3 class="text-base font-semibold flex items-center gap-2"><Papicon icon="folder" size={16} /> {m.wb_cases_title()}</h3>
     <div class="flex flex-wrap gap-2">
       <input type="search" bind:value={caseSearch} class="input text-sm flex-1 min-w-36" aria-label={m.wb_search_label()} placeholder={m.wb_search_ph()} />
+      {#if tags.length > 0}
+        <select value={tagFilter ?? ''} onchange={(event) => (tagFilter = event.currentTarget.value || null)} class="input text-sm w-auto" aria-label={m.wb_tag_filter()}>
+          <option value="">{m.wb_tag_filter_all()}</option>
+          {#each tags as tag (tag.id)}<option value={tag.id}>{tag.label}</option>{/each}
+        </select>
+      {/if}
       {#if caseFilter !== 'trash'}
         <select bind:value={caseSort} class="input text-sm w-auto" aria-label={m.wb_sort_label()}>
           {#each SORT_OPTIONS as option (option.value)}<option value={option.value}>{option.label()}</option>{/each}
@@ -1203,7 +928,7 @@
           </div>
           <p class="text-xs text-on-surface-variant flex flex-wrap items-center gap-x-3 gap-y-1">
             <span class="flex items-center gap-1"><Papicon icon="User" size={12} /> {selectedCase.subjectName}</span>
-            <span class="flex items-center gap-1"><Papicon icon="Tag" size={12} /> {wbCategoryLabel(selectedCase.category)}</span>
+            <span class="flex items-center gap-1"><Papicon icon="Tag" size={12} /> {wbCategoryName(wbCustom.value, selectedCase.category)}</span>
             <span class="flex items-center gap-1"><Papicon icon="Calendar" size={12} /> {formatDay(selectedCase.createdAt)}</span>
             {#if selectedCase.source === 'DISCORD'}
               <span class="flex items-center gap-1"><Papicon icon="MessageSquare" size={12} /> {m.wb_source_report()}</span>
@@ -1228,6 +953,7 @@
           {/if}
         </div>
       </header>
+      <TagPicker tagIds={selectedCase.tagIds ?? []} canWrite={!!status?.canWriteCases} busy={updatingCase} onchange={(tagIds) => void updateCase({ tagIds })} />
 
       {#if integrity === 'broken'}
         <Callout variant="danger" title={m.wb_integrity_broken_title()}>{m.wb_integrity_broken_desc()}</Callout>
@@ -1274,56 +1000,8 @@
         </Callout>
       {/if}
 
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 rounded-xl bg-surface-container-high/20 p-4">
-        <Field label={m.wb_assignee()} hint={m.wb_assignee_hint()}>
-          {#snippet children(id, describedBy)}
-            {#if selectedCase?.assigneeId}
-              <div class="flex items-center justify-between gap-2 text-sm min-h-9">
-                <MemberName userId={selectedCase.assigneeId} />
-                {#if status?.canWriteCases}
-                  <Button size="sm" variant="ghost" icon="X" disabled={updatingCase} aria-label={m.wb_assignee_clear()} onclick={() => void updateCase({ assigneeId: null })} />
-                {/if}
-              </div>
-            {:else if status?.canWriteCases}
-              <div class="space-y-1.5">
-                <select {id} aria-describedby={describedBy} class="input w-full" bind:value={assigneeCandidate} disabled={updatingCase}
-                  onchange={() => { const assigneeId = assigneeCandidate; assigneeCandidate = ''; if (assigneeId) void updateCase({ assigneeId }); }}>
-                  <option value="">{m.wb_member_pick()}</option>
-                  {#each teamFor(selectedCase?.subjectUserId) as member (member.id)}
-                    <option value={member.id}>{member.name}</option>
-                  {/each}
-                </select>
-                {#if viewerId && viewerId !== selectedCase?.subjectUserId}
-                  <Button size="sm" variant="ghost" icon="User" disabled={updatingCase} onclick={() => void updateCase({ assigneeId: viewerId })}>{m.wb_assign_me()}</Button>
-                {/if}
-              </div>
-            {:else}
-              <p class="text-sm text-on-surface-variant min-h-9 flex items-center">{m.wb_assignee_none()}</p>
-            {/if}
-          {/snippet}
-        </Field>
-        <Field label={m.wb_review_at()} hint={m.wb_review_hint()}>
-          {#snippet children(id, describedBy)}
-            <div class="space-y-1.5">
-              <div class="flex items-center gap-2">
-                <input {id} aria-describedby={describedBy} type="date" class="input w-full" disabled={updatingCase || !status?.canWriteCases}
-                  value={selectedCase?.reviewAt ? selectedCase.reviewAt.slice(0, 10) : ''}
-                  onchange={(e) => void updateCase({ reviewAt: e.currentTarget.value || null })} />
-                {#if selectedCase?.reviewAt && status?.canWriteCases}
-                  <Button size="sm" variant="ghost" icon="X" disabled={updatingCase} aria-label={m.wb_review_clear()} onclick={() => void updateCase({ reviewAt: null })} />
-                {/if}
-              </div>
-              {#if status?.canWriteCases}
-                <div role="group" aria-label={m.wb_review_shortcuts()} class="flex flex-wrap gap-1.5">
-                  {#each REVIEW_SHORTCUTS as days (days)}
-                    <Button size="sm" variant="ghost" disabled={updatingCase} onclick={() => void updateCase({ reviewAt: wbReviewShortcut(new Date(), days) })}>{m.wb_review_in_days({ days })}</Button>
-                  {/each}
-                </div>
-              {/if}
-            </div>
-          {/snippet}
-        </Field>
-      </div>
+      <CaseFollowUp item={selectedCase} canWrite={!!status?.canWriteCases} busy={updatingCase} {viewerId}
+        candidates={teamFor(selectedCase.subjectUserId)} onpatch={(patch) => void updateCase(patch)} />
 
       <NetworkReferent caseId={selectedCase.id} subjectUserId={selectedCase.subjectUserId ?? null}
         referentId={selectedCase.networkReferentId ?? null} referentGuildId={selectedCase.networkReferentGuildId ?? null}
@@ -1359,133 +1037,15 @@
       <div class="space-y-4 border-t border-outline-variant/30 pt-4">
         <Tabs label={m.wb_detail_tabs_label()} tabs={detailTabs} active={detailTab} onchange={(id) => (detailTab = id as DetailTab)} />
         {#if detailTab === 'timeline'}
-        <div class="space-y-3">
-          {#if status?.canWriteCases}
-            <form onsubmit={addNote} class="space-y-2">
-              <textarea bind:this={noteInput} bind:value={newNote} aria-label={m.a11y_wellbeing_note()} required rows={2} placeholder={m.wb_note_ph()} class="input w-full text-sm"></textarea>
-              <div class="space-y-1">
-                <label for="wb-note-notify" class="text-xs font-medium text-on-surface-variant">{m.wb_note_notify()}</label>
-                <WellbeingMemberList id="wb-note-notify" bind:ids={noteNotify} max={5} candidates={teamFor(selectedCase?.subjectUserId, false)} />
-              </div>
-              <div class="flex justify-end">
-                <Button type="submit" size="sm" variant="primary" icon="Plus" loading={addingNote} disabled={!newNote.trim()}>{m.wb_note_add()}</Button>
-              </div>
-            </form>
-          {/if}
-          {#if timeline.length > 0}
-            <div class="flex flex-wrap items-center justify-between gap-2">
-              <div role="group" aria-label={m.wb_timeline_view_label()} class="inline-flex rounded-lg border border-outline-variant/40 bg-surface-container p-0.5 text-xs">
-                <button type="button" aria-pressed={!timelineNotesOnly} onclick={() => setNotesOnly(false)}
-                  class="rounded-md px-2.5 py-1 {!timelineNotesOnly ? 'bg-surface-container-highest font-semibold text-on-surface' : 'text-on-surface-variant'}">{m.wb_timeline_all()}</button>
-                <button type="button" aria-pressed={timelineNotesOnly} onclick={() => setNotesOnly(true)}
-                  class="rounded-md px-2.5 py-1 {timelineNotesOnly ? 'bg-surface-container-highest font-semibold text-on-surface' : 'text-on-surface-variant'}">{m.wb_timeline_notes_only()}</button>
-              </div>
-              {#if !timelineNotesOnly && expandedGroups.length > 0}
-                <Button size="sm" variant="ghost" icon="ChevronUp" onclick={() => (expandedGroups = [])}>{m.wb_timeline_collapse_all()}</Button>
-              {/if}
-            </div>
-          {/if}
-          {#if compactTimeline.length === 0}
-            <p class="text-xs text-on-surface-variant">{timeline.length === 0 ? m.wb_timeline_empty() : m.wb_timeline_no_note()}</p>
-          {:else}
-            <ol class="relative border-l border-outline-variant/50 ml-2 space-y-3">
-              {#each compactTimeline as entry (entry.id)}
-                <li class="ml-4">
-                  <span class="absolute -left-[5px] mt-1.5 h-2.5 w-2.5 rounded-full {entry.kind === 'note' ? 'bg-primary' : 'bg-outline-variant'}" aria-hidden="true"></span>
-                  {#if entry.kind === 'group'}
-                    <button type="button" aria-expanded="false" class="flex flex-wrap items-center gap-x-2 text-xs text-on-surface-variant hover:text-on-surface"
-                      onclick={() => (expandedGroups = [...expandedGroups, entry.id])}>
-                      <Papicon icon="ChevronDown" size={12} />
-                      <span class="font-medium">{m.wb_timeline_group({ count: entry.count })}</span>
-                      <span>· {formatDay(entry.entries[entry.entries.length - 1]!.at)} – {formatDay(entry.at)}</span>
-                    </button>
-                  {:else if entry.kind === 'note'}
-                    <div class="rounded-lg border border-outline-variant/40 bg-surface-container-lowest p-3 text-sm">
-                      <div class="flex flex-wrap justify-between gap-2 text-xs text-on-surface-variant mb-1">
-                        <span class="font-semibold text-on-surface">{entry.note.authorName}</span>
-                        <span>{formatDate(entry.at)}</span>
-                      </div>
-                      {#if contentHidden}
-                        <p class="text-xs italic text-on-surface-variant">{m.wb_discreet_note_hidden()}</p>
-                      {:else if editingNoteId === entry.note.id}
-                        <div class="space-y-2">
-                          <textarea bind:value={editingText} rows={3} class="input w-full text-sm" aria-label={m.wb_note_edit_label()}></textarea>
-                          <div class="flex justify-end gap-2">
-                            <Button size="sm" variant="ghost" onclick={() => (editingNoteId = null)}>{m.common_cancel()}</Button>
-                            <Button size="sm" variant="primary" loading={savingNote} disabled={!editingText.trim()} onclick={() => void saveNoteEdit()}>{m.common_save()}</Button>
-                          </div>
-                        </div>
-                      {:else}
-                        <p class="whitespace-pre-wrap text-on-surface">{entry.note.content}</p>
-                        <div class="flex flex-wrap items-center gap-2 mt-1.5 text-2xs text-on-surface-variant">
-                          {#if entry.note.editedAt}
-                            <span>{m.wb_note_edited({ date: formatDate(entry.note.editedAt) })}</span>
-                            {#if entry.note.originalContent}
-                              <button type="button" class="underline hover:text-on-surface" aria-expanded={!!originalShown[entry.note.id]}
-                                onclick={() => (originalShown = { ...originalShown, [entry.note.id]: !originalShown[entry.note.id] })}>
-                                {originalShown[entry.note.id] ? m.wb_note_hide_original() : m.wb_note_show_original()}
-                              </button>
-                            {/if}
-                          {/if}
-                          {#if canEditNote(entry.note)}
-                            <button type="button" class="underline hover:text-on-surface" onclick={() => { editingNoteId = entry.note.id; editingText = entry.note.content; }}>{m.wb_note_edit()}</button>
-                          {/if}
-                        </div>
-                        {#if entry.note.originalContent && originalShown[entry.note.id]}
-                          <p class="mt-2 whitespace-pre-wrap text-xs text-on-surface-variant border-l-2 border-outline-variant pl-2">{entry.note.originalContent}</p>
-                        {/if}
-                      {/if}
-                    </div>
-                  {:else}
-                    <p class="flex flex-wrap items-center gap-x-2 text-xs text-on-surface-variant">
-                      <span class="font-medium text-on-surface">{entry.event.actorName}</span>
-                      <span>{wbCaseEventLabel(entry.event, formatDay)}</span>
-                      {#if entry.event.type === 'ASSIGNEE' && entry.event.toValue}<MemberName userId={entry.event.toValue} />{/if}
-                      <span>· {formatDate(entry.at)}</span>
-                    </p>
-                  {/if}
-                </li>
-              {/each}
-            </ol>
-          {/if}
-        </div>
+          {#key selectedCase.id}
+            <CaseTimeline bind:this={timelinePanel} item={selectedCase} canWrite={!!status?.canWriteCases} hidden={contentHidden} {viewerId}
+              candidates={teamFor(selectedCase.subjectUserId, false)} onchange={applyItem}
+              onreload={() => (selectedCaseId ? loadDetail(selectedCaseId) : Promise.resolve())} />
+          {/key}
         {:else if detailTab === 'tasks'}
           <CaseTasks caseId={selectedCase.id} tasks={selectedCase.tasks ?? []} canWrite={!!status?.canWriteCases} hidden={contentHidden} onchange={applyItem} />
         {:else}
-        <div class="space-y-2">
-          <p class="text-xs text-on-surface-variant">{m.wb_attachments_desc()}</p>
-          {#if contentHidden && (selectedCase.attachments ?? []).length > 0}
-            <p class="text-xs italic text-on-surface-variant">{m.wb_discreet_attachments_hidden({ count: selectedCase.attachments.length })}</p>
-          {:else}
-            {#each selectedCase.attachments ?? [] as attachment (attachment.id)}
-              <div class="flex items-center justify-between gap-2 rounded-lg bg-surface-container-high/20 px-3 py-2 text-sm">
-                <span class="flex items-center gap-2 min-w-0">
-                  <Papicon icon="file-text" size={14} />
-                  {#if isDriveLink(attachment.url)}
-                    <a href={attachment.url} target="_blank" rel="noopener noreferrer" class="text-primary hover:underline truncate">{attachment.label}</a>
-                  {:else}
-                    <span class="truncate text-on-surface-variant">{attachment.label}</span>
-                  {/if}
-                </span>
-                <span class="flex items-center gap-1 shrink-0 text-xs text-on-surface-variant">
-                  {attachment.addedByName}
-                  {#if status?.canWriteCases}
-                    <Button size="sm" variant="ghost" icon="trash" loading={removingAttachmentId === attachment.id}
-                      aria-label={m.wb_attachment_remove({ name: attachment.label })}
-                      onclick={() => void removeAttachment(attachment.id)} />
-                  {/if}
-                </span>
-              </div>
-            {/each}
-          {/if}
-          {#if status?.canWriteCases && (selectedCase.attachments ?? []).length < MAX_CASE_ATTACHMENTS}
-            <form onsubmit={addAttachment} class="grid grid-cols-1 sm:grid-cols-[1fr_2fr_auto] gap-2">
-              <input bind:value={newAttachmentLabel} maxlength={120} class="input text-sm" aria-label={m.wb_attachment_label()} placeholder={m.wb_attachment_label()} />
-              <input bind:value={newAttachmentUrl} type="url" required maxlength={500} class="input text-sm" aria-label={m.wb_attachment_url()} placeholder={m.wb_attachment_url_ph()} />
-              <Button type="submit" size="sm" variant="secondary" icon="Plus" loading={addingAttachment}>{m.common_add()}</Button>
-            </form>
-          {/if}
-        </div>
+          <CaseAttachments caseId={selectedCase.id} attachments={selectedCase.attachments ?? []} canWrite={!!status?.canWriteCases} hidden={contentHidden} onchange={applyItem} />
         {/if}
       </div>
     </section>
@@ -1604,6 +1164,12 @@
           <div class="space-y-6">
             <div class="flex flex-wrap items-center gap-3">
               <input type="search" bind:value={caseSearch} class="input text-sm flex-1 min-w-48 max-w-md" aria-label={m.wb_search_label()} placeholder={m.wb_search_ph()} />
+              {#if tags.length > 0}
+                <select value={tagFilter ?? ''} onchange={(event) => (tagFilter = event.currentTarget.value || null)} class="input text-sm w-auto" aria-label={m.wb_tag_filter()}>
+                  <option value="">{m.wb_tag_filter_all()}</option>
+                  {#each tags as tag (tag.id)}<option value={tag.id}>{tag.label}</option>{/each}
+                </select>
+              {/if}
               <p class="text-2xs text-on-surface-variant">{m.wb_board_hint()}</p>
             </div>
             <CaseBoard cases={boardCases} stages={boardStages} selectedId={selectedCaseId} canWrite={!!status.canWriteCases} onopen={openCaseById}
@@ -1637,48 +1203,14 @@
         onnewcase={(prefill) => void openNewCase(prefill)} />
     {:else if activeTab === 'stats'}
       {#if cellStats}
-        <WellbeingStats stats={cellStats} load={cellLoad} pulse={cellPulse} profiles={cellProfiles} stages={cellStages} />
+        <WellbeingStats stats={cellStats} load={cellLoad} profiles={cellProfiles} stages={cellStages} tags={cellTags} />
       {:else}
         <Skeleton height="320px" />
       {/if}
+    {:else if activeTab === 'custom'}
+      <CustomizationPanel />
     {:else if activeTab === 'resources'}
-      <section class="bg-surface-container-low/40 border border-outline-variant/30 rounded-xl p-6 space-y-4">
-        <div>
-          <h3 class="text-base font-semibold flex items-center gap-2"><Papicon icon="heart" size={16} /> {m.wb_resources_title()}</h3>
-          <p class="text-xs text-on-surface-variant mt-1">{m.wb_resources_desc()}</p>
-        </div>
-        {#if resources.length === 0}
-          <EmptyState icon="heart" title={m.wb_resources_empty()} actionLabel={m.wb_resources_add()}
-            onAction={() => (resources = [...resources, { label: '', phone: null, url: null, description: null, locale: null }])} />
-        {:else}
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {#each resources as resource, index (index)}
-              <div class="rounded-xl bg-surface-container-high/20 border border-outline-variant/30 p-4 space-y-2">
-                <div class="flex items-center gap-2">
-                  <input bind:value={resource.label} maxlength={80} class="input text-sm font-semibold flex-1" aria-label={m.wb_resources_label()} placeholder={m.wb_resources_label()} />
-                  <Button size="sm" variant="ghost" icon="trash" aria-label={m.wb_resources_remove({ name: resource.label })}
-                    onclick={() => (resources = resources.filter((_, i) => i !== index))} />
-                </div>
-                <input bind:value={resource.phone} maxlength={30} class="input text-sm w-full" aria-label={m.wb_resources_phone()} placeholder={m.wb_resources_phone()} />
-                <input bind:value={resource.url} maxlength={300} type="url" class="input text-sm w-full" aria-label={m.wb_resources_url()} placeholder={m.wb_resources_url()} />
-                <input bind:value={resource.description} maxlength={200} class="input text-sm w-full" aria-label={m.wb_resources_description()} placeholder={m.wb_resources_description()} />
-                <select bind:value={() => resource.locale ?? '', (value) => (resource.locale = value || null)} class="input text-sm w-full" aria-label={m.wb_resources_locale()}>
-                  <option value="">{m.wb_resources_locale_all()}</option>
-                  {#each RESOURCE_LOCALES as code (code)}
-                    <option value={code}>{languageName(code)}</option>
-                  {/each}
-                </select>
-              </div>
-            {/each}
-          </div>
-        {/if}
-        <div class="flex flex-wrap justify-between gap-2 border-t border-outline-variant/30 pt-4">
-          <Button variant="ghost" icon="plus" disabled={resources.length >= 10}
-            onclick={() => (resources = [...resources, { label: '', phone: null, url: null, description: null, locale: null }])}>{m.wb_resources_add()}</Button>
-          <Button variant="primary" loading={savingResources} onclick={() => void saveResources()}>{m.wb_resources_save()}</Button>
-        </div>
-        <p class="text-2xs text-on-surface-variant">{m.wb_resources_locale_hint()}</p>
-      </section>
+      <ResourcesEditor bind:resources />
       <div class="mt-6">
         <ReportPanelPublisher reportEnabled={status.reportEnabled} />
       </div>
@@ -1687,42 +1219,7 @@
         {#if pendingLogs.length > 0}
           <div class="space-y-3">{@render pendingRequests()}</div>
         {/if}
-        <section class="bg-surface-container-low/40 border border-outline-variant/30 rounded-xl p-6 space-y-4">
-          <div class="flex flex-wrap items-center justify-between gap-2">
-            <h3 class="text-base font-semibold flex items-center gap-2"><Papicon icon="eye" size={16} /> {m.wb_logs_title()}</h3>
-            <Button size="sm" variant="secondary" icon="Download" loading={exportingJournal} onclick={() => void exportJournal()}>{m.wb_journal_export()}</Button>
-          </div>
-          <p class="text-xs text-on-surface-variant">{m.wb_journal_desc()}</p>
-          {#if logs.length === 0}
-            <EmptyState icon="eye" title={m.wb_access_empty()} reason="accumulating" />
-          {:else}
-            <ul class="space-y-1.5">
-              {#each logs as log (log.id)}
-                <li class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-surface-container-high/20 px-3 py-2.5 text-sm">
-                  <div class="min-w-0">
-                    <span class="font-semibold text-on-surface">{log.actorName}</span>
-                    {#if log.reason}<span class="text-on-surface-variant"> · {log.reason}</span>{/if}
-                    {#if log.subjectUserId}
-                      <span class="text-xs text-on-surface-variant flex items-center gap-1 mt-0.5">{m.wb_pending_scope()} <MemberName userId={log.subjectUserId} /></span>
-                    {/if}
-                  </div>
-                  <span class="flex items-center gap-2 text-xs text-on-surface-variant shrink-0">
-                    {@render pill(LOG_STATUS[log.status]?.() ?? log.status, LOG_TONES[log.status] ?? wbStatusTone(''))}
-                    {formatDate(log.createdAt)}
-                    {#if log.status === 'APPROVED' && isLiveLog(log) && canEndLog(log)}
-                      <Button size="sm" variant="danger" icon="X" loading={endingLogId === log.id} onclick={() => void endBreakGlass(log.id)}>
-                        {log.actorId === viewerId ? m.wb_bg_end_now() : m.wb_bg_revoke()}
-                      </Button>
-                    {/if}
-                  </span>
-                  {#if log.endedByName}
-                    <p class="w-full text-xs text-on-surface-variant">{m.wb_bg_ended_by({ name: log.endedByName, date: formatDate(log.endedAt) })}</p>
-                  {/if}
-                </li>
-              {/each}
-            </ul>
-          {/if}
-        </section>
+        <AccessLog {logs} {viewerId} canRevokeOthers={!!status.isTeamMember || !!status.canConfigure} {endingLogId} onend={(logId) => void endBreakGlass(logId)} />
       </div>
     {:else if activeTab === 'settings'}
       <WellbeingSettings
@@ -1757,105 +1254,6 @@
   {/snippet}
 </Modal>
 
-<Modal bind:open={breakGlassOpen} title={m.wb_bg_modal_title()} size="sm">
-  <form id="bg-form" onsubmit={activateBreakGlass} class="space-y-4">
-    <Callout variant="warning">
-      {m.wb_bg_modal_desc()}
-    </Callout>
-    <Field label={m.wb_bg_reason()} required>
-      {#snippet children(id)}
-        <textarea {id} bind:value={breakGlassReason} required minlength={8} rows={3} class="input w-full" placeholder={m.wb_bg_reason_ph()}></textarea>
-      {/snippet}
-    </Field>
-    <Field label={m.wb_bg_scope()} hint={m.wb_bg_scope_hint()}>
-      {#snippet children(id, describedBy)}
-        <MemberSearchSelect {id} {describedBy} bind:value={breakGlassSubjectUserId} placeholder={m.wb_member_ph()} />
-      {/snippet}
-    </Field>
-    {#if status?.breakGlassApproval}
-      <p class="text-xs text-on-surface-variant">{m.wb_bg_approval_hint()}</p>
-    {/if}
-  </form>
-  {#snippet footer()}
-    <Button variant="ghost" onclick={() => (breakGlassOpen = false)}>{m.common_cancel()}</Button>
-    <Button variant="primary" type="submit" form="bg-form" loading={breakGlassSubmitting}>{m.wb_bg_confirm()}</Button>
-  {/snippet}
-</Modal>
+<BreakGlassModal bind:open={breakGlassOpen} approvalRequired={!!status?.breakGlassApproval} ondone={loadAll} />
 
-<Modal bind:open={newCaseOpen} title={m.wb_new_modal_title()} size="md">
-  <form id="wb-case-form" onsubmit={createCase} class="space-y-4">
-    {#if newSignalId}
-      <Callout variant="info">{m.wb_new_from_signal()}</Callout>
-    {/if}
-    <Field label={m.wb_member()} hint={m.wb_member_hint()} error={subjectIsSelf ? m.wb_subject_self_error() : ''}>
-      {#snippet children(id, describedBy)}
-        <MemberSearchSelect {id} {describedBy} bind:value={newSubjectUserId} placeholder={m.wb_member_ph()}
-          onselect={(member) => (newSubjectName = member.displayName || member.username)} />
-      {/snippet}
-    </Field>
-    <Field label={m.wb_subject()} hint={m.wb_subject_hint()} required>
-      {#snippet children(id, describedBy)}
-        <input {id} aria-describedby={describedBy} bind:value={newSubjectName} required class="input w-full" placeholder={m.wb_subject_ph()} />
-      {/snippet}
-    </Field>
-    <Field label={m.wb_case_title()} required>
-      {#snippet children(id)}
-        <input {id} bind:value={newTitle} required class="input w-full" placeholder={m.wb_case_title_ph()} />
-      {/snippet}
-    </Field>
-    <div class="space-y-1.5">
-      <p class="text-xs font-semibold text-on-surface-variant">{m.wb_category()}</p>
-      <div role="group" aria-label={m.wb_category()} class="flex flex-wrap gap-1.5">
-        {#each WB_CATEGORIES as code (code)}
-          <button type="button" aria-pressed={newCategory === code} onclick={() => pickCategory(code)}
-            class="text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors {newCategory === code ? 'bg-primary/10 text-primary border border-primary/30' : 'border border-outline-variant/40 text-on-surface-variant hover:bg-surface-container-high/40'}">
-            {wbCategoryLabel(code)}
-          </button>
-        {/each}
-      </div>
-    </div>
-    <div class="space-y-1.5">
-      <p class="text-xs font-semibold text-on-surface-variant">{m.wb_severity_label()}</p>
-      <div role="group" aria-label={m.wb_severity_label()} class="flex flex-wrap gap-1.5">
-        {#each WB_SEVERITIES as code (code)}
-          <button type="button" aria-pressed={newSeverity === code} onclick={() => (newSeverity = code)}
-            class="text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors {newSeverity === code ? wbSeverityTone(code) : 'border border-outline-variant/40 text-on-surface-variant hover:bg-surface-container-high/40'}">
-            {wbSeverityLabel(code)}
-          </button>
-        {/each}
-      </div>
-    </div>
-    <Field label={m.wb_summary()} required error={summaryError}>
-      {#snippet children(id, describedBy)}
-        <textarea {id} aria-describedby={describedBy} bind:value={newSummary} required rows={6} class="input w-full" placeholder={m.wb_summary_ph()}
-          oninput={() => (summaryError = '')}></textarea>
-      {/snippet}
-    </Field>
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-      <Field label={m.wb_assignee()} hint={suggestedAssigneeId && newAssigneeId === suggestedAssigneeId ? m.wb_assignee_suggested() : m.wb_assignee_hint()}>
-        {#snippet children(id, describedBy)}
-          <select {id} aria-describedby={describedBy} class="input w-full" bind:value={newAssigneeId}>
-            <option value="">{m.wb_member_pick()}</option>
-            {#each teamFor(newSubjectUserId) as member (member.id)}
-              <option value={member.id}>{member.name}</option>
-            {/each}
-          </select>
-        {/snippet}
-      </Field>
-      <Field label={m.wb_review_at()} hint={m.wb_review_hint()}>
-        {#snippet children(id, describedBy)}
-          <input {id} aria-describedby={describedBy} type="date" bind:value={newReviewAt} class="input w-full" />
-          <div role="group" aria-label={m.wb_review_shortcuts()} class="flex flex-wrap gap-1.5 mt-1.5">
-            {#each REVIEW_SHORTCUTS as days (days)}
-              <Button size="sm" variant="ghost" onclick={() => (newReviewAt = wbReviewShortcut(new Date(), days))}>{m.wb_review_in_days({ days })}</Button>
-            {/each}
-          </div>
-        {/snippet}
-      </Field>
-    </div>
-  </form>
-  {#snippet footer()}
-    <Button variant="ghost" onclick={() => (newCaseOpen = false)}>{m.common_cancel()}</Button>
-    <Button variant="primary" type="submit" form="wb-case-form" loading={creatingCase}>{m.wb_create()}</Button>
-  {/snippet}
-</Modal>
+<NewCaseModal bind:this={newCaseModal} bind:open={newCaseOpen} {viewerId} {teamFor} oncreated={onCaseCreated} />

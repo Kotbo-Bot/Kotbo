@@ -1,11 +1,13 @@
 <!--
   Message permanent de la cellule : posté dans un salon, il porte les boutons
   « Écrire à la cellule », « Écrire anonymement » et « Ressources d'aide ».
-  Plus discret qu'une commande tapée sous les yeux des autres.
+  Plus discret qu'une commande tapée sous les yeux des autres. Le texte se
+  choisit parmi des modèles, montrés tels que le bot les publiera.
 -->
 <script lang="ts">
   import { dashboardFetch } from '../../api';
   import { m } from '../../i18n';
+  import { onMount } from 'svelte';
   import { toast } from '../../stores/toast.svelte';
   import { dashboardStore } from '../../stores/dashboard.svelte';
   import { channelDisplayName } from '../../channelUtils';
@@ -19,6 +21,34 @@
   let channelId = $state('');
   let posting = $state(false);
 
+  /** Modèles proposés par le bot, avec leur texte dans la langue du serveur ; le premier est celui par défaut. */
+  let templates = $state<Array<{ id: string; text: string }>>([]);
+  let template = $state('');
+  const TEMPLATE_LABELS: Record<string, () => string> = {
+    listening: () => m.wb_panel_template_listening(),
+    short: () => m.wb_panel_template_short(),
+    staff: () => m.wb_panel_template_staff(),
+    anonymous: () => m.wb_panel_template_anonymous(),
+  };
+  const preview = $derived((templates.find((item) => item.id === template)?.text ?? '').replace(/\*\*/g, ''));
+  /** Texte libre : repris du dernier modèle choisi, puis modifié par la cellule. */
+  const CUSTOM = 'custom';
+  /** Même plafond que le bot (PANEL_TEXT_MAX). */
+  const TEXT_MAX = 1500;
+  let customText = $state('');
+  function pickTemplate(id: string) {
+    if (id === CUSTOM && template !== CUSTOM) customText = templates.find((item) => item.id === template)?.text ?? '';
+    template = id;
+  }
+
+  onMount(async () => {
+    if (!reportEnabled) return;
+    const res = await dashboardFetch('/wellbeing/report-panel/templates').catch(() => null);
+    if (!res?.ok) return;
+    templates = (await res.json()).templates ?? [];
+    template = templates[0]?.id ?? '';
+  });
+
   async function publish() {
     if (!channelId || posting) return;
     posting = true;
@@ -26,7 +56,7 @@
       const res = await dashboardFetch('/wellbeing/report-panel', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ channelId }),
+        body: JSON.stringify(template === CUSTOM ? { channelId, text: customText } : { channelId, template: template || undefined }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? '');
@@ -47,6 +77,26 @@
   {#if !reportEnabled}
     <Callout variant="info">{m.wb_panel_reports_off()}</Callout>
   {:else}
+    {#if templates.length > 0}
+      <div class="space-y-2">
+        <p class="text-xs font-medium text-on-surface-variant">{m.wb_panel_template()}</p>
+        <div role="group" aria-label={m.wb_panel_template()} class="flex flex-wrap gap-1.5">
+          {#each [...templates.map((item) => item.id), CUSTOM] as id (id)}
+            <button type="button" aria-pressed={template === id} onclick={() => pickTemplate(id)}
+              class="text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors {template === id ? 'bg-primary/10 text-primary border border-primary/30' : 'border border-outline-variant/40 text-on-surface-variant hover:bg-surface-container-high/40'}">
+              {id === CUSTOM ? m.wb_panel_template_custom() : TEMPLATE_LABELS[id]?.() ?? id}
+            </button>
+          {/each}
+        </div>
+        {#if template === CUSTOM}
+          <textarea bind:value={customText} maxlength={TEXT_MAX} rows={5} class="input w-full text-sm" aria-label={m.wb_panel_custom_label()}></textarea>
+          <p class="text-2xs text-on-surface-variant">{m.wb_panel_custom_hint()}</p>
+        {:else}
+          <p class="text-sm text-on-surface whitespace-pre-line rounded-lg bg-surface-container-high/30 border border-outline-variant/30 px-3 py-2.5">{preview}</p>
+          <p class="text-2xs text-on-surface-variant">{m.wb_panel_preview()}</p>
+        {/if}
+      </div>
+    {/if}
     <div class="flex flex-wrap items-end gap-2">
       <label class="flex-1 min-w-48 space-y-1">
         <span class="text-xs font-medium text-on-surface-variant">{m.wb_panel_channel()}</span>
@@ -57,7 +107,7 @@
           {/each}
         </select>
       </label>
-      <Button variant="primary" icon="Send" loading={posting} disabled={!channelId} onclick={() => void publish()}>{m.wb_panel_publish()}</Button>
+      <Button variant="primary" icon="Send" loading={posting} disabled={!channelId || (template === CUSTOM && !customText.trim())} onclick={() => void publish()}>{m.wb_panel_publish()}</Button>
     </div>
   {/if}
 </section>

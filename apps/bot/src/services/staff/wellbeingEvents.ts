@@ -7,7 +7,7 @@
  * `create` direct, sinon la chaîne se casserait d'elle-même.
  */
 import prisma from '../../utils/db.js';
-import { caseEventHash } from './wellbeingPolicy.js';
+import { caseEventHash } from './wellbeingCasePolicy.js';
 
 export interface CaseEventInput {
   type: string;

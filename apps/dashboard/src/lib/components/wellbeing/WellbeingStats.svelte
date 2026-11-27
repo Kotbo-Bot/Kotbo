@@ -33,12 +33,6 @@
     label: string;
     count: number;
   }
-  /** Météo du staff : une moyenne seulement à partir de cinq réponses. */
-  export interface WellbeingPulseWeek {
-    week: string;
-    responses: number;
-    average: number | null;
-  }
 </script>
 
 <script lang="ts">
@@ -47,31 +41,27 @@
   import Papicon from '../Papicon.svelte';
   import { SERIES } from '../analytics/analyticsFormat';
   import { dateLocale, m } from '../../i18n';
-  import { WB_CATEGORIES, WB_CLOSE_REASONS, wbCategoryLabel, wbCloseReasonLabel } from '../../wellbeingLabels';
+  import { WB_CLOSE_REASONS, wbCloseReasonLabel } from '../../wellbeingLabels';
+  import { wbCategories, wbCategoryName } from '../../wellbeingCustom';
+  import { wbCustom } from '../../stores/wellbeingCustomization.svelte';
   import MemberName from '../MemberName.svelte';
 
   const {
     stats,
     load = [],
-    pulse = null,
     profiles = null,
     stages = [],
+    tags = [],
   }: {
     stats: WellbeingCellStats;
     load?: WellbeingReferentLoad[];
-    pulse?: WellbeingPulseWeek[] | null;
     profiles?: WellbeingProfileStats | null;
     stages?: WellbeingStageCount[];
+    /** Dossiers actifs par étiquette de la cellule. */
+    tags?: WellbeingStageCount[];
   } = $props();
-  const stageMax = $derived(Math.max(1, ...stages.map((entry) => entry.count)));
 
   const loadMax = $derived(Math.max(1, ...load.map((entry) => entry.active)));
-  const pulseChart = $derived(pulse ? {
-    labels: pulse.map((entry) => entry.week.slice(5)),
-    datasets: [
-      { label: m.wb_pulse_average(), data: pulse.map((entry) => entry.average), backgroundColor: SERIES[0], borderRadius: 4, borderSkipped: false, maxBarThickness: 28 },
-    ],
-  } : null);
 
   const monthLabel = (month: string) => new Date(`${month}-01T00:00:00Z`).toLocaleDateString(dateLocale(), { month: 'short', timeZone: 'UTC' });
   const chartData = $derived({
@@ -82,9 +72,34 @@
     ],
   });
   const categoryMax = $derived(Math.max(1, ...Object.values(stats.activeByCategory)));
+  /** Catégories de la cellule, puis celles retirées qui ont encore des dossiers actifs. */
+  const statCategories = $derived.by(() => {
+    const ids = wbCategories(wbCustom.value).map((category) => category.id);
+    return [...ids, ...Object.keys(stats.activeByCategory).filter((id) => !ids.includes(id))];
+  });
   const reasons = $derived([...WB_CLOSE_REASONS, 'UNSPECIFIED'].map((code) => ({ code, count: stats.closedByReason?.[code] ?? 0 })).filter((entry) => entry.count > 0));
   const reasonMax = $derived(Math.max(1, ...reasons.map((entry) => entry.count)));
 </script>
+
+{#snippet countBars(icon: string, title: string, entries: WellbeingStageCount[])}
+  {@const max = Math.max(1, ...entries.map((entry) => entry.count))}
+  <section class="bg-surface-container-low/40 border border-outline-variant/30 rounded-xl p-6 space-y-4">
+    <h3 class="text-base font-semibold flex items-center gap-2"><Papicon {icon} size={16} /> {title}</h3>
+    <ul class="space-y-3">
+      {#each entries as entry (entry.label)}
+        <li class="space-y-1">
+          <div class="flex justify-between text-xs">
+            <span class="text-on-surface">{entry.label}</span>
+            <span class="font-semibold text-on-surface">{entry.count}</span>
+          </div>
+          <div class="h-2 bg-surface-container-high rounded-full overflow-hidden" aria-hidden="true">
+            <div class="h-2 rounded-full bg-primary transition-all duration-500" style="width: {(entry.count / max) * 100}%"></div>
+          </div>
+        </li>
+      {/each}
+    </ul>
+  </section>
+{/snippet}
 
 <div class="space-y-6">
   <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -115,11 +130,11 @@
     <section class="bg-surface-container-low/40 border border-outline-variant/30 rounded-xl p-6 space-y-4">
       <h3 class="text-base font-semibold flex items-center gap-2"><Papicon icon="folder" size={16} /> {m.wb_stats_by_category({ count: stats.active })}</h3>
       <ul class="space-y-3">
-        {#each WB_CATEGORIES as category (category)}
+        {#each statCategories as category (category)}
           {@const count = stats.activeByCategory[category] ?? 0}
           <li class="space-y-1">
             <div class="flex justify-between text-xs">
-              <span class="text-on-surface">{wbCategoryLabel(category)}</span>
+              <span class="text-on-surface">{wbCategoryName(wbCustom.value, category)}</span>
               <span class="font-semibold text-on-surface">{count}</span>
             </div>
             <div class="h-2 bg-surface-container-high rounded-full overflow-hidden" aria-hidden="true">
@@ -131,7 +146,7 @@
     </section>
   </div>
 
-  {#if (profiles && profiles.notes > 0) || stages.length > 0}
+  {#if (profiles && profiles.notes > 0) || stages.length > 0 || tags.length > 0}
     <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
       {#if profiles && profiles.notes > 0}
         <section class="bg-surface-container-low/40 border border-outline-variant/30 rounded-xl p-6 space-y-4">
@@ -145,22 +160,10 @@
         </section>
       {/if}
       {#if stages.length > 0}
-        <section class="bg-surface-container-low/40 border border-outline-variant/30 rounded-xl p-6 space-y-4">
-          <h3 class="text-base font-semibold flex items-center gap-2"><Papicon icon="Columns" size={16} /> {m.wb_stats_stages()}</h3>
-          <ul class="space-y-3">
-            {#each stages as entry (entry.label)}
-              <li class="space-y-1">
-                <div class="flex justify-between text-xs">
-                  <span class="text-on-surface">{entry.label}</span>
-                  <span class="font-semibold text-on-surface">{entry.count}</span>
-                </div>
-                <div class="h-2 bg-surface-container-high rounded-full overflow-hidden" aria-hidden="true">
-                  <div class="h-2 rounded-full bg-primary transition-all duration-500" style="width: {(entry.count / stageMax) * 100}%"></div>
-                </div>
-              </li>
-            {/each}
-          </ul>
-        </section>
+        {@render countBars('Columns', m.wb_stats_stages(), stages)}
+      {/if}
+      {#if tags.length > 0}
+        {@render countBars('Tag', m.wb_stats_by_tag(), tags)}
       {/if}
     </div>
   {/if}
@@ -209,30 +212,6 @@
     </section>
   {/if}
 
-  {#if pulse && pulseChart}
-    <section class="bg-surface-container-low/40 border border-outline-variant/30 rounded-xl p-6 space-y-4">
-      <div>
-        <h3 class="text-base font-semibold flex items-center gap-2"><Papicon icon="Sun" size={16} /> {m.wb_pulse_title()}</h3>
-        <p class="text-xs text-on-surface-variant mt-1">{m.wb_pulse_desc()}</p>
-      </div>
-      {#if pulse.some((entry) => entry.average !== null)}
-        <div role="img" aria-label={m.wb_pulse_title()}>
-          <Chart type="bar" data={pulseChart} height={200} />
-        </div>
-      {:else}
-        <p class="text-sm text-on-surface-variant">{m.wb_pulse_not_enough()}</p>
-      {/if}
-      <table class="sr-only">
-        <caption>{m.wb_pulse_title()}</caption>
-        <thead><tr><th scope="col">{m.wb_pulse_week()}</th><th scope="col">{m.wb_pulse_average()}</th><th scope="col">{m.wb_pulse_responses()}</th></tr></thead>
-        <tbody>
-          {#each pulse as entry (entry.week)}
-            <tr><th scope="row">{entry.week}</th><td>{entry.average ?? '-'}</td><td>{entry.responses}</td></tr>
-          {/each}
-        </tbody>
-      </table>
-    </section>
-  {/if}
 
   <p class="text-xs text-on-surface-variant flex items-center gap-1.5"><Papicon icon="lock" size={12} /> {m.wb_stats_privacy()}</p>
 </div>

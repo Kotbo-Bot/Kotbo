@@ -44,10 +44,6 @@ model WellbeingConfig {
   sanctionSignal     Boolean  @default(false)
   // Repérer les mots de détresse dans les messages du serveur.
   distressWatch      Boolean  @default(false)
-  // Météo du staff : sondage anonyme du lundi aux membres de ces rôles.
-  pulseEnabled       Boolean  @default(false)
-  pulseRoleIds       String[] @default([])
-  pulseSentAt        DateTime?
   // Référents partagés avec les autres cellules du réseau de serveurs qui
   // partagent aussi : un dossier peut être confié à l'un de leurs membres.
   networkPool        Boolean  @default(false)
@@ -55,6 +51,16 @@ model WellbeingConfig {
   profileRetentionMonths Int  @default(12)
   // Étapes ajoutées par la cellule à la vue en colonnes : [{ id, label }].
   boardColumns       Json     @default("[]")
+  // Réglages de la cellule : catégories et trames [{ id, label, template }],
+  // étapes du protocole de crise [{ label, dueHours }], plans d'action types
+  // [{ id, label, tasks: [{ label, dueDays }] }] et étiquettes [{ id, label }] ;
+  // une catégorie peut porter le plan appliqué à sa création (planId).
+  caseCategories     Json     @default("[]")
+  crisisTasks        Json     @default("[]")
+  taskPlans          Json     @default("[]")
+  caseTags           Json     @default("[]")
+  // Trames de notes de fiche [{ id, label, text }].
+  noteTemplates      Json     @default("[]")
 
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
 
@@ -110,6 +116,8 @@ model WellbeingCase {
   networkReferentGuildId String?
   // Étape de travail (colonne ajoutée par la cellule) ; le statut ne change pas.
   stage                  String?
+  // Étiquettes de la cellule posées sur le dossier.
+  tagIds                 String[] @default([])
 
   guild  Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
   reporterMessages WellbeingReporterMessage[]
@@ -139,6 +147,8 @@ model WellbeingProfile {
   subjectName   String
   // Départ du serveur : les notes ne vivent plus que 3 mois.
   subjectLeftAt DateTime?
+  // Étiquettes de la cellule posées sur la fiche.
+  tagIds        String[]  @default([])
 
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
   notes WellbeingProfileNote[]
@@ -215,33 +225,6 @@ model WellbeingDistressSignal {
   @@index([guildId, handledAt])
   @@index([createdAt])
   @@map("wellbeing_distress_signals")
-}
-
-// Météo du staff : compteurs de notes par semaine, sans lien avec qui a voté.
-model WellbeingPulseWeek {
-  guildId String
-  week    String
-  score1  Int    @default(0)
-  score2  Int    @default(0)
-  score3  Int    @default(0)
-  score4  Int    @default(0)
-  score5  Int    @default(0)
-
-  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
-
-  @@id([guildId, week])
-  @@map("wellbeing_pulse_weeks")
-}
-
-// Qui a déjà répondu cette semaine, par empreinte : un seul vote par personne.
-// Effacé une fois la semaine passée.
-model WellbeingPulseVoter {
-  guildId   String
-  week      String
-  voterHash String
-
-  @@id([guildId, week, voterHash])
-  @@map("wellbeing_pulse_voters")
 }
 
 model WellbeingCaseNote {

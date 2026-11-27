@@ -22,15 +22,13 @@ import * as m from '../lib/paraglide/messages.js';
 import { subscribeForModule } from '../services/core/moduleScope.js';
 import { sendWellbeingAlert, sendWellbeingDirect } from '../services/staff/wellbeingAlerts.js';
 import { appendCaseEvents } from '../services/staff/wellbeingEvents.js';
+import { cleanResources, resourcesForLocale, resourcesMessage } from '../services/staff/wellbeingReportPolicy.js';
 import {
   DISTRESS_COOLDOWN_MS,
-  cleanResources,
   detectDistress,
-  resourcesForLocale,
-  resourcesMessage,
   sanctionModeratorText,
   shouldSignalDistress,
-} from '../services/staff/wellbeingPolicy.js';
+} from '../services/staff/wellbeingWatchPolicy.js';
 import { markProfileBack, markProfileLeft } from '../services/staff/wellbeingProfiles.js';
 
 /** Dernier signal par serveur et par membre : un par jour au plus. */

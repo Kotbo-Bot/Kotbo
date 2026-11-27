@@ -1,18 +1,18 @@
 import { describe, expect, test } from 'bun:test';
+import { alertText } from '../../services/staff/wellbeingAlertPolicy';
 import {
   BREAK_GLASS_REQUEST_HOURS,
-  REPORT_COOLDOWN_MS,
-  alertText,
   breakGlassScope,
-  caseChangeEvents,
-  cleanDriveLink,
-  cleanResources,
   decideBreakGlassError,
   isBreakGlassActive,
+} from '../../services/staff/wellbeingAccessPolicy';
+import { caseChangeEvents, cleanDriveLink, staleCutoff } from '../../services/staff/wellbeingCasePolicy';
+import {
+  REPORT_COOLDOWN_MS,
+  cleanResources,
   resourcesMessage,
   shouldAcceptReport,
-  staleCutoff,
-} from '../../services/staff/wellbeingPolicy';
+} from '../../services/staff/wellbeingReportPolicy';
 
 describe('historique du dossier', () => {
   const before = { status: 'OPEN', severity: 'NORMAL', assigneeId: null, reviewAt: null };

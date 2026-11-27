@@ -5456,13 +5456,12 @@
   "wbc_track_from_cell": "> **Cellule** : {message}",
   "wbc_reply_sent": "Ton message a été transmis à la cellule de suivi. Sa réponse s'affichera avec `/confidentiel suivi`.",
   "wbc_reply_closed": "Ce signalement n'accepte plus de messages : son suivi est terminé. Tu peux en envoyer un nouveau avec `/confidentiel signaler`.",
-  "wbc_panel_text": "**Besoin d'en parler ?**\nLa cellule de suivi du serveur t'écoute, en toute confidentialité. Écris-lui avec ou sans ton nom : seule la cellule lira ton message.",
+  "wbc_panel_text": "**Besoin d'en parler ?**\nLa cellule de suivi du serveur t'écoute, en toute confidentialité. Écris-leur avec ou sans ton nom : seule la cellule lira ton message.",
+  "wbc_panel_text_short": "**La cellule de suivi est là pour toi.**\nUn souci, un coup dur ? Écris-leur, avec ou sans ton nom.",
+  "wbc_panel_text_staff": "**Un moment difficile dans l'équipe ?**\nLa cellule de suivi écoute aussi le staff. Écris-leur en toute confidentialité : ce que tu leur confies reste entre vous.",
+  "wbc_panel_text_anonymous": "**Tu as vu ou vécu quelque chose qui t'inquiète ?**\nSignale-le à la cellule de suivi. Tu peux écrire sans donner ton nom : un code te permettra de suivre ton signalement.",
   "wbc_panel_write": "Écrire à la cellule",
   "wbc_panel_write_anonymous": "Écrire anonymement",
   "wbc_panel_resources": "Ressources d'aide",
-  "wbc_pulse_question": "**Météo du staff de {guild}**\nComment te sens-tu dans ton rôle cette semaine, de 1 (difficile) à 5 (très bien) ? Ta réponse est anonyme : seule une moyenne est montrée, et seulement à partir de cinq réponses.",
-  "wbc_pulse_thanks": "Merci, ta réponse a été comptée anonymement.",
-  "wbc_pulse_already": "Tu as déjà répondu cette semaine.",
-  "wbc_pulse_closed": "Ce sondage n'est plus ouvert.",
   "wbc_distress_dm": "Un de tes messages laisse penser que tu traverses un moment difficile. Tu peux en parler : voici des ressources d'aide. Si tu es en danger immédiat, appelle les secours."
 }

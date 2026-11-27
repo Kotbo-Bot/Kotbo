@@ -8,7 +8,9 @@
   import { dashboardFetch } from '../../api';
   import { dateLocale, m } from '../../i18n';
   import { toast } from '../../stores/toast.svelte';
-  import { wbCategoryLabel, wbSeverityLabel, wbStatusLabel } from '../../wellbeingLabels';
+  import { wbSeverityLabel, wbStatusLabel } from '../../wellbeingLabels';
+  import { wbCategoryName } from '../../wellbeingCustom';
+  import { wbCustom } from '../../stores/wellbeingCustomization.svelte';
   import { wbSeverityTone, wbStatusTone } from '../../wellbeingView';
   import Papicon from '../Papicon.svelte';
   import { Button } from '../ui';
@@ -104,7 +106,7 @@
             aria-expanded={opened?.id === item.id} onclick={() => void open(item)}>
             <span class="min-w-0">
               <span class="font-semibold text-on-surface">{item.title}</span>
-              <span class="text-xs text-on-surface-variant"> · {item.guildName} · {wbCategoryLabel(item.category)}</span>
+              <span class="text-xs text-on-surface-variant"> · {item.guildName} · {wbCategoryName(wbCustom.value, item.category)}</span>
             </span>
             <span class="flex items-center gap-1.5 text-2xs">
               <span class="rounded-full px-2 py-0.5 {wbSeverityTone(item.severity)}">{wbSeverityLabel(item.severity)}</span>

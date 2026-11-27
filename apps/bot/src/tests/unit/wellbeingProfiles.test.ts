@@ -15,7 +15,14 @@ import {
   profileStats,
   shortenedExpiry,
 } from '../../services/staff/wellbeingProfilePolicy';
-import { UNUSUAL_ACCESS_WINDOW_MS, alertText, describeConfigChange, digestCounts, forgetStale, openingsInWindow, weeklyDigestText } from '../../services/staff/wellbeingPolicy';
+import {
+  UNUSUAL_ACCESS_WINDOW_MS,
+  alertText,
+  forgetStale,
+  openingsInWindow,
+} from '../../services/staff/wellbeingAlertPolicy';
+import { describeConfigChange } from '../../services/staff/wellbeingAccessPolicy';
+import { digestCounts, weeklyDigestText } from '../../services/staff/wellbeingWorkloadPolicy';
 import { isSynced } from '../../services/network/networkScope';
 import { openProfileNote, openWellbeing, sealProfileNote } from '../../services/staff/wellbeingCrypto';
 

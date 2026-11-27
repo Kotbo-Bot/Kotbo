@@ -7,7 +7,9 @@
 <script lang="ts">
   import { m } from '../../i18n';
   import { confirmDialog } from '../../stores/confirmDialog.svelte';
-  import { wbCategoryLabel, wbSeverityLabel, wbStatusLabel } from '../../wellbeingLabels';
+  import { wbSeverityLabel, wbStatusLabel } from '../../wellbeingLabels';
+  import { wbCategoryName } from '../../wellbeingCustom';
+  import { wbCustom } from '../../stores/wellbeingCustomization.svelte';
   import { wbBoardColumns, wbSeverityAccent, wbSeverityTone, wbStatusTone, type WbBoardStage, type WbBoardTarget, type WbCaseView } from '../../wellbeingView';
   import { Button } from '../ui';
 
@@ -128,7 +130,7 @@
               class="w-full text-left rounded-lg border-l-4 {wbSeverityAccent(c.severity)} px-3 py-2 transition-colors {selectedId === c.id ? 'bg-primary/10 ring-1 ring-primary/30' : 'bg-surface-container-high/30 hover:bg-surface-container-high/50'} {canWrite ? 'cursor-grab active:cursor-grabbing' : ''}"
             >
               <p class="text-sm font-semibold text-on-surface line-clamp-2">{c.title}</p>
-              <p class="text-xs text-on-surface-variant truncate mt-0.5">{c.subjectName} · {wbCategoryLabel(c.category ?? '')}</p>
+              <p class="text-xs text-on-surface-variant truncate mt-0.5">{c.subjectName} · {wbCategoryName(wbCustom.value, c.category ?? '')}</p>
               <span class="inline-flex flex-wrap gap-1 mt-1.5">
                 <span class="text-2xs font-semibold px-2 py-0.5 rounded-full {wbSeverityTone(c.severity)}">{wbSeverityLabel(c.severity)}</span>
                 {#if column.kind === 'stage'}

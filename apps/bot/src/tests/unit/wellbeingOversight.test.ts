@@ -1,22 +1,22 @@
 import { describe, expect, test } from 'bun:test';
+import { DEFAULT_ALERT_EVENTS, WELLBEING_ALERT_EVENTS, alertText } from '../../services/staff/wellbeingAlertPolicy';
 import {
   ACCESS_REVIEW_DAYS,
-  CLOSED_CASE_RETENTION_DAYS,
-  DEFAULT_ALERT_EVENTS,
-  PURGE_NOTICE_DAYS,
-  PURGE_REQUEST_HOURS,
-  WELLBEING_ALERT_EVENTS,
   accessReviewDue,
   accessReviewMessage,
-  alertText,
+  shouldSendAccessReview,
+} from '../../services/staff/wellbeingAccessPolicy';
+import {
+  CLOSED_CASE_RETENTION_DAYS,
+  PURGE_NOTICE_DAYS,
+  PURGE_REQUEST_HOURS,
   casePurgeDate,
   purgeApprovalError,
   purgeNoticeCutoff,
   purgeRequestPending,
   purgeWarnedCutoff,
-  shouldSendAccessReview,
-  wellbeingCellStats,
-} from '../../services/staff/wellbeingPolicy';
+} from '../../services/staff/wellbeingRetentionPolicy';
+import { wellbeingCellStats } from '../../services/staff/wellbeingWorkloadPolicy';
 
 const DAY = 24 * 60 * 60 * 1000;
 const NOW = new Date('2026-11-25T12:00:00Z');

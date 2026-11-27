@@ -108,8 +108,6 @@ describe('accompagnement et repérage', () => {
       followUpDays: 30,
       sanctionSignal: false,
       distressWatch: false,
-      pulseEnabled: false,
-      pulseRoleIds: [],
     });
   });
 
@@ -140,11 +138,5 @@ describe('accompagnement et repérage', () => {
     expect(noticed.find((item) => item.id === 'distress_noticed')?.ok).toBe(true);
     const off = wbSecurityChecks(base, { accessReviewDue: false });
     expect(off.some((item) => item.id === 'distress_noticed')).toBe(false);
-  });
-
-  test('la météo du staff sans rôle interrogé est à compléter', () => {
-    expect(wbStepComplete(form({ pulseEnabled: true, pulseRoleIds: [] }), 'pulse')).toBe(false);
-    expect(wbStepComplete(form({ pulseEnabled: true, pulseRoleIds: ['r1'] }), 'pulse')).toBe(true);
-    expect(wbStepComplete(form({ pulseEnabled: false }), 'pulse')).toBe(true);
   });
 });

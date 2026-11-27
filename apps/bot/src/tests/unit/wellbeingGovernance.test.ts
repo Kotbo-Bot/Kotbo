@@ -1,16 +1,18 @@
 import { describe, expect, test } from 'bun:test';
 import {
   DEFAULT_ALERT_EVENTS,
-  DISSOLUTION_DELAY_HOURS,
-  REPORTER_REPLY_MAX,
   WELLBEING_ALERT_EVENTS,
   alertPreviews,
   alertText,
+} from '../../services/staff/wellbeingAlertPolicy';
+import {
+  DISSOLUTION_DELAY_HOURS,
   dissolutionDate,
   dissolutionDue,
   emptiesComposition,
   journalCsv,
-} from '../../services/staff/wellbeingPolicy';
+} from '../../services/staff/wellbeingAccessPolicy';
+import { REPORTER_REPLY_MAX } from '../../services/staff/wellbeingReportPolicy';
 
 const HOUR = 3_600_000;
 const NOW = new Date('2026-11-25T12:00:00Z');

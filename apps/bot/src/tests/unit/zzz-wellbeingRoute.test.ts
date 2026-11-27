@@ -11,7 +11,8 @@ import type { Client } from 'discord.js';
 import { DASHBOARD_ACCESS_ADMIN, type AuthClaims } from '../../api/shared.js';
 import { completeModuleMock } from '../helpers/moduleMock.js';
 import { dashboardCall, mockDashboardGate, setDashboardAccess } from '../helpers/honoDashboard.js';
-import { caseVisibilityWhere } from '../../services/staff/wellbeingPolicy.js';
+import { caseVisibilityWhere } from '../../services/staff/wellbeingCasePolicy.js';
+import { REPORT_PANEL_TEMPLATES } from '../../services/staff/wellbeingReportPolicy.js';
 
 process.env.WELLBEING_ENCRYPTION_KEY = 'cle-de-test-bien-etre';
 
@@ -43,6 +44,11 @@ const CONFIG = {
   accessReviewedAt: null,
   accessReviewSentAt: null,
   digestSentAt: null,
+  caseCategories: [] as unknown[],
+  crisisTasks: [] as unknown[],
+  noteTemplates: [] as unknown[],
+  taskPlans: [{ id: 'plan-1', label: 'Médiation', tasks: [{ label: 'Entendre les parties', dueDays: 2 }, { label: 'Bilan', dueDays: null }] }] as unknown[],
+  caseTags: [{ id: 'tag-1', label: 'Mineur' }] as unknown[],
   createdAt: new Date('2026-01-01T00:00:00Z'),
   updatedAt: new Date('2026-01-01T00:00:00Z'),
 };
@@ -101,6 +107,7 @@ const mockDb = {
   guild: { findUnique: mock(async (_args?: unknown) => null) },
   wellbeingConfig: {
     findUnique: mock(async (_args?: unknown) => CONFIG),
+    findMany: mock(async (_args?: unknown): Promise<Array<Record<string, unknown>>> => []),
     update: mock(async (_args?: unknown) => CONFIG),
     upsert: mock(async (_args?: unknown) => CONFIG),
   },
@@ -139,13 +146,15 @@ const mockDb = {
     update: mock(async (_args?: unknown) => signal),
     updateMany: mock(async (_args?: unknown) => ({ count: signal ? 1 : 0 })),
   },
-  wellbeingPulseWeek: {
-    findMany: mock(async (_args?: unknown) => []),
-  },
   wellbeingProfile: {
     findMany: mock(async (_args?: unknown) => []),
     findUnique: mock(async (_args?: unknown) => profile),
     upsert: mock(async (args: { create: Record<string, unknown> }) => ({ id: 'profile-1', subjectLeftAt: null, ...args.create })),
+    update: mock(async (args: { data: Record<string, unknown> }) => ({ ...profile, ...args.data })),
+  },
+  wellbeingCaseTask: {
+    count: mock(async (_args?: unknown) => 0),
+    createMany: mock(async (_args?: unknown) => ({ count: 0 })),
   },
   wellbeingProfileNote: {
     findMany: mock(async (_args?: unknown) => []),
@@ -180,14 +189,17 @@ const applyCrisisProtocolIfDue = mock(async (..._args: unknown[]) => false);
 mockModule('../../services/staff/wellbeingCrisis', { applyCrisisProtocolIfDue, CRISIS_PROTOCOL_EVENT: 'CRISIS_PROTOCOL' });
 const closeTicket = mock(async (..._args: unknown[]) => null);
 mockModule('../../services/features/ticketService', { closeTicket });
-mockModule('../../commands/utility/wellbeing', { wellbeingPanelMessage: mock(() => ({ content: 'panel' })) });
+const wellbeingPanelMessage = mock((_locale: string, template?: string, _text?: string | null) => ({ content: `panel ${template}` }));
+const wellbeingPanelText = mock((template: string, _locale: string) => `texte ${template}`);
+mockModule('../../commands/utility/wellbeing', { wellbeingPanelMessage, wellbeingPanelText });
 type PoolEntry = { userId: string; guildId: string; name: string; guildName: string; active: number };
 let pool: { available: boolean; candidates: PoolEntry[] } = { available: false, candidates: [] };
 let networkRefs: Array<{ id: string; guildId: string }> = [];
+const networkGuildIds = mock(async (_guildId: string): Promise<string[]> => []);
 mockModule('../../services/staff/wellbeingNetwork', {
   networkPool: mock(async () => pool),
   networkReferentCaseRefs: mock(async () => networkRefs),
-  networkGuildIds: mock(async () => []),
+  networkGuildIds,
 });
 const requestDissolution = mock(async () => new Date(Date.now() + 24 * HOUR));
 mockModule('../../services/staff/wellbeingDissolution', {
@@ -236,6 +248,7 @@ beforeEach(() => {
   applyCrisisProtocolIfDue.mockClear();
   closeTicket.mockClear();
   requestDissolution.mockClear();
+  wellbeingPanelMessage.mockClear();
   for (const model of Object.values(mockDb)) {
     for (const fn of Object.values(model)) (fn as { mockClear: () => void }).mockClear();
   }
@@ -461,9 +474,64 @@ describe('transfert de ticket', () => {
 });
 
 describe('message permanent', () => {
+  const CHANNEL = '300000000000000001';
+  const send = mock(async (_message: unknown) => ({}));
+
+  /** Signalements Discord ouverts et un salon où le bot peut écrire. */
+  function withReportsOpen() {
+    mockDb.wellbeingConfig.findUnique.mockImplementation(async () => ({ ...CONFIG, reportEnabled: true }));
+    discordGuild.channels.cache.set(CHANNEL, { id: CHANNEL, name: 'aide', isSendable: () => true, send } as never);
+  }
+
+  function restore() {
+    mockDb.wellbeingConfig.findUnique.mockImplementation(async () => CONFIG);
+    discordGuild.channels.cache.delete(CHANNEL);
+    send.mockClear();
+  }
+
   test('refusé tant que les signalements Discord sont fermés', async () => {
-    const { status } = await call('POST', '/report-panel', { channelId: '300000000000000001' });
+    const { status } = await call('POST', '/report-panel', { channelId: CHANNEL });
     expect(status).toBe(400);
+  });
+
+  test('les modèles proposés montrent leur texte', async () => {
+    const { status, json } = await call('GET', '/report-panel/templates');
+    expect(status).toBe(200);
+    expect(json.templates.map((item: { id: string }) => item.id)).toEqual([...REPORT_PANEL_TEMPLATES]);
+    expect(json.templates[0].text).toBe(`texte ${REPORT_PANEL_TEMPLATES[0]}`);
+  });
+
+  test('le modèle choisi est publié', async () => {
+    withReportsOpen();
+    try {
+      const { status } = await call('POST', '/report-panel', { channelId: CHANNEL, template: 'short' });
+      expect(status).toBe(200);
+      expect(wellbeingPanelMessage.mock.calls[0]?.[1]).toBe('short');
+      expect(send).toHaveBeenCalledTimes(1);
+    } finally {
+      restore();
+    }
+  });
+
+  test('un texte libre remplace le modèle', async () => {
+    withReportsOpen();
+    try {
+      const { status } = await call('POST', '/report-panel', { channelId: CHANNEL, template: 'short', text: '  Notre texte  ' });
+      expect(status).toBe(200);
+      expect(wellbeingPanelMessage.mock.calls[0]?.[2]).toBe('Notre texte');
+    } finally {
+      restore();
+    }
+  });
+
+  test('un modèle inconnu publie le message par défaut', async () => {
+    withReportsOpen();
+    try {
+      await call('POST', '/report-panel', { channelId: CHANNEL, template: 'inconnu' });
+      expect(wellbeingPanelMessage.mock.calls[0]?.[1]).toBe(REPORT_PANEL_TEMPLATES[0]);
+    } finally {
+      restore();
+    }
   });
 });
 
@@ -693,3 +761,163 @@ describe('fiches confidentielles', () => {
     expect(args.data.expiresAt.getTime()).toBeGreaterThan(Date.now() + 300 * 24 * HOUR);
   });
 });
+
+describe('personnalisation de la cellule', () => {
+  test('réservée à la cellule : la direction ne règle rien', async () => {
+    const { status } = await call('PUT', '/customization', { tags: [{ label: 'X' }] }, session(DIR));
+    expect(status).toBe(403);
+    expect(mockDb.wellbeingConfig.update).not.toHaveBeenCalled();
+  });
+
+  test('seuls les réglages envoyés sont enregistrés, nettoyés', async () => {
+    const { status, json } = await call('PUT', '/customization', { tags: [{ label: 'Mineur' }, { label: 'mineur' }, { label: 'Hors serveur' }] });
+    expect(status).toBe(200);
+    const args = mockDb.wellbeingConfig.update.mock.calls[0]?.[0] as { data: Record<string, unknown> };
+    expect(Object.keys(args.data)).toEqual(['caseTags']);
+    expect((args.data.caseTags as Array<{ label: string }>).map((tag) => tag.label)).toEqual(['Mineur', 'Hors serveur']);
+    expect(json.customization.tags).toHaveLength(2);
+  });
+
+  test('l’état de la cellule porte ses réglages', async () => {
+    const { json } = await call('GET', '/status');
+    expect(json.customization.taskPlans[0].label).toBe('Médiation');
+    expect(json.customization.crisisTasks.length).toBeGreaterThan(0);
+    expect(json.customization.crisisDefault).toBe(true);
+  });
+
+  test('une catégorie inconnue de la cellule devient la première proposée', async () => {
+    await call('POST', '/cases', { subjectName: 'S', title: 'T', summary: 'R', category: 'inconnue' });
+    const args = mockDb.wellbeingCase.create.mock.calls[0]?.[0] as { data: { category: string } };
+    expect(args.data.category).toBe('SOUTIEN');
+  });
+
+  test('un dossier ne garde que les étiquettes de la cellule, et l’historique le dit', async () => {
+    const { status } = await call('PATCH', '/cases/case-1', { tagIds: ['tag-1', 'inconnue'] });
+    expect(status).toBe(200);
+    const args = mockDb.wellbeingCase.update.mock.calls[0]?.[0] as { data: { tagIds: string[] } };
+    expect(args.data.tagIds).toEqual(['tag-1']);
+    const events = appendCaseEvents.mock.calls.flatMap((call) => call[1]);
+    expect(events.some((event) => event.type === 'TAGS' && event.toValue === 'Mineur')).toBe(true);
+  });
+
+  test('un plan type ajoute ses tâches au dossier', async () => {
+    const { status } = await call('POST', '/cases/case-1/plan', { planId: 'plan-1' });
+    expect(status).toBe(201);
+    const args = mockDb.wellbeingCaseTask.createMany.mock.calls[0]?.[0] as { data: Array<{ dueAt: Date | null }> };
+    expect(args.data).toHaveLength(2);
+    expect(args.data[1]?.dueAt).toBeNull();
+  });
+
+  test('un plan inconnu est refusé', async () => {
+    const { status } = await call('POST', '/cases/case-1/plan', { planId: 'aucun' });
+    expect(status).toBe(404);
+    expect(mockDb.wellbeingCaseTask.createMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('étiquettes d’une fiche', () => {
+  async function profileCall(method: string, suffix: string, body?: unknown) {
+    setDashboardAccess(DASHBOARD_ACCESS_ADMIN, session(ALICE));
+    const { status, body: json } = await dashboardCall(createWellbeingProfilesRouter(client), method, `/api/dashboard/guilds/${GUILD}/wellbeing${suffix}`, body);
+    return { status, json };
+  }
+
+  test('seules les étiquettes de la cellule sont posées', async () => {
+    profile = { id: 'profile-1', guildId: GUILD, subjectUserId: SUBJECT, subjectName: 'Sujet', tagIds: [] };
+    try {
+      const { status } = await profileCall('PUT', `/profiles/${SUBJECT}/tags`, { tagIds: ['tag-1', 'autre'] });
+      expect(status).toBe(200);
+      const args = mockDb.wellbeingProfile.update.mock.calls[0]?.[0] as { data: { tagIds: string[] } };
+      expect(args.data.tagIds).toEqual(['tag-1']);
+    } finally {
+      profile = null;
+    }
+  });
+
+  test('pas de fiche, pas d’étiquette', async () => {
+    const { status } = await profileCall('PUT', `/profiles/${SUBJECT}/tags`, { tagIds: ['tag-1'] });
+    expect(status).toBe(404);
+  });
+});
+
+describe('personnalisation : création, bilan et réseau', () => {
+  const PLAN_CATEGORY = [{ id: 'SOUTIEN', label: 'Soutien', template: '', planId: 'plan-1' }];
+
+  test('un dossier créé dans une catégorie reliée à un plan reçoit ses tâches', async () => {
+    mockDb.wellbeingConfig.findUnique.mockImplementation(async () => ({ ...CONFIG, caseCategories: PLAN_CATEGORY }));
+    try {
+      await call('POST', '/cases', { subjectName: 'S', title: 'T', summary: 'R', category: 'SOUTIEN' });
+      const args = mockDb.wellbeingCaseTask.createMany.mock.calls[0]?.[0] as { data: unknown[] };
+      expect(args.data).toHaveLength(2);
+    } finally {
+      mockDb.wellbeingConfig.findUnique.mockImplementation(async () => CONFIG);
+    }
+  });
+
+  test('sans plan relié, aucune tâche n’est ajoutée à la création', async () => {
+    await call('POST', '/cases', { subjectName: 'S', title: 'T', summary: 'R', category: 'SOUTIEN' });
+    expect(mockDb.wellbeingCaseTask.createMany).not.toHaveBeenCalled();
+  });
+
+  test('les étiquettes choisies à la création sont gardées si elles existent', async () => {
+    await call('POST', '/cases', { subjectName: 'S', title: 'T', summary: 'R', tagIds: ['tag-1', 'inconnue'] });
+    const args = mockDb.wellbeingCase.create.mock.calls[0]?.[0] as { data: { tagIds: string[] } };
+    expect(args.data.tagIds).toEqual(['tag-1']);
+  });
+
+  test('le bilan compte les dossiers actifs par étiquette', async () => {
+    mockDb.wellbeingCase.findMany.mockImplementationOnce(async () => [
+      { ...makeCase(), tagIds: ['tag-1'] },
+      { ...makeCase({ status: 'CLOSED' }), tagIds: ['tag-1'] },
+    ] as never);
+    const { status, json } = await call('GET', '/stats');
+    expect(status).toBe(200);
+    expect(json.tags).toEqual([{ label: 'Mineur', count: 1 }]);
+  });
+
+  test('les trames de notes s’enregistrent comme les autres réglages', async () => {
+    const { status } = await call('PUT', '/customization', { noteTemplates: [{ label: 'Échange', text: 'Échange du …' }] });
+    expect(status).toBe(200);
+    const args = mockDb.wellbeingConfig.update.mock.calls[0]?.[0] as { data: Record<string, unknown> };
+    expect(Object.keys(args.data)).toEqual(['noteTemplates']);
+  });
+
+  test('hors réseau, aucune cellule à reprendre', async () => {
+    const { status, json } = await call('GET', '/customization/sources');
+    expect(status).toBe(200);
+    expect(json.sources).toEqual([]);
+  });
+
+  test('reprendre les réglages d’une cellule du réseau qui les partage', async () => {
+    const OTHER = '900000000000000002';
+    networkGuildIds.mockImplementation(async () => [GUILD, OTHER]);
+    mockDb.wellbeingConfig.findUnique.mockImplementation(async (args?: unknown) =>
+      ((args as { where: { guildId: string } }).where.guildId === OTHER
+        ? { ...CONFIG, guildId: OTHER, networkPool: true, caseTags: [{ id: 'x', label: 'Partagée' }] }
+        : CONFIG));
+    try {
+      const { status, json } = await call('POST', '/customization/import', { guildId: OTHER, kinds: ['tags'] });
+      expect(status).toBe(200);
+      const args = mockDb.wellbeingConfig.update.mock.calls[0]?.[0] as { where: { guildId: string }; data: { caseTags: Array<{ label: string }> } };
+      expect(args.where.guildId).toBe(GUILD);
+      expect(args.data.caseTags.map((tag) => tag.label)).toEqual(['Partagée']);
+      expect(json.customization.tags[0].label).toBe('Partagée');
+    } finally {
+      networkGuildIds.mockImplementation(async () => []);
+      mockDb.wellbeingConfig.findUnique.mockImplementation(async () => CONFIG);
+    }
+  });
+
+  test('une cellule qui ne partage pas, ou hors du réseau, ne se reprend pas', async () => {
+    const OTHER = '900000000000000002';
+    expect((await call('POST', '/customization/import', { guildId: OTHER, kinds: ['tags'] })).status).toBe(404);
+    networkGuildIds.mockImplementation(async () => [GUILD, OTHER]);
+    try {
+      expect((await call('POST', '/customization/import', { guildId: OTHER, kinds: ['tags'] })).status).toBe(403);
+      expect(mockDb.wellbeingConfig.update).not.toHaveBeenCalled();
+    } finally {
+      networkGuildIds.mockImplementation(async () => []);
+    }
+  });
+});
+
