@@ -11,7 +11,7 @@ const modules: Record<string, Record<string, unknown>> = {
 };
 for (const [file, exports] of Object.entries(modules)) mock.module(path.resolve(import.meta.dir, '..', file), () => exports);
 
-const { dashboardFetch, isExpectedRefusal } = await import('./client');
+const { authorizedFetch, dashboardFetch, isExpectedRefusal } = await import('./client');
 const { DashboardApiError } = await import('./errors');
 
 describe('requête annulée par l\'appelant', () => {
@@ -33,3 +33,17 @@ describe('instance bloquée', () => {
   });
 });
 
+describe('écriture sans corps', () => {
+  test('annonce du JSON, sinon le bot répond 415 ; une lecture reste sans en-tête', async () => {
+    const fetchSpy = spyOn(globalThis, 'fetch').mockImplementation((async () => new Response('{}')) as unknown as typeof fetch);
+    const sent = () => new Headers(fetchSpy.mock.calls.at(-1)?.[1]?.headers).get('content-type');
+
+    await authorizedFetch('https://api.test/onboarding/complete', { method: 'POST' });
+    expect(sent()).toBe('application/json');
+    await authorizedFetch('https://api.test/state');
+    expect(sent()).toBeNull();
+    await authorizedFetch('https://api.test/upload', { method: 'POST', body: new FormData() });
+    expect(sent()).toBeNull();
+    fetchSpy.mockRestore();
+  });
+});

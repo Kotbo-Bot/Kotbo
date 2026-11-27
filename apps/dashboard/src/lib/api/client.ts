@@ -140,7 +140,12 @@ export async function authorizedFetch(
     });
   }
 
+  // Une ecriture sans corps l'annonce quand meme en JSON : le bot repond 415 a
+  // un POST sans Content-Type (« Continuer en gratuit » restait bloque).
+  const bodylessWrite = init.body == null && !['GET', 'HEAD'].includes((init.method ?? 'GET').toUpperCase());
+
   const headers = {
+    ...(bodylessWrite ? JSON_HEADERS : undefined),
     ...init.headers,
     'Authorization': `Bearer ${token}`,
     'Accept': 'application/json'
