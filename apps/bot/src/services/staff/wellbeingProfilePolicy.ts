@@ -82,6 +82,9 @@ export function profilePurgeWarnedCutoff(now: Date): Date {
   return new Date(now.getTime() - PURGE_NOTICE_DAYS * DAY_MS);
 }
 
+/** Refus d'ouvrir sa propre fiche : elle serait lue ou écrite par la personne qu'elle concerne. */
+export const PROFILE_SELF_REFUSAL = 'Cette fiche vous concerne : seuls les autres membres de la cellule peuvent la tenir.';
+
 /** Refus de prolonger une note, ou null : garder plus longtemps se justifie. */
 export function profileExtendError(reason: string): string | null {
   return reason.trim() ? null : 'Indiquez pourquoi cette note doit être gardée plus longtemps.';
@@ -104,6 +107,12 @@ export function shortenedExpiry(
   const notice = profilePurgeNoticeCutoff(now);
   const next = target > notice ? target : notice;
   return next < note.expiresAt ? next : null;
+}
+
+/** Nouveau nom à écrire sur la fiche, ou null : seul un pseudo différent et non vide la réécrit. */
+export function profileNameChange(stored: string | null, current: string): string | null {
+  const name = current.trim();
+  return name && name !== stored ? name : null;
 }
 
 /** Refus d'effacer une note, ou null : seul son auteur revient sur ce qu'il a écrit. */

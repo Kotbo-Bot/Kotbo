@@ -20434,6 +20434,8 @@
   "wb_profiles_note_label": "Add a note",
   "wb_profiles_note_hint": "Only write what the follow-up needs. The person can ask to read what concerns them.",
   "wb_profiles_note_add": "Save the note",
+  "wb_profiles_self_title": "This profile is about you",
+  "wb_profiles_self_desc": "Only the other members of the unit can keep your profile or open a case about you: you neither read nor write what concerns you.",
   "wb_profiles_sensitive_label": "Contains sensitive information (health, private life)",
   "wb_profiles_sensitive_hint": "The note is kept for 3 months at most and stays hidden until clicked.",
   "wb_profiles_sensitive_badge": "Sensitive",

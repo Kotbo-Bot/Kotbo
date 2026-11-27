@@ -15,7 +15,7 @@
   import { wbStatusTone } from '../../wellbeingView';
   import MemberSearchSelect from '../MemberSearchSelect.svelte';
   import Papicon from '../Papicon.svelte';
-  import { Button, EmptyState } from '../ui';
+  import { Button, Callout, EmptyState } from '../ui';
 
   type ProfileHeader = { id: string; subjectUserId: string; subjectName: string; subjectLeftAt: string | null; noteCount: number; nextExpiry: string | null };
   type ProfileNote = { id: string; authorId: string; authorName: string; content: string; sensitive: boolean; createdAt: string; expiresAt: string; extendedAt: string | null; extendedByName: string | null; extendedReason: string | null };
@@ -62,6 +62,8 @@
 
   const formatDate = (iso: string) => new Date(iso).toLocaleDateString(dateLocale());
   const visible = $derived(profiles.filter((item) => item.subjectName.toLowerCase().includes(search.trim().toLowerCase())));
+  /** Sa propre fiche ne s'ouvre pas : le bot la refuse, la page le dit avant. */
+  const isSelf = $derived(!!subject && subject.userId === authStore.user?.id);
   const subjectCases = $derived(subject ? cases.filter((item) => item.subjectUserId === subject?.userId) : []);
 
   async function loadList() {
@@ -82,6 +84,7 @@
     sensitive = false;
     shownSensitive = [];
     extendingId = null;
+    if (userId === authStore.user?.id) return;
     loading = true;
     try {
       const res = await dashboardFetch(`/wellbeing/profiles/${userId}`);
@@ -213,9 +216,14 @@
             <p class="text-xs text-on-surface-variant">{m.wb_profiles_left_hint({ date: formatDate(profile.subjectLeftAt) })}</p>
           {/if}
         </div>
-        <Button size="sm" variant="secondary" icon="FolderPlus" onclick={() => subject && onnewcase({ subjectUserId: subject.userId, subjectName: subject.name })}>{m.wb_profiles_new_case()}</Button>
+        {#if !isSelf}
+          <Button size="sm" variant="secondary" icon="FolderPlus" onclick={() => subject && onnewcase({ subjectUserId: subject.userId, subjectName: subject.name })}>{m.wb_profiles_new_case()}</Button>
+        {/if}
       </div>
 
+      {#if isSelf}
+        <Callout variant="info" title={m.wb_profiles_self_title()}>{m.wb_profiles_self_desc()}</Callout>
+      {:else}
       {#if subjectCases.length > 0}
         <div class="space-y-1.5">
           <p class="text-xs font-medium text-on-surface-variant">{m.wb_profiles_cases({ count: subjectCases.length })}</p>
@@ -287,6 +295,7 @@
             <Button size="sm" variant="primary" icon="Send" disabled={!text.trim()} loading={saving} onclick={() => void addNote()}>{m.wb_profiles_note_add()}</Button>
           </div>
         </div>
+      {/if}
       {/if}
     {/if}
   </section>
