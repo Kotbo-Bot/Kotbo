@@ -73,3 +73,14 @@ export function stageChange(
   if (status === 'CLOSED') return { error: "Un dossier clos ne se range pas dans une étape : rouvrez-le d'abord." };
   return patch.stage === existing.stage ? null : { stage: patch.stage };
 }
+
+/** Bilan : dossiers actifs rangés dans chaque étape, dans l'ordre des colonnes. */
+export function stageCounts(
+  cases: ReadonlyArray<{ status: string; stage: string | null }>,
+  columns: readonly BoardColumn[],
+): Array<{ label: string; count: number }> {
+  return columns.map((column) => ({
+    label: column.label,
+    count: cases.filter((item) => item.status !== 'CLOSED' && item.stage === column.id).length,
+  }));
+}

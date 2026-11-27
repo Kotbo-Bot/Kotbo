@@ -27,6 +27,7 @@ import { sendWellbeingAlert, sendWellbeingDirect } from './wellbeingAlerts.js';
 import { appendCaseEvents } from './wellbeingEvents.js';
 import { profilePurgeNoticeCutoff } from './wellbeingProfilePolicy.js';
 import { reconcileProfileDepartures } from './wellbeingProfiles.js';
+import { loadCellMembers } from './wellbeingRoles.js';
 import {
   accessReviewMessage,
   cellMemberIds,
@@ -208,13 +209,19 @@ async function sendWeeklyDigests(client: Client, now: Date): Promise<void> {
     if (!guild) continue;
     // Marqué d'abord : une erreur d'envoi ne fait pas repartir le résumé chaque heure.
     await prisma.wellbeingConfig.update({ where: { guildId: config.guildId }, data: { digestSentAt: now } });
+    // Membres par rôle compris : sans cache complet, certains ne recevraient rien.
+    await loadCellMembers(guild, config.teamRoleIds);
     const members = guild.members.cache.map((member) => ({ id: member.id, roleIds: [...member.roles.cache.keys()] }));
     const cases = await prisma.wellbeingCase.findMany({
       where: { guildId: config.guildId, deletedAt: null, status: { not: 'CLOSED' } },
       select: { status: true, severity: true, source: true, assigneeId: true, subjectUserId: true, reviewAt: true },
     });
+    const profileNotes = (await prisma.wellbeingProfileNote.findMany({
+      where: { profile: { guildId: config.guildId } },
+      select: { expiresAt: true, profile: { select: { subjectUserId: true } } },
+    })).map((note) => ({ expiresAt: note.expiresAt, subjectUserId: note.profile.subjectUserId }));
     for (const memberId of cellMemberIds(config, members)) {
-      const text = weeklyDigestText(guild.name, digestCounts(cases, memberId, now));
+      const text = weeklyDigestText(guild.name, digestCounts(cases, memberId, now, profileNotes));
       if (text) await sendWellbeingDirect(client, [memberId], text);
     }
   }

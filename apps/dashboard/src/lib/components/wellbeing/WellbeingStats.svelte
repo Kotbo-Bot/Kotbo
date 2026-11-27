@@ -21,6 +21,18 @@
     critical: number;
     overloaded: boolean;
   }
+  /** Fiches : des nombres seulement, jamais de nom ni de contenu. */
+  export interface WellbeingProfileStats {
+    people: number;
+    notes: number;
+    sensitive: number;
+    expiringSoon: number;
+  }
+  /** Dossiers actifs dans chaque étape ajoutée par la cellule. */
+  export interface WellbeingStageCount {
+    label: string;
+    count: number;
+  }
   /** Météo du staff : une moyenne seulement à partir de cinq réponses. */
   export interface WellbeingPulseWeek {
     week: string;
@@ -38,7 +50,20 @@
   import { WB_CATEGORIES, WB_CLOSE_REASONS, wbCategoryLabel, wbCloseReasonLabel } from '../../wellbeingLabels';
   import MemberName from '../MemberName.svelte';
 
-  const { stats, load = [], pulse = null }: { stats: WellbeingCellStats; load?: WellbeingReferentLoad[]; pulse?: WellbeingPulseWeek[] | null } = $props();
+  const {
+    stats,
+    load = [],
+    pulse = null,
+    profiles = null,
+    stages = [],
+  }: {
+    stats: WellbeingCellStats;
+    load?: WellbeingReferentLoad[];
+    pulse?: WellbeingPulseWeek[] | null;
+    profiles?: WellbeingProfileStats | null;
+    stages?: WellbeingStageCount[];
+  } = $props();
+  const stageMax = $derived(Math.max(1, ...stages.map((entry) => entry.count)));
 
   const loadMax = $derived(Math.max(1, ...load.map((entry) => entry.active)));
   const pulseChart = $derived(pulse ? {
@@ -105,6 +130,40 @@
       </ul>
     </section>
   </div>
+
+  {#if (profiles && profiles.notes > 0) || stages.length > 0}
+    <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+      {#if profiles && profiles.notes > 0}
+        <section class="bg-surface-container-low/40 border border-outline-variant/30 rounded-xl p-6 space-y-4">
+          <h3 class="text-base font-semibold flex items-center gap-2"><Papicon icon="StickyNote" size={16} /> {m.wb_stats_profiles()}</h3>
+          <div class="grid grid-cols-2 gap-4">
+            <StatTile icon="Users" tone="bg-primary/10 text-primary" value={profiles.people} label={m.wb_stats_profiles_people()} />
+            <StatTile icon="StickyNote" tone="bg-surface-container-high/60 text-on-surface" value={profiles.notes} label={m.wb_stats_profiles_notes()} />
+            <StatTile icon="eye" tone="bg-warning/10 text-on-warning-container" value={profiles.sensitive} label={m.wb_stats_profiles_sensitive()} />
+            <StatTile icon="Clock" tone="bg-error/10 text-on-error-container" value={profiles.expiringSoon} label={m.wb_stats_profiles_expiring()} />
+          </div>
+        </section>
+      {/if}
+      {#if stages.length > 0}
+        <section class="bg-surface-container-low/40 border border-outline-variant/30 rounded-xl p-6 space-y-4">
+          <h3 class="text-base font-semibold flex items-center gap-2"><Papicon icon="Columns" size={16} /> {m.wb_stats_stages()}</h3>
+          <ul class="space-y-3">
+            {#each stages as entry (entry.label)}
+              <li class="space-y-1">
+                <div class="flex justify-between text-xs">
+                  <span class="text-on-surface">{entry.label}</span>
+                  <span class="font-semibold text-on-surface">{entry.count}</span>
+                </div>
+                <div class="h-2 bg-surface-container-high rounded-full overflow-hidden" aria-hidden="true">
+                  <div class="h-2 rounded-full bg-primary transition-all duration-500" style="width: {(entry.count / stageMax) * 100}%"></div>
+                </div>
+              </li>
+            {/each}
+          </ul>
+        </section>
+      {/if}
+    </div>
+  {/if}
 
   {#if reasons.length > 0}
     <section class="bg-surface-container-low/40 border border-outline-variant/30 rounded-xl p-6 space-y-4">

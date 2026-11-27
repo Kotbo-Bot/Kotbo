@@ -98,7 +98,7 @@ describe('chiffres du résumé', () => {
       { ...base, status: 'CLOSED', assigneeId: 'me' },
       { ...base, source: 'DISCORD', subjectUserId: 'me' },
     ], 'me', NOW);
-    expect(counts).toEqual({ assigned: 2, reviewsThisWeek: 1, triage: 1, criticalUnassigned: 1 });
+    expect(counts).toEqual({ assigned: 2, reviewsThisWeek: 1, triage: 1, criticalUnassigned: 1, notesExpiring: 0 });
   });
 
   test('le lundi à partir de 8 h, une fois par semaine', () => {

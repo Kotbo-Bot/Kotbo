@@ -72,9 +72,10 @@ import { closeTicket } from '../../../../services/features/ticketService.js';
 import { wellbeingPanelMessage } from '../../../../commands/utility/wellbeing.js';
 import { resolveGuildLocale } from '../../../../utils/i18n.js';
 import { bodyText } from '../../../../utils/bodyText.js';
-import { PROFILE_RETENTION_DEFAULT_MONTHS, cleanProfileRetention } from '../../../../services/staff/wellbeingProfilePolicy.js';
+import { PROFILE_RETENTION_DEFAULT_MONTHS, cleanProfileRetention, profileStats } from '../../../../services/staff/wellbeingProfilePolicy.js';
 import { applyProfileRetention } from '../../../../services/staff/wellbeingProfiles.js';
-import { STAGE_EVENT, cleanBoardColumns, describeBoardColumns, stageChange, stageLabel } from '../../../../services/staff/wellbeingBoardPolicy.js';
+import { loadCellMembers } from '../../../../services/staff/wellbeingRoles.js';
+import { STAGE_EVENT, cleanBoardColumns, describeBoardColumns, stageChange, stageCounts, stageLabel } from '../../../../services/staff/wellbeingBoardPolicy.js';
 import { randomUUID } from 'node:crypto';
 import {
   CASE_INCLUDE,
@@ -120,9 +121,12 @@ export function createWellbeingRouter(client: Client) {
   const gate = guildRoute(client);
 
   /** Membres de la cellule présents sur le serveur, désignés ou par rôle. */
-  const teamIdsOf = (state: WellbeingState) => (state.config
-    ? cellMemberIds(state.config, [...(state.discordGuild?.members.cache.values() ?? [])].map((member) => ({ id: member.id, roleIds: [...member.roles.cache.keys()] })))
-    : []);
+  /** Membres de la cellule, rôles compris : le cache est complété au besoin. */
+  const teamIdsOf = async (state: WellbeingState) => {
+    if (!state.config) return [];
+    await loadCellMembers(state.discordGuild, state.config.teamRoleIds);
+    return cellMemberIds(state.config, [...(state.discordGuild?.members.cache.values() ?? [])].map((member) => ({ id: member.id, roleIds: [...member.roles.cache.keys()] })));
+  };
 
   /** Relit un dossier complet après un geste. */
   const fullCase = async (caseId: string) =>
@@ -1221,19 +1225,27 @@ export function createWellbeingRouter(client: Client) {
     try {
       const state = await resolveWellbeingRole(client, guildId, user.userId);
       if (!state.isTeamMember && !state.isDirector) return send(c, { error: 'Accès refusé.' }, 403);
-      const [cases, pulseWeeks] = await Promise.all([
+      const [cases, pulseWeeks, profileNotes] = await Promise.all([
         prisma.wellbeingCase.findMany({
           where: caseVisibilityWhere(guildId, user.userId),
           select: {
-            status: true, severity: true, category: true, source: true, assigneeId: true, createdAt: true, closedReason: true,
+            status: true, severity: true, category: true, source: true, assigneeId: true, createdAt: true, closedReason: true, stage: true,
             events: { where: { type: { in: ['STATUS', 'ASSIGNEE'] } }, select: { type: true, toValue: true, createdAt: true }, orderBy: { createdAt: 'asc' } },
           },
         }),
         prisma.wellbeingPulseWeek.findMany({ where: { guildId }, orderBy: { week: 'desc' }, take: PULSE_WEEKS_SHOWN }),
+        // Sa propre fiche n'entre pas dans ses chiffres, comme ses dossiers.
+        prisma.wellbeingProfileNote.findMany({
+          where: { profile: { guildId, subjectUserId: { not: user.userId } } },
+          select: { profileId: true, expiresAt: true, sensitive: true },
+        }),
       ]);
+      const now = new Date();
       return send(c, {
-        stats: wellbeingCellStats(cases, new Date()),
-        load: referentLoad(cases, teamIdsOf(state)),
+        stats: wellbeingCellStats(cases, now),
+        profiles: profileStats(profileNotes, now),
+        stages: stageCounts(cases, cleanBoardColumns(state.config?.boardColumns, newColumnId)),
+        load: referentLoad(cases, await teamIdsOf(state)),
         pulse: state.config?.pulseEnabled || pulseWeeks.length > 0 ? pulseSummary(pulseWeeks) : null,
       });
     } catch (err) {
@@ -1271,7 +1283,7 @@ export function createWellbeingRouter(client: Client) {
     try {
       const state = await resolveWellbeingRole(client, guildId, c.var.dashboardUser.userId);
       if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule de suivi.' }, 403);
-      const members = teamIdsOf(state).map((id) => {
+      const members = (await teamIdsOf(state)).map((id) => {
         const member = state.discordGuild?.members.cache.get(id);
         return { id, name: member?.displayName ?? member?.user.username ?? id };
       });
@@ -1463,7 +1475,7 @@ export function createWellbeingRouter(client: Client) {
         select: { status: true, severity: true, assigneeId: true },
       });
       const exclude = subject && SNOWFLAKE_RE.test(subject) ? [subject] : [];
-      return send(c, { userId: suggestAssignee(referentLoad(cases, teamIdsOf(state)), exclude) });
+      return send(c, { userId: suggestAssignee(referentLoad(cases, await teamIdsOf(state)), exclude) });
     } catch (err) {
       logger.error('WellbeingAPI', 'Error suggesting assignee:', err);
       return fail(c, err, 'Erreur lors de la suggestion du référent.', 'WellbeingAPI');
