@@ -13,6 +13,7 @@ import {
   REPORTER_REPLY_MAX,
   REPORT_PANEL_TEMPLATES,
   cleanPanelTemplate,
+  cleanPanelText,
   cleanResources,
   resourcesMessage,
 } from '../../../../services/staff/wellbeingReportPolicy.js';
@@ -189,13 +190,15 @@ export function createWellbeingCareRouter(client: Client) {
       if (!state.config?.reportEnabled) {
         return send(c, { error: "Ouvrez d'abord les signalements Discord dans les réglages de la cellule." }, 400);
       }
-      const body = await readBody<{ channelId?: string; template?: string }>(c);
+      const body = await readBody<{ channelId?: string; template?: string; text?: string }>(c);
       const channelId = bodyText(body?.channelId, 20);
       const channel = SNOWFLAKE_RE.test(channelId) ? state.discordGuild?.channels.cache.get(channelId) : undefined;
       if (!channel || !channel.isSendable()) return send(c, { error: 'Salon introuvable ou fermé au bot.' }, 400);
       const locale = await resolveGuildLocale(guildId, state.discordGuild?.preferredLocale);
-      await channel.send(wellbeingPanelMessage(locale, cleanPanelTemplate(body?.template)));
-      await audit(client, c, guildId, 'Message Cellule de suivi', `Message permanent publié dans #${channel.name}.`);
+      // Un texte écrit par la cellule remplace celui du modèle ; les boutons restent.
+      const text = cleanPanelText(body?.text);
+      await channel.send(wellbeingPanelMessage(locale, cleanPanelTemplate(body?.template), text));
+      await audit(client, c, guildId, 'Message Cellule de suivi', `Message permanent publié dans #${channel.name}${text ? ' (texte de la cellule)' : ''}.`);
       return send(c, { ok: true });
     } catch (err) {
       logger.error('WellbeingAPI', 'Error posting panel:', err);

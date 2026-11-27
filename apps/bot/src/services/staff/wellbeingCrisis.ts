@@ -9,7 +9,7 @@
 import prisma from '../../utils/db.js';
 import { sealNote } from './wellbeingCrypto.js';
 import { appendCaseEvents } from './wellbeingEvents.js';
-import { CRISIS_REVIEW_HOURS, MAX_CASE_TASKS, crisisProtocolDue, crisisTaskDrafts } from './wellbeingCasePolicy.js';
+import { CRISIS_PROTOCOL_TASKS, CRISIS_REVIEW_HOURS, MAX_CASE_TASKS, crisisProtocolDue, crisisTaskDrafts } from './wellbeingCasePolicy.js';
 
 export const CRISIS_PROTOCOL_EVENT = 'CRISIS_PROTOCOL';
 
@@ -23,6 +23,8 @@ export async function applyCrisisProtocolIfDue(
   nextSeverity: string,
   enabled: boolean,
   actor: { id: string | null; name: string },
+  /** Étapes réglées par la cellule, sinon celles de départ. */
+  tasks: ReadonlyArray<{ label: string; dueHours: number }> = CRISIS_PROTOCOL_TASKS,
   now: Date = new Date(),
 ): Promise<boolean> {
   if (!crisisProtocolDue(previousSeverity, nextSeverity, { enabled, applied: false })) return false;
@@ -31,7 +33,7 @@ export async function applyCrisisProtocolIfDue(
 
   // Le plan d'action garde sa limite : les étapes en trop ne sont pas ajoutées.
   const room = Math.max(0, MAX_CASE_TASKS - (await prisma.wellbeingCaseTask.count({ where: { caseId: item.id } })));
-  const drafts = crisisTaskDrafts(now).slice(0, room);
+  const drafts = crisisTaskDrafts(now, tasks).slice(0, room);
   if (drafts.length > 0) {
     await prisma.wellbeingCaseTask.createMany({
       data: drafts.map((draft) => ({

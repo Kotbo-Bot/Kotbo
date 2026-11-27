@@ -31,7 +31,15 @@ import { bodyText } from '../../../../utils/bodyText.js';
 import { PROFILE_RETENTION_DEFAULT_MONTHS, cleanProfileRetention } from '../../../../services/staff/wellbeingProfilePolicy.js';
 import { applyProfileRetention } from '../../../../services/staff/wellbeingProfiles.js';
 import { cleanBoardColumns, describeBoardColumns } from '../../../../services/staff/wellbeingBoardPolicy.js';
-import { actorName, audit, HOUR_MS, newColumnId, resolveWellbeingRole, SNOWFLAKE_RE } from './wellbeingShared.js';
+import { actorName, audit, customizationOf, HOUR_MS, newColumnId, resolveWellbeingRole, SNOWFLAKE_RE } from './wellbeingShared.js';
+import {
+  cleanCaseCategories,
+  cleanCrisisTasks,
+  cleanTags,
+  cleanTaskPlans,
+  describeCustomization,
+  type CustomizationKind,
+} from '../../../../services/staff/wellbeingCustomPolicy.js';
 import { createWellbeingBreakGlassRouter } from './wellbeingBreakGlass.js';
 import { createWellbeingCasesRouter } from './wellbeingCases.js';
 import { createWellbeingCaseItemsRouter } from './wellbeingCaseItems.js';
@@ -73,6 +81,8 @@ export function createWellbeingRouter(client: Client) {
         dissolutionByName: state.config?.dissolutionByName ?? null,
         // Étapes de la vue en colonnes : seulement pour qui lit les dossiers.
         boardColumns: state.canReadCases ? cleanBoardColumns(state.config?.boardColumns, newColumnId) : [],
+        // Catégories, protocole de crise, plans types et étiquettes de la cellule.
+        customization: state.canReadCases ? customizationOf(state.config) : null,
       });
     } catch (err) {
       logger.error('WellbeingAPI', 'Error fetching status:', err);
@@ -306,6 +316,32 @@ export function createWellbeingRouter(client: Client) {
     } catch (err) {
       logger.error('WellbeingAPI', 'Error saving board columns:', err);
       return fail(c, err, "Erreur lors de l'enregistrement des colonnes.", 'WellbeingAPI');
+    }
+  });
+
+  // Réglages de la cellule : catégories et trames, protocole de crise, plans
+  // d'action types, étiquettes. Seuls les réglages envoyés changent.
+  router.put(`${base}/customization`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    try {
+      const state = await resolveWellbeingRole(client, guildId, c.var.dashboardUser.userId);
+      if (!state.canWriteCases || !state.config) return send(c, { error: 'Réservé à la cellule de suivi.' }, 403);
+      const body = await readBody<Partial<Record<CustomizationKind, unknown>>>(c);
+      const changes: Array<{ kind: CustomizationKind; column: string; value: Array<{ label: string }> }> = [];
+      if (body?.categories !== undefined) changes.push({ kind: 'categories', column: 'caseCategories', value: cleanCaseCategories(body.categories, newColumnId) });
+      if (body?.crisisTasks !== undefined) changes.push({ kind: 'crisisTasks', column: 'crisisTasks', value: cleanCrisisTasks(body.crisisTasks) });
+      if (body?.taskPlans !== undefined) changes.push({ kind: 'taskPlans', column: 'taskPlans', value: cleanTaskPlans(body.taskPlans, newColumnId) });
+      if (body?.tags !== undefined) changes.push({ kind: 'tags', column: 'caseTags', value: cleanTags(body.tags, newColumnId) });
+      if (changes.length === 0) return send(c, { error: 'Aucun réglage reçu.' }, 400);
+      const data = Object.fromEntries(changes.map((change) => [change.column, change.value as unknown as Prisma.InputJsonValue]));
+      await prisma.wellbeingConfig.update({ where: { guildId }, data });
+      for (const change of changes) {
+        await audit(client, c, guildId, 'Réglages Cellule de suivi', describeCustomization(change.kind, change.value));
+      }
+      return send(c, { customization: customizationOf({ ...state.config, ...data }) });
+    } catch (err) {
+      logger.error('WellbeingAPI', 'Error saving customization:', err);
+      return fail(c, err, "Erreur lors de l'enregistrement des réglages.", 'WellbeingAPI');
     }
   });
 

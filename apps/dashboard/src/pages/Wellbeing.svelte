@@ -5,7 +5,11 @@
   import { toast } from '../lib/stores/toast.svelte';
   import { confirmDialog } from '../lib/stores/confirmDialog.svelte';
   import ModulePage from '../lib/components/ModulePage.svelte';
-  import { WB_CLOSE_REASONS, wbCloseReasonLabel, wbCaseEventLabel, WB_SEVERITIES, WB_STATUSES, wbCategoryLabel, wbSeverityLabel, wbStatusLabel } from '../lib/wellbeingLabels';
+  import { WB_CLOSE_REASONS, wbCloseReasonLabel, wbCaseEventLabel, WB_SEVERITIES, WB_STATUSES, wbSeverityLabel, wbStatusLabel } from '../lib/wellbeingLabels';
+  import { WB_EMPTY_CUSTOMIZATION, wbCaseTags, wbCategoryName, wbFilterByTag, type WbCustomization } from '../lib/wellbeingCustom';
+  import { wbCustom } from '../lib/stores/wellbeingCustomization.svelte';
+  import CustomizationPanel from '../lib/components/wellbeing/CustomizationPanel.svelte';
+  import TagPicker from '../lib/components/wellbeing/TagPicker.svelte';
   import WellbeingStats, { type WellbeingCellStats, type WellbeingProfileStats, type WellbeingPulseWeek, type WellbeingReferentLoad, type WellbeingStageCount } from '../lib/components/wellbeing/WellbeingStats.svelte';
   import CaseTasks from '../lib/components/wellbeing/CaseTasks.svelte';
   import ReporterThread from '../lib/components/wellbeing/ReporterThread.svelte';
@@ -47,6 +51,8 @@
     accessReviewDue: boolean;
     /** Étapes ajoutées par la cellule à la vue en colonnes. */
     boardColumns?: WbBoardStage[];
+    /** Catégories, protocole de crise, plans types et étiquettes de la cellule. */
+    customization?: WbCustomization | null;
     /** Désactivation de la cellule demandée par le propriétaire, effective à cette date. */
     dissolutionAt: string | null;
     dissolutionByName: string | null;
@@ -68,7 +74,7 @@
   const selectedHeader = $derived(cases.find((c) => c.id === selectedCaseId) ?? null);
   const selectedCase = $derived(detail && detail.id === selectedCaseId ? detail : null);
 
-  type Tab = 'cases' | 'profiles' | 'stats' | 'resources' | 'access' | 'settings';
+  type Tab = 'cases' | 'profiles' | 'stats' | 'resources' | 'custom' | 'access' | 'settings';
   type DetailTab = 'timeline' | 'tasks' | 'documents';
   let detailTab = $state<DetailTab>('timeline');
   /** Petit écran : la fiche remplace la liste après un choix. */
@@ -88,13 +94,16 @@
   let caseFilter = $state<ListFilter>('active');
   let caseSearch = $state('');
   let caseSort = $state<WbCaseSort>('recent');
+  /** Étiquette choisie pour filtrer la liste et les colonnes ; `null` : toutes. */
+  let tagFilter = $state<string | null>(null);
+  const tags = $derived(wbCustom.value.tags);
   const viewerId = $derived(authStore.user?.id);
   const now = new Date();
   const purgeInfo = $derived(selectedCase ? wbPurgeInfo(selectedCase, now) : null);
   const stats = $derived(wbCaseStats(cases, now));
   const visibleCases = $derived(caseFilter === 'trash'
     ? wbSearchCases(trashCases, caseSearch)
-    : wbSortCases(wbSearchCases(wbFilterCases(cases, caseFilter, viewerId), caseSearch), caseSort));
+    : wbSortCases(wbFilterByTag(wbSearchCases(wbFilterCases(cases, caseFilter, viewerId), caseSearch), tagFilter), caseSort));
   const linkedCases = $derived(selectedHeader ? wbLinkedCases(cases, selectedHeader) : []);
   const timeline = $derived(selectedCase ? wbCaseTimeline(selectedCase) : []);
   /** Historique réduit : notes seules, ou actions à la suite repliées ; le choix est gardé. */
@@ -335,7 +344,7 @@
     if (view === 'board' && caseFilter === 'trash') caseFilter = 'active';
     try { localStorage.setItem(VIEW_KEY, view); } catch { /* stockage indisponible : réglage gardé pour la session */ }
   }
-  const boardCases = $derived(wbSearchCases(cases, caseSearch));
+  const boardCases = $derived(wbFilterByTag(wbSearchCases(cases, caseSearch), tagFilter));
   /** Étapes de la vue en colonnes, propres à la cellule. */
   let boardStages = $state<WbBoardStage[]>([]);
 
@@ -390,6 +399,7 @@
       { id: 'cases', label: m.wb_tab_cases(), icon: 'folder', badge: on && status.hasCaseAccess ? stats.active || undefined : undefined },
       ...(on && (status.isTeamMember || status.isDirector) ? [{ id: 'stats', label: m.wb_tab_stats(), icon: 'BarChart3' }] : []),
       ...(on && status.isTeamMember ? [{ id: 'resources', label: m.wb_tab_resources(), icon: 'heart', badge: resources.length || undefined }] : []),
+      ...(on && status.isTeamMember ? [{ id: 'custom', label: m.wb_tab_custom(), icon: 'SlidersHorizontal' }] : []),
       ...(on && (status.isDirector || status.isTeamMember) ? [{ id: 'access', label: m.wb_tab_access(), icon: 'eye', badge: pendingLogs.length || undefined }] : []),
       ...(status.canConfigure ? [{ id: 'settings', label: m.wb_tab_settings(), icon: 'settings' }] : []),
     ];
@@ -436,6 +446,7 @@
       if (!stRes.ok) throw new Error('status');
       status = await stRes.json();
       boardStages = status?.boardColumns ?? [];
+      wbCustom.value = status?.customization ?? WB_EMPTY_CUSTOMIZATION;
       // La cellule arrive sur ses personnes suivies ; un lien vers un dossier ramène aux dossiers.
       if (status?.isTeamMember && !new URLSearchParams(window.location.search).has('case') && activeTab === 'cases' && !initialTabChosen) {
         activeTab = 'profiles';
@@ -542,7 +553,7 @@
   let updatingCase = $state(false);
 
   /** Statut ou gravité du dossier ouvert. Fermer un dossier le rend purgeable après un an. */
-  type CasePatch = { status?: string; severity?: string; assigneeId?: string | null; reviewAt?: string | null; closedReason?: string; stage?: string | null };
+  type CasePatch = { status?: string; severity?: string; assigneeId?: string | null; reviewAt?: string | null; closedReason?: string; stage?: string | null; tagIds?: string[] };
 
   /** Modification du dossier ouvert. */
   function updateCase(patch: CasePatch) {
@@ -664,7 +675,7 @@
       const when = formatDate(data.exportedAt);
       win.document.write(wbCaseExportHtml({
         title: item.title,
-        meta: [item.subjectName, wbCategoryLabel(item.category), wbStatusLabel(item.status), wbSeverityLabel(item.severity), formatDay(item.createdAt)],
+        meta: [item.subjectName, wbCategoryName(wbCustom.value, item.category), wbStatusLabel(item.status), wbSeverityLabel(item.severity), formatDay(item.createdAt)],
         summary: item.summary,
         notes: (item.notes ?? []).map((note: any) => ({ author: note.authorName, date: formatDate(note.createdAt), content: note.content })),
         tasks: (item.tasks ?? []).map((task: any) => ({ label: task.label, done: !!task.doneAt })),
@@ -914,7 +925,14 @@
       <span class="text-sm font-semibold text-on-surface line-clamp-2">{c.title}</span>
       {@render pill(wbStatusLabel(c.status), wbStatusTone(c.status))}
     </div>
-    <p class="text-xs text-on-surface-variant mt-1 truncate">{c.subjectName} · {wbCategoryLabel(c.category)}</p>
+    <p class="text-xs text-on-surface-variant mt-1 truncate">{c.subjectName} · {wbCategoryName(wbCustom.value, c.category)}</p>
+    {#if c.tagIds?.length}
+      <div class="flex flex-wrap gap-1 mt-1">
+        {#each wbCaseTags(wbCustom.value, c.tagIds) as tag (tag.id)}
+          <span class="text-2xs font-semibold px-1.5 py-0.5 rounded-full bg-primary/10 text-primary">{tag.label}</span>
+        {/each}
+      </div>
+    {/if}
     <div class="flex flex-wrap items-center gap-1.5 mt-1.5">
       {@render pill(wbSeverityLabel(c.severity), wbSeverityTone(c.severity))}
       {#if c.source === 'DISCORD'}
@@ -935,6 +953,12 @@
     <h3 class="text-base font-semibold flex items-center gap-2"><Papicon icon="folder" size={16} /> {m.wb_cases_title()}</h3>
     <div class="flex flex-wrap gap-2">
       <input type="search" bind:value={caseSearch} class="input text-sm flex-1 min-w-36" aria-label={m.wb_search_label()} placeholder={m.wb_search_ph()} />
+      {#if tags.length > 0}
+        <select value={tagFilter ?? ''} onchange={(event) => (tagFilter = event.currentTarget.value || null)} class="input text-sm w-auto" aria-label={m.wb_tag_filter()}>
+          <option value="">{m.wb_tag_filter_all()}</option>
+          {#each tags as tag (tag.id)}<option value={tag.id}>{tag.label}</option>{/each}
+        </select>
+      {/if}
       {#if caseFilter !== 'trash'}
         <select bind:value={caseSort} class="input text-sm w-auto" aria-label={m.wb_sort_label()}>
           {#each SORT_OPTIONS as option (option.value)}<option value={option.value}>{option.label()}</option>{/each}
@@ -1019,7 +1043,7 @@
           </div>
           <p class="text-xs text-on-surface-variant flex flex-wrap items-center gap-x-3 gap-y-1">
             <span class="flex items-center gap-1"><Papicon icon="User" size={12} /> {selectedCase.subjectName}</span>
-            <span class="flex items-center gap-1"><Papicon icon="Tag" size={12} /> {wbCategoryLabel(selectedCase.category)}</span>
+            <span class="flex items-center gap-1"><Papicon icon="Tag" size={12} /> {wbCategoryName(wbCustom.value, selectedCase.category)}</span>
             <span class="flex items-center gap-1"><Papicon icon="Calendar" size={12} /> {formatDay(selectedCase.createdAt)}</span>
             {#if selectedCase.source === 'DISCORD'}
               <span class="flex items-center gap-1"><Papicon icon="MessageSquare" size={12} /> {m.wb_source_report()}</span>
@@ -1044,6 +1068,7 @@
           {/if}
         </div>
       </header>
+      <TagPicker tagIds={selectedCase.tagIds ?? []} canWrite={!!status?.canWriteCases} busy={updatingCase} onchange={(tagIds) => void updateCase({ tagIds })} />
 
       {#if integrity === 'broken'}
         <Callout variant="danger" title={m.wb_integrity_broken_title()}>{m.wb_integrity_broken_desc()}</Callout>
@@ -1420,6 +1445,12 @@
           <div class="space-y-6">
             <div class="flex flex-wrap items-center gap-3">
               <input type="search" bind:value={caseSearch} class="input text-sm flex-1 min-w-48 max-w-md" aria-label={m.wb_search_label()} placeholder={m.wb_search_ph()} />
+              {#if tags.length > 0}
+                <select value={tagFilter ?? ''} onchange={(event) => (tagFilter = event.currentTarget.value || null)} class="input text-sm w-auto" aria-label={m.wb_tag_filter()}>
+                  <option value="">{m.wb_tag_filter_all()}</option>
+                  {#each tags as tag (tag.id)}<option value={tag.id}>{tag.label}</option>{/each}
+                </select>
+              {/if}
               <p class="text-2xs text-on-surface-variant">{m.wb_board_hint()}</p>
             </div>
             <CaseBoard cases={boardCases} stages={boardStages} selectedId={selectedCaseId} canWrite={!!status.canWriteCases} onopen={openCaseById}
@@ -1457,6 +1488,8 @@
       {:else}
         <Skeleton height="320px" />
       {/if}
+    {:else if activeTab === 'custom'}
+      <CustomizationPanel />
     {:else if activeTab === 'resources'}
       <ResourcesEditor bind:resources />
       <div class="mt-6">

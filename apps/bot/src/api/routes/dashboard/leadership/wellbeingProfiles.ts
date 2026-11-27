@@ -23,12 +23,14 @@ import {
   profileNoteDeleteError,
   profileNoteExpiry,
 } from '../../../../services/staff/wellbeingProfilePolicy.js';
+import { cleanTagIds } from '../../../../services/staff/wellbeingCustomPolicy.js';
 import { openProfileHeader, openProfileNote, sealProfileNote, sealWellbeing } from '../../../../services/staff/wellbeingCrypto.js';
 import {
   SNOWFLAKE_RE,
   actorName,
   audit,
   checkUnusualAccess,
+  customizationOf,
   recordProfileOpening,
   resolveWellbeingRole,
   staleSession,
@@ -111,6 +113,26 @@ export function createWellbeingProfilesRouter(client: Client) {
     } catch (err) {
       logger.error('WellbeingAPI', 'Error reading profile:', err);
       return fail(c, err, 'Erreur lors du chargement de la fiche.', 'WellbeingAPI');
+    }
+  });
+
+  // Étiquettes de la cellule posées sur une fiche existante.
+  router.put(`${base}/:subjectUserId/tags`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    try {
+      const state = await resolveWellbeingRole(client, guildId, c.var.dashboardUser.userId);
+      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule de suivi.' }, 403);
+      const subject = subjectOf(c);
+      if (!subject.ok) return send(c, { error: subject.error }, subject.status);
+      const profile = await prisma.wellbeingProfile.findUnique({ where: { guildId_subjectUserId: { guildId, subjectUserId: subject.id } } });
+      if (!profile) return send(c, { error: NOT_FOUND }, 404);
+      const body = await readBody<{ tagIds?: unknown }>(c);
+      const tagIds = cleanTagIds(body?.tagIds, customizationOf(state.config).tags);
+      await prisma.wellbeingProfile.update({ where: { id: profile.id }, data: { tagIds } });
+      return send(c, { tagIds });
+    } catch (err) {
+      logger.error('WellbeingAPI', 'Error saving profile tags:', err);
+      return fail(c, err, "Erreur lors de l'enregistrement des étiquettes.", 'WellbeingAPI');
     }
   });
 

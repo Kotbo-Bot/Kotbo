@@ -31,12 +31,14 @@ import { applyCrisisProtocolIfDue } from '../../../../services/staff/wellbeingCr
 import { closeTicket } from '../../../../services/features/ticketService.js';
 import { bodyText } from '../../../../utils/bodyText.js';
 import { STAGE_EVENT, cleanBoardColumns, stageChange, stageLabel } from '../../../../services/staff/wellbeingBoardPolicy.js';
+import { TAGS_EVENT, caseCategoryIds, cleanTagIds, tagNames } from '../../../../services/staff/wellbeingCustomPolicy.js';
 import {
   actorName,
   audit,
   CASE_INCLUDE,
   CASE_LIST_SELECT,
   checkUnusualAccess,
+  customizationOf,
   findVisibleCase,
   fullCase,
   isTeamMemberId,
@@ -49,7 +51,6 @@ import {
   type WellbeingState,
 } from './wellbeingShared.js';
 
-const CATEGORIES = ['SOUTIEN', 'MEDIATION', 'SIGNALEMENT', 'SUIVI'];
 const SEVERITIES = ['LOW', 'NORMAL', 'HIGH', 'CRITICAL'];
 const STATUSES = ['OPEN', 'MONITORING', 'CLOSED'];
 
@@ -190,12 +191,13 @@ export function createWellbeingCasesRouter(client: Client) {
     if (assigneeConflict(input.subjectUserId, input.assigneeId)) {
       return { error: 'La personne concernée ne peut pas suivre son propre dossier.' };
     }
+    const categories = caseCategoryIds(customizationOf(state.config).categories);
     const created = await prisma.wellbeingCase.create({
       data: {
         guildId,
         subjectUserId: input.subjectUserId,
         ...sealCaseFields(guildId, { title: input.title, subjectName: input.subjectName, summary: input.summary }),
-        category: CATEGORIES.includes(input.category) ? input.category : 'SOUTIEN',
+        category: categories.includes(input.category) ? input.category : categories[0]!,
         severity: SEVERITIES.includes(input.severity) ? input.severity : 'NORMAL',
         createdById: user.userId,
         createdByName: actorName(c),
@@ -210,7 +212,8 @@ export function createWellbeingCasesRouter(client: Client) {
       ...(input.assigneeId ? [{ type: 'ASSIGNEE', toValue: input.assigneeId }] : []),
       ...(input.reviewAt ? [{ type: 'REVIEW', toValue: input.reviewAt.toISOString() }] : []),
     ]);
-    await applyCrisisProtocolIfDue(created, null, created.severity, state.config?.crisisProtocol ?? true, { id: user.userId, name: actorName(c) });
+    await applyCrisisProtocolIfDue(created, null, created.severity, state.config?.crisisProtocol ?? true, { id: user.userId, name: actorName(c) },
+      customizationOf(state.config).crisisTasks);
     void sendWellbeingAlert(client, guildId, state.config, 'CASE_CHANGE', { actorId: user.userId, action: 'créé' },
       input.assigneeId ? [input.assigneeId] : []);
     return { id: created.id };
@@ -310,7 +313,7 @@ export function createWellbeingCasesRouter(client: Client) {
       const caseId = c.req.param('caseId');
       const existing = await findVisibleCase(guildId, caseId, user.userId);
       if (!existing) return send(c, { error: 'Dossier introuvable.' }, 404);
-      const body = await readBody<{ status?: string; severity?: string; assigneeId?: string | null; reviewAt?: string | null; closedReason?: string; stage?: string | null }>(c);
+      const body = await readBody<{ status?: string; severity?: string; assigneeId?: string | null; reviewAt?: string | null; closedReason?: string; stage?: string | null; tagIds?: unknown }>(c);
 
       const patch: Partial<CaseTracked> = {
         ...(body?.status && STATUSES.includes(body.status) ? { status: body.status } : {}),
@@ -340,6 +343,11 @@ export function createWellbeingCasesRouter(client: Client) {
       const closing = patch.status === 'CLOSED' && existing.status !== 'CLOSED';
       const closedReason = closing ? cleanCloseReason(body?.closedReason) : undefined;
       if (closedReason) events.push({ type: 'CLOSED_REASON', toValue: closedReason });
+      // Étiquettes de la cellule : l'historique garde leurs noms.
+      const { tags } = customizationOf(state.config);
+      const tagIds = body?.tagIds === undefined ? undefined : cleanTagIds(body.tagIds, tags);
+      const tagsChanged = tagIds !== undefined && tagIds.join() !== (existing.tagIds ?? []).join();
+      if (tagsChanged) events.push({ type: TAGS_EVENT, fromValue: tagNames(tags, existing.tagIds ?? []), toValue: tagNames(tags, tagIds) });
       if (events.length === 0) {
         const unchanged = await prisma.wellbeingCase.findUniqueOrThrow({ where: { id: caseId }, include: CASE_INCLUDE });
         return send(c, { item: openCase(unchanged) });
@@ -350,6 +358,7 @@ export function createWellbeingCasesRouter(client: Client) {
         data: {
           ...patch,
           ...(stage ? { stage: stage.stage } : {}),
+          ...(tagsChanged ? { tagIds } : {}),
           // Une nouvelle échéance réarme sa relance.
           ...(events.some((e) => e.type === 'REVIEW') ? { reviewRemindedAt: null } : {}),
           // Un dossier résolu programme sa prise de nouvelles ; rouvrir l'annule.
@@ -362,7 +371,8 @@ export function createWellbeingCasesRouter(client: Client) {
       });
       await recordEvents(caseId, c, events);
       if (patch.severity) {
-        await applyCrisisProtocolIfDue(updated, existing.severity, patch.severity, state.config?.crisisProtocol ?? true, { id: user.userId, name: actorName(c) });
+        await applyCrisisProtocolIfDue(updated, existing.severity, patch.severity, state.config?.crisisProtocol ?? true, { id: user.userId, name: actorName(c) },
+          customizationOf(state.config).crisisTasks);
       }
       const newAssignee = events.find((e) => e.type === 'ASSIGNEE')?.toValue;
       void sendWellbeingAlert(client, guildId, state.config, 'CASE_CHANGE', { actorId: user.userId, action: 'modifié' },

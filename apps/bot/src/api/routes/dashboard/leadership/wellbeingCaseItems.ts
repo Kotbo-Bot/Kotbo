@@ -21,9 +21,11 @@ import {
 import { sendWellbeingAlert, sendWellbeingDirect } from '../../../../services/staff/wellbeingAlerts.js';
 import { openCase, openNote, sealNote } from '../../../../services/staff/wellbeingCrypto.js';
 import { bodyText } from '../../../../utils/bodyText.js';
+import { planTaskDrafts } from '../../../../services/staff/wellbeingCustomPolicy.js';
 import {
   actorName,
   CASE_INCLUDE,
+  customizationOf,
   findVisibleCase,
   fullCase,
   isTeamMemberId,
@@ -209,6 +211,40 @@ export function createWellbeingCaseItemsRouter(client: Client) {
     } catch (err) {
       logger.error('WellbeingAPI', 'Error adding task:', err);
       return fail(c, err, "Erreur lors de l'ajout de la tâche.", 'WellbeingAPI');
+    }
+  });
+
+  // Plan d'action type de la cellule : ses tâches s'ajoutent au dossier, dans la limite du plan d'action.
+  router.post(`${base}/cases/:caseId/plan`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    const user = c.var.dashboardUser;
+    try {
+      const state = await resolveWellbeingRole(client, guildId, user.userId);
+      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule de suivi.' }, 403);
+      const caseId = c.req.param('caseId');
+      const existing = await findVisibleCase(guildId, caseId, user.userId);
+      if (!existing) return send(c, { error: 'Dossier introuvable.' }, 404);
+      const body = await readBody<{ planId?: string }>(c);
+      const plan = customizationOf(state.config).taskPlans.find((item) => item.id === bodyText(body?.planId, 32));
+      if (!plan) return send(c, { error: 'Plan introuvable.' }, 404);
+      const room = MAX_CASE_TASKS - (await prisma.wellbeingCaseTask.count({ where: { caseId } }));
+      const drafts = planTaskDrafts(plan, new Date(), room);
+      if (drafts.length === 0) return send(c, { error: `Un plan d'action compte au plus ${MAX_CASE_TASKS} tâches.` }, 400);
+      await prisma.wellbeingCaseTask.createMany({
+        data: drafts.map((draft) => ({
+          caseId,
+          label: sealNote(caseId, draft.label),
+          dueAt: draft.dueAt,
+          createdById: user.userId,
+          createdByName: actorName(c),
+        })),
+      });
+      await prisma.wellbeingCase.update({ where: { id: caseId }, data: { lastActivityAt: new Date() } });
+      await recordEvents(caseId, c, drafts.map(() => ({ type: 'TASK_ADDED' })));
+      return send(c, { item: await fullCase(caseId), added: drafts.length }, 201);
+    } catch (err) {
+      logger.error('WellbeingAPI', 'Error applying task plan:', err);
+      return fail(c, err, "Erreur lors de l'application du plan.", 'WellbeingAPI');
     }
   });
 

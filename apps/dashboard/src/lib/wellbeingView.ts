@@ -157,7 +157,7 @@ export function wbLinkedCases<T extends WbCaseView>(cases: T[], current: WbCaseV
  * En-tête de la liste après une modification : les champs du dossier renvoyé
  * remplacent les anciens, sans y faire entrer son contenu.
  */
-const HEADER_FIELDS = ['title', 'subjectName', 'subjectUserId', 'status', 'severity', 'category', 'source', 'assigneeId', 'reviewAt', 'stage', 'updatedAt'] as const;
+const HEADER_FIELDS = ['title', 'subjectName', 'subjectUserId', 'status', 'severity', 'category', 'source', 'assigneeId', 'reviewAt', 'stage', 'tagIds', 'updatedAt'] as const;
 
 export function wbMergeHeader<T extends WbCaseView>(header: T, item: Record<string, unknown>): T {
   const fresh = Object.fromEntries(HEADER_FIELDS.filter((key) => key in item).map((key) => [key, item[key]]));

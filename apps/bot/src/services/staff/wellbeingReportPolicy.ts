@@ -15,6 +15,13 @@ export function cleanPanelTemplate(input: unknown): ReportPanelTemplate {
   return REPORT_PANEL_TEMPLATES.find((template) => template === input) ?? REPORT_PANEL_TEMPLATES[0];
 }
 
+/** Texte libre du message permanent, écrit par la cellule à la place d'un modèle. */
+export const PANEL_TEXT_MAX = 1500;
+
+export function cleanPanelText(input: unknown): string | null {
+  return trimmedText(input, PANEL_TEXT_MAX);
+}
+
 /** Un même membre n'envoie qu'un signalement par période : la cellule n'est pas noyée. */
 export const REPORT_COOLDOWN_MS = 10 * 60 * 1000;
 

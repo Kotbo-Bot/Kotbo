@@ -11,8 +11,13 @@ const dossier = (over: Partial<Parameters<typeof wbPeople>[1][number]> = {}) => 
 describe('personnes suivies', () => {
   test('une personne avec des notes et des dossiers apparaît une seule fois, avec les deux', () => {
     expect(wbPeople([profile()], [dossier(), dossier({ id: 'c2', status: 'CLOSED' })])).toEqual([
-      { userId: 'u1', name: 'Alex', noteCount: 2, nextExpiry: '2027-01-01T00:00:00Z', leftAt: null, activeCases: 1, caseCount: 2 },
+      { userId: 'u1', name: 'Alex', noteCount: 2, nextExpiry: '2027-01-01T00:00:00Z', leftAt: null, activeCases: 1, caseCount: 2, tagIds: [] },
     ]);
+  });
+
+  test('les étiquettes d une personne sont celles de sa fiche', () => {
+    expect(wbPeople([profile({ tagIds: ['t1'] })], [])[0]?.tagIds).toEqual(['t1']);
+    expect(wbPeople([], [dossier()])[0]?.tagIds).toEqual([]);
   });
 
   test('une personne qui n a que des dossiers a aussi sa page', () => {

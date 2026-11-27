@@ -180,8 +180,12 @@ export function crisisProtocolDue(
   return options.enabled && !options.applied && nextSeverity === 'CRITICAL' && previousSeverity !== 'CRITICAL';
 }
 
-export function crisisTaskDrafts(now: Date): Array<{ label: string; dueAt: Date }> {
-  return CRISIS_PROTOCOL_TASKS.map((task) => ({ label: task.label, dueAt: new Date(now.getTime() + task.dueHours * 60 * 60 * 1000) }));
+/** Tâches du protocole pour un dossier : les étapes de la cellule, sinon celles de départ. */
+export function crisisTaskDrafts(
+  now: Date,
+  tasks: ReadonlyArray<{ label: string; dueHours: number }> = CRISIS_PROTOCOL_TASKS,
+): Array<{ label: string; dueAt: Date }> {
+  return tasks.map((task) => ({ label: task.label, dueAt: new Date(now.getTime() + task.dueHours * 60 * 60 * 1000) }));
 }
 
 // ── Prise de nouvelles après clôture ───────────────────────────────────────

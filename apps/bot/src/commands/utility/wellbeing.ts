@@ -175,9 +175,9 @@ export function wellbeingPanelText(template: ReportPanelTemplate, locale: BotLoc
 }
 
 /** Message permanent posté dans un salon : écrire à la cellule sans taper de commande. */
-export function wellbeingPanelMessage(locale: BotLocale, template: ReportPanelTemplate = REPORT_PANEL_TEMPLATES[0]) {
+export function wellbeingPanelMessage(locale: BotLocale, template: ReportPanelTemplate = REPORT_PANEL_TEMPLATES[0], text: string | null = null) {
   return {
-    content: wellbeingPanelText(template, locale),
+    content: text ?? wellbeingPanelText(template, locale),
     components: [
       new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder().setCustomId(`${REPORT_PANEL_PREFIX}0`).setStyle(ButtonStyle.Primary).setLabel(m.wbc_panel_write({}, { locale })),

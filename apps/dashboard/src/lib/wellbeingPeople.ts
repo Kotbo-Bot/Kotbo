@@ -13,6 +13,8 @@ export interface WbProfileHeader {
   subjectLeftAt: string | null;
   noteCount: number;
   nextExpiry: string | null;
+  /** Étiquettes de la cellule posées sur la fiche. */
+  tagIds?: string[];
 }
 
 export interface WbPersonCase {
@@ -31,6 +33,7 @@ export interface WbPerson {
   leftAt: string | null;
   activeCases: number;
   caseCount: number;
+  tagIds: string[];
 }
 
 export function wbPeople(profiles: readonly WbProfileHeader[], cases: readonly WbPersonCase[]): WbPerson[] {
@@ -44,6 +47,7 @@ export function wbPeople(profiles: readonly WbProfileHeader[], cases: readonly W
       leftAt: profile.subjectLeftAt,
       activeCases: 0,
       caseCount: 0,
+      tagIds: profile.tagIds ?? [],
     });
   }
   const withProfile = new Set(profiles.map((profile) => profile.subjectUserId));
@@ -59,6 +63,7 @@ export function wbPeople(profiles: readonly WbProfileHeader[], cases: readonly W
       leftAt: null,
       activeCases: 0,
       caseCount: 0,
+      tagIds: [],
     };
     person.caseCount += 1;
     if (item.status !== 'CLOSED') person.activeCases += 1;

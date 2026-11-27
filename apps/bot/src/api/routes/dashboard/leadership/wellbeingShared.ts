@@ -26,6 +26,13 @@ import { caseVisibilityWhere, type CaseEventDraft } from '../../../../services/s
 import { appendCaseEvents } from '../../../../services/staff/wellbeingEvents.js';
 import { cellActorOf, discordGuildOf, loadCellMembers } from '../../../../services/staff/wellbeingRoles.js';
 import { openCase } from '../../../../services/staff/wellbeingCrypto.js';
+import {
+  cleanCaseCategories,
+  cleanCrisisTasks,
+  cleanTags,
+  cleanTaskPlans,
+  crisisTasksOf,
+} from '../../../../services/staff/wellbeingCustomPolicy.js';
 import { sendWellbeingAlert } from '../../../../services/staff/wellbeingAlerts.js';
 
 export const SNOWFLAKE_RE = /^\d{17,20}$/;
@@ -66,6 +73,7 @@ export const CASE_LIST_SELECT = {
   source: true,
   assigneeId: true,
   stage: true,
+  tagIds: true,
   reviewAt: true,
   lastActivityAt: true,
   createdAt: true,
@@ -205,4 +213,21 @@ export async function teamIdsOf(state: WellbeingState): Promise<string[]> {
 /** Relit un dossier complet après un geste. */
 export async function fullCase(caseId: string) {
   return openCase(await prisma.wellbeingCase.findUniqueOrThrow({ where: { id: caseId }, include: CASE_INCLUDE }));
+}
+
+type CustomizationSource = { caseCategories?: unknown; crisisTasks?: unknown; taskPlans?: unknown; caseTags?: unknown } | null | undefined;
+
+/**
+ * Réglages de la cellule lus en base, nettoyés. `crisisTasks` est le protocole
+ * appliqué (celui de départ si la cellule n'a rien réglé, `crisisDefault`).
+ */
+export function customizationOf(config: CustomizationSource) {
+  const crisisTasks = cleanCrisisTasks(config?.crisisTasks);
+  return {
+    categories: cleanCaseCategories(config?.caseCategories, newColumnId),
+    crisisTasks: [...crisisTasksOf(crisisTasks)],
+    crisisDefault: crisisTasks.length === 0,
+    taskPlans: cleanTaskPlans(config?.taskPlans, newColumnId),
+    tags: cleanTags(config?.caseTags, newColumnId),
+  };
 }

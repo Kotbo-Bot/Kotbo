@@ -13,7 +13,9 @@
   import { toast } from '../../stores/toast.svelte';
   import MemberSearchSelect from '../MemberSearchSelect.svelte';
   import { Button, Callout, Field, Modal } from '../ui';
-  import { WB_CATEGORIES, WB_SEVERITIES, wbCategoryLabel, wbIsSummaryTemplate, wbSeverityLabel, wbSummaryTemplate } from '../../wellbeingLabels';
+  import { WB_SEVERITIES, wbSeverityLabel } from '../../wellbeingLabels';
+  import { wbCategories, wbCategoryTemplate, wbIsCategoryTemplate } from '../../wellbeingCustom';
+  import { wbCustom } from '../../stores/wellbeingCustomization.svelte';
   import { WB_REVIEW_SHORTCUTS, wbReviewShortcut, wbSeverityTone } from '../../wellbeingView';
 
   let {
@@ -34,7 +36,10 @@
   let subjectUserId = $state('');
   let subjectName = $state('');
   let title = $state('');
-  let category = $state('SOUTIEN');
+  /** Catégories de la cellule ; la première sert par défaut. */
+  const categories = $derived(wbCategories(wbCustom.value));
+  let category = $state('');
+  const isTemplate = (text: string) => wbIsCategoryTemplate(wbCustom.value, text);
   let severity = $state('NORMAL');
   let summary = $state('');
   let assigneeId = $state('');
@@ -57,7 +62,8 @@
     if (prefill.subjectUserId !== undefined) subjectUserId = prefill.subjectUserId;
     if (prefill.subjectName !== undefined) subjectName = prefill.subjectName;
     if (prefill.severity) severity = prefill.severity;
-    if (wbIsSummaryTemplate(summary)) summary = wbSummaryTemplate(category);
+    if (!categories.some((item) => item.id === category)) category = categories[0]?.id ?? '';
+    if (isTemplate(summary)) summary = wbCategoryTemplate(wbCustom.value, category);
     open = true;
     const query = subjectUserId ? `?subjectUserId=${encodeURIComponent(subjectUserId)}` : '';
     const res = await dashboardFetch(`/wellbeing/assignee-suggestion${query}`).catch(() => null);
@@ -83,13 +89,13 @@
   /** Change la catégorie ; sa trame remplace un résumé encore vide ou resté tel quel. */
   function pickCategory(code: string) {
     category = code;
-    if (wbIsSummaryTemplate(summary)) summary = wbSummaryTemplate(code);
+    if (isTemplate(summary)) summary = wbCategoryTemplate(wbCustom.value, code);
   }
 
   async function create(event: SubmitEvent) {
     event.preventDefault();
     if (creating || subjectIsSelf) return;
-    if (wbIsSummaryTemplate(summary)) {
+    if (isTemplate(summary)) {
       summaryError = m.wb_summary_template_error();
       return;
     }
@@ -155,10 +161,10 @@
     <div class="space-y-1.5">
       <p class="text-xs font-semibold text-on-surface-variant">{m.wb_category()}</p>
       <div role="group" aria-label={m.wb_category()} class="flex flex-wrap gap-1.5">
-        {#each WB_CATEGORIES as code (code)}
-          <button type="button" aria-pressed={category === code} onclick={() => pickCategory(code)}
-            class="text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors {category === code ? 'bg-primary/10 text-primary border border-primary/30' : 'border border-outline-variant/40 text-on-surface-variant hover:bg-surface-container-high/40'}">
-            {wbCategoryLabel(code)}
+        {#each categories as item (item.id)}
+          <button type="button" aria-pressed={category === item.id} onclick={() => pickCategory(item.id)}
+            class="text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors {category === item.id ? 'bg-primary/10 text-primary border border-primary/30' : 'border border-outline-variant/40 text-on-surface-variant hover:bg-surface-container-high/40'}">
+            {item.label}
           </button>
         {/each}
       </div>

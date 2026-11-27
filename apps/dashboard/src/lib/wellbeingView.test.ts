@@ -166,6 +166,11 @@ describe('en-tête mis à jour après une modification', () => {
     expect(fusion).toMatchObject({ id: 'a', status: 'CLOSED', severity: 'HIGH', subjectIsTeamMember: true });
     expect('summary' in fusion).toBe(false);
   });
+
+  test('reprend les étiquettes posées sur le dossier', () => {
+    const fusion = wbMergeHeader({ ...dossier({ id: 'a' }), tagIds: [] }, { ...dossier({ id: 'a' }), tagIds: ['t1'] });
+    expect(fusion.tagIds).toEqual(['t1']);
+  });
 });
 
 describe("raccourcis d'échéance", () => {
