@@ -296,8 +296,9 @@
   }
 </script>
 
-<section class="grid grid-cols-1 lg:grid-cols-3 lg:items-start gap-4" aria-labelledby="home-todo-title" data-tour="home-todo">
-  <div class="section-card p-5 flex flex-col gap-3 {setupMissing ? 'lg:col-span-2' : 'lg:col-span-3'}">
+<!-- Cartes empilées : le bloc n'occupe que 2/3 de l'accueil, trois colonnes écrasaient « Configuration ». -->
+<section class="flex flex-col gap-3.5" aria-labelledby="home-todo-title" data-tour="home-todo">
+  <div class="section-card p-5 flex flex-col gap-3 flex-1">
     <div class="flex items-center justify-between gap-3">
       <h2 id="home-todo-title" class="text-base font-semibold text-on-surface flex items-center gap-2">
         <Papicon icon="tasks" size={18} class="text-on-surface-variant" />
@@ -413,9 +414,7 @@
   </div>
 
   {#if setup && setupMissing}
-    <!-- Les cartes ne s'etirent plus a la hauteur de la voisine : une seule
-         etape en attente laissait « A traiter » a moitie vide. Les etapes
-         tiennent chacune sur une ligne, consigne comprise. -->
+    <!-- Pleine largeur : chaque étape tient sur une ligne, consigne comprise. -->
     <div class="section-card p-5 flex flex-col gap-3">
       <div class="flex items-center justify-between gap-3">
         <h2 class="text-base font-semibold text-on-surface flex items-center gap-2">
