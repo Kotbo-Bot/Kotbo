@@ -13,13 +13,13 @@
   import { fetchDiscordClientId } from '../lib/api';
   import { toast } from '../lib/stores/toast.svelte';
   import { m } from '../lib/i18n';
-  import { Button, Callout, SectionCard, ToggleSwitch } from '../lib/components/ui';
+  import { Button, Callout, SectionCard, ToggleSwitch, ListGroup, ListRow } from '../lib/components/ui';
+  import { resolveUserAvatarSrc } from '../lib/discordMedia';
   import Navbar from '../lib/components/Navbar.svelte';
   import ServerSwitcherModal from '../lib/components/ServerSwitcherModal.svelte';
   import RankCardCustomizer from '../lib/components/RankCardCustomizer.svelte';
   import SiteEditorSpace from '../lib/components/site/SiteEditorSpace.svelte';
   import BotInviteModal from '../lib/components/onboarding/BotInviteModal.svelte';
-  import Papicon from '../lib/components/Papicon.svelte';
 
   const BIO_MAX = 500;
 
@@ -56,7 +56,22 @@
     }
   }
 
+  const TICKET_STATUS: Record<string, () => string> = {
+    PENDING: m.e1_tickets_status_pending,
+    OPEN: m.e1_tickets_status_open,
+    CLAIMED: m.e1_tickets_status_claimed,
+    CLOSED: m.e1_tickets_status_closed,
+    ARCHIVED: m.e1_tickets_status_archived,
+    REJECTED: m.e1_tickets_status_rejected,
+  };
+
   async function openMyTicket(ticketId: string) {
+    // Un second clic sur le ticket ouvert le referme.
+    if (selectedTicket?.id === ticketId) {
+      selectedTicket = null;
+      return;
+    }
+    ticketReply = '';
     try {
       const res = await authorizedFetch(`${API_BASE_URL}/api/user/me/tickets/${ticketId}`);
       if (res.ok) {
@@ -163,88 +178,76 @@
 {/if}
 
 <main id="main-content" class="min-h-screen bg-background text-on-background">
-  <div class="mx-auto w-full max-w-3xl px-4 sm:px-6 py-10 space-y-6">
-    <header class="flex flex-col md:flex-row md:items-end justify-between gap-x-6 gap-y-3">
-      <div class="min-w-0">
-        <h1 class="text-2xl font-semibold tracking-tight text-on-surface font-headline leading-tight">{m.me_title()}</h1>
-        <p class="mt-1 max-w-prose text-sm text-on-surface-variant">{m.me_subtitle()}</p>
+  <div class="mx-auto w-full max-w-2xl px-4 sm:px-6 py-8 space-y-6">
+    <!-- Qui je suis, avant tout réglage. -->
+    <header class="flex flex-col items-center gap-3 text-center">
+      <img
+        src={resolveUserAvatarSrc(authStore.user?.id, authStore.user?.avatar)}
+        alt=""
+        width="88"
+        height="88"
+        class="h-22 w-22 rounded-full object-cover bg-surface-container ring-4 ring-surface-container-lowest shadow-md"
+      />
+      <div class="min-w-0 max-w-full">
+        <h1 class="text-2xl font-bold tracking-tight text-on-surface font-headline leading-tight">{m.me_title()}</h1>
+        {#if authStore.user?.username}
+          <p class="mt-0.5 text-sm font-semibold text-on-surface truncate">@{authStore.user.username}</p>
+        {/if}
+        <p class="mx-auto mt-1 max-w-md text-sm text-on-surface-variant">{m.me_subtitle()}</p>
       </div>
-      <div class="flex items-center flex-wrap gap-2 shrink-0">
+      <div class="flex flex-wrap items-center justify-center gap-2">
+        {#if userId}
+          <Button href={`/profile/${userId}`} size="sm" variant="secondary" icon="user">{m.me_view_public()}</Button>
+        {/if}
         {#if hasDashboard}
-          <Button href="/" size="sm" icon="arrow-left">{m.me_back_dashboard()}</Button>
+          <Button href="/" size="sm" variant="ghost" icon="arrow-left">{m.me_back_dashboard()}</Button>
         {:else}
           <Button size="sm" variant="ghost" icon="log-out" onclick={() => authStore.logout()}>{m.navbar_logout()}</Button>
         {/if}
       </div>
     </header>
 
-    <section class="section-card p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-      <div class="flex items-start gap-3 min-w-0">
-        <div class="w-8 h-8 rounded-lg bg-surface-container text-on-surface-variant flex items-center justify-center shrink-0 mt-0.5">
-          <Papicon icon="Plus" size={16} />
-        </div>
-        <div class="min-w-0">
-          <h2 class="text-sm font-semibold text-on-surface leading-tight">{m.me_manage_server()}</h2>
-          <p class="text-body-sm text-on-surface-variant mt-0.5 leading-relaxed">{m.me_manage_server_desc()}</p>
-        </div>
+    {#if loading}
+      <div class="section-card p-5 space-y-4 animate-pulse" aria-busy="true">
+        <div class="h-28 rounded-xl bg-surface-container"></div>
+        <div class="h-10 rounded-xl bg-surface-container"></div>
       </div>
-      <div class="flex items-center gap-2 shrink-0 w-full sm:w-auto">
-        <Button href="/servers" size="sm" variant="secondary" icon="Server">{m.srv_title()}</Button>
-        <Button size="sm" variant="primary" icon="Plus" onclick={openInviteModal}>{m.me_add_kotbo_cta()}</Button>
-      </div>
-    </section>
+    {:else}
+      <ListGroup title={m.me_profile_title()} footer={m.me_profile_desc()}>
+        <div class="p-4">
+          <div class="flex items-baseline justify-between gap-3">
+            <label for="me-bio" class="list-row__label">{m.me_bio_label()}</label>
+            <span class="text-xs tabular-nums text-on-surface-variant">{bio.length}/{BIO_MAX}</span>
+          </div>
+          <textarea
+            id="me-bio"
+            bind:value={bio}
+            maxlength={BIO_MAX}
+            rows={4}
+            placeholder={m.me_bio_ph()}
+            class="input mt-2 w-full resize-y text-sm"
+          ></textarea>
+        </div>
 
-    <SectionCard title={m.me_profile_title()} description={m.me_profile_desc()}>
-      {#snippet actions()}
-        {#if userId}
-          <Button href={`/profile/${userId}`} size="sm" variant="ghost">{m.me_view_public()}</Button>
+        <ListRow icon="Globe" label={m.me_public_label()} description={m.me_public_desc()}>
+          <ToggleSwitch checked={isPublic} onToggle={(value) => (isPublic = value)} ariaLabel={m.me_public_label()} />
+        </ListRow>
+
+        {#if missingProfile}
+          <div class="p-4"><Callout variant="info">{m.me_no_profile()}</Callout></div>
         {/if}
-      {/snippet}
 
-      {#if loading}
-        <div class="space-y-4 animate-pulse" aria-busy="true">
-          <div class="h-28 rounded-lg bg-surface-container"></div>
-          <div class="h-10 rounded-lg bg-surface-container"></div>
-        </div>
-      {:else}
-        <div class="space-y-5">
-          <div>
-            <label for="me-bio" class="field-label">{m.me_bio_label()}</label>
-            <textarea
-              id="me-bio"
-              bind:value={bio}
-              maxlength={BIO_MAX}
-              rows={5}
-              placeholder={m.me_bio_ph()}
-              class="w-full rounded-lg border border-field-border bg-surface-container-lowest px-3 py-2 text-sm text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:border-primary resize-y"
-            ></textarea>
-            <p class="mt-1 text-right text-xs text-on-surface-variant">{bio.length}/{BIO_MAX}</p>
+        <!-- Le bouton n'apparaît que lorsqu'il y a quelque chose à enregistrer. -->
+        {#if dirty && !missingProfile}
+          <div class="flex flex-wrap items-center justify-end gap-2 px-4 py-3">
+            <Button variant="ghost" size="sm" onclick={() => { bio = saved.bio; isPublic = saved.isPublic; }}>{m.common_cancel()}</Button>
+            <Button variant="primary" size="sm" onclick={save} loading={saving}>{m.me_save()}</Button>
           </div>
+        {/if}
+      </ListGroup>
+    {/if}
 
-          <div class="flex items-start justify-between gap-4">
-            <div>
-              <p class="text-sm font-medium text-on-surface">{m.me_public_label()}</p>
-              <p class="mt-0.5 text-body-sm text-on-surface-variant">{m.me_public_desc()}</p>
-            </div>
-            <ToggleSwitch checked={isPublic} onToggle={(value) => (isPublic = value)} ariaLabel={m.me_public_label()} />
-          </div>
-
-          {#if missingProfile}
-            <Callout variant="info">{m.me_no_profile()}</Callout>
-          {/if}
-
-          <div class="flex justify-end">
-            <Button variant="primary" onclick={save} loading={saving} disabled={!dirty || missingProfile} disabledReason={missingProfile ? m.me_no_profile() : ''}>
-              {m.me_save()}
-            </Button>
-          </div>
-        </div>
-      {/if}
-    </SectionCard>
-
-    <SiteEditorSpace />
-
-    <SectionCard title="Mes tickets" description="Suivez vos demandes et répondez au staff depuis le web" icon="life-buoy">
+    <SectionCard title="Mes tickets" description="Suivez vos demandes et répondez au staff depuis le web" icon="life-buoy" flush>
       <div class="p-4 space-y-4">
         {#if ticketsLoading}
           <p class="text-sm text-on-surface-variant">Chargement de vos tickets…</p>
@@ -263,7 +266,7 @@
                   <p class="text-xs text-on-surface-variant">{tk.guildName} · {new Date(tk.createdAt).toLocaleDateString('fr-FR')}</p>
                 </div>
                 <span class="shrink-0 px-2 py-0.5 rounded-full text-2xs font-semibold bg-surface-container-high text-on-surface-variant">
-                  {tk.status}
+                  {TICKET_STATUS[tk.status]?.() ?? tk.status}
                 </span>
               </button>
             {/each}
@@ -299,6 +302,13 @@
     <section class="section-card p-5">
       <RankCardCustomizer />
     </section>
+
+    <SiteEditorSpace />
+
+    <ListGroup title={m.me_manage_server()}>
+      <ListRow icon="Plus" label={m.me_add_kotbo_cta()} description={m.me_manage_server_desc()} onclick={openInviteModal} />
+      <ListRow icon="Server" label={m.srv_title()} href="/servers" />
+    </ListGroup>
   </div>
 
   <BotInviteModal

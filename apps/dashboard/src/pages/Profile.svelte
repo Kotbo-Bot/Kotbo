@@ -4,7 +4,7 @@
   import { memberAvatarSrc } from '../lib/discordMedia';
   import { router } from 'tinro';
   import { resolveTabFromUrl, gotoTab } from '../lib/tabRouting';
-  import { Button, Callout, SectionCard, Tabs } from '../lib/components/ui';
+  import { Button, Callout, SectionCard, Tabs, ListGroup, ListRow } from '../lib/components/ui';
   import { authStore } from '../lib/stores/auth.svelte';
   import {
     API_BASE_URL,
@@ -14,7 +14,6 @@
     addManagerNote,
     deleteManagerNote, dashboardFetch } from '../lib/api';
   import type { APIKey, StaffMember, TestingPeriod, StaffManagerNote } from '../lib/types';
-  import MetricCard from '../lib/components/MetricCard.svelte';
   import FormInput from '../lib/components/FormInput.svelte';
   import FormSelect from '../lib/components/FormSelect.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
@@ -86,10 +85,6 @@
   let submittingResignation = $state(false);
 
   const isOwnProfile = $derived(targetUserId === authStore.user?.id);
-
-  // Une seule teinte pour toutes les pastilles de chiffres : la couleur ne dit
-  // rien de plus que le libelle, elle ne faisait que bigarrer la page.
-  const NEUTRAL_TONE = 'bg-surface-container text-on-surface-variant';
 
   const profileName = $derived(
     staffMember?.displayName || publicProfile?.displayName || publicProfile?.username || authStore.user?.username || '',
@@ -466,7 +461,19 @@
 
 </script>
 
-<div class="space-y-6 pb-16">
+{#snippet statBand(items: { label: string; value: string; note: string }[])}
+  <dl class="section-card grid grid-cols-2 gap-y-4 p-4 text-center {items.length > 2 ? 'lg:grid-cols-4' : ''}">
+    {#each items as item (item.label)}
+      <div class="flex flex-col px-2">
+        <dt class="text-xs font-semibold text-on-surface-variant">{item.label}</dt>
+        <dd class="text-2xl font-bold tabular-nums text-on-surface font-headline">{item.value}</dd>
+        <dd class="text-xs text-on-surface-variant">{item.note}</dd>
+      </div>
+    {/each}
+  </dl>
+{/snippet}
+
+<div class="mx-auto w-full max-w-5xl space-y-6 pb-16">
   {#if loading}
     <div class="space-y-6 animate-pulse" aria-busy="true">
       <div class="flex items-center gap-4">
@@ -492,32 +499,42 @@
   {:else}
 
     <!-- Identite : pas de banniere vide ni de halo, l'avatar et le nom suffisent. -->
-    <header class="flex flex-col sm:flex-row sm:items-center gap-4">
+    <header class="section-card flex flex-col items-center gap-4 p-5 text-center sm:flex-row sm:text-left">
       <img
         src={getUserAvatar()}
         alt=""
-        width="64"
-        height="64"
-        class="w-16 h-16 rounded-full object-cover bg-surface-container shrink-0"
+        width="80"
+        height="80"
+        class="w-20 h-20 rounded-full object-cover bg-surface-container shrink-0 shadow-md"
       />
       <div class="min-w-0 flex-1">
-        <div class="flex flex-wrap items-center gap-2">
-          <h1 class="text-xl font-semibold text-on-surface truncate">{profileName}</h1>
+        <div class="flex flex-wrap items-center justify-center sm:justify-start gap-2">
+          <h1 class="text-2xl font-bold tracking-tight text-on-surface font-headline truncate">{profileName}</h1>
           {#if staffMember}
-            <span class="inline-flex items-center gap-1.5 rounded-md border border-outline-variant px-2 py-0.5 text-xs font-medium text-on-surface-variant">
+            <span class="inline-flex items-center gap-1.5 rounded-full bg-surface-container px-2.5 py-0.5 text-xs font-medium text-on-surface-variant">
               <Papicon icon={gradeIcon(staffMember.grade)} size={13} />
               {staffMember.grade}
             </span>
           {/if}
           {#if isBlacklisted}
-            <span class="inline-flex items-center gap-1.5 rounded-md bg-error/10 px-2 py-0.5 text-xs font-medium text-on-error-container">
+            <span class="inline-flex items-center gap-1.5 rounded-full bg-error/10 px-2 py-0.5 text-xs font-medium text-on-error-container">
               <Papicon icon="Slash" size={13} />
               {m.pf_restricted_account()}
             </span>
           {/if}
         </div>
-        <p class="mt-0.5 text-body-sm text-on-surface-variant truncate">
-          @{profileUsername} · <span class="font-mono text-xs">{targetUserId}</span>
+        <p class="mt-1 flex flex-wrap items-center justify-center sm:justify-start gap-x-2 gap-y-1 text-body-sm text-on-surface-variant">
+          <span class="truncate">@{profileUsername}</span>
+          <button
+            type="button"
+            class="inline-flex min-h-6 items-center gap-1.5 rounded-full px-2 font-mono text-xs hover:bg-surface-container hover:text-on-surface"
+            title={m.pf_copy_id()}
+            aria-label={m.pf_copy_id()}
+            onclick={() => copyToClipboard(targetUserId, 'user-id')}
+          >
+            {targetUserId}
+            <Papicon icon={copiedKeyId === 'user-id' ? 'check' : 'copy'} size={12} />
+          </button>
         </p>
       </div>
       {#if isOwnProfile}
@@ -537,14 +554,14 @@
     <div>
       {#if activeTab === 'staff_overview' && staffMember}
         <div class="space-y-6">
-          <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <MetricCard label="Messages" value={`${stats?.totalMessages ?? 0}`} note={m.pf_total_sent()} icon="MessageSquare" toneClass={NEUTRAL_TONE} />
-            <MetricCard label={m.home_opt_voice()} value={`${Math.round((stats?.totalVoiceMinutes ?? 0))}m`} note={m.pf_time_spent()} icon="Mic" toneClass={NEUTRAL_TONE} />
-            {#if visibility.discipline}
-              <MetricCard label={m.pfx_sanctions()} value={`${stats?.sanctionsIssued ?? 0}`} note={m.pfx_sanctions_note()} icon="Hammer" toneClass={NEUTRAL_TONE} />
-              <MetricCard label={m.pf_warnings_label()} value={`${stats?.activeWarnings ?? 0}`} note={m.pf_active_received()} icon="ShieldAlert" toneClass={NEUTRAL_TONE} />
-            {/if}
-          </div>
+          {@render statBand([
+            { label: 'Messages', value: `${stats?.totalMessages ?? 0}`, note: m.pf_total_sent() },
+            { label: m.home_opt_voice(), value: `${Math.round((stats?.totalVoiceMinutes ?? 0))}m`, note: m.pf_time_spent() },
+            ...(visibility.discipline ? [
+              { label: m.pfx_sanctions(), value: `${stats?.sanctionsIssued ?? 0}`, note: m.pfx_sanctions_note() },
+              { label: m.pf_warnings_label(), value: `${stats?.activeWarnings ?? 0}`, note: m.pf_active_received() },
+            ] : []),
+          ])}
 
           {#if isBlacklisted}
             <Callout variant="danger" title={m.pf_restricted_account()}>
@@ -859,12 +876,12 @@
 
       {:else if activeTab === 'community_overview' && publicProfile}
         <div class="space-y-6">
-          <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <MetricCard label="Messages" value={publicProfile.messageCount?.toLocaleString() || '0'} note={m.pf_total_sent_pl()} icon="MessageSquare" toneClass={NEUTRAL_TONE} />
-            <MetricCard label={m.home_opt_voice()} value={`${Math.round((publicProfile.voiceTimeSeconds || 0) / 60)} min`} note={m.pf_time_spent()} icon="Mic" toneClass={NEUTRAL_TONE} />
-            <MetricCard label={m.home_mod_events_title()} value={`${publicProfile.eventParticipations?.length || 0}`} note="Participations" icon="Zap" toneClass={NEUTRAL_TONE} />
-            <MetricCard label={m.pf_seniority()} value={getDurationSince(publicProfile.guildJoinedAt)} note={m.pf_since_arrival()} icon="Calendar" toneClass={NEUTRAL_TONE} />
-          </div>
+          {@render statBand([
+            { label: 'Messages', value: publicProfile.messageCount?.toLocaleString(dateLocale()) || '0', note: m.pf_total_sent_pl() },
+            { label: m.home_opt_voice(), value: `${Math.round((publicProfile.voiceTimeSeconds || 0) / 60)} min`, note: m.pf_time_spent() },
+            { label: m.home_mod_events_title(), value: `${publicProfile.eventParticipations?.length || 0}`, note: 'Participations' },
+            { label: m.pf_seniority(), value: getDurationSince(publicProfile.guildJoinedAt), note: m.pf_since_arrival() },
+          ])}
 
           <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <div class="space-y-4">
@@ -874,22 +891,15 @@
                 </p>
               </SectionCard>
 
-              <SectionCard title={m.pf_account_details()}>
-                <dl class="divide-y divide-outline-variant/60">
-                  <div class="flex items-center justify-between gap-3 pb-2">
-                    <dt class="text-xs text-on-surface-variant">{m.pf_creation()}</dt>
-                    <dd class="text-xs font-medium text-on-surface">{formatDate(publicProfile.accountCreatedAt)}</dd>
-                  </div>
-                  <div class="flex items-center justify-between gap-3 py-2">
-                    <dt class="text-xs text-on-surface-variant">{m.pf_arrival()}</dt>
-                    <dd class="text-xs font-medium text-on-surface">{formatDate(publicProfile.guildJoinedAt)}</dd>
-                  </div>
-                  <div class="flex items-center justify-between gap-3 pt-2">
-                    <dt class="text-xs text-on-surface-variant">{m.pf_last_seen()}</dt>
-                    <dd class="text-xs font-medium text-on-surface">{formatTimeAgo(publicProfile.lastSeenAt)}</dd>
-                  </div>
-                </dl>
-              </SectionCard>
+              <ListGroup title={m.pf_account_details()}>
+                {#each [
+                  { icon: 'User', label: m.pf_creation(), text: formatDate(publicProfile.accountCreatedAt) },
+                  { icon: 'Calendar', label: m.pf_arrival(), text: formatDate(publicProfile.guildJoinedAt) },
+                  { icon: 'clock', label: m.pf_last_seen(), text: formatTimeAgo(publicProfile.lastSeenAt) },
+                ] as row (row.label)}
+                  <ListRow icon={row.icon} label={row.label} description={row.text} />
+                {/each}
+              </ListGroup>
 
               {#if publicProfile.roles && publicProfile.roles.length > 0}
                 <SectionCard title={m.pf_roles()}>

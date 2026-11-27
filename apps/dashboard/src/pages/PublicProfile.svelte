@@ -5,7 +5,7 @@
   import { authStore } from '../lib/stores/auth.svelte';
   import { router } from 'tinro';
   import Papicon from '../lib/components/Papicon.svelte';
-  import MetricCard from '../lib/components/MetricCard.svelte';
+  import { Button, ListGroup, ListRow } from '../lib/components/ui';
   import BoosterBadge from '../lib/components/BoosterBadge.svelte';
   import { boostMonths } from '@kotbo/contracts';
   import { formatRelative, formatTenure } from '../lib/components/staff/format';
@@ -46,303 +46,158 @@
     });
   }
 
+  const isOwn = $derived(authStore.isAuthenticated && authStore.user?.id === userId);
+  const name = $derived(profile?.displayName || profile?.username || '');
+  const voiceMinutes = $derived(Math.round((profile?.voiceTimeSeconds || 0) / 60));
+
+  const stats = $derived(profile ? [
+    { label: m.ppf_messages(), value: profile.messageCount?.toLocaleString(dateLocale()) || '0' },
+    { label: m.ppf_voice(), value: m.ppf_minutes({ count: voiceMinutes }) },
+    { label: m.ppf_events(), value: String(profile.eventParticipations?.length || 0) },
+    { label: m.ppf_tenure(), value: profile.guildJoinedAt ? formatTenure(profile.guildJoinedAt) : m.ppf_unknown() },
+  ] : []);
 </script>
 
-<div class="min-h-screen bg-surface-container-lowest/30 pb-24 font-sans text-on-surface antialiased">
-  <!-- Decorative top background grid/neon -->
-  <div class="absolute top-0 inset-x-0 h-[500px] bg-linear-to-b from-primary/5 to-transparent blur-none hidden pointer-events-none"></div>
+{#snippet value(text: string)}
+  <span class="text-sm font-semibold text-on-surface text-right">{text}</span>
+{/snippet}
 
-  <div class="max-w-6xl mx-auto px-6 pt-16 relative z-10">
-    <!-- Back Button -->
-    <div class="mb-8">
-      <button onclick={() => router.goto('/')} class="group inline-flex items-center gap-2 rounded-xl bg-surface-container-low/60 hover:bg-surface-container-high/80 border border-outline-variant/10 px-5 py-2.5 text-body-sm font-medium text-on-surface-variant transition-all">
-        <Papicon icon="ArrowLeft" size={14} class="transition-transform group-hover:-translate-x-1" />
-        {m.ppf_back()}
-      </button>
+<div class="min-h-screen bg-background text-on-surface">
+  <div class="mx-auto w-full max-w-2xl px-4 sm:px-6 py-8 space-y-6">
+    <div>
+      <Button variant="ghost" size="sm" icon="arrow-left" onclick={() => router.goto('/')}>{m.ppf_back()}</Button>
     </div>
 
     {#if loading}
-      <!-- Loading Skeleton -->
-      <div class="space-y-10 animate-pulse">
-        <div class="h-64 bg-surface-container-high/40 rounded-xl border border-outline-variant/5"></div>
-        <div class="grid grid-cols-2 lg:grid-cols-4 gap-6">
-          <div class="h-32 bg-surface-container-high/40 rounded-xl"></div>
-          <div class="h-32 bg-surface-container-high/40 rounded-xl"></div>
-          <div class="h-32 bg-surface-container-high/40 rounded-xl"></div>
-          <div class="h-32 bg-surface-container-high/40 rounded-xl"></div>
-        </div>
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div class="lg:col-span-2 h-96 bg-surface-container-high/30 rounded-xl"></div>
-          <div class="h-96 bg-surface-container-high/30 rounded-xl"></div>
-        </div>
+      <div class="space-y-6 animate-pulse" aria-busy="true">
+        <div class="h-56 rounded-3xl bg-surface-container"></div>
+        <div class="h-24 rounded-2xl bg-surface-container"></div>
+        <div class="h-64 rounded-2xl bg-surface-container"></div>
       </div>
     {:else if error}
-      <!-- Error Panel -->
-      <div class="flex flex-col items-center justify-center py-24 text-center max-w-xl mx-auto">
-        <div class="w-20 h-20 rounded-xl bg-error/10 text-on-error-container border border-error/20 flex items-center justify-center mb-6 shadow-sm">
-          <Papicon icon="AlertTriangle" size={36} />
-        </div>
-        <h3 class="text-lg font-semibold tracking-tight text-on-surface font-headline">{m.ppf_not_found()}</h3>
-        <p class="mt-4 text-base font-bold text-on-surface-variant leading-relaxed">
-          {m.ppf_error_desc({ error })}
-        </p>
-        <button onclick={() => router.goto('/')} class="mt-10 inline-flex items-center gap-3 rounded-lg bg-primary px-8 py-4 text-body-sm font-medium text-on-primary shadow-sm shadow-primary/20 active:scale-[0.98] transition-all">
-          <Papicon icon="Home" size={16} />
-          {m.ppf_home()}
-        </button>
+      <div class="section-card p-8 flex flex-col items-center gap-3 text-center">
+        <span class="icon-disc" aria-hidden="true"><Papicon icon="AlertTriangle" size={16} /></span>
+        <h1 class="text-lg font-semibold text-on-surface font-headline">{m.ppf_not_found()}</h1>
+        <p class="max-w-md text-sm text-on-surface-variant">{m.ppf_error_desc({ error })}</p>
+        <Button variant="primary" icon="Home" onclick={() => router.goto('/')}>{m.ppf_home()}</Button>
       </div>
     {:else if profile}
-      
-      <!-- ── Hero Banner Section ──────────────────────────────────────── -->
-      <div class="relative overflow-hidden rounded-xl border border-outline-variant/10 bg-surface-container-lowest shadow-sm mb-8 group">
-        <!-- Banner Image/Gradient -->
-        <div class="relative h-48 md:h-64 overflow-hidden bg-surface-container-low">
+      <header class="section-card-flush">
+        <div class="h-32 sm:h-40 bg-surface-container">
           {#if profile.banner}
-            <img src={profile.banner} alt={m.ppf_banner_alt()} class="w-full h-full object-cover transition-transform duration-1000 " />
+            <img src={profile.banner} alt={m.ppf_banner_alt()} class="h-full w-full object-cover" />
           {:else}
-            <!-- Elegant animated mesh gradient -->
-            <div class="absolute inset-0 bg-linear-to-br from-indigo-900/40 via-purple-950/20 to-surface-container-low blur-none hidden scale-125"></div>
-            <div class="absolute -top-12 -left-12 w-64 h-64 bg-primary/10 rounded-full blur-none hidden animate-pulse"></div>
-            <div class="absolute -bottom-12 -right-12 w-80 h-80 bg-secondary/5 rounded-full blur-none hidden animate-pulse duration-5000"></div>
+            <div class="h-full w-full bg-linear-to-br from-primary/25 to-primary/5"></div>
           {/if}
-          <!-- Fade Overlay -->
-          <div class="absolute inset-0 bg-linear-to-b from-transparent via-transparent to-surface-container-lowest"></div>
-          
-          <div class="absolute top-6 right-6 z-20">
-            <span class="inline-flex items-center gap-2 rounded-full bg-surface-container-lowest/30 border border-outline-variant/10 px-4 py-2 text-xs font-semibold text-white shadow-lg">
-              <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-              {m.ppf_badge()}
-            </span>
-          </div>
         </div>
-
-        <!-- Avatar & User Info Overlap -->
-        <div class="relative px-8 pb-10 -mt-16 md:-mt-20">
-          <div class="flex flex-col md:flex-row items-center md:items-end justify-between gap-6 text-center md:text-left">
-            <div class="flex flex-col md:flex-row items-center md:items-end gap-6">
-              <!-- Avatar Frame -->
-              <div class="relative shrink-0">
-                <div class="absolute -inset-2.5 bg-primary/10 rounded-[2.2rem] blur-xl opacity-30 group-hover:opacity-40 transition-opacity"></div>
-                <div class="relative w-32 h-32 md:w-36 md:h-36 rounded-[2.2rem] border-[5px] border-surface-container-lowest shadow-sm overflow-hidden bg-surface-container-low transition-transform duration-500 group-hover:">
-                  <img src={memberAvatarSrc(profile.avatar, profile.displayName || profile.username, profile.userId)} alt={profile.username} class="w-full h-full object-cover" />
-                </div>
-              </div>
-
-              <!-- Name & User details -->
-              <div class="space-y-2 pb-2">
-                <h1 class="text-lg md:text-xl font-semibold text-on-surface tracking-tight font-headline leading-none">
-                  {profile.displayName || profile.username}
-                </h1>
-                <div class="flex flex-wrap items-center justify-center md:justify-start gap-2.5">
-                  <p class="text-base text-on-surface-variant font-bold">@{profile.username}</p>
-                  {#if profile.boostingSince}
-                    <BoosterBadge since={profile.boostingSince} size={16} />
-                  {/if}
-                  {#if profile.isPrivate}
-                    <span class="inline-flex items-center gap-1.5 rounded-lg bg-warning/10 border border-warning/20 px-2.5 py-1 text-xs font-semibold text-on-warning-container">
-                      <Papicon icon="Lock" size={10} /> {m.ppf_private()}
-                    </span>
-                  {/if}
-                </div>
-              </div>
+        <div class="relative -mt-12 flex flex-col items-center gap-2 px-5 pb-5 text-center">
+          <img
+            src={memberAvatarSrc(profile.avatar, name, profile.userId)}
+            alt=""
+            width="96"
+            height="96"
+            class="h-24 w-24 rounded-full object-cover bg-surface-container ring-4 ring-surface-container-lowest shadow-md"
+          />
+          <div class="min-w-0 max-w-full">
+            <h1 class="text-2xl font-bold tracking-tight text-on-surface font-headline leading-tight break-words">{name}</h1>
+            <div class="mt-1 flex flex-wrap items-center justify-center gap-2">
+              <span class="text-sm text-on-surface-variant">@{profile.username}</span>
+              {#if profile.boostingSince}
+                <BoosterBadge since={profile.boostingSince} size={16} />
+              {/if}
+              {#if profile.isPrivate}
+                <span class="inline-flex items-center gap-1.5 rounded-full bg-warning/10 px-2.5 py-0.5 text-xs font-semibold text-on-warning-container">
+                  <Papicon icon="Lock" size={10} /> {m.ppf_private()}
+                </span>
+              {/if}
             </div>
-
-            <!-- Context CTA Button -->
-            {#if authStore.isAuthenticated && authStore.user?.id === userId}
-              <div class="pb-2">
-                <button onclick={() => router.goto('/profile')} class="group inline-flex items-center gap-2.5 rounded-lg bg-primary hover:bg-primary-hover px-8 py-4 text-body-sm font-medium text-on-primary shadow-sm shadow-primary/20 active:scale-[0.97] transition-all">
-                  <Papicon icon="ShieldUser" size={16} class="transition-transform group-hover:rotate-6" />
-                  {m.ppf_staff_space()}
-                </button>
-              </div>
-            {/if}
           </div>
+          {#if isOwn}
+            <div class="mt-1 flex flex-wrap justify-center gap-2">
+              <Button href="/me" size="sm" variant="primary" icon="edit">{m.me_edit_profile()}</Button>
+              <Button size="sm" variant="secondary" icon="ShieldUser" onclick={() => router.goto('/profile')}>{m.ppf_staff_space()}</Button>
+            </div>
+          {/if}
         </div>
-      </div>
+      </header>
 
       {#if profile.isPrivate}
-        <!-- Private Profile View -->
-        <div class="bg-surface-container-low/40 rounded-xl border border-outline-variant/10 p-10 text-center shadow-lg">
-          <div class="w-16 h-16 rounded-lg bg-warning/10 border border-warning/20 flex items-center justify-center mx-auto mb-6 text-on-warning-container">
-            <Papicon icon="Lock" size={28} />
-          </div>
-          <h3 class="text-xl font-semibold text-on-surface font-headline">{m.ppf_private_title()}</h3>
-          <p class="mt-2 text-sm text-on-surface-variant max-w-md mx-auto leading-relaxed">
-            {m.ppf_private_desc()}
-          </p>
+        <div class="section-card p-8 flex flex-col items-center gap-2 text-center">
+          <span class="icon-disc" aria-hidden="true"><Papicon icon="Lock" size={16} /></span>
+          <h2 class="text-base font-semibold text-on-surface">{m.ppf_private_title()}</h2>
+          <p class="max-w-md text-sm text-on-surface-variant">{m.ppf_private_desc()}</p>
         </div>
       {:else}
-        <!-- Public Profile Content -->
-        
-        <!-- ── Metrics Section ──────────────────────────────────────── -->
-        <div class="grid grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <MetricCard 
-            label={m.ppf_messages()} 
-            value={profile.messageCount?.toLocaleString(dateLocale()) || '0'} 
-            note={m.ppf_messages_note()} 
-            icon="MessageSquare" 
-            toneClass="bg-blue-500/10 text-blue-500 border-blue-500/20" 
-          />
-          <MetricCard 
-            label={m.ppf_voice()} 
-            value={m.ppf_minutes({ count: Math.round((profile.voiceTimeSeconds || 0) / 60) })} 
-            note={m.ppf_voice_note()} 
-            icon="Mic" 
-            toneClass="bg-success/10 text-on-success-container border-success/20" 
-          />
-          <MetricCard 
-            label={m.ppf_events()} 
-            value={`${profile.eventParticipations?.length || 0}`} 
-            note={m.ppf_events_note()} 
-            icon="Zap" 
-            toneClass="bg-warning/10 text-on-warning-container border-warning/20" 
-          />
-          <MetricCard 
-            label={m.ppf_tenure()} 
-            value={profile.guildJoinedAt ? formatTenure(profile.guildJoinedAt) : m.ppf_unknown()} 
-            note={m.ppf_tenure_note()} 
-            icon="Calendar" 
-            toneClass="bg-purple-500/10 text-purple-500 border-purple-500/20" 
-          />
-        </div>
-
-        <!-- ── Detailed Bento Grid ────────────────────────────────── -->
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
-          <!-- Left Column: Biography & Metadata -->
-          <div class="lg:col-span-1 space-y-6">
-            <!-- Biography Card -->
-            <div class="rounded-xl bg-surface-container-low/40 border border-outline-variant/10 p-8 shadow-sm relative overflow-hidden group">
-              <h4 class="text-sm font-semibold text-primary mb-4">{m.ppf_bio()}</h4>
-              <p class="text-sm text-on-surface-variant leading-relaxed">
-                {profile.bio?.trim() || m.ppf_no_bio()}
-              </p>
+        <dl class="section-card grid grid-cols-2 sm:grid-cols-4 gap-y-4 p-4 text-center">
+          {#each stats as stat (stat.label)}
+            <div class="flex flex-col-reverse px-1">
+              <dt class="text-xs text-on-surface-variant">{stat.label}</dt>
+              <dd class="text-lg font-bold tabular-nums text-on-surface font-headline">{stat.value}</dd>
             </div>
+          {/each}
+        </dl>
 
-            <!-- Identity Card -->
-            <div class="rounded-xl bg-surface-container-low/40 border border-outline-variant/10 p-8 shadow-sm relative overflow-hidden group">
-              <h4 class="text-sm font-semibold text-primary mb-6">{m.ppf_file()}</h4>
-              <div class="space-y-6">
-                {#if profile.boost?.boostingSince}
-                  <div class="flex items-center justify-between border-b border-outline-variant/5 pb-3">
-                    <span class="text-xs font-semibold text-on-surface-variant">{m.ppf_boost_title()}</span>
-                    <span class="text-xs font-bold text-on-surface">
-                      {formatDate(profile.boost.boostingSince)} · {m.ppf_boost_value({ months: String(boostMonths(new Date(profile.boost.boostingSince))) })}
-                    </span>
-                  </div>
-                {/if}
-                {#if profile.boost?.totalDays}
-                  <div class="flex items-center justify-between border-b border-outline-variant/5 pb-3">
-                    <span class="text-xs font-semibold text-on-surface-variant">{m.mcm_boost_total()}</span>
-                    <span class="text-xs font-bold text-on-surface">{m.boost_days({ count: String(profile.boost.totalDays) })}</span>
-                  </div>
-                {/if}
-                <div class="flex items-center justify-between border-b border-outline-variant/5 pb-3">
-                  <span class="text-xs font-semibold text-on-surface-variant">{m.ppf_account_created()}</span>
-                  <span class="text-xs font-bold text-on-surface">{formatDate(profile.accountCreatedAt)}</span>
-                </div>
-                <div class="flex items-center justify-between border-b border-outline-variant/5 pb-3">
-                  <span class="text-xs font-semibold text-on-surface-variant">{m.ppf_joined()}</span>
-                  <span class="text-xs font-bold text-on-surface">{formatDate(profile.guildJoinedAt)}</span>
-                </div>
-                <div class="flex items-center justify-between border-b border-outline-variant/5 pb-3">
-                  <span class="text-xs font-semibold text-on-surface-variant">{m.ppf_last_message()}</span>
-                  <span class="text-xs font-bold text-on-surface">{profile.lastSeenAt ? formatRelative(profile.lastSeenAt) : m.ppf_never()}</span>
-                </div>
-                <div class="flex items-center justify-between border-b border-outline-variant/5 pb-3">
-                  <span class="text-xs font-semibold text-on-surface-variant">{m.ppf_messages_sent()}</span>
-                  <span class="text-xs font-bold text-on-surface">{profile.messageCount?.toLocaleString(dateLocale()) || 0}</span>
-                </div>
-                <div class="flex items-center justify-between">
-                  <span class="text-xs font-semibold text-on-surface-variant">{m.ppf_voice_time()}</span>
-                  <span class="text-xs font-bold text-on-surface">{m.ppf_minutes({ count: Math.round((profile.voiceTimeSeconds || 0) / 60) })}</span>
-                </div>
+        <ListGroup title={m.ppf_bio()}>
+          <p class="p-4 text-sm leading-relaxed text-on-surface whitespace-pre-line break-words">
+            {profile.bio?.trim() || m.ppf_no_bio()}
+          </p>
+        </ListGroup>
+
+        <ListGroup title={m.ppf_file()}>
+          {#if profile.boost?.boostingSince}
+            <ListRow icon="Zap" label={m.ppf_boost_title()}>
+              {@render value(`${formatDate(profile.boost.boostingSince)} · ${m.ppf_boost_value({ months: String(boostMonths(new Date(profile.boost.boostingSince))) })}`)}
+            </ListRow>
+          {/if}
+          {#if profile.boost?.totalDays}
+            <ListRow icon="Zap" label={m.mcm_boost_total()}>
+              {@render value(m.boost_days({ count: String(profile.boost.totalDays) }))}
+            </ListRow>
+          {/if}
+          <ListRow icon="User" label={m.ppf_account_created()}>{@render value(formatDate(profile.accountCreatedAt))}</ListRow>
+          <ListRow icon="Calendar" label={m.ppf_joined()}>{@render value(formatDate(profile.guildJoinedAt))}</ListRow>
+          <ListRow icon="clock" label={m.ppf_last_message()}>
+            {@render value(profile.lastSeenAt ? formatRelative(profile.lastSeenAt) : m.ppf_never())}
+          </ListRow>
+        </ListGroup>
+
+        <ListGroup title={m.ppf_badges()}>
+          <div class="p-4">
+            {#if profile.roles && profile.roles.length > 0}
+              <div class="flex flex-wrap gap-1.5">
+                {#each profile.roles as role}
+                  <span class="rounded-full bg-surface-container px-3 py-1 text-xs font-semibold text-on-surface">{role.name}</span>
+                {/each}
               </div>
-            </div>
-
-            <!-- Badges/Roles Card -->
-            <div class="rounded-xl bg-surface-container-low/40 border border-outline-variant/10 p-8 shadow-sm relative overflow-hidden group">
-              <h4 class="text-sm font-semibold text-primary mb-4">{m.ppf_badges()}</h4>
-              {#if profile.roles && profile.roles.length > 0}
-                <div class="flex flex-wrap gap-2">
-                  {#each profile.roles as role}
-                    <span class="inline-flex items-center gap-1.5 rounded-lg bg-surface-container-high/60 border border-outline-variant/10 px-3 py-1.5 text-xs font-semibold text-on-surface-variant">
-                      {role.name}
-                    </span>
-                  {/each}
-                </div>
-              {:else}
-                <p class="text-xs text-on-surface-variant/40 italic">{m.ppf_no_badges()}</p>
-              {/if}
-            </div>
+            {:else}
+              <p class="text-sm text-on-surface-variant">{m.ppf_no_badges()}</p>
+            {/if}
           </div>
+        </ListGroup>
 
-          <!-- Right Column: Events History -->
-          <div class="lg:col-span-2 space-y-6">
-            <div class="rounded-xl bg-surface-container-low/40 border border-outline-variant/10 p-10 shadow-sm">
-              <div class="flex items-center gap-3.5 mb-8 border-b border-outline-variant/5 pb-6">
-                <div class="w-12 h-12 rounded-xl bg-primary/10 border border-primary/20 text-primary flex items-center justify-center">
-                  <Papicon icon="Zap" size={24} />
-                </div>
-                <div>
-                  <h3 class="text-xl font-semibold text-on-surface font-headline leading-tight">{m.ppf_events_history()}</h3>
-                  <p class="text-xs font-semibold text-on-surface-variant/40 mt-0.5">{m.ppf_events_recent()}</p>
-                </div>
-              </div>
+        <ListGroup title={m.ppf_events_history()}>
+          {#each profile.eventParticipations ?? [] as event}
+            <ListRow icon="Zap" label={event.title} description={`${event.type} · ${formatDate(event.date)}`}>
+              {@render value(m.ppf_points({ count: event.score }))}
+            </ListRow>
+          {:else}
+            <p class="p-4 text-sm text-on-surface-variant">{m.ppf_no_events()}</p>
+          {/each}
+        </ListGroup>
 
-              {#if profile.eventParticipations && profile.eventParticipations.length > 0}
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {#each profile.eventParticipations as event}
-                    <div class="flex items-center justify-between p-4.5 rounded-lg bg-surface-container-high/30 border border-outline-variant/5 hover:border-primary/25 hover:bg-surface-container-high/60 transition-all">
-                      <div>
-                        <h4 class="text-sm font-semibold text-on-surface leading-tight truncate max-w-[180px]">{event.title}</h4>
-                        <p class="text-xs font-semibold text-primary mt-0.5">{event.type}</p>
-                      </div>
-                      <div class="text-right">
-                        <span class="text-sm font-semibold text-primary">{m.ppf_points({ count: event.score })}</span>
-                        <p class="text-xs font-semibold text-on-surface-variant/30 mt-0.5">{formatDate(event.date)}</p>
-                      </div>
-                    </div>
-                  {/each}
-                </div>
-              {:else}
-                <div class="py-16 text-center opacity-30">
-                  <Papicon icon="Zap" size={48} class="mx-auto mb-4" />
-                  <p class="text-sm font-semibold">{m.ppf_no_events()}</p>
-                </div>
-              {/if}
-            </div>
-          </div>
-        </div>
-
-        <!-- Log In Call-to-action (if not logged in) -->
         {#if !authStore.isAuthenticated}
-          <div class="rounded-xl bg-linear-to-br from-indigo-950/40 via-purple-950/20 to-surface-container-low border border-outline-variant/10 p-10 text-center relative overflow-hidden shadow-sm">
-            <div class="absolute -right-6 -bottom-6 w-36 h-36 bg-primary/5 rounded-full blur-none hidden pointer-events-none"></div>
-            <h3 class="text-2xl font-semibold text-on-surface font-headline tracking-tight leading-none mb-3">{m.ppf_staff_cta()}</h3>
-            <p class="text-sm text-on-surface-variant max-w-lg mx-auto mb-8 font-bold leading-relaxed">
-              {m.ppf_staff_cta_desc()}
-            </p>
-            <a href={`${API_BASE_URL}/api/auth/discord/login?returnTo=${encodeURIComponent(window.location.pathname)}`} class="inline-flex items-center gap-3 rounded-lg bg-primary hover:bg-primary-hover px-10 py-5 text-sm font-semibold text-on-primary shadow-sm shadow-primary/20 active:scale-[0.98] transition-all">
-              <Papicon icon="Lock" size={18} />
-              {m.ppf_login()}
-            </a>
-          </div>
+          <ListGroup title={m.ppf_staff_cta()}>
+            <ListRow
+              icon="log-in"
+              label={m.ppf_login()}
+              description={m.ppf_staff_cta_desc()}
+              onclick={() => (window.location.href = `${API_BASE_URL}/api/auth/discord/login?returnTo=${encodeURIComponent(window.location.pathname)}`)}
+            />
+          </ListGroup>
         {/if}
       {/if}
-      
-      <!-- Footer details -->
-      <div class="mt-20 pt-8 border-t border-outline-variant/5 text-center">
-        <p class="text-xs font-semibold text-on-surface-variant/20 italic">
-          {m.ppf_footer()}
-        </p>
-      </div>
 
+      <p class="text-center text-xs text-on-surface-variant">{m.ppf_footer()}</p>
     {/if}
   </div>
 </div>
-
-<style>
-  :global(.font-headline) {
-    font-family: 'Outfit', 'Inter', sans-serif;
-  }
-</style>
