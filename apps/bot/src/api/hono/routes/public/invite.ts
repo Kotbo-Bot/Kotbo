@@ -124,6 +124,28 @@ export function createPublicInviteRouter(): OpenAPIHono {
     const direct = c.req.query('direct') === '1';
     const popup = c.req.query('popup') === '1';
 
+    // « Mes serveurs » du dashboard : autorisation dans le même onglet, puis
+    // retour automatique sur la prise en main. Ni cookie ni mesure : la
+    // provenance du visiteur a été posée à son arrivée et ne doit pas être écrasée.
+    if (c.req.query('return') === '1') {
+      const params = new URLSearchParams({
+        client_id: clientId,
+        permissions: c.req.query('perms') === 'admin' ? PermissionFlagsBits.Administrator.toString() : INVITE_PERMISSIONS,
+        scope: 'bot applications.commands',
+      });
+      const redirectUri = getDiscordRedirectUri();
+      if (redirectUri) {
+        params.set('redirect_uri', redirectUri);
+        params.set('response_type', 'code');
+      }
+      const guildId = c.req.query('guild_id') ?? '';
+      if (/^\d{17,20}$/.test(guildId)) {
+        params.set('guild_id', guildId);
+        params.set('disable_guild_select', 'true');
+      }
+      return c.redirect(`https://discord.com/oauth2/authorize?${params.toString()}`, 302);
+    }
+
     const botRequest = isBotRequest({ method: c.req.method, headers: c.req.raw.headers });
 
     if (!botRequest) {
