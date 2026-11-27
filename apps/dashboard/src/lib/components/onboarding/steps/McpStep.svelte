@@ -105,7 +105,7 @@
             icon={entry.icon}
             badge={entry.key === 'read' ? m.obx_recommended() : undefined}
             selected={scope === entry.key}
-            onclick={() => { wizard.answer({ mcpScope: entry.key }); celebrateStep(); }}
+            onclick={() => { wizard.answer({ mcpScope: entry.key }) }}
           />
         {/each}
       </div>

@@ -64,7 +64,7 @@
         icon={entry.icon}
         selected={level === entry.key}
         badge={entry.key === 'standard' ? m.obx_recommended() : undefined}
-        onclick={() => { wizard.answer({ moderation: entry.key }); celebrateStep(); }}
+        onclick={() => { wizard.answer({ moderation: entry.key }) }}
       />
     {/each}
   </div>

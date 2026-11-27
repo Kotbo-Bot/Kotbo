@@ -95,14 +95,12 @@
         ? selection.filter((entry) => entry !== id)
         : [...selection, id],
     });
-    celebrateStep();
   }
 
   function togglePole(key: string) {
     poleKeys = poleKeys.includes(key)
       ? poleKeys.filter((entry) => entry !== key)
       : [...poleKeys, key];
-    celebrateStep();
   }
 
   /**
@@ -199,7 +197,7 @@
               detail={entry.detail}
               icon={entry.icon}
               selected={structureKey === entry.key}
-              onclick={() => { structureKey = entry.key; celebrateStep(); }}
+              onclick={() => { structureKey = entry.key }}
             />
           {/each}
         </div>

@@ -46,7 +46,6 @@
         ? selection.filter((entry) => entry !== key)
         : [...selection, key],
     });
-    celebrateStep();
   }
 
   function effectOf(item: ShopPreset): string {

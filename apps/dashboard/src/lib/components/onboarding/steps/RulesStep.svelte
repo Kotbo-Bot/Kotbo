@@ -163,7 +163,7 @@
         <div class="flex items-start gap-3 p-4">
           <button
             type="button"
-            onclick={() => { rule.selected = !rule.selected; celebrateStep(); }}
+            onclick={() => { rule.selected = !rule.selected }}
             aria-pressed={rule.selected}
             aria-label={rule.selected ? m.onb_rules_remove_aria({ title: rule.title }) : m.onb_rules_add_aria({ title: rule.title })}
             class="mt-0.5 w-5 h-5 shrink-0 rounded-md border flex items-center justify-center transition-colors

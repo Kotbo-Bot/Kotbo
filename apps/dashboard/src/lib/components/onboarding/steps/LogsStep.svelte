@@ -107,7 +107,7 @@
             detail={entry.detail()}
             icon={entry.icon}
             selected={retention === entry.key}
-            onclick={() => { wizard.answer({ retention: entry.key }); celebrateStep(); }}
+            onclick={() => { wizard.answer({ retention: entry.key }) }}
           />
         {/each}
       </div>

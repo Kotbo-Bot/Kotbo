@@ -43,7 +43,6 @@
         ? selection.filter((entry) => entry !== key)
         : [...selection, key],
     });
-    celebrateStep();
   }
 
   async function apply() {

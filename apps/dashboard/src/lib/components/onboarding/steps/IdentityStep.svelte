@@ -101,7 +101,7 @@
     {#each OPTIONS as option (option.key)}
       <button
         type="button"
-        onclick={() => { language = option.key; celebrateStep(); }}
+        onclick={() => { language = option.key }}
         aria-pressed={language === option.key}
         class="section-card text-left p-4 transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40
         {language === option.key

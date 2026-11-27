@@ -22,7 +22,7 @@
   import { toast } from '../../../stores/toast.svelte';
   import { wizard } from '../../../stores/onboardingWizard.svelte';
   import { onboardingData } from '../../../stores/onboardingData.svelte';
-  import { celebratePhase, celebrateStep } from '../../../onboarding';
+  import { celebratePhase } from '../../../onboarding';
   import { applyMigrationPlan } from '../../../api';
   import ToggleCard from '../ToggleCard.svelte';
   import RecoveredContent from '../RecoveredContent.svelte';
@@ -54,7 +54,6 @@
     dropped = dropped.includes(key)
       ? dropped.filter((entry) => entry !== key)
       : [...dropped, key];
-    celebrateStep();
   }
 
   async function apply() {

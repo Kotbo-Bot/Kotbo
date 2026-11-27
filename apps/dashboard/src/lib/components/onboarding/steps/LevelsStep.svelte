@@ -157,7 +157,7 @@
         icon={entry.icon}
         selected={rhythm === entry.key}
         badge={entry.key === 'standard' ? m.obx_recommended() : undefined}
-        onclick={() => { wizard.answer({ rhythm: entry.key }); celebrateStep(); }}
+        onclick={() => { wizard.answer({ rhythm: entry.key }) }}
       />
     {/each}
   </div>
@@ -197,7 +197,7 @@
             pitch={entry.pitch}
             icon={entry.icon}
             selected={ladderKey === entry.key}
-            onclick={() => { ladderKey = entry.key; celebrateStep(); }}
+            onclick={() => { ladderKey = entry.key }}
           />
         {/each}
       </div>
@@ -210,7 +210,7 @@
               type="button"
               role="radio"
               aria-checked={count === option}
-              onclick={() => { count = option; celebrateStep(); }}
+              onclick={() => { count = option }}
               class="min-w-13 rounded-xl border px-3.5 py-2 text-body-sm font-semibold tabular-nums transition
                      focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40
                      {count === option

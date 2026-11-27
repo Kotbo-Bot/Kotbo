@@ -14,9 +14,9 @@
  *    `pointer-events: none`, et disparaissent seuls. Un navigateur qui refuse
  *    l'audio ou un canvas qui ne s'initialise pas ne doivent jamais empecher de
  *    passer a l'ecran suivant.
- * 2. Rien n'est telecharge. Les sons sont synthetises a la volee par WebAudio :
- *    pas de fichier a servir, pas de requete a attendre, pas de kilo-octet
- *    ajoute au chargement pour trois « pop ».
+ * 2. Trois sons, pas un de plus : étape validée, serveur monté, échec. Ce sont
+ *    des échantillons (Kenney, « Interface Sounds », CC0), servis depuis
+ *    `public/sounds/onboarding/` : les bips synthétisés sonnaient génériques.
  * 3. Tout s'arrete. `prefers-reduced-motion` coupe les confettis, et le son se
  *    coupe d'un clic - le reglage est retenu par navigateur.
  *
@@ -34,8 +34,6 @@ function prefersReducedMotion(): boolean {
 }
 
 // ── Son ──────────────────────────────────────────────────────────────────────
-
-let audioContext: AudioContext | null = null;
 
 function readSoundPreference(): boolean {
   try {
@@ -61,57 +59,27 @@ export const sound = {
     }
     // Un retour immediat, sinon activer le son ne produit rien d'audible et
     // l'on ne sait pas si le bouton a fonctionne.
-    if (soundOn) tone([660, 880], 0.09);
+    if (soundOn) play('step');
     return soundOn;
   },
 };
 
-function context(): AudioContext | null {
-  if (typeof window === 'undefined') return null;
-  const Ctor = window.AudioContext ?? (window as any).webkitAudioContext;
-  if (!Ctor) return null;
-  if (!audioContext) {
-    try {
-      audioContext = new Ctor();
-    } catch {
-      return null;
-    }
+export type OnboardingSound = 'step' | 'done' | 'error';
+
+const VOLUMES: Record<OnboardingSound, number> = { step: 0.35, done: 0.45, error: 0.35 };
+const players = new Map<OnboardingSound, HTMLAudioElement>();
+
+/** Joue un son sans jamais bloquer : un refus du navigateur reste silencieux. */
+export function play(name: OnboardingSound): void {
+  if (!soundOn || typeof Audio === 'undefined') return;
+  let player = players.get(name);
+  if (!player) {
+    player = new Audio(`${import.meta.env?.BASE_URL ?? '/'}sounds/onboarding/${name}.wav`);
+    player.volume = VOLUMES[name];
+    players.set(name, player);
   }
-  // Suspendu tant que la page n'a pas ete touchee : la reprise echoue en
-  // silence si le geste n'a pas eu lieu, et reussit des le premier clic.
-  if (audioContext.state === 'suspended') void audioContext.resume().catch(() => {});
-  return audioContext;
-}
-
-/**
- * Une petite montee de notes, en sinus.
- *
- * Une onde sinusoidale et une enveloppe qui retombe vite : c'est ce qui
- * ressemble le moins a une alarme. Les notes s'enchainent sur un accord plutot
- * que sur une gamme - deux frequences dissonantes suffisent a rendre un
- * « bravo » desagreable.
- */
-function tone(frequencies: number[], step = 0.11, volume = 0.055): void {
-  if (!soundOn) return;
-  const ctx = context();
-  if (!ctx) return;
-
-  frequencies.forEach((frequency, index) => {
-    const startAt = ctx.currentTime + index * step;
-    const oscillator = ctx.createOscillator();
-    const gain = ctx.createGain();
-
-    oscillator.type = 'sine';
-    oscillator.frequency.setValueAtTime(frequency, startAt);
-
-    gain.gain.setValueAtTime(0, startAt);
-    gain.gain.linearRampToValueAtTime(volume, startAt + 0.012);
-    gain.gain.exponentialRampToValueAtTime(0.0001, startAt + step + 0.16);
-
-    oscillator.connect(gain).connect(ctx.destination);
-    oscillator.start(startAt);
-    oscillator.stop(startAt + step + 0.2);
-  });
+  player.currentTime = 0;
+  void player.play()?.catch(() => {});
 }
 
 // ── Confettis ────────────────────────────────────────────────────────────────
@@ -221,26 +189,26 @@ export function confetti(options: { count?: number; originY?: number; spread?: n
 
 // ── Les trois moments ────────────────────────────────────────────────────────
 
-/** Une etape validee : une note, rien de plus. C'est un accuse de reception. */
+/** Une etape validee : un clic mat. C'est un accuse de reception, pas une fete. */
 export function celebrateStep(): void {
-  tone([784], 0.07, 0.035);
+  play('step');
 }
 
 /**
- * Une phase franchie. Trois notes montantes et une poignee de confettis.
+ * Une phase franchie. Le clic d'étape et une poignee de confettis.
  *
  * C'est le moment ou le parcours dit « vous avez fini quelque chose », et il
  * n'arrive que quatre ou cinq fois : le rendre plus discret le ferait passer
  * inapercu, le rendre plus long le ferait attendre.
  */
 export function celebratePhase(): void {
-  tone([523.25, 659.25, 783.99]);
+  play('step');
   confetti({ count: 46, originY: 0.3, spread: 0.7 });
 }
 
 /** Le serveur monte, ou le parcours termine. La seule grande celebration. */
 export function celebrateFinale(): void {
-  tone([523.25, 659.25, 783.99, 1046.5], 0.13, 0.07);
+  play('done');
   confetti({ count: 140, originY: 0.5, spread: 1.4 });
   // Une seconde salve, decalee : une seule pluie retombe trop vite pour un
   // ecran ou l'on s'attarde.

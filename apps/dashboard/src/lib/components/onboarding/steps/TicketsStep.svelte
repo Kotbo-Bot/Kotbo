@@ -69,7 +69,6 @@
 
   function toggle(key: string) {
     picked = keys.includes(key) ? keys.filter((entry) => entry !== key) : [...keys, key];
-    celebrateStep();
   }
 
   async function apply() {
@@ -161,7 +160,7 @@
       {#each PANEL_COLORS as color (color.value)}
         <button
           type="button"
-          onclick={() => { wizard.answer({ panelColor: color.value }); celebrateStep(); }}
+          onclick={() => { wizard.answer({ panelColor: color.value }) }}
           aria-pressed={panelColor === color.value}
           aria-label={color.label}
           title={color.label}

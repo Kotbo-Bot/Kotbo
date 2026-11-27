@@ -105,7 +105,7 @@
             detail={entry.detail()}
             icon={entry.icon}
             selected={rhythm === entry.key}
-            onclick={() => { wizard.answer({ dropRhythm: entry.key }); celebrateStep(); }}
+            onclick={() => { wizard.answer({ dropRhythm: entry.key }) }}
           />
         {/each}
       </div>

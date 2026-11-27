@@ -45,7 +45,6 @@
     picked = current.includes(key)
       ? current.filter((entry) => entry !== key)
       : [...current, key];
-    celebrateStep();
   }
 
   const minutes = $derived(estimatedMinutes(selection));
@@ -59,6 +58,7 @@
 
   function confirm() {
     wizard.setTracks([...selection]);
+    celebrateStep();
     wizard.complete('tracks');
   }
 </script>
@@ -103,14 +103,14 @@
          pour qui veut un serveur qui tourne ce soir. -->
     <button
       type="button"
-      onclick={() => { picked = TRACKS.map((track) => track.key); celebrateStep(); }}
+      onclick={() => { picked = TRACKS.map((track) => track.key) }}
       class="btn btn-ghost btn-sm !hidden sm:!inline-flex"
     >
       {m.onb_tracks_all()}
     </button>
     <button
       type="button"
-      onclick={() => { picked = defaultTracks(kind); celebrateStep(); }}
+      onclick={() => { picked = defaultTracks(kind) }}
       class="btn btn-ghost btn-sm !hidden sm:!inline-flex"
     >
       {m.onb_tracks_essentials()}

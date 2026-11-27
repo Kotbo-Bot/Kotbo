@@ -166,7 +166,7 @@
         ] as suggestion (suggestion.name)}
           <button
             type="button"
-            onclick={() => { wizard.answer({ currencyName: suggestion.name, currencyEmoji: suggestion.emoji }); celebrateStep(); }}
+            onclick={() => { wizard.answer({ currencyName: suggestion.name, currencyEmoji: suggestion.emoji }) }}
             class="inline-flex items-center gap-1.5 rounded-full border border-outline-variant/40 px-3 py-1.5
                    text-xs font-medium text-on-surface-variant/75 hover:border-primary/45 hover:text-on-surface transition-colors"
           >
@@ -187,7 +187,7 @@
             detail={entry.detail()}
             icon={entry.icon}
             selected={rhythm === entry.key}
-            onclick={() => { wizard.answer({ economyRhythm: entry.key }); celebrateStep(); }}
+            onclick={() => { wizard.answer({ economyRhythm: entry.key }) }}
           />
         {/each}
       </div>

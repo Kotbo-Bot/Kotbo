@@ -88,7 +88,7 @@
     {#each TONES as tone (tone.key)}
       <button
         type="button"
-        onclick={() => { message = tone.text; celebrateStep(); }}
+        onclick={() => { message = tone.text }}
         class="inline-flex items-center gap-1.5 rounded-full border border-outline-variant/40 bg-surface-container-low/40 px-3 py-1.5 text-xs font-medium text-on-surface-variant/80
                hover:border-primary/45 hover:text-on-surface transition-colors"
       >

@@ -14,7 +14,7 @@
    */
   import { wizard } from '../../../stores/onboardingWizard.svelte';
   import { onboardingData } from '../../../stores/onboardingData.svelte';
-  import { THEMES, celebrateStep, selectionFor, type ThemeKey } from '../../../onboarding';
+  import { THEMES, selectionFor, type ThemeKey } from '../../../onboarding';
   import ChoiceCard from '../ChoiceCard.svelte';
   import Papicon from '../../Papicon.svelte';
   import WizardShell from '../WizardShell.svelte';
@@ -76,7 +76,7 @@
         pitch={entry.pitch}
         icon={entry.icon}
         selected={theme === entry.key}
-        onclick={() => { wizard.answer({ theme: entry.key }); celebrateStep(); }}
+        onclick={() => { wizard.answer({ theme: entry.key }) }}
       />
     {/each}
   </div>
