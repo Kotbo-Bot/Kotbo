@@ -9,6 +9,7 @@
   import { API_BASE_URL } from "../api";
   import NotificationBell from "./NotificationBell.svelte";
   import Papicon from "./Papicon.svelte";
+  import Segmented from "./ui/Segmented.svelte";
   import { sidebarStore } from "../stores/sidebar.svelte";
   import { resolveGuildIconSrc, resolveUserAvatarSrc } from "../discordMedia";
   import { serverSwitcherStore } from "../stores/serverSwitcher.svelte";
@@ -334,234 +335,142 @@
           aria-label={m.nav_account()}
           class="tafac-panel absolute right-0 top-12 w-76 max-h-[calc(100dvh-5rem)] overflow-y-auto z-50"
         >
-          <!-- Identite -->
-          <div
-            class="flex items-center gap-3 px-4 py-3.5 border-b border-outline-variant bg-surface-container-low/50"
+          <!-- Identité : la carte entière mène au profil. -->
+          <a
+            href={authStore.user?.id ? `/profile/${authStore.user.id}` : "/profile"}
+            role="menuitem"
+            class="flex items-center gap-3 px-4 py-3.5 border-b border-outline-variant hover:bg-surface-hover transition-colors"
+            onclick={() => (userMenuOpen = false)}
           >
-            <div
-              class="w-10 h-10 shrink-0 rounded-full overflow-hidden ring-1 ring-outline-variant bg-surface-container"
-            >
+            <span class="w-11 h-11 shrink-0 rounded-full overflow-hidden bg-surface-container">
               {#if authStore.user}
-                <img
-                  class="w-full h-full object-cover"
-                  src={getUserAvatar()}
-                  alt=""
-                />
+                <img class="w-full h-full object-cover" src={getUserAvatar()} alt="" />
               {/if}
-            </div>
-            <div class="min-w-0 flex-1">
-              <p
-                class="font-headline text-base font-bold text-on-surface truncate leading-tight"
-              >
+            </span>
+            <span class="min-w-0 flex-1">
+              <span class="block font-headline text-base font-bold text-on-surface truncate leading-tight">
                 {authStore.user?.username ?? "…"}
-              </p>
+              </span>
               {#if selectedGuild?.name}
-                <p class="text-xs text-on-surface-variant mt-0.5 truncate">
+                <span class="block text-xs text-on-surface-variant mt-0.5 truncate">
                   {highestRole} · {selectedGuild.name}
-                </p>
+                </span>
               {/if}
-            </div>
-          </div>
+              <span class="block text-xs font-semibold text-primary mt-0.5">{m.navbar_my_profile()}</span>
+            </span>
+            <Papicon icon="chevron-right" size={15} class="shrink-0 text-on-surface-variant" />
+          </a>
 
-          <!-- Compte & navigation -->
-          <div class="p-2 space-y-0.5">
-            <button
-              type="button"
-              role="menuitem"
-              class="group/item flex items-center gap-2.5 px-2.5 py-2 w-full rounded-xl text-left text-sm font-semibold bg-primary-container/65 text-on-primary-container transition-colors hover:bg-primary-container cursor-pointer mb-1"
-              onclick={startTutorial}
-            >
-              <span
-                class="w-7 h-7 rounded-lg bg-surface-container-lowest/75 dark:bg-primary/15 text-on-primary-container flex items-center justify-center shrink-0"
-              >
-                <Papicon icon="school" size={15} />
-              </span>
-              <span class="truncate">{m.navbar_tutorial()}</span>
-            </button>
-            <a
-              href={authStore.user?.id
-                ? `/profile/${authStore.user.id}`
-                : "/profile"}
-              role="menuitem"
-              class="group/item flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface"
-              onclick={() => (userMenuOpen = false)}
-            >
-              <span
-                class="w-7 h-7 rounded-lg bg-surface-container text-on-surface-variant flex items-center justify-center shrink-0 transition-colors group-hover/item:bg-primary/12 group-hover/item:text-primary"
-              >
-                <Papicon icon="user" size={15} />
-              </span>
-              <span class="truncate">{m.navbar_my_profile()}</span>
-            </a>
+          <!-- Compte -->
+          <div class="p-1.5">
             <a
               href="/me"
               role="menuitem"
-              class="group/item flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface"
+              class="pick-row"
               onclick={() => (userMenuOpen = false)}
             >
-              <span
-                class="w-7 h-7 rounded-lg bg-surface-container text-on-surface-variant flex items-center justify-center shrink-0 transition-colors group-hover/item:bg-primary/12 group-hover/item:text-primary"
-              >
-                <Papicon icon="edit" size={15} />
-              </span>
-              <span class="truncate">{m.me_title()}</span>
+              <span class="icon-disc" aria-hidden="true"><Papicon icon="edit" size={15} /></span>
+              <span class="pick-row__label flex-1 truncate">{m.me_title()}</span>
             </a>
             <a
               href="/userSettings"
               role="menuitem"
-              class="group/item flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface"
+              class="pick-row"
               onclick={() => (userMenuOpen = false)}
             >
-              <span
-                class="w-7 h-7 rounded-lg bg-surface-container text-on-surface-variant flex items-center justify-center shrink-0 transition-colors group-hover/item:bg-primary/12 group-hover/item:text-primary"
-              >
-                <Papicon icon="settings" size={15} />
-              </span>
-              <span class="truncate">{m.navbar_settings()}</span>
+              <span class="icon-disc" aria-hidden="true"><Papicon icon="settings" size={15} /></span>
+              <span class="pick-row__label flex-1 truncate">{m.navbar_settings()}</span>
             </a>
           </div>
 
-          <!-- Apparence : theme et langue -->
+          <!-- Apparence : thème et langue -->
           <div class="border-t border-outline-variant px-4 py-3 space-y-2.5">
             <div class="flex items-center justify-between gap-3">
-              <span class="text-body-sm font-medium text-on-surface-variant"
-                >{m.nav_theme()}</span
-              >
-              <div
-                class="inline-flex rounded-full bg-surface-container p-0.5 border border-outline-variant"
-                role="group"
-                aria-label={m.nav_theme()}
-              >
-                <button
-                  type="button"
-                  onclick={() => {
-                    if (themeStore.dark) themeStore.toggle();
-                  }}
-                  aria-pressed={!themeStore.dark}
-                  class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold transition-colors cursor-pointer {!themeStore.dark
-                    ? 'bg-surface-container-lowest dark:bg-surface-container-highest text-on-surface shadow-xs ring-1 ring-outline-variant'
-                    : 'text-on-surface-variant hover:text-on-surface'}"
-                >
-                  <Papicon icon="sun" size={12} />
-                  {m.nav_theme_light_short()}
-                </button>
-                <button
-                  type="button"
-                  onclick={() => {
-                    if (!themeStore.dark) themeStore.toggle();
-                  }}
-                  aria-pressed={themeStore.dark}
-                  class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold transition-colors cursor-pointer {themeStore.dark
-                    ? 'bg-surface-container-lowest dark:bg-surface-container-highest text-on-surface shadow-xs ring-1 ring-outline-variant'
-                    : 'text-on-surface-variant hover:text-on-surface'}"
-                >
-                  <Papicon icon="moon" size={12} />
-                  {m.nav_theme_dark_short()}
-                </button>
-              </div>
+              <span class="text-body-sm font-medium text-on-surface">{m.nav_theme()}</span>
+              <Segmented
+                label={m.nav_theme()}
+                options={[
+                  { value: "light", label: m.nav_theme_light_short(), icon: "sun" },
+                  { value: "dark", label: m.nav_theme_dark_short(), icon: "moon" },
+                ]}
+                value={themeStore.dark ? "dark" : "light"}
+                onchange={(next) => {
+                  if (themeStore.dark !== (next === "dark")) themeStore.toggle();
+                }}
+              />
             </div>
             <div class="flex items-center justify-between gap-3">
-              <span class="text-body-sm font-medium text-on-surface-variant"
-                >{m.nav_language()}</span
-              >
-              <div
-                class="inline-flex rounded-full bg-surface-container p-0.5 border border-outline-variant"
-                role="group"
-                aria-label={m.nav_language()}
-              >
-                {#each languages as lang (lang.code)}
-                  <button
-                    type="button"
-                    onclick={() => userPrefs.set("language", lang.code)}
-                    aria-pressed={userPrefs.prefs.language === lang.code}
-                    title={lang.label}
-                    class="px-3 py-1 rounded-full text-xs font-semibold uppercase transition-colors cursor-pointer {userPrefs
-                      .prefs.language === lang.code
-                      ? 'bg-surface-container-lowest dark:bg-surface-container-highest text-on-surface shadow-xs ring-1 ring-outline-variant'
-                      : 'text-on-surface-variant hover:text-on-surface'}"
-                    >{lang.code}</button
-                  >
-                {/each}
-              </div>
+              <span class="text-body-sm font-medium text-on-surface">{m.nav_language()}</span>
+              <Segmented
+                label={m.nav_language()}
+                options={languages.map((lang) => ({ value: lang.code, label: lang.code.toUpperCase(), title: lang.label }))}
+                value={userPrefs.prefs.language}
+                onchange={(code) => userPrefs.set("language", code)}
+              />
             </div>
           </div>
 
-          <!-- Ressources & retour -->
-          <div class="border-t border-outline-variant p-2 space-y-0.5">
+          <!-- Aide et retours -->
+          <div class="border-t border-outline-variant p-1.5">
+            <button
+              type="button"
+              role="menuitem"
+              class="pick-row"
+              onclick={startTutorial}
+            >
+              <span class="icon-disc" aria-hidden="true"><Papicon icon="school" size={15} /></span>
+              <span class="pick-row__label flex-1 truncate">{m.navbar_tutorial()}</span>
+            </button>
             <a
               href="https://docs.kotbo.fr/"
               target="_blank"
               rel="noopener noreferrer"
               role="menuitem"
-              class="group/item flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface"
+              class="pick-row"
               onclick={() => (userMenuOpen = false)}
             >
-              <span
-                class="w-7 h-7 rounded-lg bg-surface-container text-on-surface-variant flex items-center justify-center shrink-0 transition-colors group-hover/item:bg-primary/12 group-hover/item:text-primary"
-              >
-                <Papicon icon="pronote" size={15} />
-              </span>
-              <span class="flex-1 truncate">{m.navbar_documentation()}</span>
-              <Papicon
-                icon="external-link"
-                size={13}
-                class="shrink-0 text-on-surface-variant/50 group-hover/item:text-on-surface-variant transition-colors"
-              />
+              <span class="icon-disc" aria-hidden="true"><Papicon icon="pronote" size={15} /></span>
+              <span class="pick-row__label flex-1 truncate">{m.navbar_documentation()}</span>
+              <Papicon icon="external-link" size={13} class="shrink-0 text-on-surface-variant" />
             </a>
-            {#if brandingStore.loaded && !brandingStore.isWhiteLabel}
-              <a
-                href={TOPGG_VOTE_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                role="menuitem"
-                class="group/item flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface"
-                onclick={() => (userMenuOpen = false)}
-              >
-                <span
-                  class="w-7 h-7 rounded-lg bg-surface-container text-on-surface-variant flex items-center justify-center shrink-0 transition-colors group-hover/item:bg-primary/12 group-hover/item:text-primary"
-                >
-                  <Papicon icon="star" size={15} />
-                </span>
-                <span class="flex-1 truncate">{m.navbar_vote_topgg()}</span>
-                <Papicon
-                  icon="external-link"
-                  size={13}
-                  class="shrink-0 text-on-surface-variant/50 group-hover/item:text-on-surface-variant transition-colors"
-                />
-              </a>
-            {/if}
             <button
               type="button"
               role="menuitem"
-              class="group/item flex items-center gap-2.5 px-2.5 py-2 w-full rounded-xl text-left text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface cursor-pointer"
+              class="pick-row"
               onclick={() => {
                 userMenuOpen = false;
                 feedbackModal.show();
               }}
             >
-              <span
-                class="w-7 h-7 rounded-lg bg-surface-container text-on-surface-variant flex items-center justify-center shrink-0 transition-colors group-hover/item:bg-primary/12 group-hover/item:text-primary"
-              >
-                <Papicon icon="bug_report" size={15} />
-              </span>
-              <span class="truncate">{m.navbar_feedback()}</span>
+              <span class="icon-disc" aria-hidden="true"><Papicon icon="bug_report" size={15} /></span>
+              <span class="pick-row__label flex-1 truncate">{m.navbar_feedback()}</span>
             </button>
+            {#if brandingStore.loaded && !brandingStore.isWhiteLabel}
+            <a
+              href={TOPGG_VOTE_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              role="menuitem"
+              class="pick-row"
+              onclick={() => (userMenuOpen = false)}
+            >
+              <span class="icon-disc" aria-hidden="true"><Papicon icon="star" size={15} /></span>
+              <span class="pick-row__label flex-1 truncate">{m.navbar_vote_topgg()}</span>
+              <Papicon icon="external-link" size={13} class="shrink-0 text-on-surface-variant" />
+            </a>
+            {/if}
           </div>
 
-          <!-- Deconnexion -->
-          <div class="border-t border-outline-variant p-2">
+          <!-- Déconnexion -->
+          <div class="border-t border-outline-variant p-1.5">
             <button
               type="button"
               role="menuitem"
+              class="pick-row"
               onclick={logout}
-              class="group/item flex items-center gap-2.5 px-2.5 py-2 w-full rounded-xl text-left text-sm font-semibold text-error transition-colors hover:bg-error/10 cursor-pointer"
             >
-              <span
-                class="w-7 h-7 rounded-lg bg-error/10 text-on-error-container flex items-center justify-center shrink-0 transition-colors group-hover/item:bg-error/15"
-              >
-                <Papicon icon="log-out" size={15} />
-              </span>
-              <span class="truncate">{m.navbar_logout()}</span>
+              <span class="icon-disc text-error" aria-hidden="true"><Papicon icon="log-out" size={15} /></span>
+              <span class="pick-row__label flex-1 truncate !text-error">{m.navbar_logout()}</span>
             </button>
           </div>
         </div>
