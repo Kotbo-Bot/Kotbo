@@ -3281,6 +3281,7 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "moderatorNote": null,
     "presenceTrackingOptOut": false,
     "presenceOptOutAt": null,
+    "bumpReminderPingOptOut": false,
     "tempVoiceWriteNoAsk": null,
     "tempVoiceSavedSettings": null,
     "createdAt": "__NOW__",
