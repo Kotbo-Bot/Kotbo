@@ -45,6 +45,7 @@
     "@getpapillon/papicons": "^0.2.3",
     "@kotbo/contracts": "workspace:*",
     "@kotbo/shared": "workspace:*",
+    "@kotbo/ui": "file:../../../analytics-v3",
     "@sentry/browser": "^10.78.0",
     "@tiptap/core": "^3.35.0",
     "@tiptap/extension-bubble-menu": "^3.35.0",

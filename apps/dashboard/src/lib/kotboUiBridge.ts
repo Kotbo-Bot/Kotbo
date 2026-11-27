@@ -1,0 +1,105 @@
+/**
+ * Pont de configuration entre Paraglide-JS (@kotbo/dashboard) et @kotbo/ui.
+ * Synchronise la locale BCP 47 et les libelles i18n a l'initialisation et
+ * lors d'un changement de langue a chaud.
+ */
+import { configureKotboUi } from '@kotbo/ui';
+import { dateLocale, m } from './i18n';
+
+export function syncKotboUiConfig(): void {
+  configureKotboUi({
+    locale: () => dateLocale(),
+    messages: {
+      common_close: m.common_close,
+      common_cancel: m.common_cancel,
+      common_confirm: m.common_confirm,
+      common_apply: m.ppan_apply,
+      common_clear: m.common_clear,
+      common_refresh: m.common_refresh,
+      common_error_generic: m.common_error,
+      confirm_required: m.d7_confirm_required,
+      confirm_impacts_title: m.confirm_impacts_title,
+      confirm_type_pre: m.d7_type_to_confirm_pre,
+      confirm_type_post: m.d7_type_to_confirm_post,
+      toggle_aria_label: m.e6_toggle_switch_aria_label,
+      empty_default_title: m.esx_default_title,
+
+      toast_undo: m.toast_undo,
+      toast_undoable_failed: m.toast_undoable_failed,
+
+      select_search_placeholder: m.d4_search_placeholder,
+      select_no_results: m.e6_searchable_select_no_results,
+      select_no_result_for: m.d4_no_result_for,
+      select_all_selected: m.d4_all_selected,
+      select_remove_item: m.d4_remove_item,
+      select_create: m.searchable_select_create,
+      color_none: m.fcp_none,
+      color_title: m.fcp_title,
+      color_preview: m.fcp_preview,
+      color_hex: m.fcp_hex,
+      color_presets: m.fcp_presets,
+
+      unsaved_title: m.d4_unsaved_title,
+      unsaved_reset: m.d4_reset,
+      unsaved_save: m.d4_save,
+      unsaved_saving: m.d4_saving,
+
+      cal_today: m.cal_today,
+      cal_prev: m.cal_prev,
+      cal_next: m.cal_next,
+      cal_all_day: m.cal_all_day,
+      cal_agenda_empty: m.cal_agenda_empty,
+      cal_agenda_add: m.cal_agenda_add,
+      cal_more: m.cal_more,
+
+      anx_unit_minutes: m.anx_unit_minutes,
+      anx_unit_hours: m.anx_unit_hours,
+      anx_unit_seconds: m.anx_unit_seconds,
+      anx_unit_hours_minutes: m.anx_unit_hours_minutes,
+      anx_unit_points: m.anx_unit_points,
+      anx_delta_new: m.anx_delta_new,
+      anx_delta_vs_previous: m.anx_delta_vs_previous,
+      anx_delta_title: m.anx_delta_title,
+      anx_previous_period: m.anx_previous_period,
+      anx_metrics_label: m.anx_metrics_label,
+      anx_view_label: m.anx_view_label,
+      anx_view_line: m.anx_view_line,
+      anx_view_bar: m.anx_view_bar,
+      anx_view_table: m.anx_view_table,
+      anx_opt_smooth: m.anx_opt_smooth,
+      anx_opt_previous: m.anx_opt_previous,
+      anx_opt_forecast: m.anx_opt_forecast,
+      anx_forecast_unavailable: m.anx_forecast_unavailable,
+      anx_table_period: m.anx_table_period,
+      anx_table_previous: m.anx_table_previous,
+      anx_fact_total: m.anx_fact_total,
+      anx_fact_average: m.anx_fact_average,
+      anx_fact_peak: m.anx_fact_peak,
+      anx_fact_min: m.anx_fact_min,
+      anx_fact_trend: m.anx_fact_trend,
+      anx_trend_vs_start: m.anx_trend_vs_start,
+      anx_trend_previous: m.anx_trend_previous,
+      anx_series_smoothed: m.anx_series_smoothed,
+      anx_series_forecast: m.anx_series_forecast,
+      anx_chart_caption: m.chart_data_caption,
+      anx_chart_label_col: m.chart_data_label,
+      anx_top_rank: m.anx_top_rank,
+      anx_top_name: m.anx_top_name,
+      anx_top_value: m.anx_top_value,
+      anx_top_share: m.anx_top_share,
+      anx_top_empty: m.anx_top_empty,
+      anx_top_unavailable: m.anx_top_unavailable,
+      anx_top_total: m.anx_top_total,
+      anx_top_see_all: m.anx_top_see_all,
+      anx_top_search: m.anx_top_search,
+      anx_top_export: m.anx_top_export,
+      anx_top_prev_page: m.anx_top_prev_page,
+      anx_top_next_page: m.anx_top_next_page,
+      anx_cohort_week: m.anx_cohort_week,
+      anx_cohort_size: m.anx_cohort_size,
+      anx_cohort_average: m.anx_cohort_average,
+    },
+  });
+}
+
+syncKotboUiConfig();

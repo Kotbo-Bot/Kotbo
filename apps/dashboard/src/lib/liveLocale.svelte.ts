@@ -11,6 +11,7 @@
  */
 import { getLocale, locales, overwriteGetLocale, setLocale, type Locale } from './paraglide/runtime.js';
 import { fetchGuildLanguage } from './api/guild';
+import { syncKotboUiConfig } from './kotboUiBridge';
 import { authStore } from './stores/auth.svelte';
 import { botLocale } from './stores/botLocale.svelte';
 
@@ -45,6 +46,7 @@ class LiveLocaleStore {
     if (!locales.includes(lang as Locale) || lang === this.current) return;
     setLocale(lang as Locale, { reload: false });
     this.current = lang as Locale;
+    syncKotboUiConfig();
   }
 }
 

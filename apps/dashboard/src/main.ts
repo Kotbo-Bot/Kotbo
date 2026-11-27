@@ -7,7 +7,9 @@ import './lib/guildFromUrl'
 // Avant tout rendu : la langue devient un etat Svelte, pour qu'un changement
 // de langue retraduise l'interface sans recharger la page.
 import './lib/liveLocale.svelte'
+import './lib/kotboUiBridge'
 import { mount } from 'svelte'
+import '@kotbo/ui/styles'
 import './app.css'
 import App from './App.svelte'
 
