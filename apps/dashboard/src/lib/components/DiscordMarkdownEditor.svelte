@@ -1,5 +1,7 @@
 <script lang="ts">
-  import { parseDiscordEmojisAndMarkdown } from '../emojiParser';
+  import { Avatar, Markdown, MessageFrame, MessageHeader, type MessageAuthor } from '@arcscord/discord-ui-svelte';
+  import DiscordScope from './discord/DiscordScope.svelte';
+  import { toPreviewMarkdown } from './discord/previewEntities.svelte';
   import { confirmDialog } from '../stores/confirmDialog.svelte';
   import Papicon from './Papicon.svelte';
   import { floatingPanel } from '../actions/floatingPanel';
@@ -193,8 +195,16 @@
     return () => document.removeEventListener('click', handleOutsideClick, true);
   });
 
+  const botAuthor: MessageAuthor = {
+    id: 'kotbo',
+    displayName: 'Kotbo',
+    avatarUrl: '/favicon.svg',
+    bot: true,
+  };
+  const previewTimestamp = new Date().toISOString();
+
   const charCount = $derived(value.length);
-  const previewHtml = $derived(parseDiscordEmojisAndMarkdown(value));
+  const previewPrepared = $derived(toPreviewMarkdown(value, { mentions: false }));
 </script>
 
 <div class="discord-md-editor flex flex-col rounded-xl border border-outline-variant/20 bg-surface-container-low overflow-hidden transition-all focus-within:border-primary/40 focus-within:shadow-lg focus-within:shadow-primary/5">
@@ -323,23 +333,15 @@
       ></textarea>
     {:else}
       <!-- Discord-style preview -->
-      <div class="px-4 py-3 min-h-[200px] max-h-[60vh] overflow-y-auto">
+      <div class="min-h-[200px] max-h-[60vh] overflow-y-auto">
         {#if value.trim()}
-          <div class="flex items-start gap-3">
-            <div class="w-10 h-10 rounded-full bg-primary/15 flex items-center justify-center text-xs font-bold text-primary shrink-0 mt-0.5">
-              BOT
-            </div>
-            <div class="flex-1 min-w-0">
-              <div class="flex items-center gap-2 mb-1">
-                <span class="font-bold text-primary text-sm">Kotbo</span>
-                <span class="bg-primary/20 text-primary text-2xs font-semibold px-1.5 py-0.5 rounded uppercase leading-none">BOT</span>
-                <span class="text-2xs text-on-surface-variant/40">{m.d1_dme_today()}</span>
-              </div>
-              <div class="text-sm text-[#dcddde] leading-relaxed whitespace-pre-wrap break-words discord-preview">
-                {@html previewHtml}
-              </div>
-            </div>
-          </div>
+          <DiscordScope class="dme-discord-preview" entities={previewPrepared.entities}>
+            <MessageFrame>
+              {#snippet avatar()}<Avatar author={botAuthor} />{/snippet}
+              {#snippet header()}<MessageHeader author={botAuthor} timestamp={previewTimestamp} />{/snippet}
+              <Markdown content={previewPrepared.markdown} />
+            </MessageFrame>
+          </DiscordScope>
         {:else}
           <div class="flex flex-col items-center justify-center py-10 text-on-surface-variant/30">
             <Papicon icon="eye" size={28} class="mb-2" />
@@ -368,15 +370,8 @@
 </div>
 
 <style>
-  .discord-preview :global(h1),
-  .discord-preview :global(h2),
-  .discord-preview :global(h3) {
-    margin-top: 0.5rem;
-    margin-bottom: 0.25rem;
-  }
-  .discord-preview :global(h1:first-child),
-  .discord-preview :global(h2:first-child),
-  .discord-preview :global(h3:first-child) {
-    margin-top: 0;
+  :global(.arcscord-discord-ui.dme-discord-preview) {
+    min-height: 200px;
+    padding: 0.5rem 0;
   }
 </style>

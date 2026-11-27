@@ -46,11 +46,11 @@ const PAGES = [
   'lib/components/channels/ChannelDetailsModal.svelte',
   'lib/components/tickets/TicketPerformance.svelte',
   'pages/EventControl.svelte',
+  'pages/MessageSearch.svelte',
 ];
 
 /** Pages qui ouvrent la fiche par le pseudo seul, via `MemberName`. */
 const MEMBER_NAME_PAGES = [
-  'pages/MessageSearch.svelte',
   'pages/security/AntiRaid.svelte',
   'lib/components/aegis/AegisReviewQueue.svelte',
   'lib/components/tickets/TicketBlacklist.svelte',

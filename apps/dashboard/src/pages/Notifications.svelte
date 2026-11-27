@@ -140,7 +140,15 @@
   }
 
   function formatDate(value: string): string {
-    return new Date(value).toLocaleString(dateLocale(), { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+    const diffMs = Date.now() - new Date(value).getTime();
+    const mins = Math.max(1, Math.floor(diffMs / 60_000));
+    const rtf = new Intl.RelativeTimeFormat(dateLocale(), { numeric: 'auto', style: 'short' });
+    if (mins < 60) return rtf.format(-mins, 'minute');
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return rtf.format(-hours, 'hour');
+    const days = Math.floor(hours / 24);
+    if (days < 7) return rtf.format(-days, 'day');
+    return new Date(value).toLocaleDateString(dateLocale(), { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
   }
 </script>
 
@@ -153,31 +161,33 @@
     <RefreshButton onclick={() => notificationsStore.fetchNotifications(true)} loading={loading} />
   {/snippet}
 
-  <div class="ntf-toolbar mb-5">
+  <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
     <Tabs label={m.nav_inbox()} tabs={statusTabs} active={status} onchange={(id) => (status = id as NotificationStatus)} />
-    <div class="ntf-filters">
-      <label>
-        <span>{m.ntf_filter_server()}</span>
-        <select bind:value={guildId}>
-          <option value="">{m.ntf_all_servers()}</option>
-          {#each guildOptions as option (option.id)}
-            <option value={option.id}>{option.name}</option>
-          {/each}
-        </select>
-      </label>
-      <label>
-        <span>{m.ntf_filter_category()}</span>
-        <select bind:value={category}>
-          <option value="">{m.ntf_all_categories()}</option>
-          {#each CATEGORIES as key (key)}
-            <option value={key}>{categoryMeta(key).label()}</option>
-          {/each}
-        </select>
-      </label>
+    <div class="flex flex-wrap items-center gap-2">
+      <select
+        bind:value={guildId}
+        aria-label={m.ntf_filter_server()}
+        class="px-3.5 py-1.5 rounded-full text-xs font-medium bg-surface-container-lowest border border-outline-variant text-on-surface cursor-pointer hover:border-outline transition-colors"
+      >
+        <option value="">{m.ntf_all_servers()}</option>
+        {#each guildOptions as option (option.id)}
+          <option value={option.id}>{option.name}</option>
+        {/each}
+      </select>
+      <select
+        bind:value={category}
+        aria-label={m.ntf_filter_category()}
+        class="px-3.5 py-1.5 rounded-full text-xs font-medium bg-surface-container-lowest border border-outline-variant text-on-surface cursor-pointer hover:border-outline transition-colors"
+      >
+        <option value="">{m.ntf_all_categories()}</option>
+        {#each CATEGORIES as key (key)}
+          <option value={key}>{categoryMeta(key).label()}</option>
+        {/each}
+      </select>
     </div>
   </div>
 
-  <SectionCard title={statusTabs.find((t) => t.id === status)?.label ?? ''} flush>
+  <SectionCard flush>
     {#if loading}
       <div class="p-5 space-y-2">
         {#each Array(4) as _}
@@ -187,92 +197,65 @@
     {:else if items.length === 0}
       <EmptyState icon="inbox" title={m.ntf_empty_title()} description={m.ntf_empty_desc()} reason="all-clear" />
     {:else}
-      <ul class="divide-y divide-outline-variant/10">
+      <ul class="divide-y divide-outline-variant">
         {#each items as notif (notif.id)}
           {@const meta = severityMeta(notif.type)}
           {@const cat = categoryMeta(notif.category)}
-          {@const actions = quickActions(notif)}
+          {@const rowActions = quickActions(notif)}
           <li
-            class="relative flex items-start gap-3 px-5 py-4 transition-colors hover:bg-white/2
-            {notif.isRead ? '' : 'before:absolute before:left-0 before:top-3 before:bottom-3 before:w-0.5 before:bg-primary before:rounded-full'}"
+            class="flex flex-col sm:flex-row sm:items-center gap-3 px-4 py-3 transition-colors hover:bg-surface-hover group {notif.isRead ? 'opacity-75' : 'bg-surface-container-low/50'}"
           >
-            <div class="w-7 h-7 shrink-0 rounded-lg flex items-center justify-center {meta.bg} {meta.text}">
-              <Papicon icon={meta.icon} size={14} />
+            <div class="flex items-start gap-3 min-w-0 flex-1">
+              <div class="w-8 h-8 shrink-0 rounded-full flex items-center justify-center mt-0.5 {meta.bg} {meta.text}">
+                <Papicon icon={meta.icon} size={14} />
+              </div>
+
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-2 flex-wrap">
+                  {#if !notif.isRead}
+                    <span class="w-2 h-2 rounded-full bg-primary shrink-0" aria-hidden="true"></span>
+                  {/if}
+                  <h3 class="text-sm font-semibold text-on-surface leading-snug wrap-break-word">
+                    {notif.title}
+                    {#if notif.count > 1}
+                      <span class="ml-1 text-2xs font-semibold text-primary">{m.ntf_grouped({ count: notif.count })}</span>
+                    {/if}
+                  </h3>
+                  <span class="inline-flex items-center gap-1 text-2xs text-on-surface-variant">
+                    <span>·</span>
+                    <Papicon icon={cat.icon} size={10} />
+                    <span>{cat.label()}</span>
+                    <span>·</span>
+                    <span class="truncate max-w-[12rem]">{notificationsStore.guildName(notif)}</span>
+                  </span>
+                </div>
+
+                <p class="mt-0.5 text-xs text-on-surface-variant leading-relaxed whitespace-pre-line wrap-break-word">{notif.message}</p>
+              </div>
             </div>
 
-            <div class="min-w-0 flex-1">
-              <div class="flex items-start justify-between gap-3">
-                <h3 class="text-body-sm font-semibold text-on-surface leading-snug wrap-break-word">
-                  {notif.title}
-                  {#if notif.count > 1}
-                    <span class="ml-1 text-2xs font-medium text-primary">{m.ntf_grouped({ count: notif.count })}</span>
-                  {/if}
-                </h3>
-                <span class="text-2xs text-on-surface-variant whitespace-nowrap shrink-0 tabular-nums">{formatDate(notif.updatedAt)}</span>
-              </div>
-
-              <p class="mt-1 text-xs text-on-surface-variant leading-relaxed whitespace-pre-line wrap-break-word">{notif.message}</p>
-
-              <div class="mt-2 flex flex-wrap items-center gap-1.5 text-2xs text-on-surface-variant">
-                <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-surface-container">
-                  <Papicon icon={cat.icon} size={10} />
-                  {cat.label()}
-                </span>
-                <span class="px-1.5 py-0.5 rounded bg-surface-container truncate max-w-[14rem]">{notificationsStore.guildName(notif)}</span>
-              </div>
-
-              <div class="mt-2.5 flex flex-wrap items-center gap-2">
-                {#each actions as action (action.label)}
-                  <Button variant={action.variant} size="sm" icon={action.icon} loading={busy === notif.id} onclick={() => runQuickAction(notif, action)}>{action.label}</Button>
-                {/each}
-                {#if notif.link}
-                  <Button size="sm" icon="external-link" onclick={() => notificationsStore.open(notif)}>{m.ntf_open()}</Button>
-                {/if}
-                <Button variant="ghost" size="sm" icon={notif.isRead ? 'mail' : 'check'} disabled={busy === notif.id} onclick={() => act(notif, () => notificationsStore.markAsRead(notif.id, !notif.isRead))}>{notif.isRead ? m.ntf_mark_unread() : m.ntf_mark_read()}</Button>
-                <Button variant="ghost" size="sm" icon="archive" disabled={busy === notif.id} onclick={() => act(notif, () => notificationsStore.archive(notif.id, !notif.archivedAt))}>{notif.archivedAt ? m.ntf_unarchive() : m.ntf_archive()}</Button>
-                <Button variant="ghost" size="sm" icon="trash-2" disabled={busy === notif.id} onclick={() => act(notif, () => notificationsStore.remove(notif.id))}>{m.ntf_delete()}</Button>
+            <div class="flex items-center justify-between sm:justify-end gap-2 shrink-0 pl-11 sm:pl-0">
+              <span class="text-2xs text-on-surface-variant whitespace-nowrap tabular-nums mr-1">{formatDate(notif.updatedAt)}</span>
+              {#each rowActions as action (action.label)}
+                <Button variant={action.variant} size="sm" icon={action.icon} loading={busy === notif.id} onclick={() => runQuickAction(notif, action)}>{action.label}</Button>
+              {/each}
+              {#if notif.link}
+                <Button size="sm" icon="external-link" onclick={() => notificationsStore.open(notif)}>{m.ntf_open()}</Button>
+              {/if}
+              <div class="flex items-center gap-0.5 opacity-75 group-hover:opacity-100 transition-opacity">
+                <Button variant="ghost" size="sm" icon={notif.isRead ? 'mail' : 'check'} title={notif.isRead ? m.ntf_mark_unread() : m.ntf_mark_read()} aria-label={notif.isRead ? m.ntf_mark_unread() : m.ntf_mark_read()} disabled={busy === notif.id} onclick={() => act(notif, () => notificationsStore.markAsRead(notif.id, !notif.isRead))} />
+                <Button variant="ghost" size="sm" icon="archive" title={notif.archivedAt ? m.ntf_unarchive() : m.ntf_archive()} aria-label={notif.archivedAt ? m.ntf_unarchive() : m.ntf_archive()} disabled={busy === notif.id} onclick={() => act(notif, () => notificationsStore.archive(notif.id, !notif.archivedAt))} />
+                <Button variant="ghost" size="sm" icon="trash-2" title={m.ntf_delete()} aria-label={m.ntf_delete()} disabled={busy === notif.id} onclick={() => act(notif, () => notificationsStore.remove(notif.id))} />
               </div>
             </div>
           </li>
         {/each}
       </ul>
       {#if nextCursor}
-        <div class="p-4 flex justify-center">
+        <div class="p-4 flex justify-center border-t border-outline-variant">
           <Button size="sm" icon="chevron-down" loading={loadingMore} onclick={loadMore}>{m.ntf_load_more()}</Button>
         </div>
       {/if}
     {/if}
   </SectionCard>
 </ModulePage>
-
-<style>
-  .ntf-toolbar {
-    display: grid;
-    gap: 0.75rem;
-  }
-
-  .ntf-filters {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.75rem;
-  }
-
-  .ntf-filters label {
-    display: grid;
-    gap: 0.3rem;
-    min-width: 12rem;
-    flex: 1 1 12rem;
-    color: var(--on-surface-variant);
-    font-size: 0.75rem;
-    font-weight: 600;
-  }
-
-  .ntf-filters select {
-    width: 100%;
-    padding: 0.5rem 0.75rem;
-    border: 1px solid var(--field-border-color);
-    border-radius: 0.75rem;
-    background: var(--surface-container-lowest);
-    color: var(--on-surface);
-  }
-</style>

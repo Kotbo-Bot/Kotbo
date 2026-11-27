@@ -37,14 +37,14 @@ export const THEME_PRESETS: ThemePreset[] = [
     get label() { return m.thx_light(); },
     mode: 'light',
     icon: 'sun',
-    preview: { bg: '#ffffff', surface: '#f3f4f6', text: '#111827' },
+    preview: { bg: '#fcfbf8', surface: '#efede7', text: '#491d11' },
   },
   {
     id: 'dark',
     get label() { return m.thx_dark(); },
     mode: 'dark',
     icon: 'moon',
-    preview: { bg: '#09090b', surface: '#1c1c1f', text: '#fafafa' },
+    preview: { bg: '#0f0f0f', surface: '#1c1c1c', text: '#e4e4e4' },
   },
   {
     id: 'midnight',
@@ -476,7 +476,7 @@ function createThemeStore() {
 
   let themeId = $state<ThemeId>(initialThemeId);
   let customColors = $state<CustomThemeColors>(loadCustomColors());
-  let currentAccent = $state<AccentColorId>('violet');
+  let currentAccent = $state<AccentColorId>('green');
   let preferredByMode = $state<Record<ThemeMode, ThemeId>>(loadPreferred());
 
   function loadPreferred(): Record<ThemeMode, ThemeId> {

@@ -460,7 +460,7 @@
           </div>
         {/if}
 
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
           <!-- Conseils -->
           <SectionCard title={m.pulse_alerts_title()} icon="lightbulb">
             <div class="flex flex-col gap-2">
@@ -511,9 +511,11 @@
           <Callout variant="info">{m.pulse_factors_unavailable()}</Callout>
         {/if}
 
-        <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
-          {#each DIMENSIONS as dim (dim.id)}
+        <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 items-stretch">
+          {#each DIMENSIONS as dim, idx (dim.id)}
             {@const score = current[dim.field]}
+            {@const isLastWide = idx === DIMENSIONS.length - 1}
+            <div class="{isLastWide ? 'xl:col-span-2' : ''} [&>.section-card]:h-full">
             <SectionCard title={dim.label()} description={dim.desc()} icon={dim.icon}>
               {#snippet actions()}
                 <span class="flex flex-col items-end">
@@ -524,7 +526,7 @@
               {#if factorsByDimension[dim.id].length === 0}
                 <p class="text-body-sm text-on-surface-variant">{factors.length === 0 ? m.pulse_factors_unavailable() : m.pulse_dim_no_factor()}</p>
               {:else}
-                <ul class="flex flex-col gap-3">
+                <ul class="{isLastWide ? 'grid grid-cols-1 md:grid-cols-3 gap-4' : 'flex flex-col gap-3'}">
                   {#each factorsByDimension[dim.id] as factor (factor.key)}
                     <li class="pulse-factor-row">
                       <div class="flex items-baseline justify-between gap-3">
@@ -545,6 +547,7 @@
                 </ul>
               {/if}
             </SectionCard>
+            </div>
           {/each}
         </div>
       </div>

@@ -202,7 +202,7 @@
       <button
         type="button"
         onclick={skip}
-        class="text-body-sm font-medium text-on-surface-variant hover:text-on-surface transition-colors"
+        class="btn btn-ghost"
       >
         Passer
       </button>
@@ -210,8 +210,7 @@
         type="button"
         onclick={createKey}
         disabled={onboardingData.busy}
-        class="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-on-primary
-               hover:brightness-110 transition disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+        class="btn btn-primary"
       >
         {onboardingData.busy ? m.onb_mcp_creating() : m.onb_mcp_create()}
         <Papicon icon="key" size={15} />
@@ -220,8 +219,7 @@
       <button
         type="button"
         onclick={() => wizard.complete('mcp')}
-        class="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-on-primary
-               hover:brightness-110 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+        class="btn btn-primary"
       >
         Continuer
         <Papicon icon="ChevronRight" size={15} />

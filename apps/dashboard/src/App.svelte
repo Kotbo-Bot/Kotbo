@@ -15,6 +15,7 @@
   import { channelDetailsModal } from "./lib/stores/channelDetailsModal.svelte";
   import { serverDetailsModal } from "./lib/stores/serverDetailsModal.svelte";
   import { memberCaseModal } from "./lib/stores/memberCaseModal.svelte";
+  import { staff } from "./lib/components/staff/staffStore.svelte";
   import ToastContainer from "./lib/components/ToastContainer.svelte";
   import BackendDownBanner from "./lib/components/BackendDownBanner.svelte";
   import InstanceBlockedBanner from "./lib/components/InstanceBlockedBanner.svelte";
@@ -1401,6 +1402,13 @@
   {#await import("./lib/components/MemberCaseModalHost.svelte") then module}
     {@const MemberCaseModalHost = module.default}
     <MemberCaseModalHost />
+  {/await}
+{/if}
+
+{#if staff.dialogs.addMember || staff.dialogs.warn || staff.dialogs.blacklist || staff.dialogs.grades || staff.dialogs.settings}
+  {#await import("./lib/components/staff/StaffDialogs.svelte") then module}
+    {@const StaffDialogs = module.default}
+    <StaffDialogs />
   {/await}
 {/if}
 

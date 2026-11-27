@@ -356,7 +356,7 @@
       <button
         type="button"
         onclick={skip}
-        class="text-body-sm font-medium text-on-surface-variant hover:text-on-surface transition-colors"
+        class="btn btn-ghost"
       >
         {m.obx_skip()}
       </button>
@@ -364,7 +364,7 @@
     <button
       type="button"
       onclick={() => wizard.complete(wizard.step)}
-      class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-on-primary text-sm font-semibold hover:opacity-90 transition-opacity"
+      class="btn btn-primary"
     >
       {m.obx_continue()}
       <Papicon icon="ChevronRight" size={15} />

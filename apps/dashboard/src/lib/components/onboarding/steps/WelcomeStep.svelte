@@ -94,7 +94,7 @@
     { icon: 'layout-grid', get title() { return m.obx_wc_structure(); }, get text() { return m.obx_wc_structure_desc(); } },
     { icon: 'shield', get title() { return m.obx_wc_moderation(); }, get text() { return m.obx_wc_moderation_desc(); } },
     { icon: 'door-open', get title() { return m.obx_wc_welcome(); }, get text() { return m.obx_wc_welcome_desc(); } },
-    { icon: 'sparkles', get title() { return m.obx_wc_rest(); }, get text() { return m.obx_wc_rest_desc(); } },
+    { icon: 'layers', get title() { return m.obx_wc_rest(); }, get text() { return m.obx_wc_rest_desc(); } },
   ];
 </script>
 
@@ -157,12 +157,12 @@
 
   <ul class="mt-9 grid gap-3 sm:grid-cols-2">
     {#each PROMISES as row (row.title)}
-      <li class="rounded-2xl border border-outline-variant/30 bg-surface-container-low/30 p-4">
-        <div class="w-9 h-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center mb-2.5">
+      <li class="section-card p-4">
+        <div class="w-9 h-9 rounded-full bg-primary/10 text-primary flex items-center justify-center mb-2.5">
           <Papicon icon={row.icon} size={16} />
         </div>
         <p class="text-sm font-semibold text-on-surface">{row.title}</p>
-        <p class="mt-1 text-body-sm text-on-surface-variant/65 leading-relaxed">{row.text}</p>
+        <p class="mt-1 text-body-sm text-on-surface-variant leading-relaxed">{row.text}</p>
       </li>
     {/each}
   </ul>
@@ -172,7 +172,7 @@
       type="button"
       onclick={deferOnboarding}
       disabled={deferring}
-      class="text-body-sm font-medium text-on-surface-variant/75 hover:text-on-surface transition-colors disabled:opacity-40"
+      class="btn btn-ghost"
     >
       {m.obx_wc_defer()}
     </button>
@@ -180,7 +180,7 @@
       type="button"
       onclick={handleStart}
       disabled={deferring}
-      class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-on-primary text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-40"
+      class="btn btn-primary"
     >
       {m.obx_wc_start()}
       <Papicon icon="ChevronRight" size={15} />

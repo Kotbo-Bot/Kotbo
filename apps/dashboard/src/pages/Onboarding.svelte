@@ -177,20 +177,20 @@
   <div class="min-h-screen bg-background flex flex-col items-center justify-center gap-6">
     <KotboMark size={52} halo />
     <div class="w-full max-w-2xl px-6 space-y-3">
-      <div class="h-8 w-1/2 rounded-lg bg-surface-container-low/50 animate-pulse"></div>
-      <div class="h-24 rounded-2xl bg-surface-container-low/40 animate-pulse"></div>
-      <div class="h-24 rounded-2xl bg-surface-container-low/40 animate-pulse"></div>
+      <div class="h-8 w-1/2 rounded-full bg-surface-container-low animate-pulse"></div>
+      <div class="section-card h-24 animate-pulse"></div>
+      <div class="section-card h-24 animate-pulse"></div>
     </div>
   </div>
 
 {:else if loadError}
   <div class="min-h-screen bg-background flex flex-col items-center justify-center gap-4 px-6 text-center">
     <KotboMark size={44} />
-    <p class="text-[15px] text-on-surface-variant/80 max-w-sm leading-relaxed">{loadError}</p>
+    <p class="text-[15px] text-on-surface-variant max-w-sm leading-relaxed">{loadError}</p>
     <button
       type="button"
       onclick={load}
-      class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-on-primary text-sm font-semibold hover:opacity-90 transition-opacity"
+      class="btn btn-primary"
     >
       {m.common_retry()}
     </button>

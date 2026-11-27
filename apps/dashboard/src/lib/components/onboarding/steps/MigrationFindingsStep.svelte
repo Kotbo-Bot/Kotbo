@@ -164,7 +164,7 @@
     <button
       type="button"
       onclick={skip}
-      class="text-body-sm font-medium text-on-surface-variant hover:text-on-surface transition-colors"
+      class="btn btn-ghost"
     >
       Passer
     </button>
@@ -172,8 +172,7 @@
       type="button"
       onclick={apply}
       disabled={onboardingData.busy || loading}
-      class="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-on-primary
-             hover:brightness-110 transition disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+      class="btn btn-primary"
     >
       {#if onboardingData.busy}
         Reprise…

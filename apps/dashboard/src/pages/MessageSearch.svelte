@@ -15,9 +15,10 @@
   import ModulePage from "../lib/components/ModulePage.svelte";
   import RefreshButton from "../lib/components/RefreshButton.svelte";
   import Papicon from "../lib/components/Papicon.svelte";
-  import MemberName from "../lib/components/MemberName.svelte";
+  import { Message } from "@arcscord/discord-ui-svelte";
+  import DiscordScope from "../lib/components/discord/DiscordScope.svelte";
+  import { toLoggedMessageView } from "../lib/loggedMessageView";
   import { memberCaseModal } from "../lib/stores/memberCaseModal.svelte";
-  import { memberAvatarSrc } from "../lib/discordMedia";
   import ToggleSwitch from "../lib/components/ToggleSwitch.svelte";
   import MultiSelect from "../lib/components/MultiSelect.svelte";
   import { m, dateLocale } from "../lib/i18n";
@@ -249,16 +250,6 @@
     includeDeleted = false;
     order = "desc";
     search(true);
-  }
-
-  function formatDate(iso: string): string {
-    return new Date(iso).toLocaleString(dateLocale(), {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
   }
 
   onMount(async () => {
@@ -640,145 +631,58 @@
       {:else}
         <div class="flex flex-col gap-2">
           {#each messages as message (message.id)}
+            {@const prepared = toLoggedMessageView(message, {
+              roles: dashboardStore.state.discordRoles,
+              channels: guildChannels.length ? guildChannels : dashboardStore.state.discordChannels,
+            })}
             <div
-              class="flex gap-3 p-4 bg-surface-container-low/60 border border-outline-variant/20 rounded-lg hover:border-outline-variant/40 transition-colors {message.deletedAt
+              class="p-3 bg-surface-container-low/60 border border-outline-variant/20 rounded-lg hover:border-outline-variant/40 transition-colors space-y-2 {message.deletedAt
                 ? 'opacity-70'
                 : ''}"
             >
-              {#if message.isBot}
-                {#if message.authorAvatar}
-                  <img
-                    src={message.authorAvatar}
-                    alt=""
-                    class="w-9 h-9 rounded-full shrink-0 object-cover"
-                  />
-                {:else}
-                  <div
-                    class="w-9 h-9 rounded-full bg-surface-container flex items-center justify-center shrink-0"
-                  >
-                    <Papicon
-                      icon="user"
-                      size={16}
-                      class="text-on-surface-variant"
-                    />
-                  </div>
-                {/if}
-              {:else if memberCaseModal.canOpen}
-                <button
-                  type="button"
-                  onclick={() =>
-                    memberCaseModal.show(message.authorId, message.authorName)}
-                  class="shrink-0 rounded-full transition-opacity hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-                  title={m.lg_open_case()}
-                >
-                  <img
-                    src={memberAvatarSrc(
-                      message.authorAvatar,
-                      message.authorName,
-                      message.authorId,
-                    )}
-                    alt=""
-                    class="w-9 h-9 rounded-full object-cover bg-surface-container"
-                  />
-                </button>
-              {:else}
-                <img
-                  src={memberAvatarSrc(
-                    message.authorAvatar,
-                    message.authorName,
-                    message.authorId,
-                  )}
-                  alt=""
-                  class="w-9 h-9 rounded-full object-cover bg-surface-container shrink-0"
-                />
-              {/if}
-
-              <div class="min-w-0 flex-1">
+              <div class="flex items-center justify-between gap-2">
                 <div class="flex items-center gap-2 flex-wrap">
-                  {#if message.isBot}
-                    <span class="text-sm font-semibold text-on-surface"
-                      >{message.authorName}</span
-                    >
-                    <span
-                      class="px-1.5 py-0.5 text-2xs font-bold bg-primary/20 text-primary rounded"
-                      >BOT</span
-                    >
-                  {:else}
-                    <MemberName
-                      userId={message.authorId}
-                      name={message.authorName}
-                      class="text-sm font-semibold text-on-surface"
-                    />
-                  {/if}
-                  <span class="text-xs text-on-surface-variant"
-                    >#{message.channelName}</span
-                  >
-                  <span class="text-xs text-on-surface-variant/40"
-                    >· {formatDate(message.createdAt)}</span
-                  >
-                  {#if message.editedAt}
-                    <span class="text-xs text-on-surface-variant/40"
-                      >{m.ms_edited()}</span
-                    >
-                  {/if}
+                  <span class="text-xs font-medium text-on-surface-variant">#{message.channelName}</span>
                   {#if message.deletedAt}
-                    <span
-                      class="px-1.5 py-0.5 text-2xs font-bold bg-error/20 text-on-error-container rounded"
-                      >{m.ms_deleted_badge()}</span
-                    >
+                    <span class="px-1.5 py-0.5 text-2xs font-bold bg-error/20 text-on-error-container rounded">
+                      {m.ms_deleted_badge()}
+                    </span>
                   {/if}
                 </div>
 
-                {#if message.content}
-                  <p
-                    class="text-sm text-on-surface-variant mt-1 whitespace-pre-wrap break-words"
-                  >
-                    {message.content}
-                  </p>
-                {/if}
-
-                {#if message.attachments && message.attachments.length > 0}
-                  <div class="flex flex-wrap gap-2 mt-2">
-                    {#each message.attachments as att}
-                      <a
-                        href={att.url}
-                        target="_blank"
-                        rel="noopener"
-                        class="flex items-center gap-1.5 px-2 py-1 text-xs bg-surface-container border border-outline-variant/30 rounded-md text-primary hover:bg-surface-container-high transition-colors"
-                      >
-                        <Papicon icon="download" size={12} />
-                        {att.name}
-                      </a>
-                    {/each}
-                  </div>
+                {#if isAdmin}
+                  {#if pendingDeleteId === message.id}
+                    <div class="flex items-center gap-2 shrink-0">
+                      <button
+                        onclick={() => confirmDelete(message.id)}
+                        class="px-2.5 py-1 text-xs font-medium bg-error text-on-error rounded-md hover:bg-error/90 transition-colors"
+                      >{m.common_delete()}</button>
+                      <button
+                        onclick={() => (pendingDeleteId = null)}
+                        class="px-2.5 py-1 text-xs font-medium bg-surface-container text-on-surface rounded-md hover:bg-surface-container-high transition-colors"
+                      >{m.common_cancel()}</button>
+                    </div>
+                  {:else}
+                    <button
+                      onclick={() => (pendingDeleteId = message.id)}
+                      class="flex items-center justify-center w-8 h-8 text-on-surface-variant hover:text-error hover:bg-error/10 rounded-md transition-colors shrink-0"
+                      title={m.ms_delete_history_title()}
+                      aria-label={m.ms_delete_aria()}
+                    >
+                      <Papicon icon="trash" size={15} />
+                    </button>
+                  {/if}
                 {/if}
               </div>
 
-              {#if isAdmin}
-                {#if pendingDeleteId === message.id}
-                  <div class="flex items-center gap-2 shrink-0">
-                    <button
-                      onclick={() => confirmDelete(message.id)}
-                      class="px-2.5 py-1 text-xs font-medium bg-error text-on-error rounded-md hover:bg-error/90 transition-colors"
-                      >{m.common_delete()}</button
-                    >
-                    <button
-                      onclick={() => (pendingDeleteId = null)}
-                      class="px-2.5 py-1 text-xs font-medium bg-surface-container text-on-surface rounded-md hover:bg-surface-container-high transition-colors"
-                      >{m.common_cancel()}</button
-                    >
-                  </div>
-                {:else}
-                  <button
-                    onclick={() => (pendingDeleteId = message.id)}
-                    class="flex items-center justify-center w-8 h-8 text-on-surface-variant hover:text-error hover:bg-error/10 rounded-md transition-colors shrink-0"
-                    title={m.ms_delete_history_title()}
-                    aria-label={m.ms_delete_aria()}
-                  >
-                    <Papicon icon="trash" size={15} />
-                  </button>
-                {/if}
-              {/if}
+              <DiscordScope class="ms-discord-message" entities={prepared.entities}>
+                <Message
+                  message={prepared.view}
+                  onUserClick={!message.isBot && memberCaseModal.canOpen
+                    ? () => memberCaseModal.show(message.authorId, message.authorName)
+                    : undefined}
+                />
+              </DiscordScope>
             </div>
           {/each}
         </div>
@@ -798,3 +702,10 @@
     </div>
   {/snippet}
 </ModulePage>
+
+<style>
+  :global(.arcscord-discord-ui.ms-discord-message) {
+    border-radius: 0.5rem;
+    padding: 0.25rem 0;
+  }
+</style>

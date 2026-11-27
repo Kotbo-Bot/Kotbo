@@ -1,26 +1,31 @@
 <script lang="ts" module>
   /** Couleur de chaque type d'evenement, reprise par la legende de la page. */
   export const EVENT_TYPE_COLOR: Record<string, string> = {
-    meeting: 'var(--color-primary)',
-    call: 'var(--color-success)',
-    absence: 'var(--color-warning)',
-    task: 'var(--color-tertiary)',
+    meeting: "var(--color-primary)",
+    call: "var(--color-success)",
+    absence: "var(--color-warning)",
+    task: "var(--color-tertiary)",
     // Calques du serveur : couleurs de categorie, comme les calendriers d'Outlook.
-    server_event: '#0891b2',
-    giveaway: '#db2777',
-    schedule: '#64748b',
-    testing_end: '#ea580c',
-    sanction_end: '#be123c',
-    voice: '#0d9488',
-    coverage: 'var(--color-error)',
+    server_event: "#0891b2",
+    giveaway: "#db2777",
+    schedule: "#64748b",
+    testing_end: "#ea580c",
+    sanction_end: "#be123c",
+    voice: "#0d9488",
+    coverage: "var(--color-error)",
   };
 
-  export type CalendarView = 'day' | 'twodays' | 'week' | 'month' | 'agenda';
+  export type CalendarView = "day" | "twodays" | "week" | "month" | "agenda";
 
   /** Peu de vues, comme Tafac : la semaine par defaut, le jour, le mois et la liste. */
-  export const CALENDAR_VIEWS: CalendarView[] = ['day', 'week', 'month', 'agenda'];
+  export const CALENDAR_VIEWS: CalendarView[] = [
+    "day",
+    "week",
+    "month",
+    "agenda",
+  ];
   /** Sur telephone, une ou deux colonnes et la liste : une semaine n'y tient pas. */
-  export const PHONE_VIEWS: CalendarView[] = ['day', 'twodays', 'agenda'];
+  export const PHONE_VIEWS: CalendarView[] = ["day", "twodays", "agenda"];
 
   export interface CalendarEvent {
     id: string;
@@ -39,17 +44,17 @@
 </script>
 
 <script lang="ts">
-  import { onMount, tick, untrack } from 'svelte';
-  import { layoutDay } from '../calendarLayout';
-  import { m, dateLocale } from '../i18n';
-  import Papicon from './Papicon.svelte';
+  import { onMount, tick, untrack } from "svelte";
+  import { layoutDay } from "../calendarLayout";
+  import { m, dateLocale } from "../i18n";
+  import Papicon from "./Papicon.svelte";
 
   let {
-    view = $bindable<CalendarView>('week'),
+    view = $bindable<CalendarView>("week"),
     currentDate = $bindable(new Date()),
     events = [] as CalendarEvent[],
     selectedKey = null as string | null,
-    showWeekend = 'auto' as 'auto' | 'always',
+    showWeekend = "auto" as "auto" | "always",
     onRangeChange,
     onEventClick,
     onSlotSelect,
@@ -63,7 +68,7 @@
     /** Evenement dont l'apercu est ouvert : reste en surbrillance. */
     selectedKey?: string | null;
     /** `auto` : la semaine cache samedi et dimanche quand ils sont vides. */
-    showWeekend?: 'auto' | 'always';
+    showWeekend?: "auto" | "always";
     onRangeChange: (start: Date, end: Date) => void;
     onEventClick: (event: CalendarEvent, anchor: DOMRect) => void;
     /** Creneau choisi au clic ou au glisser ; `anchor` sert a placer la bulle de creation. */
@@ -82,7 +87,8 @@
 
   const hours = Array.from({ length: 24 }, (_, i) => i);
   const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
-  const colorOf = (e: CalendarEvent) => e.color ?? EVENT_TYPE_COLOR[e.type] ?? 'var(--color-outline)';
+  const colorOf = (e: CalendarEvent) =>
+    e.color ?? EVENT_TYPE_COLOR[e.type] ?? "var(--color-outline)";
   const keyOf = (e: CalendarEvent) => `${e.type}:${e.id}`;
 
   let timeGridEl = $state<HTMLElement | undefined>(undefined);
@@ -107,7 +113,11 @@
   }
 
   function isSameDay(a: Date, b: Date) {
-    return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+    return (
+      a.getFullYear() === b.getFullYear() &&
+      a.getMonth() === b.getMonth() &&
+      a.getDate() === b.getDate()
+    );
   }
 
   const isToday = (d: Date) => isSameDay(d, now);
@@ -115,12 +125,24 @@
 
   /** Toute la periode : c'est elle qu'on charge, meme quand le week-end est masque. */
   const rangeDays = $derived.by((): Date[] => {
-    if (view === 'day') return [startOfDay(currentDate)];
-    if (view === 'twodays') return [startOfDay(currentDate), addDays(startOfDay(currentDate), 1)];
-    if (view === 'week') return Array.from({ length: 7 }, (_, i) => addDays(getMonday(currentDate), i));
-    const first = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
-    if (view === 'agenda') {
-      const count = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
+    if (view === "day") return [startOfDay(currentDate)];
+    if (view === "twodays")
+      return [startOfDay(currentDate), addDays(startOfDay(currentDate), 1)];
+    if (view === "week")
+      return Array.from({ length: 7 }, (_, i) =>
+        addDays(getMonday(currentDate), i),
+      );
+    const first = new Date(
+      currentDate.getFullYear(),
+      currentDate.getMonth(),
+      1,
+    );
+    if (view === "agenda") {
+      const count = new Date(
+        currentDate.getFullYear(),
+        currentDate.getMonth() + 1,
+        0,
+      ).getDate();
       return Array.from({ length: count }, (_, i) => addDays(first, i));
     }
     // Mois : six semaines pleines, du lundi au dimanche.
@@ -129,12 +151,14 @@
 
   // Comme Tafac : un week-end vide prend de la place pour rien.
   const days = $derived(
-    view === 'week' && showWeekend === 'auto'
+    view === "week" && showWeekend === "auto"
       ? rangeDays.filter((d) => !isWeekend(d) || eventsOn(d).length > 0)
       : rangeDays,
   );
 
-  const isTimeView = $derived(view === 'day' || view === 'twodays' || view === 'week');
+  const isTimeView = $derived(
+    view === "day" || view === "twodays" || view === "week",
+  );
 
   $effect(() => {
     const first = rangeDays[0];
@@ -147,20 +171,37 @@
   });
 
   const title = $derived.by(() => {
-    const fmt = (d: Date, o: Intl.DateTimeFormatOptions) => d.toLocaleDateString(dateLocale(), o);
-    if (view === 'day') return capitalize(fmt(currentDate, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }));
-    if (view === 'month' || view === 'agenda') return capitalize(fmt(currentDate, { month: 'long', year: 'numeric' }));
+    const fmt = (d: Date, o: Intl.DateTimeFormatOptions) =>
+      d.toLocaleDateString(dateLocale(), o);
+    if (view === "day")
+      return capitalize(
+        fmt(currentDate, {
+          weekday: "long",
+          day: "numeric",
+          month: "long",
+          year: "numeric",
+        }),
+      );
+    if (view === "month" || view === "agenda")
+      return capitalize(fmt(currentDate, { month: "long", year: "numeric" }));
     const first = days[0];
     const last = days[days.length - 1];
-    if (first.getMonth() === last.getMonth()) return `${first.getDate()} – ${last.getDate()} ${fmt(last, { month: 'long', year: 'numeric' })}`;
-    return `${fmt(first, { day: 'numeric', month: 'short' })} – ${fmt(last, { day: 'numeric', month: 'short', year: 'numeric' })}`;
+    if (first.getMonth() === last.getMonth())
+      return `${first.getDate()} – ${last.getDate()} ${fmt(last, { month: "long", year: "numeric" })}`;
+    return `${fmt(first, { day: "numeric", month: "short" })} – ${fmt(last, { day: "numeric", month: "short", year: "numeric" })}`;
   });
 
   function shift(direction: 1 | -1) {
-    if (view === 'day') currentDate = addDays(currentDate, direction);
-    else if (view === 'twodays') currentDate = addDays(currentDate, 2 * direction);
-    else if (view === 'week') currentDate = addDays(currentDate, 7 * direction);
-    else currentDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + direction, 1);
+    if (view === "day") currentDate = addDays(currentDate, direction);
+    else if (view === "twodays")
+      currentDate = addDays(currentDate, 2 * direction);
+    else if (view === "week") currentDate = addDays(currentDate, 7 * direction);
+    else
+      currentDate = new Date(
+        currentDate.getFullYear(),
+        currentDate.getMonth() + direction,
+        1,
+      );
   }
 
   function goToday() {
@@ -183,7 +224,9 @@
     });
   }
 
-  const allDayByDay = $derived(days.map((d) => eventsOn(d).filter((e) => e.isAllDay)));
+  const allDayByDay = $derived(
+    days.map((d) => eventsOn(d).filter((e) => e.isAllDay)),
+  );
 
   const timedByDay = $derived(
     days.map((day) => {
@@ -193,7 +236,12 @@
         .map((e) => {
           const startMin = Math.max(0, (e.start.getTime() - from) / 60000);
           const endMin = Math.min(1440, (eventEnd(e).getTime() - from) / 60000);
-          return { event: e, key: keyOf(e), start: startMin, end: Math.max(endMin, startMin + 20) };
+          return {
+            event: e,
+            key: keyOf(e),
+            start: startMin,
+            end: Math.max(endMin, startMin + 20),
+          };
         });
       const layout = layoutDay(items);
       return items.map((item) => ({ ...item, ...layout.get(item.key)! }));
@@ -201,29 +249,42 @@
   );
 
   const agendaDays = $derived(
-    view === 'agenda'
+    view === "agenda"
       ? days
           .map((date) => ({
             date,
-            events: eventsOn(date).sort((a, b) => Number(!a.isAllDay) - Number(!b.isAllDay) || a.start.getTime() - b.start.getTime()),
+            events: eventsOn(date).sort(
+              (a, b) =>
+                Number(!a.isAllDay) - Number(!b.isAllDay) ||
+                a.start.getTime() - b.start.getTime(),
+            ),
           }))
           .filter((d) => d.events.length > 0)
       : [],
   );
 
-  const formatTime = (d: Date) => d.toLocaleTimeString(dateLocale(), { hour: '2-digit', minute: '2-digit' });
+  const formatTime = (d: Date) =>
+    d.toLocaleTimeString(dateLocale(), { hour: "2-digit", minute: "2-digit" });
   const isPast = (e: CalendarEvent) => eventEnd(e).getTime() < now.getTime();
 
   function getEventIcon(type: string) {
     switch (type) {
-      case 'meeting': return 'calendar';
-      case 'call': return 'phone';
-      case 'absence': return 'sun';
-      case 'task': return 'check-square';
-      case 'server_event': return 'megaphone';
-      case 'giveaway': return 'gift';
-      case 'schedule': return 'send';
-      default: return 'circle';
+      case "meeting":
+        return "calendar";
+      case "call":
+        return "phone";
+      case "absence":
+        return "sun";
+      case "task":
+        return "check-square";
+      case "server_event":
+        return "megaphone";
+      case "giveaway":
+        return "gift";
+      case "schedule":
+        return "send";
+      default:
+        return "circle";
     }
   }
 
@@ -238,13 +299,24 @@
 
   // ── Glisser-deposer a la souris ─────────────────────────
   const SNAP = 15;
-  let drag = $state<{ key: string; event: CalendarEvent; day: number; start: number; end: number } | null>(null);
+  let drag = $state<{
+    key: string;
+    event: CalendarEvent;
+    day: number;
+    start: number;
+    end: number;
+  } | null>(null);
   let suppressClick = false;
 
-  function startDrag(item: { event: CalendarEvent; key: string; start: number; end: number }, dayIndex: number, e: PointerEvent, mode: 'move' | 'resize') {
+  function startDrag(
+    item: { event: CalendarEvent; key: string; start: number; end: number },
+    dayIndex: number,
+    e: PointerEvent,
+    mode: "move" | "resize",
+  ) {
     e.stopPropagation();
-    if (e.pointerType !== 'mouse' || e.button !== 0 || !onEventMove) return;
-    if (mode === 'move' ? !canMove(item.event) : !canResize(item.event)) return;
+    if (e.pointerType !== "mouse" || e.button !== 0 || !onEventMove) return;
+    if (mode === "move" ? !canMove(item.event) : !canResize(item.event)) return;
     e.preventDefault();
     const x0 = e.clientX;
     const y0 = e.clientY;
@@ -254,51 +326,82 @@
     const move = (ev: PointerEvent) => {
       if (!moved && Math.hypot(ev.clientX - x0, ev.clientY - y0) < 4) return;
       moved = true;
-      const delta = Math.round(((ev.clientY - y0) / HOUR) * 60 / SNAP) * SNAP;
-      if (mode === 'resize') {
-        drag = { key: item.key, event: item.event, day: dayIndex, start: item.start, end: Math.max(item.start + SNAP, Math.min(1440, item.end + delta)) };
+      const delta = Math.round((((ev.clientY - y0) / HOUR) * 60) / SNAP) * SNAP;
+      if (mode === "resize") {
+        drag = {
+          key: item.key,
+          event: item.event,
+          day: dayIndex,
+          start: item.start,
+          end: Math.max(item.start + SNAP, Math.min(1440, item.end + delta)),
+        };
         return;
       }
-      const column = (document.elementFromPoint(ev.clientX, ev.clientY) as HTMLElement | null)?.closest<HTMLElement>('[data-day-index]');
+      const column = (
+        document.elementFromPoint(ev.clientX, ev.clientY) as HTMLElement | null
+      )?.closest<HTMLElement>("[data-day-index]");
       const day = column ? Number(column.dataset.dayIndex) : dayIndex;
       const start = Math.max(0, Math.min(1440 - duration, item.start + delta));
-      drag = { key: item.key, event: item.event, day, start, end: start + duration };
+      drag = {
+        key: item.key,
+        event: item.event,
+        day,
+        start,
+        end: start + duration,
+      };
     };
     const up = () => {
-      window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerup', up);
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
       const done = drag;
       drag = null;
       if (!moved || !done) return;
       suppressClick = true;
-      onEventMove?.(done.event, slotDate(days[done.day], done.start), slotDate(days[done.day], done.end));
+      onEventMove?.(
+        done.event,
+        slotDate(days[done.day], done.start),
+        slotDate(days[done.day], done.end),
+      );
     };
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', up);
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
   }
 
   // ── Balayage au doigt ───────────────────────────────────
   // Un geste franc et horizontal change de periode ; le defilement vertical reste libre.
   function handleSwipeStart(e: PointerEvent) {
-    if (e.pointerType === 'mouse') return;
+    if (e.pointerType === "mouse") return;
     const x0 = e.clientX;
     const y0 = e.clientY;
     const t0 = Date.now();
     const up = (ev: PointerEvent) => {
-      window.removeEventListener('pointerup', up);
+      window.removeEventListener("pointerup", up);
       const dx = ev.clientX - x0;
       const dy = ev.clientY - y0;
-      if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5 && Date.now() - t0 < 800) shift(dx < 0 ? 1 : -1);
+      if (
+        Math.abs(dx) > 60 &&
+        Math.abs(dx) > Math.abs(dy) * 1.5 &&
+        Date.now() - t0 < 800
+      )
+        shift(dx < 0 ? 1 : -1);
     };
-    window.addEventListener('pointerup', up);
+    window.addEventListener("pointerup", up);
   }
 
   // ── Selection de creneau ────────────────────────────────
-  let selection = $state<{ day: number; from: number; to: number } | null>(null);
+  let selection = $state<{ day: number; from: number; to: number } | null>(
+    null,
+  );
 
   function minutesAt(column: HTMLElement, clientY: number) {
     const rect = column.getBoundingClientRect();
-    return Math.min(1440 - SLOT, Math.max(0, Math.floor(((clientY - rect.top) / HOUR) * 60 / SLOT) * SLOT));
+    return Math.min(
+      1440 - SLOT,
+      Math.max(
+        0,
+        Math.floor((((clientY - rect.top) / HOUR) * 60) / SLOT) * SLOT,
+      ),
+    );
   }
 
   function slotDate(day: Date, minutes: number) {
@@ -312,8 +415,17 @@
     const from = Math.min(selection.from, selection.to);
     const to = Math.max(selection.from, selection.to) + SLOT;
     const rect = column.getBoundingClientRect();
-    const anchor = new DOMRect(rect.left, rect.top + (from / 60) * HOUR, rect.width, ((to - from) / 60) * HOUR);
-    onSlotSelect(slotDate(days[selection.day], from), slotDate(days[selection.day], to), anchor);
+    const anchor = new DOMRect(
+      rect.left,
+      rect.top + (from / 60) * HOUR,
+      rect.width,
+      ((to - from) / 60) * HOUR,
+    );
+    onSlotSelect(
+      slotDate(days[selection.day], from),
+      slotDate(days[selection.day], to),
+      anchor,
+    );
   }
 
   function handleColumnPointerDown(dayIndex: number, event: PointerEvent) {
@@ -323,53 +435,66 @@
     selection = { day: dayIndex, from: start, to: start };
 
     // Au doigt, un glisser fait defiler la grille : seul un appui bref choisit le creneau.
-    if (event.pointerType !== 'mouse') {
+    if (event.pointerType !== "mouse") {
       const x = event.clientX;
       const y = event.clientY;
       const up = (e: PointerEvent) => {
-        window.removeEventListener('pointerup', up);
-        if (Math.hypot(e.clientX - x, e.clientY - y) <= 10) finishSelection(column);
+        window.removeEventListener("pointerup", up);
+        if (Math.hypot(e.clientX - x, e.clientY - y) <= 10)
+          finishSelection(column);
         selection = null;
       };
-      window.addEventListener('pointerup', up);
+      window.addEventListener("pointerup", up);
       return;
     }
 
     event.preventDefault();
     const move = (e: PointerEvent) => {
-      if (selection) selection = { ...selection, to: minutesAt(column, e.clientY) };
+      if (selection)
+        selection = { ...selection, to: minutesAt(column, e.clientY) };
     };
     const up = () => {
-      window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerup', up);
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
       finishSelection(column);
       selection = null;
     };
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', up);
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
   }
 
   function handleColumnKeydown(day: Date, event: KeyboardEvent) {
-    if (event.key !== 'Enter' && event.key !== ' ') return;
+    if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
     const start = slotDate(day, 9 * 60);
-    onSlotSelect(start, new Date(start.getTime() + 3600000), (event.currentTarget as HTMLElement).getBoundingClientRect());
+    onSlotSelect(
+      start,
+      new Date(start.getTime() + 3600000),
+      (event.currentTarget as HTMLElement).getBoundingClientRect(),
+    );
   }
 
   function selectAllDay(day: Date, target: EventTarget | null) {
     const start = slotDate(day, 9 * 60);
-    onSlotSelect(start, new Date(start.getTime() + 3600000), (target as HTMLElement).getBoundingClientRect());
+    onSlotSelect(
+      start,
+      new Date(start.getTime() + 3600000),
+      (target as HTMLElement).getBoundingClientRect(),
+    );
   }
 
   function openDay(day: Date) {
     currentDate = new Date(day);
-    view = 'day';
+    view = "day";
   }
 
   // ── Defilement et raccourcis ────────────────────────────
   function scrollToMorning() {
     if (!timeGridEl) return;
-    const hour = isToday(currentDate) || days.some(isToday) ? Math.max(0, Math.min(now.getHours() - 2, 17)) : WORK_START;
+    const hour =
+      isToday(currentDate) || days.some(isToday)
+        ? Math.max(0, Math.min(now.getHours() - 2, 17))
+        : WORK_START;
     timeGridEl.scrollTop = Math.max(hour, 0) * HOUR;
   }
 
@@ -377,18 +502,28 @@
     if (isTimeView) void tick().then(scrollToMorning);
   });
 
-  const VIEW_KEYS: Record<string, CalendarView> = { d: 'day', w: 'week', m: 'month', a: 'agenda' };
+  const VIEW_KEYS: Record<string, CalendarView> = {
+    d: "day",
+    w: "week",
+    m: "month",
+    a: "agenda",
+  };
 
   // ← → pour naviguer, T pour aujourd'hui, D/W/M/A pour la vue.
   // Ignore pendant une saisie et quand une fenetre est ouverte par-dessus.
   function handleShortcut(e: KeyboardEvent) {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
-    if ((e.target as HTMLElement).closest('input, textarea, select, [contenteditable="true"]')) return;
+    if (
+      (e.target as HTMLElement).closest(
+        'input, textarea, select, [contenteditable="true"]',
+      )
+    )
+      return;
     if (document.querySelector('[role="dialog"]')) return;
     const key = e.key.toLowerCase();
-    if (e.key === 'ArrowLeft') shift(-1);
-    else if (e.key === 'ArrowRight') shift(1);
-    else if (key === 't') goToday();
+    if (e.key === "ArrowLeft") shift(-1);
+    else if (e.key === "ArrowRight") shift(1);
+    else if (key === "t") goToday();
     else if (VIEW_KEYS[key]) view = VIEW_KEYS[key];
     else return;
     e.preventDefault();
@@ -396,12 +531,16 @@
 
   onMount(() => {
     // Sur telephone, une semaine ou un mois ne tiennent pas : on ouvre la journee.
-    if (window.matchMedia('(max-width: 640px)').matches && !PHONE_VIEWS.includes(view)) view = 'day';
+    if (
+      window.matchMedia("(max-width: 640px)").matches &&
+      !PHONE_VIEWS.includes(view)
+    )
+      view = "day";
     const clock = setInterval(() => (now = new Date()), 60000);
-    window.addEventListener('keydown', handleShortcut);
+    window.addEventListener("keydown", handleShortcut);
     return () => {
       clearInterval(clock);
-      window.removeEventListener('keydown', handleShortcut);
+      window.removeEventListener("keydown", handleShortcut);
     };
   });
 </script>
@@ -409,9 +548,14 @@
 {#snippet eventChip(event: CalendarEvent, compact: boolean)}
   <button
     type="button"
-    class="cal-chip {selectedKey === keyOf(event) ? 'cal-chip--selected' : ''} {isPast(event) ? 'cal-chip--past' : ''}"
+    class="cal-chip {selectedKey === keyOf(event)
+      ? 'cal-chip--selected'
+      : ''} {isPast(event) ? 'cal-chip--past' : ''}"
     style="--evt: {colorOf(event)}"
-    onclick={(e) => { e.stopPropagation(); openEvent(event, e.currentTarget); }}
+    onclick={(e) => {
+      e.stopPropagation();
+      openEvent(event, e.currentTarget);
+    }}
     onpointerdown={(e) => e.stopPropagation()}
   >
     {#if !compact && !event.isAllDay}
@@ -423,25 +567,64 @@
 
 <section class="cal flex flex-col h-full min-h-0" aria-label={title}>
   <!-- Barre de navigation : Aujourd'hui, precedent / suivant, periode -->
-  <div class="cal-nav flex items-center gap-1 px-3 py-2 border-b border-outline-variant shrink-0">
-    <button type="button" class="cal-nav__today" onclick={goToday} title="{m.cal_today()} (T)">{m.cal_today()}</button>
-    <button type="button" class="cal-nav__arrow" onclick={() => shift(-1)} aria-label={m.cal_prev()} title="{m.cal_prev()} (←)">
+  <div
+    class="cal-nav flex items-center gap-1 px-3 py-2 border-b border-outline-variant shrink-0"
+  >
+    <button
+      type="button"
+      class="cal-nav__today"
+      onclick={goToday}
+      title="{m.cal_today()} (T)">{m.cal_today()}</button
+    >
+    <button
+      type="button"
+      class="cal-nav__arrow"
+      onclick={() => shift(-1)}
+      aria-label={m.cal_prev()}
+      title="{m.cal_prev()} (←)"
+    >
       <Papicon icon="chevron-left" size={16} />
     </button>
-    <button type="button" class="cal-nav__arrow" onclick={() => shift(1)} aria-label={m.cal_next()} title="{m.cal_next()} (→)">
+    <button
+      type="button"
+      class="cal-nav__arrow"
+      onclick={() => shift(1)}
+      aria-label={m.cal_next()}
+      title="{m.cal_next()} (→)"
+    >
       <Papicon icon="chevron-right" size={16} />
     </button>
-    <h2 class="ml-2 min-w-0 truncate text-base font-semibold text-on-surface">{title}</h2>
+    <h2 class="ml-2 min-w-0 truncate text-base font-semibold text-on-surface">
+      {title}
+    </h2>
   </div>
 
-  <div class="cal-body flex-1 min-h-0 flex flex-col" onpointerdown={handleSwipeStart} role="presentation">
-    {#if view === 'agenda'}
+  <div
+    class="cal-body flex-1 min-h-0 flex flex-col"
+    onpointerdown={handleSwipeStart}
+    role="presentation"
+  >
+    {#if view === "agenda"}
       <div class="flex-1 overflow-y-auto">
         {#each agendaDays as day (day.date.getTime())}
           <section>
-            <h3 class="sticky top-0 z-10 px-4 py-2 text-body-sm font-semibold bg-surface-container-low border-b border-outline-variant {isToday(day.date) ? 'text-primary' : 'text-on-surface'}">
-              {capitalize(day.date.toLocaleDateString(dateLocale(), { weekday: 'long', day: 'numeric', month: 'long' }))}
-              {#if isToday(day.date)}<span class="ml-1 text-2xs font-medium">· {m.cal_today()}</span>{/if}
+            <h3
+              class="sticky top-0 z-10 px-4 py-2 text-body-sm font-semibold bg-surface-container-low border-b border-outline-variant {isToday(
+                day.date,
+              )
+                ? 'text-primary'
+                : 'text-on-surface'}"
+            >
+              {capitalize(
+                day.date.toLocaleDateString(dateLocale(), {
+                  weekday: "long",
+                  day: "numeric",
+                  month: "long",
+                }),
+              )}
+              {#if isToday(day.date)}<span class="ml-1 text-2xs font-medium"
+                  >· {m.cal_today()}</span
+                >{/if}
             </h3>
             <ul>
               {#each day.events as event (keyOf(event))}
@@ -450,70 +633,134 @@
                     type="button"
                     onclick={(e) => openEvent(event, e.currentTarget)}
                     style="--evt: {colorOf(event)}"
-                    class="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-surface-container transition-colors {isPast(event) ? 'opacity-60' : ''}"
+                    class="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-surface-container transition-colors {isPast(
+                      event,
+                    )
+                      ? 'opacity-60'
+                      : ''}"
                   >
-                    <span class="w-28 shrink-0 text-2xs font-medium text-on-surface-variant tabular-nums">
-                      {event.isAllDay ? m.cal_all_day() : `${formatTime(event.start)} – ${formatTime(eventEnd(event))}`}
+                    <span
+                      class="w-28 shrink-0 text-2xs font-medium text-on-surface-variant tabular-nums"
+                    >
+                      {event.isAllDay
+                        ? m.cal_all_day()
+                        : `${formatTime(event.start)} – ${formatTime(eventEnd(event))}`}
                     </span>
                     <span class="cal-bar self-stretch"></span>
                     <span class="min-w-0 flex-1">
-                      <span class="block text-body-sm font-medium text-on-surface truncate">{event.title}</span>
+                      <span
+                        class="block text-body-sm font-medium text-on-surface truncate"
+                        >{event.title}</span
+                      >
                       {#if event.staffName}
-                        <span class="block text-2xs text-on-surface-variant truncate">{event.staffName}</span>
+                        <span
+                          class="block text-2xs text-on-surface-variant truncate"
+                          >{event.staffName}</span
+                        >
                       {/if}
                     </span>
-                    <Papicon icon={getEventIcon(event.type)} size={14} class="text-on-surface-variant shrink-0" />
+                    <Papicon
+                      icon={getEventIcon(event.type)}
+                      size={14}
+                      class="text-on-surface-variant shrink-0"
+                    />
                   </button>
                 </li>
               {/each}
             </ul>
           </section>
         {:else}
-          <div class="h-full flex flex-col items-center justify-center gap-3 p-8 text-center">
-            <Papicon icon="calendar" size={28} class="text-on-surface-variant" />
-            <p class="text-body-sm text-on-surface-variant">{m.cal_agenda_empty()}</p>
+          <div
+            class="h-full flex flex-col items-center justify-center gap-3 p-8 text-center"
+          >
+            <Papicon
+              icon="calendar"
+              size={28}
+              class="text-on-surface-variant"
+            />
+            <p class="text-body-sm text-on-surface-variant">
+              {m.cal_agenda_empty()}
+            </p>
             <button
               type="button"
               class="btn btn-tonal btn-sm"
-              onclick={(e) => { const s = new Date(Date.now() + 3600000); onSlotSelect(s, new Date(s.getTime() + 3600000), e.currentTarget.getBoundingClientRect()); }}
+              onclick={(e) => {
+                const s = new Date(Date.now() + 3600000);
+                onSlotSelect(
+                  s,
+                  new Date(s.getTime() + 3600000),
+                  e.currentTarget.getBoundingClientRect(),
+                );
+              }}
             >
               {m.cal_agenda_add()}
             </button>
           </div>
         {/each}
       </div>
-    {:else if view === 'month'}
+    {:else if view === "month"}
       <div class="grid grid-cols-7 border-b border-outline-variant shrink-0">
         {#each days.slice(0, 7) as d (d.getTime())}
-          <div class="px-2 py-1.5 text-2xs font-semibold text-on-surface-variant">
-            {capitalize(d.toLocaleDateString(dateLocale(), { weekday: 'long' }))}
+          <div
+            class="px-2 py-1.5 text-2xs font-semibold text-on-surface-variant"
+          >
+            {capitalize(
+              d.toLocaleDateString(dateLocale(), { weekday: "long" }),
+            )}
           </div>
         {/each}
       </div>
       <div class="flex-1 min-h-0 grid grid-cols-7 grid-rows-6">
         {#each days as day, i (day.getTime())}
-          {@const dayEvents = eventsOn(day).sort((a, b) => Number(!a.isAllDay) - Number(!b.isAllDay) || a.start.getTime() - b.start.getTime())}
+          {@const dayEvents = eventsOn(day).sort(
+            (a, b) =>
+              Number(!a.isAllDay) - Number(!b.isAllDay) ||
+              a.start.getTime() - b.start.getTime(),
+          )}
           <div
-            class="cal-month-cell {day.getMonth() !== currentDate.getMonth() ? 'cal-month-cell--out' : ''} {isWeekend(day) ? 'cal-off' : ''}"
+            class="cal-month-cell {day.getMonth() !== currentDate.getMonth()
+              ? 'cal-month-cell--out'
+              : ''} {isWeekend(day) ? 'cal-off' : ''}"
             role="button"
             tabindex="0"
-            aria-label={day.toLocaleDateString(dateLocale(), { weekday: 'long', day: 'numeric', month: 'long' })}
+            aria-label={day.toLocaleDateString(dateLocale(), {
+              weekday: "long",
+              day: "numeric",
+              month: "long",
+            })}
             onclick={(e) => selectAllDay(day, e.currentTarget)}
-            onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), selectAllDay(day, e.currentTarget))}
+            onkeydown={(e) =>
+              (e.key === "Enter" || e.key === " ") &&
+              (e.preventDefault(), selectAllDay(day, e.currentTarget))}
           >
             <button
               type="button"
               class="cal-month-day {isToday(day) ? 'cal-month-day--today' : ''}"
-              onclick={(e) => { e.stopPropagation(); openDay(day); }}
+              onclick={(e) => {
+                e.stopPropagation();
+                openDay(day);
+              }}
             >
-              {day.getDate() === 1 || i === 0 ? day.toLocaleDateString(dateLocale(), { day: 'numeric', month: 'short' }) : day.getDate()}
+              {day.getDate() === 1 || i === 0
+                ? day.toLocaleDateString(dateLocale(), {
+                    day: "numeric",
+                    month: "short",
+                  })
+                : day.getDate()}
             </button>
             <div class="flex flex-col gap-0.5 min-w-0">
               {#each dayEvents.slice(0, 3) as event (keyOf(event))}
                 {@render eventChip(event, false)}
               {/each}
               {#if dayEvents.length > 3}
-                <button type="button" class="cal-more" onclick={(e) => { e.stopPropagation(); openDay(day); }}>
+                <button
+                  type="button"
+                  class="cal-more"
+                  onclick={(e) => {
+                    e.stopPropagation();
+                    openDay(day);
+                  }}
+                >
                   {m.cal_more({ n: dayEvents.length - 3 })}
                 </button>
               {/if}
@@ -523,18 +770,32 @@
       </div>
     {:else}
       <!-- En-tetes des jours -->
-      <div class="cal-row border-b border-outline-variant shrink-0" style="--cols: {days.length}">
+      <div
+        class="cal-row border-b border-outline-variant shrink-0"
+        style="--cols: {days.length}"
+      >
         <div></div>
         {#each days as day (day.getTime())}
-          <button type="button" class="cal-day-head {isToday(day) ? 'cal-day-head--today' : ''}" onclick={() => openDay(day)}>
+          <button
+            type="button"
+            class="cal-day-head {isToday(day) ? 'cal-day-head--today' : ''}"
+            onclick={() => openDay(day)}
+          >
             <span class="cal-day-head__num">{day.getDate()}</span>
-            <span class="cal-day-head__name">{day.toLocaleDateString(dateLocale(), { weekday: view === 'day' ? 'long' : 'short' })}</span>
+            <span class="cal-day-head__name"
+              >{day.toLocaleDateString(dateLocale(), {
+                weekday: view === "day" ? "long" : "short",
+              })}</span
+            >
           </button>
         {/each}
       </div>
 
       <!-- Evenements sur la journee entiere -->
-      <div class="cal-row border-b border-outline-variant shrink-0" style="--cols: {days.length}">
+      <div
+        class="cal-row border-b border-outline-variant shrink-0"
+        style="--cols: {days.length}"
+      >
         <div class="cal-gutter-label">{m.cal_all_day()}</div>
         {#each days as day, i (day.getTime())}
           <div
@@ -548,7 +809,14 @@
               {@render eventChip(event, true)}
             {/each}
             {#if allDayByDay[i].length > 3}
-              <button type="button" class="cal-more" onclick={(e) => { e.stopPropagation(); openDay(day); }}>
+              <button
+                type="button"
+                class="cal-more"
+                onclick={(e) => {
+                  e.stopPropagation();
+                  openDay(day);
+                }}
+              >
                 {m.cal_more({ n: allDayByDay[i].length - 3 })}
               </button>
             {/if}
@@ -558,11 +826,16 @@
 
       <!-- Grille horaire -->
       <div bind:this={timeGridEl} class="flex-1 min-h-0 overflow-y-auto">
-        <div class="cal-row relative" style="--cols: {days.length}; height: {DAY_HEIGHT}px">
+        <div
+          class="cal-row relative"
+          style="--cols: {days.length}; height: {DAY_HEIGHT}px"
+        >
           <div class="relative">
             {#each hours as hour (hour)}
               {#if hour > 0}
-                <span class="cal-hour" style="top: {hour * HOUR}px">{String(hour).padStart(2, '0')}:00</span>
+                <span class="cal-hour" style="top: {hour * HOUR}px"
+                  >{String(hour).padStart(2, "0")}:00</span
+                >
               {/if}
             {/each}
           </div>
@@ -573,19 +846,36 @@
               data-day-index={i}
               role="button"
               tabindex="0"
-              aria-label={day.toLocaleDateString(dateLocale(), { weekday: 'long', day: 'numeric', month: 'long' })}
+              aria-label={day.toLocaleDateString(dateLocale(), {
+                weekday: "long",
+                day: "numeric",
+                month: "long",
+              })}
               onpointerdown={(e) => handleColumnPointerDown(i, e)}
               onkeydown={(e) => handleColumnKeydown(day, e)}
             >
               {#each hours as hour (hour)}
-                <div class="cal-hour-cell {isWeekend(day) || hour < WORK_START || hour >= WORK_END ? 'cal-off' : ''}"></div>
+                <div
+                  class="cal-hour-cell {isWeekend(day) ||
+                  hour < WORK_START ||
+                  hour >= WORK_END
+                    ? 'cal-off'
+                    : ''}"
+                ></div>
               {/each}
 
               {#if selection && selection.day === i}
                 {@const from = Math.min(selection.from, selection.to)}
                 {@const to = Math.max(selection.from, selection.to) + SLOT}
-                <div class="cal-selection" style="top: {(from / 60) * HOUR}px; height: {((to - from) / 60) * HOUR}px">
-                  {formatTime(slotDate(day, from))} – {formatTime(slotDate(day, to))}
+                <div
+                  class="cal-selection"
+                  style="top: {(from / 60) * HOUR}px; height: {((to - from) /
+                    60) *
+                    HOUR}px"
+                >
+                  {formatTime(slotDate(day, from))} – {formatTime(
+                    slotDate(day, to),
+                  )}
                 </div>
               {/if}
 
@@ -593,20 +883,40 @@
                 {@const height = ((item.end - item.start) / 60) * HOUR}
                 <button
                   type="button"
-                  class="cal-event {selectedKey === item.key ? 'cal-event--selected' : ''} {isPast(item.event) ? 'cal-event--past' : ''} {drag?.key === item.key ? 'cal-event--dragging' : ''} {canMove(item.event) ? 'cal-event--movable' : ''}"
-                  style="--evt: {colorOf(item.event)}; top: {(item.start / 60) * HOUR}px; height: {height - 2}px; left: calc({(item.col / item.cols) * 100}% + 1px); width: calc({100 / item.cols}% - 4px);"
-                  onclick={(e) => { e.stopPropagation(); openEvent(item.event, e.currentTarget); }}
-                  onpointerdown={(e) => startDrag(item, i, e, 'move')}
+                  class="cal-event {selectedKey === item.key
+                    ? 'cal-event--selected'
+                    : ''} {isPast(item.event)
+                    ? 'cal-event--past'
+                    : ''} {drag?.key === item.key
+                    ? 'cal-event--dragging'
+                    : ''} {canMove(item.event) ? 'cal-event--movable' : ''}"
+                  style="--evt: {colorOf(item.event)}; top: {(item.start / 60) *
+                    HOUR}px; height: {height - 2}px; left: calc({(item.col /
+                    item.cols) *
+                    100}% + 1px); width: calc({100 / item.cols}% - 4px);"
+                  onclick={(e) => {
+                    e.stopPropagation();
+                    openEvent(item.event, e.currentTarget);
+                  }}
+                  onpointerdown={(e) => startDrag(item, i, e, "move")}
                 >
                   <span class="cal-event__title">{item.event.title}</span>
                   {#if height >= 36}
-                    <span class="cal-event__meta">{formatTime(item.event.start)} – {formatTime(eventEnd(item.event))}</span>
+                    <span class="cal-event__meta"
+                      >{formatTime(item.event.start)} – {formatTime(
+                        eventEnd(item.event),
+                      )}</span
+                    >
                   {/if}
                   {#if height >= 56 && item.event.staffName}
                     <span class="cal-event__meta">{item.event.staffName}</span>
                   {/if}
                   {#if canResize(item.event)}
-                    <span class="cal-event__resize" aria-hidden="true" onpointerdown={(e) => startDrag(item, i, e, 'resize')}></span>
+                    <span
+                      class="cal-event__resize"
+                      aria-hidden="true"
+                      onpointerdown={(e) => startDrag(item, i, e, "resize")}
+                    ></span>
                   {/if}
                 </button>
               {/each}
@@ -615,16 +925,27 @@
               {#if drag && drag.day === i}
                 <div
                   class="cal-event cal-event--ghost"
-                  style="--evt: {colorOf(drag.event)}; top: {(drag.start / 60) * HOUR}px; height: {((drag.end - drag.start) / 60) * HOUR - 2}px; left: 1px; width: calc(100% - 4px);"
+                  style="--evt: {colorOf(drag.event)}; top: {(drag.start / 60) *
+                    HOUR}px; height: {((drag.end - drag.start) / 60) * HOUR -
+                    2}px; left: 1px; width: calc(100% - 4px);"
                   aria-hidden="true"
                 >
                   <span class="cal-event__title">{drag.event.title}</span>
-                  <span class="cal-event__meta">{formatTime(slotDate(day, drag.start))} – {formatTime(slotDate(day, drag.end))}</span>
+                  <span class="cal-event__meta"
+                    >{formatTime(slotDate(day, drag.start))} – {formatTime(
+                      slotDate(day, drag.end),
+                    )}</span
+                  >
                 </div>
               {/if}
 
               {#if isToday(day)}
-                <div class="cal-now" style="top: {((now.getHours() * 60 + now.getMinutes()) / 60) * HOUR}px" aria-hidden="true"></div>
+                <div
+                  class="cal-now"
+                  style="top: {((now.getHours() * 60 + now.getMinutes()) / 60) *
+                    HOUR}px"
+                  aria-hidden="true"
+                ></div>
               {/if}
             </div>
           {/each}
@@ -636,11 +957,16 @@
 
 <style>
   .cal-nav__today {
-    padding: 0.375rem 0.75rem;
-    border-radius: 0.375rem;
+    padding: 0.3125rem 0.875rem;
+    border-radius: 999px;
+    border: 1px solid var(--color-outline-variant);
+    background: var(--color-surface-container-low);
     font-size: 0.8125rem;
     font-weight: 500;
     color: var(--color-on-surface);
+    transition:
+      background-color 150ms ease,
+      border-color 150ms ease;
   }
   .cal-nav__today:hover,
   .cal-nav__arrow:hover {
@@ -652,8 +978,11 @@
     justify-content: center;
     width: 2rem;
     height: 2rem;
-    border-radius: 0.375rem;
+    border-radius: 999px;
     color: var(--color-on-surface-variant);
+    transition:
+      background-color 150ms ease,
+      color 150ms ease;
   }
 
   .cal-row {
@@ -689,7 +1018,7 @@
     color: var(--color-primary);
   }
   .cal-day-head--today::after {
-    content: '';
+    content: "";
     position: absolute;
     left: 0;
     right: 0;
@@ -733,12 +1062,22 @@
   }
   .cal-hour-cell {
     height: 48px;
-    border-bottom: 1px solid color-mix(in srgb, var(--color-outline-variant) 70%, transparent);
-    background-image: linear-gradient(to bottom, transparent 23.5px, color-mix(in srgb, var(--color-outline-variant) 35%, transparent) 23.5px, transparent 24.5px);
+    border-bottom: 1px solid
+      color-mix(in srgb, var(--color-outline-variant) 70%, transparent);
+    background-image: linear-gradient(
+      to bottom,
+      transparent 23.5px,
+      color-mix(in srgb, var(--color-outline-variant) 35%, transparent) 23.5px,
+      transparent 24.5px
+    );
   }
   /* Heures hors bureau et week-end : un ton plus sombre, comme Outlook. */
   .cal-off {
-    background-color: color-mix(in srgb, var(--color-surface-container) 55%, transparent);
+    background-color: color-mix(
+      in srgb,
+      var(--color-surface-container) 55%,
+      transparent
+    );
   }
   .cal-selection {
     position: absolute;
@@ -765,13 +1104,23 @@
     padding: 0.1875rem 0.375rem 0.1875rem 0.5rem;
     border-radius: 0.25rem;
     border-left: 3px solid var(--evt);
-    background: color-mix(in srgb, var(--evt) 18%, var(--color-surface-container-lowest));
+    background: color-mix(
+      in srgb,
+      var(--evt) 18%,
+      var(--color-surface-container-lowest)
+    );
     text-align: left;
     color: var(--color-on-surface);
-    transition: background-color 0.12s ease, box-shadow 0.12s ease;
+    transition:
+      background-color 0.12s ease,
+      box-shadow 0.12s ease;
   }
   .cal-event:hover {
-    background: color-mix(in srgb, var(--evt) 28%, var(--color-surface-container-lowest));
+    background: color-mix(
+      in srgb,
+      var(--evt) 28%,
+      var(--color-surface-container-lowest)
+    );
     z-index: 4;
   }
   .cal-event--selected {
@@ -834,7 +1183,7 @@
     pointer-events: none;
   }
   .cal-now::before {
-    content: '';
+    content: "";
     position: absolute;
     left: -5px;
     top: -4px;
@@ -852,13 +1201,21 @@
     padding: 0.0625rem 0.375rem;
     border-radius: 0.25rem;
     border-left: 3px solid var(--evt);
-    background: color-mix(in srgb, var(--evt) 16%, var(--color-surface-container-lowest));
+    background: color-mix(
+      in srgb,
+      var(--evt) 16%,
+      var(--color-surface-container-lowest)
+    );
     font-size: 0.6875rem;
     text-align: left;
     color: var(--color-on-surface);
   }
   .cal-chip:hover {
-    background: color-mix(in srgb, var(--evt) 26%, var(--color-surface-container-lowest));
+    background: color-mix(
+      in srgb,
+      var(--evt) 26%,
+      var(--color-surface-container-lowest)
+    );
   }
   .cal-chip--selected {
     background: var(--evt);

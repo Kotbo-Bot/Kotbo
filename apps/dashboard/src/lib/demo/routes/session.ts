@@ -35,23 +35,62 @@ export const AUDIT = 'audit';
 
 export const moduleStates = () => demoDb.get(MODULE_STATES, moduleStatesSeed);
 
+const EXTRA_DEMO_SERVERS = [
+  { id: '930000000000000031', name: 'Les Veilleurs', icon: null, owner: true, botPresent: false, activated: false },
+  { id: '930000000000000032', name: 'Labo de Zenox', icon: null, owner: false, botPresent: true, activated: false },
+];
+
 export function registerSessionRoutes(): void {
   route('GET', '/api/auth/session', () => ({ user: sessionUser() }));
   route('POST', '/api/auth/migrate', () => ({ ok: true }));
   route('POST', '/api/auth/logout', () => ({ ok: true }));
   route('GET', '/api/user/me', () => sessionUser());
-  route('GET', '/api/user/guilds', () => ({ guilds: sessionGuilds() }));
+
+  const installedIds = () => new Set(demoDb.get<string[]>('demo/installed-guilds', () => []));
+
+  route('GET', '/api/user/guilds', () => {
+    const installed = installedIds();
+    const extra = EXTRA_DEMO_SERVERS
+      .filter((g) => g.botPresent || installed.has(g.id))
+      .map((g) => ({
+        id: g.id,
+        name: g.name,
+        icon: g.icon,
+        owner: g.owner,
+        botPresent: true,
+        accessLevel: 'admin' as const,
+        isStaffServer: false,
+        pairedGuildId: null,
+        billingAccess: true,
+      }));
+    return { guilds: [...sessionGuilds(), ...extra] };
+  });
+
   // Page « Mes serveurs » : le serveur de démo, plus deux autres où l'on est admin mais sans Kotbo.
-  route('GET', '/api/user/servers', () => ({
-    guilds: [
-      ...sessionGuilds().map((g) => ({ id: g.id, name: g.name, icon: g.icon, owner: true, botPresent: true, activated: true })),
-      { id: '930000000000000031', name: 'Les Veilleurs', icon: null, owner: true, botPresent: false, activated: false },
-      { id: '930000000000000032', name: 'Labo de Zenox', icon: null, owner: false, botPresent: true, activated: false },
-    ],
-    clientId: '1100000000000000001',
-    invitePermissions: '8',
-    oauthUnavailable: false,
-  }));
+  route('GET', '/api/user/servers', () => {
+    const installed = installedIds();
+    return {
+      guilds: [
+        ...sessionGuilds().map((g) => ({ id: g.id, name: g.name, icon: g.icon, owner: true, botPresent: true, activated: true })),
+        ...EXTRA_DEMO_SERVERS.map((g) =>
+          installed.has(g.id)
+            ? { ...g, botPresent: true, activated: true }
+            : g,
+        ),
+      ],
+      clientId: '1100000000000000001',
+      invitePermissions: '8',
+      oauthUnavailable: false,
+    };
+  });
+
+  route('POST', '/api/demo/guilds/:guildId/install', ({ params }) => {
+    const list = demoDb.get<string[]>('demo/installed-guilds', () => []);
+    if (!list.includes(params.guildId)) {
+      demoDb.set('demo/installed-guilds', [...list, params.guildId]);
+    }
+    return { ok: true };
+  });
   // L'instance publique de Kotbo, sans marque blanche.
   route('GET', '/api/branding', () => ({
     instanceId: 'public',
@@ -65,15 +104,18 @@ export function registerSessionRoutes(): void {
   }));
 
   /** L'état complet du serveur, tel que le rend `buildGuildState`. */
-  const guildState = () => {
+  const guildState = ({ params }: { params: Record<string, string> }) => {
     const states = moduleStates();
     const featureKeys = [...MODULE_REGISTRY.map((m) => m.key), 'centralized_config', 'commands', 'settings'];
+    const extraGuild = EXTRA_DEMO_SERVERS.find((g) => g.id === params.guildId);
+    const completedOnboarding = new Set(demoDb.get<string[]>('demo/onboarding-completed', () => []));
+    const onboardingRequired = extraGuild ? !completedOnboarding.has(extraGuild.id) : false;
 
     return {
-      guildName: DEMO_GUILD_NAME,
+      guildName: extraGuild?.name ?? DEMO_GUILD_NAME,
       plan: 'PLUS',
-      onboardingRequired: false,
-      onboardingCanFinishWithoutPayment: false,
+      onboardingRequired,
+      onboardingCanFinishWithoutPayment: true,
       configChannelId: channelByName('staff').id,
       logChannelId: channelByName('logs').id,
       logIgnoredChannelIds: [],

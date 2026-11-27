@@ -244,160 +244,160 @@
 
       <!-- ── Les trois prochaines actions ───────────────────────────────── -->
       {#if nextActions.length > 0}
-        <div class="grid gap-3 sm:grid-cols-3">
+        <div class="grid gap-3.5 sm:grid-cols-3">
           {#each nextActions as action, index (action.key)}
             <a
               href={action.href}
               onclick={(event) => guideTo(event, action)}
-              class="group rounded-2xl border p-4 transition-colors
-              {index === 0
-                ? 'border-primary/45 bg-primary/[0.05] hover:border-primary/70'
-                : 'border-outline-variant/30 bg-surface-container-low/30 hover:border-primary/40'}"
+              class="section-card group p-4 flex flex-col justify-between gap-3 transition-transform active:scale-[0.99]
+              {index === 0 ? 'ring-1 ring-primary/40' : ''}"
             >
-              <div class="flex items-center gap-2 mb-2">
-                <span class="w-7 h-7 rounded-lg flex items-center justify-center shrink-0
-                  {index === 0 ? 'bg-primary text-on-primary' : 'bg-primary/12 text-primary'}">
-                  <Papicon icon="arrow-right" size={13} />
-                </span>
-                {#if index === 0}
-                  <span class="text-xs font-semibold text-primary">
-                    {m.setup_do_now()}
+              <div>
+                <div class="flex items-center justify-between gap-2 mb-2.5">
+                  <span class="w-7 h-7 rounded-full flex items-center justify-center shrink-0
+                    {index === 0 ? 'bg-primary text-on-primary' : 'bg-primary/12 text-primary'}">
+                    <Papicon icon="arrow-right" size={13} />
                   </span>
-                {/if}
-              </div>
+                  {#if index === 0}
+                    <span class="text-2xs font-semibold px-2.5 py-0.5 rounded-full bg-primary/12 text-primary">
+                      {m.setup_do_now()}
+                    </span>
+                  {/if}
+                </div>
 
-              <p class="text-sm font-semibold text-on-surface leading-tight">{setupStepTitle(action)}</p>
-              <p class="mt-1 text-xs text-on-surface-variant leading-relaxed">{setupStepWhy(action)}</p>
+                <p class="text-sm font-semibold text-on-surface leading-tight group-hover:text-primary transition-colors">{setupStepTitle(action)}</p>
+                <p class="mt-1 text-xs text-on-surface-variant leading-relaxed">{setupStepWhy(action)}</p>
+              </div>
               {#if action.detail}
-                <p class="mt-2 text-2xs px-1.5 py-0.5 rounded bg-error/10 text-on-error-container inline-block">
-                  {m.setup_missing({ detail: action.detail })}
-                </p>
+                <div>
+                  <span class="text-2xs px-2.5 py-0.5 rounded-full bg-error/10 text-on-error-container font-medium inline-block">
+                    {m.setup_missing({ detail: action.detail })}
+                  </span>
+                </div>
               {/if}
             </a>
           {/each}
         </div>
       {/if}
 
-      <!-- ── Monter le serveur ──────────────────────────────────────────── -->
+      <!-- ── Monter le serveur (replié par défaut pour garder la page compacte) ── -->
       {#if canBuildServer}
         <section id="structure" class="scroll-mt-6">
           <SectionCard
             title={m.st_title()}
             description={m.st_description()}
-            icon="sparkles"
+            icon="layers"
           >
             {#snippet actions()}
-              {#if templateApplied}
-                <button
-                  type="button"
-                  onclick={() => (templateOpen = !templateOpen)}
-                  class="px-3 py-1.5 text-xs font-medium rounded-lg text-primary hover:bg-primary/10 transition-colors"
-                >
-                  {templateOpen ? m.setup_hide() : m.setup_review()}
-                </button>
-              {/if}
+              <button
+                type="button"
+                onclick={() => (templateOpen = !templateOpen)}
+                class="btn btn-tonal btn-sm"
+              >
+                {templateOpen ? m.setup_hide() : templateApplied ? m.setup_review() : m.st_title()}
+              </button>
             {/snippet}
 
-            {#if templateApplied && !templateOpen}
+            {#if !templateOpen}
               <p class="text-body-sm text-on-surface-variant leading-relaxed">
-                {m.setup_structure_done()}
+                {templateApplied ? m.setup_structure_done() : m.st_description()}
               </p>
             {/if}
 
             <!-- Toujours monté, même replié : c'est lui qui charge le plan, et
                  donc lui qui dit si la mise en place a déjà eu lieu. -->
-            <div class:hidden={templateApplied !== null && !templateOpen}>
+            <div class:hidden={!templateOpen}>
               <ServerTemplatePanel onLoaded={onTemplateLoaded} onApplied={onTemplateApplied} />
             </div>
           </SectionCard>
         </section>
       {/if}
 
-      <!-- ── Étapes par groupe ──────────────────────────────────────────── -->
-      {#each GROUPS as group (group.key)}
-        {@const groupSteps = steps.filter((s) => s.group === group.key)}
-        {#if groupSteps.length > 0}
-          {@const groupDone = groupSteps.filter((s) => s.done).length}
-          <SectionCard title={group.title()} description={group.description()} icon={group.icon}>
-            {#snippet actions()}
-              <span class="text-2xs px-2 py-0.5 rounded-full font-semibold
-                {groupDone === groupSteps.length ? 'bg-success/10 text-on-success-container' : 'bg-surface-container text-on-surface-variant'}">
-                {groupDone}/{groupSteps.length}
-              </span>
-            {/snippet}
+      <!-- ── Étapes par groupe + configurations rapides (grille 2 colonnes) ── -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+        {#each GROUPS as group (group.key)}
+          {@const groupSteps = steps.filter((s) => s.group === group.key)}
+          {#if groupSteps.length > 0}
+            {@const groupDone = groupSteps.filter((s) => s.done).length}
+            <SectionCard title={group.title()} description={group.description()} icon={group.icon} flush>
+              {#snippet actions()}
+                <span class="text-2xs px-2.5 py-0.5 rounded-full font-semibold tabular-nums
+                  {groupDone === groupSteps.length ? 'bg-success/10 text-on-success-container' : 'bg-surface-container text-on-surface-variant'}">
+                  {groupDone}/{groupSteps.length}
+                </span>
+              {/snippet}
 
-            <ul class="space-y-1.5">
-              {#each groupSteps as step (step.key)}
-                <li>
-                  <a
-                    href={step.href}
-                    onclick={(event) => { if (!step.done) guideTo(event, step); }}
-                    class="flex items-start gap-3 rounded-xl border px-4 py-3 transition-colors
-                    {step.done
-                      ? 'border-outline-variant/20 bg-surface-container-low/30 hover:border-outline-variant/40'
-                      : 'border-primary/25 bg-primary/[0.04] hover:border-primary/45'}"
-                  >
-                    <div class="w-6 h-6 shrink-0 rounded-full flex items-center justify-center mt-0.5
-                      {step.done ? 'bg-success/15 text-on-success-container' : 'bg-primary/15 text-primary'}">
-                      <Papicon icon={step.done ? 'check' : 'arrow-right'} size={13} />
-                    </div>
-
-                    <div class="min-w-0 flex-1">
-                      <div class="flex items-center gap-2 flex-wrap">
-                        <span class="text-body-sm font-semibold {step.done ? 'text-on-surface-variant' : 'text-on-surface'}">
-                          {setupStepTitle(step)}
-                        </span>
-                        {#if !step.done && step.detail}
-                          <span class="text-2xs px-1.5 py-0.5 rounded bg-error/10 text-on-error-container">
-                            {m.setup_missing({ detail: step.detail })}
-                          </span>
-                        {:else if step.done && step.detail}
-                          <span class="text-2xs px-1.5 py-0.5 rounded bg-surface-container text-on-surface-variant">
-                            {step.detail}
-                          </span>
-                        {/if}
+              <ul class="divide-y divide-outline-variant">
+                {#each groupSteps as step (step.key)}
+                  <li>
+                    <a
+                      href={step.href}
+                      onclick={(event) => { if (!step.done) guideTo(event, step); }}
+                      class="flex items-start gap-3 px-4 py-2.5 transition-colors hover:bg-surface-hover group
+                      {step.done ? 'opacity-75' : ''}"
+                    >
+                      <div class="w-6 h-6 shrink-0 rounded-full flex items-center justify-center mt-0.5
+                        {step.done ? 'bg-success/15 text-on-success-container' : 'bg-primary/15 text-primary'}">
+                        <Papicon icon={step.done ? 'check' : 'arrow-right'} size={13} />
                       </div>
-                      <p class="mt-0.5 text-xs text-on-surface-variant leading-relaxed">{setupStepWhy(step)}</p>
-                    </div>
-                  </a>
-                </li>
+
+                      <div class="min-w-0 flex-1">
+                        <div class="flex items-center gap-2 flex-wrap">
+                          <span class="text-body-sm font-semibold {step.done ? 'text-on-surface-variant' : 'text-on-surface group-hover:text-primary transition-colors'}">
+                            {setupStepTitle(step)}
+                          </span>
+                          {#if !step.done && step.detail}
+                            <span class="text-2xs px-2 py-0.5 rounded-full bg-error/10 text-on-error-container font-medium">
+                              {m.setup_missing({ detail: step.detail })}
+                            </span>
+                          {:else if step.done && step.detail}
+                            <span class="text-2xs px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant">
+                              {step.detail}
+                            </span>
+                          {/if}
+                        </div>
+                        <p class="mt-0.5 text-xs text-on-surface-variant leading-snug">{setupStepWhy(step)}</p>
+                      </div>
+                    </a>
+                  </li>
+                {/each}
+              </ul>
+            </SectionCard>
+          {/if}
+        {/each}
+
+        <QuickSetupHub />
+
+        {#if skippedTracks.length > 0}
+          <!-- Ce qu'on a laisse de cote pendant le parcours. Quelqu'un qui a
+               decoche « L'economie » le premier jour ne savait pas encore ce ce que
+               Kotbo faisait ; ici, il le sait, et personne ne le lui reproposait. -->
+          <SectionCard
+            title={m.setup_skipped_title()}
+            description={m.setup_skipped_desc()}
+            icon="package"
+            flush
+          >
+            <div class="divide-y divide-outline-variant">
+              {#each skippedTracks as track (track.key)}
+                <a
+                  href={TRACK_PAGES[track.key]}
+                  class="flex items-center gap-3 px-4 py-3 hover:bg-surface-hover transition-colors group"
+                >
+                  <span class="w-8 h-8 shrink-0 rounded-full bg-surface-container text-on-surface-variant group-hover:bg-primary/15 group-hover:text-primary flex items-center justify-center transition-colors">
+                    <Papicon icon={track.icon} size={15} />
+                  </span>
+                  <div class="min-w-0 flex-1">
+                    <p class="text-body-sm font-semibold text-on-surface group-hover:text-primary transition-colors">{track.label()}</p>
+                    <p class="mt-0.5 text-xs text-on-surface-variant leading-snug">{track.outcome()}</p>
+                  </div>
+                  <Papicon icon="ChevronRight" size={14} class="shrink-0 text-on-surface-variant group-hover:text-on-surface transition-colors" />
+                </a>
               {/each}
-            </ul>
+            </div>
           </SectionCard>
         {/if}
-      {/each}
-
-      <QuickSetupHub />
-
-      {#if skippedTracks.length > 0}
-        <!-- Ce qu'on a laisse de cote pendant le parcours. Quelqu'un qui a
-             decoche « L'economie » le premier jour ne savait pas encore ce que
-             Kotbo faisait ; ici, il le sait, et personne ne le lui reproposait. -->
-        <SectionCard
-          title={m.setup_skipped_title()}
-          description={m.setup_skipped_desc()}
-          icon="package"
-        >
-          <div class="grid gap-2.5 sm:grid-cols-2">
-            {#each skippedTracks as track (track.key)}
-              <a
-                href={TRACK_PAGES[track.key]}
-                class="flex items-start gap-3 rounded-xl border border-outline-variant/25 bg-surface-container-low/25 p-3.5
-                       hover:border-primary/40 transition-colors"
-              >
-                <span class="w-8 h-8 shrink-0 rounded-lg bg-surface-container text-on-surface-variant flex items-center justify-center">
-                  <Papicon icon={track.icon} size={15} />
-                </span>
-                <div class="min-w-0 flex-1">
-                  <p class="text-body-sm font-semibold text-on-surface">{track.label()}</p>
-                  <p class="mt-0.5 text-xs text-on-surface-variant leading-relaxed">{track.outcome()}</p>
-                </div>
-                <Papicon icon="ChevronRight" size={14} class="mt-1 shrink-0 text-on-surface-variant/30" />
-              </a>
-            {/each}
-          </div>
-        </SectionCard>
-      {/if}
+      </div>
     </div>
   {/if}
 </ModulePage>

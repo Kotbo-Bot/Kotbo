@@ -258,6 +258,8 @@
       </section>
     </div>
   </div>
+{:else if staff.loading.members}
+  <div class="section-card h-64 animate-pulse"></div>
 {/if}
 
 <style>

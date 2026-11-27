@@ -123,7 +123,7 @@
   </div>
 
   {#if canFilter && filterOpen}
-    <div class="absolute left-0 top-8 z-20 w-64 rounded-xl border border-outline-variant bg-white p-3 shadow-sm">
+    <div class="absolute left-0 top-8 z-20 w-64 rounded-xl border border-outline-variant bg-surface-container-lowest p-3 shadow-lg">
       <div class="mb-2 flex items-center justify-between gap-2">
         <p class="text-xs font-semibold text-on-surface-variant">{m.csf_filter_label({ label: label.toLowerCase() })}</p>
         {#if selectedCount > 0}
@@ -142,7 +142,7 @@
           type="text"
           bind:value={searchTerm}
           placeholder={m.csf_search_ph()}
-          class="mb-2 w-full rounded-lg border border-field-border bg-white px-2.5 py-1.5 text-xs text-on-surface outline-none transition focus:border-primary"
+          class="mb-2 w-full rounded-lg border border-field-border bg-surface-container px-2.5 py-1.5 text-xs text-on-surface outline-none transition focus:border-primary"
         />
       {/if}
 
@@ -151,7 +151,7 @@
           <p class="py-2 text-xs text-on-surface-variant">{m.csf_no_result()}</p>
         {:else}
           {#each filteredOptions as entry (entry.value)}
-            <label class="flex cursor-pointer items-center gap-2 rounded-md px-1 py-1 text-xs hover:bg-surface-container-low">
+            <label class="flex cursor-pointer items-center gap-2 rounded-md px-1 py-1 text-xs text-on-surface hover:bg-surface-container-low">
               <input
                 type="checkbox"
                 checked={selectedValues.includes(entry.value)}

@@ -198,4 +198,47 @@ export function registerPulseRoutes(): void {
     const days = parseInt(query.get('days') ?? '30', 10);
     return predictionPayload(days);
   });
+
+  // Widgets de l'accueil (Pulse, Bouclier, Mes tâches, Climat, Boosts)
+  route('GET', '/api/dashboard/guilds/:guildId/home-widgets', () => ({
+    pulse: {
+      hasData: true,
+      score: CURRENT_SCORE,
+      trend: PULSE_PAYLOAD.current.trend,
+      trendDelta: PULSE_PAYLOAD.current.trendDelta,
+      alertCount: PULSE_PAYLOAD.current.alerts.length,
+      history: [74, 76, 75, 79, 80, 81, CURRENT_SCORE],
+    },
+    shield: {
+      configured: true,
+      jailed: 1,
+      jailedRecently: 4,
+      openWaves: 0,
+      pendingVision: 0,
+    },
+    myTasks: {
+      isStaff: true,
+      open: 2,
+      overdue: 0,
+      next: [
+        { id: 't-1', title: 'Examiner le ticket #0148', dueAt: null, priority: 'high' },
+        { id: 't-2', title: 'Valider la demande d’absence de Kylian', dueAt: null, priority: 'medium' },
+      ],
+    },
+    climate: {
+      enabled: true,
+      analyzed: 1_240,
+      toxicPercent: 1.4,
+      dominantEmotion: 'joy',
+      history: [82, 85, 84, 88, 86, 89, 91],
+    },
+    boosts: {
+      hasData: true,
+      tier: 2,
+      boostCount: 9,
+      boosterCount: 6,
+      delta: 1,
+      lostRecently: 0,
+    },
+  }));
 }

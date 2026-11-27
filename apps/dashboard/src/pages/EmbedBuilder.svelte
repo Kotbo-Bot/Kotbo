@@ -623,15 +623,24 @@
         </h3>
 
         <div class="select-none">
-          {#if hasEmbed || content.trim()}
-            <DiscordPreview channel={previewChannel} content={content.trim() ? content : undefined} mentions={false} entities={previewEntities}>
-              {#if hasEmbed}<Embed embed={previewEmbed} />{/if}
-            </DiscordPreview>
-          {:else}
-            <p class="text-xs text-on-surface-variant/40 italic">{m.embed_builder_preview_empty_hint()}</p>
-          {/if}
+          <DiscordPreview channel={previewChannel} content={content.trim() ? content : undefined} mentions={false} entities={previewEntities}>
+            {#if hasEmbed}
+              <Embed embed={previewEmbed} />
+            {:else if !content.trim()}
+              <p class="embed-preview-empty">{m.embed_builder_preview_empty_hint()}</p>
+            {/if}
+          </DiscordPreview>
         </div>
       </section>
     </div>
   {/if}
 </ModulePage>
+
+<style>
+  .embed-preview-empty {
+    margin-top: 0.25rem;
+    font-size: 0.875rem;
+    font-style: italic;
+    opacity: 0.6;
+  }
+</style>

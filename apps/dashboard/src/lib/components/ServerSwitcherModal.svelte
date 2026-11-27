@@ -162,12 +162,12 @@
     ></button>
 
     <div
-      class="server-switcher-modal__panel relative z-10 w-full max-w-md bg-surface-container-lowest border border-outline-variant rounded-xl shadow-lg overflow-hidden"
+      class="server-switcher-modal__panel tafac-panel relative z-10 w-full max-w-md overflow-hidden"
       role="document"
       transition:scale={{ start: 0.98, duration: 150 }}
     >
-      <div class="flex items-center gap-2.5 px-3 py-2.5 border-b border-outline-variant">
-        <Papicon icon="Search" size={15} class="text-on-surface-variant/40 shrink-0" />
+      <div class="flex items-center gap-2.5 px-4 py-3 border-b border-outline-variant">
+        <Papicon icon="Search" size={16} class="text-on-surface-variant shrink-0" />
         <input aria-label={m.d7_search_server()}
           bind:this={inputEl}
           bind:value={query}
@@ -175,15 +175,15 @@
           onkeydown={handleKeydown}
           type="text"
           placeholder={m.d7_search_server()}
-          class="flex-1 bg-transparent text-sm text-on-surface placeholder-on-surface-variant/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          class="flex-1 bg-transparent text-sm text-on-surface placeholder:text-on-surface-variant/65 focus:outline-none"
         />
-        <kbd class="hidden sm:flex px-1.5 py-0.5 rounded bg-surface-container border border-outline-variant text-2xs font-medium text-on-surface-variant/40 leading-none">
+        <kbd class="kbd-key hidden sm:inline-flex">
           ESC
         </kbd>
       </div>
 
-      <div class="max-h-[50vh] overflow-y-auto py-1">
-        <p class="text-xs font-medium text-on-surface-variant px-3 py-1.5">
+      <div class="max-h-[50vh] overflow-y-auto py-1.5">
+        <p class="text-xs font-semibold text-on-surface-variant px-4 py-1.5">
           {m.d7_servers_count({ count: filteredGroups.length })}
         </p>
 
@@ -196,8 +196,8 @@
           {@const isExpanded = expandedGroups.has(guild.id)}
 
           <div
-            class="w-full flex items-center gap-1 mx-1 rounded-lg"
-            style="width: calc(100% - 0.5rem)"
+            class="w-full flex items-center gap-1 mx-1.5 rounded-xl"
+            style="width: calc(100% - 0.75rem)"
           >
             {#if row.nested}
               <div class="w-5 shrink-0"></div>
@@ -205,7 +205,7 @@
               <button
                 type="button"
                 onclick={(e) => { e.stopPropagation(); toggleGroup(guild.id); }}
-                class="w-5 h-5 shrink-0 flex items-center justify-center rounded text-on-surface-variant/40 hover:text-on-surface transition-transform duration-150 {isExpanded ? 'rotate-90' : ''}"
+                class="w-5 h-5 shrink-0 flex items-center justify-center rounded-md text-on-surface-variant hover:text-on-surface transition-transform duration-150 {isExpanded ? 'rotate-90' : ''}"
                 aria-label={isExpanded ? m.d7_collapse() : m.d7_show_linked_staff()}
               >
                 <Papicon icon="ChevronRight" size={12} />
@@ -217,39 +217,39 @@
             <button
               onclick={() => selectGuild(guild.id)}
               onmouseenter={() => selectedIndex = idx}
-              class="flex-1 flex items-center gap-2.5 px-2 py-2 rounded-lg text-left transition-colors duration-100
- {isSelected ? 'bg-primary/8 text-primary' : 'text-on-surface-variant hover:bg-surface-container'}"
+              class="flex-1 flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-left transition-colors duration-100
+ {isSelected ? 'bg-primary/10 text-primary' : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'}"
             >
               {#if iconUrl}
                 <img
                   src={iconUrl}
                   alt=""
                   referrerpolicy="no-referrer"
-                  class="w-6 h-6 rounded object-cover"
+                  class="w-7 h-7 rounded-lg object-cover shrink-0"
                 />
               {:else}
-                <div class="w-6 h-6 rounded bg-primary/10 flex items-center justify-center text-[10px] font-medium text-on-primary-container">
+                <div class="w-7 h-7 rounded-lg bg-primary/12 flex items-center justify-center text-xs font-semibold text-primary shrink-0">
                   {guild.name.charAt(0)}
                 </div>
               {/if}
 
               <div class="flex-1 min-w-0">
-                <p class="text-sm leading-none truncate flex items-center gap-1.5">
+                <p class="text-sm font-medium leading-none truncate flex items-center gap-1.5 {isSelected ? 'text-primary' : 'text-on-surface'}">
                   {guild.name}
                   {#if guild.isStaffServer}
-                    <span class="text-xs font-medium px-1 py-0.5 rounded bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20">{m.d7_staff()}</span>
+                    <span class="text-2xs font-medium px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant border border-outline-variant">{m.d7_staff()}</span>
                   {/if}
                   {#if isActive}
-                    <span class="text-xs font-medium px-1 py-0.5 rounded bg-primary/10 text-primary">{m.d7_current()}</span>
+                    <span class="text-2xs font-semibold px-2 py-0.5 rounded-full bg-primary/15 text-primary">{m.d7_current()}</span>
                   {/if}
                 </p>
-                <p class="text-2xs text-on-surface-variant mt-0.5 truncate">
+                <p class="text-2xs text-on-surface-variant mt-1 truncate">
                   {guild.accessLevel === 'admin' ? m.d7_admin() : guild.accessLevel === 'moderator' ? m.d7_moderator() : m.d7_member()}
                 </p>
               </div>
 
               {#if isSelected}
-                <kbd class="text-2xs text-primary/50 leading-none">↵</kbd>
+                <kbd class="kbd-key text-primary border-primary/25 bg-primary/10">↵</kbd>
               {/if}
             </button>
 
@@ -260,45 +260,45 @@
                 onclick={(e) => toggleFavorite(guild.id, e)}
                 aria-label={m.nav_favorite({ name: guild.name })}
                 aria-pressed={isFav}
-                class="w-6 h-6 shrink-0 flex items-center justify-center rounded-md transition-opacity duration-150
-                  {isFav ? 'opacity-100 text-warning' : 'opacity-40 hover:opacity-100 focus-visible:opacity-100 text-on-surface-variant hover:text-warning'}"
+                class="w-7 h-7 shrink-0 flex items-center justify-center rounded-full transition-colors duration-150
+                  {isFav ? 'text-warning' : 'opacity-60 hover:opacity-100 focus-visible:opacity-100 text-on-surface-variant hover:text-warning hover:bg-surface-container'}"
               >
-                <Papicon icon="star" size={12} class={isFav ? 'fill-current' : ''} />
+                <Papicon icon="star" size={13} class={isFav ? 'fill-current' : ''} />
               </button>
             {/if}
           </div>
         {:else}
           <div class="flex flex-col items-center py-8 gap-1.5 text-center">
-            <Papicon icon="SearchX" size={24} class="text-on-surface-variant/30" />
+            <Papicon icon="SearchX" size={24} class="text-on-surface-variant/50" />
             <p class="text-sm text-on-surface-variant">{m.d7_no_server_found()}</p>
           </div>
         {/each}
       </div>
 
-      <div class="border-t border-outline-variant p-1">
+      <div class="border-t border-outline-variant p-1.5">
         <button
           type="button"
           onclick={goToServers}
-          class="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg text-left text-on-surface-variant hover:bg-surface-container transition-colors duration-100"
+          class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-left text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-colors duration-100"
         >
-          <span class="w-6 h-6 rounded border border-dashed border-outline-variant flex items-center justify-center text-on-surface-variant">
+          <span class="w-7 h-7 rounded-lg border border-dashed border-outline flex items-center justify-center text-on-surface-variant shrink-0">
             <Papicon icon="Plus" size={13} />
           </span>
           <span class="min-w-0 flex-1">
-            <span class="block text-sm leading-none truncate">{m.d7_add_to_server()}</span>
-            <span class="block text-2xs text-on-surface-variant mt-0.5 truncate">{m.d7_add_to_server_hint()}</span>
+            <span class="block text-sm font-medium text-on-surface leading-none truncate">{m.d7_add_to_server()}</span>
+            <span class="block text-2xs text-on-surface-variant mt-1 truncate">{m.d7_add_to_server_hint()}</span>
           </span>
-          <Papicon icon="ChevronRight" size={12} class="shrink-0 text-on-surface-variant/40" />
+          <Papicon icon="ChevronRight" size={13} class="shrink-0 text-on-surface-variant" />
         </button>
       </div>
 
-      <div class="flex items-center gap-3 px-3 py-2 border-t border-outline-variant bg-surface-container">
-        <div class="flex items-center gap-1 text-2xs text-on-surface-variant/40">
-          <kbd class="px-1 py-0.5 rounded bg-surface-container-highest border border-outline-variant font-mono text-2xs">↑↓</kbd>
+      <div class="flex items-center gap-4 px-4 py-2.5 border-t border-outline-variant bg-surface-container-low">
+        <div class="flex items-center gap-1.5 text-2xs text-on-surface-variant">
+          <kbd class="kbd-key">↑↓</kbd>
           {m.d7_navigate()}
         </div>
-        <div class="flex items-center gap-1 text-2xs text-on-surface-variant/40">
-          <kbd class="px-1 py-0.5 rounded bg-surface-container-highest border border-outline-variant font-mono text-2xs">↵</kbd>
+        <div class="flex items-center gap-1.5 text-2xs text-on-surface-variant">
+          <kbd class="kbd-key">↵</kbd>
           {m.d7_select()}
         </div>
       </div>

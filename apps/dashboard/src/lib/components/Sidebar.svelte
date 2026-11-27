@@ -284,7 +284,7 @@
 {#snippet pageLink(item: PageConfig, withIcon: boolean)}
   {@const active = isActiveNavItem(item.href)}
   {@const plan = !userPrefs.prefs.showPlanCrowns && dashboardStore.state.plan !== 'FREE' ? null : pagePlan(item)}
-  <div data-href={item.href} class="nav-row group relative flex items-center rounded-lg transition-colors duration-150 {active ? 'is-active' : ''}">
+  <div data-href={item.href} class="nav-row group relative flex items-center rounded-xl transition-colors duration-150 {active ? 'is-active' : ''}">
     {#if !withIcon}
       <span class="nav-row__node" aria-hidden="true">
         <Papicon icon={item.icon ?? 'circle'} size={12} />
@@ -333,8 +333,8 @@
     onmouseleave={hideTooltip}
     aria-label={label}
     aria-current={active ? 'page' : undefined}
-    class="relative flex items-center justify-center w-full h-10 rounded-lg transition-colors duration-150
-      {active ? 'text-primary bg-primary/10' : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container'}"
+    class="relative flex items-center justify-center w-full h-10 rounded-xl transition-colors duration-150
+      {active ? 'text-primary bg-primary/12' : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container'}"
   >
     <Papicon {icon} size={18} />
     {#if href === '/notifications' && unread > 0}
@@ -414,7 +414,7 @@
     {#if !isCollapsed}
       <a href="/" onclick={(e) => guardedLinkClick(e, '/')} class="flex-1 min-w-0 text-sm font-semibold text-on-surface truncate font-headline hover:text-primary transition-colors">{brandingStore.brandName}</a>
       {#if isStaffServerGuild}
-        <span class="shrink-0 px-1.5 py-0.5 rounded-md text-2xs font-medium bg-primary/10 text-primary">Staff</span>
+        <span class="shrink-0 px-2 py-0.5 rounded-full text-2xs font-semibold bg-primary/12 text-primary">Staff</span>
       {/if}
 
       <button
@@ -464,13 +464,13 @@
       onmouseleave={hideTooltip}
       aria-label={isCollapsed ? m.nav_search_pages() : undefined}
       aria-keyshortcuts="Control+K"
-      class="nav-search w-full flex items-center gap-2 h-9 rounded-lg border border-outline-variant bg-surface-container-low text-on-surface-variant hover:text-on-surface hover:border-outline transition-colors
-        {isCollapsed ? 'lg:justify-center lg:px-0 px-3' : 'px-3'}"
+      class="nav-search flex items-center gap-2 rounded-full border border-outline-variant bg-surface-container-low text-on-surface-variant hover:text-on-surface hover:border-outline hover:bg-surface-container transition-colors cursor-pointer
+        {isCollapsed ? 'lg:w-10 lg:h-10 lg:mx-auto lg:justify-center lg:px-0 w-full h-9 px-3.5' : 'w-full h-9 px-3.5'}"
     >
       <Papicon icon="search" size={14} class="shrink-0" />
       {#if !isCollapsed}
         <span class="flex-1 text-left text-body-sm">{m.sbx_search()}</span>
-        <kbd class="hidden lg:inline text-2xs font-medium text-on-surface-variant font-body">Ctrl K</kbd>
+        <kbd class="kbd-key hidden lg:inline-flex">Ctrl K</kbd>
       {/if}
     </button>
   </div>
@@ -525,14 +525,14 @@
               onclick={() => toggleSpace(space.key)}
               aria-expanded={open}
               aria-controls="nav-space-{space.key}"
-              class="nav-space w-full flex items-center gap-2.5 pl-2.5 pr-2 py-1.5 rounded-lg text-left transition-colors hover:bg-surface-container
+              class="nav-space w-full flex items-center gap-2.5 pl-2.5 pr-2 py-1.5 rounded-xl text-left transition-colors hover:bg-surface-container cursor-pointer
                 {current ? 'text-on-surface' : 'text-on-surface-variant hover:text-on-surface'}"
             >
               <Papicon icon={space.icon} size={16} class="shrink-0 {current ? 'text-primary' : 'text-on-surface-variant'}" />
               <span class="flex-1 min-w-0 truncate text-body-sm {current ? 'font-medium' : ''}">{space.label}</span>
               <span
                 aria-hidden="true"
-                class="text-on-surface-variant/40 transition-transform duration-150 {open ? '' : '-rotate-90'}"
+                class="text-on-surface-variant transition-transform duration-150 {open ? '' : '-rotate-90'}"
               >
                 <Papicon icon="chevron-down" size={12} />
               </span>
@@ -599,8 +599,8 @@
   <div
     use:portal
     role="tooltip"
-    class="fixed z-100 -translate-y-1/2 pointer-events-none bg-surface-container-highest text-on-surface border border-outline-variant rounded-md px-2 py-1 text-xs font-medium whitespace-nowrap shadow-sm animate-in fade-in"
-    style="left: calc(4.5rem + 8px); top: {activeTooltip.top}px"
+    class="fixed z-100 -translate-y-1/2 pointer-events-none bg-surface-container-lowest text-on-surface border border-outline-variant rounded-lg px-2.5 py-1 text-xs font-medium whitespace-nowrap animate-in fade-in"
+    style="left: calc(4.5rem + 8px); top: {activeTooltip.top}px; box-shadow: var(--glass-quiet-shadow);"
   >
     {activeTooltip.text}
   </div>
@@ -770,7 +770,7 @@
     width: 24px;
     height: 24px;
     border-radius: 9999px;
-    border: 1px solid var(--outline-variant);
+    border: 1px solid var(--glass-quiet-outer);
     background: var(--surface-container-lowest);
     color: var(--on-surface-variant);
     display: flex;
@@ -778,7 +778,7 @@
     justify-content: center;
     opacity: 0;
     pointer-events: none;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+    box-shadow: var(--glass-quiet-shadow);
     cursor: pointer;
     transition: opacity 150ms ease,
                 background-color 150ms ease,

@@ -105,15 +105,14 @@
     id="welcome-message"
     bind:value={message}
     rows="5"
-    class="w-full rounded-xl border border-field-border bg-surface-container-low/40 px-4 py-3 text-sm text-on-surface
-           placeholder-on-surface-variant/40 focus:outline-none focus:border-primary/50 resize-none"
+    class="input resize-none"
     placeholder={m.bot_greet_placeholder(VARS, bot())}
   ></textarea>
 
-  <p class="mt-2 text-xs text-on-surface-variant/55 leading-relaxed">
-    <code class="px-1 py-0.5 rounded bg-surface-container text-on-surface-variant">{'{user}'}</code>
+  <p class="mt-2 text-xs text-on-surface-variant leading-relaxed">
+    <code class="px-1.5 py-0.5 rounded-md bg-surface-container text-on-surface-variant">{'{user}'}</code>
     {m.obx_gr_user_hint()}
-    <code class="px-1 py-0.5 rounded bg-surface-container text-on-surface-variant">{'{server}'}</code>
+    <code class="px-1.5 py-0.5 rounded-md bg-surface-container text-on-surface-variant">{'{server}'}</code>
     {m.obx_gr_server_hint()}
   </p>
 
@@ -127,7 +126,7 @@
       onclick={apply}
       disabled={onboardingData.busy}
       use:explainDisabled={(!message.trim()) ? m.common_reason_fill_field() : ''}
-      class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-on-primary text-sm font-semibold hover:opacity-90 transition-opacity disabled:opacity-40"
+      class="btn btn-primary"
     >
       {onboardingData.busy ? m.obx_saving() : m.common_save()}
       <Papicon icon="ChevronRight" size={15} />

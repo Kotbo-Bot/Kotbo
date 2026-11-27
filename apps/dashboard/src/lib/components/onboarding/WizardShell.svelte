@@ -115,18 +115,18 @@
 
 <div class="min-h-screen bg-background text-on-background flex flex-col">
   <!-- ── En-tête : identité, serveur, sortie ──────────────────────────────── -->
-  <header class="shrink-0 border-b border-outline-variant/25">
+  <header class="shrink-0 border-b border-outline-variant bg-surface-container-lowest/70 backdrop-blur-md">
     <div class="mx-auto w-full {frame} px-6 py-3.5 flex items-center justify-between gap-4 transition-[max-width] duration-300">
       <div class="flex items-center gap-2.5 min-w-0">
         <KotboMark size={26} />
         <span class="font-semibold tracking-tight text-on-surface shrink-0">Kotbo</span>
         {#if selectedGuild}
-          <Papicon icon="plus" size={11} class="shrink-0 text-on-surface-variant/30" />
+          <Papicon icon="plus" size={11} class="shrink-0 text-on-surface-variant" />
           <span class="flex items-center gap-1.5 min-w-0">
             {#if guildIconUrl}
-              <img src={guildIconUrl} alt="" class="w-5 h-5 rounded-md shrink-0" />
+              <img src={guildIconUrl} alt="" class="w-5 h-5 rounded-full shrink-0 object-cover" />
             {:else}
-              <span class="w-5 h-5 rounded-md shrink-0 bg-surface-container text-on-surface-variant text-[10px] font-bold flex items-center justify-center">
+              <span class="w-5 h-5 rounded-full shrink-0 bg-surface-container text-on-surface-variant text-[10px] font-bold flex items-center justify-center">
                 {selectedGuild.name.slice(0, 1).toUpperCase()}
               </span>
             {/if}
@@ -137,12 +137,12 @@
         {/if}
       </div>
 
-      <div class="shrink-0 flex items-center gap-3.5">
+      <div class="shrink-0 flex items-center gap-2">
         {#if onEditTracks}
           <button
             type="button"
             onclick={onEditTracks}
-            class="inline-flex items-center gap-1.5 text-body-sm font-medium text-on-surface-variant hover:text-on-surface transition-colors"
+            class="btn btn-ghost btn-sm"
           >
             <Papicon icon="list-checks" size={13} />
             <span class="hidden md:inline">{m.onb_tracks_edit()}</span>
@@ -154,7 +154,7 @@
         <button
           type="button"
           onclick={() => { soundOn = sound.toggle(); }}
-          class="inline-flex items-center text-on-surface-variant/45 hover:text-on-surface transition-colors"
+          class="btn btn-ghost btn-sm px-2"
           title={soundOn ? m.onb_shell_sound_on() : m.onb_shell_sound_off()}
           aria-label={soundOn ? m.onb_shell_sound_on() : m.onb_shell_sound_off()}
           aria-pressed={soundOn}
@@ -164,7 +164,7 @@
 
         <a
           href="/servers"
-          class="inline-flex items-center gap-1.5 text-body-sm font-medium text-on-surface-variant hover:text-on-surface transition-colors"
+          class="btn btn-ghost btn-sm"
         >
           <Papicon icon="arrow-left-right" size={13} />
           <span class="hidden sm:inline">{m.sbx_switch_server()}</span>
@@ -174,7 +174,7 @@
   </header>
 
   <!-- ── Progression, par phases ──────────────────────────────────────────── -->
-  <div class="shrink-0 border-b border-outline-variant/25 bg-surface-container-lowest/40">
+  <div class="shrink-0 border-b border-outline-variant bg-surface-container-low/50">
     <div class="mx-auto w-full {frame} px-6 py-3 transition-[max-width] duration-300">
       <div class="flex items-center gap-3">
         {#each visiblePhases as phase (phase.key)}
@@ -182,12 +182,12 @@
             {#each phase.steps as step (step)}
               {@const position = steps.indexOf(step)}
               <div
-                class="h-1 flex-1 rounded-full transition-colors duration-500
+                class="h-1.5 flex-1 rounded-full transition-colors duration-500
                 {position < index
                   ? 'bg-primary'
                   : position === index
-                    ? 'bg-primary/60'
-                    : 'bg-outline-variant/30'}"
+                    ? 'bg-primary/65'
+                    : 'bg-outline-variant'}"
               ></div>
             {/each}
           </div>
@@ -195,10 +195,10 @@
       </div>
 
       <div class="mt-2 flex items-baseline justify-between gap-3">
-        <p class="text-xs font-semibold text-primary/75 truncate">
+        <p class="text-xs font-semibold text-primary truncate">
           {visiblePhases.find((phase) => phase.key === currentPhase)?.label ?? ''}
         </p>
-        <p class="text-2xs font-medium text-on-surface-variant/40 shrink-0">
+        <p class="text-2xs font-medium tabular-nums text-on-surface-variant shrink-0">
           {definition.label()} · {index + 1}/{wizard.total}
         </p>
       </div>
@@ -220,11 +220,11 @@
         <div in:fly={{ y: 10, duration: 260 }} class="grid gap-8 lg:gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] items-start">
           <div class="min-w-0">
             {#if !bare && title}
-              <div class="flex items-center gap-2 mb-3">
-                <span class="w-7 h-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                  <Papicon icon={definition.icon} size={14} />
+              <div class="flex items-center gap-2.5 mb-3">
+                <span class="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                  <Papicon icon={definition.icon} size={15} />
                 </span>
-                <span class="text-xs font-semibold text-on-surface-variant/45">
+                <span class="text-xs font-semibold text-on-surface-variant">
                   {definition.label()}
                 </span>
               </div>
@@ -233,7 +233,7 @@
                 {title}
               </h1>
               {#if lead}
-                <p class="mt-2.5 text-[15px] text-on-surface-variant/75 leading-relaxed">{lead}</p>
+                <p class="mt-2.5 text-[15px] text-on-surface-variant leading-relaxed">{lead}</p>
               {/if}
             {/if}
 
@@ -257,11 +257,11 @@
       {:else}
         <div in:fly={{ y: 10, duration: 260 }}>
           {#if !bare && title}
-            <div class="flex items-center gap-2 mb-3">
-              <span class="w-7 h-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                <Papicon icon={definition.icon} size={14} />
+            <div class="flex items-center gap-2.5 mb-3">
+              <span class="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                <Papicon icon={definition.icon} size={15} />
               </span>
-              <span class="text-xs font-semibold text-on-surface-variant/45">
+              <span class="text-xs font-semibold text-on-surface-variant">
                 {definition.label()}
               </span>
             </div>
@@ -270,7 +270,7 @@
               {title}
             </h1>
             {#if lead}
-              <p class="mt-2.5 text-[15px] text-on-surface-variant/75 leading-relaxed">{lead}</p>
+              <p class="mt-2.5 text-[15px] text-on-surface-variant leading-relaxed">{lead}</p>
             {/if}
           {/if}
 
@@ -283,13 +283,13 @@
   </main>
 
   <!-- ── Pied : retour et action ──────────────────────────────────────────── -->
-  <footer class="shrink-0 border-t border-outline-variant/25 bg-surface-container-lowest/60 backdrop-blur-sm">
+  <footer class="shrink-0 border-t border-outline-variant bg-surface-container-lowest/75 backdrop-blur-md">
     <div class="mx-auto w-full {frame} px-6 py-4 flex items-center justify-between gap-4 transition-[max-width] duration-300">
       {#if canGoBack && !wizard.isFirst}
         <button
           type="button"
           onclick={() => wizard.back()}
-          class="inline-flex items-center gap-1.5 text-body-sm font-medium text-on-surface-variant hover:text-on-surface transition-colors"
+          class="btn btn-ghost btn-sm"
         >
           <Papicon icon="ChevronLeft" size={14} />
           Retour

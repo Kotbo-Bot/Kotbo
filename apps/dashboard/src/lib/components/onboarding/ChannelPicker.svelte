@@ -80,8 +80,7 @@
     {id}
     {value}
     onchange={(event) => onpick(event.currentTarget.value || null)}
-    class="w-full rounded-xl border border-field-border bg-surface-container-lowest/60 px-3.5 py-2.5
-           text-sm text-on-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+    class="input"
   >
     {#if noneLabel}
       <option value="">{noneLabel}</option>
@@ -102,9 +101,7 @@
       type="button"
       onclick={create}
       disabled={creating || onboardingData.busy}
-      class="mt-2.5 inline-flex items-center gap-2 rounded-xl border border-primary/40 bg-primary/[0.06] px-3.5 py-2
-             text-body-sm font-semibold text-primary transition hover:bg-primary/[0.11]
-             disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+      class="btn btn-tonal btn-sm mt-2.5"
     >
       <Papicon icon={creating ? 'loader' : 'plus'} size={14} class={creating ? 'animate-spin' : ''} />
       {creating ? m.obx_creating() : createLabel}
@@ -116,7 +113,7 @@
       type="button"
       onclick={create}
       disabled={creating || onboardingData.busy}
-      class="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-on-surface-variant/55
+      class="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-on-surface-variant
              hover:text-primary transition-colors disabled:opacity-50"
     >
       <Papicon icon={creating ? 'loader' : 'plus'} size={12} class={creating ? 'animate-spin' : ''} />

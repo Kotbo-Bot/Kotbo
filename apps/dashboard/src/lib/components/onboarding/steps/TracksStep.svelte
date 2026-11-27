@@ -100,14 +100,14 @@
     <button
       type="button"
       onclick={() => { picked = TRACKS.map((track) => track.key); celebrateStep(); }}
-      class="text-body-sm font-medium text-on-surface-variant hover:text-on-surface transition-colors"
+      class="btn btn-ghost btn-sm"
     >
       {m.onb_tracks_all()}
     </button>
     <button
       type="button"
       onclick={() => { picked = defaultTracks(kind); celebrateStep(); }}
-      class="text-body-sm font-medium text-on-surface-variant hover:text-on-surface transition-colors"
+      class="btn btn-ghost btn-sm"
     >
       {m.onb_tracks_essentials()}
     </button>
@@ -116,7 +116,7 @@
       <span class="text-xs font-semibold tabular-nums text-on-surface">
         {m.onb_tracks_estimate({ minutes })}
       </span>
-      <span class="text-2xs text-on-surface-variant/40 tabular-nums">
+      <span class="text-2xs text-on-surface-variant tabular-nums">
         {m.onb_tracks_count({ count: selection.length, total: TRACKS.length })}
         {#if screens > 0}
           · {m.onb_tracks_screens({ count: screens })}
@@ -127,8 +127,7 @@
     <button
       type="button"
       onclick={confirm}
-      class="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-on-primary
-             hover:brightness-110 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+      class="btn btn-primary"
     >
       Continuer
       <Papicon icon="ChevronRight" size={15} />

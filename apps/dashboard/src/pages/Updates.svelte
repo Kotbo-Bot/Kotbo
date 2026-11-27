@@ -10,8 +10,96 @@
   import RefreshButton from '../lib/components/RefreshButton.svelte';
   import Skeleton from '../lib/components/Skeleton.svelte';
   import Papicon from '../lib/components/Papicon.svelte';
-  import EmojiText from '../lib/components/EmojiText.svelte';
+  import {
+    Avatar,
+    MessageComponents,
+    MessageFrame,
+    MessageHeader,
+    type ContainerChild,
+    type MessageAuthor,
+    type MessageComponent,
+    type MessageEntities,
+  } from '@arcscord/discord-ui-svelte';
+  import DiscordScope from '../lib/components/discord/DiscordScope.svelte';
+  import { mergeEntities, toPreviewMarkdown } from '../lib/components/discord/previewEntities.svelte';
   import { Button } from '../lib/components/ui';
+
+  const KOTBO_AUTHOR: MessageAuthor = {
+    id: 'kotbo',
+    displayName: 'Kotbo',
+    avatarUrl: '/favicon.svg',
+    bot: true,
+  };
+
+  function toIsoTimestamp(value: string): string {
+    if (/^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:\d{2})$/.test(value)) return value;
+    const parsed = new Date(value);
+    return Number.isFinite(parsed.valueOf()) ? parsed.toISOString() : new Date().toISOString();
+  }
+
+  function buildUpdateView(entry: UpdateEntry): {
+    components: MessageComponent[];
+    entities: MessageEntities;
+    timestamp: string;
+  } {
+    const timestamp = toIsoTimestamp(entry.finishedAt ?? entry.createdAt);
+    const unix = Math.floor(new Date(timestamp).getTime() / 1000);
+    const children: ContainerChild[] = [];
+
+    if (entry.thumbnailUrl) {
+      children.push({
+        id: `${entry.id}-header`,
+        kind: 'section',
+        components: [{ id: `${entry.id}-title`, kind: 'text-display', content: `## ${entry.title}` }],
+        accessory: {
+          id: `${entry.id}-thumb`,
+          kind: 'thumbnail',
+          media: { id: `${entry.id}-thumb-media`, url: entry.thumbnailUrl, alt: '' },
+        },
+      });
+    } else {
+      children.push({ id: `${entry.id}-title`, kind: 'text-display', content: `## ${entry.title}` });
+    }
+
+    children.push({ id: `${entry.id}-sep`, kind: 'separator', divider: true, spacing: 'small' });
+    children.push({ id: `${entry.id}-body`, kind: 'text-display', content: entry.message });
+
+    if (entry.imageUrl) {
+      children.push({
+        id: `${entry.id}-img`,
+        kind: 'media-gallery',
+        items: [{ id: `${entry.id}-img-media`, url: entry.imageUrl, alt: '' }],
+      });
+    }
+
+    if (entry.footerText) {
+      children.push({ id: `${entry.id}-fsep`, kind: 'separator', divider: false, spacing: 'small' });
+      children.push({
+        id: `${entry.id}-footer`,
+        kind: 'text-display',
+        content: `-# ${entry.footerText} • <t:${unix}:d>`,
+      });
+    }
+
+    const entities = mergeEntities(
+      [entry.title, entry.message, entry.footerText ?? '']
+        .filter(Boolean)
+        .map((text) => toPreviewMarkdown(text, { mentions: false }).entities),
+    );
+
+    return {
+      timestamp,
+      entities,
+      components: [
+        {
+          id: `${entry.id}-container`,
+          kind: 'container',
+          accentColor: entry.color || '#5865F2',
+          components: children,
+        },
+      ],
+    };
+  }
 
   interface PollResults {
     options: { label: string; votes: number }[];
@@ -147,45 +235,21 @@
       {#each updates as entry (entry.id)}
         {@const closed = isClosed(entry)}
         {@const isHighlighted = highlightedId === entry.id}
+        {@const view = buildUpdateView(entry)}
         <article
           id="update-{entry.id}"
           class="rounded-2xl border bg-surface-container-low overflow-hidden transition {isHighlighted ? 'border-primary ring-2 ring-primary/25' : 'border-outline-variant/25'}"
         >
-          <div class="flex">
-            <div class="w-1.5 shrink-0" style="background: {entry.color || '#5865F2'}"></div>
-            <div class="flex-1 p-5 space-y-4">
-              <div class="flex items-start justify-between gap-4">
-                <div class="space-y-1 min-w-0">
-                  <h2 class="text-base font-bold text-on-surface leading-snug"><EmojiText value={entry.title} /></h2>
-                  <p class="text-xs text-on-surface-variant">
-                    {new Date(entry.finishedAt ?? entry.createdAt).toLocaleString(dateLocale(), {
-                      day: '2-digit',
-                      month: 'long',
-                      year: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  </p>
-                </div>
-                {#if entry.thumbnailUrl}
-                  <img
-                    src={entry.thumbnailUrl}
-                    alt=""
-                    class="w-14 h-14 rounded-xl object-cover shrink-0 border border-outline-variant/20"
-                  />
-                {/if}
-              </div>
+          <DiscordScope class="updates-discord-message" entities={view.entities}>
+            <MessageFrame>
+              {#snippet avatar()}<Avatar author={KOTBO_AUTHOR} />{/snippet}
+              {#snippet header()}<MessageHeader author={KOTBO_AUTHOR} timestamp={view.timestamp} />{/snippet}
+              <MessageComponents components={view.components} />
+            </MessageFrame>
+          </DiscordScope>
 
-              <div class="text-sm text-on-surface whitespace-pre-wrap leading-relaxed"><EmojiText value={entry.message} /></div>
-
-              {#if entry.imageUrl}
-                <img
-                  src={entry.imageUrl}
-                  alt=""
-                  class="max-h-80 rounded-xl object-contain border border-outline-variant/20 bg-surface-container-lowest"
-                />
-              {/if}
-
+          {#if (entry.pollOptions.length > 0 && entry.pollResults) || entry.feedbackLabel}
+            <div class="p-4 sm:p-5 space-y-4 border-t border-outline-variant/20">
               {#if entry.pollOptions.length > 0 && entry.pollResults}
                 <div class="rounded-xl border border-outline-variant/25 bg-surface-container-lowest p-4 space-y-3">
                   <div class="flex items-center justify-between gap-2 flex-wrap">
@@ -276,16 +340,16 @@
                   {/if}
                 </div>
               {/if}
-
-              {#if entry.footerText}
-                <p class="text-2xs text-on-surface-variant pt-1 border-t border-outline-variant/15">
-                  <EmojiText value={entry.footerText} />
-                </p>
-              {/if}
             </div>
-          </div>
+          {/if}
         </article>
       {/each}
     </div>
   {/if}
 </ModulePage>
+
+<style>
+  :global(.arcscord-discord-ui.updates-discord-message) {
+    padding: 0.75rem 0.25rem;
+  }
+</style>

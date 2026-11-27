@@ -121,7 +121,11 @@ function inviteDetail(code: string, days: number) {
     joins,
     retention: {
       total: totalJoined, stayed: totalJoined - totalLeft, left: totalLeft, retentionPct: Math.round(((totalJoined - totalLeft) / totalJoined) * 1000) / 10,
-      survival: { d1: 0.93, d7: 0.84, d30: 0.76 }, avgLifetimeDays: 41.2, medianLifetimeDays: 28, sameDayLeavers: 5, sameDayLeaversPct: 3.2,
+      survival: {
+        d1: { rate: 93, eligible: totalJoined },
+        d7: { rate: 84, eligible: Math.max(1, totalJoined - 4) },
+        d30: { rate: 76, eligible: Math.max(1, totalJoined - 12) },
+      }, avgLifetimeDays: 41.2, medianLifetimeDays: 28, sameDayLeavers: 5, sameDayLeaversPct: 3.2,
     },
     quality: {
       analyzed: 138, avgMessages: 64.2, guildAvgMessages: 48.9, avgLevel: 9.4, guildAvgLevel: 8.1,
@@ -136,7 +140,7 @@ function inviteDetail(code: string, days: number) {
     },
     ranking: {
       rank: 1, totalCodes: 6, sharePct: 41.6,
-      topCodes: [['atelier-nova', 412], ['topgg', 188], ['disboard', 96], ['tiktok-oct', 54], ['k8Rq2Lp', 23]].map(([c, joins]) => ({ inviteCode: c, joins })),
+      topCodes: [['atelier-nova', 412], ['topgg', 188], ['disboard', 96], ['tiktok-oct', 54], ['k8Rq2Lp', 23]].map(([code, joins]) => ({ code, joins })),
     },
   };
 }

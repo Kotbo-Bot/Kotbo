@@ -48,17 +48,17 @@
   {onclick}
   {disabled}
   aria-pressed={selected}
-  class="toggle group relative w-full text-left rounded-2xl border p-4 transition-all duration-200
+  class="toggle section-card group relative w-full text-left p-4 transition-all duration-200
          focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40
          disabled:opacity-45 disabled:cursor-not-allowed
          {selected
-           ? 'border-primary bg-primary/[0.05] shadow-sm shadow-primary/10'
-           : 'border-outline-variant/40 hover:border-primary/45 hover:bg-surface-container-low/50'}"
+           ? '!border-primary bg-primary/[0.06] ring-1 ring-primary/25'
+           : 'hover:!border-primary/45'}"
 >
   <div class="flex items-start gap-3.5">
     <span
-      class="box mt-0.5 w-[18px] h-[18px] shrink-0 rounded-[6px] border-[1.5px] flex items-center justify-center transition-colors
-      {selected ? 'bg-primary border-primary text-on-primary' : 'border-outline-variant/60 text-transparent'}"
+      class="box mt-0.5 w-[18px] h-[18px] shrink-0 rounded-md border-[1.5px] flex items-center justify-center transition-colors
+      {selected ? 'bg-primary border-primary text-on-primary' : 'border-outline-variant text-transparent'}"
     >
       <Papicon icon="check" size={11} />
     </span>
@@ -67,7 +67,7 @@
       <EmojiText value={emoji} class="text-[19px] leading-none mt-px shrink-0" />
     {:else if icon}
       <span
-        class="icon w-9 h-9 shrink-0 rounded-xl flex items-center justify-center transition-colors
+        class="icon w-9 h-9 shrink-0 rounded-full flex items-center justify-center transition-colors
         {selected ? 'bg-primary/15 text-primary' : 'bg-surface-container text-on-surface-variant'}"
       >
         <Papicon {icon} size={17} />
@@ -78,7 +78,7 @@
       <div class="flex items-baseline justify-between gap-3">
         <h3 class="text-[14.5px] font-semibold text-on-surface leading-tight">{label}</h3>
         {#if meta}
-          <span class="text-2xs font-medium tabular-nums text-on-surface-variant/40 shrink-0">{meta}</span>
+          <span class="text-2xs font-medium tabular-nums text-on-surface-variant shrink-0">{meta}</span>
         {/if}
       </div>
 
@@ -86,7 +86,7 @@
         <p class="mt-0.5 text-body-sm font-medium text-on-surface-variant">{pitch}</p>
       {/if}
       {#if detail}
-        <p class="mt-1.5 text-xs text-on-surface-variant/55 leading-relaxed">{detail}</p>
+        <p class="mt-1.5 text-xs text-on-surface-variant leading-relaxed">{detail}</p>
       {/if}
       {@render children?.()}
     </div>

@@ -1,31 +1,44 @@
 <script lang="ts">
-  import { dialogFocus } from '../lib/actions/dialogFocus';
-  import { router } from 'tinro';
-  import { authStore } from '../lib/stores/auth.svelte';
-  import { dashboardStore } from '../lib/stores/dashboard.svelte';
-  import { notificationsStore } from '../lib/stores/notifications.svelte';
-  import { staffStore } from '../lib/stores/staff.svelte';
-  import { fetchAnalytics, fetchActivityRankings, fetchUserSettings, updateUserSettings, fetchChangelog, fetchStaffServerLinks, fetchHomeWidgets } from '../lib/api';
-  import type { ChangelogCommit, HomeWidgetsData, HomeWidgetSection } from '../lib/api';
-  import RefreshButton from '../lib/components/RefreshButton.svelte';
-  import Papicon from '../lib/components/Papicon.svelte';
-  import HomeTodo from '../lib/components/home/HomeTodo.svelte';
-  import HomeWellbeingAgenda from '../lib/components/home/HomeWellbeingAgenda.svelte';
-  import HomeActivityCard from '../lib/components/home/HomeActivityCard.svelte';
-  import TopList from '../lib/components/analytics/TopList.svelte';
-  import Sparkline from '../lib/components/analytics/Sparkline.svelte';
-  import { SERIES } from '../lib/components/analytics/analyticsFormat';
-  import { channelDetailsModal } from '../lib/stores/channelDetailsModal.svelte';
-  import ServerLocaleSettings from '../lib/components/ServerLocaleSettings.svelte';
-  import { Button, Callout, Menu, type MenuItem } from '../lib/components/ui';
-  import { toast } from '../lib/stores/toast.svelte';
-  import { m, dateLocale } from '../lib/i18n';
-  import { isMobile } from '../lib/stores/media.svelte';
-  import { navigationStore } from '../lib/stores/navigation.svelte';
-  import { canViewFeature } from '../lib/permissions.svelte';
-  import { HOME_WIDGET_ACCESS } from '@kotbo/contracts';
-  import { brandingStore } from '../lib/stores/branding.svelte';
-  import { TOPGG_VOTE_URL } from '../lib/config/links';
+  import { onMount } from "svelte";
+  import { dialogFocus } from "../lib/actions/dialogFocus";
+  import { router } from "tinro";
+  import { authStore } from "../lib/stores/auth.svelte";
+  import { dashboardStore } from "../lib/stores/dashboard.svelte";
+  import { notificationsStore } from "../lib/stores/notifications.svelte";
+  import { staffStore } from "../lib/stores/staff.svelte";
+  import {
+    fetchAnalytics,
+    fetchActivityRankings,
+    fetchUserSettings,
+    updateUserSettings,
+    fetchChangelog,
+    fetchStaffServerLinks,
+    fetchHomeWidgets,
+  } from "../lib/api";
+  import type {
+    ChangelogCommit,
+    HomeWidgetsData,
+    HomeWidgetSection,
+  } from "../lib/api";
+  import RefreshButton from "../lib/components/RefreshButton.svelte";
+  import Papicon from "../lib/components/Papicon.svelte";
+  import HomeTodo from "../lib/components/home/HomeTodo.svelte";
+  import HomeWellbeingAgenda from "../lib/components/home/HomeWellbeingAgenda.svelte";
+  import HomeActivityCard from "../lib/components/home/HomeActivityCard.svelte";
+  import TopList from "../lib/components/analytics/TopList.svelte";
+  import Sparkline from "../lib/components/analytics/Sparkline.svelte";
+  import { SERIES } from "../lib/components/analytics/analyticsFormat";
+  import { channelDetailsModal } from "../lib/stores/channelDetailsModal.svelte";
+  import ServerLocaleSettings from "../lib/components/ServerLocaleSettings.svelte";
+  import { Button, Callout, Menu, type MenuItem } from "../lib/components/ui";
+  import { toast } from "../lib/stores/toast.svelte";
+  import { m, dateLocale } from "../lib/i18n";
+  import { isMobile } from "../lib/stores/media.svelte";
+  import { navigationStore } from "../lib/stores/navigation.svelte";
+  import { canViewFeature } from "../lib/permissions.svelte";
+  import { HOME_WIDGET_ACCESS } from "@kotbo/contracts";
+  import { brandingStore } from "../lib/stores/branding.svelte";
+  import { TOPGG_VOTE_URL } from "../lib/config/links";
 
   interface LayoutItem {
     id: string;
@@ -46,47 +59,361 @@
    * pas : les nouveaux blocs y arrivent masques.
    */
   const DEFAULT_LAYOUT: LayoutItem[] = [
-    { id: 'liveStats', colSpan: 3, rowSpan: 1, visible: true },
-    { id: 'pulse', colSpan: 1, rowSpan: 1, visible: true },
-    { id: 'analytics', colSpan: 2, rowSpan: 1, visible: true },
-    { id: 'moderation', colSpan: 1, rowSpan: 1, visible: true },
-    { id: 'shield', colSpan: 1, rowSpan: 1, visible: true },
-    { id: 'myTasks', colSpan: 1, rowSpan: 1, visible: true },
-    { id: 'audit', colSpan: 2, rowSpan: 1, visible: true },
-    { id: 'climate', colSpan: 1, rowSpan: 1, visible: true },
+    { id: "liveStats", colSpan: 3, rowSpan: 1, visible: true },
+    { id: "pulse", colSpan: 1, rowSpan: 1, visible: true },
+    { id: "analytics", colSpan: 2, rowSpan: 1, visible: true },
+  ];
+
+  type HomeTemplate = {
+    id: string;
+    name: string;
+    description: string;
+    icon: string;
+    layout: LayoutItem[];
+  };
+
+  const HOME_TEMPLATES: HomeTemplate[] = [
+    {
+      id: "essential",
+      name: "Essentiel",
+      description:
+        "Vue synthétique en un écran : stats live, pouls et tendances.",
+      icon: "sparkles",
+      layout: DEFAULT_LAYOUT,
+    },
+    {
+      id: "moderation",
+      name: "Modération & Staff",
+      description: "Bouclier, tickets, tâches d’équipe et suivi des sanctions.",
+      icon: "shield",
+      layout: [
+        { id: "liveStats", colSpan: 3, rowSpan: 1, visible: true },
+        { id: "shield", colSpan: 1, rowSpan: 1, visible: true },
+        { id: "tickets", colSpan: 1, rowSpan: 1, visible: true },
+        { id: "myTasks", colSpan: 1, rowSpan: 1, visible: true },
+        { id: "moderation", colSpan: 2, rowSpan: 1, visible: true },
+        { id: "staff", colSpan: 1, rowSpan: 1, visible: true },
+      ],
+    },
+    {
+      id: "community",
+      name: "Communauté & Vie",
+      description:
+        "Pouls, climat social, événements, sondages, niveaux et économie.",
+      icon: "users",
+      layout: [
+        { id: "pulse", colSpan: 1, rowSpan: 1, visible: true },
+        { id: "climate", colSpan: 2, rowSpan: 1, visible: true },
+        { id: "events", colSpan: 1, rowSpan: 1, visible: true },
+        { id: "polls", colSpan: 1, rowSpan: 1, visible: true },
+        { id: "leveling", colSpan: 1, rowSpan: 1, visible: true },
+        { id: "economy", colSpan: 2, rowSpan: 1, visible: true },
+        { id: "boosts", colSpan: 1, rowSpan: 1, visible: true },
+      ],
+    },
   ];
 
   const MODULE_CATALOG = [
-    { id: 'liveStats', get title() { return m.home_mod_livestats_title(); }, get desc() { return m.home_mod_livestats_desc(); }, icon: 'users' },
-    { id: 'analytics', get title() { return m.home_mod_analytics_title(); }, get desc() { return m.home_mod_analytics_desc(); }, icon: 'trending-up' },
-    { id: 'system', get title() { return m.home_mod_system_title(); }, get desc() { return m.home_mod_system_desc(); }, icon: 'cpu' },
-    { id: 'channels', get title() { return m.home_mod_channels_title(); }, get desc() { return m.home_mod_channels_desc(); }, icon: 'hash' },
-    { id: 'moderation', get title() { return m.home_mod_moderation_title(); }, get desc() { return m.home_mod_moderation_desc(); }, icon: 'shield' },
-    { id: 'members', get title() { return m.home_mod_members_title(); }, get desc() { return m.home_mod_members_desc(); }, icon: 'award' },
-    { id: 'notifications', get title() { return m.home_mod_notifications_title(); }, get desc() { return m.home_mod_notifications_desc(); }, icon: 'inbox' },
-    { id: 'staff', get title() { return m.home_mod_staff_title(); }, get desc() { return m.home_mod_staff_desc(); }, icon: 'users' },
-    { id: 'audit', get title() { return m.home_mod_audit_title(); }, get desc() { return m.home_mod_audit_desc(); }, icon: 'activity' },
-    { id: 'botLanguage', get title() { return m.home_mod_botlanguage_title(); }, get desc() { return m.home_mod_botlanguage_desc(); }, icon: 'globe' },
-    { id: 'timezone', get title() { return m.home_mod_timezone_title(); }, get desc() { return m.home_mod_timezone_desc(); }, icon: 'clock' },
-    { id: 'actions', get title() { return m.home_mod_actions_title(); }, get desc() { return m.home_mod_actions_desc(); }, icon: 'plus-circle' },
-    { id: 'notes', get title() { return m.home_mod_notes_title(); }, get desc() { return m.home_mod_notes_desc(); }, icon: 'edit' },
-    { id: 'serverInfo', get title() { return m.home_mod_serverinfo_title(); }, get desc() { return m.home_mod_serverinfo_desc(); }, icon: 'server' },
-    { id: 'botHosting', get title() { return m.home_mod_bothosting_title(); }, get desc() { return m.home_mod_bothosting_desc(); }, icon: 'cpu' },
-    { id: 'news', get title() { return m.home_mod_news_title(); }, get desc() { return m.home_mod_news_desc(); }, icon: 'book' },
-    { id: 'quickGuide', get title() { return m.home_mod_quickguide_title(); }, get desc() { return m.home_mod_quickguide_desc(); }, icon: 'info' },
-    { id: 'clockWeather', get title() { return m.home_mod_clockweather_title(); }, get desc() { return m.home_mod_clockweather_desc(); }, icon: 'clock' },
-    { id: 'economy', get title() { return m.home_mod_economy_title(); }, get desc() { return m.home_mod_economy_desc(); }, icon: 'dollar-sign' },
-    { id: 'leveling', get title() { return m.home_mod_leveling_title(); }, get desc() { return m.home_mod_leveling_desc(); }, icon: 'bar-chart-2' },
-    { id: 'tickets', get title() { return m.home_mod_tickets_title(); }, get desc() { return m.home_mod_tickets_desc(); }, icon: 'message-square' },
-    { id: 'invites', get title() { return m.home_mod_invites_title(); }, get desc() { return m.home_mod_invites_desc(); }, icon: 'user-plus' },
-    { id: 'events', get title() { return m.home_mod_events_title(); }, get desc() { return m.home_mod_events_desc(); }, icon: 'calendar' },
-    { id: 'polls', get title() { return m.home_mod_polls_title(); }, get desc() { return m.home_mod_polls_desc(); }, icon: 'bar-chart' },
-    { id: 'staffServer', get title() { return m.home_mod_staffserver_title(); }, get desc() { return m.home_mod_staffserver_desc(); }, icon: 'shield' },
-    { id: 'pulse', get title() { return m.home_mod_pulse_title(); }, get desc() { return m.home_mod_pulse_desc(); }, icon: 'activity' },
-    { id: 'shield', get title() { return m.home_mod_shield_title(); }, get desc() { return m.home_mod_shield_desc(); }, icon: 'shield' },
-    { id: 'myTasks', get title() { return m.home_mod_mytasks_title(); }, get desc() { return m.home_mod_mytasks_desc(); }, icon: 'check-circle' },
-    { id: 'boosts', get title() { return m.home_mod_boosts_title(); }, get desc() { return m.home_mod_boosts_desc(); }, icon: 'star' },
-    { id: 'climate', get title() { return m.home_mod_climate_title(); }, get desc() { return m.home_mod_climate_desc(); }, icon: 'bar-chart-2' },
+    {
+      id: "liveStats",
+      get title() {
+        return m.home_mod_livestats_title();
+      },
+      get desc() {
+        return m.home_mod_livestats_desc();
+      },
+      icon: "users",
+    },
+    {
+      id: "analytics",
+      get title() {
+        return m.home_mod_analytics_title();
+      },
+      get desc() {
+        return m.home_mod_analytics_desc();
+      },
+      icon: "trending-up",
+    },
+    {
+      id: "system",
+      get title() {
+        return m.home_mod_system_title();
+      },
+      get desc() {
+        return m.home_mod_system_desc();
+      },
+      icon: "cpu",
+    },
+    {
+      id: "channels",
+      get title() {
+        return m.home_mod_channels_title();
+      },
+      get desc() {
+        return m.home_mod_channels_desc();
+      },
+      icon: "hash",
+    },
+    {
+      id: "moderation",
+      get title() {
+        return m.home_mod_moderation_title();
+      },
+      get desc() {
+        return m.home_mod_moderation_desc();
+      },
+      icon: "shield",
+    },
+    {
+      id: "members",
+      get title() {
+        return m.home_mod_members_title();
+      },
+      get desc() {
+        return m.home_mod_members_desc();
+      },
+      icon: "award",
+    },
+    {
+      id: "notifications",
+      get title() {
+        return m.home_mod_notifications_title();
+      },
+      get desc() {
+        return m.home_mod_notifications_desc();
+      },
+      icon: "inbox",
+    },
+    {
+      id: "staff",
+      get title() {
+        return m.home_mod_staff_title();
+      },
+      get desc() {
+        return m.home_mod_staff_desc();
+      },
+      icon: "users",
+    },
+    {
+      id: "audit",
+      get title() {
+        return m.home_mod_audit_title();
+      },
+      get desc() {
+        return m.home_mod_audit_desc();
+      },
+      icon: "activity",
+    },
+    {
+      id: "botLanguage",
+      get title() {
+        return m.home_mod_botlanguage_title();
+      },
+      get desc() {
+        return m.home_mod_botlanguage_desc();
+      },
+      icon: "globe",
+    },
+    {
+      id: "timezone",
+      get title() {
+        return m.home_mod_timezone_title();
+      },
+      get desc() {
+        return m.home_mod_timezone_desc();
+      },
+      icon: "clock",
+    },
+    {
+      id: "actions",
+      get title() {
+        return m.home_mod_actions_title();
+      },
+      get desc() {
+        return m.home_mod_actions_desc();
+      },
+      icon: "plus-circle",
+    },
+    {
+      id: "notes",
+      get title() {
+        return m.home_mod_notes_title();
+      },
+      get desc() {
+        return m.home_mod_notes_desc();
+      },
+      icon: "edit",
+    },
+    {
+      id: "serverInfo",
+      get title() {
+        return m.home_mod_serverinfo_title();
+      },
+      get desc() {
+        return m.home_mod_serverinfo_desc();
+      },
+      icon: "server",
+    },
+    {
+      id: "botHosting",
+      get title() {
+        return m.home_mod_bothosting_title();
+      },
+      get desc() {
+        return m.home_mod_bothosting_desc();
+      },
+      icon: "cpu",
+    },
+    {
+      id: "news",
+      get title() {
+        return m.home_mod_news_title();
+      },
+      get desc() {
+        return m.home_mod_news_desc();
+      },
+      icon: "book",
+    },
+    {
+      id: "quickGuide",
+      get title() {
+        return m.home_mod_quickguide_title();
+      },
+      get desc() {
+        return m.home_mod_quickguide_desc();
+      },
+      icon: "info",
+    },
+    {
+      id: "clockWeather",
+      get title() {
+        return m.home_mod_clockweather_title();
+      },
+      get desc() {
+        return m.home_mod_clockweather_desc();
+      },
+      icon: "clock",
+    },
+    {
+      id: "economy",
+      get title() {
+        return m.home_mod_economy_title();
+      },
+      get desc() {
+        return m.home_mod_economy_desc();
+      },
+      icon: "dollar-sign",
+    },
+    {
+      id: "leveling",
+      get title() {
+        return m.home_mod_leveling_title();
+      },
+      get desc() {
+        return m.home_mod_leveling_desc();
+      },
+      icon: "bar-chart-2",
+    },
+    {
+      id: "tickets",
+      get title() {
+        return m.home_mod_tickets_title();
+      },
+      get desc() {
+        return m.home_mod_tickets_desc();
+      },
+      icon: "message-square",
+    },
+    {
+      id: "invites",
+      get title() {
+        return m.home_mod_invites_title();
+      },
+      get desc() {
+        return m.home_mod_invites_desc();
+      },
+      icon: "user-plus",
+    },
+    {
+      id: "events",
+      get title() {
+        return m.home_mod_events_title();
+      },
+      get desc() {
+        return m.home_mod_events_desc();
+      },
+      icon: "calendar",
+    },
+    {
+      id: "polls",
+      get title() {
+        return m.home_mod_polls_title();
+      },
+      get desc() {
+        return m.home_mod_polls_desc();
+      },
+      icon: "bar-chart",
+    },
+    {
+      id: "staffServer",
+      get title() {
+        return m.home_mod_staffserver_title();
+      },
+      get desc() {
+        return m.home_mod_staffserver_desc();
+      },
+      icon: "shield",
+    },
+    {
+      id: "pulse",
+      get title() {
+        return m.home_mod_pulse_title();
+      },
+      get desc() {
+        return m.home_mod_pulse_desc();
+      },
+      icon: "activity",
+    },
+    {
+      id: "shield",
+      get title() {
+        return m.home_mod_shield_title();
+      },
+      get desc() {
+        return m.home_mod_shield_desc();
+      },
+      icon: "shield",
+    },
+    {
+      id: "myTasks",
+      get title() {
+        return m.home_mod_mytasks_title();
+      },
+      get desc() {
+        return m.home_mod_mytasks_desc();
+      },
+      icon: "check-circle",
+    },
+    {
+      id: "boosts",
+      get title() {
+        return m.home_mod_boosts_title();
+      },
+      get desc() {
+        return m.home_mod_boosts_desc();
+      },
+      icon: "star",
+    },
+    {
+      id: "climate",
+      get title() {
+        return m.home_mod_climate_title();
+      },
+      get desc() {
+        return m.home_mod_climate_desc();
+      },
+      icon: "bar-chart-2",
+    },
   ];
 
   /**
@@ -124,19 +451,22 @@
     {
       label: m.home_edit_presets(),
       description: m.home_edit_presets_desc(),
-      icon: 'layers',
-      onselect: () => { showPresetsModal = true; void loadPresets(); },
+      icon: "layers",
+      onselect: () => {
+        showPresetsModal = true;
+        void loadPresets();
+      },
     },
     {
       label: m.home_edit_export(),
       description: m.home_edit_export_desc(),
-      icon: 'download',
+      icon: "download",
       onselect: exportCurrentLayout,
     },
     {
       label: m.home_edit_reset(),
       description: m.home_edit_reset_desc(),
-      icon: 'rotate-ccw',
+      icon: "rotate-ccw",
       onselect: () => (showResetConfirm = true),
     },
   ]);
@@ -144,40 +474,50 @@
   let showResetConfirm = $state(false);
   let showPresetsModal = $state(false);
   let userLayout = $state<LayoutItem[]>([]);
-  const availableCatalog = $derived(MODULE_CATALOG.filter((mod) => canUseWidget(mod.id)));
+  const availableCatalog = $derived(
+    MODULE_CATALOG.filter((mod) => canUseWidget(mod.id)),
+  );
 
   /**
    * Une disposition enregistree avant un retrait de droit garde le bloc : le
    * filtre s'applique donc au rendu, pas seulement a la bibliotheque.
    */
-  const visibleLayout = $derived(userLayout.filter((item) => item.visible && canUseWidget(item.id)));
+  const visibleLayout = $derived(
+    userLayout.filter((item) => item.visible && canUseWidget(item.id)),
+  );
 
   let dragOverIndex = $state<number | null>(null);
-  let resizing = $state<{ id: string; axis: 'col' | 'row'; startX: number; startY: number; startSpan: number } | null>(null);
+  let resizing = $state<{
+    id: string;
+    axis: "col" | "row";
+    startX: number;
+    startY: number;
+    startSpan: number;
+  } | null>(null);
   let presets = $state<any[]>([]);
-  let presetName = $state('');
-  let presetDescription = $state('');
+  let presetName = $state("");
+  let presetDescription = $state("");
   let loadingPresets = $state(false);
-  let presetImportJson = $state('');
+  let presetImportJson = $state("");
   let changelogCommits = $state<ChangelogCommit[]>([]);
   let changelogLoading = $state(false);
 
   function getStorageKey(): string {
-    const guildId = authStore.selectedGuildId || 'default';
-    const userId = authStore.user?.id || 'default';
+    const guildId = authStore.selectedGuildId || "default";
+    const userId = authStore.user?.id || "default";
     return `bento_layout_${guildId}_${userId}`;
   }
 
   function ensureRowSpan(items: LayoutItem[]): LayoutItem[] {
-    return items.map(item => ({ ...item, rowSpan: item.rowSpan || 1 }));
+    return items.map((item) => ({ ...item, rowSpan: item.rowSpan || 1 }));
   }
 
   function completeLayout(items: LayoutItem[]): LayoutItem[] {
     const parsed = ensureRowSpan(items);
-    const existingIds = new Set(parsed.map(item => item.id));
-    const missingModules: LayoutItem[] = MODULE_CATALOG
-      .filter(m => !existingIds.has(m.id))
-      .map(m => ({ id: m.id, colSpan: 1, rowSpan: 1, visible: false }));
+    const existingIds = new Set(parsed.map((item) => item.id));
+    const missingModules: LayoutItem[] = MODULE_CATALOG.filter(
+      (m) => !existingIds.has(m.id),
+    ).map((m) => ({ id: m.id, colSpan: 1, rowSpan: 1, visible: false }));
     return [...parsed, ...missingModules];
   }
 
@@ -237,17 +577,17 @@
   }
 
   async function resetLayout() {
-    const defaultIds = new Set(DEFAULT_LAYOUT.map(item => item.id));
-    const hiddenItems: LayoutItem[] = MODULE_CATALOG
-      .filter(m => !defaultIds.has(m.id))
-      .map(m => ({
-        id: m.id,
-        colSpan: 1,
-        rowSpan: 1,
-        visible: false
-      }));
+    const defaultIds = new Set(DEFAULT_LAYOUT.map((item) => item.id));
+    const hiddenItems: LayoutItem[] = MODULE_CATALOG.filter(
+      (m) => !defaultIds.has(m.id),
+    ).map((m) => ({
+      id: m.id,
+      colSpan: 1,
+      rowSpan: 1,
+      visible: false,
+    }));
     userLayout = [...DEFAULT_LAYOUT, ...hiddenItems];
-    
+
     // Reset in DB
     try {
       await updateUserSettings({ bentoLayout: null });
@@ -258,16 +598,16 @@
     showResetConfirm = false;
     layoutBeforeEdit = null;
     isEditing = false;
-    
+
     // Reset in localStorage
     const key = getStorageKey();
     localStorage.removeItem(key);
-    
+
     toast.success(m.home_layout_reset());
   }
 
   function toggleSize(id: string) {
-    userLayout = userLayout.map(item => {
+    userLayout = userLayout.map((item) => {
       if (item.id === id) {
         let nextSpan = 1;
         if (item.colSpan === 1) nextSpan = 2;
@@ -279,7 +619,7 @@
   }
 
   function hideModule(id: string) {
-    userLayout = userLayout.map(item => {
+    userLayout = userLayout.map((item) => {
       if (item.id === id) {
         return { ...item, visible: false };
       }
@@ -288,7 +628,7 @@
   }
 
   function addModule(id: string) {
-    userLayout = userLayout.map(item => {
+    userLayout = userLayout.map((item) => {
       if (item.id === id) {
         return { ...item, visible: true, rowSpan: item.rowSpan || 1 };
       }
@@ -321,7 +661,7 @@
   }
 
   function toggleRowSize(id: string) {
-    userLayout = userLayout.map(item => {
+    userLayout = userLayout.map((item) => {
       if (item.id === id) {
         let nextRowSpan = 1;
         if (item.rowSpan === 1) nextRowSpan = 2;
@@ -338,16 +678,16 @@
   function handleDragStart(e: DragEvent, index: number) {
     draggedIndex = index;
     if (e.dataTransfer) {
-      e.dataTransfer.effectAllowed = 'move';
-      e.dataTransfer.setData('text/plain', String(index));
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", String(index));
     }
     const target = e.currentTarget as HTMLElement;
-    requestAnimationFrame(() => target.classList.add('opacity-40', 'scale-95'));
+    requestAnimationFrame(() => target.classList.add("opacity-40", "scale-95"));
   }
 
   function handleDragEnd(e: DragEvent) {
     const target = e.currentTarget as HTMLElement;
-    target.classList.remove('opacity-40', 'scale-95');
+    target.classList.remove("opacity-40", "scale-95");
     draggedIndex = null;
     dragOverIndex = null;
   }
@@ -389,32 +729,38 @@
   }
 
   // Border resize handlers
-  function handleResizeStart(e: MouseEvent, itemId: string, axis: 'col' | 'row') {
+  function handleResizeStart(
+    e: MouseEvent,
+    itemId: string,
+    axis: "col" | "row",
+  ) {
     e.preventDefault();
     e.stopPropagation();
-    const item = userLayout.find(i => i.id === itemId);
+    const item = userLayout.find((i) => i.id === itemId);
     if (!item) return;
     resizing = {
       id: itemId,
       axis,
       startX: e.clientX,
       startY: e.clientY,
-      startSpan: axis === 'col' ? item.colSpan : (item.rowSpan || 1)
+      startSpan: axis === "col" ? item.colSpan : item.rowSpan || 1,
     };
-    document.addEventListener('mousemove', handleResizeMove);
-    document.addEventListener('mouseup', handleResizeEnd);
+    document.addEventListener("mousemove", handleResizeMove);
+    document.addEventListener("mouseup", handleResizeEnd);
   }
 
   function handleResizeMove(e: MouseEvent) {
     if (!resizing) return;
     const { id, axis, startX, startY, startSpan } = resizing;
-    const delta = axis === 'col' ? e.clientX - startX : e.clientY - startY;
-    const cellSize = axis === 'col' ? 280 : 200;
+    const delta = axis === "col" ? e.clientX - startX : e.clientY - startY;
+    const cellSize = axis === "col" ? 280 : 200;
     const spanDelta = Math.round(delta / cellSize);
     const newSpan = Math.max(1, Math.min(3, startSpan + spanDelta));
     userLayout = userLayout.map((item) => {
       if (item.id === id) {
-        return axis === 'col' ? { ...item, colSpan: newSpan } : { ...item, rowSpan: newSpan };
+        return axis === "col"
+          ? { ...item, colSpan: newSpan }
+          : { ...item, rowSpan: newSpan };
       }
       return item;
     });
@@ -422,15 +768,15 @@
 
   function handleResizeEnd() {
     resizing = null;
-    document.removeEventListener('mousemove', handleResizeMove);
-    document.removeEventListener('mouseup', handleResizeEnd);
+    document.removeEventListener("mousemove", handleResizeMove);
+    document.removeEventListener("mouseup", handleResizeEnd);
   }
 
   // Preset management
   async function loadPresets() {
     loadingPresets = true;
     try {
-      const { fetchLayoutPresets } = await import('../lib/api');
+      const { fetchLayoutPresets } = await import("../lib/api");
       presets = await fetchLayoutPresets();
     } catch (e) {
       console.error("Failed to load presets", e);
@@ -440,15 +786,22 @@
   }
 
   async function saveAsPreset() {
-    if (!presetName.trim()) { toast.error(m.home_name_required()); return; }
+    if (!presetName.trim()) {
+      toast.error(m.home_name_required());
+      return;
+    }
     try {
-      const { createLayoutPreset } = await import('../lib/api');
-      const visible = userLayout.filter(i => i.visible);
-      const preset = await createLayoutPreset({ name: presetName.trim(), description: presetDescription.trim(), layout: visible });
+      const { createLayoutPreset } = await import("../lib/api");
+      const visible = userLayout.filter((i) => i.visible);
+      const preset = await createLayoutPreset({
+        name: presetName.trim(),
+        description: presetDescription.trim(),
+        layout: visible,
+      });
       if (preset) {
         presets = [preset, ...presets];
-        presetName = '';
-        presetDescription = '';
+        presetName = "";
+        presetDescription = "";
         toast.success(m.home_preset_saved());
       }
     } catch (e) {
@@ -456,16 +809,23 @@
     }
   }
 
+  function applyBuiltInTemplate(template: HomeTemplate) {
+    const allowed = template.layout.filter((item) => canUseWidget(item.id));
+    userLayout = completeLayout(allowed);
+    showPresetsModal = false;
+    toast.success(`Modèle « ${template.name} » appliqué`);
+  }
+
   async function applyPreset(presetId: string) {
     try {
-      const { applyLayoutPreset } = await import('../lib/api');
+      const { applyLayoutPreset } = await import("../lib/api");
       const layout = await applyLayoutPreset(presetId);
       if (layout) {
         const parsed = ensureRowSpan(layout as LayoutItem[]);
-        const existingIds = new Set(parsed.map(item => item.id));
-        const missingModules: LayoutItem[] = MODULE_CATALOG
-          .filter(m => !existingIds.has(m.id))
-          .map(m => ({ id: m.id, colSpan: 1, rowSpan: 1, visible: false }));
+        const existingIds = new Set(parsed.map((item) => item.id));
+        const missingModules: LayoutItem[] = MODULE_CATALOG.filter(
+          (m) => !existingIds.has(m.id),
+        ).map((m) => ({ id: m.id, colSpan: 1, rowSpan: 1, visible: false }));
         userLayout = [...parsed, ...missingModules];
         showPresetsModal = false;
         toast.success(m.home_preset_applied());
@@ -477,9 +837,9 @@
 
   async function removePreset(presetId: string) {
     try {
-      const { deleteLayoutPreset } = await import('../lib/api');
+      const { deleteLayoutPreset } = await import("../lib/api");
       const ok = await deleteLayoutPreset(presetId);
-      if (ok) presets = presets.filter(p => p.id !== presetId);
+      if (ok) presets = presets.filter((p) => p.id !== presetId);
     } catch (e) {
       toast.error(m.home_delete_error());
     }
@@ -487,7 +847,7 @@
 
   async function sharePreset(presetId: string) {
     try {
-      const { shareLayoutPreset } = await import('../lib/api');
+      const { shareLayoutPreset } = await import("../lib/api");
       const result = await shareLayoutPreset(presetId);
       if (result?.shareToken) {
         const url = `${window.location.origin}/?importPreset=${result.shareToken}`;
@@ -500,12 +860,20 @@
   }
 
   function exportPreset(preset: any) {
-    const data = JSON.stringify({ name: preset.name, description: preset.description || '', layout: preset.layout }, null, 2);
-    const blob = new Blob([data], { type: 'application/json' });
+    const data = JSON.stringify(
+      {
+        name: preset.name,
+        description: preset.description || "",
+        layout: preset.layout,
+      },
+      null,
+      2,
+    );
+    const blob = new Blob([data], { type: "application/json" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
-    a.download = `preset-${preset.name.replace(/\s+/g, '-').toLowerCase()}.json`;
+    a.download = `preset-${preset.name.replace(/\s+/g, "-").toLowerCase()}.json`;
     a.click();
     URL.revokeObjectURL(url);
     toast.success(m.home_preset_exported());
@@ -515,12 +883,19 @@
     if (!presetImportJson.trim()) return;
     try {
       const parsed = JSON.parse(presetImportJson);
-      if (!parsed.name || !parsed.layout) { toast.error(m.home_invalid_format()); return; }
-      const { importLayoutPreset } = await import('../lib/api');
-      const preset = await importLayoutPreset({ name: parsed.name, description: parsed.description || m.home_imported_label(), layout: parsed.layout });
+      if (!parsed.name || !parsed.layout) {
+        toast.error(m.home_invalid_format());
+        return;
+      }
+      const { importLayoutPreset } = await import("../lib/api");
+      const preset = await importLayoutPreset({
+        name: parsed.name,
+        description: parsed.description || m.home_imported_label(),
+        layout: parsed.layout,
+      });
       if (preset) {
         presets = [preset, ...presets];
-        presetImportJson = '';
+        presetImportJson = "";
         toast.success(m.home_preset_imported());
       }
     } catch (e) {
@@ -529,31 +904,39 @@
   }
 
   function exportCurrentLayout() {
-    const visible = userLayout.filter(i => i.visible);
-    const data = JSON.stringify({ name: m.home_my_layout(), description: m.home_current_export(), layout: visible }, null, 2);
-    const blob = new Blob([data], { type: 'application/json' });
+    const visible = userLayout.filter((i) => i.visible);
+    const data = JSON.stringify(
+      {
+        name: m.home_my_layout(),
+        description: m.home_current_export(),
+        layout: visible,
+      },
+      null,
+      2,
+    );
+    const blob = new Blob([data], { type: "application/json" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
-    a.download = 'layout-courant.json';
+    a.download = "layout-courant.json";
     a.click();
     URL.revokeObjectURL(url);
     toast.success(m.home_layout_exported());
   }
 
   // Staff notes logic
-  let staffNotes = $state('');
+  let staffNotes = $state("");
 
   function loadStaffNotes() {
-    const guildId = authStore.selectedGuildId || 'default';
+    const guildId = authStore.selectedGuildId || "default";
     const savedNotes = localStorage.getItem(`staff_notes_${guildId}`);
-    staffNotes = savedNotes || '';
+    staffNotes = savedNotes || "";
   }
 
   function saveStaffNotes(e: Event) {
     const target = e.target as HTMLTextAreaElement;
     staffNotes = target.value;
-    const guildId = authStore.selectedGuildId || 'default';
+    const guildId = authStore.selectedGuildId || "default";
     localStorage.setItem(`staff_notes_${guildId}`, staffNotes);
   }
 
@@ -567,24 +950,42 @@
     const days = Math.floor(hours / 24);
     if (days === 1) return m.home_rel_yesterday();
     if (days < 30) return m.home_rel_days({ n: days });
-    return new Date(isoDate).toLocaleDateString(dateLocale(), { day: 'numeric', month: 'short' });
+    return new Date(isoDate).toLocaleDateString(dateLocale(), {
+      day: "numeric",
+      month: "short",
+    });
   }
 
   // Clock & Weather logic
-  let currentTime = $state('');
-  let currentDate = $state('');
+  let currentTime = $state("");
+  let currentDate = $state("");
 
   function updateDateTime() {
     const now = new Date();
-    currentTime = now.toLocaleTimeString(dateLocale(), { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    currentDate = now.toLocaleDateString(dateLocale(), { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    currentTime = now.toLocaleTimeString(dateLocale(), {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+    currentDate = now.toLocaleDateString(dateLocale(), {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    });
   }
 
   // Widget "Serveur Staff" - état du lien de la paire
   const SYNC_MODE_LABELS: Record<string, string> = {
-    get MAIN_TO_STAFF() { return m.home_sync_main_to_staff(); },
-    get STAFF_TO_MAIN() { return m.home_sync_staff_to_main(); },
-    get BIDIRECTIONAL() { return m.home_sync_bidirectional(); },
+    get MAIN_TO_STAFF() {
+      return m.home_sync_main_to_staff();
+    },
+    get STAFF_TO_MAIN() {
+      return m.home_sync_staff_to_main();
+    },
+    get BIDIRECTIONAL() {
+      return m.home_sync_bidirectional();
+    },
   };
   let staffServerLinks = $state<any[]>([]);
   let staffLinksGuildId: string | null = null;
@@ -628,21 +1029,27 @@
   }
 
   async function handleImportFromUrl() {
-    if (typeof window === 'undefined') return;
+    if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
-    const token = params.get('importPreset');
+    const token = params.get("importPreset");
     if (!token) return;
     try {
-      const { fetchSharedLayoutPreset, importLayoutPreset } = await import('../lib/api');
+      const { fetchSharedLayoutPreset, importLayoutPreset } = await import(
+        "../lib/api"
+      );
       const shared = await fetchSharedLayoutPreset(token);
       if (shared?.layout) {
-        const preset = await importLayoutPreset({ name: shared.name, description: shared.description || m.home_imported_via_link(), layout: shared.layout as any[] });
+        const preset = await importLayoutPreset({
+          name: shared.name,
+          description: shared.description || m.home_imported_via_link(),
+          layout: shared.layout as any[],
+        });
         if (preset) {
           const parsed = ensureRowSpan(shared.layout as LayoutItem[]);
-          const existingIds = new Set(parsed.map(item => item.id));
-          const missingModules: LayoutItem[] = MODULE_CATALOG
-            .filter(m => !existingIds.has(m.id))
-            .map(m => ({ id: m.id, colSpan: 1, rowSpan: 1, visible: false }));
+          const existingIds = new Set(parsed.map((item) => item.id));
+          const missingModules: LayoutItem[] = MODULE_CATALOG.filter(
+            (m) => !existingIds.has(m.id),
+          ).map((m) => ({ id: m.id, colSpan: 1, rowSpan: 1, visible: false }));
           userLayout = [...parsed, ...missingModules];
           toast.success(m.home_preset_imported_applied({ name: shared.name }));
         }
@@ -650,7 +1057,7 @@
     } catch (e) {
       console.warn("Failed to import preset from URL", e);
     }
-    window.history.replaceState({}, '', window.location.pathname);
+    window.history.replaceState({}, "", window.location.pathname);
   }
 
   let timerInterval: any;
@@ -664,10 +1071,10 @@
 
   function getSpanStyle(colSpan: number, rowSpan: number): string {
     const parts: string[] = [];
-    if (colSpan === 2) parts.push('grid-column: span 2');
-    else if (colSpan === 3) parts.push('grid-column: span 3');
+    if (colSpan === 2) parts.push("grid-column: span 2");
+    else if (colSpan === 3) parts.push("grid-column: span 3");
     if (rowSpan >= 2) parts.push(`grid-row: span ${rowSpan}`);
-    return parts.join('; ');
+    return parts.join("; ");
   }
 
   function displayColSpan(item: LayoutItem): number {
@@ -675,7 +1082,7 @@
   }
 
   function displayRowSpan(item: LayoutItem): number {
-    return $isMobile ? 1 : (item.rowSpan || 1);
+    return $isMobile ? 1 : item.rowSpan || 1;
   }
 
   function getColSpanClass(colSpan: number): string {
@@ -690,14 +1097,18 @@
     return "";
   }
 
-  const COMPACT_MODULES = new Set(['actions', 'liveStats', 'clockWeather']);
+  const COMPACT_MODULES = new Set(["actions", "liveStats", "clockWeather"]);
 
   function getModuleMinHeight(id: string): string {
-    if (COMPACT_MODULES.has(id)) return 'min-h-[80px]';
-    return 'min-h-[180px]';
+    if (COMPACT_MODULES.has(id)) return "min-h-[72px]";
+    return "min-h-[136px]";
   }
 
-  function getListCount(baseCount: number, colSpan: number, rowSpan: number): number {
+  function getListCount(
+    baseCount: number,
+    colSpan: number,
+    rowSpan: number,
+  ): number {
     let count = baseCount;
     if (rowSpan >= 3) count += 6;
     else if (rowSpan >= 2) count += 3;
@@ -711,7 +1122,12 @@
 
   async function loadAnalytics(force = false) {
     const guildId = authStore.selectedGuildId;
-    if (!guildId || analyticsLoading || (!force && analyticsGuildId === guildId)) return;
+    if (
+      !guildId ||
+      analyticsLoading ||
+      (!force && analyticsGuildId === guildId)
+    )
+      return;
     analyticsLoading = true;
     try {
       analyticsData = await fetchAnalytics({ period: 7 });
@@ -724,20 +1140,20 @@
   }
 
   const WIDGET_SECTIONS: Record<string, HomeWidgetSection> = {
-    leveling: 'leveling',
-    invites: 'invites',
-    economy: 'economy',
-    tickets: 'tickets',
-    events: 'events',
-    polls: 'polls',
-    serverInfo: 'serverInfo',
-    quickGuide: 'quickGuide',
-    botHosting: 'hosting',
-    pulse: 'pulse',
-    shield: 'shield',
-    myTasks: 'myTasks',
-    boosts: 'boosts',
-    climate: 'climate',
+    leveling: "leveling",
+    invites: "invites",
+    economy: "economy",
+    tickets: "tickets",
+    events: "events",
+    polls: "polls",
+    serverInfo: "serverInfo",
+    quickGuide: "quickGuide",
+    botHosting: "hosting",
+    pulse: "pulse",
+    shield: "shield",
+    myTasks: "myTasks",
+    boosts: "boosts",
+    climate: "climate",
   };
 
   let homeWidgets = $state<HomeWidgetsData | null>(null);
@@ -760,7 +1176,7 @@
       homeWidgetsGuildId = guildId;
     }
 
-    const key = `${guildId}:${[...sections].sort().join(',')}`;
+    const key = `${guildId}:${[...sections].sort().join(",")}`;
     if (homeWidgetsLoading || (!force && homeWidgetsKey === key)) return;
 
     homeWidgetsLoading = true;
@@ -792,22 +1208,74 @@
 
   function emotionLabel(emotion: string | null): string {
     switch (emotion) {
-      case 'joy': return m.home_climate_emotion_joy();
-      case 'sad': return m.home_climate_emotion_sad();
-      case 'anger': return m.home_climate_emotion_anger();
-      case 'fear': return m.home_climate_emotion_fear();
-      default: return '-';
+      case "joy":
+        return m.home_climate_emotion_joy();
+      case "sad":
+        return m.home_climate_emotion_sad();
+      case "anger":
+        return m.home_climate_emotion_anger();
+      case "fear":
+        return m.home_climate_emotion_fear();
+      default:
+        return "-";
     }
   }
 
   function pulseTone(score: number): string {
-    if (score >= 70) return 'text-success';
-    if (score >= 40) return 'text-warning';
-    return 'text-error';
+    if (score >= 70) return "text-success";
+    if (score >= 40) return "text-warning";
+    return "text-error";
+  }
+
+  /** Courbe monotone cubique (Fritsch–Carlson) pour le fond du widget Pulse. */
+  function smoothPulsePath(values: number[]): string {
+    if (values.length < 2) return "";
+    const maxV = Math.max(...values);
+    const minV = Math.min(...values);
+    const spanV = maxV - minV || 1;
+    const pts = values.map((v, i) => ({
+      x: (i / (values.length - 1)) * 100,
+      y: 38 - ((v - minV) / spanV) * 24,
+    }));
+    const n = pts.length;
+    const dx: number[] = [];
+    const slopes: number[] = [];
+    for (let i = 0; i < n - 1; i += 1) {
+      const d = pts[i + 1]!.x - pts[i]!.x;
+      dx.push(d);
+      slopes.push((pts[i + 1]!.y - pts[i]!.y) / d);
+    }
+    const tangents: number[] = [slopes[0]!];
+    for (let i = 1; i < n - 1; i += 1) {
+      if (slopes[i - 1]! * slopes[i]! <= 0) {
+        tangents.push(0);
+      } else {
+        tangents.push(
+          (3 * (dx[i - 1]! + dx[i]!)) /
+            ((2 * dx[i]! + dx[i - 1]!) / slopes[i - 1]! +
+              (dx[i]! + 2 * dx[i - 1]!) / slopes[i]!),
+        );
+      }
+    }
+    tangents.push(slopes[n - 2]!);
+
+    let path = `M${pts[0]!.x.toFixed(2)},${pts[0]!.y.toFixed(2)}`;
+    for (let i = 0; i < n - 1; i += 1) {
+      const third = dx[i]! / 3;
+      const p0 = pts[i]!;
+      const p1 = pts[i + 1]!;
+      path += ` C${(p0.x + third).toFixed(2)},${(p0.y + tangents[i]! * third).toFixed(2)},${(p1.x - third).toFixed(2)},${(p1.y - tangents[i + 1]! * third).toFixed(2)},${p1.x.toFixed(2)},${p1.y.toFixed(2)}`;
+    }
+    return path;
   }
 
   function formatEventDate(iso: string): string {
-    return new Date(iso).toLocaleDateString(dateLocale(), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    return new Date(iso).toLocaleDateString(dateLocale(), {
+      day: "numeric",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
   }
 
   $effect(() => {
@@ -822,17 +1290,19 @@
       if (authStore.selectedGuildId !== guildId) return;
       // Courbe et classements lisent les routes d'Analytics v3 eux-memes ;
       // l'ancienne reponse ne sert plus qu'aux chiffres du moment et a la moderation.
-      if (['liveStats', 'moderation'].some((id) => visibleIds.has(id))) {
+      if (["liveStats", "moderation"].some((id) => visibleIds.has(id))) {
         void loadAnalytics();
       }
-      if (visibleIds.has('staff')) void staffStore.fetchAll();
-      if (visibleIds.has('news')) void loadChangelog();
-      if (visibleIds.has('staffServer')) void loadStaffServerLinks();
+      if (visibleIds.has("staff")) void staffStore.fetchAll();
+      if (visibleIds.has("news")) void loadChangelog();
+      if (visibleIds.has("staffServer")) void loadStaffServerLinks();
       void loadHomeWidgets(sectionsFor(visibleIds));
     };
 
-    if (typeof window.requestIdleCallback === 'function') {
-      const idleId = window.requestIdleCallback(loadSecondaryWidgets, { timeout: 1_500 });
+    if (typeof window.requestIdleCallback === "function") {
+      const idleId = window.requestIdleCallback(loadSecondaryWidgets, {
+        timeout: 1_500,
+      });
       return () => window.cancelIdleCallback(idleId);
     }
 
@@ -840,11 +1310,170 @@
     return () => globalThis.clearTimeout(timeoutId);
   });
 
-  const activeModulesCount = $derived(dashboardStore.state.modules.filter(m => m.status === 'active').length);
-  const errorModulesCount = $derived(dashboardStore.state.modules.filter(m => m.status === 'error').length);
-  const errorModules = $derived(dashboardStore.state.modules.filter(m => m.status === 'error'));
+  const activeModulesCount = $derived(
+    dashboardStore.state.modules.filter((m) => m.status === "active").length,
+  );
+  const errorModulesCount = $derived(
+    dashboardStore.state.modules.filter((m) => m.status === "error").length,
+  );
+  const errorModules = $derived(
+    dashboardStore.state.modules.filter((m) => m.status === "error"),
+  );
 
   const pendingAbsences = $derived(staffStore.pendingAbsences);
+
+  const DAILY_GREETING_PHOTOS = [
+    {
+      src: "/greeting/day-0.jpg",
+      author: "Yang Zhiyuan (Unsplash)",
+      url: "https://unsplash.com/photos/misty-mountains-shrouded-in-blue-twilight-fog-1758637689971-fe6124e7cabd",
+    },
+    {
+      src: "/greeting/day-1.jpg",
+      author: "Chensiyuan (Wikimedia Commons)",
+      url: "https://commons.wikimedia.org/wiki/File:1_pano_cuiping_yangshuo_2016.jpg",
+    },
+    {
+      src: "/greeting/day-2.jpg",
+      author: "Kreuzschnabel (Wikimedia Commons)",
+      url: "https://commons.wikimedia.org/wiki/File:2013_Rainbow_over_Washfold.jpg",
+    },
+    {
+      src: "/greeting/day-3.jpg",
+      author: "Kreuzschnabel (Wikimedia Commons)",
+      url: "https://commons.wikimedia.org/wiki/File:2015_Ribblehead_Viaduct_1.jpg",
+    },
+    {
+      src: "/greeting/day-4.jpg",
+      author: "Kreuzschnabel (Wikimedia Commons)",
+      url: "https://commons.wikimedia.org/wiki/File:2015_Swaledale_from_Kisdon_Hill.jpg",
+    },
+    {
+      src: "/greeting/day-5.jpg",
+      author: "Kreuzschnabel (Wikimedia Commons)",
+      url: "https://commons.wikimedia.org/wiki/File:2013_Cogden_Bridge.jpg",
+    },
+    {
+      src: "/greeting/day-6.jpg",
+      author: "Moahim (Wikimedia Commons)",
+      url: "https://commons.wikimedia.org/wiki/File:2018_-_Ch%C3%A2teau_fort_de_Lourdes.jpg",
+    },
+  ] as const;
+
+  interface GreetingPhoto {
+    src: string;
+    author: string;
+    url: string;
+  }
+
+  const fallbackDailyPhoto = $derived.by((): GreetingPhoto => {
+    const now = new Date();
+    const startOfYear = new Date(now.getFullYear(), 0, 0);
+    const dayOfYear = Math.floor(
+      (now.getTime() - startOfYear.getTime()) / 86_400_000,
+    );
+    return DAILY_GREETING_PHOTOS[dayOfYear % DAILY_GREETING_PHOTOS.length]!;
+  });
+
+  let fetchedDailyPhoto = $state<GreetingPhoto | null>(null);
+  const dailyPhoto = $derived(fetchedDailyPhoto ?? fallbackDailyPhoto);
+
+  function stripHtmlTags(raw: string): string {
+    return raw
+      .replace(/<[^>]+>/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  async function loadDailyPhoto() {
+    if (typeof window === "undefined") return;
+    const now = new Date();
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, "0");
+    const dd = String(now.getDate()).padStart(2, "0");
+    const dateKey = `${yyyy}-${mm}-${dd}`;
+    const cacheKey = `kotbo_daily_landscape_${dateKey}`;
+
+    try {
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        const parsed = JSON.parse(cached) as GreetingPhoto;
+        if (parsed?.src && parsed?.author && parsed?.url) {
+          fetchedDailyPhoto = parsed;
+          return;
+        }
+      }
+    } catch {
+      /* ignore cache errors */
+    }
+
+    try {
+      const endpoint =
+        "https://commons.wikimedia.org/w/api.php?action=query&generator=categorymembers&gcmtitle=Category:Featured_pictures_of_landscapes&gcmtype=file&gcmlimit=50&prop=imageinfo&iiprop=url|extmetadata&iiurlwidth=1280&format=json&origin=*";
+      const res = await fetch(endpoint);
+      if (!res.ok) return;
+      const data = (await res.json()) as {
+        query?: {
+          pages?: Record<
+            string,
+            {
+              title?: string;
+              imageinfo?: Array<{
+                thumburl?: string;
+                url?: string;
+                descriptionurl?: string;
+                extmetadata?: {
+                  Artist?: { value?: string };
+                  Categories?: { value?: string };
+                };
+              }>;
+            }
+          >;
+        };
+      };
+      const animalRe =
+        /\b(bird|aves|animal|insect|mammal|fish|frog|spider|turkey|deer|horse|dog|cat|butterfly)\b/i;
+      const candidates = Object.values(data.query?.pages ?? {}).filter((p) => {
+        const info = p.imageinfo?.[0];
+        const src = info?.thumburl || info?.url;
+        if (!src || !p.title || !/\.(jpe?g|png|webp)$/i.test(p.title))
+          return false;
+        const meta = `${p.title} ${info?.extmetadata?.Categories?.value ?? ""}`;
+        return !animalRe.test(meta);
+      });
+      if (candidates.length === 0) return;
+
+      const startOfYear = new Date(yyyy, 0, 0);
+      const dayOfYear = Math.floor(
+        (now.getTime() - startOfYear.getTime()) / 86_400_000,
+      );
+      const picked = candidates[dayOfYear % candidates.length]!;
+      const info = picked.imageinfo![0]!;
+      const src = (info.thumburl || info.url)!;
+
+      const rawArtist = info.extmetadata?.Artist?.value ?? "";
+      const author = stripHtmlTags(rawArtist) || "Wikimedia Commons";
+      const photo: GreetingPhoto = {
+        src,
+        author: `${author} (Wikimedia Commons)`,
+        url:
+          info.descriptionurl ||
+          "https://commons.wikimedia.org/wiki/Category:Featured_pictures_of_landscapes",
+      };
+      fetchedDailyPhoto = photo;
+      try {
+        localStorage.setItem(cacheKey, JSON.stringify(photo));
+      } catch {
+        /* ignore storage quota */
+      }
+    } catch {
+      // Hors-ligne ou limite reseau : le repli local par jour reste actif.
+    }
+  }
+
+  onMount(() => {
+    void loadDailyPhoto();
+  });
 
   const dynamicGreeting = $derived.by(() => {
     const name = authStore.user?.username || m.home_manager();
@@ -860,22 +1489,38 @@
   let todoRefreshKey = $state(0);
 
   /** « 1 sujet » ou « 4 sujets » : paraglide n'a pas de pluriel, on choisit la cle. */
-  const plural = (n: number, one: () => string, other: (p: { n: number }) => string) =>
-    n === 1 ? one() : other({ n });
+  const plural = (
+    n: number,
+    one: () => string,
+    other: (p: { n: number }) => string,
+  ) => (n === 1 ? one() : other({ n }));
 
   const dynamicSubtitle = $derived.by(() => {
     const guildName = dashboardStore.state.guildName || m.home_your_server();
     const parts: string[] = [];
-    if (errorModulesCount > 0) parts.push(plural(errorModulesCount, m.home_modules_error_one, m.home_modules_error_count));
-    if (todoCount > 0) parts.push(plural(todoCount, m.home_tasks_one, m.home_tasks_count));
+    if (errorModulesCount > 0)
+      parts.push(
+        plural(
+          errorModulesCount,
+          m.home_modules_error_one,
+          m.home_modules_error_count,
+        ),
+      );
+    if (todoCount > 0)
+      parts.push(plural(todoCount, m.home_tasks_one, m.home_tasks_count));
     const unread = notificationsStore.unreadCount;
-    if (unread > 0) parts.push(plural(unread, m.home_notifications_one, m.home_notifications_count));
+    if (unread > 0)
+      parts.push(
+        plural(unread, m.home_notifications_one, m.home_notifications_count),
+      );
     if (parts.length === 0) return m.home_all_good({ guild: guildName });
     // « 4 sujets a traiter et 2 notifications non lues » se lit ; les points
     // medians d'avant faisaient une liste de compteurs.
-    let joined = parts.join(', ');
+    let joined = parts.join(", ");
     try {
-      joined = new Intl.ListFormat(dateLocale(), { type: 'conjunction' }).format(parts);
+      joined = new Intl.ListFormat(dateLocale(), {
+        type: "conjunction",
+      }).format(parts);
     } catch {
       // Navigateur sans ListFormat : la virgule suffit.
     }
@@ -906,16 +1551,16 @@
     notificationsStore.fetchNotifications(true);
 
     const visibleIds = new Set(visibleLayout.map((item) => item.id));
-    if (visibleIds.has('staff')) staffStore.fetchAll(true);
-    if (['liveStats', 'moderation'].some((id) => visibleIds.has(id))) {
+    if (visibleIds.has("staff")) staffStore.fetchAll(true);
+    if (["liveStats", "moderation"].some((id) => visibleIds.has(id))) {
       loadAnalytics(true);
     }
     void loadHomeWidgets(sectionsFor(visibleIds), true);
   };
 
   function formatNumber(n: number): string {
-    if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
-    if (n >= 1_000) return (n / 1_000).toFixed(1) + 'k';
+    if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
+    if (n >= 1_000) return (n / 1_000).toFixed(1) + "k";
     return n.toString();
   }
 
@@ -931,35 +1576,88 @@
   }
 </script>
 
-<div class="space-y-5 {isEditing ? 'pb-28' : 'pb-10'}">
+<div class="space-y-3.5 {isEditing ? 'pb-28' : 'pb-6'}">
+  <!-- Première ligne façon tafac : GreetingCard (1/3) + « À traiter » (2/3) côte à côte. -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-3.5 items-stretch">
+    <header
+      class="section-card relative overflow-hidden p-5 flex flex-col justify-between gap-3"
+    >
+      <img
+        src={dailyPhoto.src}
+        alt=""
+        aria-hidden="true"
+        class="pointer-events-none absolute inset-0 w-full h-full object-cover object-center opacity-85"
+      />
+      <div
+        aria-hidden="true"
+        class="pointer-events-none absolute inset-0"
+        style="background: linear-gradient(to top, color-mix(in srgb, var(--surface-container-lowest) 94%, transparent) 0%, color-mix(in srgb, var(--surface-container-lowest) 68%, transparent) 58%, color-mix(in srgb, var(--surface-container-lowest) 12%, transparent) 100%);"
+      ></div>
 
-  <header>
-    <div class="flex items-center justify-between gap-3">
-      <h1 class="min-w-0 text-2xl font-semibold font-headline text-on-surface">{isEditing ? m.home_edit_title() : dynamicGreeting}</h1>
+      <div class="relative z-10 min-w-0 space-y-1 mt-auto pt-6">
+        <h1
+          class="min-w-0 text-2xl sm:text-[1.65rem] font-bold tracking-tight font-headline text-on-surface leading-tight"
+        >
+          {isEditing ? m.home_edit_title() : dynamicGreeting}
+        </h1>
+        <p class="text-sm font-medium text-on-surface-variant leading-snug">
+          {isEditing ? m.home_edit_hint() : dynamicSubtitle}
+        </p>
+      </div>
+
       {#if !isEditing}
-        <div class="flex items-center gap-1 shrink-0">
-          <!-- L'accueil est la page la plus vue du dashboard : le vote y est à
-               portée sans rien masquer. Jamais en marque blanche. -->
-          {#if brandingStore.loaded && !brandingStore.isWhiteLabel}
-            <Button variant="ghost" size="sm" icon="star" href={TOPGG_VOTE_URL} target="_blank" title={m.navbar_vote_topgg()}>
-              {$isMobile ? m.home_vote_short() : m.home_vote()}
+        <div
+          class="relative z-10 flex flex-wrap items-center justify-between gap-2 pt-1"
+        >
+          <div class="flex flex-wrap items-center gap-1.5">
+            <Button
+              variant="secondary"
+              size="sm"
+              icon="sliders"
+              onclick={startEditing}
+              data-tour="home-customize"
+            >
+              {m.home_customize()}
             </Button>
-          {/if}
-          <Button variant="ghost" size="sm" icon="sliders" onclick={startEditing} data-tour="home-customize">
-            {m.home_customize()}
-          </Button>
-          <RefreshButton onClick={handleRefresh} ariaLabel={m.home_refresh_aria()} />
+            {#if brandingStore.loaded && !brandingStore.isWhiteLabel}
+              <Button
+                variant="ghost"
+                size="sm"
+                icon="star"
+                href={TOPGG_VOTE_URL}
+                target="_blank"
+                title={m.navbar_vote_topgg()}
+              >
+                {$isMobile ? m.home_vote_short() : m.home_vote()}
+              </Button>
+            {/if}
+          </div>
+          <a
+            href={dailyPhoto.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="text-2xs text-on-surface-variant hover:text-on-surface transition-colors"
+          >
+            Photo : {dailyPhoto.author}
+          </a>
         </div>
       {/if}
-    </div>
-    <p class="text-sm text-on-surface-variant mt-1">{isEditing ? m.home_edit_hint() : dynamicSubtitle}</p>
-  </header>
+    </header>
 
-  {#if dashboardStore.state.error === 'api_unreachable'}
+    <div class="lg:col-span-2 min-w-0 flex flex-col [&>*]:h-full">
+      <HomeTodo refreshKey={todoRefreshKey} bind:count={todoCount} />
+    </div>
+  </div>
+
+  {#if dashboardStore.state.error === "api_unreachable"}
     <Callout variant="warning" title={m.home_api_restarting()}>
       {m.home_api_reconnect()}
       {#snippet actions()}
-        <Button size="sm" variant="secondary" onclick={() => dashboardStore.refresh()}>{m.home_retry()}</Button>
+        <Button
+          size="sm"
+          variant="secondary"
+          onclick={() => dashboardStore.refresh()}>{m.home_retry()}</Button
+        >
       {/snippet}
     </Callout>
   {/if}
@@ -967,28 +1665,43 @@
   {#if errorModulesCount > 0}
     <Callout
       variant="danger"
-      title={errorModulesCount === 1 ? m.home_modules_failing_one() : m.home_modules_failing({ n: errorModulesCount })}
+      title={errorModulesCount === 1
+        ? m.home_modules_failing_one()
+        : m.home_modules_failing({ n: errorModulesCount })}
     >
-      {errorModules.map((mod) => mod.name).join(', ')}
+      {errorModules.map((mod) => mod.name).join(", ")}
       {#snippet actions()}
-        <Button size="sm" variant="secondary" href="/modules">{m.home_see_modules()}</Button>
+        <Button size="sm" variant="secondary" href="/modules"
+          >{m.home_see_modules()}</Button
+        >
       {/snippet}
     </Callout>
   {/if}
 
-  <HomeTodo refreshKey={todoRefreshKey} bind:count={todoCount} />
-
   <HomeWellbeingAgenda />
 
   {#if visibleLayout.length === 0 && !isEditing}
-    <div class="section-card p-6 flex flex-wrap items-center justify-between gap-3">
+    <div
+      class="section-card p-6 flex flex-wrap items-center justify-between gap-3"
+    >
       <p class="text-sm text-on-surface-variant">{m.home_grid_empty()}</p>
-      <Button size="sm" variant="secondary" icon="add" onclick={() => { startEditing(); showAddModuleModal = true; }}>{m.home_add_module()}</Button>
+      <Button
+        size="sm"
+        variant="secondary"
+        icon="add"
+        onclick={() => {
+          startEditing();
+          showAddModuleModal = true;
+        }}>{m.home_add_module()}</Button
+      >
     </div>
   {/if}
 
   <!-- Bento Grid -->
-  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" role="list">
+  <div
+    class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5"
+    role="list"
+  >
     {#each visibleLayout as item, index (item.id)}
       <div
         role="listitem"
@@ -998,12 +1711,24 @@
         ondragover={(e) => handleDragOver(e, index)}
         ondragleave={handleDragLeave}
         ondrop={(e) => handleDrop(e, index)}
-        class="home-bento-item section-card p-5 flex flex-col relative group transition-all duration-200 {getColSpanClass(displayColSpan(item))} {getRowSpanClass(displayRowSpan(item))} {getModuleMinHeight(item.id)} {isEditing ? 'border-dashed border-primary/50 hover:shadow-lg hover:border-primary bg-surface-container-lowest/80' : ''} {isEditing && dragOverIndex === index ? 'ring-2 ring-primary ring-offset-2 ring-offset-surface scale-[1.02]' : ''}"
-        style={isEditing ? `cursor: grab; ${getSpanStyle(displayColSpan(item), displayRowSpan(item))}` : getSpanStyle(displayColSpan(item), displayRowSpan(item))}
+        class="home-bento-item section-card p-5 flex flex-col relative group transition-all duration-200 {getColSpanClass(
+          displayColSpan(item),
+        )} {getRowSpanClass(displayRowSpan(item))} {getModuleMinHeight(
+          item.id,
+        )} {isEditing
+          ? 'border-dashed border-primary/50 hover:shadow-lg hover:border-primary bg-surface-container-lowest/80'
+          : ''} {isEditing && dragOverIndex === index
+          ? 'ring-2 ring-primary ring-offset-2 ring-offset-surface scale-[1.02]'
+          : ''}"
+        style={isEditing
+          ? `cursor: grab; ${getSpanStyle(displayColSpan(item), displayRowSpan(item))}`
+          : getSpanStyle(displayColSpan(item), displayRowSpan(item))}
       >
         {#if isEditing}
           <!-- Grab handle indicator -->
-          <div class="absolute top-1.5 left-1/2 -translate-x-1/2 z-10 opacity-40 group-hover:opacity-80 transition-opacity pointer-events-none">
+          <div
+            class="absolute top-1.5 left-1/2 -translate-x-1/2 z-10 opacity-40 group-hover:opacity-80 transition-opacity pointer-events-none"
+          >
             <div class="flex gap-0.5">
               <div class="w-1 h-1 rounded-full bg-on-surface-variant"></div>
               <div class="w-1 h-1 rounded-full bg-on-surface-variant"></div>
@@ -1017,7 +1742,9 @@
           </div>
 
           <!-- Edit toolbar -->
-          <div class="absolute top-2.5 right-2.5 z-10 flex items-center gap-1 bg-surface-container/90 px-1.5 py-1 rounded-md shadow-sm border border-outline-variant/60">
+          <div
+            class="absolute top-2.5 right-2.5 z-30 flex items-center gap-1 bg-surface-container-highest px-1.5 py-1 rounded-xl shadow-md border border-outline-variant"
+          >
             <button
               onclick={() => moveModule(item.id, -1)}
               disabled={index === 0}
@@ -1070,134 +1797,200 @@
               role="button"
               tabindex="-1"
               aria-label={m.home_resize_width()}
-              onmousedown={(e) => handleResizeStart(e, item.id, 'col')}
-              class="absolute top-0 right-0 w-2 h-full cursor-col-resize z-20 group/resize hover:bg-primary/20 transition-colors rounded-r-lg"
+              onmousedown={(e) => handleResizeStart(e, item.id, "col")}
+              class="absolute inset-y-5 right-0.5 w-1.5 cursor-col-resize z-20 group/resize hover:bg-primary/20 transition-colors rounded-full"
               title={m.home_resize_width()}
             >
-              <div class="absolute top-1/2 right-0.5 -translate-y-1/2 w-0.5 h-8 bg-primary/40 rounded-full opacity-0 group-hover/resize:opacity-100 transition-opacity"></div>
+              <div
+                class="absolute top-1/2 right-0.5 -translate-y-1/2 w-0.5 h-8 bg-primary/40 rounded-full opacity-0 group-hover/resize:opacity-100 transition-opacity"
+              ></div>
             </div>
 
             <div
               role="button"
               tabindex="-1"
               aria-label={m.home_resize_height()}
-              onmousedown={(e) => handleResizeStart(e, item.id, 'row')}
-              class="absolute bottom-0 left-0 w-full h-2 cursor-row-resize z-20 group/resize hover:bg-primary/20 transition-colors rounded-b-lg"
+              onmousedown={(e) => handleResizeStart(e, item.id, "row")}
+              class="absolute inset-x-5 bottom-0.5 h-1.5 cursor-row-resize z-20 group/resize hover:bg-primary/20 transition-colors rounded-full"
               title={m.home_resize_height()}
             >
-              <div class="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-primary/40 rounded-full opacity-0 group-hover/resize:opacity-100 transition-opacity"></div>
+              <div
+                class="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-primary/40 rounded-full opacity-0 group-hover/resize:opacity-100 transition-opacity"
+              ></div>
             </div>
           {/if}
         {/if}
 
-        {#if item.id === 'liveStats'}
+        {#if item.id === "liveStats"}
           <!-- Une seule surface : quatre chiffres cote a cote, sans carte par
                chiffre ni pastille : juste une petite icone devant le libelle. Les colonnes suivent la largeur du
                bloc, pas celle de l'ecran, pour tenir aussi en bloc etroit. -->
           {@const stats = [
             {
               label: m.home_members_label(),
-              icon: 'user',
-              value: liveStats ? formatNumber(liveStats.humansCount) : '-',
-              note: liveStats ? (liveStats.botsCount === 1 ? m.home_bots_one() : m.home_bots_count({ n: liveStats.botsCount })) : '',
-              tone: '',
+              icon: "user",
+              value: liveStats ? formatNumber(liveStats.humansCount) : "-",
+              note: liveStats
+                ? liveStats.botsCount === 1
+                  ? m.home_bots_one()
+                  : m.home_bots_count({ n: liveStats.botsCount })
+                : "",
+              tone: "",
             },
             {
               label: m.home_connected_label(),
-              icon: 'wifi',
-              value: liveStats ? formatNumber(liveStats.onlineMembers + liveStats.idleMembers + liveStats.dndMembers) : '-',
-              note: liveStats ? m.home_online_available({ n: liveStats.onlineMembers }) : '',
-              tone: '',
+              icon: "wifi",
+              value: liveStats
+                ? formatNumber(
+                    liveStats.onlineMembers +
+                      liveStats.idleMembers +
+                      liveStats.dndMembers,
+                  )
+                : "-",
+              note: liveStats
+                ? m.home_online_available({ n: liveStats.onlineMembers })
+                : "",
+              tone: "",
             },
             {
               label: m.home_in_voice(),
-              icon: 'microphone',
-              value: liveStats ? String(liveStats.voiceConnected) : '-',
+              icon: "microphone",
+              value: liveStats ? String(liveStats.voiceConnected) : "-",
               note: m.home_right_now(),
-              tone: '',
+              tone: "",
             },
             {
               label: m.home_this_week(),
-              icon: 'chartlineup',
-              value: totals ? `${totals.netGrowth > 0 ? '+' : ''}${totals.netGrowth}` : '-',
-              note: totals ? m.home_joins_leaves_note({ joins: totals.joins, leaves: totals.leaves }) : '',
-              tone: totals && totals.netGrowth < 0 ? 'text-error' : '',
+              icon: "chartlineup",
+              value: totals
+                ? `${totals.netGrowth > 0 ? "+" : ""}${totals.netGrowth}`
+                : "-",
+              note: totals
+                ? m.home_joins_leaves_note({
+                    joins: totals.joins,
+                    leaves: totals.leaves,
+                  })
+                : "",
+              tone: totals && totals.netGrowth < 0 ? "text-error" : "",
             },
           ]}
           <div class="@container h-full flex items-center">
             <dl class="w-full grid grid-cols-2 @xl:grid-cols-4 gap-x-6 gap-y-4">
               {#each stats as stat (stat.label)}
-                <div class="min-w-0 @xl:border-l @xl:border-outline-variant @xl:pl-5 @xl:first:border-l-0 @xl:first:pl-0">
-                  <dt class="flex items-center gap-1.5 text-xs text-on-surface-variant">
+                <div
+                  class="min-w-0 @xl:border-l @xl:border-outline-variant @xl:pl-5 @xl:first:border-l-0 @xl:first:pl-0"
+                >
+                  <dt
+                    class="flex items-center gap-1.5 text-xs text-on-surface-variant"
+                  >
                     <Papicon icon={stat.icon} size={14} />
                     <span class="truncate">{stat.label}</span>
                   </dt>
                   <dd class="mt-0.5">
                     {#if analyticsLoading && !liveStats}
-                      <span class="block h-7 w-14 animate-pulse bg-surface-container-high rounded"></span>
+                      <span
+                        class="block h-7 w-14 animate-pulse bg-surface-container-high rounded"
+                      ></span>
                     {:else}
-                      <span class="block text-2xl font-semibold tracking-tight tabular-nums text-on-surface {stat.tone}">{stat.value}</span>
+                      <span
+                        class="block text-2xl font-semibold tracking-tight tabular-nums text-on-surface {stat.tone}"
+                        >{stat.value}</span
+                      >
                     {/if}
                     {#if stat.note}
-                      <span class="block text-xs text-on-surface-variant truncate">{stat.note}</span>
+                      <span
+                        class="block text-xs text-on-surface-variant truncate"
+                        >{stat.note}</span
+                      >
                     {/if}
                   </dd>
                 </div>
               {/each}
             </dl>
           </div>
-        {:else if item.id === 'analytics'}
+        {:else if item.id === "analytics"}
           {#if dashboardStore.state.featureAccess.analytics?.canView}
             <HomeActivityCard
-              height={displayRowSpan(item) >= 3 ? 340 : displayRowSpan(item) >= 2 ? 250 : 170}
+              height={displayRowSpan(item) >= 3
+                ? 340
+                : displayRowSpan(item) >= 2
+                  ? 250
+                  : 170}
               refreshKey={analyticsRefreshKey}
             />
           {/if}
-        {:else if item.id === 'botLanguage' || item.id === 'timezone'}
+        {:else if item.id === "botLanguage" || item.id === "timezone"}
           <!-- Reglages du serveur, pas des chiffres : le meme bloc vit dans
                Reglages du serveur > Apercu. Le widget reste pour qui l'avait. -->
           <div class="h-full -my-2">
-            <ServerLocaleSettings only={item.id === 'botLanguage' ? 'language' : 'timezone'} stacked bare />
+            <ServerLocaleSettings
+              only={item.id === "botLanguage" ? "language" : "timezone"}
+              stacked
+              bare
+            />
           </div>
-        {:else if item.id === 'system'}
+        {:else if item.id === "system"}
           <!-- L'ancien anneau affichait une sante fixee a 100 % par l'API, et
                « Interactions » additionnait des compteurs sans rapport. Ne
                reste que ce qui est vrai : combien de modules tournent, et
                lesquels sont en erreur. -->
           <div class="flex flex-col gap-3 h-full">
             <div class="flex items-center justify-between gap-2 shrink-0">
-              <h3 class="flex items-center gap-2 text-sm font-medium text-on-surface">
-                <Papicon icon="grid" size={16} class="text-on-surface-variant" />
+              <h3
+                class="flex items-center gap-2 text-sm font-medium text-on-surface"
+              >
+                <Papicon
+                  icon="grid"
+                  size={16}
+                  class="text-on-surface-variant"
+                />
                 {m.home_mod_system_title()}
               </h3>
-              <a href="/modules" class="text-2xs text-primary hover:underline">{m.home_manage()}</a>
+              <a href="/modules" class="text-2xs text-primary hover:underline"
+                >{m.home_manage()}</a
+              >
             </div>
             <div class="grow flex flex-col justify-center gap-2">
               <p>
-                <span class="text-2xl font-semibold tabular-nums text-on-surface">{activeModulesCount}</span>
-                <span class="text-sm text-on-surface-variant">{activeModulesCount === 1 ? m.home_modules_active_one() : m.home_modules_active_other()}</span>
+                <span
+                  class="text-2xl font-semibold tabular-nums text-on-surface"
+                  >{activeModulesCount}</span
+                >
+                <span class="text-sm text-on-surface-variant"
+                  >{activeModulesCount === 1
+                    ? m.home_modules_active_one()
+                    : m.home_modules_active_other()}</span
+                >
               </p>
               {#if errorModules.length > 0}
                 <div>
-                  <p class="flex items-center gap-1.5 text-xs font-medium text-error">
+                  <p
+                    class="flex items-center gap-1.5 text-xs font-medium text-error"
+                  >
                     <Papicon icon="alert-triangle" size={14} />
-                    {errorModules.length === 1 ? m.home_modules_failing_one() : m.home_modules_failing({ n: errorModules.length })}
+                    {errorModules.length === 1
+                      ? m.home_modules_failing_one()
+                      : m.home_modules_failing({ n: errorModules.length })}
                   </p>
                   <ul class="mt-1 space-y-0.5">
                     {#each errorModules.slice(0, displayRowSpan(item) >= 2 ? 8 : 4) as mod (mod.name)}
-                      <li class="text-xs text-on-surface truncate">{mod.name}</li>
+                      <li class="text-xs text-on-surface truncate">
+                        {mod.name}
+                      </li>
                     {/each}
                   </ul>
                 </div>
               {:else}
-                <p class="flex items-center gap-1.5 text-xs text-on-surface-variant">
+                <p
+                  class="flex items-center gap-1.5 text-xs text-on-surface-variant"
+                >
                   <Papicon icon="check-circle" size={14} class="text-success" />
                   {m.home_modules_none_failing()}
                 </p>
               {/if}
             </div>
           </div>
-        {:else if item.id === 'channels'}
+        {:else if item.id === "channels"}
           <TopList
             bare
             title={m.anx_top_channels_messages()}
@@ -1205,39 +1998,87 @@
             description={m.home_last_7_days()}
             kind="channels"
             limit={getListCount(5, 1, displayRowSpan(item))}
-            load={(limit) => fetchActivityRankings({ period: 7 }, 'messages', 'channels', limit)}
+            load={(limit) =>
+              fetchActivityRankings(
+                { period: 7 },
+                "messages",
+                "channels",
+                limit,
+              )}
             reloadKey={`${authStore.selectedGuildId}|${analyticsRefreshKey}`}
             compare
             color={SERIES[0]}
-            onselect={(entry) => channelDetailsModal.show(entry.id, entry.name ? `#${entry.name}` : m.anx_channel_deleted())}
+            onselect={(entry) =>
+              channelDetailsModal.show(
+                entry.id,
+                entry.name ? `#${entry.name}` : m.anx_channel_deleted(),
+              )}
             exportName="top_salons_messages"
           />
-        {:else if item.id === 'moderation'}
-          {@const modStats = moderation ? [
-            { label: m.home_mod_warns(), value: moderation.totals.warns, icon: 'alert-triangle' },
-            { label: m.home_mod_timeouts(), value: moderation.totals.timeouts, icon: 'clock' },
-            { label: m.home_mod_kicks(), value: moderation.totals.kicks, icon: 'logout' },
-            { label: m.home_mod_bans(), value: moderation.totals.bans, icon: 'gavel' },
-          ] : []}
+        {:else if item.id === "moderation"}
+          {@const modStats = moderation
+            ? [
+                {
+                  label: m.home_mod_warns(),
+                  value: moderation.totals.warns,
+                  icon: "alert-triangle",
+                },
+                {
+                  label: m.home_mod_timeouts(),
+                  value: moderation.totals.timeouts,
+                  icon: "clock",
+                },
+                {
+                  label: m.home_mod_kicks(),
+                  value: moderation.totals.kicks,
+                  icon: "logout",
+                },
+                {
+                  label: m.home_mod_bans(),
+                  value: moderation.totals.bans,
+                  icon: "gavel",
+                },
+              ]
+            : []}
           <div class="flex flex-col h-full justify-between">
             <div class="flex items-center justify-between gap-2 mb-3 shrink-0">
-              <h3 class="flex items-center gap-2 text-sm font-medium text-on-surface">
-                <Papicon icon="shield" size={16} class="text-on-surface-variant" />
+              <h3
+                class="flex items-center gap-2 text-sm font-medium text-on-surface"
+              >
+                <Papicon
+                  icon="shield"
+                  size={16}
+                  class="text-on-surface-variant"
+                />
                 {m.home_mod_moderation_title()}
               </h3>
-              <a href="/analytics" class="text-2xs text-primary hover:underline">{m.home_details()}</a>
+              <a href="/analytics" class="text-2xs text-primary hover:underline"
+                >{m.home_details()}</a
+              >
             </div>
             <div class="space-y-3 grow flex flex-col justify-center">
               {#if analyticsLoading && !moderation}
                 {#each Array(2) as _}
-                  <div class="h-10 animate-pulse bg-surface-container-high rounded"></div>
+                  <div
+                    class="h-10 animate-pulse bg-surface-container-high rounded"
+                  ></div>
                 {/each}
               {:else if moderation}
-                <dl class="grid {displayColSpan(item) >= 2 ? 'grid-cols-4' : 'grid-cols-2'} gap-x-4 gap-y-3">
+                <dl
+                  class="grid {displayColSpan(item) >= 2
+                    ? 'grid-cols-4'
+                    : 'grid-cols-2'} gap-x-4 gap-y-3"
+                >
                   {#each modStats as stat (stat.label)}
                     <div class="min-w-0">
-                      <dd class="text-lg font-semibold tabular-nums text-on-surface">{stat.value}</dd>
-                      <dt class="flex items-center gap-1.5 text-xs text-on-surface-variant">
+                      <dd
+                        class="text-lg font-semibold tabular-nums text-on-surface"
+                      >
+                        {stat.value}
+                      </dd>
+                      <dt
+                        class="flex items-center gap-1.5 text-xs text-on-surface-variant"
+                      >
                         <Papicon icon={stat.icon} size={13} />
                         <span class="truncate">{stat.label}</span>
                       </dt>
@@ -1246,28 +2087,44 @@
                 </dl>
                 <p class="text-xs text-on-surface-variant">
                   {#if moderation.activeSanctions > 0}
-                    <span class="text-warning">{moderation.activeSanctions === 1 ? m.home_active_sanctions_one() : m.home_active_sanctions({ n: moderation.activeSanctions })}</span>
+                    <span class="text-warning"
+                      >{moderation.activeSanctions === 1
+                        ? m.home_active_sanctions_one()
+                        : m.home_active_sanctions({
+                            n: moderation.activeSanctions,
+                          })}</span
+                    >
                   {:else}
                     {m.home_mod_week_note()}
                   {/if}
                 </p>
                 {#if displayRowSpan(item) >= 2 && moderation.recentSanctions?.length > 0}
                   <div class="border-t border-outline-variant pt-2 space-y-1.5">
-                    <span class="text-xs text-on-surface-variant">{m.home_recent_sanctions()}</span>
+                    <span class="text-xs text-on-surface-variant"
+                      >{m.home_recent_sanctions()}</span
+                    >
                     {#each moderation.recentSanctions.slice(0, displayRowSpan(item) >= 3 ? 6 : 3) as sanction}
                       <div class="flex items-center justify-between text-xs">
-                        <span class="text-on-surface truncate">{sanction.targetName || m.home_member()}</span>
-                        <span class="text-2xs text-on-surface-variant shrink-0">{sanction.type}</span>
+                        <span class="text-on-surface truncate"
+                          >{sanction.targetName || m.home_member()}</span
+                        >
+                        <span class="text-2xs text-on-surface-variant shrink-0"
+                          >{sanction.type}</span
+                        >
                       </div>
                     {/each}
                   </div>
                 {/if}
               {:else}
-                <div class="flex items-center justify-center h-full text-xs text-on-surface-variant">{m.home_no_data()}</div>
+                <div
+                  class="flex items-center justify-center h-full text-xs text-on-surface-variant"
+                >
+                  {m.home_no_data()}
+                </div>
               {/if}
             </div>
           </div>
-        {:else if item.id === 'members'}
+        {:else if item.id === "members"}
           <TopList
             bare
             title={m.anx_top_members_messages()}
@@ -1275,36 +2132,77 @@
             description={m.home_last_7_days()}
             kind="members"
             limit={getListCount(5, 1, displayRowSpan(item))}
-            load={(limit) => fetchActivityRankings({ period: 7 }, 'messages', 'members', limit)}
+            load={(limit) =>
+              fetchActivityRankings(
+                { period: 7 },
+                "messages",
+                "members",
+                limit,
+              )}
             reloadKey={`${authStore.selectedGuildId}|${analyticsRefreshKey}`}
             compare
             color={SERIES[0]}
             exportName="top_membres_messages"
           />
-        {:else if item.id === 'notifications'}
-          {@const notifCount = getListCount(5, displayColSpan(item), displayRowSpan(item))}
+        {:else if item.id === "notifications"}
+          {@const notifCount = getListCount(
+            5,
+            displayColSpan(item),
+            displayRowSpan(item),
+          )}
           {@const notifCols = displayColSpan(item) >= 2 ? 2 : 1}
           <div class="flex flex-col h-full justify-between">
             <div class="flex items-center justify-between mb-3 shrink-0">
               <div class="flex items-center gap-2.5">
                 <div>
-                  <h3 class="text-sm font-medium text-on-surface">Notifications</h3>
-                  <span class="text-2xs text-on-surface-variant">{notificationsStore.unreadCount === 1 ? m.home_notifications_one() : m.home_notifications_count({ n: notificationsStore.unreadCount })}</span>
+                  <h3 class="text-sm font-medium text-on-surface">
+                    Notifications
+                  </h3>
+                  <span class="text-2xs text-on-surface-variant"
+                    >{notificationsStore.unreadCount === 1
+                      ? m.home_notifications_one()
+                      : m.home_notifications_count({
+                          n: notificationsStore.unreadCount,
+                        })}</span
+                  >
                 </div>
               </div>
-              <a href="/notifications" class="w-6 h-6 rounded-md bg-surface-container flex items-center justify-center hover:bg-surface-container-high transition-colors text-on-surface-variant">
+              <a
+                href="/notifications"
+                class="w-6 h-6 rounded-md bg-surface-container flex items-center justify-center hover:bg-surface-container-high transition-colors text-on-surface-variant"
+              >
                 <Papicon icon="arrow-up-right" size={12} />
               </a>
             </div>
-            <div class="grow flex flex-col justify-center {notifCols > 1 ? 'grid grid-cols-2 gap-1.5 items-start' : 'space-y-1.5'}">
-              {#if notificationsStore.items.filter(n => !n.isRead).length > 0}
-                {#each notificationsStore.items.filter(n => !n.isRead).slice(0, notifCount) as notif}
-                  <div class="px-2.5 py-2 rounded-lg border border-outline-variant bg-surface-container-low flex items-center justify-between gap-2 hover:border-primary/30 transition-colors">
+            <div
+              class="grow flex flex-col justify-center {notifCols > 1
+                ? 'grid grid-cols-2 gap-1.5 items-start'
+                : 'space-y-1.5'}"
+            >
+              {#if notificationsStore.items.filter((n) => !n.isRead).length > 0}
+                {#each notificationsStore.items
+                  .filter((n) => !n.isRead)
+                  .slice(0, notifCount) as notif}
+                  <div
+                    class="px-2.5 py-2 rounded-lg border border-outline-variant bg-surface-container-low flex items-center justify-between gap-2 hover:border-primary/30 transition-colors"
+                  >
                     <div class="flex items-center gap-2 min-w-0">
-                      <div class="w-1.5 h-1.5 rounded-full {notif.type === 'ERROR' ? 'bg-error' : notif.type === 'WARNING' ? 'bg-warning' : 'bg-primary'} shrink-0"></div>
+                      <div
+                        class="w-1.5 h-1.5 rounded-full {notif.type === 'ERROR'
+                          ? 'bg-error'
+                          : notif.type === 'WARNING'
+                            ? 'bg-warning'
+                            : 'bg-primary'} shrink-0"
+                      ></div>
                       <div class="min-w-0">
-                        <p class="text-xs font-medium leading-tight truncate">{notif.title}</p>
-                        <p class="text-2xs text-on-surface-variant mt-0.5 line-clamp-1">{notif.message}</p>
+                        <p class="text-xs font-medium leading-tight truncate">
+                          {notif.title}
+                        </p>
+                        <p
+                          class="text-2xs text-on-surface-variant mt-0.5 line-clamp-1"
+                        >
+                          {notif.message}
+                        </p>
                       </div>
                     </div>
                     <button
@@ -1316,14 +2214,23 @@
                   </div>
                 {/each}
               {:else}
-                <div class="flex flex-col items-center justify-center py-6 text-center text-on-surface-variant {notifCols > 1 ? 'col-span-2' : ''}">
-                  <Papicon icon="check-circle" size={18} class="mb-1 text-success/50" />
+                <div
+                  class="flex flex-col items-center justify-center py-6 text-center text-on-surface-variant {notifCols >
+                  1
+                    ? 'col-span-2'
+                    : ''}"
+                >
+                  <Papicon
+                    icon="check-circle"
+                    size={18}
+                    class="mb-1 text-success/50"
+                  />
                   <p class="text-2xs">{m.home_all_up_to_date()}</p>
                 </div>
               {/if}
             </div>
           </div>
-        {:else if item.id === 'staff'}
+        {:else if item.id === "staff"}
           {@const staffAbsCount = displayRowSpan(item) >= 2 ? 3 : 1}
           {@const staffMeetCount = displayRowSpan(item) >= 2 ? 3 : 1}
           <!-- Deux listes courtes separees par un filet : les petites cartes
@@ -1331,284 +2238,527 @@
                pastilles « 2 abs. » / « 1 reu. » demandaient a etre dechiffrees. -->
           <div class="flex flex-col h-full">
             <div class="flex items-center justify-between gap-2 mb-3 shrink-0">
-              <h3 class="text-sm font-medium text-on-surface">{m.home_staff_title()}</h3>
-              <a href="/staff-management" class="text-2xs text-primary hover:underline">{m.home_manage_team()}</a>
+              <h3 class="text-sm font-medium text-on-surface">
+                {m.home_staff_title()}
+              </h3>
+              <a
+                href="/staff-management"
+                class="text-2xs text-primary hover:underline"
+                >{m.home_manage_team()}</a
+              >
             </div>
-            <div class="grid {displayColSpan(item) >= 2 ? 'grid-cols-2 gap-6' : 'grid-cols-1 gap-3'}">
+            <div
+              class="grid {displayColSpan(item) >= 2
+                ? 'grid-cols-2 gap-6'
+                : 'grid-cols-1 gap-3'}"
+            >
               <section>
                 <h4 class="text-xs text-on-surface-variant">
-                  {pendingAbsences.length === 0 ? m.home_absences_none() : pendingAbsences.length === 1 ? m.home_absences_one() : m.home_absences_count({ n: pendingAbsences.length })}
+                  {pendingAbsences.length === 0
+                    ? m.home_absences_none()
+                    : pendingAbsences.length === 1
+                      ? m.home_absences_one()
+                      : m.home_absences_count({ n: pendingAbsences.length })}
                 </h4>
                 {#each pendingAbsences.slice(0, staffAbsCount) as absence}
-                  <a href="/planning" class="block mt-1 rounded-md -mx-1.5 px-1.5 py-1 hover:bg-surface-container">
-                    <span class="block text-sm font-medium text-on-surface truncate">{absence.staffDisplayName || m.home_staff_member()}</span>
+                  <a
+                    href="/planning"
+                    class="block mt-1 rounded-md -mx-1.5 px-1.5 py-1 hover:bg-surface-container"
+                  >
+                    <span
+                      class="block text-sm font-medium text-on-surface truncate"
+                      >{absence.staffDisplayName || m.home_staff_member()}</span
+                    >
                     {#if absence.reason}
-                      <span class="block text-xs text-on-surface-variant truncate">{absence.reason}</span>
+                      <span
+                        class="block text-xs text-on-surface-variant truncate"
+                        >{absence.reason}</span
+                      >
                     {/if}
                   </a>
                 {/each}
               </section>
-              <section class="{displayColSpan(item) >= 2 ? '' : 'pt-3 border-t border-outline-variant'}">
+              <section
+                class={displayColSpan(item) >= 2
+                  ? ""
+                  : "pt-3 border-t border-outline-variant"}
+              >
                 <h4 class="text-xs text-on-surface-variant">
-                  {staffStore.upcomingMeetings.length === 0 ? m.home_meetings_none() : m.home_next_meeting()}
+                  {staffStore.upcomingMeetings.length === 0
+                    ? m.home_meetings_none()
+                    : m.home_next_meeting()}
                 </h4>
                 {#each staffStore.upcomingMeetings.slice(0, staffMeetCount) as meeting}
-                  <a href="/planning" class="block mt-1 rounded-md -mx-1.5 px-1.5 py-1 hover:bg-surface-container">
-                    <span class="block text-sm font-medium text-on-surface truncate">{meeting.title}</span>
+                  <a
+                    href="/planning"
+                    class="block mt-1 rounded-md -mx-1.5 px-1.5 py-1 hover:bg-surface-container"
+                  >
+                    <span
+                      class="block text-sm font-medium text-on-surface truncate"
+                      >{meeting.title}</span
+                    >
                     <span class="block text-xs text-on-surface-variant">
-                      {m.home_date_at_time({ date: new Date(meeting.scheduledAt).toLocaleDateString(dateLocale(), { weekday: 'long', day: 'numeric', month: 'short' }), time: new Date(meeting.scheduledAt).toLocaleTimeString(dateLocale(), { hour: '2-digit', minute: '2-digit' }) })}
+                      {m.home_date_at_time({
+                        date: new Date(meeting.scheduledAt).toLocaleDateString(
+                          dateLocale(),
+                          { weekday: "long", day: "numeric", month: "short" },
+                        ),
+                        time: new Date(meeting.scheduledAt).toLocaleTimeString(
+                          dateLocale(),
+                          { hour: "2-digit", minute: "2-digit" },
+                        ),
+                      })}
                     </span>
                   </a>
                 {/each}
               </section>
             </div>
           </div>
-        {:else if item.id === 'audit'}
+        {:else if item.id === "audit"}
           <!-- La largeur sert a lire chaque ligne en entier, pas a en montrer
                plus : seule la hauteur allonge la liste. -->
           {@const auditCount = getListCount(5, 1, displayRowSpan(item))}
           <div class="flex flex-col h-full justify-between">
             <div class="flex items-center justify-between mb-3 shrink-0">
               <div class="flex items-center gap-2.5">
-                <h3 class="text-sm font-medium text-on-surface">{m.home_recent_activity()}</h3>
+                <h3 class="text-sm font-medium text-on-surface">
+                  {m.home_recent_activity()}
+                </h3>
               </div>
-              <a href="/activity" class="text-2xs text-primary hover:underline">{m.home_see_all()}</a>
+              <a href="/activity" class="text-2xs text-primary hover:underline"
+                >{m.home_see_all()}</a
+              >
             </div>
             <div class="space-y-2 grow flex flex-col justify-center">
               {#each dashboardStore.state.auditTrail.slice(0, auditCount) as entry}
                 <div class="flex gap-2 items-start">
-                  <div class="w-6 h-6 rounded bg-surface-container flex items-center justify-center shrink-0 mt-0.5">
-                    <Papicon icon={entry.source === 'discord' ? 'message-circle' : entry.user === 'Automatique' ? 'cpu' : 'user'} size={11} class="text-on-surface-variant" />
+                  <div
+                    class="w-6 h-6 rounded bg-surface-container flex items-center justify-center shrink-0 mt-0.5"
+                  >
+                    <Papicon
+                      icon={entry.source === "discord"
+                        ? "message-circle"
+                        : entry.user === "Automatique"
+                          ? "cpu"
+                          : "user"}
+                      size={11}
+                      class="text-on-surface-variant"
+                    />
                   </div>
                   <div class="grow min-w-0">
                     <div class="flex items-center justify-between gap-2">
-                      <span class="text-2xs text-primary truncate">{entry.module}</span>
-                      <span class="text-2xs text-on-surface-variant shrink-0">{entry.dateIso ? relativeTime(entry.dateIso) : ''}</span>
+                      <span class="text-2xs text-primary truncate"
+                        >{entry.module}</span
+                      >
+                      <span class="text-2xs text-on-surface-variant shrink-0"
+                        >{entry.dateIso
+                          ? relativeTime(entry.dateIso)
+                          : ""}</span
+                      >
                     </div>
                     <p class="text-xs text-on-surface truncate">
-                      {entry.action}{#if displayColSpan(item) >= 2 && entry.user}<span class="text-on-surface-variant">{' · '}{m.home_by_user({ user: entry.user })}</span>{/if}
+                      {entry.action}{#if displayColSpan(item) >= 2 && entry.user}<span
+                          class="text-on-surface-variant"
+                          >{" · "}{m.home_by_user({ user: entry.user })}</span
+                        >{/if}
                     </p>
                   </div>
                 </div>
               {:else}
-                <div class="flex items-center justify-center h-full text-xs text-on-surface-variant">{m.home_no_activity()}</div>
+                <div
+                  class="flex items-center justify-center h-full text-xs text-on-surface-variant"
+                >
+                  {m.home_no_activity()}
+                </div>
               {/each}
             </div>
           </div>
-        {:else if item.id === 'actions'}
+        {:else if item.id === "actions"}
           <div class="flex flex-col h-full justify-center">
             <div class="flex flex-wrap gap-2 items-center">
-              <span class="text-2xs text-on-surface-variant mr-1">{m.home_shortcuts()}</span>
-              <button onclick={() => router.goto('/planning')} class="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-surface-container border border-outline-variant rounded-md text-xs text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors cursor-pointer">
-                <Papicon icon="calendar-plus" size={12} class="text-primary" /> {m.home_absence()}
+              <span class="text-2xs text-on-surface-variant mr-1"
+                >{m.home_shortcuts()}</span
+              >
+              <button
+                onclick={() => router.goto("/planning")}
+                class="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-surface-container border border-outline-variant rounded-md text-xs text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors cursor-pointer"
+              >
+                <Papicon icon="calendar-plus" size={12} class="text-primary" />
+                {m.home_absence()}
               </button>
-              <button onclick={() => router.goto('/planning')} class="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-surface-container border border-outline-variant rounded-md text-xs text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors cursor-pointer">
-                <Papicon icon="video" size={12} class="text-secondary" /> {m.home_meeting()}
+              <button
+                onclick={() => router.goto("/planning")}
+                class="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-surface-container border border-outline-variant rounded-md text-xs text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors cursor-pointer"
+              >
+                <Papicon icon="video" size={12} class="text-secondary" />
+                {m.home_meeting()}
               </button>
-              <button onclick={() => router.goto('/modules')} class="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-surface-container border border-outline-variant rounded-md text-xs text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors cursor-pointer">
-                <Papicon icon="plus-circle" size={12} class="text-tertiary" /> {m.nav_modules()}
+              <button
+                onclick={() => router.goto("/modules")}
+                class="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-surface-container border border-outline-variant rounded-md text-xs text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors cursor-pointer"
+              >
+                <Papicon icon="plus-circle" size={12} class="text-tertiary" />
+                {m.nav_modules()}
               </button>
-              <button onclick={() => router.goto('/analytics')} class="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-surface-container border border-outline-variant rounded-md text-xs text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors cursor-pointer">
-                <Papicon icon="bar-chart-2" size={12} class="text-warning" /> {m.home_shortcut_stats()}
+              <button
+                onclick={() => router.goto("/analytics")}
+                class="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-surface-container border border-outline-variant rounded-md text-xs text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors cursor-pointer"
+              >
+                <Papicon icon="bar-chart-2" size={12} class="text-warning" />
+                {m.home_shortcut_stats()}
               </button>
-              <button onclick={() => router.goto('/staff-management')} class="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-surface-container border border-outline-variant rounded-md text-xs text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors cursor-pointer">
+              <button
+                onclick={() => router.goto("/staff-management")}
+                class="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-surface-container border border-outline-variant rounded-md text-xs text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-colors cursor-pointer"
+              >
                 <Papicon icon="users" size={12} class="text-success" /> Staff
               </button>
             </div>
           </div>
-        {:else if item.id === 'notes'}
+        {:else if item.id === "notes"}
           <div class="flex flex-col h-full min-h-[160px]">
             <div class="flex items-center gap-2.5 mb-2 shrink-0">
-              <h3 class="text-sm font-medium text-on-surface">{m.home_team_notes()}</h3>
+              <h3 class="text-sm font-medium text-on-surface">
+                {m.home_team_notes()}
+              </h3>
             </div>
-            <textarea aria-label={m.home_team_notes()}
+            <textarea
+              aria-label={m.home_team_notes()}
               value={staffNotes}
               oninput={saveStaffNotes}
               placeholder={m.home_notes_placeholder()}
               class="w-full grow p-2.5 text-xs bg-surface-container border border-field-border rounded-lg outline-none resize-none focus:border-primary/50 text-on-surface min-h-[100px]"
             ></textarea>
           </div>
-        {:else if item.id === 'serverInfo'}
+        {:else if item.id === "serverInfo"}
           {@const serverInfo = homeWidgets?.serverInfo}
-          {@const memberCount = serverInfo?.memberCount ?? (liveStats ? liveStats.humansCount + liveStats.botsCount : null)}
+          {@const memberCount =
+            serverInfo?.memberCount ??
+            (liveStats ? liveStats.humansCount + liveStats.botsCount : null)}
           <div class="flex flex-col h-full justify-between">
             <div class="flex items-center justify-between mb-3 shrink-0">
               <div class="flex items-center gap-2.5">
-                <h3 class="text-sm font-medium text-on-surface">{m.home_mod_serverinfo_title()}</h3>
+                <h3 class="text-sm font-medium text-on-surface">
+                  {m.home_mod_serverinfo_title()}
+                </h3>
               </div>
             </div>
             <div class="space-y-2 text-xs grow flex flex-col justify-center">
-              <div class="flex justify-between py-1 border-b border-outline-variant/30">
-                <span class="text-on-surface-variant">{m.home_name_label()}</span>
-                <span class="font-medium text-on-surface truncate max-w-[150px]">{serverInfo?.name || dashboardStore.state.guildName || '-'}</span>
+              <div
+                class="flex justify-between py-1 border-b border-outline-variant/30"
+              >
+                <span class="text-on-surface-variant"
+                  >{m.home_name_label()}</span
+                >
+                <span class="font-medium text-on-surface truncate max-w-[150px]"
+                  >{serverInfo?.name ||
+                    dashboardStore.state.guildName ||
+                    "-"}</span
+                >
               </div>
-              <div class="flex justify-between py-1 border-b border-outline-variant/30">
-                <span class="text-on-surface-variant">{m.home_members_label()}</span>
-                <span class="font-medium text-on-surface">{memberCount === null ? '-' : formatNumber(memberCount)}</span>
+              <div
+                class="flex justify-between py-1 border-b border-outline-variant/30"
+              >
+                <span class="text-on-surface-variant"
+                  >{m.home_members_label()}</span
+                >
+                <span class="font-medium text-on-surface"
+                  >{memberCount === null
+                    ? "-"
+                    : formatNumber(memberCount)}</span
+                >
               </div>
-              <div class="flex justify-between py-1 border-b border-outline-variant/30">
+              <div
+                class="flex justify-between py-1 border-b border-outline-variant/30"
+              >
                 <span class="text-on-surface-variant">Boosts</span>
                 {#if serverInfo?.boostLevel == null}
                   <span class="font-medium text-on-surface">-</span>
                 {:else}
-                  <span class="font-medium text-purple-400 flex items-center gap-1">
-                    <Papicon icon="star" size={10} /> {m.home_boost_level({ n: serverInfo.boostLevel })} · {serverInfo.boostCount}
+                  <span
+                    class="font-medium text-purple-400 flex items-center gap-1"
+                  >
+                    <Papicon icon="star" size={10} />
+                    {m.home_boost_level({ n: serverInfo.boostLevel })} · {serverInfo.boostCount}
                   </span>
                 {/if}
               </div>
               <div class="flex justify-between py-1">
                 <span class="text-on-surface-variant">{m.home_owner()}</span>
-                <span class="font-semibold text-on-surface truncate max-w-[150px]">{serverInfo?.ownerTag || '-'}</span>
+                <span
+                  class="font-semibold text-on-surface truncate max-w-[150px]"
+                  >{serverInfo?.ownerTag || "-"}</span
+                >
               </div>
             </div>
           </div>
-        {:else if item.id === 'botHosting'}
+        {:else if item.id === "botHosting"}
           {@const hosting = homeWidgets?.hosting}
-          {@const memoryPercent = hosting && hosting.memoryTotalMb > 0 ? Math.min(100, Math.round((hosting.memoryUsedMb / hosting.memoryTotalMb) * 100)) : 0}
+          {@const memoryPercent =
+            hosting && hosting.memoryTotalMb > 0
+              ? Math.min(
+                  100,
+                  Math.round(
+                    (hosting.memoryUsedMb / hosting.memoryTotalMb) * 100,
+                  ),
+                )
+              : 0}
           <div class="flex flex-col h-full justify-between">
             <div class="flex items-center justify-between mb-3 shrink-0">
               <div class="flex items-center gap-2.5">
-                <h3 class="text-sm font-medium text-on-surface">{m.home_mod_bothosting_title()}</h3>
+                <h3 class="text-sm font-medium text-on-surface">
+                  {m.home_mod_bothosting_title()}
+                </h3>
               </div>
               {#if hosting}
-                <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-2xs bg-success/20 text-on-success-container font-medium">
-                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> {m.home_online_label()}
+                <span
+                  class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-2xs bg-success/20 text-on-success-container font-medium"
+                >
+                  <span
+                    class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"
+                  ></span>
+                  {m.home_online_label()}
                 </span>
               {/if}
             </div>
             <div class="space-y-3 grow flex flex-col justify-center">
               <div>
-                <div class="flex justify-between text-2xs text-on-surface-variant mb-1">
+                <div
+                  class="flex justify-between text-2xs text-on-surface-variant mb-1"
+                >
                   <span>{m.home_cpu()}</span>
-                  <span class="font-medium text-on-surface">{hosting?.cpuPercent == null ? '-' : `${hosting.cpuPercent}%`}</span>
+                  <span class="font-medium text-on-surface"
+                    >{hosting?.cpuPercent == null
+                      ? "-"
+                      : `${hosting.cpuPercent}%`}</span
+                  >
                 </div>
-                <div class="h-1.5 w-full bg-surface-container-high rounded-full overflow-hidden">
-                  <div class="bg-emerald-500 h-full rounded-full transition-all duration-500" style="width: {hosting?.cpuPercent ?? 0}%"></div>
+                <div
+                  class="h-1.5 w-full bg-surface-container-high rounded-full overflow-hidden"
+                >
+                  <div
+                    class="bg-emerald-500 h-full rounded-full transition-all duration-500"
+                    style="width: {hosting?.cpuPercent ?? 0}%"
+                  ></div>
                 </div>
               </div>
               <div>
-                <div class="flex justify-between text-2xs text-on-surface-variant mb-1">
+                <div
+                  class="flex justify-between text-2xs text-on-surface-variant mb-1"
+                >
                   <span>{m.home_ram()}</span>
-                  <span class="font-medium text-on-surface">{hosting ? `${formatMemory(hosting.memoryUsedMb)} / ${formatMemory(hosting.memoryTotalMb)}` : '-'}</span>
+                  <span class="font-medium text-on-surface"
+                    >{hosting
+                      ? `${formatMemory(hosting.memoryUsedMb)} / ${formatMemory(hosting.memoryTotalMb)}`
+                      : "-"}</span
+                  >
                 </div>
-                <div class="h-1.5 w-full bg-surface-container-high rounded-full overflow-hidden">
-                  <div class="bg-primary h-full rounded-full transition-all duration-500" style="width: {memoryPercent}%"></div>
+                <div
+                  class="h-1.5 w-full bg-surface-container-high rounded-full overflow-hidden"
+                >
+                  <div
+                    class="bg-primary h-full rounded-full transition-all duration-500"
+                    style="width: {memoryPercent}%"
+                  ></div>
                 </div>
               </div>
               <div class="flex justify-between text-xs pt-1">
-                <span class="text-on-surface-variant">{m.home_api_latency()}</span>
-                <span class="font-medium {!hosting ? 'text-on-surface' : hosting.latencyMs < 200 ? 'text-success' : hosting.latencyMs < 500 ? 'text-warning' : 'text-error'}">
-                  {hosting ? `${hosting.latencyMs} ms` : '-'}
+                <span class="text-on-surface-variant"
+                  >{m.home_api_latency()}</span
+                >
+                <span
+                  class="font-medium {!hosting
+                    ? 'text-on-surface'
+                    : hosting.latencyMs < 200
+                      ? 'text-success'
+                      : hosting.latencyMs < 500
+                        ? 'text-warning'
+                        : 'text-error'}"
+                >
+                  {hosting ? `${hosting.latencyMs} ms` : "-"}
                 </span>
               </div>
               <div class="flex justify-between text-xs">
                 <span class="text-on-surface-variant">{m.home_uptime()}</span>
-                <span class="font-medium text-on-surface">{hosting ? formatDuration(hosting.uptimeSeconds) : '-'}</span>
+                <span class="font-medium text-on-surface"
+                  >{hosting ? formatDuration(hosting.uptimeSeconds) : "-"}</span
+                >
               </div>
             </div>
           </div>
-        {:else if item.id === 'news'}
+        {:else if item.id === "news"}
           {@const maxNewsItems = displayRowSpan(item) >= 2 ? 6 : 3}
           <div class="flex flex-col h-full justify-between">
             <div class="flex items-center justify-between mb-3 shrink-0">
               <div class="flex items-center gap-2.5">
-                <h3 class="text-sm font-medium text-on-surface">{m.home_kotbo_news()}</h3>
+                <h3 class="text-sm font-medium text-on-surface">
+                  {m.home_kotbo_news()}
+                </h3>
               </div>
             </div>
-            <div class="space-y-2 grow text-xs flex flex-col overflow-y-auto" style="scrollbar-width: thin;">
+            <div
+              class="space-y-2 grow text-xs flex flex-col overflow-y-auto"
+              style="scrollbar-width: thin;"
+            >
               {#if changelogLoading}
                 <div class="flex items-center justify-center grow">
-                  <span class="text-on-surface-variant text-2xs">{m.common_loading()}</span>
+                  <span class="text-on-surface-variant text-2xs"
+                    >{m.common_loading()}</span
+                  >
                 </div>
               {:else if changelogCommits.length === 0}
                 <div class="flex items-center justify-center grow">
-                  <span class="text-on-surface-variant text-2xs">{m.home_no_updates()}</span>
+                  <span class="text-on-surface-variant text-2xs"
+                    >{m.home_no_updates()}</span
+                  >
                 </div>
               {:else}
                 {#each changelogCommits.slice(0, maxNewsItems) as commit}
                   {@const typeColors: Record<string, string> = { feat: 'text-success', fix: 'text-warning', refactor: 'text-blue-400', perf: 'text-cyan-400', test: 'text-violet-400' }}
                   {@const typeBgColors: Record<string, string> = { feat: 'bg-success/15', fix: 'bg-warning/15', refactor: 'bg-blue-500/15', perf: 'bg-cyan-500/15', test: 'bg-violet-500/15' }}
                   {@const typeLabels: Record<string, string> = { feat: m.home_type_feat(), fix: m.home_type_fix(), refactor: m.home_type_refactor(), perf: 'Perf', test: 'Test' }}
-                  {@const typeColor = typeColors[commit.type] || 'text-purple-400'}
-                  {@const typeBg = typeBgColors[commit.type] || 'bg-purple-500/15'}
+                  {@const typeColor =
+                    typeColors[commit.type] || "text-purple-400"}
+                  {@const typeBg =
+                    typeBgColors[commit.type] || "bg-purple-500/15"}
                   {@const typeLabel = typeLabels[commit.type] || commit.type}
                   {@const relDate = formatRelativeDate(commit.date)}
-                  <div class="p-2 rounded-lg bg-surface-container/60 hover:bg-surface-container transition-colors">
+                  <div
+                    class="p-2 rounded-lg bg-surface-container/60 hover:bg-surface-container transition-colors"
+                  >
                     <div class="flex items-center justify-between mb-0.5">
-                      <span class="inline-flex items-center px-1.5 py-px rounded-full text-2xs font-medium {typeBg} {typeColor}">
-                        {typeLabel}{commit.scope ? ` (${commit.scope})` : ''}
+                      <span
+                        class="inline-flex items-center px-1.5 py-px rounded-full text-2xs font-medium {typeBg} {typeColor}"
+                      >
+                        {typeLabel}{commit.scope ? ` (${commit.scope})` : ""}
                       </span>
-                      <span class="text-2xs text-on-surface-variant">{relDate}</span>
+                      <span class="text-2xs text-on-surface-variant"
+                        >{relDate}</span
+                      >
                     </div>
-                    <p class="font-medium text-on-surface text-2xs leading-snug">{commit.title}</p>
+                    <p
+                      class="font-medium text-on-surface text-2xs leading-snug"
+                    >
+                      {commit.title}
+                    </p>
                     {#if commit.description}
-                      <p class="text-2xs text-on-surface-variant mt-0.5 leading-tight line-clamp-2">{commit.description}</p>
+                      <p
+                        class="text-2xs text-on-surface-variant mt-0.5 leading-tight line-clamp-2"
+                      >
+                        {commit.description}
+                      </p>
                     {/if}
                   </div>
                 {/each}
               {/if}
             </div>
           </div>
-        {:else if item.id === 'quickGuide'}
+        {:else if item.id === "quickGuide"}
           {@const guide = homeWidgets?.quickGuide}
           {@const guideSteps = [
-            { label: m.home_guide_invite(), done: guide?.botInvited ?? false, href: '/modules' },
-            { label: m.home_guide_logs(), done: guide?.logsConfigured ?? false, href: '/logs' },
-            { label: m.home_guide_tickets(), done: guide?.ticketsConfigured ?? false, href: '/tickets' },
-            { label: m.home_guide_roles(), done: guide?.staffRolesConfigured ?? false, href: '/staff-management/roles' },
+            {
+              label: m.home_guide_invite(),
+              done: guide?.botInvited ?? false,
+              href: "/modules",
+            },
+            {
+              label: m.home_guide_logs(),
+              done: guide?.logsConfigured ?? false,
+              href: "/logs",
+            },
+            {
+              label: m.home_guide_tickets(),
+              done: guide?.ticketsConfigured ?? false,
+              href: "/tickets",
+            },
+            {
+              label: m.home_guide_roles(),
+              done: guide?.staffRolesConfigured ?? false,
+              href: "/staff-management/roles",
+            },
           ]}
           <div class="flex flex-col h-full justify-between">
             <div class="flex items-center gap-2.5 mb-3 shrink-0">
-              <h3 class="text-sm font-medium text-on-surface">{m.home_quick_guide()}</h3>
+              <h3 class="text-sm font-medium text-on-surface">
+                {m.home_quick_guide()}
+              </h3>
             </div>
             <div class="space-y-2 grow flex flex-col justify-center">
               {#each guideSteps as step}
                 <button
                   onclick={() => router.goto(step.href)}
                   disabled={!guide}
-                  class="flex items-center gap-2 text-xs text-on-surface text-left disabled:cursor-default {guide ? 'cursor-pointer hover:text-primary' : ''}"
+                  class="flex items-center gap-2 text-xs text-on-surface text-left disabled:cursor-default {guide
+                    ? 'cursor-pointer hover:text-primary'
+                    : ''}"
                 >
-                  <span class="w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 {step.done ? 'bg-primary border-primary text-white' : 'border-outline-variant'}">
+                  <span
+                    class="w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 {step.done
+                      ? 'bg-primary border-primary text-white'
+                      : 'border-outline-variant'}"
+                  >
                     {#if step.done}
                       <Papicon icon="check" size={10} />
                     {/if}
                   </span>
-                  <span class={step.done ? 'line-through text-on-surface-variant' : ''}>{step.label}</span>
+                  <span
+                    class={step.done
+                      ? "line-through text-on-surface-variant"
+                      : ""}>{step.label}</span
+                  >
                 </button>
               {/each}
             </div>
           </div>
-        {:else if item.id === 'clockWeather'}
+        {:else if item.id === "clockWeather"}
           <div class="flex flex-col h-full justify-between min-h-[130px]">
             <div class="flex items-center gap-2.5 mb-2 shrink-0">
-              <h3 class="text-sm font-medium text-on-surface">{m.home_mod_clockweather_title()}</h3>
+              <h3 class="text-sm font-medium text-on-surface">
+                {m.home_mod_clockweather_title()}
+              </h3>
             </div>
             <div class="flex flex-col justify-center grow">
-              <p class="text-2xl font-bold text-on-surface tracking-tight">{currentTime}</p>
-              <p class="text-2xs text-on-surface-variant capitalize">{currentDate}</p>
+              <p class="text-2xl font-bold text-on-surface tracking-tight">
+                {currentTime}
+              </p>
+              <p class="text-2xs text-on-surface-variant capitalize">
+                {currentDate}
+              </p>
             </div>
           </div>
-        {:else if item.id === 'economy'}
+        {:else if item.id === "economy"}
           {@const economy = homeWidgets?.economy}
           <div class="flex flex-col h-full justify-between">
             <div class="flex items-center justify-between mb-3 shrink-0">
-              <div class="flex items-center gap-2.5">
-                <h3 class="text-sm font-medium text-on-surface">{m.home_mod_economy_title()}</h3>
-              </div>
-              <button onclick={() => router.goto('/economy')} class="text-2xs text-primary hover:underline cursor-pointer">{m.home_manage()}</button>
+              <h3 class="text-sm font-medium text-on-surface-variant">
+                {m.home_mod_economy_title()}
+              </h3>
+              <button
+                onclick={() => router.goto("/economy")}
+                class="text-2xs font-medium text-primary hover:underline cursor-pointer"
+                >{m.home_manage()}</button
+              >
             </div>
-            <div class="space-y-2.5 grow flex flex-col justify-center">
-              <div class="grid grid-cols-2 gap-2">
-                <div class="px-3 py-2 rounded-lg bg-warning/5 border border-warning/10">
-                  <p class="text-lg font-semibold text-on-surface">{economy ? formatNumber(economy.totalBalance) : '-'}</p>
-                  <p class="text-2xs text-on-surface-variant">{m.home_in_circulation()}</p>
+            <div class="space-y-3 grow flex flex-col justify-end">
+              <dl class="grid grid-cols-2 divide-x divide-outline-variant">
+                <div class="pr-3 min-w-0">
+                  <dd class="text-2xl font-bold tabular-nums text-on-surface">
+                    {economy ? formatNumber(economy.totalBalance) : "-"}
+                  </dd>
+                  <dt class="text-2xs text-on-surface-variant truncate">
+                    {m.home_in_circulation()}
+                  </dt>
                 </div>
-                <div class="px-3 py-2 rounded-lg bg-success/5 border border-success/10">
-                  <p class="text-lg font-semibold text-on-surface">{economy ? formatNumber(economy.activePlayers) : '-'}</p>
-                  <p class="text-2xs text-on-surface-variant">{m.home_active_7d()}</p>
+                <div class="pl-3 min-w-0">
+                  <dd class="text-2xl font-bold tabular-nums text-on-surface">
+                    {economy ? formatNumber(economy.activePlayers) : "-"}
+                  </dd>
+                  <dt class="text-2xs text-on-surface-variant truncate">
+                    {m.home_active_7d()}
+                  </dt>
                 </div>
-              </div>
-              <p class="text-2xs text-on-surface-variant text-center">
+              </dl>
+              <p class="text-2xs text-on-surface-variant">
                 {#if !economy}
                   {m.home_economy_hint()}
                 {:else if !economy.enabled}
@@ -1619,27 +2769,39 @@
               </p>
             </div>
           </div>
-        {:else if item.id === 'leveling'}
+        {:else if item.id === "leveling"}
           {@const leveling = homeWidgets?.leveling}
           <div class="flex flex-col h-full justify-between">
             <div class="flex items-center justify-between mb-3 shrink-0">
-              <div class="flex items-center gap-2.5">
-                <h3 class="text-sm font-medium text-on-surface">{m.home_mod_leveling_title()}</h3>
-              </div>
-              <button onclick={() => router.goto('/leveling')} class="text-2xs text-primary hover:underline cursor-pointer">{m.home_leaderboard()}</button>
+              <h3 class="text-sm font-medium text-on-surface-variant">
+                {m.home_mod_leveling_title()}
+              </h3>
+              <button
+                onclick={() => router.goto("/leveling")}
+                class="text-2xs font-medium text-primary hover:underline cursor-pointer"
+                >{m.home_leaderboard()}</button
+              >
             </div>
-            <div class="space-y-2 grow flex flex-col justify-center">
-              <div class="grid grid-cols-2 gap-2">
-                <div class="px-3 py-2 rounded-lg bg-indigo-500/5 border border-indigo-500/10">
-                  <p class="text-lg font-semibold text-on-surface">{leveling?.averageLevel ?? '-'}</p>
-                  <p class="text-2xs text-on-surface-variant">{m.home_avg_level()}</p>
+            <div class="space-y-3 grow flex flex-col justify-end">
+              <dl class="grid grid-cols-2 divide-x divide-outline-variant">
+                <div class="pr-3 min-w-0">
+                  <dd class="text-2xl font-bold tabular-nums text-on-surface">
+                    {leveling?.averageLevel ?? "-"}
+                  </dd>
+                  <dt class="text-2xs text-on-surface-variant truncate">
+                    {m.home_avg_level()}
+                  </dt>
                 </div>
-                <div class="px-3 py-2 rounded-lg bg-purple-500/5 border border-purple-500/10">
-                  <p class="text-lg font-semibold text-on-surface">{leveling ? formatNumber(leveling.activeMembers) : '-'}</p>
-                  <p class="text-2xs text-on-surface-variant">{m.home_active_7d()}</p>
+                <div class="pl-3 min-w-0">
+                  <dd class="text-2xl font-bold tabular-nums text-on-surface">
+                    {leveling ? formatNumber(leveling.activeMembers) : "-"}
+                  </dd>
+                  <dt class="text-2xs text-on-surface-variant truncate">
+                    {m.home_active_7d()}
+                  </dt>
                 </div>
-              </div>
-              <p class="text-2xs text-on-surface-variant text-center">
+              </dl>
+              <p class="text-2xs text-on-surface-variant">
                 {#if !leveling}
                   {m.home_leveling_hint()}
                 {:else if !leveling.enabled}
@@ -1650,53 +2812,83 @@
               </p>
             </div>
           </div>
-        {:else if item.id === 'tickets'}
+        {:else if item.id === "tickets"}
           {@const tickets = homeWidgets?.tickets}
           <div class="flex flex-col h-full justify-between">
             <div class="flex items-center justify-between mb-3 shrink-0">
-              <div class="flex items-center gap-2.5">
-                <h3 class="text-sm font-medium text-on-surface">Tickets</h3>
-              </div>
-              <button onclick={() => router.goto('/tickets')} class="text-2xs text-primary hover:underline cursor-pointer">{m.home_see_everything()}</button>
+              <h3 class="text-sm font-medium text-on-surface-variant">
+                Tickets
+              </h3>
+              <button
+                onclick={() => router.goto("/tickets")}
+                class="text-2xs font-medium text-primary hover:underline cursor-pointer"
+                >{m.home_see_everything()}</button
+              >
             </div>
-            <div class="space-y-2 grow flex flex-col justify-center">
-              <div class="grid grid-cols-3 gap-2">
-                <div class="px-2 py-2 rounded-lg bg-blue-500/5 border border-blue-500/10 text-center">
-                  <p class="text-lg font-semibold text-on-surface">{tickets ? formatNumber(tickets.open) : '-'}</p>
-                  <p class="text-2xs text-on-surface-variant">{m.home_open_tickets()}</p>
+            <div class="grow flex flex-col justify-end">
+              <dl class="grid grid-cols-3 divide-x divide-outline-variant">
+                <div class="pr-2 min-w-0">
+                  <dd class="text-2xl font-bold tabular-nums text-on-surface">
+                    {tickets ? formatNumber(tickets.open) : "-"}
+                  </dd>
+                  <dt class="text-2xs text-on-surface-variant truncate">
+                    {m.home_open_tickets()}
+                  </dt>
                 </div>
-                <div class="px-2 py-2 rounded-lg bg-warning/5 border border-warning/10 text-center">
-                  <p class="text-lg font-semibold text-on-surface">{tickets ? formatNumber(tickets.claimed) : '-'}</p>
-                  <p class="text-2xs text-on-surface-variant">{m.home_in_progress()}</p>
+                <div class="px-2 min-w-0">
+                  <dd class="text-2xl font-bold tabular-nums text-warning">
+                    {tickets ? formatNumber(tickets.claimed) : "-"}
+                  </dd>
+                  <dt class="text-2xs text-on-surface-variant truncate">
+                    {m.home_in_progress()}
+                  </dt>
                 </div>
-                <div class="px-2 py-2 rounded-lg bg-success/5 border border-success/10 text-center">
-                  <p class="text-lg font-semibold text-on-surface">{tickets ? formatNumber(tickets.closedRecently) : '-'}</p>
-                  <p class="text-2xs text-on-surface-variant">{m.home_closed_7d()}</p>
+                <div class="pl-2 min-w-0">
+                  <dd class="text-2xl font-bold tabular-nums text-success">
+                    {tickets ? formatNumber(tickets.closedRecently) : "-"}
+                  </dd>
+                  <dt class="text-2xs text-on-surface-variant truncate">
+                    {m.home_closed_7d()}
+                  </dt>
                 </div>
-              </div>
+              </dl>
             </div>
           </div>
-        {:else if item.id === 'invites'}
+        {:else if item.id === "invites"}
           {@const invites = homeWidgets?.invites}
           <div class="flex flex-col h-full justify-between">
             <div class="flex items-center justify-between mb-3 shrink-0">
-              <div class="flex items-center gap-2.5">
-                <h3 class="text-sm font-medium text-on-surface">{m.home_mod_invites_title()}</h3>
-              </div>
-              <button onclick={() => router.goto('/invitations')} class="text-2xs text-primary hover:underline cursor-pointer">{m.home_details()}</button>
+              <h3 class="text-sm font-medium text-on-surface-variant">
+                {m.home_mod_invites_title()}
+              </h3>
+              <button
+                onclick={() => router.goto("/invitations")}
+                class="text-2xs font-medium text-primary hover:underline cursor-pointer"
+                >{m.home_details()}</button
+              >
             </div>
-            <div class="space-y-2 grow flex flex-col justify-center">
-              <div class="grid grid-cols-2 gap-2">
-                <div class="px-3 py-2 rounded-lg bg-teal-500/5 border border-teal-500/10">
-                  <p class="text-lg font-semibold text-on-surface">{invites ? formatNumber(invites.activeCodes) : '-'}</p>
-                  <p class="text-2xs text-on-surface-variant">{m.home_active_invites()}</p>
+            <div class="space-y-3 grow flex flex-col justify-end">
+              <dl class="grid grid-cols-2 divide-x divide-outline-variant">
+                <div class="pr-3 min-w-0">
+                  <dd class="text-2xl font-bold tabular-nums text-on-surface">
+                    {invites ? formatNumber(invites.activeCodes) : "-"}
+                  </dd>
+                  <dt class="text-2xs text-on-surface-variant truncate">
+                    {m.home_active_invites()}
+                  </dt>
                 </div>
-                <div class="px-3 py-2 rounded-lg bg-success/5 border border-success/10">
-                  <p class="text-lg font-semibold text-on-surface">{invites?.retentionPercent == null ? '-' : `${invites.retentionPercent}%`}</p>
-                  <p class="text-2xs text-on-surface-variant">{m.home_retention()}</p>
+                <div class="pl-3 min-w-0">
+                  <dd class="text-2xl font-bold tabular-nums text-success">
+                    {invites?.retentionPercent == null
+                      ? "-"
+                      : `${invites.retentionPercent}%`}
+                  </dd>
+                  <dt class="text-2xs text-on-surface-variant truncate">
+                    {m.home_retention()}
+                  </dt>
                 </div>
-              </div>
-              <p class="text-2xs text-on-surface-variant text-center">
+              </dl>
+              <p class="text-2xs text-on-surface-variant">
                 {#if invites}
                   {m.home_invites_joined({ n: invites.joinedRecently })}
                 {:else}
@@ -1705,258 +2897,551 @@
               </p>
             </div>
           </div>
-        {:else if item.id === 'events'}
+        {:else if item.id === "events"}
           {@const upcomingEvents = homeWidgets?.events?.upcoming ?? []}
           {@const maxEvents = displayRowSpan(item) >= 2 ? 5 : 3}
           <div class="flex flex-col h-full justify-between">
             <div class="flex items-center justify-between mb-3 shrink-0">
-              <div class="flex items-center gap-2.5">
-                <h3 class="text-sm font-medium text-on-surface">{m.home_mod_events_title()}</h3>
-              </div>
-              <button onclick={() => router.goto('/events')} class="text-2xs text-primary hover:underline cursor-pointer">{m.home_see_everything()}</button>
+              <h3 class="text-sm font-medium text-on-surface-variant">
+                {m.home_mod_events_title()}
+              </h3>
+              <button
+                onclick={() => router.goto("/events")}
+                class="text-2xs font-medium text-primary hover:underline cursor-pointer"
+                >{m.home_see_everything()}</button
+              >
             </div>
-            <div class="space-y-2 grow flex flex-col {upcomingEvents.length > 0 ? '' : 'justify-center'}">
+            <div
+              class="grow flex flex-col {upcomingEvents.length > 0
+                ? 'divide-y divide-outline-variant'
+                : 'justify-center'}"
+            >
               {#if upcomingEvents.length === 0}
-                <div class="flex flex-col items-center justify-center py-4 text-center text-on-surface-variant">
-                  <Papicon icon="calendar" size={18} class="mb-1 text-error/50" />
-                  <p class="text-2xs">{m.home_no_upcoming_events()}</p>
+                <div
+                  class="flex flex-col items-center justify-center py-4 text-center text-on-surface-variant"
+                >
+                  <p class="text-xs font-medium">
+                    {m.home_no_upcoming_events()}
+                  </p>
                   <p class="text-2xs mt-0.5">{m.home_create_event_hint()}</p>
                 </div>
               {:else}
                 {#each upcomingEvents.slice(0, maxEvents) as evt (evt.id)}
                   <button
-                    onclick={() => router.goto('/events')}
-                    class="w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded-lg bg-error/5 border border-error/10 hover:border-error/30 transition-colors text-left cursor-pointer"
+                    onclick={() => router.goto("/events")}
+                    class="w-full flex items-center justify-between gap-2 py-2 -mx-1.5 px-1.5 rounded-lg hover:bg-surface-hover transition-colors text-left cursor-pointer"
                   >
                     <div class="min-w-0">
-                      <p class="text-xs font-medium text-on-surface truncate">{evt.title}</p>
+                      <p class="text-xs font-medium text-on-surface truncate">
+                        {evt.title}
+                      </p>
                       <p class="text-2xs text-on-surface-variant">
-                        {evt.startsAt ? formatEventDate(evt.startsAt) : evt.type}
+                        {evt.startsAt
+                          ? formatEventDate(evt.startsAt)
+                          : evt.type}
                       </p>
                     </div>
-                    <span class="text-2xs font-medium uppercase tracking-wide px-1.5 py-0.5 rounded shrink-0 {evt.status === 'ONGOING' ? 'bg-success/10 text-success' : 'bg-blue-500/10 text-blue-400'}">
-                      {evt.status === 'ONGOING' ? m.ev_status_ongoing() : m.ev_status_published()}
+                    <span
+                      class="text-2xs font-semibold px-2 py-0.5 rounded-full shrink-0 {evt.status ===
+                      'ONGOING'
+                        ? 'bg-success/10 text-on-success-container'
+                        : 'bg-surface-container text-on-surface-variant'}"
+                    >
+                      {evt.status === "ONGOING"
+                        ? m.ev_status_ongoing()
+                        : m.ev_status_published()}
                     </span>
                   </button>
                 {/each}
               {/if}
             </div>
           </div>
-        {:else if item.id === 'polls'}
+        {:else if item.id === "polls"}
           {@const openPolls = homeWidgets?.polls?.open ?? []}
           {@const maxPolls = displayRowSpan(item) >= 2 ? 5 : 3}
           <div class="flex flex-col h-full justify-between">
             <div class="flex items-center justify-between mb-3 shrink-0">
-              <div class="flex items-center gap-2.5">
-                <h3 class="text-sm font-medium text-on-surface">{m.home_mod_polls_title()}</h3>
-              </div>
-              <button onclick={() => router.goto('/staff-management/polls')} class="text-2xs text-primary hover:underline cursor-pointer">{m.home_see_everything()}</button>
+              <h3 class="text-sm font-medium text-on-surface-variant">
+                {m.home_mod_polls_title()}
+              </h3>
+              <button
+                onclick={() => router.goto("/staff-management/polls")}
+                class="text-2xs font-medium text-primary hover:underline cursor-pointer"
+                >{m.home_see_everything()}</button
+              >
             </div>
-            <div class="space-y-2 grow flex flex-col {openPolls.length > 0 ? '' : 'justify-center'}">
+            <div
+              class="grow flex flex-col {openPolls.length > 0
+                ? 'divide-y divide-outline-variant'
+                : 'justify-center'}"
+            >
               {#if openPolls.length === 0}
-                <div class="flex flex-col items-center justify-center py-4 text-center text-on-surface-variant">
-                  <Papicon icon="bar-chart" size={18} class="mb-1 text-violet-500/50" />
-                  <p class="text-2xs">{m.home_no_active_polls()}</p>
+                <div
+                  class="flex flex-col items-center justify-center py-4 text-center text-on-surface-variant"
+                >
+                  <p class="text-xs font-medium">{m.home_no_active_polls()}</p>
                   <p class="text-2xs mt-0.5">{m.home_polls_hint()}</p>
                 </div>
               {:else}
                 {#each openPolls.slice(0, maxPolls) as poll (poll.id)}
-                  <div class="px-2.5 py-2 rounded-lg bg-violet-500/5 border border-violet-500/10">
-                    <p class="text-xs font-medium text-on-surface truncate">{poll.title}</p>
-                    <p class="text-2xs text-on-surface-variant">
-                      {m.home_poll_votes({ n: poll.voteCount })}{poll.closesAt ? ` · ${m.home_poll_closes({ date: formatEventDate(poll.closesAt) })}` : ''}
+                  <div class="py-2">
+                    <p class="text-xs font-medium text-on-surface truncate">
+                      {poll.title}
+                    </p>
+                    <p class="text-2xs text-on-surface-variant tabular-nums">
+                      {m.home_poll_votes({ n: poll.voteCount })}{poll.closesAt
+                        ? ` · ${m.home_poll_closes({ date: formatEventDate(poll.closesAt) })}`
+                        : ""}
                     </p>
                   </div>
                 {/each}
               {/if}
             </div>
           </div>
-        {:else if item.id === 'pulse'}
+        {:else if item.id === "pulse"}
           {@const pulse = homeWidgets?.pulse}
-          <div class="flex flex-col h-full justify-between">
-            <div class="flex items-center justify-between mb-3 shrink-0">
-              <h3 class="text-sm font-medium text-on-surface">{m.home_mod_pulse_title()}</h3>
-              <button onclick={() => router.goto('/pulse')} class="text-2xs text-primary hover:underline cursor-pointer">{m.home_pulse_open()}</button>
+          <div class="relative flex flex-col h-full justify-between">
+            {#if pulse && pulse.history.length > 1}
+              {@const linePath = smoothPulsePath(pulse.history)}
+              <div
+                class="pointer-events-none absolute -inset-5 overflow-hidden rounded-[inherit]"
+                aria-hidden="true"
+              >
+                <svg
+                  viewBox="0 0 100 100"
+                  preserveAspectRatio="none"
+                  class="w-full h-full"
+                >
+                  <defs>
+                    <linearGradient
+                      id="pulse-bg-grad"
+                      x1="0"
+                      y1="0"
+                      x2="0"
+                      y2="1"
+                    >
+                      <stop
+                        offset="0%"
+                        stop-color="var(--primary-color)"
+                        stop-opacity="0.14"
+                      />
+                      <stop
+                        offset="100%"
+                        stop-color="var(--primary-color)"
+                        stop-opacity="0"
+                      />
+                    </linearGradient>
+                  </defs>
+                  <path
+                    d="{linePath} L 100,100 L 0,100 Z"
+                    fill="url(#pulse-bg-grad)"
+                  />
+                  <path
+                    d={linePath}
+                    fill="none"
+                    stroke="var(--primary-color)"
+                    stroke-width="2"
+                    vector-effect="non-scaling-stroke"
+                    opacity="0.75"
+                  />
+                </svg>
+              </div>
+            {/if}
+            <div
+              class="relative z-10 flex items-center justify-between mb-3 shrink-0"
+            >
+              <h3 class="text-sm font-medium text-on-surface-variant">
+                {m.home_mod_pulse_title()}
+              </h3>
+              <button
+                onclick={() => router.goto("/pulse")}
+                class="text-2xs font-medium text-primary hover:underline cursor-pointer"
+                >{m.home_pulse_open()}</button
+              >
             </div>
-            <div class="grow flex flex-col justify-center gap-2">
+            <div class="relative z-10 grow flex flex-col justify-end gap-1.5">
               {#if pulse && !pulse.hasData}
-                <p class="text-2xs text-on-surface-variant text-center">{m.home_pulse_no_data()}</p>
+                <p class="text-2xs text-on-surface-variant text-center">
+                  {m.home_pulse_no_data()}
+                </p>
               {:else}
-                <div class="flex items-end justify-between gap-3">
-                  <div>
-                    <p class="text-3xl font-semibold leading-none {pulse?.score == null ? 'text-on-surface' : pulseTone(pulse.score)}">{pulse?.score ?? '-'}<span class="text-sm text-on-surface-variant font-normal">/100</span></p>
-                    {#if pulse && pulse.trendDelta !== 0}
-                      <p class="text-2xs mt-1 {pulse.trendDelta > 0 ? 'text-success' : 'text-error'}">{pulse.trendDelta > 0 ? '+' : ''}{pulse.trendDelta}</p>
-                    {/if}
-                  </div>
-                  {#if pulse && pulse.history.length > 1}
-                    <Sparkline values={pulse.history} width={120} height={36} />
+                <div class="flex items-baseline gap-2.5">
+                  <p
+                    class="text-3xl font-bold tabular-nums leading-none {pulse?.score ==
+                    null
+                      ? 'text-on-surface'
+                      : pulseTone(pulse.score)}"
+                  >
+                    {pulse?.score ?? "-"}<span
+                      class="text-sm text-on-surface-variant font-normal"
+                      >/100</span
+                    >
+                  </p>
+                  {#if pulse && pulse.trendDelta !== 0}
+                    <span
+                      class="text-2xs font-semibold tabular-nums {pulse.trendDelta >
+                      0
+                        ? 'text-success'
+                        : 'text-error'}"
+                      >{pulse.trendDelta > 0 ? "+" : ""}{pulse.trendDelta}</span
+                    >
                   {/if}
                 </div>
-                <p class="text-2xs {pulse && pulse.alertCount > 0 ? 'text-warning' : 'text-on-surface-variant'}">
-                  {pulse && pulse.alertCount > 0 ? m.home_pulse_alerts({ n: pulse.alertCount }) : m.home_pulse_no_alert()}
+                <p
+                  class="text-2xs {pulse && pulse.alertCount > 0
+                    ? 'text-warning'
+                    : 'text-on-surface-variant'}"
+                >
+                  {pulse && pulse.alertCount > 0
+                    ? m.home_pulse_alerts({ n: pulse.alertCount })
+                    : m.home_pulse_no_alert()}
                 </p>
               {/if}
             </div>
           </div>
-        {:else if item.id === 'shield'}
+        {:else if item.id === "shield"}
           {@const shield = homeWidgets?.shield}
-          {@const shieldPending = shield ? shield.openWaves + shield.pendingVision : 0}
+          {@const shieldPending = shield
+            ? shield.openWaves + shield.pendingVision
+            : 0}
           <div class="flex flex-col h-full justify-between">
             <div class="flex items-center justify-between mb-3 shrink-0">
-              <h3 class="text-sm font-medium text-on-surface">{m.home_mod_shield_title()}</h3>
-              <button onclick={() => router.goto('/security/raid-protection')} class="text-2xs text-primary hover:underline cursor-pointer">{m.home_details()}</button>
+              <h3 class="text-sm font-medium text-on-surface-variant">
+                {m.home_mod_shield_title()}
+              </h3>
+              <button
+                onclick={() => router.goto("/security/raid-protection")}
+                class="text-2xs font-medium text-primary hover:underline cursor-pointer"
+                >{m.home_details()}</button
+              >
             </div>
-            <div class="grow flex flex-col justify-center gap-2">
-              <div class="grid grid-cols-2 gap-2">
-                <div class="px-3 py-2 rounded-lg bg-warning/5 border border-warning/10">
-                  <p class="text-lg font-semibold text-on-surface">{shield ? formatNumber(shield.jailed) : '-'}</p>
-                  <p class="text-2xs text-on-surface-variant">{m.home_shield_jailed()}</p>
+            <div class="grow flex flex-col justify-end gap-3">
+              <dl class="grid grid-cols-2 divide-x divide-outline-variant">
+                <div class="pr-3 min-w-0">
+                  <dd class="text-2xl font-bold tabular-nums text-on-surface">
+                    {shield ? formatNumber(shield.jailed) : "-"}
+                  </dd>
+                  <dt class="text-2xs text-on-surface-variant truncate">
+                    {m.home_shield_jailed()}
+                  </dt>
                 </div>
-                <div class="px-3 py-2 rounded-lg bg-error/5 border border-error/10">
-                  <p class="text-lg font-semibold text-on-surface">{shield ? formatNumber(shield.jailedRecently) : '-'}</p>
-                  <p class="text-2xs text-on-surface-variant">{m.home_shield_jailed_7d()}</p>
+                <div class="pl-3 min-w-0">
+                  <dd class="text-2xl font-bold tabular-nums text-on-surface">
+                    {shield ? formatNumber(shield.jailedRecently) : "-"}
+                  </dd>
+                  <dt class="text-2xs text-on-surface-variant truncate">
+                    {m.home_shield_jailed_7d()}
+                  </dt>
                 </div>
-              </div>
+              </dl>
               {#if shield && shield.openWaves > 0}
-                <p class="text-2xs text-warning">{m.home_shield_waves()} : {shield.openWaves}</p>
+                <p class="text-2xs text-warning">
+                  {m.home_shield_waves()} : {shield.openWaves}
+                </p>
               {/if}
               {#if shield && shield.pendingVision > 0}
-                <p class="text-2xs text-warning">{m.home_shield_vision()} : {shield.pendingVision}</p>
+                <p class="text-2xs text-warning">
+                  {m.home_shield_vision()} : {shield.pendingVision}
+                </p>
               {/if}
               {#if shield && shieldPending === 0}
-                <p class="text-2xs text-on-surface-variant text-center">{shield.configured ? m.home_shield_calm() : m.home_shield_not_configured()}</p>
+                <p class="text-2xs text-on-surface-variant">
+                  {shield.configured
+                    ? m.home_shield_calm()
+                    : m.home_shield_not_configured()}
+                </p>
               {/if}
             </div>
           </div>
-        {:else if item.id === 'myTasks'}
+        {:else if item.id === "myTasks"}
           {@const tasks = homeWidgets?.myTasks}
           <div class="flex flex-col h-full justify-between">
             <div class="flex items-center justify-between mb-3 shrink-0">
-              <h3 class="text-sm font-medium text-on-surface">{m.home_mod_mytasks_title()}</h3>
-              <button onclick={() => router.goto('/doing-lists')} class="text-2xs text-primary hover:underline cursor-pointer">{m.home_see_everything()}</button>
+              <h3 class="text-sm font-medium text-on-surface-variant">
+                {m.home_mod_mytasks_title()}
+              </h3>
+              <button
+                onclick={() => router.goto("/doing-lists")}
+                class="text-2xs font-medium text-primary hover:underline cursor-pointer"
+                >{m.home_see_everything()}</button
+              >
             </div>
-            <div class="grow flex flex-col gap-2 {tasks && tasks.isStaff && tasks.next.length > 0 ? '' : 'justify-center'}">
+            <div
+              class="grow flex flex-col gap-3 {tasks &&
+              tasks.isStaff &&
+              tasks.next.length > 0
+                ? 'justify-between'
+                : 'justify-center'}"
+            >
               {#if tasks && !tasks.isStaff}
-                <p class="text-2xs text-on-surface-variant text-center">{m.home_tasks_not_staff()}</p>
+                <p class="text-2xs text-on-surface-variant text-center">
+                  {m.home_tasks_not_staff()}
+                </p>
               {:else if tasks && tasks.open === 0}
-                <p class="text-2xs text-on-surface-variant text-center">{m.home_tasks_none()}</p>
+                <p class="text-2xs text-on-surface-variant text-center">
+                  {m.home_tasks_none()}
+                </p>
               {:else}
-                <div class="grid grid-cols-2 gap-2">
-                  <div class="px-3 py-2 rounded-lg bg-blue-500/5 border border-blue-500/10">
-                    <p class="text-lg font-semibold text-on-surface">{tasks ? formatNumber(tasks.open) : '-'}</p>
-                    <p class="text-2xs text-on-surface-variant">{m.home_tasks_open()}</p>
+                <dl class="grid grid-cols-2 divide-x divide-outline-variant">
+                  <div class="pr-3 min-w-0">
+                    <dd class="text-2xl font-bold tabular-nums text-on-surface">
+                      {tasks ? formatNumber(tasks.open) : "-"}
+                    </dd>
+                    <dt class="text-2xs text-on-surface-variant truncate">
+                      {m.home_tasks_open()}
+                    </dt>
                   </div>
-                  <div class="px-3 py-2 rounded-lg {tasks && tasks.overdue > 0 ? 'bg-error/5 border-error/10' : 'bg-success/5 border-success/10'} border">
-                    <p class="text-lg font-semibold text-on-surface">{tasks ? formatNumber(tasks.overdue) : '-'}</p>
-                    <p class="text-2xs text-on-surface-variant">{m.home_tasks_overdue()}</p>
+                  <div class="pl-3 min-w-0">
+                    <dd
+                      class="text-2xl font-bold tabular-nums {tasks &&
+                      tasks.overdue > 0
+                        ? 'text-error'
+                        : 'text-success'}"
+                    >
+                      {tasks ? formatNumber(tasks.overdue) : "-"}
+                    </dd>
+                    <dt class="text-2xs text-on-surface-variant truncate">
+                      {m.home_tasks_overdue()}
+                    </dt>
                   </div>
-                </div>
-                {#each (tasks?.next ?? []).slice(0, displayRowSpan(item) >= 2 ? 3 : 2) as task (task.id)}
-                  <div class="px-2.5 py-1.5 rounded-lg bg-surface-container/60">
-                    <p class="text-xs font-medium text-on-surface truncate">{task.title}</p>
-                    {#if task.dueAt}
-                      <p class="text-2xs {new Date(task.dueAt) < new Date() ? 'text-error' : 'text-on-surface-variant'}">{m.home_tasks_due({ date: formatEventDate(task.dueAt) })}</p>
-                    {/if}
+                </dl>
+                {#if (tasks?.next ?? []).length > 0}
+                  <div
+                    class="divide-y divide-outline-variant border-t border-outline-variant"
+                  >
+                    {#each (tasks?.next ?? []).slice(0, displayRowSpan(item) >= 2 ? 3 : 2) as task (task.id)}
+                      <div class="py-1.5">
+                        <p class="text-xs font-medium text-on-surface truncate">
+                          {task.title}
+                        </p>
+                        {#if task.dueAt}
+                          <p
+                            class="text-2xs {new Date(task.dueAt) < new Date()
+                              ? 'text-error'
+                              : 'text-on-surface-variant'}"
+                          >
+                            {m.home_tasks_due({
+                              date: formatEventDate(task.dueAt),
+                            })}
+                          </p>
+                        {/if}
+                      </div>
+                    {/each}
                   </div>
-                {/each}
+                {/if}
               {/if}
             </div>
           </div>
-        {:else if item.id === 'boosts'}
+        {:else if item.id === "boosts"}
           {@const boosts = homeWidgets?.boosts}
           <div class="flex flex-col h-full justify-between">
             <div class="flex items-center justify-between mb-3 shrink-0">
-              <h3 class="text-sm font-medium text-on-surface">{m.home_mod_boosts_title()}</h3>
-              <button onclick={() => router.goto('/analytics')} class="text-2xs text-primary hover:underline cursor-pointer">{m.home_details()}</button>
+              <h3 class="text-sm font-medium text-on-surface-variant">
+                {m.home_mod_boosts_title()}
+              </h3>
+              <button
+                onclick={() => router.goto("/analytics")}
+                class="text-2xs font-medium text-primary hover:underline cursor-pointer"
+                >{m.home_details()}</button
+              >
             </div>
-            <div class="grow flex flex-col justify-center gap-2">
+            <div class="grow flex flex-col justify-end gap-1.5">
               {#if boosts && !boosts.hasData}
-                <p class="text-2xs text-on-surface-variant text-center">{m.home_boosts_no_data()}</p>
+                <p class="text-2xs text-on-surface-variant text-center">
+                  {m.home_boosts_no_data()}
+                </p>
               {:else}
-                <div class="flex items-center justify-between gap-2">
-                  <p class="text-lg font-semibold text-purple-400 flex items-center gap-1.5">
-                    <Papicon icon="star" size={14} />{boosts?.tier == null ? '-' : m.home_boosts_level({ n: boosts.tier })}
+                <div class="flex items-baseline justify-between gap-2">
+                  <p class="text-2xl font-bold tabular-nums text-on-surface">
+                    {boosts?.tier == null
+                      ? "-"
+                      : m.home_boosts_level({ n: boosts.tier })}
                   </p>
                   {#if boosts?.delta != null && boosts.delta !== 0}
-                    <span class="text-2xs {boosts.delta > 0 ? 'text-success' : 'text-error'}">{boosts.delta > 0 ? '+' : ''}{boosts.delta} · {m.home_boosts_delta()}</span>
+                    <span
+                      class="text-2xs font-semibold tabular-nums {boosts.delta >
+                      0
+                        ? 'text-success'
+                        : 'text-error'}"
+                      >{boosts.delta > 0 ? "+" : ""}{boosts.delta} · {m.home_boosts_delta()}</span
+                    >
                   {/if}
                 </div>
                 <p class="text-xs text-on-surface">
-                  {boosts?.boostCount == null ? '-' : m.home_boosts_count({ n: boosts.boostCount })}
-                  {#if boosts?.boosterCount != null}<span class="text-on-surface-variant"> · {m.home_boosts_boosters({ n: boosts.boosterCount })}</span>{/if}
+                  {boosts?.boostCount == null
+                    ? "-"
+                    : m.home_boosts_count({ n: boosts.boostCount })}
+                  {#if boosts?.boosterCount != null}<span
+                      class="text-on-surface-variant"
+                    >
+                      · {m.home_boosts_boosters({
+                        n: boosts.boosterCount,
+                      })}</span
+                    >{/if}
                 </p>
                 {#if boosts}
-                  <p class="text-2xs {boosts.lostRecently > 0 ? 'text-warning' : 'text-on-surface-variant'}">
-                    {boosts.lostRecently > 0 ? m.home_boosts_lost({ n: boosts.lostRecently }) : m.home_boosts_none_lost()}
+                  <p
+                    class="text-2xs {boosts.lostRecently > 0
+                      ? 'text-warning'
+                      : 'text-on-surface-variant'}"
+                  >
+                    {boosts.lostRecently > 0
+                      ? m.home_boosts_lost({ n: boosts.lostRecently })
+                      : m.home_boosts_none_lost()}
                   </p>
                 {/if}
               {/if}
             </div>
           </div>
-        {:else if item.id === 'climate'}
+        {:else if item.id === "climate"}
           {@const climate = homeWidgets?.climate}
-          <div class="flex flex-col h-full justify-between">
-            <div class="flex items-center justify-between mb-3 shrink-0">
-              <h3 class="text-sm font-medium text-on-surface">{m.home_mod_climate_title()}</h3>
-              <button onclick={() => router.goto('/analytics')} class="text-2xs text-primary hover:underline cursor-pointer">{m.home_details()}</button>
+          <div class="relative flex flex-col h-full justify-between">
+            {#if climate && climate.history.length > 1}
+              {@const cPath = smoothPulsePath(climate.history)}
+              <div
+                class="pointer-events-none absolute -inset-5 overflow-hidden rounded-[inherit]"
+                aria-hidden="true"
+              >
+                <svg
+                  viewBox="0 0 100 100"
+                  preserveAspectRatio="none"
+                  class="w-full h-full"
+                >
+                  <defs>
+                    <linearGradient
+                      id="climate-bg-grad"
+                      x1="0"
+                      y1="0"
+                      x2="0"
+                      y2="1"
+                    >
+                      <stop
+                        offset="0%"
+                        stop-color="var(--series-2, var(--primary-color))"
+                        stop-opacity="0.14"
+                      />
+                      <stop
+                        offset="100%"
+                        stop-color="var(--series-2, var(--primary-color))"
+                        stop-opacity="0"
+                      />
+                    </linearGradient>
+                  </defs>
+                  <path
+                    d="{cPath} L 100,100 L 0,100 Z"
+                    fill="url(#climate-bg-grad)"
+                  />
+                  <path
+                    d={cPath}
+                    fill="none"
+                    stroke="var(--series-2, var(--primary-color))"
+                    stroke-width="2"
+                    vector-effect="non-scaling-stroke"
+                    opacity="0.75"
+                  />
+                </svg>
+              </div>
+            {/if}
+            <div
+              class="relative z-10 flex items-center justify-between mb-3 shrink-0"
+            >
+              <h3 class="text-sm font-medium text-on-surface-variant">
+                {m.home_mod_climate_title()}
+              </h3>
+              <button
+                onclick={() => router.goto("/analytics")}
+                class="text-2xs font-medium text-primary hover:underline cursor-pointer"
+                >{m.home_details()}</button
+              >
             </div>
-            <div class="grow flex flex-col justify-center gap-2">
+            <div class="relative z-10 grow flex flex-col justify-end gap-1.5">
               {#if climate && !climate.enabled && climate.analyzed === 0}
-                <p class="text-2xs text-on-surface-variant text-center">{m.home_climate_disabled()}</p>
+                <p class="text-2xs text-on-surface-variant text-center">
+                  {m.home_climate_disabled()}
+                </p>
               {:else}
-                <div class="flex items-end justify-between gap-3">
-                  <div>
-                    <p class="text-lg font-semibold text-on-surface">{climate?.toxicPercent == null ? '-' : `${climate.toxicPercent}%`}</p>
-                    <p class="text-2xs text-on-surface-variant">{m.home_climate_toxic()}</p>
-                  </div>
-                  {#if climate && climate.history.length > 1}
-                    <Sparkline values={climate.history} width={100} height={32} color="var(--series-2)" />
-                  {/if}
+                <div>
+                  <p
+                    class="text-3xl font-bold tabular-nums leading-none text-on-surface"
+                  >
+                    {climate?.toxicPercent == null
+                      ? "-"
+                      : `${climate.toxicPercent}%`}
+                  </p>
+                  <p class="text-2xs text-on-surface-variant mt-1">
+                    {m.home_climate_toxic()}
+                  </p>
                 </div>
                 {#if climate}
-                  <p class="text-2xs text-on-surface-variant">{m.home_climate_emotion()} : <span class="text-on-surface">{emotionLabel(climate.dominantEmotion)}</span> · {m.home_climate_analyzed({ n: climate.analyzed })}</p>
+                  <p class="text-2xs text-on-surface-variant">
+                    {m.home_climate_emotion()} :
+                    <span class="text-on-surface font-medium"
+                      >{emotionLabel(climate.dominantEmotion)}</span
+                    >
+                    · {m.home_climate_analyzed({ n: climate.analyzed })}
+                  </p>
                 {/if}
               {/if}
             </div>
           </div>
-        {:else if item.id === 'staffServer'}
+        {:else if item.id === "staffServer"}
           <div class="flex flex-col h-full justify-between">
             <div class="flex items-center justify-between mb-3 shrink-0">
-              <div class="flex items-center gap-2.5">
-                <h3 class="text-sm font-medium text-on-surface">{m.home_mod_staffserver_title()}</h3>
-              </div>
-              <button onclick={() => router.goto('/staff-server')} class="text-2xs text-primary hover:underline cursor-pointer">{m.home_manage()}</button>
+              <h3 class="text-sm font-medium text-on-surface-variant">
+                {m.home_mod_staffserver_title()}
+              </h3>
+              <button
+                onclick={() => router.goto("/staff-server")}
+                class="text-2xs font-medium text-primary hover:underline cursor-pointer"
+                >{m.home_manage()}</button
+              >
             </div>
             {#if staffServerLinks.length > 0}
               {@const link = staffServerLinks[0]}
-              <div class="space-y-2 grow flex flex-col justify-center">
+              <div class="space-y-3 grow flex flex-col justify-end">
                 <div class="flex items-center gap-2">
-                  <span class="w-2 h-2 rounded-full {link.enabled ? 'bg-emerald-400' : 'bg-red-400'}"></span>
-                  <p class="text-sm font-medium text-on-surface truncate">{link.otherGuildName}</p>
-                  <span class="text-xs font-medium px-1 py-0.5 rounded bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/20">
-                    {link.isMain ? 'Staff' : m.home_main_label()}
+                  <span
+                    class="w-2 h-2 rounded-full {link.enabled
+                      ? 'bg-success'
+                      : 'bg-error'}"
+                  ></span>
+                  <p class="text-sm font-semibold text-on-surface truncate">
+                    {link.otherGuildName}
+                  </p>
+                  <span
+                    class="text-2xs font-semibold px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant"
+                  >
+                    {link.isMain ? "Staff" : m.home_main_label()}
                   </span>
                 </div>
-                <div class="grid grid-cols-2 gap-2">
-                  <div class="px-3 py-2 rounded-lg bg-blue-500/5 border border-blue-500/10">
-                    <p class="text-xs font-semibold text-on-surface">{SYNC_MODE_LABELS[link.syncMode] ?? link.syncMode}</p>
-                    <p class="text-2xs text-on-surface-variant">{m.home_sync_mode()}</p>
+                <dl class="grid grid-cols-2 divide-x divide-outline-variant">
+                  <div class="pr-3 min-w-0">
+                    <dd class="text-sm font-semibold text-on-surface truncate">
+                      {SYNC_MODE_LABELS[link.syncMode] ?? link.syncMode}
+                    </dd>
+                    <dt class="text-2xs text-on-surface-variant truncate">
+                      {m.home_sync_mode()}
+                    </dt>
                   </div>
-                  <div class="px-3 py-2 rounded-lg bg-success/5 border border-success/10">
-                    <p class="text-lg font-semibold text-on-surface">{link.roleMappings?.length ?? 0}</p>
-                    <p class="text-2xs text-on-surface-variant">{m.home_mapped_roles()}</p>
+                  <div class="pl-3 min-w-0">
+                    <dd class="text-2xl font-bold tabular-nums text-on-surface">
+                      {link.roleMappings?.length ?? 0}
+                    </dd>
+                    <dt class="text-2xs text-on-surface-variant truncate">
+                      {m.home_mapped_roles()}
+                    </dt>
                   </div>
-                </div>
-                <p class="text-2xs text-on-surface-variant text-center">
+                </dl>
+                <p class="text-2xs text-on-surface-variant">
                   {link.enabled ? m.home_link_active() : m.home_link_disabled()}
                 </p>
               </div>
             {:else}
               <div class="space-y-2 grow flex flex-col justify-center">
-                <div class="flex flex-col items-center justify-center py-4 text-center text-on-surface-variant">
-                  <Papicon icon="shield" size={18} class="mb-1 text-blue-500/50" />
-                  <p class="text-2xs">{m.home_no_staff_server()}</p>
+                <div
+                  class="flex flex-col items-center justify-center py-4 text-center text-on-surface-variant"
+                >
+                  <p class="text-xs font-medium">{m.home_no_staff_server()}</p>
                   <p class="text-2xs mt-0.5">{m.home_link_staff_hint()}</p>
                 </div>
               </div>
@@ -1982,26 +3467,88 @@
     >
       {#if $isMobile}
         <!-- Sur telephone, la barre doit tenir sur une ligne au-dessus des onglets. -->
-        <Button size="sm" variant="secondary" icon="add" aria-label={m.home_add_module()} onclick={() => (showAddModuleModal = true)} />
+        <Button
+          size="sm"
+          variant="secondary"
+          icon="add"
+          aria-label={m.home_add_module()}
+          onclick={() => (showAddModuleModal = true)}
+        />
+        <Button
+          size="sm"
+          variant="secondary"
+          icon="layers"
+          aria-label={m.home_layout_presets()}
+          onclick={() => {
+            showPresetsModal = true;
+            void loadPresets();
+          }}
+        />
       {:else}
-        <Button size="sm" variant="secondary" icon="add" onclick={() => (showAddModuleModal = true)}>{m.home_add_module()}</Button>
+        <Button
+          size="sm"
+          variant="secondary"
+          icon="add"
+          onclick={() => (showAddModuleModal = true)}
+          >{m.home_add_module()}</Button
+        >
+        <Button
+          size="sm"
+          variant="secondary"
+          icon="layers"
+          onclick={() => {
+            showPresetsModal = true;
+            void loadPresets();
+          }}>Modèles</Button
+        >
       {/if}
       <Menu items={editMenu} label={m.home_edit_more()} />
-      <Button size="sm" variant="ghost" onclick={cancelEditing}>{m.common_cancel()}</Button>
-      <Button size="sm" variant="primary" onclick={saveLayout}>{m.common_save()}</Button>
+      <Button size="sm" variant="ghost" onclick={cancelEditing}
+        >{m.common_cancel()}</Button
+      >
+      <Button size="sm" variant="primary" onclick={saveLayout}
+        >{m.common_save()}</Button
+      >
     </div>
   {/if}
 
   <!-- Add Module Modal -->
   {#if showAddModuleModal}
-    <div class="modal-backdrop" onclick={() => showAddModuleModal = false} role="button" tabindex="-1" onkeydown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) showAddModuleModal = false; }}>
-      <div class="modal-panel modal-panel-lg" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} use:dialogFocus={{ onEscape: () => (showAddModuleModal = false) }} role="dialog" aria-modal="true" aria-labelledby="home-module-library-title" tabindex="-1">
-        <div class="flex items-center justify-between border-b border-outline-variant pb-3 mb-4">
-          <h2 id="home-module-library-title" class="text-base font-semibold text-on-surface flex items-center gap-2">
-            <Papicon icon="plus-circle" size={18} class="text-primary" /> {m.home_module_library()}
+    <div
+      class="modal-backdrop"
+      onclick={() => (showAddModuleModal = false)}
+      role="button"
+      tabindex="-1"
+      onkeydown={(e) => {
+        if (
+          e.target === e.currentTarget &&
+          (e.key === "Enter" || e.key === " ")
+        )
+          showAddModuleModal = false;
+      }}
+    >
+      <div
+        class="modal-panel modal-panel-lg"
+        onclick={(e) => e.stopPropagation()}
+        onkeydown={(e) => e.stopPropagation()}
+        use:dialogFocus={{ onEscape: () => (showAddModuleModal = false) }}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="home-module-library-title"
+        tabindex="-1"
+      >
+        <div
+          class="flex items-center justify-between border-b border-outline-variant pb-3 mb-4"
+        >
+          <h2
+            id="home-module-library-title"
+            class="text-base font-semibold text-on-surface flex items-center gap-2"
+          >
+            <Papicon icon="plus-circle" size={18} class="text-primary" />
+            {m.home_module_library()}
           </h2>
           <button
-            onclick={() => showAddModuleModal = false}
+            onclick={() => (showAddModuleModal = false)}
             class="p-1 rounded-full text-on-surface-variant hover:bg-surface-container transition-colors cursor-pointer"
           >
             <Papicon icon="close" size={16} />
@@ -2012,28 +3559,48 @@
           {m.home_library_hint()}
         </p>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[60vh] overflow-y-auto pr-1">
+        <div
+          class="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-[60vh] overflow-y-auto pr-1"
+        >
           {#each availableCatalog as mod}
-            {@const isVisible = userLayout.find(item => item.id === mod.id)?.visible}
-            <div class="p-4 rounded-xl border border-outline-variant bg-surface-container-lowest hover:border-primary/40 transition-all flex flex-col justify-between gap-3 {isVisible ? 'opacity-65' : ''}">
+            {@const isVisible = userLayout.find(
+              (item) => item.id === mod.id,
+            )?.visible}
+            <div
+              class="p-4 rounded-xl border border-outline-variant bg-surface-container-lowest hover:border-primary/40 transition-all flex flex-col justify-between gap-3 {isVisible
+                ? 'opacity-65'
+                : ''}"
+            >
               <div>
                 <div class="flex items-center gap-2.5 mb-1.5">
-                  <div class="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                  <div
+                    class="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary shrink-0"
+                  >
                     <Papicon icon={mod.icon} size={16} />
                   </div>
-                  <h4 class="font-medium text-xs text-on-surface">{mod.title}</h4>
+                  <h4 class="font-medium text-xs text-on-surface">
+                    {mod.title}
+                  </h4>
                 </div>
-                <p class="text-2xs text-on-surface-variant leading-normal">{mod.desc}</p>
+                <p class="text-2xs text-on-surface-variant leading-normal">
+                  {mod.desc}
+                </p>
               </div>
-              
+
               <div class="flex justify-end pt-1">
                 {#if isVisible}
-                  <span class="inline-flex items-center gap-1 text-2xs text-on-success-container font-medium bg-success/10 px-2 py-1 rounded">
-                    <Papicon icon="check" size={10} /> {m.home_already_visible()}
+                  <span
+                    class="inline-flex items-center gap-1 text-2xs text-on-success-container font-medium bg-success/10 px-2 py-1 rounded"
+                  >
+                    <Papicon icon="check" size={10} />
+                    {m.home_already_visible()}
                   </span>
                 {:else}
                   <button
-                    onclick={() => { addModule(mod.id); showAddModuleModal = false; }}
+                    onclick={() => {
+                      addModule(mod.id);
+                      showAddModuleModal = false;
+                    }}
                     class="px-2.5 py-1 bg-primary text-white text-2xs font-medium rounded hover:bg-primary-container hover:text-on-primary-container transition-colors cursor-pointer"
                   >
                     {m.common_add()}
@@ -2049,15 +3616,48 @@
 
   <!-- Reset Confirmation Modal -->
   {#if showResetConfirm}
-    <div class="modal-backdrop" onclick={() => showResetConfirm = false} role="button" tabindex="-1" onkeydown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) showResetConfirm = false; }}>
-      <div class="modal-panel max-w-sm" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} use:dialogFocus={{ onEscape: () => (showResetConfirm = false) }} role="dialog" aria-modal="true" aria-labelledby="home-reset-title" tabindex="-1">
-        <h3 id="home-reset-title" class="font-semibold text-base text-on-surface mb-2">{m.home_reset_layout_q()}</h3>
+    <div
+      class="modal-backdrop"
+      onclick={() => (showResetConfirm = false)}
+      role="button"
+      tabindex="-1"
+      onkeydown={(e) => {
+        if (
+          e.target === e.currentTarget &&
+          (e.key === "Enter" || e.key === " ")
+        )
+          showResetConfirm = false;
+      }}
+    >
+      <div
+        class="modal-panel max-w-sm"
+        onclick={(e) => e.stopPropagation()}
+        onkeydown={(e) => e.stopPropagation()}
+        use:dialogFocus={{ onEscape: () => (showResetConfirm = false) }}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="home-reset-title"
+        tabindex="-1"
+      >
+        <h3
+          id="home-reset-title"
+          class="font-semibold text-base text-on-surface mb-2"
+        >
+          {m.home_reset_layout_q()}
+        </h3>
         <p class="text-sm text-on-surface-variant leading-normal mb-5">
           {m.home_reset_layout_warn()}
         </p>
         <div class="flex justify-end gap-2">
-          <Button size="sm" variant="ghost" onclick={() => (showResetConfirm = false)}>{m.common_cancel()}</Button>
-          <Button size="sm" variant="danger" onclick={resetLayout}>{m.home_edit_reset()}</Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onclick={() => (showResetConfirm = false)}
+            >{m.common_cancel()}</Button
+          >
+          <Button size="sm" variant="danger" onclick={resetLayout}
+            >{m.home_edit_reset()}</Button
+          >
         </div>
       </div>
     </div>
@@ -2065,33 +3665,100 @@
 
   <!-- Presets Modal -->
   {#if showPresetsModal}
-    <div class="modal-backdrop" onclick={() => showPresetsModal = false} role="button" tabindex="-1" onkeydown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) showPresetsModal = false; }}>
-      <div class="modal-panel modal-panel-lg" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} use:dialogFocus={{ onEscape: () => (showPresetsModal = false) }} role="dialog" aria-modal="true" aria-labelledby="home-presets-title" tabindex="-1">
-        <div class="flex items-center justify-between border-b border-outline-variant pb-3 mb-4">
-          <h2 id="home-presets-title" class="text-base font-semibold text-on-surface flex items-center gap-2">
-            <Papicon icon="layers" size={18} class="text-primary" /> {m.home_layout_presets()}
+    <div
+      class="modal-backdrop"
+      onclick={() => (showPresetsModal = false)}
+      role="button"
+      tabindex="-1"
+      onkeydown={(e) => {
+        if (
+          e.target === e.currentTarget &&
+          (e.key === "Enter" || e.key === " ")
+        )
+          showPresetsModal = false;
+      }}
+    >
+      <div
+        class="modal-panel modal-panel-lg"
+        onclick={(e) => e.stopPropagation()}
+        onkeydown={(e) => e.stopPropagation()}
+        use:dialogFocus={{ onEscape: () => (showPresetsModal = false) }}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="home-presets-title"
+        tabindex="-1"
+      >
+        <div
+          class="flex items-center justify-between border-b border-outline-variant pb-3 mb-4"
+        >
+          <h2
+            id="home-presets-title"
+            class="text-base font-semibold text-on-surface flex items-center gap-2"
+          >
+            <Papicon icon="layers" size={18} class="text-primary" />
+            {m.home_layout_presets()}
           </h2>
           <button
-            onclick={() => showPresetsModal = false}
+            onclick={() => (showPresetsModal = false)}
             class="p-1 rounded-full text-on-surface-variant hover:bg-surface-container transition-colors cursor-pointer"
           >
             <Papicon icon="close" size={16} />
           </button>
         </div>
 
+        <!-- Built-in templates -->
+        <div class="mb-4">
+          <h3
+            class="text-xs font-medium text-on-surface mb-2.5 flex items-center gap-2"
+          >
+            <Papicon icon="layers" size={14} class="text-primary" /> Modèles prêts
+            à l’emploi
+          </h3>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            {#each HOME_TEMPLATES as tpl (tpl.id)}
+              <button
+                type="button"
+                onclick={() => applyBuiltInTemplate(tpl)}
+                class="section-card p-3.5 text-left transition-colors hover:!border-primary/50 flex flex-col justify-between gap-2 cursor-pointer"
+              >
+                <div class="flex items-center gap-2">
+                  <span
+                    class="w-7 h-7 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0"
+                  >
+                    <Papicon icon={tpl.icon} size={14} />
+                  </span>
+                  <span class="text-xs font-semibold text-on-surface"
+                    >{tpl.name}</span
+                  >
+                </div>
+                <p class="text-2xs text-on-surface-variant leading-relaxed">
+                  {tpl.description}
+                </p>
+              </button>
+            {/each}
+          </div>
+        </div>
+
         <!-- Save current layout as preset -->
-        <div class="p-4 rounded-xl border border-outline-variant bg-surface-container-lowest mb-4">
-          <h3 class="text-xs font-medium text-on-surface mb-3 flex items-center gap-2">
-            <Papicon icon="save" size={14} class="text-primary" /> {m.home_save_current_layout()}
+        <div
+          class="p-4 rounded-xl border border-outline-variant bg-surface-container-lowest mb-4"
+        >
+          <h3
+            class="text-xs font-medium text-on-surface mb-3 flex items-center gap-2"
+          >
+            <Papicon icon="save" size={14} class="text-primary" />
+            {m.home_save_current_layout()}
           </h3>
           <div class="flex gap-2">
-            <input aria-label={m.home_preset_name_ph()}
+            <input
+              aria-label={m.home_preset_name_ph()}
               type="text"
               bind:value={presetName}
               placeholder={m.home_preset_name_ph()}
               class="grow px-3 py-2 text-xs bg-surface-container border border-field-border rounded-lg outline-none focus:border-primary/50 text-on-surface"
             />
-            <input aria-label={m.home_preset_desc_ph()}
+            <input
+              aria-label={m.home_preset_desc_ph()}
               type="text"
               bind:value={presetDescription}
               placeholder={m.home_preset_desc_ph()}
@@ -2107,14 +3774,21 @@
         </div>
 
         <!-- Import section -->
-        <div class="p-4 rounded-xl border border-outline-variant bg-surface-container-lowest mb-4">
-          <h3 class="text-xs font-medium text-on-surface mb-3 flex items-center gap-2">
-            <Papicon icon="upload" size={14} class="text-secondary" /> {m.home_import_preset_json()}
+        <div
+          class="p-4 rounded-xl border border-outline-variant bg-surface-container-lowest mb-4"
+        >
+          <h3
+            class="text-xs font-medium text-on-surface mb-3 flex items-center gap-2"
+          >
+            <Papicon icon="upload" size={14} class="text-secondary" />
+            {m.home_import_preset_json()}
           </h3>
           <div class="flex gap-2">
-            <textarea aria-label={m.home_import_preset_json()}
+            <textarea
+              aria-label={m.home_import_preset_json()}
               bind:value={presetImportJson}
-              placeholder={m.home_paste_json_ph() + ' {"name": "...", "layout": [...]}'}
+              placeholder={m.home_paste_json_ph() +
+                ' {"name": "...", "layout": [...]}'}
               class="grow px-3 py-2 text-xs bg-surface-container border border-field-border rounded-lg outline-none focus:border-primary/50 text-on-surface min-h-[60px] resize-none"
             ></textarea>
             <button
@@ -2127,24 +3801,38 @@
         </div>
 
         <!-- Saved presets list -->
-        <h3 class="text-xs font-medium text-on-surface mb-3 flex items-center gap-2">
-          <Papicon icon="list" size={14} class="text-on-surface-variant" /> {m.home_my_presets()}
+        <h3
+          class="text-xs font-medium text-on-surface mb-3 flex items-center gap-2"
+        >
+          <Papicon icon="list" size={14} class="text-on-surface-variant" />
+          {m.home_my_presets()}
         </h3>
         <div class="space-y-2 max-h-[40vh] overflow-y-auto pr-1">
           {#if loadingPresets}
             {#each Array(3) as _}
-              <div class="h-16 animate-pulse bg-surface-container-high rounded-xl"></div>
+              <div
+                class="h-16 animate-pulse bg-surface-container-high rounded-xl"
+              ></div>
             {/each}
           {:else if presets.length > 0}
             {#each presets as preset}
-              <div class="p-3 rounded-xl border border-outline-variant bg-surface-container-lowest hover:border-primary/30 transition-colors flex items-center justify-between gap-3">
+              <div
+                class="p-3 rounded-xl border border-outline-variant bg-surface-container-lowest hover:border-primary/30 transition-colors flex items-center justify-between gap-3"
+              >
                 <div class="min-w-0">
-                  <h4 class="text-xs font-medium text-on-surface truncate">{preset.name}</h4>
+                  <h4 class="text-xs font-medium text-on-surface truncate">
+                    {preset.name}
+                  </h4>
                   {#if preset.description}
-                    <p class="text-2xs text-on-surface-variant truncate mt-0.5">{preset.description}</p>
+                    <p class="text-2xs text-on-surface-variant truncate mt-0.5">
+                      {preset.description}
+                    </p>
                   {/if}
                   <p class="text-2xs text-on-surface-variant mt-0.5">
-                    {Array.isArray(preset.layout) ? preset.layout.length : '?'} modules · {new Date(preset.createdAt).toLocaleDateString(dateLocale())}
+                    {Array.isArray(preset.layout) ? preset.layout.length : "?"} modules
+                    · {new Date(preset.createdAt).toLocaleDateString(
+                      dateLocale(),
+                    )}
                   </p>
                 </div>
                 <div class="flex items-center gap-1.5 shrink-0">
@@ -2180,7 +3868,9 @@
               </div>
             {/each}
           {:else}
-            <div class="flex flex-col items-center justify-center py-8 text-on-surface-variant">
+            <div
+              class="flex flex-col items-center justify-center py-8 text-on-surface-variant"
+            >
               <Papicon icon="layers" size={24} class="mb-2" />
               <p class="text-xs">{m.home_no_presets()}</p>
               <p class="text-2xs mt-0.5">{m.home_no_presets_hint()}</p>

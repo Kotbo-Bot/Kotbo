@@ -69,7 +69,7 @@
   <div
     role="dialog"
     aria-labelledby="onb-resume-title"
-    class="fixed bottom-6 left-1/2 z-50 w-[min(28rem,calc(100vw-2rem))] -translate-x-1/2 space-y-3 rounded-xl border border-outline-variant bg-surface-container-lowest p-4 shadow-lg animate-in fade-in slide-up duration-200"
+    class="section-card fixed bottom-6 left-1/2 z-50 w-[min(28rem,calc(100vw-2rem))] -translate-x-1/2 space-y-3 p-4 shadow-lg animate-in fade-in slide-up duration-200"
   >
     <div>
       <p id="onb-resume-title" class="text-sm font-semibold text-on-surface">{m.onb_resume_title()}</p>

@@ -1140,7 +1140,13 @@
     top: calc(var(--app-navbar-height) + 1rem);
     display: flex;
     flex-direction: column;
-    gap: 1rem;
+    gap: 0.75rem;
+    padding: 0.5rem;
+    border-radius: var(--radius-card);
+    corner-shape: superellipse(1.3);
+    border: 1px solid var(--color-outline-variant);
+    background: var(--surface-card);
+    box-shadow: var(--glass-quiet-shadow), var(--glass-quiet-rim);
   }
 
   .analytics-v2__mobile-sections {
@@ -1153,13 +1159,14 @@
     align-items: center;
     gap: 0.625rem;
     width: 100%;
-    min-height: 2.5rem;
+    min-height: 2.375rem;
     padding: 0 0.75rem;
-    border-radius: 0.5rem;
+    border-radius: 999px;
     font-size: 0.875rem;
     font-weight: 500;
     text-align: left;
     color: var(--color-on-surface-variant);
+    transition: background-color 150ms ease, color 150ms ease;
   }
 
   .side-link:hover {
