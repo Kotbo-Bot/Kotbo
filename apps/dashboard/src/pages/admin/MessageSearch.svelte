@@ -4,6 +4,7 @@
    * La recherche part a la validation, pas a la frappe : elle est lourde et
    * chaque envoi est inscrit au journal d'audit.
    */
+  import { m } from '../../lib/i18n';
   import { searchAdminMessages, type FoundMessage, type MessageSearchResult } from '../../lib/api/adminInsights';
   import { toast } from '../../lib/stores/toast.svelte';
   import AdminShell from '../../lib/components/admin/AdminShell.svelte';
@@ -25,7 +26,7 @@
       result = offset && result ? { ...page, messages: [...result.messages, ...page.messages] } : page;
     } catch (err) {
       if (!offset) result = null;
-      toast.error(err instanceof Error ? err.message : 'Impossible de chercher ce message. Réessaie.');
+      toast.error(err instanceof Error ? err.message : m.d7_loading_error());
     } finally {
       loading = false;
     }
@@ -68,7 +69,7 @@
       {/each}
     </div>
   {:else if !result}
-    <EmptyState icon="Search" title="Aucune recherche lancée" description="Saisis un texte, un lien ou un identifiant puis valide." />
+    <EmptyState icon="Search" title="Aucune recherche lancée" description="Saisis un texte, un lien ou un identifiant puis valide." reason="instruction" />
   {:else if result.messages.length === 0}
     <EmptyState
       icon="Search"
