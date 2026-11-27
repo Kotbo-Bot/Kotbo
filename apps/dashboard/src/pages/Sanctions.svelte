@@ -671,6 +671,18 @@ import DiscordAutomodEvents from '../lib/components/automod/DiscordAutomodEvents
   const sanctionReports = $derived((dashboardStore.state.sanctionReports || []) as any[]);
   const showSanctionsSkeleton = $derived(dashboardStore.state.loading && sanctions.length === 0);
 
+  let pendingSanctionId = $state(
+    typeof window === 'undefined' ? '' : (new URLSearchParams(window.location.search).get('sanction') ?? '')
+  );
+
+  $effect(() => {
+    if (!pendingSanctionId || sanctions.length === 0) return;
+    const target = sanctions.find((entry) => entry.id === pendingSanctionId);
+    if (!target) return;
+    pendingSanctionId = '';
+    untrack(() => openReportModal(target));
+  });
+
   // Get unique values for filter options
   const uniqueStatuses = $derived([...new Set(sanctions.map((s) => s.status))].sort());
   const uniqueTypes = $derived([...new Set(sanctions.map((s) => s.type))].sort());
