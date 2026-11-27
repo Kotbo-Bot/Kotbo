@@ -98,7 +98,7 @@ type WizardState = {
 };
 
 const DEFAULT_STATE: WizardState = {
-  step: 'tracks',
+  step: 'kind',
   kind: null,
   tracks: null,
   theme: null,

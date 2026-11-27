@@ -83,10 +83,13 @@ export type StepDefinition = {
 };
 
 export const STEPS: StepDefinition[] = [
-  // Premier écran : type de serveur, langue, puis installation express ou choix.
-  { key: 'tracks', label: () => m.onb_step_start(), icon: 'sparkles', phase: 'discovery', track: null, requires: null, optional: false, layout: 'centered' },
+  // Serveur deja en place : son etat d'abord, puis la reprise, imposee avant le
+  // choix des modules. `kind` et `tracks` partagent le meme composant ; un
+  // serveur neuf ne voit que `tracks`, qui porte alors les deux questions.
+  { key: 'kind', label: () => m.onb_step_start(), icon: 'search', phase: 'discovery', track: null, requires: 'existing', optional: false, layout: 'centered' },
   { key: 'migration-bots', label: () => m.onb_step_migration_bots(), icon: 'radar', phase: 'discovery', track: null, requires: 'existing', optional: false, layout: 'centered' },
   { key: 'migration-findings', label: () => m.onb_step_migration_findings(), icon: 'download', phase: 'discovery', track: null, requires: 'existing', optional: true, layout: 'centered' },
+  { key: 'tracks', label: () => m.onb_step_tracks(), icon: 'sparkles', phase: 'discovery', track: null, requires: null, optional: false, layout: 'centered' },
 
   { key: 'theme', label: () => 'Sa vocation', icon: 'compass', phase: 'setup', track: null, requires: null, optional: false, layout: 'split' },
 
@@ -129,12 +132,13 @@ export function stepDefinition(step: WizardStep): StepDefinition {
  * celui qui l'a absorbe.
  */
 export function resumeStep(step: unknown): WizardStep {
-  if (typeof step !== 'string') return 'tracks';
+  // `kind` par defaut : la page renvoie un serveur neuf vers `tracks`.
+  if (typeof step !== 'string') return 'kind';
   if (BY_KEY.has(step as WizardStep)) return step as WizardStep;
   if (step.startsWith('map-')) return 'map-access';
   if (step === 'identity') return 'theme';
   if (step === 'recap') return 'checkout';
-  return 'tracks';
+  return 'kind';
 }
 
 /**

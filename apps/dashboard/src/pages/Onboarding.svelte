@@ -80,6 +80,14 @@
          */
         wizard.answer({ structured: template.structured });
 
+        // Le type de serveur se propose d'apres ce que le bot voit : il decide
+        // si le parcours commence par la reprise ou directement par le choix.
+        if (!wizard.kind) {
+          wizard.answer({ kind: template.maturity.maturity === 'established' ? 'existing' : 'new' });
+        }
+        if (wizard.step === 'kind' && wizard.kind === 'new') wizard.goto('tracks');
+        if (wizard.kind === 'existing') void onboardingData.loadMigration();
+
         /**
          * Une structure posee ne se repropose que s'il y reste quelque chose a
          * faire.
@@ -192,7 +200,8 @@
     </button>
   </div>
 
-{:else if wizard.step === 'tracks'}
+{:else if wizard.step === 'kind' || wizard.step === 'tracks'}
+  <!-- Une seule branche : changer de type de serveur garde les saisies. -->
   <TracksStep />
 {:else if wizard.step === 'migration-bots'}
   <MigrationBotsStep />

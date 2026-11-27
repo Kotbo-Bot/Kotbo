@@ -48,6 +48,7 @@
     const last = lastActive();
     visible = last !== null
       && Date.now() - last > AWAY_MS
+      && wizard.step !== 'kind'
       && wizard.step !== 'tracks'
       && wizard.step !== 'checkout';
     touch();

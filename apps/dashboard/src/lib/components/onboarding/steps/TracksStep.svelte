@@ -10,6 +10,11 @@
    *
    * La langue s'enregistre avant de continuer, parce que la maquette nomme ses
    * salons dans la langue du serveur.
+   *
+   * Sur un serveur deja en place, l'ecran se joue en deux temps : le serveur
+   * (`kind`), puis la reprise, puis le choix (`tracks`). Elle est imposee avant
+   * le menu des modules : proposer de tout monter sans avoir regarde ce qui
+   * existe serait la meilleure facon de le doubler.
    */
   import { m } from '../../../i18n';
   import { onMount } from 'svelte';
@@ -99,10 +104,44 @@
     clientId = id;
   });
 
+  const onServer = $derived(wizard.step === 'kind');
+  /** Un serveur neuf repond aux deux questions sur le meme ecran. */
+  const showServer = $derived(onServer || kind === 'new');
+
   function chooseKind(next: ServerKind) {
     wizard.answer({ kind: next });
     // Lancee des le clic : l'attente tombe pendant qu'on lit.
     if (next === 'existing') void onboardingData.loadMigration();
+    wizard.goto(next === 'existing' ? 'kind' : 'tracks');
+  }
+
+  /** La maquette est nommee dans la langue du serveur : elle s'ecrit avant la suite. */
+  async function saveServer() {
+    if (saved.language !== null && language !== saved.language) {
+      await updateGuildLanguage({ language }, undefined, { silent: true });
+      saved.language = language;
+      botLocale.set(language);
+      await onboardingData.refreshTemplate();
+    }
+    if (saved.timezone !== null && timezone !== saved.timezone) {
+      await updateGuildTimezone(timezone, undefined, { silent: true });
+      saved.timezone = timezone;
+    }
+  }
+
+  async function continueToTakeover() {
+    if (onboardingData.busy) return;
+    onboardingData.busy = true;
+    try {
+      await saveServer();
+      wizard.answer({ kind: 'existing' });
+      celebrateStep();
+      wizard.complete('kind');
+    } catch (err) {
+      toast.error(errorMessage(err) || m.onb_identity_save_failed());
+    } finally {
+      onboardingData.busy = false;
+    }
   }
 
   async function refreshPermissions() {
@@ -121,17 +160,8 @@
     if (onboardingData.busy) return;
     onboardingData.busy = true;
     try {
-      chooseKind(kind);
-      if (saved.language !== null && language !== saved.language) {
-        await updateGuildLanguage({ language }, undefined, { silent: true });
-        saved.language = language;
-        botLocale.set(language);
-        await onboardingData.refreshTemplate();
-      }
-      if (saved.timezone !== null && timezone !== saved.timezone) {
-        await updateGuildTimezone(timezone, undefined, { silent: true });
-        saved.timezone = timezone;
-      }
+      wizard.answer({ kind });
+      await saveServer();
       if (express) wizard.setTracks(['structure', 'moderation', 'greeting'], { express: true });
       else wizard.setTracks([...selection]);
       celebrateStep();
@@ -177,6 +207,7 @@
     </div>
   {/if}
 
+  {#if showServer}
   <div class="mt-7">
     <ListGroup title={m.onb_start_server()}>
       <ListRow
@@ -216,8 +247,11 @@
       </ListRow>
     </ListGroup>
   </div>
+  {/if}
 
-  {#if !choosing}
+  {#if onServer}
+    <p class="mt-4 text-center text-sm text-on-surface-variant">{m.onb_start_takeover_hint()}</p>
+  {:else if !choosing}
     <div class="mt-6">
       <ListGroup title={m.onb_start_express_title()} footer={m.onb_start_express_footer()}>
         {#each TRACKS.filter((track) => ['structure', 'moderation', 'greeting'].includes(track.key)) as track (track.key)}
@@ -261,7 +295,12 @@
   {/if}
 
   {#snippet footer()}
-    {#if !choosing}
+    {#if onServer}
+      <button type="button" onclick={continueToTakeover} disabled={onboardingData.busy} class="btn btn-primary">
+        {onboardingData.busy ? m.obx_creating() : m.obx_continue()}
+        <Papicon icon="ChevronRight" size={15} />
+      </button>
+    {:else if !choosing}
       <button type="button" onclick={() => (choosing = true)} class="btn btn-ghost">
         {m.onb_start_choose()}
       </button>

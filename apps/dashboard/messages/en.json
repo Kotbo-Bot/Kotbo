@@ -12185,6 +12185,7 @@
   "onb_sim_replay": "Replay",
   "onb_step_start": "Start",
   "onb_start_lead": "Check these three settings, then pick how you want to proceed.",
+  "onb_start_takeover_hint": "Next, Kotbo looks at what is already running before suggesting anything.",
   "onb_start_server": "Your server",
   "onb_start_language": "Bot language",
   "onb_start_express_title": "Express setup",

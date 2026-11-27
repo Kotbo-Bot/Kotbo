@@ -22,8 +22,8 @@ describe('ce qui est coché d’office', () => {
     expect(stepsFor(defaultTracks('new'), 'new').length).toBeLessThanOrEqual(7);
   });
 
-  test('un serveur déjà organisé ne dépasse pas neuf écrans', () => {
-    expect(stepsFor(defaultTracks('existing'), 'existing', { structured: true }).length).toBeLessThanOrEqual(9);
+  test('un serveur déjà organisé ne dépasse pas dix écrans', () => {
+    expect(stepsFor(defaultTracks('existing'), 'existing', { structured: true }).length).toBeLessThanOrEqual(10);
   });
 });
 
@@ -36,7 +36,7 @@ describe('installation express', () => {
 
   test('serveur habité : la reprise et le rattachement restent imposés', () => {
     expect(stepsFor(express, 'existing', { structured: true, express: true })).toEqual([
-      'tracks', 'migration-bots', 'migration-findings', 'map-access', 'structure', 'checkout',
+      'kind', 'migration-bots', 'migration-findings', 'tracks', 'map-access', 'structure', 'checkout',
     ]);
   });
 });
@@ -44,7 +44,7 @@ describe('installation express', () => {
 describe('reprise d’un parcours enregistré avant la fusion des écrans', () => {
   test('un écran disparu renvoie à celui qui l’a absorbé', () => {
     expect(['welcome', 'kind', 'identity', 'map-voice', 'recap', 'inconnu', null].map(resumeStep))
-      .toEqual(['tracks', 'tracks', 'theme', 'map-access', 'checkout', 'tracks', 'tracks']);
+      .toEqual(['kind', 'kind', 'theme', 'map-access', 'checkout', 'kind', 'kind']);
     expect(resumeStep('rules')).toBe('rules');
   });
 });
