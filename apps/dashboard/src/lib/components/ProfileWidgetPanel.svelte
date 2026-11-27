@@ -5,7 +5,7 @@
   import { toast } from '../stores/toast.svelte';
   import Papicon from './Papicon.svelte';
   import LoadingHint from './LoadingHint.svelte';
-  import Button from './ui/Button.svelte';
+  import { Button, SectionCard, StatTile } from './ui';
 
   let loading = $state(true);
   let acting = $state(false);
@@ -144,45 +144,31 @@
   onMount(load);
 </script>
 
-<!-- ======================== CONTENT ======================== -->
 {#if loading}
   <div class="flex flex-col items-center justify-center py-16 text-on-surface-variant">
     <p class="text-sm">{m.pwp_loading()}</p>
     <LoadingHint context="data" />
   </div>
 {:else}
-  <!-- ======================== STATS ROW ======================== -->
   <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-    <div class="bg-surface-container-low/30 border border-outline-variant/10 rounded-xl p-4 flex items-center gap-3">
-      <div class="w-10 h-10 rounded-xl flex items-center justify-center {isActive ? 'bg-success/10 text-success' : 'bg-surface-container-high/30 text-on-surface-variant'}">
-        <Papicon icon={isActive ? 'check-circle' : 'x-circle'} size={20} />
-      </div>
-      <div class="flex flex-col">
-        <span class="text-2xl font-bold">{isActive ? m.pwp_active() : m.pwp_inactive()}</span>
-        <span class="text-xs font-medium text-on-surface-variant mt-0.5">{m.pwp_your_widget()}</span>
-      </div>
-    </div>
-    <div class="bg-surface-container-low/30 border border-outline-variant/10 rounded-xl p-4 flex items-center gap-3">
-      <div class="w-10 h-10 rounded-xl flex items-center justify-center bg-primary/10 text-primary">
-        <Papicon icon="users" size={20} />
-      </div>
-      <div class="flex flex-col">
-        <span class="text-2xl font-bold">{subscriptionCount}</span>
-        <span class="text-xs font-medium text-on-surface-variant mt-0.5">{m.pwp_active_widgets()}</span>
-      </div>
-    </div>
+    <StatTile
+      icon={isActive ? 'check-circle' : 'x-circle'}
+      tone={isActive ? 'bg-success/10 text-success' : 'bg-surface-container text-on-surface-variant'}
+      value={isActive ? m.pwp_active() : m.pwp_inactive()}
+      label={m.pwp_your_widget()}
+    />
+    <StatTile
+      icon="users"
+      tone="bg-primary/10 text-primary"
+      value={subscriptionCount}
+      label={m.pwp_active_widgets()}
+    />
   </div>
 
-  <!-- ======================== GRID ======================== -->
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
-    <!-- Actions card -->
-    <div class="bg-surface-container-low/30 border border-outline-variant/10 rounded-xl p-6 space-y-4">
-      <h3 class="text-base font-semibold flex items-center gap-2.5">
-        <Papicon icon="zap" size={18} />
-        {m.pwp_actions()}
-      </h3>
-      <div class="flex flex-col gap-3">
+    <SectionCard title={m.pwp_actions()} icon="zap">
+      <div class="flex flex-col gap-2.5">
         {#if isActive}
           <Button variant="primary" icon="refresh-cw" onclick={handleRefresh} disabled={acting}>
             {m.pwp_refresh_mine()}
@@ -200,14 +186,9 @@
           {m.pwp_refresh_all()}
         </Button>
       </div>
-    </div>
+    </SectionCard>
 
-    <!-- How it works card -->
-    <div class="bg-surface-container-low/30 border border-outline-variant/10 rounded-xl p-6 space-y-4">
-      <h3 class="text-base font-semibold flex items-center gap-2.5">
-        <Papicon icon="info" size={18} />
-        {m.pwp_how()}
-      </h3>
+    <SectionCard title={m.pwp_how()} icon="info">
       <div class="flex flex-col gap-4">
         <div class="flex items-start gap-3">
           <span class="shrink-0 w-7 h-7 bg-primary text-on-primary rounded-full flex items-center justify-center text-xs font-bold">1</span>
@@ -215,22 +196,21 @@
         </div>
         <div class="flex items-start gap-3">
           <span class="shrink-0 w-7 h-7 bg-primary text-on-primary rounded-full flex items-center justify-center text-xs font-bold">2</span>
-          <span class="text-sm text-on-surface-variant leading-relaxed">{m.pwp_step2_before()} <code class="bg-surface-container-high/50 px-1.5 py-0.5 rounded text-xs">/widget activer</code> {m.pwp_step2_after()}</span>
+          <span class="text-sm text-on-surface-variant leading-relaxed">{m.pwp_step2_before()} <code class="bg-surface-container px-1.5 py-0.5 rounded text-xs">/widget activer</code> {m.pwp_step2_after()}</span>
         </div>
         <div class="flex items-start gap-3">
           <span class="shrink-0 w-7 h-7 bg-primary text-on-primary rounded-full flex items-center justify-center text-xs font-bold">3</span>
           <span class="text-sm text-on-surface-variant leading-relaxed">{m.pwp_step3()} <kbd class="font-mono text-xs">Ctrl+R</kbd>.</span>
         </div>
       </div>
-    </div>
+    </SectionCard>
 
     {#if isActive}
-      <section class="lg:col-span-2 relative overflow-hidden rounded-xl border border-warning/20 bg-warning/[0.04] p-6">
-        <div class="absolute -right-12 -top-16 h-44 w-44 rounded-full bg-warning/10 blur-3xl pointer-events-none"></div>
-        <div class="relative grid gap-6 lg:grid-cols-[1fr_auto] lg:items-center">
+      <section class="lg:col-span-2 rounded-2xl border border-warning/25 bg-warning/[0.05] p-5">
+        <div class="grid gap-6 lg:grid-cols-[1fr_auto] lg:items-center">
           <div class="space-y-3">
             <div class="flex items-center gap-2 text-warning">
-              <Papicon icon="terminal" size={18} />
+              <Papicon icon="terminal" size={16} />
               <span class="text-xs font-semibold">{m.pwp_local_install()}</span>
             </div>
             <h3 class="text-base font-semibold text-on-surface">{m.pwp_board_title()}</h3>
@@ -257,179 +237,143 @@
           </div>
         </div>
       </section>
+
+      <div class="lg:col-span-2">
+        <SectionCard title={m.pwp_devices_title()} description={m.pwp_devices_desc()} icon="smartphone">
+          <div class="space-y-5">
+            <!-- Token widget -->
+            <div class="rounded-xl border border-outline-variant bg-surface-container-low p-4 space-y-2">
+              <p class="text-xs font-semibold text-on-surface-variant">{m.pwp_token()}</p>
+              <div class="flex flex-wrap items-center gap-2">
+                <code class="flex-1 min-w-0 truncate rounded-lg border border-outline-variant bg-surface-container-lowest px-3 py-2 font-mono text-xs text-on-surface">
+                  {showToken ? (widgetToken ?? '-') : '••••••••••••••••••••••••••••••••'}
+                </code>
+                <Button variant="secondary" size="sm" onclick={() => showToken = !showToken}>
+                  {showToken ? m.pwp_hide() : m.pwp_show()}
+                </Button>
+                <Button variant="secondary" size="sm" onclick={() => widgetToken && copy(widgetToken, 'token')}>
+                  {copiedField === 'token' ? m.pwp_copied() : m.pwp_copy()}
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon="refresh-cw"
+                  onclick={handleRotateToken}
+                  disabled={rotatingToken}
+                  aria-label={m.pwp_rotate_token()}
+                  title={m.pwp_rotate_token()}
+                />
+              </div>
+              <p class="text-2xs text-on-surface-variant">
+                {m.pwp_token_hint()}
+              </p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <!-- iOS / Scriptable -->
+              <div class="rounded-xl border border-outline-variant bg-surface-container-low p-4 space-y-3 flex flex-col justify-between">
+                <div class="space-y-3">
+                  <div class="flex items-center gap-2 text-on-surface">
+                    <Papicon icon="apple" size={16} />
+                    <span class="text-sm font-semibold">iOS · Scriptable</span>
+                  </div>
+                  <ol class="space-y-1.5 text-xs text-on-surface-variant leading-relaxed list-decimal list-inside">
+                    <li>{m.pwp_ios_s1_before()} <strong>Scriptable</strong> {m.pwp_ios_s1_after()}</li>
+                    <li>{m.pwp_ios_s2()}</li>
+                    <li>{m.pwp_ios_s3()}</li>
+                    <li>{m.pwp_ios_s4()} <code class="text-2xs break-all">{widgetToken}|{apiOrigin}</code></li>
+                  </ol>
+                </div>
+                <div class="flex flex-col gap-1.5 pt-2">
+                  <Button href="/mobile-widgets/kotbo-widget.scriptable.js" target="_blank" variant="secondary" size="sm" icon="download" fullWidth>
+                    {m.pwp_download_script()}
+                  </Button>
+                  <Button variant="ghost" size="sm" fullWidth onclick={() => widgetToken && copy(`${widgetToken}|${apiOrigin}`, 'ios-param')}>
+                    {copiedField === 'ios-param' ? m.pwp_copied() : m.pwp_copy_param()}
+                  </Button>
+                </div>
+              </div>
+
+              <!-- Android / KWGT -->
+              <div class="rounded-xl border border-outline-variant bg-surface-container-low p-4 space-y-3 flex flex-col justify-between">
+                <div class="space-y-3">
+                  <div class="flex items-center gap-2 text-on-surface">
+                    <Papicon icon="smartphone" size={16} />
+                    <span class="text-sm font-semibold">Android · KWGT</span>
+                  </div>
+                  <ol class="space-y-1.5 text-xs text-on-surface-variant leading-relaxed list-decimal list-inside">
+                    <li>{m.pwp_android_s1_before()} <strong>KWGT Kustom Widget Maker</strong> {m.pwp_android_s1_after()}</li>
+                    <li>{m.pwp_android_s2()}</li>
+                    <li>{m.pwp_android_s3()}</li>
+                  </ol>
+                </div>
+                <div class="flex flex-col gap-1.5 pt-2">
+                  <Button href="/mobile-widgets/kwgt-guide.txt" target="_blank" variant="secondary" size="sm" icon="download" fullWidth>
+                    {m.pwp_view_guide()}
+                  </Button>
+                  <Button variant="ghost" size="sm" fullWidth onclick={() => copy(widgetDataUrl, 'android-url')}>
+                    {copiedField === 'android-url' ? m.pwp_copied() : m.pwp_copy_data_url()}
+                  </Button>
+                </div>
+              </div>
+
+              <!-- Windows 11 / Edge -->
+              <div class="rounded-xl border border-outline-variant bg-surface-container-low p-4 space-y-3">
+                <div class="flex items-center gap-2 text-on-surface">
+                  <Papicon icon="monitor" size={16} />
+                  <span class="text-sm font-semibold">Windows 11 · Edge</span>
+                </div>
+                <ol class="space-y-1.5 text-xs text-on-surface-variant leading-relaxed list-decimal list-inside">
+                  <li>{m.pwp_win_s1()} <strong>Microsoft Edge</strong></li>
+                  <li>{m.pwp_win_s2()}</li>
+                  <li>{m.pwp_win_s3()}</li>
+                </ol>
+                <p class="text-2xs text-on-surface-variant">
+                  {m.pwp_win_note()}
+                </p>
+              </div>
+
+              <!-- Linux / Waybar & Conky -->
+              <div class="rounded-xl border border-outline-variant bg-surface-container-low p-4 space-y-3 flex flex-col justify-between">
+                <div class="space-y-3">
+                  <div class="flex items-center gap-2 text-on-surface">
+                    <Papicon icon="terminal" size={16} />
+                    <span class="text-sm font-semibold">Linux · Waybar / Conky</span>
+                  </div>
+                  <ol class="space-y-1.5 text-xs text-on-surface-variant leading-relaxed list-decimal list-inside">
+                    <li>{m.pwp_linux_s1()}</li>
+                    <li>{m.pwp_linux_s2_before()} <code class="text-2xs">chmod +x</code> {m.pwp_linux_s2_after()}</li>
+                    <li>{m.pwp_linux_s3()}</li>
+                  </ol>
+                </div>
+                <div class="flex flex-col gap-1.5 pt-2">
+                  <Button href="/desktop-widgets/linux-widgets-guide.txt" target="_blank" variant="secondary" size="sm" icon="download" fullWidth>
+                    {m.pwp_view_guide()}
+                  </Button>
+                  <Button variant="ghost" size="sm" fullWidth onclick={() => copy(widgetDataUrl, 'linux-url')}>
+                    {copiedField === 'linux-url' ? m.pwp_copied() : m.pwp_copy_data_url()}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </SectionCard>
+      </div>
     {/if}
 
-    <!-- ==================== WIDGETS TÉLÉPHONE & PC ==================== -->
-    {#if isActive}
-      <section class="lg:col-span-2 rounded-xl border border-outline-variant/10 bg-surface-container-low/30 p-6 space-y-5">
-        <div>
-          <h3 class="text-base font-semibold flex items-center gap-2.5">
-            <Papicon icon="smartphone" size={18} />
-            {m.pwp_devices_title()}
-          </h3>
-          <p class="mt-1 text-xs text-on-surface-variant">
-            {m.pwp_devices_desc()}
-          </p>
-        </div>
-
-        <!-- Token widget -->
-        <div class="rounded-lg border border-outline-variant/10 bg-surface-container-high/20 p-4 space-y-2">
-          <p class="text-xs font-semibold text-on-surface-variant">{m.pwp_token()}</p>
-          <div class="flex items-center gap-2">
-            <code class="flex-1 min-w-0 truncate rounded-lg border border-outline-variant/10 bg-surface-container-highest/40 px-3 py-2 font-mono text-xs text-on-surface">
-              {showToken ? (widgetToken ?? '-') : '••••••••••••••••••••••••••••••••'}
-            </code>
-            <button
-              class="shrink-0 rounded-lg border border-outline-variant/20 px-2.5 py-2 text-2xs text-on-surface-variant hover:text-on-surface transition-colors"
-              onclick={() => showToken = !showToken}
-            >
-              {showToken ? m.pwp_hide() : m.pwp_show()}
-            </button>
-            <button
-              class="shrink-0 rounded-lg border border-outline-variant/20 px-2.5 py-2 text-2xs text-on-surface-variant hover:text-on-surface transition-colors"
-              onclick={() => widgetToken && copy(widgetToken, 'token')}
-            >
-              {copiedField === 'token' ? m.pwp_copied() : m.pwp_copy()}
-            </button>
-            <button
-              class="shrink-0 rounded-lg border border-outline-variant/20 px-2.5 py-2 text-2xs text-on-surface-variant hover:text-on-surface transition-colors disabled:opacity-50"
-              onclick={handleRotateToken}
-              disabled={rotatingToken}
-              aria-label={m.pwp_rotate_token()}
-              title={m.pwp_rotate_token()}
-            >
-              <Papicon icon="refresh-cw" size={14} />
-            </button>
-          </div>
-          <p class="text-2xs text-on-surface-variant">
-            {m.pwp_token_hint()}
-          </p>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <!-- iOS / Scriptable -->
-          <div class="rounded-lg border border-outline-variant/10 bg-surface-container-high/10 p-4 space-y-3">
-            <div class="flex items-center gap-2 text-on-surface">
-              <Papicon icon="apple" size={16} />
-              <span class="text-sm font-semibold">iOS · Scriptable</span>
-            </div>
-            <ol class="space-y-1.5 text-xs text-on-surface-variant leading-relaxed list-decimal list-inside">
-              <li>{m.pwp_ios_s1_before()} <strong>Scriptable</strong> {m.pwp_ios_s1_after()}</li>
-              <li>{m.pwp_ios_s2()}</li>
-              <li>{m.pwp_ios_s3()}</li>
-              <li>{m.pwp_ios_s4()} <code class="text-2xs">{widgetToken}|{apiOrigin}</code></li>
-            </ol>
-            <div class="flex flex-col gap-1.5">
-              <a
-                href="/mobile-widgets/kotbo-widget.scriptable.js"
-                target="_blank"
-                rel="noreferrer"
-                class="inline-flex items-center justify-center gap-2 rounded-lg bg-surface-container-highest/50 px-3 py-2 text-xs font-semibold text-on-surface hover:bg-surface-container-highest/70 transition-colors"
-              >
-                <Papicon icon="download" size={13} />
-                {m.pwp_download_script()}
-              </a>
-              <button
-                class="text-2xs text-on-surface-variant underline decoration-outline-variant underline-offset-4 hover:text-on-surface"
-                onclick={() => widgetToken && copy(`${widgetToken}|${apiOrigin}`, 'ios-param')}
-              >{copiedField === 'ios-param' ? m.pwp_copied() : m.pwp_copy_param()}</button>
-            </div>
-          </div>
-
-          <!-- Android / KWGT -->
-          <div class="rounded-lg border border-outline-variant/10 bg-surface-container-high/10 p-4 space-y-3">
-            <div class="flex items-center gap-2 text-on-surface">
-              <Papicon icon="smartphone" size={16} />
-              <span class="text-sm font-semibold">Android · KWGT</span>
-            </div>
-            <ol class="space-y-1.5 text-xs text-on-surface-variant leading-relaxed list-decimal list-inside">
-              <li>{m.pwp_android_s1_before()} <strong>KWGT Kustom Widget Maker</strong> {m.pwp_android_s1_after()}</li>
-              <li>{m.pwp_android_s2()}</li>
-              <li>{m.pwp_android_s3()}</li>
-            </ol>
-            <div class="flex flex-col gap-1.5">
-              <a
-                href="/mobile-widgets/kwgt-guide.txt"
-                target="_blank"
-                rel="noreferrer"
-                class="inline-flex items-center justify-center gap-2 rounded-lg bg-surface-container-highest/50 px-3 py-2 text-xs font-semibold text-on-surface hover:bg-surface-container-highest/70 transition-colors"
-              >
-                <Papicon icon="download" size={13} />
-                {m.pwp_view_guide()}
-              </a>
-              <button
-                class="text-2xs text-on-surface-variant underline decoration-outline-variant underline-offset-4 hover:text-on-surface"
-                onclick={() => copy(widgetDataUrl, 'android-url')}
-              >{copiedField === 'android-url' ? m.pwp_copied() : m.pwp_copy_data_url()}</button>
-            </div>
-          </div>
-
-          <!-- Windows 11 / Edge -->
-          <div class="rounded-lg border border-outline-variant/10 bg-surface-container-high/10 p-4 space-y-3">
-            <div class="flex items-center gap-2 text-on-surface">
-              <Papicon icon="monitor" size={16} />
-              <span class="text-sm font-semibold">Windows 11 · Edge</span>
-            </div>
-            <ol class="space-y-1.5 text-xs text-on-surface-variant leading-relaxed list-decimal list-inside">
-              <li>{m.pwp_win_s1()} <strong>Microsoft Edge</strong></li>
-              <li>{m.pwp_win_s2()}</li>
-              <li>{m.pwp_win_s3()}</li>
-            </ol>
-            <p class="text-2xs text-on-surface-variant">
-              {m.pwp_win_note()}
-            </p>
-          </div>
-
-          <!-- Linux / Waybar & Conky -->
-          <div class="rounded-lg border border-outline-variant/10 bg-surface-container-high/10 p-4 space-y-3">
-            <div class="flex items-center gap-2 text-on-surface">
-              <Papicon icon="terminal" size={16} />
-              <span class="text-sm font-semibold">Linux · Waybar / Conky</span>
-            </div>
-            <ol class="space-y-1.5 text-xs text-on-surface-variant leading-relaxed list-decimal list-inside">
-              <li>{m.pwp_linux_s1()}</li>
-              <li>{m.pwp_linux_s2_before()} <code class="text-2xs">chmod +x</code> {m.pwp_linux_s2_after()}</li>
-              <li>{m.pwp_linux_s3()}</li>
-            </ol>
-            <div class="flex flex-col gap-1.5">
-              <a
-                href="/desktop-widgets/linux-widgets-guide.txt"
-                target="_blank"
-                rel="noreferrer"
-                class="inline-flex items-center justify-center gap-2 rounded-lg bg-surface-container-highest/50 px-3 py-2 text-xs font-semibold text-on-surface hover:bg-surface-container-highest/70 transition-colors"
-              >
-                <Papicon icon="download" size={13} />
-                {m.pwp_view_guide()}
-              </a>
-              <button
-                class="text-2xs text-on-surface-variant underline decoration-outline-variant underline-offset-4 hover:text-on-surface"
-                onclick={() => copy(widgetDataUrl, 'linux-url')}
-              >{copiedField === 'linux-url' ? m.pwp_copied() : m.pwp_copy_data_url()}</button>
-            </div>
-          </div>
-        </div>
-      </section>
-    {/if}
-
-    <!-- Active staff list card -->
     {#if data?.subscriptions?.length > 0}
-      <div class="bg-surface-container-low/30 border border-outline-variant/10 rounded-xl p-6 space-y-4">
-        <h3 class="text-base font-semibold flex items-center gap-2.5">
-          <Papicon icon="users" size={18} />
-          {m.pwp_staff_title()}
-        </h3>
-        <div class="flex flex-col divide-y divide-outline-variant/10">
-          {#each data.subscriptions.filter((s: any) => s.enabled) as sub}
-            <div class="flex items-center gap-4 py-3">
-              <span class="flex-1 font-mono text-sm text-on-surface">{sub.userId}</span>
+      <SectionCard title={m.pwp_staff_title()} icon="users" flush>
+        <div class="divide-y divide-outline-variant">
+          {#each data.subscriptions.filter((s: any) => s.enabled) as sub (sub.userId)}
+            <div class="flex items-center gap-4 px-5 py-3">
+              <span class="flex-1 font-mono text-sm text-on-surface truncate">{sub.userId}</span>
               <span class="text-xs text-on-surface-variant">{new Date(sub.createdAt).toLocaleDateString(dateLocale())}</span>
-              <span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-success/10 text-on-success-container border border-success/15">{m.pwp_active()}</span>
+              <span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-success/10 text-on-success-container">{m.pwp_active()}</span>
             </div>
           {/each}
         </div>
-      </div>
+      </SectionCard>
     {/if}
 
   </div>
 {/if}
-

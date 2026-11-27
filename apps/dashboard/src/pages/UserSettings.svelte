@@ -3,7 +3,7 @@
   import { router } from 'tinro';
   import { authStore } from '../lib/stores/auth.svelte';
   import { resolveTabFromUrl, gotoTab } from '../lib/tabRouting';
-  import { Tabs } from '../lib/components/ui';
+  import { Tabs, Button, SectionCard, SettingsRow } from '../lib/components/ui';
   import ProfileWidgetPanel from '../lib/components/ProfileWidgetPanel.svelte';
   import { userPrefs } from '../lib/stores/userPreferences.svelte';
   import { timezoneStore } from '../lib/stores/timezone.svelte';
@@ -47,7 +47,7 @@
   const customColors = $state<CustomThemeColors>({ ...themeStore.customColors });
   let showCustomEditor = $state(false);
 
-  function handleToggle<K extends keyof typeof userPrefs.prefs>(key: K, value: any) {
+  function handleToggle<K extends keyof typeof userPrefs.prefs>(key: K, value: (typeof userPrefs.prefs)[K]) {
     userPrefs.set(key, value);
     if (key === 'theme') {
       themeStore.themeId = value as ThemeId;
@@ -94,7 +94,7 @@
 
       for (const key of allowedKeys) {
         if (key in imported) {
-          userPrefs.set(key, imported[key] as any);
+          userPrefs.set(key, imported[key] as never);
         }
       }
 
@@ -123,8 +123,8 @@
 
   /**
    * Activer les notifications bureau sans la permission du navigateur
-   * laisserait un interrupteur allume qui ne fait rien : on la demande au
-   * moment du clic, seul moment ou le navigateur accepte d'afficher la demande.
+   * laisserait un interrupteur allumé qui ne fait rien : on la demande au
+   * moment du clic, seul moment où le navigateur accepte d'afficher la demande.
    */
   async function handleNotificationToggle(key: 'soundNotifications' | 'desktopNotifications', value: boolean) {
     if (key === 'desktopNotifications' && value) {
@@ -140,7 +140,7 @@
       }
     }
     handleToggle(key, value);
-    // Un retour immediat : sans lui, activer le son ne produit rien d'audible.
+    // Retour immédiat : sans lui, activer le son ne produit rien d'audible.
     if (key === 'soundNotifications' && value) playNotificationSound('INFO', { force: true });
   }
 
@@ -149,17 +149,6 @@
     { tone: 'SUCCESS', label: m.us_sound_type_success() },
     { tone: 'WARNING', label: m.us_sound_type_warning() },
     { tone: 'ERROR', label: m.us_sound_type_error() },
-  ]);
-
-  const activeThemeLabel = $derived(
-    THEME_PRESETS.find(p => p.id === themeStore.themeId)?.label ?? 'Custom'
-  );
-  const activeSummary = $derived([
-    { label: m.us_summary_theme(), value: activeThemeLabel },
-    { label: m.us_summary_accent(), value: userPrefs.prefs.accentColor },
-    { label: m.settings_language(), value: userPrefs.prefs.language === 'fr' ? m.settings_language_fr() : m.settings_language_en() },
-    { label: m.us_summary_dates(), value: userPrefs.prefs.dateFormat },
-    { label: m.us_summary_sidebar(), value: userPrefs.prefs.sidebarBehavior },
   ]);
 
   const accentColors: { id: AccentColorId; label: string; hex: string }[] = [
@@ -171,21 +160,21 @@
     { id: 'cyan',   get label() { return m.us_color_cyan(); },   hex: ACCENT_COLORS.cyan.hex },
   ];
 
-  const languages: { id: Language; label: string; flag: string }[] = [
-    { id: 'fr', get label() { return m.settings_language_fr(); }, flag: '🇫🇷' },
-    { id: 'en', get label() { return m.settings_language_en(); },  flag: '🇬🇧' },
+  const languages: { id: Language; label: string; code: string }[] = [
+    { id: 'fr', get label() { return m.settings_language_fr(); }, code: 'FR' },
+    { id: 'en', get label() { return m.settings_language_en(); }, code: 'EN' },
   ];
 
   const dateFormats: { id: DateFormat; label: string; example: string }[] = [
     { id: 'relative', get label() { return m.us_datefmt_relative(); }, get example() { return m.us_datefmt_relative_ex(); } },
     { id: 'absolute', get label() { return m.us_datefmt_absolute(); }, get example() { return m.us_datefmt_absolute_ex(); } },
-    { id: 'both',     get label() { return m.us_datefmt_both(); }, get example() { return m.us_datefmt_both_ex(); } },
+    { id: 'both',     get label() { return m.us_datefmt_both(); },     get example() { return m.us_datefmt_both_ex(); } },
   ];
 
   /**
    * Fuseau de lecture des statistiques. `auto` suit le navigateur, ce qui est
-   * deja correct pour la plupart des lecteurs ; le choix explicite sert a qui
-   * pilote un serveur depuis un autre fuseau que celui ou il vit.
+   * déjà correct pour la plupart des lecteurs ; le choix explicite sert à qui
+   * pilote un serveur depuis un autre fuseau que celui où il vit.
    */
   const timezoneChoice = $derived(userPrefs.prefs.timezone ?? 'auto');
   const timezoneZones = $derived(listSupportedTimezones(timezoneStore.displayTimezone));
@@ -196,13 +185,13 @@
   }
 
   const sidebarBehaviors: { id: SidebarBehavior; label: string; desc: string }[] = [
-    { id: 'auto',         get label() { return m.us_sidebar_auto(); }, get desc() { return m.us_sidebar_auto_desc(); } },
-    { id: 'always-open',  get label() { return m.us_sidebar_open(); }, get desc() { return m.us_sidebar_open_desc(); } },
-    { id: 'always-closed',get label() { return m.us_sidebar_closed(); }, get desc() { return m.us_sidebar_closed_desc(); } },
+    { id: 'auto',          get label() { return m.us_sidebar_auto(); },   get desc() { return m.us_sidebar_auto_desc(); } },
+    { id: 'always-open',   get label() { return m.us_sidebar_open(); },   get desc() { return m.us_sidebar_open_desc(); } },
+    { id: 'always-closed', get label() { return m.us_sidebar_closed(); }, get desc() { return m.us_sidebar_closed_desc(); } },
   ];
 </script>
 
-<div class="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-12">
+<div class="space-y-6 pb-12">
 
   <header class="flex flex-col md:flex-row md:items-end justify-between gap-x-6 gap-y-3">
     <div class="min-w-0">
@@ -215,10 +204,10 @@
       </p>
     </div>
 
-    <!-- Les preferences s'enregistrent seules : une ligne discrete le dit,
+    <!-- Les préférences s'enregistrent seules : une ligne discrète le dit,
          et confirme chaque enregistrement, sans prendre la place d'un bouton. -->
     {#if activeTab === 'preferences'}
-      <p class="flex shrink-0 items-center gap-1.5 text-xs {savedFeedback ? 'text-success' : 'text-on-surface-variant'}" aria-live="polite">
+      <p class="flex shrink-0 items-center gap-1.5 text-xs {savedFeedback ? 'text-success font-medium' : 'text-on-surface-variant'}" aria-live="polite">
         {#if savedFeedback}
           <Papicon icon="check" size={14} />
           {m.us_saved_auto()}
@@ -229,453 +218,438 @@
     {/if}
   </header>
 
-  <div class="flex">
+  <div class="flex flex-wrap items-center justify-between gap-3">
     <Tabs
       label={m.nav_user_settings()}
       {tabs}
       active={activeTab}
       onchange={(id) => gotoTab(SETTINGS_BASE, id, 'preferences')}
     />
+
+    {#if activeTab === 'preferences'}
+      <div class="flex flex-wrap items-center gap-2">
+        <Button variant="secondary" size="sm" icon="upload" onclick={openImportDialog}>
+          {m.common_import()}
+        </Button>
+        <Button variant="secondary" size="sm" icon="download" onclick={exportPreferences}>
+          {m.common_export()}
+        </Button>
+        <Button variant="secondary" size="sm" icon="Bell" onclick={testNotifications}>
+          {m.us_test_notifications()}
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          icon="Keyboard"
+          onclick={() => window.dispatchEvent(new CustomEvent('open-keyboard-shortcuts'))}
+        >
+          {m.us_keyboard_shortcuts()}
+        </Button>
+      </div>
+    {/if}
   </div>
+
+  <input
+    bind:this={importInput}
+    type="file"
+    accept="application/json"
+    class="hidden"
+    onchange={handleImportFile}
+  />
 
 {#if activeTab === 'widget'}
   <ProfileWidgetPanel />
 {:else}
 
-  <section class="bg-surface-container-low/30 border border-outline-variant/10 p-6 rounded-xl space-y-5">
-    <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-      <div>
-        <p class="text-xs font-semibold text-on-surface-variant">{m.us_quick_overview()}</p>
-        <h2 class="text-lg font-semibold mt-1">{m.us_active_settings()}</h2>
-      </div>
-      <div class="flex flex-wrap gap-2">
-        <button onclick={openImportDialog} class="px-4 py-2 rounded-xl border border-outline-variant/20 bg-surface-container-high/20 text-sm font-bold hover:border-primary/30 hover:bg-primary/5 transition-colors">
-          {m.common_import()}
-        </button>
-        <button onclick={exportPreferences} class="px-4 py-2 rounded-xl border border-outline-variant/20 bg-surface-container-high/20 text-sm font-bold hover:border-primary/30 hover:bg-primary/5 transition-colors">
-          {m.common_export()}
-        </button>
-        <button onclick={testNotifications} class="px-4 py-2 rounded-xl border border-outline-variant/20 bg-surface-container-high/20 text-sm font-bold hover:border-primary/30 hover:bg-primary/5 transition-colors">
-          {m.us_test_notifications()}
-        </button>
-        <button
-          onclick={() => window.dispatchEvent(new CustomEvent('open-keyboard-shortcuts'))}
-          class="px-4 py-2 rounded-xl border border-outline-variant/20 bg-surface-container-high/20 text-sm font-bold hover:border-primary/30 hover:bg-primary/5 transition-colors flex items-center gap-2"
-        >
-          <Papicon icon="Keyboard" size={14} />
-          {m.us_keyboard_shortcuts()}
-        </button>
-      </div>
-    </div>
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
 
-    <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
-      {#each activeSummary as item}
-        <div class="rounded-lg border border-outline-variant/20 bg-surface-container-high/20 p-4">
-          <p class="text-xs font-semibold text-on-surface-variant">{item.label}</p>
-          <p class="mt-2 text-sm font-semibold text-on-surface truncate">{item.value}</p>
-        </div>
-      {/each}
-    </div>
-
-    <input
-      bind:this={importInput}
-      type="file"
-      accept="application/json"
-      class="hidden"
-      onchange={handleImportFile}
-    />
-  </section>
-
-  <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-
-    <!-- ─── Apparence ─────────────────────────────────────────── -->
-    <section class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-8">
-      <h2 class="text-xl font-semibold flex items-center gap-3">
-        <div class="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center">
-          <Papicon icon="Palette" size={16} class="text-primary" />
-        </div>
-        {m.us_appearance()}
-      </h2>
-
-      <!-- Theme Presets -->
-      <div class="space-y-3">
-        <p class="text-xs font-semibold text-on-surface-variant">{m.us_theme()}</p>
-        <div class="grid grid-cols-3 gap-2.5">
-          {#each THEME_PRESETS as preset}
-            <button
-              onclick={() => handleToggle('theme', preset.id)}
-              class="group relative flex flex-col items-center gap-2 p-3 rounded-lg border-2 transition-all duration-200 text-xs font-bold
- {themeStore.themeId === preset.id
-                  ? 'border-primary bg-primary/10 text-primary shadow-sm shadow-primary/20'
-                  : 'border-outline-variant/20 bg-surface-container-high/20 text-on-surface-variant hover:border-primary/30 hover:bg-primary/5'}"
-            >
-              <div class="w-full h-8 rounded-md overflow-hidden flex border border-outline-variant/20">
-                <div class="flex-1" style="background:{preset.preview.bg}"></div>
-                <div class="flex-1" style="background:{preset.preview.surface}"></div>
-                <div class="w-2.5 rounded-r-sm" style="background:{preset.preview.text}; opacity:0.3"></div>
-              </div>
-              <span class="truncate w-full text-center">{preset.label}</span>
-            </button>
-          {/each}
-          <!-- Custom theme button -->
-          <button
-            onclick={() => { handleToggle('theme', 'custom'); showCustomEditor = true; }}
-            class="group relative flex flex-col items-center gap-2 p-3 rounded-lg border-2 transition-all duration-200 text-xs font-bold
- {themeStore.themeId === 'custom'
-                ? 'border-primary bg-primary/10 text-primary shadow-sm shadow-primary/20'
-                : 'border-outline-variant/20 bg-surface-container-high/20 text-on-surface-variant hover:border-primary/30 hover:bg-primary/5'}"
-          >
-            <div class="w-full h-8 rounded-md overflow-hidden flex items-center justify-center border border-dashed border-outline-variant/40 bg-surface-container-high/30">
-              <Papicon icon="Palette" size={16} class="opacity-60" />
-            </div>
-            <span>Custom</span>
-          </button>
-        </div>
-      </div>
-
-      <!-- Custom Theme Editor -->
-      {#if themeStore.themeId === 'custom' || showCustomEditor}
-        <div class="space-y-4 p-4 rounded-lg border border-primary/20 bg-primary/5 animate-in fade-in duration-200">
-          <div class="flex items-center justify-between">
-            <p class="text-xs font-bold text-primary">{m.us_custom_theme()}</p>
-            <button
-              onclick={() => showCustomEditor = false}
-              class="text-on-surface-variant/40 hover:text-on-surface transition-colors"
-            >
-              <Papicon icon="x" size={14} />
-            </button>
-          </div>
-
-          <div class="flex items-center gap-3 p-3 rounded-lg bg-surface-container-high/20 border border-outline-variant/10">
-            <span class="text-xs font-bold w-16 shrink-0">{m.us_mode()}</span>
-            <div class="flex gap-2 flex-1">
-              <button
-                onclick={() => { customColors.mode = 'dark'; applyCustomTheme(); }}
-                class="flex-1 py-1.5 rounded-md text-xs font-bold transition-all {customColors.mode === 'dark' ? 'bg-primary text-on-primary' : 'bg-surface-container-high/40 text-on-surface-variant hover:bg-surface-container-high'}"
-              >{m.us_dark()}</button>
-              <button
-                onclick={() => { customColors.mode = 'light'; applyCustomTheme(); }}
-                class="flex-1 py-1.5 rounded-md text-xs font-bold transition-all {customColors.mode === 'light' ? 'bg-primary text-on-primary' : 'bg-surface-container-high/40 text-on-surface-variant hover:bg-surface-container-high'}"
-              >{m.us_light()}</button>
-            </div>
-          </div>
-
-          <div class="grid grid-cols-2 gap-3">
-            {#each [
-              { key: 'background', label: m.us_color_background() },
-              { key: 'surface', label: m.us_color_surface() },
-              { key: 'text', label: m.us_color_text() },
-              { key: 'surfaceContainer', label: m.us_color_panel() },
-            ] as field}
-              <label class="flex items-center gap-2.5 p-2.5 rounded-lg bg-surface-container-high/20 border border-outline-variant/10 cursor-pointer">
-                <input
-                  type="color"
-                  value={customColors[field.key as keyof CustomThemeColors] as string}
-                  oninput={(e) => { customColors[field.key as keyof CustomThemeColors] = (e.currentTarget as HTMLInputElement).value as any; }}
-                  class="w-7 h-7 rounded-md border border-outline-variant/30 cursor-pointer shrink-0 [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:rounded-md [&::-webkit-color-swatch]:border-none"
-                />
-                <span class="text-xs font-bold truncate">{field.label}</span>
-              </label>
-            {/each}
-          </div>
-          <p class="text-2xs text-on-surface-variant/40">{m.us_accent_note()}</p>
-
-          <!-- Preview -->
-          <div class="rounded-lg overflow-hidden border border-outline-variant/20">
-            <div class="flex h-14" style="background:{customColors.background}">
-              <div class="w-10 flex items-center justify-center" style="background:{customColors.surfaceContainer}">
-                <div class="w-4 h-4 rounded-sm bg-primary"></div>
-              </div>
-              <div class="flex-1 p-2.5 flex flex-col justify-center gap-1">
-                <div class="h-2 w-20 rounded-full" style="background:{customColors.text}; opacity:0.8"></div>
-                <div class="h-1.5 w-32 rounded-full" style="background:{customColors.text}; opacity:0.3"></div>
-              </div>
-              <div class="w-16 flex items-center justify-center">
-                <div class="h-5 w-12 rounded-md bg-primary"></div>
-              </div>
-            </div>
-          </div>
-
-          <button
-            onclick={applyCustomTheme}
-            class="w-full py-2.5 rounded-lg bg-primary text-on-primary text-body-sm font-medium hover:brightness-110 transition-all"
-          >
-            {m.us_apply()}
-          </button>
-        </div>
-      {/if}
-
-      <!-- Accent Color -->
-      <div class="space-y-3">
-        <p class="text-xs font-semibold text-on-surface-variant">{m.us_accent_color()}</p>
-        <div class="flex flex-wrap gap-3">
-          {#each accentColors as color}
-            <button
-              onclick={() => handleToggle('accentColor', color.id)}
-              title={color.label}
-              class="relative w-10 h-10 rounded-xl transition-all duration-200 {userPrefs.prefs.accentColor === color.id ? 'ring-2 ring-offset-2 ring-offset-surface-container-low scale-110' : ''}"
-              style="background-color: {color.hex}; {userPrefs.prefs.accentColor === color.id ? `--tw-ring-color: ${color.hex}` : ''}"
-            >
-              {#if userPrefs.prefs.accentColor === color.id}
-                <div class="absolute inset-0 flex items-center justify-center">
-                  <Papicon icon="check" size={16} class="text-white" />
-                </div>
-              {/if}
-            </button>
-          {/each}
-        </div>
-      </div>
-
-      <!-- Compact Mode -->
-      <div class="flex items-center justify-between p-4 rounded-lg bg-surface-container-high/20 border border-outline-variant/5 hover:bg-surface-container-high/40 transition-colors">
-        <div>
-          <p class="text-sm font-bold">{m.us_compact_mode()}</p>
-          <p class="text-2xs text-on-surface-variant">{m.us_compact_mode_desc()}</p>
-        </div>
-        <ToggleSwitch
-          checked={userPrefs.prefs.compactMode}
-          onToggle={(v: boolean) => handleToggle('compactMode', v)}
-        />
-      </div>
-
-      <!-- Animations -->
-      <div class="flex items-center justify-between p-4 rounded-lg bg-surface-container-high/20 border border-outline-variant/5 hover:bg-surface-container-high/40 transition-colors">
-        <div>
-          <p class="text-sm font-bold">{m.us_animations()}</p>
-          <p class="text-2xs text-on-surface-variant">{m.us_animations_desc()}</p>
-        </div>
-        <ToggleSwitch
-          checked={userPrefs.prefs.animationsEnabled}
-          onToggle={(v: boolean) => handleToggle('animationsEnabled', v)}
-        />
-      </div>
-
-      <!-- Couronnes d'offre -->
-      <div class="flex items-center justify-between p-4 rounded-lg bg-surface-container-high/20 border border-outline-variant/5 hover:bg-surface-container-high/40 transition-colors">
-        <div>
-          <p class="text-sm font-bold">{m.us_plan_crowns()}</p>
-          <p class="text-2xs text-on-surface-variant">{m.us_plan_crowns_desc()}</p>
-        </div>
-        <ToggleSwitch
-          checked={userPrefs.prefs.showPlanCrowns}
-          onToggle={(v: boolean) => handleToggle('showPlanCrowns', v)}
-        />
-      </div>
-    </section>
-
-    <!-- ─── Langue & Dates ────────────────────────────────────── -->
-    <div class="space-y-8">
-      <section class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-8">
-        <h2 class="text-xl font-semibold flex items-center gap-3">
-          <div class="w-8 h-8 rounded-xl bg-secondary/10 flex items-center justify-center">
-            <Papicon icon="Globe" size={16} class="text-secondary" />
-          </div>
-          {m.us_language_region()}
-        </h2>
-
-        <!-- Language -->
-        <div class="space-y-3">
-          <p class="text-xs font-semibold text-on-surface-variant">{m.us_interface_language()}</p>
-          <div class="grid grid-cols-2 gap-3">
-            {#each languages as lang}
-              <button
-                onclick={() => handleToggle('language', lang.id)}
-                class="flex items-center gap-3 p-4 rounded-lg border-2 transition-all duration-200 font-bold text-sm
- {userPrefs.prefs.language === lang.id
-                    ? 'border-secondary bg-secondary/10 text-secondary'
-                    : 'border-outline-variant/20 bg-surface-container-high/20 text-on-surface-variant hover:border-secondary/40'}"
-              >
-                <span class="text-xl">{lang.flag}</span>
-                {lang.label}
-              </button>
-            {/each}
-          </div>
-        </div>
-
-        <!-- Date format -->
-        <div class="space-y-3">
-          <p class="text-xs font-semibold text-on-surface-variant">{m.us_date_format()}</p>
-          <div class="space-y-2">
-            {#each dateFormats as fmt}
-              <button
-                onclick={() => handleToggle('dateFormat', fmt.id)}
-                class="w-full flex items-center gap-4 p-3.5 rounded-xl border transition-all duration-200 text-left
- {userPrefs.prefs.dateFormat === fmt.id
-                    ? 'border-secondary/40 bg-secondary/8 text-on-surface'
-                    : 'border-outline-variant/10 bg-surface-container-high/10 text-on-surface-variant hover:border-secondary/20'}"
-              >
-                <div class="w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center
- {userPrefs.prefs.dateFormat === fmt.id ? 'border-secondary' : 'border-outline-variant/40'}">
-                  {#if userPrefs.prefs.dateFormat === fmt.id}
-                    <div class="w-2 h-2 rounded-full bg-secondary"></div>
-                  {/if}
-                </div>
-                <div>
-                  <p class="text-sm font-bold">{fmt.label}</p>
-                  <p class="text-2xs text-on-surface-variant">{fmt.example}</p>
-                </div>
-              </button>
-            {/each}
-          </div>
-        </div>
-
-        <!-- Fuseau horaire des statistiques -->
-        <div class="space-y-3">
-          <p class="text-xs font-semibold text-on-surface-variant">{m.us_timezone()}</p>
-          <select aria-label={m.us_timezone()}
-            value={timezoneChoice}
-            onchange={(e) => handleTimezone((e.currentTarget as HTMLSelectElement).value)}
-            class="w-full bg-surface-container-high/20 border border-field-border rounded-xl px-4 py-3 text-sm text-on-surface outline-none focus:border-secondary transition-colors"
-          >
-            <option value="auto">{m.us_timezone_auto({ zone: timezoneStore.browserTimezone })}</option>
-            {#each timezoneZones as zone}
-              <option value={zone}>{zone.replace(/_/g, ' ')}</option>
-            {/each}
-          </select>
-          <p class="text-2xs text-on-surface-variant">
-            {m.us_timezone_desc({ zone: timezoneStore.displayTimezone })}
-          </p>
-        </div>
-      </section>
-    </div>
-
-    <!-- ─── Sidebar ───────────────────────────────────────────── -->
-    <section class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-8">
-      <h2 class="text-xl font-semibold flex items-center gap-3">
-        <div class="w-8 h-8 rounded-xl bg-tertiary/10 flex items-center justify-center">
-          <Papicon icon="Menu" size={16} class="text-tertiary" />
-        </div>
-        {m.us_navigation()}
-      </h2>
-
-      <!-- Sidebar behavior -->
-      <div class="space-y-3">
-        <p class="text-xs font-semibold text-on-surface-variant">{m.us_sidebar_behavior()}</p>
-        <div class="space-y-2">
-          {#each sidebarBehaviors as behavior}
-            <button
-              onclick={() => handleToggle('sidebarBehavior', behavior.id)}
-              class="w-full flex items-center gap-4 p-3.5 rounded-xl border transition-all duration-200 text-left
- {userPrefs.prefs.sidebarBehavior === behavior.id
-                  ? 'border-tertiary/40 bg-tertiary/8 text-on-surface'
-                  : 'border-outline-variant/10 bg-surface-container-high/10 text-on-surface-variant hover:border-tertiary/20'}"
-            >
-              <div class="w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center
- {userPrefs.prefs.sidebarBehavior === behavior.id ? 'border-tertiary' : 'border-outline-variant/40'}">
-                {#if userPrefs.prefs.sidebarBehavior === behavior.id}
-                  <div class="w-2 h-2 rounded-full bg-tertiary"></div>
-                {/if}
-              </div>
-              <div>
-                <p class="text-sm font-bold">{behavior.label}</p>
-                <p class="text-2xs text-on-surface-variant">{behavior.desc}</p>
-              </div>
-            </button>
-          {/each}
-        </div>
-      </div>
-    </section>
-
-    <!-- ─── Notifications & Confidentialité ──────────────────── -->
-    <section class="bg-surface-container-low/30 border border-outline-variant/10 p-8 rounded-xl space-y-8">
-      <h2 class="text-xl font-semibold flex items-center gap-3">
-        <div class="w-8 h-8 rounded-xl bg-error/10 flex items-center justify-center">
-          <Papicon icon="Bell" size={16} class="text-error" />
-        </div>
-        {m.us_notif_privacy()}
-      </h2>
-
-      <div class="space-y-3">
-        <div class="p-4 rounded-lg bg-surface-container-high/20 border border-outline-variant/5 hover:bg-surface-container-high/40 transition-colors space-y-3">
-          <div class="flex items-center justify-between gap-4">
-            <div>
-              <p class="text-sm font-bold">{m.us_sound_notif()}</p>
-              <p class="text-2xs text-on-surface-variant">{m.us_sound_notif_desc()}</p>
-            </div>
-            <ToggleSwitch
-              checked={userPrefs.prefs.soundNotifications}
-              onToggle={(v: boolean) => handleNotificationToggle('soundNotifications', v)}
-            />
-          </div>
-          {#if userPrefs.prefs.soundNotifications}
-            <div class="flex flex-wrap items-center gap-2">
-              <span class="text-2xs text-on-surface-variant">{m.us_sound_preview()}</span>
-              {#each soundPreviews as preview}
+    <!-- ─── Colonne gauche : Apparence & Navigation ──────────── -->
+    <div class="space-y-6 min-w-0">
+      <SectionCard title={m.us_appearance()} icon="Palette">
+        <div class="space-y-6">
+          <!-- Thème -->
+          <div class="space-y-2.5">
+            <p class="text-xs font-semibold text-on-surface-variant">{m.us_theme()}</p>
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+              {#each THEME_PRESETS as preset (preset.id)}
+                {@const selected = themeStore.themeId === preset.id}
                 <button
                   type="button"
-                  onclick={() => playNotificationSound(preview.tone, { force: true })}
-                  class="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-outline-variant/20 bg-surface-container-high/20 text-2xs font-medium hover:border-primary/30 hover:bg-primary/5 transition-colors"
+                  aria-pressed={selected}
+                  onclick={() => handleToggle('theme', preset.id)}
+                  class="flex flex-col items-center gap-2 p-2.5 min-h-[44px] rounded-xl border transition-colors text-xs font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary
+                    {selected
+                      ? 'border-primary bg-primary/10 text-on-surface'
+                      : 'border-outline-variant bg-surface-container-low text-on-surface-variant hover:border-outline hover:text-on-surface'}"
                 >
-                  <Papicon icon="Play" size={10} />
-                  {preview.label}
+                  <div class="w-full h-8 rounded-lg overflow-hidden flex border border-outline-variant">
+                    <div class="flex-1" style="background:{preset.preview.bg}"></div>
+                    <div class="flex-1" style="background:{preset.preview.surface}"></div>
+                    <div class="w-2.5" style="background:{preset.preview.text}; opacity:0.35"></div>
+                  </div>
+                  <span class="truncate w-full text-center">{preset.label}</span>
+                </button>
+              {/each}
+
+              <button
+                type="button"
+                aria-pressed={themeStore.themeId === 'custom'}
+                onclick={() => { handleToggle('theme', 'custom'); showCustomEditor = true; }}
+                class="flex flex-col items-center gap-2 p-2.5 min-h-[44px] rounded-xl border transition-colors text-xs font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary
+                  {themeStore.themeId === 'custom'
+                    ? 'border-primary bg-primary/10 text-on-surface'
+                    : 'border-outline-variant bg-surface-container-low text-on-surface-variant hover:border-outline hover:text-on-surface'}"
+              >
+                <div class="w-full h-8 rounded-lg overflow-hidden flex items-center justify-center border border-dashed border-outline bg-surface-container">
+                  <Papicon icon="Palette" size={16} />
+                </div>
+                <span>Custom</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Éditeur de thème personnalisé -->
+          {#if themeStore.themeId === 'custom' || showCustomEditor}
+            <div class="space-y-4 p-4 rounded-xl border border-primary/30 bg-surface-container-low">
+              <div class="flex items-center justify-between gap-2">
+                <p class="text-xs font-semibold text-primary">{m.us_custom_theme()}</p>
+                <button
+                  type="button"
+                  aria-label="Fermer"
+                  onclick={() => showCustomEditor = false}
+                  class="p-1.5 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-hover transition-colors focus-visible:outline-2 focus-visible:outline-primary"
+                >
+                  <Papicon icon="x" size={14} />
+                </button>
+              </div>
+
+              <div class="flex items-center gap-3 p-2.5 rounded-lg bg-surface-container-lowest border border-outline-variant">
+                <span class="text-xs font-medium text-on-surface w-16 shrink-0">{m.us_mode()}</span>
+                <div class="flex gap-2 flex-1">
+                  <button
+                    type="button"
+                    aria-pressed={customColors.mode === 'dark'}
+                    onclick={() => { customColors.mode = 'dark'; applyCustomTheme(); }}
+                    class="flex-1 py-2 rounded-lg text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-primary
+                      {customColors.mode === 'dark' ? 'bg-primary text-on-primary' : 'bg-surface-container text-on-surface-variant hover:text-on-surface'}"
+                  >{m.us_dark()}</button>
+                  <button
+                    type="button"
+                    aria-pressed={customColors.mode === 'light'}
+                    onclick={() => { customColors.mode = 'light'; applyCustomTheme(); }}
+                    class="flex-1 py-2 rounded-lg text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-primary
+                      {customColors.mode === 'light' ? 'bg-primary text-on-primary' : 'bg-surface-container text-on-surface-variant hover:text-on-surface'}"
+                  >{m.us_light()}</button>
+                </div>
+              </div>
+
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                {#each [
+                  { key: 'background', label: m.us_color_background() },
+                  { key: 'surface', label: m.us_color_surface() },
+                  { key: 'text', label: m.us_color_text() },
+                  { key: 'surfaceContainer', label: m.us_color_panel() },
+                ] as field (field.key)}
+                  <label class="flex items-center gap-2.5 p-2.5 rounded-lg bg-surface-container-lowest border border-outline-variant cursor-pointer hover:border-outline transition-colors">
+                    <input
+                      type="color"
+                      value={customColors[field.key as keyof CustomThemeColors] as string}
+                      oninput={(e) => { customColors[field.key as keyof CustomThemeColors] = (e.currentTarget as HTMLInputElement).value as never; }}
+                      class="w-7 h-7 rounded-md border border-outline-variant cursor-pointer shrink-0 [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:rounded-md [&::-webkit-color-swatch]:border-none"
+                    />
+                    <span class="text-xs font-medium text-on-surface truncate">{field.label}</span>
+                  </label>
+                {/each}
+              </div>
+              <p class="text-2xs text-on-surface-variant">{m.us_accent_note()}</p>
+
+              <!-- Aperçu -->
+              <div class="rounded-lg overflow-hidden border border-outline-variant">
+                <div class="flex h-14" style="background:{customColors.background}">
+                  <div class="w-10 flex items-center justify-center" style="background:{customColors.surfaceContainer}">
+                    <div class="w-4 h-4 rounded-sm bg-primary"></div>
+                  </div>
+                  <div class="flex-1 p-2.5 flex flex-col justify-center gap-1">
+                    <div class="h-2 w-20 rounded-full" style="background:{customColors.text}; opacity:0.8"></div>
+                    <div class="h-1.5 w-32 rounded-full" style="background:{customColors.text}; opacity:0.35"></div>
+                  </div>
+                  <div class="w-16 flex items-center justify-center">
+                    <div class="h-5 w-12 rounded-md bg-primary"></div>
+                  </div>
+                </div>
+              </div>
+
+              <Button variant="primary" size="sm" fullWidth onclick={applyCustomTheme}>
+                {m.us_apply()}
+              </Button>
+            </div>
+          {/if}
+
+          <!-- Couleur d'accentuation -->
+          <div class="space-y-2.5">
+            <p class="text-xs font-semibold text-on-surface-variant">{m.us_accent_color()}</p>
+            <div class="flex flex-wrap gap-3">
+              {#each accentColors as color (color.id)}
+                {@const active = userPrefs.prefs.accentColor === color.id}
+                <button
+                  type="button"
+                  aria-label={color.label}
+                  aria-pressed={active}
+                  title={color.label}
+                  onclick={() => handleToggle('accentColor', color.id)}
+                  class="relative w-11 h-11 rounded-xl transition-transform duration-150 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary
+                    {active ? 'ring-2 ring-offset-2 ring-offset-surface-container-lowest scale-105' : 'hover:scale-105'}"
+                  style="background-color: {color.hex}; {active ? `--tw-ring-color: ${color.hex}` : ''}"
+                >
+                  {#if active}
+                    <span class="absolute inset-0 flex items-center justify-center">
+                      <Papicon icon="check" size={16} class="text-white" />
+                    </span>
+                  {/if}
                 </button>
               {/each}
             </div>
-          {/if}
-        </div>
+          </div>
 
-        <div class="p-4 rounded-lg bg-surface-container-high/20 border border-outline-variant/5 hover:bg-surface-container-high/40 transition-colors space-y-2">
-          <div class="flex items-center justify-between gap-4">
-            <div>
-              <p class="text-sm font-bold">{m.us_desktop_notif()}</p>
-              <p class="text-2xs text-on-surface-variant">{m.us_desktop_notif_desc()}</p>
+          <!-- Interrupteurs d'interface -->
+          <div class="divide-y divide-outline-variant border-t border-outline-variant -mx-5 -mb-5">
+            <SettingsRow label={m.us_compact_mode()} description={m.us_compact_mode_desc()}>
+              <ToggleSwitch
+                checked={userPrefs.prefs.compactMode}
+                onToggle={(v: boolean) => handleToggle('compactMode', v)}
+              />
+            </SettingsRow>
+            <SettingsRow label={m.us_animations()} description={m.us_animations_desc()}>
+              <ToggleSwitch
+                checked={userPrefs.prefs.animationsEnabled}
+                onToggle={(v: boolean) => handleToggle('animationsEnabled', v)}
+              />
+            </SettingsRow>
+            <SettingsRow label={m.us_plan_crowns()} description={m.us_plan_crowns_desc()}>
+              <ToggleSwitch
+                checked={userPrefs.prefs.showPlanCrowns}
+                onToggle={(v: boolean) => handleToggle('showPlanCrowns', v)}
+              />
+            </SettingsRow>
+          </div>
+        </div>
+      </SectionCard>
+
+      <!-- Navigation / Barre latérale -->
+      <SectionCard title={m.us_navigation()} description={m.us_sidebar_behavior()} icon="Menu" flush>
+        <div class="divide-y divide-outline-variant" role="radiogroup" aria-label={m.us_sidebar_behavior()}>
+          {#each sidebarBehaviors as behavior (behavior.id)}
+            {@const checked = userPrefs.prefs.sidebarBehavior === behavior.id}
+            <button
+              type="button"
+              role="radio"
+              aria-checked={checked}
+              onclick={() => handleToggle('sidebarBehavior', behavior.id)}
+              class="w-full flex items-center gap-3.5 px-4 py-3.5 text-left transition-colors hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-primary
+                {checked ? 'bg-surface-selection' : ''}"
+            >
+              <span
+                class="w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center
+                  {checked ? 'border-primary' : 'border-outline'}"
+              >
+                {#if checked}
+                  <span class="w-2 h-2 rounded-full bg-primary"></span>
+                {/if}
+              </span>
+              <span class="min-w-0">
+                <span class="block text-sm font-medium text-on-surface">{behavior.label}</span>
+                <span class="block text-xs text-on-surface-variant mt-0.5">{behavior.desc}</span>
+              </span>
+            </button>
+          {/each}
+        </div>
+      </SectionCard>
+    </div>
+
+    <!-- ─── Colonne droite : Langue & Notifications ─────────── -->
+    <div class="space-y-6 min-w-0">
+      <SectionCard title={m.us_language_region()} icon="Globe">
+        <div class="space-y-6">
+          <!-- Langue -->
+          <div class="space-y-2.5">
+            <p class="text-xs font-semibold text-on-surface-variant">{m.us_interface_language()}</p>
+            <div class="grid grid-cols-2 gap-2.5">
+              {#each languages as lang (lang.id)}
+                {@const selected = userPrefs.prefs.language === lang.id}
+                <button
+                  type="button"
+                  aria-pressed={selected}
+                  onclick={() => handleToggle('language', lang.id)}
+                  class="flex items-center gap-3 p-3.5 min-h-[44px] rounded-xl border transition-colors text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary
+                    {selected
+                      ? 'border-primary bg-primary/10 text-on-surface'
+                      : 'border-outline-variant bg-surface-container-low text-on-surface-variant hover:border-outline hover:text-on-surface'}"
+                >
+                  <span class="px-2 py-0.5 rounded-md text-xs font-mono font-bold {selected ? 'bg-primary text-on-primary' : 'bg-surface-container text-on-surface-variant'}">
+                    {lang.code}
+                  </span>
+                  <span class="truncate">{lang.label}</span>
+                </button>
+              {/each}
             </div>
+          </div>
+
+          <!-- Format des dates -->
+          <div class="space-y-2.5">
+            <p class="text-xs font-semibold text-on-surface-variant">{m.us_date_format()}</p>
+            <div
+              class="divide-y divide-outline-variant rounded-xl border border-outline-variant overflow-hidden bg-surface-container-low"
+              role="radiogroup"
+              aria-label={m.us_date_format()}
+            >
+              {#each dateFormats as fmt (fmt.id)}
+                {@const checked = userPrefs.prefs.dateFormat === fmt.id}
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={checked}
+                  onclick={() => handleToggle('dateFormat', fmt.id)}
+                  class="w-full flex items-center gap-3.5 px-4 py-3 text-left transition-colors hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-primary
+                    {checked ? 'bg-surface-selection' : ''}"
+                >
+                  <span
+                    class="w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center
+                      {checked ? 'border-primary' : 'border-outline'}"
+                  >
+                    {#if checked}
+                      <span class="w-2 h-2 rounded-full bg-primary"></span>
+                    {/if}
+                  </span>
+                  <span class="min-w-0">
+                    <span class="block text-sm font-medium text-on-surface">{fmt.label}</span>
+                    <span class="block text-xs text-on-surface-variant mt-0.5">{fmt.example}</span>
+                  </span>
+                </button>
+              {/each}
+            </div>
+          </div>
+
+          <!-- Fuseau horaire -->
+          <div class="space-y-2">
+            <label for="us-timezone-select" class="block text-xs font-semibold text-on-surface-variant">{m.us_timezone()}</label>
+            <select
+              id="us-timezone-select"
+              value={timezoneChoice}
+              onchange={(e) => handleTimezone((e.currentTarget as HTMLSelectElement).value)}
+              class="w-full bg-surface-container-lowest border border-field-border rounded-lg px-3.5 py-2.5 text-sm text-on-surface focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 transition-colors"
+            >
+              <option value="auto">{m.us_timezone_auto({ zone: timezoneStore.browserTimezone })}</option>
+              {#each timezoneZones as zone (zone)}
+                <option value={zone}>{zone.replace(/_/g, ' ')}</option>
+              {/each}
+            </select>
+            <p class="text-xs text-on-surface-variant">
+              {m.us_timezone_desc({ zone: timezoneStore.displayTimezone })}
+            </p>
+          </div>
+        </div>
+      </SectionCard>
+
+      <!-- Notifications & Confidentialité -->
+      <SectionCard title={m.us_notif_privacy()} icon="Bell" flush>
+        <div class="divide-y divide-outline-variant">
+          <div class="px-4 py-3.5 space-y-3">
+            <div class="flex items-center justify-between gap-4">
+              <div class="min-w-0">
+                <p class="text-sm font-medium text-on-surface">{m.us_sound_notif()}</p>
+                <p class="text-xs text-on-surface-variant mt-0.5">{m.us_sound_notif_desc()}</p>
+              </div>
+              <ToggleSwitch
+                checked={userPrefs.prefs.soundNotifications}
+                onToggle={(v: boolean) => handleNotificationToggle('soundNotifications', v)}
+              />
+            </div>
+            {#if userPrefs.prefs.soundNotifications}
+              <div class="flex flex-wrap items-center gap-1.5 pt-1">
+                <span class="text-2xs text-on-surface-variant mr-1">{m.us_sound_preview()}</span>
+                {#each soundPreviews as preview (preview.tone)}
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    icon="Play"
+                    onclick={() => playNotificationSound(preview.tone, { force: true })}
+                  >
+                    {preview.label}
+                  </Button>
+                {/each}
+              </div>
+            {/if}
+          </div>
+
+          <div class="px-4 py-3.5 space-y-2">
+            <div class="flex items-center justify-between gap-4">
+              <div class="min-w-0">
+                <p class="text-sm font-medium text-on-surface">{m.us_desktop_notif()}</p>
+                <p class="text-xs text-on-surface-variant mt-0.5">{m.us_desktop_notif_desc()}</p>
+              </div>
+              <ToggleSwitch
+                checked={userPrefs.prefs.desktopNotifications && permissionState === 'granted'}
+                onToggle={(v: boolean) => handleNotificationToggle('desktopNotifications', v)}
+              />
+            </div>
+            {#if permissionState === 'denied'}
+              <p class="text-xs text-warning">{m.us_notif_blocked_hint()}</p>
+            {/if}
+          </div>
+
+          <NotificationPreferencesGrid />
+
+          <SettingsRow label={m.us_online_status()} description={m.us_online_status_desc()}>
             <ToggleSwitch
-              checked={userPrefs.prefs.desktopNotifications && permissionState === 'granted'}
-              onToggle={(v: boolean) => handleNotificationToggle('desktopNotifications', v)}
+              checked={userPrefs.prefs.showOnlineStatus}
+              onToggle={(v: boolean) => handleToggle('showOnlineStatus', v)}
             />
+          </SettingsRow>
+
+          <div class="p-4 grid grid-cols-1 sm:grid-cols-2 gap-2.5 bg-surface-container-low/50">
+            <a
+              href="https://kotbo.fr/terms"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="p-3 rounded-lg border border-outline-variant bg-surface-container-lowest hover:border-outline transition-colors focus-visible:outline-2 focus-visible:outline-primary"
+            >
+              <p class="text-sm font-medium text-on-surface">{m.us_privacy_policy()}</p>
+              <p class="text-xs text-on-surface-variant mt-0.5">{m.us_privacy_policy_desc()}</p>
+            </a>
+            <a
+              href="https://kotbo.fr/cookies"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="p-3 rounded-lg border border-outline-variant bg-surface-container-lowest hover:border-outline transition-colors focus-visible:outline-2 focus-visible:outline-primary"
+            >
+              <p class="text-sm font-medium text-on-surface">{m.us_cookies()}</p>
+              <p class="text-xs text-on-surface-variant mt-0.5">{m.us_cookies_desc()}</p>
+            </a>
+            <a
+              href="mailto:privacy@kotbo.fr?subject=Demande%20RGPD%20Kotbo"
+              class="sm:col-span-2 p-3 rounded-lg border border-primary/25 bg-primary/8 hover:bg-primary/12 transition-colors focus-visible:outline-2 focus-visible:outline-primary"
+            >
+              <p class="text-sm font-medium text-primary">{m.us_gdpr_rights()}</p>
+              <p class="text-xs text-on-surface-variant mt-0.5">{m.us_gdpr_rights_desc()}</p>
+            </a>
           </div>
-          {#if permissionState === 'denied'}
-            <p class="text-2xs text-warning">{m.us_notif_blocked_hint()}</p>
-          {/if}
         </div>
-
-        <NotificationPreferencesGrid />
-
-        <div class="flex items-center justify-between p-4 rounded-lg bg-surface-container-high/20 border border-outline-variant/5 hover:bg-surface-container-high/40 transition-colors">
-          <div>
-            <p class="text-sm font-bold">{m.us_online_status()}</p>
-            <p class="text-2xs text-on-surface-variant">{m.us_online_status_desc()}</p>
-          </div>
-          <ToggleSwitch
-            checked={userPrefs.prefs.showOnlineStatus}
-            onToggle={(v: boolean) => handleToggle('showOnlineStatus', v)}
-          />
-        </div>
-      </div>
-
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-        <a href="https://kotbo.fr/terms" target="_blank" rel="noopener noreferrer" class="p-4 rounded-lg border border-outline-variant/10 bg-surface-container-high/20 hover:bg-surface-container-high/40 transition-colors">
-          <p class="text-sm font-bold">{m.us_privacy_policy()}</p>
-          <p class="text-2xs text-on-surface-variant mt-1">{m.us_privacy_policy_desc()}</p>
-        </a>
-        <a href="https://kotbo.fr/cookies" target="_blank" rel="noopener noreferrer" class="p-4 rounded-lg border border-outline-variant/10 bg-surface-container-high/20 hover:bg-surface-container-high/40 transition-colors">
-          <p class="text-sm font-bold">{m.us_cookies()}</p>
-          <p class="text-2xs text-on-surface-variant mt-1">{m.us_cookies_desc()}</p>
-        </a>
-        <a href="mailto:privacy@kotbo.fr?subject=Demande%20RGPD%20Kotbo" class="sm:col-span-2 p-4 rounded-lg border border-primary/20 bg-primary/5 hover:bg-primary/10 transition-colors">
-          <p class="text-sm font-bold text-primary">{m.us_gdpr_rights()}</p>
-          <p class="text-2xs text-on-surface-variant mt-1">{m.us_gdpr_rights_desc()}</p>
-        </a>
-      </div>
-    </section>
+      </SectionCard>
+    </div>
   </div>
 
-  <!-- ─── Danger Zone ───────────────────────────────────────────── -->
-  <section class="bg-error/5 border border-error/20 p-8 rounded-xl space-y-4">
-    <h2 class="text-xl font-semibold text-error flex items-center gap-3">
-      <Papicon icon="AlertTriangle" size={20} />
-      {m.us_reset_zone()}
-    </h2>
-    <p class="text-sm text-on-surface-variant">
-      {m.us_reset_desc()}
-    </p>
-    <button
-      onclick={() => { userPrefs.reset(); themeStore.themeId = userPrefs.prefs.theme; showSavedFeedback(); toast.success(m.us_reset_done()); }}
-      class="px-6 py-2.5 rounded-xl border-2 border-error/40 text-error font-bold text-sm hover:bg-error/10 transition-all duration-200 hover:border-error/60"
-    >
-      {m.us_reset_button()}
-    </button>
-  </section>
+  <!-- ─── Zone de réinitialisation ────────────────────────── -->
+  <SectionCard title={m.us_reset_zone()} description={m.us_reset_desc()} icon="AlertTriangle">
+    {#snippet actions()}
+      <Button
+        variant="danger"
+        size="sm"
+        icon="refresh-cw"
+        onclick={() => { userPrefs.reset(); themeStore.themeId = userPrefs.prefs.theme; showSavedFeedback(); toast.success(m.us_reset_done()); }}
+      >
+        {m.us_reset_button()}
+      </Button>
+    {/snippet}
+  </SectionCard>
 {/if}
 </div>
