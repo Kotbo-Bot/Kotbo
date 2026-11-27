@@ -10,7 +10,8 @@
  * personne quitte le serveur. Avant l'effacement, la cellule est prévenue et
  * peut prolonger une note en disant pourquoi : la prolongation est tracée.
  */
-import { PURGE_NOTICE_DAYS } from './wellbeingPolicy.js';
+import { DAY_MS } from './wellbeingPolicyShared.js';
+import { PURGE_NOTICE_DAYS } from './wellbeingRetentionPolicy.js';
 
 export const PROFILE_RETENTION_DEFAULT_MONTHS = 12;
 export const PROFILE_RETENTION_MIN_MONTHS = 1;
@@ -25,8 +26,6 @@ export const PROFILE_SENSITIVE_MONTHS = 3;
 /** Même plafond qu'une note de dossier. */
 export const PROFILE_NOTE_MAX = 4000;
 export const PROFILE_EXTEND_REASON_MAX = 500;
-
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Durée réglée par le propriétaire, bornée ; undefined si la valeur n'est pas un entier. */
 export function cleanProfileRetention(value: unknown): number | undefined {

@@ -8,6 +8,7 @@
   import { toast } from '../../stores/toast.svelte';
   import { wbTaskProgress } from '../../wellbeingView';
   import { Button } from '../ui';
+  import { wbCustom } from '../../stores/wellbeingCustomization.svelte';
 
   type Task = { id: string; label: string; dueAt: string | null; doneAt: string | null; createdByName: string };
 
@@ -75,6 +76,31 @@
   });
 
   const remove = (task: Task) => call(task.id, `/${task.id}`, { method: 'DELETE' });
+
+  /** Plans d'action types de la cellule, appliqués d'un clic. */
+  const plans = $derived(wbCustom.value.taskPlans);
+  let planId = $state('');
+  let applying = $state(false);
+  async function applyPlan() {
+    if (!planId || applying) return;
+    applying = true;
+    try {
+      const res = await dashboardFetch(`/wellbeing/cases/${caseId}/plan`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ planId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? '');
+      onchange(data.item);
+      planId = '';
+      toast.success(m.toast_wb_plan_applied({ count: data.added ?? 0 }));
+    } catch (err: any) {
+      toast.error(err?.message || m.toast_wb_update_failed());
+    } finally {
+      applying = false;
+    }
+  }
 </script>
 
 <div class="space-y-4">
@@ -129,5 +155,16 @@
       <input bind:value={dueAt} type="date" class="input text-sm" aria-label={m.wb_tasks_due_label()} />
       <Button type="submit" size="sm" variant="secondary" icon="Plus" loading={busyId === 'new'} disabled={!label.trim()}>{m.common_add()}</Button>
     </form>
+    {#if plans.length > 0}
+      <div class="flex flex-wrap items-center gap-2">
+        <select bind:value={planId} class="input text-sm flex-1 min-w-40" aria-label={m.wb_plan_pick()}>
+          <option value="">{m.wb_plan_pick_ph()}</option>
+          {#each plans as plan (plan.id)}
+            <option value={plan.id}>{plan.label} ({plan.tasks.length})</option>
+          {/each}
+        </select>
+        <Button size="sm" variant="secondary" icon="ListChecks" loading={applying} disabled={!planId} onclick={() => void applyPlan()}>{m.wb_plan_apply()}</Button>
+      </div>
+    {/if}
   {/if}
 </div>

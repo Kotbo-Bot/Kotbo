@@ -14,14 +14,14 @@ import { logger } from '../../utils/logger.js';
 import { resolveGuildLocale, type BotLocale } from '../../utils/i18n.js';
 import * as m from '../../lib/paraglide/messages.js';
 import { isModuleEnabled } from '../core/moduleGate.js';
+import { weeklyDue } from './wellbeingWorkloadPolicy.js';
 import {
   PULSE_BUTTON_PREFIX,
   PULSE_MAX_RECIPIENTS,
   cleanPulseScore,
   pulseVoterHash,
   pulseWeekKey,
-  weeklyDue,
-} from './wellbeingPolicy.js';
+} from './wellbeingWatchPolicy.js';
 
 /** Le sondage part le lundi à partir de 10 h (UTC), après le résumé de la cellule. */
 const PULSE_HOUR = 10;

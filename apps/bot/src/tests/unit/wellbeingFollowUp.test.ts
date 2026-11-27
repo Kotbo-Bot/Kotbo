@@ -1,17 +1,19 @@
 import { describe, expect, test } from 'bun:test';
+import { cellMemberIds } from '../../services/staff/wellbeingAccessPolicy';
 import {
   CLOSE_REASONS,
   NOTE_EDIT_HOURS,
-  absenceActive,
   canEditNote,
-  cellMemberIds,
   cleanCloseReason,
+} from '../../services/staff/wellbeingCasePolicy';
+import {
+  absenceActive,
   digestCounts,
   digestDue,
   reminderRecipient,
   weeklyDigestText,
   wellbeingCellStats,
-} from '../../services/staff/wellbeingPolicy';
+} from '../../services/staff/wellbeingWorkloadPolicy';
 
 const HOUR = 3_600_000;
 const NOW = new Date('2026-11-25T12:00:00Z');

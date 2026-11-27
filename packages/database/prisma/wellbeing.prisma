@@ -55,6 +55,13 @@ model WellbeingConfig {
   profileRetentionMonths Int  @default(12)
   // Étapes ajoutées par la cellule à la vue en colonnes : [{ id, label }].
   boardColumns       Json     @default("[]")
+  // Réglages de la cellule : catégories et trames [{ id, label, template }],
+  // étapes du protocole de crise [{ label, dueHours }], plans d'action types
+  // [{ id, label, tasks: [{ label, dueDays }] }] et étiquettes [{ id, label }].
+  caseCategories     Json     @default("[]")
+  crisisTasks        Json     @default("[]")
+  taskPlans          Json     @default("[]")
+  caseTags           Json     @default("[]")
 
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
 
@@ -110,6 +117,8 @@ model WellbeingCase {
   networkReferentGuildId String?
   // Étape de travail (colonne ajoutée par la cellule) ; le statut ne change pas.
   stage                  String?
+  // Étiquettes de la cellule posées sur le dossier.
+  tagIds                 String[] @default([])
 
   guild  Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
   reporterMessages WellbeingReporterMessage[]
@@ -139,6 +148,8 @@ model WellbeingProfile {
   subjectName   String
   // Départ du serveur : les notes ne vivent plus que 3 mois.
   subjectLeftAt DateTime?
+  // Étiquettes de la cellule posées sur la fiche.
+  tagIds        String[]  @default([])
 
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
   notes WellbeingProfileNote[]

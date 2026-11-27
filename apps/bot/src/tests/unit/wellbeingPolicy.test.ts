@@ -1,16 +1,17 @@
 import { describe, expect, test } from 'bun:test';
 import {
-  CLOSED_CASE_RETENTION_DAYS,
-  closedCaseCutoff,
-  describeConfigChange,
   READ_ALERT_COOLDOWN_MS,
   alertText,
   cleanAlertEvents,
-  idListChange,
   shouldSendReadAlert,
+} from '../../services/staff/wellbeingAlertPolicy';
+import {
+  describeConfigChange,
+  idListChange,
   resolveWellbeingAccess,
   type WellbeingAccessLists,
-} from '../../services/staff/wellbeingPolicy';
+} from '../../services/staff/wellbeingAccessPolicy';
+import { CLOSED_CASE_RETENTION_DAYS, closedCaseCutoff } from '../../services/staff/wellbeingRetentionPolicy';
 
 const empty: WellbeingAccessLists = {
   enabled: false,

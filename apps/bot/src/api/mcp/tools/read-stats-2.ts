@@ -2,7 +2,7 @@
 import prisma from '../../../utils/db.js';
 import { z } from 'zod';
 import { type McpToolContext, ok, toolError } from '../toolkit.js';
-import { WELLBEING_AUDIT_MODULE } from '../../../services/staff/wellbeingPolicy.js';
+import { WELLBEING_AUDIT_MODULE } from '../../../services/staff/wellbeingAccessPolicy.js';
 
 /**
  * Filtre du journal d'audit lu par le MCP. Les gestes de la cellule de suivi

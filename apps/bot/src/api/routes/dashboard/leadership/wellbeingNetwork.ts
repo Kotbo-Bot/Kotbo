@@ -14,7 +14,7 @@ import { logger } from '../../../../utils/logger.js';
 import { bodyText } from '../../../../utils/bodyText.js';
 import { getGuildName } from '../../../shared.js';
 import { fail, guildRoute, readBody, send } from '../../../hono/dashboard/kit.js';
-import { shouldRecordView } from '../../../../services/staff/wellbeingPolicy.js';
+import { shouldRecordView } from '../../../../services/staff/wellbeingCasePolicy.js';
 import {
   NETWORK_REFERENT_EVENT,
   NETWORK_VIEW,

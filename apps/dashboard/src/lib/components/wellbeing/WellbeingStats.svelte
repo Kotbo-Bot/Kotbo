@@ -47,7 +47,9 @@
   import Papicon from '../Papicon.svelte';
   import { SERIES } from '../analytics/analyticsFormat';
   import { dateLocale, m } from '../../i18n';
-  import { WB_CATEGORIES, WB_CLOSE_REASONS, wbCategoryLabel, wbCloseReasonLabel } from '../../wellbeingLabels';
+  import { WB_CLOSE_REASONS, wbCloseReasonLabel } from '../../wellbeingLabels';
+  import { wbCategories, wbCategoryName } from '../../wellbeingCustom';
+  import { wbCustom } from '../../stores/wellbeingCustomization.svelte';
   import MemberName from '../MemberName.svelte';
 
   const {
@@ -82,6 +84,11 @@
     ],
   });
   const categoryMax = $derived(Math.max(1, ...Object.values(stats.activeByCategory)));
+  /** Catégories de la cellule, puis celles retirées qui ont encore des dossiers actifs. */
+  const statCategories = $derived.by(() => {
+    const ids = wbCategories(wbCustom.value).map((category) => category.id);
+    return [...ids, ...Object.keys(stats.activeByCategory).filter((id) => !ids.includes(id))];
+  });
   const reasons = $derived([...WB_CLOSE_REASONS, 'UNSPECIFIED'].map((code) => ({ code, count: stats.closedByReason?.[code] ?? 0 })).filter((entry) => entry.count > 0));
   const reasonMax = $derived(Math.max(1, ...reasons.map((entry) => entry.count)));
 </script>
@@ -115,11 +122,11 @@
     <section class="bg-surface-container-low/40 border border-outline-variant/30 rounded-xl p-6 space-y-4">
       <h3 class="text-base font-semibold flex items-center gap-2"><Papicon icon="folder" size={16} /> {m.wb_stats_by_category({ count: stats.active })}</h3>
       <ul class="space-y-3">
-        {#each WB_CATEGORIES as category (category)}
+        {#each statCategories as category (category)}
           {@const count = stats.activeByCategory[category] ?? 0}
           <li class="space-y-1">
             <div class="flex justify-between text-xs">
-              <span class="text-on-surface">{wbCategoryLabel(category)}</span>
+              <span class="text-on-surface">{wbCategoryName(wbCustom.value, category)}</span>
               <span class="font-semibold text-on-surface">{count}</span>
             </div>
             <div class="h-2 bg-surface-container-high rounded-full overflow-hidden" aria-hidden="true">

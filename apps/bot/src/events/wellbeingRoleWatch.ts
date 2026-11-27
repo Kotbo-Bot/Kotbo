@@ -23,7 +23,7 @@ import {
   cellMembershipChanges,
   roleDeltaFromChanges,
   shouldRevertCellRoleGrant,
-} from '../services/staff/wellbeingPolicy.js';
+} from '../services/staff/wellbeingAccessPolicy.js';
 
 const REVERT_TTL_MS = 60_000;
 /** Retraits faits par la garde elle-même : leur propre entrée d'audit n'est pas re-signalée. */

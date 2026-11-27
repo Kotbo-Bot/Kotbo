@@ -1,33 +1,39 @@
 import { describe, expect, test } from 'bun:test';
+import { DEFAULT_ALERT_EVENTS, WELLBEING_ALERT_EVENTS, alertText } from '../../services/staff/wellbeingAlertPolicy';
 import {
   CRISIS_PROTOCOL_TASKS,
   CRISIS_REVIEW_HOURS,
-  DEFAULT_ALERT_EVENTS,
-  DISTRESS_COOLDOWN_MS,
-  MAX_REPORTER_MESSAGES,
-  PULSE_MIN_RESPONSES,
-  REFERENT_OVERLOAD_ACTIVE,
-  WELLBEING_ALERT_EVENTS,
-  alertText,
-  cleanPulseScore,
-  cleanResources,
   crisisProtocolDue,
   crisisTaskDrafts,
-  detectDistress,
   followUpDate,
+  ticketCaseSummary,
+} from '../../services/staff/wellbeingCasePolicy';
+import {
+  MAX_REPORTER_MESSAGES,
+  REPORT_PANEL_TEMPLATES,
+  cleanPanelTemplate,
+  cleanResources,
+  reporterCanWrite,
+  resourcesForLocale,
+  trackingThread,
+} from '../../services/staff/wellbeingReportPolicy';
+import {
+  REFERENT_OVERLOAD_ACTIVE,
+  referentLoad,
+  suggestAssignee,
+  weeklyDigestText,
+  weeklyDue,
+} from '../../services/staff/wellbeingWorkloadPolicy';
+import {
+  DISTRESS_COOLDOWN_MS,
+  PULSE_MIN_RESPONSES,
+  cleanPulseScore,
+  detectDistress,
   pulseSummary,
   pulseVoterHash,
   pulseWeekKey,
-  referentLoad,
-  reporterCanWrite,
-  resourcesForLocale,
   shouldSignalDistress,
-  suggestAssignee,
-  ticketCaseSummary,
-  trackingThread,
-  weeklyDigestText,
-  weeklyDue,
-} from '../../services/staff/wellbeingPolicy';
+} from '../../services/staff/wellbeingWatchPolicy';
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
@@ -116,6 +122,22 @@ describe('fil anonyme avec le signaleur', () => {
     const text = alertText('REPORT', { actorId: '', followUp: true });
     expect(text).not.toContain('<@');
     expect(text).toContain('message');
+  });
+});
+
+describe('modèles du message permanent', () => {
+  test('un modèle connu est gardé', () => {
+    for (const template of REPORT_PANEL_TEMPLATES) expect(cleanPanelTemplate(template)).toBe(template);
+  });
+
+  test('un modèle inconnu ou absent devient le modèle par défaut', () => {
+    expect(cleanPanelTemplate('inconnu')).toBe('listening');
+    expect(cleanPanelTemplate(undefined)).toBe('listening');
+    expect(cleanPanelTemplate(3)).toBe('listening');
+  });
+
+  test('le modèle par défaut vient en premier', () => {
+    expect(REPORT_PANEL_TEMPLATES[0]).toBe('listening');
   });
 });
 
@@ -246,7 +268,7 @@ describe('météo du staff', () => {
 
 describe('signal aux modérateurs', () => {
   test('le message au modérateur ne dit rien du dossier', async () => {
-    const { sanctionModeratorText } = await import('../../services/staff/wellbeingPolicy');
+    const { sanctionModeratorText } = await import('../../services/staff/wellbeingWatchPolicy');
     const text = sanctionModeratorText();
     expect(text).toContain('cellule');
     expect(text).not.toContain('<@');

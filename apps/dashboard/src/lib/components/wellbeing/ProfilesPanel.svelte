@@ -15,13 +15,16 @@
   import { wbSeverityLabel, wbStatusLabel } from '../../wellbeingLabels';
   import { wbSeverityTone, wbStatusTone } from '../../wellbeingView';
   import { wbPeople, type WbPersonCase } from '../../wellbeingPeople';
+  import { wbCaseTags, wbFilterByTag } from '../../wellbeingCustom';
+  import { wbCustom } from '../../stores/wellbeingCustomization.svelte';
+  import TagPicker from './TagPicker.svelte';
   import MemberSearchSelect from '../MemberSearchSelect.svelte';
   import Papicon from '../Papicon.svelte';
   import { Button, Callout, EmptyState } from '../ui';
 
-  type ProfileHeader = { id: string; subjectUserId: string; subjectName: string; subjectLeftAt: string | null; noteCount: number; nextExpiry: string | null };
+  type ProfileHeader = { id: string; subjectUserId: string; subjectName: string; subjectLeftAt: string | null; noteCount: number; nextExpiry: string | null; tagIds?: string[] };
   type ProfileNote = { id: string; authorId: string; authorName: string; content: string; sensitive: boolean; createdAt: string; expiresAt: string; extendedAt: string | null; extendedByName: string | null; extendedReason: string | null };
-  type Profile = { id: string; subjectUserId: string; subjectName: string; subjectLeftAt: string | null; notes: ProfileNote[] };
+  type Profile = { id: string; subjectUserId: string; subjectName: string; subjectLeftAt: string | null; tagIds?: string[]; notes: ProfileNote[] };
   type CaseHeader = WbPersonCase & { title: string; severity: string; updatedAt?: string };
 
   const {
@@ -72,7 +75,9 @@
 
   const formatDate = (iso: string) => new Date(iso).toLocaleDateString(dateLocale());
   const people = $derived(wbPeople(profiles, cases));
-  const visible = $derived(people.filter((person) => person.name.toLowerCase().includes(search.trim().toLowerCase())));
+  /** Étiquette choisie pour filtrer les personnes ; `null` : toutes. */
+  let tagFilter = $state<string | null>(null);
+  const visible = $derived(wbFilterByTag(people, tagFilter).filter((person) => person.name.toLowerCase().includes(search.trim().toLowerCase())));
   /** Sa propre fiche ne s'ouvre pas : le bot la refuse, la page le dit avant. */
   const isSelf = $derived(!!subject && subject.userId === authStore.user?.id);
   const subjectCases = $derived(subject ? cases.filter((item) => item.subjectUserId === subject?.userId) : []);
@@ -115,6 +120,29 @@
     pickedId = '';
     picking = false;
     void open(member.id, member.displayName || member.username);
+  }
+
+  let savingTags = $state(false);
+  /** Étiquettes de la fiche ouverte : enregistrées aussitôt, la liste suit. */
+  async function saveTags(tagIds: string[]) {
+    const current = profile;
+    if (!current || savingTags) return;
+    savingTags = true;
+    try {
+      const res = await dashboardFetch(`/wellbeing/profiles/${current.subjectUserId}/tags`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tagIds }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? '');
+      profile = { ...current, tagIds: data.tagIds };
+      profiles = profiles.map((item) => (item.subjectUserId === current.subjectUserId ? { ...item, tagIds: data.tagIds } : item));
+    } catch (err: any) {
+      toast.error(err?.message || m.toast_wb_update_failed());
+    } finally {
+      savingTags = false;
+    }
   }
 
   async function addNote() {
@@ -208,12 +236,21 @@
     {#if people.length > 0}
       <label for="wb-profile-search" class="text-xs font-medium text-on-surface-variant">{m.wb_profiles_search()}</label>
       <input id="wb-profile-search" type="search" class="input w-full" placeholder={m.wb_profiles_search_ph()} bind:value={search} />
+      {#if wbCustom.value.tags.length > 0}
+        <select value={tagFilter ?? ''} onchange={(event) => (tagFilter = event.currentTarget.value || null)} class="input w-full text-sm" aria-label={m.wb_tag_filter()}>
+          <option value="">{m.wb_tag_filter_all()}</option>
+          {#each wbCustom.value.tags as tag (tag.id)}<option value={tag.id}>{tag.label}</option>{/each}
+        </select>
+      {/if}
       <ul class="space-y-1.5">
         {#each visible as person (person.userId)}
           <li>
             <button type="button" class="w-full rounded-lg border px-3 py-2 text-left text-sm {subject?.userId === person.userId ? 'border-primary/40 bg-primary/5' : 'border-outline-variant/30 bg-surface-container-lowest'}"
               aria-current={subject?.userId === person.userId} onclick={() => void open(person.userId, person.name)}>
               <span class="font-semibold text-on-surface">{person.name}</span>
+              {#each wbCaseTags(wbCustom.value, person.tagIds) as tag (tag.id)}
+                <span class="ml-1 text-2xs font-semibold px-1.5 py-0.5 rounded-full bg-primary/10 text-primary">{tag.label}</span>
+              {/each}
               <span class="block text-2xs text-on-surface-variant">
                 {m.wb_profiles_count({ count: person.noteCount })} · {m.wb_people_cases({ count: person.activeCases })}{#if person.nextExpiry} · {m.wb_profiles_next_expiry({ date: formatDate(person.nextExpiry) })}{/if}{#if person.leftAt} · {m.wb_profiles_left()}{/if}
               </span>
@@ -243,6 +280,9 @@
       {#if isSelf}
         <Callout variant="info" title={m.wb_profiles_self_title()}>{m.wb_profiles_self_desc()}</Callout>
       {:else}
+      {#if profile}
+        <TagPicker tagIds={profile.tagIds ?? []} canWrite={true} busy={savingTags} onchange={(tagIds) => void saveTags(tagIds)} />
+      {/if}
       {#if loading}
         <p class="text-sm text-on-surface-variant flex items-center gap-2"><Papicon icon="Loader" size={14} /> {m.wb_profiles_loading()}</p>
       {:else if hidden}

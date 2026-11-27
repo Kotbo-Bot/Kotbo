@@ -4,14 +4,14 @@
  * changement d'appartenance doit se voir.
  */
 import { describe, expect, test } from 'bun:test';
+import { alertText } from '../../services/staff/wellbeingAlertPolicy';
 import {
-  alertText,
   cellMembershipChanges,
   roleDeltaFromChanges,
   shouldRevertCellRoleGrant,
   shouldLoadAllMembers,
   type WellbeingAccessLists,
-} from '../../services/staff/wellbeingPolicy';
+} from '../../services/staff/wellbeingAccessPolicy';
 
 const config: WellbeingAccessLists = {
   enabled: true,

@@ -2,7 +2,7 @@ import type { Prisma } from '@prisma/client';
 import { trackGhostSignal } from './services/analytics/ghostActivityTracker.js';
 import { recordModuleExecution, wasModuleExecutionTracked } from './services/analytics/moduleUsageBuffer.js';
 import { commandLabel, recordCommandUsage } from './services/analytics/commandStatsService.js';
-import { WELLBEING_COMMAND } from './services/staff/wellbeingPolicy.js';
+import { WELLBEING_COMMAND } from './services/staff/wellbeingAccessPolicy.js';
 import { INSTANCE_BLOCKED_MESSAGE, isInstanceBlocked, shouldDeliverEvent } from './services/system/instanceBlock.js';
 import dotenv from 'dotenv';
 import path from 'path';

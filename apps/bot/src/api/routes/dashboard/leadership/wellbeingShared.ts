@@ -4,26 +4,50 @@
  */
 import type { Client } from 'discord.js';
 import type { Context } from 'hono';
+import { randomUUID } from 'node:crypto';
 import prisma from '../../../../utils/db.js';
+import { bodyText } from '../../../../utils/bodyText.js';
 import { getGuildName, pushAudit } from '../../../shared.js';
 import { auditUserOf } from '../../../hono/dashboard/kit.js';
 import {
   UNUSUAL_ACCESS_COOLDOWN_MS,
   UNUSUAL_ACCESS_WINDOW_MS,
-  WELLBEING_AUDIT_MODULE,
-  caseVisibilityWhere,
   forgetStale,
   isUnusualAccess,
   openingsInWindow,
+} from '../../../../services/staff/wellbeingAlertPolicy.js';
+import {
+  WELLBEING_AUDIT_MODULE,
+  cellMemberIds,
   resolveWellbeingAccess,
   wellbeingSessionExpired,
-  type CaseEventDraft,
-} from '../../../../services/staff/wellbeingPolicy.js';
+} from '../../../../services/staff/wellbeingAccessPolicy.js';
+import { caseVisibilityWhere, type CaseEventDraft } from '../../../../services/staff/wellbeingCasePolicy.js';
 import { appendCaseEvents } from '../../../../services/staff/wellbeingEvents.js';
-import { cellActorOf, discordGuildOf } from '../../../../services/staff/wellbeingRoles.js';
+import { cellActorOf, discordGuildOf, loadCellMembers } from '../../../../services/staff/wellbeingRoles.js';
+import { openCase } from '../../../../services/staff/wellbeingCrypto.js';
+import {
+  cleanCaseCategories,
+  cleanCrisisTasks,
+  cleanTags,
+  cleanTaskPlans,
+  crisisTasksOf,
+} from '../../../../services/staff/wellbeingCustomPolicy.js';
 import { sendWellbeingAlert } from '../../../../services/staff/wellbeingAlerts.js';
 
 export const SNOWFLAKE_RE = /^\d{17,20}$/;
+export const HOUR_MS = 60 * 60 * 1000;
+
+/** Identifiant d'une nouvelle colonne de la vue en colonnes. */
+export const newColumnId = () => randomUUID().slice(0, 8);
+
+/** Échéance envoyée par la page : `undefined` si absente ou invalide, `null` pour l'effacer. */
+export function parseReviewAt(value: unknown): Date | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null || value === '') return null;
+  const date = new Date(bodyText(value, 40));
+  return Number.isNaN(date.getTime()) ? undefined : date;
+}
 
 export const CASE_INCLUDE = {
   notes: { orderBy: { createdAt: 'asc' as const } },
@@ -49,6 +73,7 @@ export const CASE_LIST_SELECT = {
   source: true,
   assigneeId: true,
   stage: true,
+  tagIds: true,
   reviewAt: true,
   lastActivityAt: true,
   createdAt: true,
@@ -176,4 +201,33 @@ export async function checkUnusualAccess(client: Client, c: Context, guildId: st
   await audit(client, c, guildId, 'Consultation Cellule de suivi',
     `Consultation inhabituelle : ${opened} dossiers ou fiches ouverts en ${UNUSUAL_ACCESS_WINDOW_MS / 60_000} minutes.`, 'Sécurité');
   void sendWellbeingAlert(client, guildId, config, 'UNUSUAL_ACCESS', { actorId: userId, caseCount: opened });
+}
+
+/** Membres de la cellule, rôles compris : le cache est complété au besoin. */
+export async function teamIdsOf(state: WellbeingState): Promise<string[]> {
+  if (!state.config) return [];
+  await loadCellMembers(state.discordGuild, state.config.teamRoleIds);
+  return cellMemberIds(state.config, [...(state.discordGuild?.members.cache.values() ?? [])].map((member) => ({ id: member.id, roleIds: [...member.roles.cache.keys()] })));
+}
+
+/** Relit un dossier complet après un geste. */
+export async function fullCase(caseId: string) {
+  return openCase(await prisma.wellbeingCase.findUniqueOrThrow({ where: { id: caseId }, include: CASE_INCLUDE }));
+}
+
+type CustomizationSource = { caseCategories?: unknown; crisisTasks?: unknown; taskPlans?: unknown; caseTags?: unknown } | null | undefined;
+
+/**
+ * Réglages de la cellule lus en base, nettoyés. `crisisTasks` est le protocole
+ * appliqué (celui de départ si la cellule n'a rien réglé, `crisisDefault`).
+ */
+export function customizationOf(config: CustomizationSource) {
+  const crisisTasks = cleanCrisisTasks(config?.crisisTasks);
+  return {
+    categories: cleanCaseCategories(config?.caseCategories, newColumnId),
+    crisisTasks: [...crisisTasksOf(crisisTasks)],
+    crisisDefault: crisisTasks.length === 0,
+    taskPlans: cleanTaskPlans(config?.taskPlans, newColumnId),
+    tags: cleanTags(config?.caseTags, newColumnId),
+  };
 }

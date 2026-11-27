@@ -1,15 +1,13 @@
 import { describe, expect, test } from 'bun:test';
+import { READ_ALERT_COOLDOWN_MS, alertText } from '../../services/staff/wellbeingAlertPolicy';
+import { endBreakGlassError } from '../../services/staff/wellbeingAccessPolicy';
+import { CASE_TRASH_DAYS, trashCutoff } from '../../services/staff/wellbeingRetentionPolicy';
 import {
-  CASE_TRASH_DAYS,
-  READ_ALERT_COOLDOWN_MS,
-  alertText,
   assigneeConflict,
   caseVisibilityWhere,
-  endBreakGlassError,
   isCaseSubject,
   shouldRecordView,
-  trashCutoff,
-} from '../../services/staff/wellbeingPolicy';
+} from '../../services/staff/wellbeingCasePolicy';
 
 const DAY = 24 * 60 * 60 * 1000;
 

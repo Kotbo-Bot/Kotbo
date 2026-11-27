@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { WELLBEING_AUDIT_MODULE } from '../../services/staff/wellbeingPolicy.js';
+import { WELLBEING_AUDIT_MODULE } from '../../services/staff/wellbeingAccessPolicy.js';
 import { auditLogSearchWhere } from '../../api/mcp/tools/read-stats-2.js';
 
 describe('journal d audit lu par le MCP', () => {

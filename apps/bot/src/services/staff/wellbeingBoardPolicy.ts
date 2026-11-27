@@ -7,6 +7,7 @@
  * et le bilan ne dépendent que du statut. Clore un dossier le sort de son
  * étape ; supprimer une colonne renvoie ses dossiers à leur statut.
  */
+import { cleanLabeledList, type LabeledItem } from './wellbeingCustomPolicy.js';
 
 export const BOARD_COLUMN_MAX = 6;
 export const BOARD_COLUMN_LABEL_MAX = 40;
@@ -15,10 +16,7 @@ export const STAGE_EVENT = 'STAGE';
 
 const COLUMN_ID_RE = /^[a-z0-9-]{1,32}$/;
 
-export interface BoardColumn {
-  id: string;
-  label: string;
-}
+export type BoardColumn = LabeledItem;
 
 /**
  * Colonnes reçues du dashboard ou lues en base, nettoyées : libellé non vide
@@ -26,22 +24,7 @@ export interface BoardColumn {
  * (`newId` en fournit un sinon), au plus `BOARD_COLUMN_MAX`.
  */
 export function cleanBoardColumns(input: unknown, newId: () => string): BoardColumn[] {
-  if (!Array.isArray(input)) return [];
-  const columns: BoardColumn[] = [];
-  const ids = new Set<string>();
-  const labels = new Set<string>();
-  for (const raw of input) {
-    if (columns.length >= BOARD_COLUMN_MAX) break;
-    if (!raw || typeof raw !== 'object') continue;
-    const { id, label } = raw as { id?: unknown; label?: unknown };
-    const name = typeof label === 'string' ? label.trim().slice(0, BOARD_COLUMN_LABEL_MAX) : '';
-    if (!name || labels.has(name.toLowerCase())) continue;
-    const columnId = typeof id === 'string' && COLUMN_ID_RE.test(id) && !ids.has(id) ? id : newId();
-    ids.add(columnId);
-    labels.add(name.toLowerCase());
-    columns.push({ id: columnId, label: name });
-  }
-  return columns;
+  return cleanLabeledList(input, { max: BOARD_COLUMN_MAX, labelMax: BOARD_COLUMN_LABEL_MAX, newId, idPattern: COLUMN_ID_RE }, () => ({}));
 }
 
 /** Ligne d'audit d'une modification des colonnes. */

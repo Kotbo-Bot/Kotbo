@@ -5,7 +5,7 @@ import {
   networkReferentError,
   sharesNetworkPool,
 } from '../../services/staff/wellbeingNetworkPolicy';
-import { describeConfigChange } from '../../services/staff/wellbeingPolicy';
+import { describeConfigChange } from '../../services/staff/wellbeingAccessPolicy';
 import { isSynced } from '../../services/network/networkScope';
 
 const HOME = '900000000000000001';

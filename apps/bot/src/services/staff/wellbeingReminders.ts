@@ -28,17 +28,10 @@ import { appendCaseEvents } from './wellbeingEvents.js';
 import { profilePurgeNoticeCutoff } from './wellbeingProfilePolicy.js';
 import { reconcileProfileDepartures } from './wellbeingProfiles.js';
 import { loadCellMembers } from './wellbeingRoles.js';
-import {
-  accessReviewMessage,
-  cellMemberIds,
-  digestCounts,
-  digestDue,
-  purgeNoticeCutoff,
-  reminderRecipient,
-  shouldSendAccessReview,
-  staleCutoff,
-  weeklyDigestText,
-} from './wellbeingPolicy.js';
+import { accessReviewMessage, cellMemberIds, shouldSendAccessReview } from './wellbeingAccessPolicy.js';
+import { purgeNoticeCutoff } from './wellbeingRetentionPolicy.js';
+import { staleCutoff } from './wellbeingCasePolicy.js';
+import { digestCounts, digestDue, reminderRecipient, weeklyDigestText } from './wellbeingWorkloadPolicy.js';
 import { currentAbsence } from './wellbeingAbsence.js';
 import { applyDueDissolutions } from './wellbeingDissolution.js';
 import { setDashboardModuleStatus } from '../core/moduleActivationService.js';

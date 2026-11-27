@@ -8,7 +8,8 @@
  */
 import type { Client, Guild } from 'discord.js';
 import prisma from '../../utils/db.js';
-import { cellMemberIds, isCaseSubject, resolveWellbeingAccess } from './wellbeingPolicy.js';
+import { cellMemberIds, resolveWellbeingAccess } from './wellbeingAccessPolicy.js';
+import { isCaseSubject } from './wellbeingCasePolicy.js';
 import {
   networkPoolCandidates,
   networkReferentAllowed,
