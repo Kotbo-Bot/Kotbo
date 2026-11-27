@@ -52,10 +52,6 @@ export default defineConfig({
     demoHead(),
   ],
   server: {
-    // Autorise Vite à servir le paquet local @kotbo/ui (../analytics-v3).
-    fs: {
-      allow: [resolve(dashboardDir, '../../..'), resolve(dashboardDir, '../../../analytics-v3')],
-    },
     // Sites communautaires en développement : même relais que nginx en
     // production, l'API ne servant le site qu'à un dashboard connu.
     proxy: {
