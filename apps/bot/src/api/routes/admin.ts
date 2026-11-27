@@ -86,6 +86,7 @@ import {
   resolveErrorGroup,
 } from '../../services/system/botErrorLogService.js';
 import { listLinkedGroups } from '../../services/moderation/adminLinkedAccountsService.js';
+import { MIN_TEXT_LENGTH, parseMessageQuery, searchMessagesEverywhere } from '../../services/analytics/adminMessageSearchService.js';
 import { handleAdminAnalyticsRoutes } from './admin/analytics.js';
 import { handleAdminInsightRoutes } from './admin/insights.js';
 import { handleAdminAchievementRoutes } from './admin/achievements.js';
@@ -263,6 +264,29 @@ export async function handleAdminRoutes(
     } catch (err) {
       logger.error('AdminAPI', 'GET admin linked-accounts error:', err);
       return fail(c, err, 'Erreur lors du chargement des doubles comptes', 'AdminAPI');
+    }
+
+  }
+
+  // GET /api/admin/messages/search - D'ou vient un message, tous serveurs confondus
+  if (parts[2] === 'messages' && parts[3] === 'search' && parts.length === 4 && method === 'GET') {
+    const query = parseMessageQuery(url.searchParams.get('q') ?? '');
+    if (!query) {
+      return reply(c, 400, { error: `Saisis au moins ${MIN_TEXT_LENGTH} caractères, un identifiant ou un lien de message.` });
+    }
+    const offset = Math.max(Math.floor(Number(url.searchParams.get('offset')) || 0), 0);
+    try {
+      // Lire des messages de tous les serveurs est sensible : chaque recherche est tracee.
+      if (offset === 0) {
+        await audit({
+          action: 'message.search',
+          summary: `Recherche de messages sur tous les serveurs : ${url.searchParams.get('q')?.trim()}`,
+        });
+      }
+      return reply(c, 200, await searchMessagesEverywhere(client, query, offset));
+    } catch (err) {
+      logger.error('AdminAPI', 'GET admin message search error:', err);
+      return fail(c, err, 'Impossible de chercher ce message. Réessaie.', 'AdminAPI');
     }
 
   }

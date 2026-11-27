@@ -165,7 +165,7 @@ interface GuildLabel {
   memberCount: number;
 }
 
-async function collectGuildLabels(client: Client, extraGuildIds: string[] = []): Promise<Map<string, GuildLabel>> {
+export async function collectGuildLabels(client: Client, extraGuildIds: string[] = []): Promise<Map<string, GuildLabel>> {
   const read = (shard: Client): GuildLabel[] =>
     shard.guilds.cache.map((guild) => ({ id: guild.id, name: guild.name, icon: guild.iconURL(), memberCount: guild.memberCount }));
   const found = client.shard ? (await client.shard.broadcastEval(read)).flat() : read(client);
