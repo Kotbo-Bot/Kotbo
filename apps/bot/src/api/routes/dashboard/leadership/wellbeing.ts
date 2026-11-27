@@ -74,6 +74,8 @@ import { resolveGuildLocale } from '../../../../utils/i18n.js';
 import { bodyText } from '../../../../utils/bodyText.js';
 import { PROFILE_RETENTION_DEFAULT_MONTHS, cleanProfileRetention } from '../../../../services/staff/wellbeingProfilePolicy.js';
 import { applyProfileRetention } from '../../../../services/staff/wellbeingProfiles.js';
+import { STAGE_EVENT, cleanBoardColumns, describeBoardColumns, stageChange, stageLabel } from '../../../../services/staff/wellbeingBoardPolicy.js';
+import { randomUUID } from 'node:crypto';
 import {
   CASE_INCLUDE,
   CASE_LIST_SELECT,
@@ -94,6 +96,8 @@ const SEVERITIES = ['LOW', 'NORMAL', 'HIGH', 'CRITICAL'];
 const STATUSES = ['OPEN', 'MONITORING', 'CLOSED'];
 const HOUR_MS = 60 * 60 * 1000;
 const MAX_STALE_DAYS = 90;
+/** Identifiant d'une nouvelle colonne de la vue en colonnes. */
+const newColumnId = () => randomUUID().slice(0, 8);
 
 /** Id d'un dossier de ce serveur, ou null : un id inconnu n'entre pas au journal. */
 async function caseIdOfGuild(guildId: string, caseId: unknown): Promise<string | null> {
@@ -145,6 +149,8 @@ export function createWellbeingRouter(client: Client) {
         // Désactivation demandée : visible de la cellule, annulable par le propriétaire.
         dissolutionAt: state.config?.dissolutionAt?.toISOString() ?? null,
         dissolutionByName: state.config?.dissolutionByName ?? null,
+        // Étapes de la vue en colonnes : seulement pour qui lit les dossiers.
+        boardColumns: state.canReadCases ? cleanBoardColumns(state.config?.boardColumns, newColumnId) : [],
       });
     } catch (err) {
       logger.error('WellbeingAPI', 'Error fetching status:', err);
@@ -734,7 +740,7 @@ export function createWellbeingRouter(client: Client) {
       const caseId = c.req.param('caseId');
       const existing = await findVisibleCase(guildId, caseId, user.userId);
       if (!existing) return send(c, { error: 'Dossier introuvable.' }, 404);
-      const body = await readBody<{ status?: string; severity?: string; assigneeId?: string | null; reviewAt?: string | null; closedReason?: string }>(c);
+      const body = await readBody<{ status?: string; severity?: string; assigneeId?: string | null; reviewAt?: string | null; closedReason?: string; stage?: string | null }>(c);
 
       const patch: Partial<CaseTracked> = {
         ...(body?.status && STATUSES.includes(body.status) ? { status: body.status } : {}),
@@ -753,7 +759,13 @@ export function createWellbeingRouter(client: Client) {
       const reviewAt = parseReviewAt(body?.reviewAt);
       if (reviewAt !== undefined) patch.reviewAt = reviewAt;
 
-      const events: Array<CaseEventDraft | { type: string; toValue: string | null }> = caseChangeEvents(existing, patch);
+      const events: Array<CaseEventDraft | { type: string; fromValue?: string | null; toValue: string | null }> = caseChangeEvents(existing, patch);
+      // Étape de travail : une colonne ajoutée par la cellule, sans effet sur le statut.
+      const columns = cleanBoardColumns(state.config?.boardColumns, newColumnId);
+      const requestedStage = body?.stage === undefined ? undefined : (body.stage === null ? null : bodyText(body.stage, 32) || null);
+      const stage = stageChange(existing, { stage: requestedStage, status: patch.status }, columns);
+      if (stage && 'error' in stage) return send(c, { error: stage.error }, 400);
+      if (stage) events.push({ type: STAGE_EVENT, fromValue: stageLabel(columns, existing.stage), toValue: stageLabel(columns, stage.stage) });
       // Fermer enregistre son motif ; rouvrir l'efface.
       const closing = patch.status === 'CLOSED' && existing.status !== 'CLOSED';
       const closedReason = closing ? cleanCloseReason(body?.closedReason) : undefined;
@@ -767,6 +779,7 @@ export function createWellbeingRouter(client: Client) {
         where: { id: caseId },
         data: {
           ...patch,
+          ...(stage ? { stage: stage.stage } : {}),
           // Une nouvelle échéance réarme sa relance.
           ...(events.some((e) => e.type === 'REVIEW') ? { reviewRemindedAt: null } : {}),
           // Un dossier résolu programme sa prise de nouvelles ; rouvrir l'annule.
@@ -1226,6 +1239,46 @@ export function createWellbeingRouter(client: Client) {
     } catch (err) {
       logger.error('WellbeingAPI', 'Error computing stats:', err);
       return fail(c, err, 'Erreur lors du calcul du bilan.', 'WellbeingAPI');
+    }
+  });
+
+  // Colonnes ajoutées à la vue en colonnes : un outil de travail de la cellule.
+  router.put(`${base}/board-columns`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    try {
+      const state = await resolveWellbeingRole(client, guildId, c.var.dashboardUser.userId);
+      if (!state.canWriteCases || !state.config) return send(c, { error: 'Réservé à la cellule de suivi.' }, 403);
+      const body = await readBody<{ columns?: unknown }>(c);
+      const columns = cleanBoardColumns(body?.columns, newColumnId);
+      await prisma.wellbeingConfig.update({ where: { guildId }, data: { boardColumns: columns as unknown as Prisma.InputJsonValue } });
+      // Une colonne supprimée rend ses dossiers à la colonne de leur statut.
+      await prisma.wellbeingCase.updateMany({
+        where: { guildId, stage: { not: null, notIn: columns.map((column) => column.id) } },
+        data: { stage: null },
+      });
+      await audit(client, c, guildId, 'Colonnes Cellule de suivi', describeBoardColumns(columns));
+      return send(c, { columns });
+    } catch (err) {
+      logger.error('WellbeingAPI', 'Error saving board columns:', err);
+      return fail(c, err, "Erreur lors de l'enregistrement des colonnes.", 'WellbeingAPI');
+    }
+  });
+
+  // Membres de la cellule, pour les listes de la page (référent, collègues à prévenir) :
+  // on ne propose que des personnes que le bot acceptera.
+  router.get(`${base}/team`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    try {
+      const state = await resolveWellbeingRole(client, guildId, c.var.dashboardUser.userId);
+      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule de suivi.' }, 403);
+      const members = teamIdsOf(state).map((id) => {
+        const member = state.discordGuild?.members.cache.get(id);
+        return { id, name: member?.displayName ?? member?.user.username ?? id };
+      });
+      return send(c, { members });
+    } catch (err) {
+      logger.error('WellbeingAPI', 'Error listing team:', err);
+      return fail(c, err, 'Erreur lors du chargement de la cellule.', 'WellbeingAPI');
     }
   });
 

@@ -5835,6 +5835,7 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "pulseSentAt": null,
     "networkPool": false,
     "profileRetentionMonths": 12,
+    "boardColumns": [],
     "createdAt": "__NOW__",
     "updatedAt": "__NOW__"
   },
@@ -5870,6 +5871,7 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "followUpSentAt": null,
     "networkReferentId": null,
     "networkReferentGuildId": null,
+    "stage": null,
     "createdAt": "__NOW__",
     "updatedAt": "__NOW__"
   },

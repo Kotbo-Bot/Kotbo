@@ -38,6 +38,8 @@ export interface WbCaseView {
   subjectUserId?: string | null;
   source?: string;
   assigneeId?: string | null;
+  /** Étape de travail : une colonne ajoutée par la cellule. */
+  stage?: string | null;
   updatedAt?: string;
   notes?: WbNoteView[];
   events?: WbEventView[];
@@ -152,7 +154,7 @@ export function wbLinkedCases<T extends WbCaseView>(cases: T[], current: WbCaseV
  * En-tête de la liste après une modification : les champs du dossier renvoyé
  * remplacent les anciens, sans y faire entrer son contenu.
  */
-const HEADER_FIELDS = ['title', 'subjectName', 'subjectUserId', 'status', 'severity', 'category', 'source', 'assigneeId', 'reviewAt', 'updatedAt'] as const;
+const HEADER_FIELDS = ['title', 'subjectName', 'subjectUserId', 'status', 'severity', 'category', 'source', 'assigneeId', 'reviewAt', 'stage', 'updatedAt'] as const;
 
 export function wbMergeHeader<T extends WbCaseView>(header: T, item: Record<string, unknown>): T {
   const fresh = Object.fromEntries(HEADER_FIELDS.filter((key) => key in item).map((key) => [key, item[key]]));
@@ -235,11 +237,48 @@ ${section(labels.summary, `<p>${e(content.summary)}</p>`)}${section(labels.notes
 <footer>${e(labels.exported)}</footer></body></html>`;
 }
 
-const BOARD_STATUSES = ['OPEN', 'MONITORING', 'CLOSED'] as const;
+/** Colonne ajoutée par la cellule (une étape de travail), telle que le bot la renvoie. */
+export interface WbBoardStage {
+  id: string;
+  label: string;
+}
 
-/** Colonnes de la vue par statut, dans l'ordre du suivi. */
-export function wbBoardColumns<T extends WbCaseView>(cases: T[]): Array<{ status: string; cases: T[] }> {
-  return BOARD_STATUSES.map((status) => ({ status, cases: cases.filter((c) => c.status === status) }));
+/** Colonne où l'on dépose une carte : un statut, ou une étape de la cellule. */
+export type WbBoardTarget = { status: string } | { stage: string };
+
+export type WbBoardColumn<T> =
+  | { key: string; kind: 'status'; status: string; cases: T[] }
+  | { key: string; kind: 'stage'; stage: string; label: string; cases: T[] };
+
+/** Étape où ranger un dossier : la sienne si elle existe encore et qu'il n'est pas clos. */
+function placedStage(c: WbCaseView, stages: readonly WbBoardStage[]): string | null {
+  return c.status !== 'CLOSED' && c.stage && stages.some((stage) => stage.id === c.stage) ? c.stage : null;
+}
+
+/**
+ * Colonnes de la vue, dans l'ordre du suivi : Ouvert, les étapes de la
+ * cellule, Sous surveillance, Clos. Un dossier rangé dans une étape n'apparaît
+ * que là ; sinon, dans la colonne de son statut.
+ */
+export function wbBoardColumns<T extends WbCaseView>(cases: T[], stages: readonly WbBoardStage[] = []): WbBoardColumn<T>[] {
+  const byStatus = (status: string): WbBoardColumn<T> => ({
+    key: `status:${status}`,
+    kind: 'status',
+    status,
+    cases: cases.filter((c) => c.status === status && !placedStage(c, stages)),
+  });
+  return [
+    byStatus('OPEN'),
+    ...stages.map((stage): WbBoardColumn<T> => ({
+      key: `stage:${stage.id}`,
+      kind: 'stage',
+      stage: stage.id,
+      label: stage.label,
+      cases: cases.filter((c) => placedStage(c, stages) === stage.id),
+    })),
+    byStatus('MONITORING'),
+    byStatus('CLOSED'),
+  ];
 }
 
 /** Dossier voisin dans la liste affichée (`step` : 1 suivant, -1 précédent), sans en sortir. */

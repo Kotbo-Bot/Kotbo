@@ -47,6 +47,7 @@ export const CASE_LIST_SELECT = {
   status: true,
   source: true,
   assigneeId: true,
+  stage: true,
   reviewAt: true,
   lastActivityAt: true,
   createdAt: true,

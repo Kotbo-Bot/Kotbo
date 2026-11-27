@@ -3,6 +3,9 @@
    * Liste de membres désignés un par un dans la cellule de suivi : équipe,
    * direction, destinataires des alertes. Contrairement à un rôle Discord,
    * personne d'autre que le propriétaire ne peut la modifier.
+   *
+   * Avec `candidates`, le choix se limite à ces membres (les collègues de la
+   * cellule à prévenir, par exemple) au lieu de tout le serveur.
    */
   import MemberName from './MemberName.svelte';
   import MemberSearchSelect from './MemberSearchSelect.svelte';
@@ -14,7 +17,16 @@
     max,
     id,
     describedBy = undefined,
-  }: { ids: string[]; max: number; id: string; describedBy?: string } = $props();
+    candidates = undefined,
+  }: {
+    ids: string[];
+    max: number;
+    id: string;
+    describedBy?: string;
+    candidates?: ReadonlyArray<{ id: string; name: string }>;
+  } = $props();
+
+  const remaining = $derived(candidates?.filter((member) => !ids.includes(member.id)) ?? []);
 
   let candidate = $state('');
 
@@ -39,7 +51,18 @@
   {/if}
   {#if ids.length < max}
     <div class="flex gap-2">
-      <div class="flex-1"><MemberSearchSelect {id} {describedBy} bind:value={candidate} placeholder={m.wb_member_ph()} /></div>
+      <div class="flex-1">
+        {#if candidates}
+          <select {id} aria-describedby={describedBy} class="input w-full" bind:value={candidate} disabled={remaining.length === 0}>
+            <option value="">{remaining.length > 0 ? m.wb_member_pick() : m.wb_member_pick_none()}</option>
+            {#each remaining as member (member.id)}
+              <option value={member.id}>{member.name}</option>
+            {/each}
+          </select>
+        {:else}
+          <MemberSearchSelect {id} {describedBy} bind:value={candidate} placeholder={m.wb_member_ph()} />
+        {/if}
+      </div>
       <Button size="sm" variant="secondary" disabled={!candidate} onclick={add}>{m.wb_alerts_add_user()}</Button>
     </div>
   {/if}
