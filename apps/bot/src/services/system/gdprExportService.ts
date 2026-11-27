@@ -14,12 +14,12 @@ import {
 } from './gdprProjections.js';
 import { openNote, openProfileNote } from '../staff/wellbeingCrypto.js';
 
-type StoredProfileNote = { profileId: string; content: string; createdAt: Date; expiresAt: Date; extendedAt: Date | null };
+type StoredProfileNote = { profileId: string; content: string; sensitive: boolean; createdAt: Date; expiresAt: Date; extendedAt: Date | null };
 
 /** Note de fiche remise à la personne qu'elle concerne : le texte et ses dates, sans qui l'a écrite ni prolongée. */
 export const projectProfileNote = (record: Record<string, unknown>): unknown => {
-  const { content, expiresAt, createdAt, extendedAt } = openProfileNote(record as unknown as StoredProfileNote);
-  return { content, createdAt, expiresAt, extendedAt: extendedAt ?? null };
+  const { content, sensitive, expiresAt, createdAt, extendedAt } = openProfileNote(record as unknown as StoredProfileNote);
+  return { content, sensitive, createdAt, expiresAt, extendedAt: extendedAt ?? null };
 };
 
 /**
@@ -286,10 +286,10 @@ const STATIC_SOURCES: GdprSource[] = [
   // Droit d'accès : ce que la cellule a noté sur la personne, avec ses dates
   // d'écriture et d'effacement. Ni l'auteur ni le motif d'une prolongation,
   // qui disent qui l'a suivie (article 15 § 4).
-  { category: 'staff', key: 'wellbeingProfileNote', label: 'Notes de fiche cellule bien-être vous concernant', model: 'wellbeingProfileNote', where: ({ discordId }) => ({ profile: { subjectUserId: discordId } }), project: projectProfileNote },
+  { category: 'staff', key: 'wellbeingProfileNote', label: 'Notes de fiche cellule de suivi vous concernant', model: 'wellbeingProfileNote', where: ({ discordId }) => ({ profile: { subjectUserId: discordId } }), project: projectProfileNote },
   // Notes écrites sur d'autres : leur texte concerne la personne suivie, seule la trace sort.
-  { category: 'staff', key: 'wellbeingProfileNoteAuthored', label: 'Notes de fiche cellule bien-être écrites', model: 'wellbeingProfileNote', where: ({ discordId }) => ({ authorId: discordId }), project: (record) => ({ id: record.id, createdAt: record.createdAt, expiresAt: record.expiresAt }) },
-  { category: 'staff', key: 'wellbeingCaseNote', label: 'Notes cellule bien-être', model: 'wellbeingCaseNote', where: ({ discordId }) => ({ authorId: discordId }), project: (record) => openNote(record as unknown as { caseId: string; content: string }) },
+  { category: 'staff', key: 'wellbeingProfileNoteAuthored', label: 'Notes de fiche cellule de suivi écrites', model: 'wellbeingProfileNote', where: ({ discordId }) => ({ authorId: discordId }), project: (record) => ({ id: record.id, createdAt: record.createdAt, expiresAt: record.expiresAt }) },
+  { category: 'staff', key: 'wellbeingCaseNote', label: 'Notes cellule de suivi', model: 'wellbeingCaseNote', where: ({ discordId }) => ({ authorId: discordId }), project: (record) => openNote(record as unknown as { caseId: string; content: string }) },
 
   // ── Système ────────────────────────────────────────────────────
   { category: 'system', key: 'scheduledTask', label: 'Tâches planifiées', model: 'scheduledTask', where: ({ discordId }) => ({ targetId: discordId }) },

@@ -148,7 +148,7 @@ describe('droits d\'une clé MCP par module', () => {
   });
 });
 
-describe('cellule bien-être fermée au MCP', () => {
+describe('cellule de suivi fermée au MCP', () => {
   const handler = mock(async () => ({ content: [{ type: 'text' as const, text: 'ok' }] }));
 
   test('le registre marque la cellule comme module confidentiel', () => {

@@ -1,5 +1,5 @@
 <!--
-  Bilan de la cellule bien-être : des chiffres, jamais de contenu de dossier.
+  Bilan de la cellule de suivi : des chiffres, jamais de contenu de dossier.
   Lisible par la direction, qui y voit si la cellule tient la charge sans
   avoir besoin d'un accès d'urgence.
 -->

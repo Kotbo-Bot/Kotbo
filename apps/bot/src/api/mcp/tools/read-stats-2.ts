@@ -5,7 +5,7 @@ import { type McpToolContext, ok, toolError } from '../toolkit.js';
 import { WELLBEING_AUDIT_MODULE } from '../../../services/staff/wellbeingPolicy.js';
 
 /**
- * Filtre du journal d'audit lu par le MCP. Les gestes de la cellule bien-être
+ * Filtre du journal d'audit lu par le MCP. Les gestes de la cellule de suivi
  * (accès d'urgence, motifs, membres consultés) n'en sortent jamais.
  */
 export function auditLogSearchWhere(guildId: string, query?: string) {

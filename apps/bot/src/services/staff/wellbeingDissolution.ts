@@ -1,5 +1,5 @@
 /**
- * Dissolution différée de la cellule bien-être.
+ * Dissolution différée de la cellule de suivi.
  *
  * Désactiver la cellule, vider sa composition ou éteindre son module coupe la
  * cellule de ses dossiers. Le propriétaire seul peut le demander ; la demande

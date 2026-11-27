@@ -1,5 +1,5 @@
 /**
- * Logique d'affichage de la page Bien-être : teintes des pastilles, filtre
+ * Logique d'affichage de la page Suivi confidentiel : teintes des pastilles, filtre
  * de la liste, chiffres clés et chronologie d'un dossier. Sans dépendance à
  * Svelte, pour être testée seule.
  */

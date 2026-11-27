@@ -1,5 +1,5 @@
 /**
- * Référents partagés entre les cellules bien-être d'un réseau de serveurs,
+ * Référents partagés entre les cellules de suivi d'un réseau de serveurs,
  * sans accès à la base ni à Discord.
  *
  * Une cellule qui partage ses référents peut confier un dossier à un membre
@@ -83,6 +83,6 @@ export function networkReferentAllowed(state: {
 
 /** Message privé au référent désigné : aucun contenu du dossier, seulement où le lire. */
 export function networkReferentText(caseGuildName: string): string {
-  return `La cellule bien-être de ${caseGuildName} vous confie le suivi d'un dossier en tant que référent du réseau. `
-    + 'Ouvrez-le depuis la cellule bien-être de votre serveur, dans le dashboard (Dossiers du réseau).';
+  return `La cellule de suivi de ${caseGuildName} vous confie le suivi d'un dossier en tant que référent du réseau. `
+    + 'Ouvrez-le depuis la cellule de suivi de votre serveur, dans le dashboard (Dossiers du réseau).';
 }

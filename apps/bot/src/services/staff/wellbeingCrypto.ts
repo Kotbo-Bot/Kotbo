@@ -1,5 +1,5 @@
 /**
- * Chiffrement au repos des dossiers de la cellule bien-être.
+ * Chiffrement au repos des dossiers de la cellule de suivi.
  *
  * Titre, personne concernée, résumé et notes peuvent révéler des données de
  * santé ou des conflits : ils sont chiffrés en base, chaque chiffré étant lié
@@ -78,7 +78,7 @@ export function openCaseHeader<T extends { guildId: string; title: string; subje
 
 /**
  * Échange avec l'auteur d'un signalement : lié au serveur, comme le dossier,
- * pour que `/bienetre suivi` le relise sans avoir à connaître le dossier.
+ * pour que `/confidentiel suivi` le relise sans avoir à connaître le dossier.
  */
 export function openReporterMessage<T extends { content: string }>(guildId: string, message: T): T {
   return { ...message, content: readable(guildId, message.content) };

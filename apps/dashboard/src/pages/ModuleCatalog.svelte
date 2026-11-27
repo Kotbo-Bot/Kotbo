@@ -210,7 +210,7 @@
       }
     }
 
-    // Module confidentiel (cellule bien-être) : seul le propriétaire l'éteint, et
+    // Module confidentiel (cellule de suivi) : seul le propriétaire l'éteint, et
     // l'extinction est différée de 24 h, annoncée à la cellule. Il reste allumé
     // d'ici là : pas d'affichage optimiste, la réponse dit ce qui se passe.
     if (next === 'inactive' && isRestrictedModule(mod.id)) {

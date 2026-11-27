@@ -65,7 +65,7 @@ export async function reconcileProfileDepartures(client: Client, now: Date = new
 export async function applyProfileRetention(guildId: string, retentionMonths: number, now: Date = new Date()): Promise<number> {
   const notes = await prisma.wellbeingProfileNote.findMany({
     where: { profile: { guildId } },
-    select: { id: true, createdAt: true, extendedAt: true, expiresAt: true },
+    select: { id: true, createdAt: true, extendedAt: true, expiresAt: true, sensitive: true },
   });
   let changed = 0;
   for (const note of notes) {

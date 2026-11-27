@@ -1,5 +1,5 @@
 <!--
-  Réglages de la cellule bien-être (propriétaire du serveur).
+  Réglages de la cellule de suivi (propriétaire du serveur).
 
   Première configuration : un parcours en étapes (composition, direction,
   alertes, signalements, récapitulatif). Ensuite : le score de sécurité et le

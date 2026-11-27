@@ -571,7 +571,7 @@ client.once(Events.ClientReady, async (c) => {
   registerStickyMessageBusSubscribers(client);
   registerWelcomeGoodbyeBusSubscribers(client);
   registerModerationBusSubscribers(scopeClientToModule(client, 'sanctions'));
-  // Cellule bien-être : seul le propriétaire donne ses rôles, chaque changement est signalé.
+  // Cellule de suivi : seul le propriétaire donne ses rôles, chaque changement est signalé.
   registerWellbeingRoleWatch(scopeClientToModule(client, 'wellbeing'));
   // Signal aux modérateurs et repérage des mots de détresse, si la cellule les active.
   registerWellbeingWatch(scopeClientToModule(client, 'wellbeing'));
@@ -973,7 +973,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return;
       }
 
-      // La cellule bien-être n'entre pas au journal : ses arguments (code de
+      // La cellule de suivi n'entre pas au journal : ses arguments (code de
       // suivi, message au signaleur) relieraient un signalement anonyme à son auteur.
       if (interaction.guildId && interaction.commandName !== WELLBEING_COMMAND) {
         const optionsString = interaction.options.data.map(opt => {
@@ -1003,7 +1003,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         await cache.invalidateGuild(interaction.guildId);
       }
 
-      // Track command usage for analytics (buffered), sauf la cellule bien-être (anonymat).
+      // Track command usage for analytics (buffered), sauf la cellule de suivi (anonymat).
       if (interaction.commandName !== WELLBEING_COMMAND) {
         try {
           const usageKey = `${interaction.guildId || 'DM'}:${interaction.commandName}:${interaction.user.id}`;
@@ -1107,7 +1107,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
   } finally {
     // Analytics des commandes : une ligne par jour, commande et membre. La
-    // cellule bien-être n'y figure pas : un signalement anonyme se retrouverait
+    // cellule de suivi n'y figure pas : un signalement anonyme se retrouverait
     // à son auteur par le classement des commandes.
     if (interaction.isChatInputCommand() && interaction.guildId && !interaction.user.bot
       && interaction.commandName !== WELLBEING_COMMAND) {

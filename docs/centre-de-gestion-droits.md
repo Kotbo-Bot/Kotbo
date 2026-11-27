@@ -43,6 +43,6 @@ ancien réglage qui n'existait que côté Shield est repris.
 ## Fiche membre par rôle
 
 Les onglets de la fiche membre se règlent selon le rôle du staff qui la
-consulte (disposition par rôle, `MemberCaseLayout`). L'onglet Bien-être est
-confidentiel et réservé à la cellule bien-être, avec un accès exceptionnel
+consulte (disposition par rôle, `MemberCaseLayout`). L'onglet Suivi confidentiel est
+confidentiel et réservé à la cellule de suivi, avec un accès exceptionnel
 journalisé.

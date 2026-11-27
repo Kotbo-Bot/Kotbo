@@ -19,7 +19,7 @@
     { id: 'analytics', label: 'Analytics' }, { id: 'contenu', label: 'Contenu' }, { id: 'messages', label: 'Messages' },
     { id: 'logs', label: 'Logs' }, { id: 'sanctions', label: 'Sanctions' }, { id: 'candidatures', label: 'Candidatures' },
     { id: 'invites', label: 'Invitations' }, { id: 'connexions', label: 'Connexions' }, { id: 'linked_accounts', label: 'Comptes liés' },
-    { id: 'notes', label: 'Notes' }, { id: 'wellbeing', label: 'Bien-être' },
+    { id: 'notes', label: 'Notes' }, { id: 'wellbeing', label: 'Suivi confidentiel' },
   ];
 
   type Rule = { name: string; roleIds: string[]; tabOrder: string[]; hiddenTabs: string[] };

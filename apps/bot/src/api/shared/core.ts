@@ -818,7 +818,7 @@ export type AuthClaims = {
   username?: string;
   avatar?: string;
   discordToken?: string;
-  /** Ouverture de la session (ms) : la cellule bien-être exige une connexion récente. */
+  /** Ouverture de la session (ms) : la cellule de suivi exige une connexion récente. */
   sessionCreatedAt?: number;
 };
 

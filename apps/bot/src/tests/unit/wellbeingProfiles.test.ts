@@ -3,6 +3,7 @@ import {
   PROFILE_DEPARTURE_MONTHS,
   PROFILE_RETENTION_DEFAULT_MONTHS,
   PROFILE_RETENTION_MAX_MONTHS,
+  PROFILE_SENSITIVE_MONTHS,
   addMonths,
   cleanProfileRetention,
   departureCap,
@@ -12,7 +13,7 @@ import {
   profileNoteDeleteError,
   shortenedExpiry,
 } from '../../services/staff/wellbeingProfilePolicy';
-import { alertText, describeConfigChange } from '../../services/staff/wellbeingPolicy';
+import { UNUSUAL_ACCESS_WINDOW_MS, alertText, describeConfigChange, openingsInWindow } from '../../services/staff/wellbeingPolicy';
 import { isSynced } from '../../services/network/networkScope';
 import { openProfileNote, openWellbeing, sealProfileNote } from '../../services/staff/wellbeingCrypto';
 
@@ -41,10 +42,17 @@ describe('durée de conservation des notes de fiche', () => {
   });
 
   test("une note d'une personne partie ne vit que 3 mois", () => {
-    expect(profileNoteExpiry(NOW, 12, null)).toEqual(addMonths(NOW, 12));
-    expect(profileNoteExpiry(NOW, 12, new Date('2026-11-01T00:00:00Z'))).toEqual(addMonths(NOW, 3));
+    const left = new Date('2026-11-01T00:00:00Z');
+    expect(profileNoteExpiry(NOW, 12, { subjectLeftAt: null, sensitive: false })).toEqual(addMonths(NOW, 12));
+    expect(profileNoteExpiry(NOW, 12, { subjectLeftAt: left, sensitive: false })).toEqual(addMonths(NOW, 3));
     // Une durée choisie plus courte que le délai de départ reste la plus courte.
-    expect(profileNoteExpiry(NOW, 1, new Date('2026-11-01T00:00:00Z'))).toEqual(addMonths(NOW, 1));
+    expect(profileNoteExpiry(NOW, 1, { subjectLeftAt: left, sensitive: false })).toEqual(addMonths(NOW, 1));
+  });
+
+  test('une note sensible (santé, vie privée) ne vit que 3 mois, quelle que soit la durée réglée', () => {
+    expect(PROFILE_SENSITIVE_MONTHS).toBe(3);
+    expect(profileNoteExpiry(NOW, 36, { subjectLeftAt: null, sensitive: true })).toEqual(addMonths(NOW, 3));
+    expect(profileNoteExpiry(NOW, 1, { subjectLeftAt: null, sensitive: true })).toEqual(addMonths(NOW, 1));
   });
 
   test('au départ, aucune note ne dépasse 3 mois', () => {
@@ -81,6 +89,13 @@ describe('baisse de la durée réglée', () => {
     expect(shortenedExpiry(note, 3, NOW)).toEqual(profilePurgeNoticeCutoff(NOW));
   });
 
+  test('une note sensible reste à 3 mois même quand la durée réglée baisse moins', () => {
+    const note = { createdAt: NOW, extendedAt: null, expiresAt: addMonths(NOW, 3), sensitive: true };
+    expect(shortenedExpiry(note, 12, NOW)).toBeNull();
+    const old = { createdAt: written, extendedAt: null, expiresAt: addMonths(written, 24), sensitive: true };
+    expect(shortenedExpiry(old, 12, NOW)).toEqual(profilePurgeNoticeCutoff(NOW));
+  });
+
   test("une note déjà plus courte n'est jamais rallongée", () => {
     const note = { createdAt: written, extendedAt: null, expiresAt: new Date('2026-12-20T00:00:00Z') };
     expect(shortenedExpiry(note, 12, NOW)).toBeNull();
@@ -105,6 +120,18 @@ describe('réglage et alertes', () => {
     const text = alertText('PURGE_SOON', { actorId: '', noteCount: 2 });
     expect(text).toContain('2 note(s) de fiche');
     expect(text).not.toContain('dossier');
+  });
+});
+
+describe('consultation inhabituelle', () => {
+  test('seules les ouvertures de la fenêtre comptent', () => {
+    const now = NOW.getTime();
+    expect(openingsInWindow([now - UNUSUAL_ACCESS_WINDOW_MS - 1, now - 1000, now], now)).toEqual([now - 1000, now]);
+  });
+
+  test("l'alerte parle de dossiers et de fiches, sans les nommer", () => {
+    const text = alertText('UNUSUAL_ACCESS', { actorId: '200000000000000001', caseCount: 12 });
+    expect(text).toContain('12 dossiers ou fiches');
   });
 });
 

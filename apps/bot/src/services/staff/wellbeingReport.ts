@@ -1,14 +1,14 @@
 /**
- * Signalement à la cellule bien-être depuis Discord (`/bienetre signaler`).
+ * Signalement à la cellule de suivi depuis Discord (`/confidentiel signaler`).
  *
  * Un signalement anonyme ne garde aucune trace de son auteur : ni dans le
  * dossier, ni dans l'historique, ni dans l'alerte. Les comptages de commandes
  * et de modules l'ignorent aussi (voir `index.ts`). Seule la limite d'envoi
  * connaît l'auteur, en mémoire, le temps du délai.
  *
- * L'auteur reçoit un code de suivi (`/bienetre suivi`) : il y lit l'état de
+ * L'auteur reçoit un code de suivi (`/confidentiel suivi`) : il y lit l'état de
  * son signalement et les derniers échanges avec la cellule, jamais qui le
- * traite. Avec ce code, il peut aussi répondre (`/bienetre repondre`) sans que
+ * traite. Avec ce code, il peut aussi répondre (`/confidentiel repondre`) sans que
  * la cellule sache qui il est. Seule l'empreinte du code est gardée, si bien
  * que la base ne relie pas un code à une personne.
  */

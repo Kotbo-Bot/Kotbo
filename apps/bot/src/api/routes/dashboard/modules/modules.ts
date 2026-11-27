@@ -44,7 +44,7 @@ export function createModuleToggleRouter(client: Client) {
       const body = (await readBody<{ status: ModuleStatus }>(c)) ?? { status: 'inactive' };
       const moduleKey = canonicalModuleKey(c.req.param('moduleId'));
 
-      // Module confidentiel (cellule bien-être) : l'éteindre coupe la cellule de
+      // Module confidentiel (cellule de suivi) : l'éteindre coupe la cellule de
       // ses dossiers. Seul le propriétaire le peut, et l'extinction est différée
       // de 24 h, annoncée à la cellule, comme sa désactivation dans ses réglages.
       if (body.status !== 'active' && isRestrictedModule(moduleKey)) {

@@ -79,7 +79,7 @@ export function registerMcpTools(
     return rows;
   };
 
-  // Salon d'alerte de la cellule bien-être, avec son nom pour reconnaître « #alertes ».
+  // Salon d'alerte de la cellule de suivi, avec son nom pour reconnaître « #alertes ».
   const loadWellbeingAlertChannel = async (): Promise<ChannelRef | null> => {
     const cacheKey = `guild:${guildId}:wellbeing-alert-channel`;
     const cached = await cache.get<{ id: string | null }>(cacheKey);

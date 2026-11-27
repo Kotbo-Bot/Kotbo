@@ -1,5 +1,5 @@
 /**
- * Fiches confidentielles de la cellule bien-être : ce que la cellule sait
+ * Fiches confidentielles de la cellule de suivi : ce que la cellule sait
  * d'une personne, en notes datées, sans rien à traiter. Les règles de
  * conservation sont dans wellbeingProfilePolicy.ts.
  *
@@ -22,7 +22,15 @@ import {
   profileNoteExpiry,
 } from '../../../../services/staff/wellbeingProfilePolicy.js';
 import { openProfileHeader, openProfileNote, sealProfileNote, sealWellbeing } from '../../../../services/staff/wellbeingCrypto.js';
-import { SNOWFLAKE_RE, actorName, audit, resolveWellbeingRole, staleSession } from './wellbeingShared.js';
+import {
+  SNOWFLAKE_RE,
+  actorName,
+  audit,
+  checkUnusualAccess,
+  recordProfileOpening,
+  resolveWellbeingRole,
+  staleSession,
+} from './wellbeingShared.js';
 
 const NOT_FOUND = 'Fiche introuvable.';
 
@@ -48,7 +56,7 @@ export function createWellbeingProfilesRouter(client: Client) {
       const stale = staleSession(c);
       if (stale) return stale;
       const state = await resolveWellbeingRole(client, guildId, user.userId);
-      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule bien-être.' }, 403);
+      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule de suivi.' }, 403);
       const profiles = await prisma.wellbeingProfile.findMany({
         where: { guildId, subjectUserId: { not: user.userId } },
         include: { notes: { select: { expiresAt: true } } },
@@ -74,7 +82,7 @@ export function createWellbeingProfilesRouter(client: Client) {
       const stale = staleSession(c);
       if (stale) return stale;
       const state = await resolveWellbeingRole(client, guildId, user.userId);
-      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule bien-être.' }, 403);
+      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule de suivi.' }, 403);
       const subjectUserId = subjectOf(c);
       if (!subjectUserId) return send(c, { error: NOT_FOUND }, 404);
       const profile = await prisma.wellbeingProfile.findUnique({
@@ -87,7 +95,9 @@ export function createWellbeingProfilesRouter(client: Client) {
       const now = new Date();
       if (shouldRecordView(lastViewAt.get(key) ?? null, now)) {
         lastViewAt.set(key, now);
-        await audit(client, c, guildId, 'Consultation fiche Cellule bien-être', `Fiche ${profile.id} ouverte.`, 'Sécurité');
+        await audit(client, c, guildId, 'Consultation fiche Cellule de suivi', `Fiche ${profile.id} ouverte.`, 'Sécurité');
+        recordProfileOpening(guildId, user.userId, now);
+        await checkUnusualAccess(client, c, guildId, state.config, now);
       }
       return send(c, { profile: { ...openProfileHeader(profile), notes: profile.notes.map((note) => openProfileNote(note)) } });
     } catch (err) {
@@ -101,10 +111,11 @@ export function createWellbeingProfilesRouter(client: Client) {
     const user = c.var.dashboardUser;
     try {
       const state = await resolveWellbeingRole(client, guildId, user.userId);
-      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule bien-être.' }, 403);
+      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule de suivi.' }, 403);
       const subjectUserId = subjectOf(c);
       if (!subjectUserId) return send(c, { error: NOT_FOUND }, 404);
-      const body = await readBody<{ content?: string; subjectName?: string }>(c);
+      const body = await readBody<{ content?: string; subjectName?: string; sensitive?: boolean }>(c);
+      const sensitive = body?.sensitive === true;
       const content = bodyText(body?.content, PROFILE_NOTE_MAX);
       if (!content) return send(c, { error: 'Contenu requis.' }, 400);
 
@@ -121,10 +132,11 @@ export function createWellbeingProfilesRouter(client: Client) {
           authorId: user.userId,
           authorName: actorName(c),
           content: sealProfileNote(profile.id, content),
-          expiresAt: profileNoteExpiry(now, state.config?.profileRetentionMonths ?? PROFILE_RETENTION_DEFAULT_MONTHS, profile.subjectLeftAt),
+          sensitive,
+          expiresAt: profileNoteExpiry(now, state.config?.profileRetentionMonths ?? PROFILE_RETENTION_DEFAULT_MONTHS, { subjectLeftAt: profile.subjectLeftAt, sensitive }),
         },
       });
-      await audit(client, c, guildId, 'Note de fiche Cellule bien-être', `Note ajoutée à la fiche ${profile.id}.`);
+      await audit(client, c, guildId, 'Note de fiche Cellule de suivi', `Note${sensitive ? ' sensible' : ''} ajoutée à la fiche ${profile.id}.`);
       return send(c, { note: openProfileNote(note) }, 201);
     } catch (err) {
       logger.error('WellbeingAPI', 'Error adding profile note:', err);
@@ -137,7 +149,7 @@ export function createWellbeingProfilesRouter(client: Client) {
     const user = c.var.dashboardUser;
     try {
       const state = await resolveWellbeingRole(client, guildId, user.userId);
-      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule bien-être.' }, 403);
+      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule de suivi.' }, 403);
       const subjectUserId = subjectOf(c);
       if (!subjectUserId) return send(c, { error: NOT_FOUND }, 404);
       const profile = await prisma.wellbeingProfile.findUnique({ where: { guildId_subjectUserId: { guildId, subjectUserId } } });
@@ -153,7 +165,7 @@ export function createWellbeingProfilesRouter(client: Client) {
       const note = await prisma.wellbeingProfileNote.update({
         where: { id: existing.id },
         data: {
-          expiresAt: profileNoteExpiry(now, state.config?.profileRetentionMonths ?? PROFILE_RETENTION_DEFAULT_MONTHS, profile.subjectLeftAt),
+          expiresAt: profileNoteExpiry(now, state.config?.profileRetentionMonths ?? PROFILE_RETENTION_DEFAULT_MONTHS, { subjectLeftAt: profile.subjectLeftAt, sensitive: existing.sensitive }),
           purgeWarnedAt: null,
           extendedAt: now,
           extendedById: user.userId,
@@ -162,7 +174,7 @@ export function createWellbeingProfilesRouter(client: Client) {
         },
       });
       // Le motif reste dans la fiche, chiffré : le journal dit seulement qu'il existe.
-      await audit(client, c, guildId, 'Prolongation note de fiche Cellule bien-être',
+      await audit(client, c, guildId, 'Prolongation note de fiche Cellule de suivi',
         `Note ${existing.id} de la fiche ${profile.id} gardée jusqu'au ${note.expiresAt.toISOString().slice(0, 10)}, motif consigné.`, 'Sécurité');
       return send(c, { note: openProfileNote(note) });
     } catch (err) {
@@ -176,7 +188,7 @@ export function createWellbeingProfilesRouter(client: Client) {
     const user = c.var.dashboardUser;
     try {
       const state = await resolveWellbeingRole(client, guildId, user.userId);
-      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule bien-être.' }, 403);
+      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule de suivi.' }, 403);
       const subjectUserId = subjectOf(c);
       if (!subjectUserId) return send(c, { error: NOT_FOUND }, 404);
       const profile = await prisma.wellbeingProfile.findUnique({ where: { guildId_subjectUserId: { guildId, subjectUserId } } });
@@ -188,7 +200,7 @@ export function createWellbeingProfilesRouter(client: Client) {
 
       // Effacée pour de bon, sans corbeille : le journal garde seulement qu'elle a existé.
       await prisma.wellbeingProfileNote.delete({ where: { id: existing.id } });
-      await audit(client, c, guildId, 'Effacement note de fiche Cellule bien-être',
+      await audit(client, c, guildId, 'Effacement note de fiche Cellule de suivi',
         `Note ${existing.id} de la fiche ${profile.id} effacée par son auteur.`, 'Sécurité');
       return send(c, { ok: true });
     } catch (err) {

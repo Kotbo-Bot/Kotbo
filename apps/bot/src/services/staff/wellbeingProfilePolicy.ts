@@ -1,5 +1,5 @@
 /**
- * Fiches confidentielles de la cellule bien-être, sans accès à la base.
+ * Fiches confidentielles de la cellule de suivi, sans accès à la base.
  *
  * Une fiche réunit ce que la cellule sait d'une personne, sans qu'il y ait
  * quoi que ce soit à traiter : des notes datées, chiffrées, sans statut ni
@@ -17,6 +17,11 @@ export const PROFILE_RETENTION_MIN_MONTHS = 1;
 export const PROFILE_RETENTION_MAX_MONTHS = 36;
 /** Durée de vie d'une note une fois la personne partie du serveur. */
 export const PROFILE_DEPARTURE_MONTHS = 3;
+/**
+ * Durée de vie d'une note sensible (santé, vie privée), cochée par qui l'écrit :
+ * ces données appellent plus de prudence (RGPD, article 9).
+ */
+export const PROFILE_SENSITIVE_MONTHS = 3;
 /** Même plafond qu'une note de dossier. */
 export const PROFILE_NOTE_MAX = 4000;
 export const PROFILE_EXTEND_REASON_MAX = 500;
@@ -40,13 +45,26 @@ export function addMonths(date: Date, months: number): Date {
   return result;
 }
 
+export interface ProfileNoteContext {
+  subjectLeftAt: Date | null;
+  sensitive: boolean;
+}
+
 /**
- * Échéance d'une note écrite ou prolongée maintenant : la durée réglée, ou
- * le délai de départ si la personne a quitté le serveur, le plus court des deux.
+ * Durée de vie d'une note, en mois : la durée réglée, ramenée au délai de
+ * départ si la personne a quitté le serveur, et à celui des notes sensibles.
  */
-export function profileNoteExpiry(now: Date, retentionMonths: number, subjectLeftAt: Date | null): Date {
-  const months = subjectLeftAt ? Math.min(retentionMonths, PROFILE_DEPARTURE_MONTHS) : retentionMonths;
-  return addMonths(now, months);
+export function noteRetentionMonths(retentionMonths: number, note: ProfileNoteContext): number {
+  return Math.min(
+    retentionMonths,
+    note.subjectLeftAt ? PROFILE_DEPARTURE_MONTHS : Infinity,
+    note.sensitive ? PROFILE_SENSITIVE_MONTHS : Infinity,
+  );
+}
+
+/** Échéance d'une note écrite ou prolongée maintenant. */
+export function profileNoteExpiry(now: Date, retentionMonths: number, note: ProfileNoteContext): Date {
+  return addMonths(now, noteRetentionMonths(retentionMonths, note));
 }
 
 /** Échéance la plus lointaine d'une note quand la personne quitte le serveur maintenant. */
@@ -76,11 +94,13 @@ export function profileExtendError(reason: string): string | null {
  * une hausse ne rallonge rien, garder plus longtemps se justifie note par note.
  */
 export function shortenedExpiry(
-  note: { createdAt: Date; extendedAt: Date | null; expiresAt: Date },
+  note: { createdAt: Date; extendedAt: Date | null; expiresAt: Date; sensitive?: boolean },
   retentionMonths: number,
   now: Date,
 ): Date | null {
-  const target = addMonths(note.extendedAt ?? note.createdAt, retentionMonths);
+  // Le départ du serveur a déjà ramené l'échéance : seul le caractère sensible compte ici.
+  const months = noteRetentionMonths(retentionMonths, { subjectLeftAt: null, sensitive: note.sensitive === true });
+  const target = addMonths(note.extendedAt ?? note.createdAt, months);
   const notice = profilePurgeNoticeCutoff(now);
   const next = target > notice ? target : notice;
   return next < note.expiresAt ? next : null;

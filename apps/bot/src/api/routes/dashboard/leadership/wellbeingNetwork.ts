@@ -1,5 +1,5 @@
 /**
- * Référents partagés entre les cellules bien-être d'un réseau de serveurs.
+ * Référents partagés entre les cellules de suivi d'un réseau de serveurs.
  *
  * Côté cellule d'origine : la liste des référents du réseau et la
  * désignation de l'un d'eux sur un dossier. Côté référent : les dossiers des
@@ -63,7 +63,7 @@ export function createWellbeingNetworkRouter(client: Client) {
     const guildId = c.req.param('guildId');
     try {
       const state = await resolveWellbeingRole(client, guildId, c.var.dashboardUser.userId);
-      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule bien-être.' }, 403);
+      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule de suivi.' }, 403);
       const subject = c.req.query('subjectUserId');
       return send(c, await networkPool(client, guildId, subject && SNOWFLAKE_RE.test(subject) ? [subject] : []));
     } catch (err) {
@@ -77,7 +77,7 @@ export function createWellbeingNetworkRouter(client: Client) {
     const user = c.var.dashboardUser;
     try {
       const state = await resolveWellbeingRole(client, guildId, user.userId);
-      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule bien-être.' }, 403);
+      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule de suivi.' }, 403);
       const caseId = c.req.param('caseId');
       const existing = await findVisibleCase(guildId, caseId, user.userId);
       if (!existing) return send(c, { error: 'Dossier introuvable.' }, 404);
@@ -100,7 +100,7 @@ export function createWellbeingNetworkRouter(client: Client) {
           data: { networkReferentId: userId, networkReferentGuildId: referentGuildId, lastActivityAt: new Date() },
         });
         await recordEvents(caseId, c, [{ type: NETWORK_REFERENT_EVENT, fromValue: existing.networkReferentId, toValue: userId }]);
-        await audit(client, c, guildId, 'Référent du réseau Cellule bien-être', userId && referentGuildId
+        await audit(client, c, guildId, 'Référent du réseau Cellule de suivi', userId && referentGuildId
           ? `Dossier ${caseId} confié à ${userId}, membre de la cellule de ${getGuildName(client, referentGuildId)}.`
           : `Dossier ${caseId} : référent du réseau retiré.`, 'Sécurité');
         if (userId) void sendWellbeingDirect(client, [userId], networkReferentText(getGuildName(client, guildId)));
@@ -153,7 +153,7 @@ export function createWellbeingNetworkRouter(client: Client) {
       if (shouldRecordView(lastView?.createdAt ?? null, new Date())) {
         await recordEvents(caseId, c, [{ type: 'VIEWED', toValue: NETWORK_VIEW }]);
         // Le journal du serveur du dossier dit qui l'a lu, et depuis quelle cellule.
-        await audit(client, c, ref.guildId, 'Consultation Cellule bien-être',
+        await audit(client, c, ref.guildId, 'Consultation Cellule de suivi',
           `Référent du réseau : dossier ${caseId} ouvert depuis la cellule de ${getGuildName(client, guildId)}.`, 'Sécurité');
       }
       // Seul ce que le référent du réseau lit et annote sort : ni plan d'action,

@@ -44,9 +44,9 @@ const EXCLUDED_MEMBER_LISTS: Record<string, string> = {
   'StarboardConfig.blockedUserIds': 'réglage du serveur, sans information sur la personne',
   'TagAutomodConfig.exemptUserIds': 'réglage du serveur, sans information sur la personne',
   'TagWave.userIds': "vague d'arrivées partagée : la liste désigne d'autres membres, l'événement du membre est exporté par TagAutomodEvent",
-  'WellbeingConfig.teamUserIds': 'réglage du serveur (équipe cellule bien-être)',
-  'WellbeingConfig.directorUserIds': 'réglage du serveur (direction cellule bien-être)',
-  'WellbeingConfig.alertUserIds': 'réglage du serveur (destinataires des alertes de la cellule bien-être)',
+  'WellbeingConfig.teamUserIds': 'réglage du serveur (équipe cellule de suivi)',
+  'WellbeingConfig.directorUserIds': 'réglage du serveur (direction cellule de suivi)',
+  'WellbeingConfig.alertUserIds': 'réglage du serveur (destinataires des alertes de la cellule de suivi)',
 };
 
 /** Champs au nom d'auteur d'action qui n'en sont pas : état de jeu, réglage. */

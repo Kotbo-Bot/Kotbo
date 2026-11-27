@@ -149,7 +149,7 @@ describe('garde des écritures : widget de profil', () => {
   });
 });
 
-describe('garde des écritures : cellule bien-être', () => {
+describe('garde des écritures : cellule de suivi', () => {
   test('un membre du staff peut ouvrir un dossier, le modifier, le noter ou demander un accès d urgence', async () => {
     // wellbeing.ts revérifie ensuite l'appartenance à la cellule ou à la direction.
     featureAccess = {};

@@ -5924,6 +5924,7 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "authorName": "",
     "content": "",
     "expiresAt": "__NOW__",
+    "sensitive": false,
     "purgeWarnedAt": null,
     "extendedAt": null,
     "extendedById": null,

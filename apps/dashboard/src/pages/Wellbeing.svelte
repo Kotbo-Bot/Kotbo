@@ -83,6 +83,8 @@
   ] : []);
   type ListFilter = WbCaseFilter | 'trash';
   let activeTab = $state<Tab>('cases');
+  /** Fiche à ouvrir à l'arrivée sur l'onglet Fiches, depuis un lien. */
+  let profileSubjectId = $state<string | null>(null);
   let caseFilter = $state<ListFilter>('active');
   let caseSearch = $state('');
   let caseSort = $state<WbCaseSort>('recent');
@@ -454,6 +456,13 @@
       }
       if (!stRes.ok) throw new Error('status');
       status = await stRes.json();
+      // Lien direct (fiche membre) : `?profile=` ouvre la fiche de cette personne.
+      const linkedProfile = new URLSearchParams(window.location.search).get('profile');
+      if (linkedProfile) {
+        history.replaceState(history.state, '', window.location.pathname);
+        profileSubjectId = linkedProfile;
+        activeTab = 'profiles';
+      }
 
       if (status?.hasCaseAccess) {
         const casesRes = await dashboardFetch('/wellbeing/cases');
@@ -1509,7 +1518,7 @@
         {/if}
       {/if}
     {:else if activeTab === 'profiles'}
-      <ProfilesPanel {cases} hidden={contentHidden}
+      <ProfilesPanel {cases} hidden={contentHidden} initialSubjectId={profileSubjectId}
         checkReauth={async (res) => { const stale = await needsReauth(res); if (stale) activeTab = 'cases'; return stale; }}
         onopencase={(caseId) => { activeTab = 'cases'; openCaseById(caseId); mobileDetail = true; }}
         onnewcase={(prefill) => { activeTab = 'cases'; void openNewCase(prefill); }} />

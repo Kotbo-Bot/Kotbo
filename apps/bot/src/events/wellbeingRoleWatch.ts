@@ -1,5 +1,5 @@
 /**
- * Garde des rôles de la cellule bien-être.
+ * Garde des rôles de la cellule de suivi.
  *
  * La cellule et la direction peuvent se composer par rôles Discord, et un rôle
  * se donne hors de Kotbo : quiconque a « Gérer les rôles » pouvait s'ajouter à
@@ -68,7 +68,7 @@ export function registerWellbeingRoleWatch(client: Client): void {
           markOwnRevert(key);
           const member = await guild.members.fetch(targetId).catch(() => null);
           reverted = !!member && await member.roles
-            .remove(change.roleId, '[Cellule bien-être] Seul le propriétaire du serveur peut donner ce rôle')
+            .remove(change.roleId, '[Cellule de suivi] Seul le propriétaire du serveur peut donner ce rôle')
             .then(() => true, (err) => {
               logger.error('Wellbeing', `Rôle ${change.roleId} non retiré à ${targetId} :`, err);
               return false;
@@ -78,7 +78,7 @@ export function registerWellbeingRoleWatch(client: Client): void {
         const group = change.scope === 'direction' ? 'direction' : 'cellule';
         await pushAudit(guild.id, {
           user: executorName,
-          action: 'Appartenance Cellule bien-être',
+          action: 'Appartenance Cellule de suivi',
           context: guild.name,
           module: WELLBEING_AUDIT_MODULE,
           eventType: 'Sécurité',

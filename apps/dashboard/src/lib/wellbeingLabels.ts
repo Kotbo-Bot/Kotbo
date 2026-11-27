@@ -1,5 +1,5 @@
 /**
- * Codes des dossiers de la cellule bien-être (ceux du bot) et leurs libellés
+ * Codes des dossiers de la cellule de suivi (ceux du bot) et leurs libellés
  * traduits : la page et l'onglet de la fiche membre affichent les mêmes.
  */
 import { m } from './i18n';

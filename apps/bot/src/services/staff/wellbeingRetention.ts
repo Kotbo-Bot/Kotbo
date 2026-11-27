@@ -1,5 +1,5 @@
 /**
- * Conservation des dossiers de la cellule bien-être.
+ * Conservation des dossiers de la cellule de suivi.
  *
  * Ces dossiers peuvent contenir des données sensibles (santé, conflits) : on
  * ne les garde pas indéfiniment. Un dossier fermé et inchangé depuis la durée

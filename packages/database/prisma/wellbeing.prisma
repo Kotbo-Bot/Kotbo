@@ -1,5 +1,5 @@
 // ============================================================================
-// CELLULE BIEN-ÊTRE (ESPACE CONFIDENTIEL CLOISONNÉ) & MULTI-SERVEURS PUBLICS
+// CELLULE DE SUIVI (ESPACE CONFIDENTIEL CLOISONNÉ) & MULTI-SERVEURS PUBLICS
 // ============================================================================
 
 model WellbeingConfig {
@@ -17,7 +17,7 @@ model WellbeingConfig {
   alertEvents      String[] @default(["BREAK_GLASS", "EMERGENCY_READ", "CONFIG_CHANGE", "REPORT", "REMINDER", "MEMBERSHIP_CHANGE", "PURGE_SOON", "UNUSUAL_ACCESS", "DISSOLUTION", "DISTRESS"])
   // Accès d'urgence validé par une seconde personne (direction ou cellule).
   breakGlassApproval Boolean @default(false)
-  // Signalements depuis Discord (/bienetre signaler).
+  // Signalements depuis Discord (/confidentiel signaler).
   reportEnabled    Boolean  @default(false)
   // Relance d'un dossier critique resté sans activité pendant ce nombre de jours.
   staleCriticalDays Int     @default(7)
@@ -154,6 +154,8 @@ model WellbeingProfileNote {
   authorName     String
   content        String
   expiresAt      DateTime
+  // Santé, vie privée : la note ne vit que 3 mois et reste masquée jusqu'à un clic.
+  sensitive      Boolean   @default(false)
   // Annonce de l'effacement, une semaine avant ; vidée par une prolongation.
   purgeWarnedAt  DateTime?
   // Dernière prolongation et son motif (chiffré comme la note).

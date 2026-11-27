@@ -1,5 +1,5 @@
 /**
- * Logique de l'onglet Réglages de la cellule bien-être : formulaire, score de
+ * Logique de l'onglet Réglages de la cellule de suivi : formulaire, score de
  * sécurité, tableau « qui peut quoi » et parcours de première configuration.
  * Sans dépendance à Svelte, pour être testée seule.
  */

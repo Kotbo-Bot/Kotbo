@@ -417,8 +417,8 @@ export const MODULE_REGISTRY: ModuleDefinition[] = [
   },
   {
     key: 'wellbeing',
-    name: 'Cellule bien-être',
-    description: "Dossiers confidentiels de soutien et de médiation, cloisonnés, avec accès d'urgence journalisé.",
+    name: 'Suivi confidentiel',
+    description: "Fiches confidentielles sur les personnes et dossiers de soutien et de médiation, cloisonnés, avec accès d'urgence journalisé.",
     category: 'staff',
     icon: 'HeartHandshake',
     defaultEnabled: true,

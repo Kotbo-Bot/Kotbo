@@ -1,5 +1,5 @@
 /**
- * Routes dashboard de la cellule bien-être : les garde-fous d'accès.
+ * Routes dashboard de la cellule de suivi : les garde-fous d'accès.
  *
  * Préfixe `zzz-` : ce fichier remplace la base, les alertes, l'historique et
  * les absences pour tout le process (`mock.module` est global). Il doit
@@ -591,12 +591,32 @@ describe('fiches confidentielles', () => {
     expect(months).toBeLessThan(13);
   });
 
+  test('une note sensible ne vit que 3 mois', async () => {
+    const { status } = await profileCall('POST', `/profiles/${SUBJECT}/notes`, { content: 'Suivi médical', subjectName: 'Sujet', sensitive: true });
+    expect(status).toBe(201);
+    const args = mockDb.wellbeingProfileNote.create.mock.calls[0]?.[0] as { data: { expiresAt: Date; sensitive: boolean } };
+    expect(args.data.sensitive).toBe(true);
+    const days = (args.data.expiresAt.getTime() - Date.now()) / (24 * HOUR);
+    expect(days).toBeGreaterThan(85);
+    expect(days).toBeLessThan(95);
+  });
+
   test('prolonger sans motif est refusé', async () => {
     profile = { id: 'profile-1', guildId: GUILD, subjectUserId: SUBJECT, subjectName: 'Sujet', subjectLeftAt: null };
     profileNote = { id: 'pnote-1', profileId: 'profile-1', content: 'x', expiresAt: new Date(Date.now() + 3 * 24 * HOUR), purgeWarnedAt: new Date() };
     const { status } = await profileCall('POST', `/profiles/${SUBJECT}/notes/pnote-1/extend`, { reason: ' ' });
     expect(status).toBe(400);
     expect(mockDb.wellbeingProfileNote.update).not.toHaveBeenCalled();
+  });
+
+  test('ouvrir beaucoup de fiches en peu de temps prévient la cellule', async () => {
+    for (let i = 0; i < 10; i += 1) {
+      const subject = `20000000000000000${i}`;
+      profile = { id: `profile-burst-${i}`, guildId: GUILD, subjectUserId: subject, subjectName: 'Sujet', subjectLeftAt: null, notes: [] };
+      expect((await profileCall('GET', `/profiles/${subject}`, undefined, session(BOB))).status).toBe(200);
+    }
+    const details = mockDb.dashboardAuditLog.create.mock.calls.map((call) => String((call[0] as { data: { details: string } }).data.details));
+    expect(details.some((text) => text.includes('Consultation inhabituelle'))).toBe(true);
   });
 
   test("seul l'auteur efface sa note, et l'effacement entre au journal", async () => {

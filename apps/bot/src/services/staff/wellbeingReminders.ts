@@ -1,5 +1,5 @@
 /**
- * Relances de la cellule bien-être, passées toutes les heures.
+ * Relances de la cellule de suivi, passées toutes les heures.
  *
  * - Échéance de suivi atteinte : le référent est prévenu, ainsi que les
  *   destinataires des alertes s'ils suivent l'événement REMINDER. Une fois par

@@ -1,5 +1,5 @@
 /**
- * Rôles Discord de la cellule bien-être et de sa direction. Seul le
+ * Rôles Discord de la cellule de suivi et de sa direction. Seul le
  * propriétaire du serveur les distribue (voir events/wellbeingRoleWatch.ts) :
  * les outils de Kotbo refusent d'y toucher.
  */
@@ -8,7 +8,7 @@ import prisma from '../../utils/db.js';
 import type { WellbeingActor } from './wellbeingPolicy.js';
 
 export const CELL_ROLE_REFUSAL =
-  'Ce rôle donne accès à la cellule bien-être : seul le propriétaire du serveur peut le donner ou le retirer, depuis Discord.';
+  'Ce rôle donne accès à la cellule de suivi : seul le propriétaire du serveur peut le donner ou le retirer, depuis Discord.';
 
 export async function cellRoleIds(guildId: string): Promise<Set<string>> {
   const config = await prisma.wellbeingConfig.findUnique({

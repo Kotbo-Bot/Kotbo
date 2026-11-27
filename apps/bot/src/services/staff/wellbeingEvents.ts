@@ -1,5 +1,5 @@
 /**
- * Écriture de l'historique d'un dossier de la cellule bien-être.
+ * Écriture de l'historique d'un dossier de la cellule de suivi.
  *
  * Chaque entrée porte une empreinte liée à la précédente (`caseEventHash`) :
  * une entrée modifiée ou retirée directement en base se voit à la relecture

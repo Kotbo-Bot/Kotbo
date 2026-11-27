@@ -1,5 +1,5 @@
 /**
- * Écoutes de la cellule bien-être hors du dashboard, toutes à activer par le
+ * Écoutes de la cellule de suivi hors du dashboard, toutes à activer par le
  * propriétaire dans les réglages de la cellule :
  *
  * - Signal aux modérateurs (`sanctionSignal`) : quand une personne qui a un
@@ -94,7 +94,7 @@ async function onMemberLeave(member: GuildMember | PartialGuildMember) {
   if (profile) await markProfileLeft(profile.id, new Date());
 }
 
-/** `client` est limité au module bien-être (`scopeClientToModule`). */
+/** `client` est limité au module Suivi confidentiel (`scopeClientToModule`). */
 export function registerWellbeingWatch(client: Client): void {
   subscribeForModule('wellbeing', 'sanction:applied', async (payload) => {
     await onSanctionApplied(client, payload).catch((error) => logger.error('Wellbeing', 'Signal de sanction en échec :', error));

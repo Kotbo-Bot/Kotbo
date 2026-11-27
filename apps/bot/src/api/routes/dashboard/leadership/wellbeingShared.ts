@@ -1,5 +1,5 @@
 /**
- * Outils communs aux routes de la cellule bien-être : droits de la personne,
+ * Outils communs aux routes de la cellule de suivi : droits de la personne,
  * lecture des dossiers visibles, historique et journal d'audit.
  */
 import type { Client } from 'discord.js';
@@ -8,14 +8,19 @@ import prisma from '../../../../utils/db.js';
 import { getGuildName, pushAudit } from '../../../shared.js';
 import { auditUserOf } from '../../../hono/dashboard/kit.js';
 import {
+  UNUSUAL_ACCESS_COOLDOWN_MS,
+  UNUSUAL_ACCESS_WINDOW_MS,
   WELLBEING_AUDIT_MODULE,
   caseVisibilityWhere,
+  isUnusualAccess,
+  openingsInWindow,
   resolveWellbeingAccess,
   wellbeingSessionExpired,
   type CaseEventDraft,
 } from '../../../../services/staff/wellbeingPolicy.js';
 import { appendCaseEvents } from '../../../../services/staff/wellbeingEvents.js';
 import { cellActorOf, discordGuildOf } from '../../../../services/staff/wellbeingRoles.js';
+import { sendWellbeingAlert } from '../../../../services/staff/wellbeingAlerts.js';
 
 export const SNOWFLAKE_RE = /^\d{17,20}$/;
 
@@ -68,7 +73,7 @@ export function findVisibleCase(guildId: string, caseId: string, viewerId: strin
  */
 export function staleSession(c: Context): Response | null {
   if (!wellbeingSessionExpired(c.var.dashboardUser.sessionCreatedAt, Date.now())) return null;
-  return c.json({ error: 'Reconnectez-vous pour ouvrir les dossiers de la cellule bien-être.', code: 'WELLBEING_REAUTH' }, 403);
+  return c.json({ error: 'Reconnectez-vous pour ouvrir les dossiers de la cellule de suivi.', code: 'WELLBEING_REAUTH' }, 403);
 }
 
 export async function resolveWellbeingRole(client: Client, guildId: string, userId: string) {
@@ -127,4 +132,41 @@ export async function audit(client: Client, c: Context, guildId: string, action:
     details,
     channelId: null,
   });
+}
+
+// ── Consultation inhabituelle ──────────────────────────────────────────────
+
+/** Dernière alerte de consultation inhabituelle, par serveur et par personne. */
+const unusualAlertAt = new Map<string, number>();
+/**
+ * Fiches ouvertes, par serveur et par personne. Une fiche n'a pas d'historique
+ * comme un dossier : ses ouvertures sont comptées ici, sur la seule fenêtre.
+ */
+const profileOpenings = new Map<string, number[]>();
+
+/** Une fiche vient d'être ouverte : elle compte pour la consultation inhabituelle. */
+export function recordProfileOpening(guildId: string, userId: string, now: Date): void {
+  const key = `${guildId}:${userId}`;
+  profileOpenings.set(key, [...openingsInWindow(profileOpenings.get(key) ?? [], now.getTime()), now.getTime()]);
+}
+
+/**
+ * Beaucoup de dossiers et de fiches ouverts en peu de temps par une même
+ * personne : compte inhabituel ou curiosité, la cellule est prévenue (une
+ * fois par heure).
+ */
+export async function checkUnusualAccess(client: Client, c: Context, guildId: string, config: WellbeingState['config'], now: Date): Promise<void> {
+  const userId = c.var.dashboardUser.userId;
+  const key = `${guildId}:${userId}`;
+  const cases = await prisma.wellbeingCaseEvent.count({
+    where: { type: 'VIEWED', actorId: userId, createdAt: { gte: new Date(now.getTime() - UNUSUAL_ACCESS_WINDOW_MS) }, wellbeingCase: { guildId } },
+  });
+  const opened = cases + openingsInWindow(profileOpenings.get(key) ?? [], now.getTime()).length;
+  if (!isUnusualAccess(opened)) return;
+  const last = unusualAlertAt.get(key);
+  if (last !== undefined && now.getTime() - last < UNUSUAL_ACCESS_COOLDOWN_MS) return;
+  unusualAlertAt.set(key, now.getTime());
+  await audit(client, c, guildId, 'Consultation Cellule de suivi',
+    `Consultation inhabituelle : ${opened} dossiers ou fiches ouverts en ${UNUSUAL_ACCESS_WINDOW_MS / 60_000} minutes.`, 'Sécurité');
+  void sendWellbeingAlert(client, guildId, config, 'UNUSUAL_ACCESS', { actorId: userId, caseCount: opened });
 }

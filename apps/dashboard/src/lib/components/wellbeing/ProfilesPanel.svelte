@@ -10,6 +10,7 @@
   import { toast } from '../../stores/toast.svelte';
   import { authStore } from '../../stores/auth.svelte';
   import { confirmDialog } from '../../stores/confirmDialog.svelte';
+  import { memberIdentities } from '../../stores/memberIdentities.svelte';
   import { wbStatusLabel } from '../../wellbeingLabels';
   import { wbStatusTone } from '../../wellbeingView';
   import MemberSearchSelect from '../MemberSearchSelect.svelte';
@@ -17,13 +18,14 @@
   import { Button, EmptyState } from '../ui';
 
   type ProfileHeader = { id: string; subjectUserId: string; subjectName: string; subjectLeftAt: string | null; noteCount: number; nextExpiry: string | null };
-  type ProfileNote = { id: string; authorId: string; authorName: string; content: string; createdAt: string; expiresAt: string; extendedAt: string | null; extendedByName: string | null; extendedReason: string | null };
+  type ProfileNote = { id: string; authorId: string; authorName: string; content: string; sensitive: boolean; createdAt: string; expiresAt: string; extendedAt: string | null; extendedByName: string | null; extendedReason: string | null };
   type Profile = { id: string; subjectUserId: string; subjectName: string; subjectLeftAt: string | null; notes: ProfileNote[] };
   type CaseHeader = { id: string; title: string; status: string; subjectUserId?: string | null };
 
   const {
     cases,
     hidden,
+    initialSubjectId = null,
     checkReauth,
     onopencase,
     onnewcase,
@@ -32,6 +34,8 @@
     cases: CaseHeader[];
     /** Mode discret : les notes ne sont pas rendues. */
     hidden: boolean;
+    /** Fiche ouverte d'emblée (lien depuis la fiche membre). */
+    initialSubjectId?: string | null;
     /** Connexion trop ancienne : la page propose de se reconnecter. */
     checkReauth: (res: Response) => Promise<boolean>;
     onopencase: (caseId: string) => void;
@@ -49,6 +53,9 @@
   let profile = $state<Profile | null>(null);
   let loading = $state(false);
   let text = $state('');
+  let sensitive = $state(false);
+  /** Notes sensibles affichées d'un clic, le temps de la fiche ouverte. */
+  let shownSensitive = $state<string[]>([]);
   let saving = $state(false);
   let extendingId = $state<string | null>(null);
   let reason = $state('');
@@ -63,12 +70,17 @@
     if (res.ok) profiles = (await res.json()).profiles ?? [];
   }
 
-  onMount(() => void loadList());
+  onMount(() => {
+    void loadList();
+    if (initialSubjectId) void open(initialSubjectId, memberIdentities.get(initialSubjectId)?.displayName ?? initialSubjectId);
+  });
 
   async function open(userId: string, name: string) {
     subject = { userId, name };
     profile = null;
     text = '';
+    sensitive = false;
+    shownSensitive = [];
     extendingId = null;
     loading = true;
     try {
@@ -98,14 +110,16 @@
       const res = await dashboardFetch(`/wellbeing/profiles/${subject.userId}/notes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content, subjectName: subject.name }),
+        body: JSON.stringify({ content, subjectName: subject.name, sensitive }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? '');
       profile = profile
         ? { ...profile, notes: [...profile.notes, data.note] }
         : { id: data.note.profileId, subjectUserId: subject.userId, subjectName: subject.name, subjectLeftAt: null, notes: [data.note] };
+      if (sensitive) shownSensitive = [...shownSensitive, data.note.id];
       text = '';
+      sensitive = false;
       toast.success(m.toast_wb_note_saved());
       void loadList();
     } catch (err: any) {
@@ -226,10 +240,15 @@
           <ul class="space-y-2">
             {#each profile.notes as note (note.id)}
               <li class="rounded-lg bg-surface-container-high/30 px-3 py-2 space-y-1.5">
-                <p class="text-2xs text-on-surface-variant">
+                <p class="text-2xs text-on-surface-variant flex flex-wrap items-center gap-1.5">
+                  {#if note.sensitive}<span class="rounded-full px-2 py-0.5 bg-warning/15 text-on-warning-container border border-warning/30">{m.wb_profiles_sensitive_badge()}</span>{/if}
                   {note.authorName} · {formatDate(note.createdAt)} · {m.wb_profiles_note_expiry({ date: formatDate(note.expiresAt) })}
                 </p>
-                <p class="whitespace-pre-wrap text-sm">{note.content}</p>
+                {#if note.sensitive && !shownSensitive.includes(note.id)}
+                  <Button size="sm" variant="secondary" icon="eye" onclick={() => (shownSensitive = [...shownSensitive, note.id])}>{m.wb_profiles_sensitive_reveal()}</Button>
+                {:else}
+                  <p class="whitespace-pre-wrap text-sm">{note.content}</p>
+                {/if}
                 {#if note.extendedAt && note.extendedReason}
                   <p class="text-2xs text-on-surface-variant">{m.wb_profiles_note_extended({ name: note.extendedByName ?? '', date: formatDate(note.extendedAt), reason: note.extendedReason })}</p>
                 {/if}
@@ -259,6 +278,10 @@
         <div class="space-y-1.5">
           <label for="wb-profile-note" class="text-xs font-medium text-on-surface-variant">{m.wb_profiles_note_label()}</label>
           <textarea id="wb-profile-note" class="input w-full min-h-20" maxlength={NOTE_MAX} bind:value={text}></textarea>
+          <label class="flex items-start gap-2 text-xs text-on-surface">
+            <input type="checkbox" class="mt-0.5" bind:checked={sensitive} />
+            <span>{m.wb_profiles_sensitive_label()} <span class="block text-2xs text-on-surface-variant">{m.wb_profiles_sensitive_hint()}</span></span>
+          </label>
           <p class="text-2xs text-on-surface-variant">{m.wb_profiles_note_hint()}</p>
           <div class="flex justify-end">
             <Button size="sm" variant="primary" icon="Send" disabled={!text.trim()} loading={saving} onclick={() => void addNote()}>{m.wb_profiles_note_add()}</Button>
