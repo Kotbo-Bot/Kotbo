@@ -175,7 +175,7 @@
       transition:scale={{ start: 0.98, duration: 150 }}
     >
       <div class="flex items-center gap-2 p-3">
-        <label class="flex flex-1 min-w-0 items-center gap-2.5 rounded-full bg-surface-container pl-4">
+        <label class="flex flex-1 min-w-0 items-center gap-2.5 rounded-full bg-surface-container pl-4 focus-within:ring-2 focus-within:ring-primary/60">
           <Papicon icon="Search" size={16} class="text-on-surface-variant shrink-0" />
           <input aria-label={m.d7_search_server()}
             bind:this={inputEl}
@@ -184,7 +184,7 @@
             onkeydown={handleKeydown}
             type="text"
             placeholder={m.d7_search_server()}
-            class="min-h-11 flex-1 min-w-0 rounded-r-full bg-transparent pr-4 text-sm text-on-surface placeholder:text-on-surface-variant focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+            class="min-h-11 flex-1 min-w-0 rounded-r-full bg-transparent pr-4 text-sm text-on-surface placeholder:text-on-surface-variant focus-visible:outline-none!"
           />
         </label>
         <button type="button" class="kbd-key hidden sm:inline-flex cursor-pointer" onclick={close} aria-label={m.common_close()}>Esc</button>
