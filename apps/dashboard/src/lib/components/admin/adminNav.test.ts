@@ -5,7 +5,7 @@ describe('plan de la console admin', () => {
   test('chaque page admin appartient a un seul espace', () => {
     const paths = ADMIN_SPACES.flatMap((space) => space.tabs.map((tab) => tab.path));
     expect(new Set(paths).size).toBe(paths.length);
-    expect(paths.length).toBe(28);
+    expect(paths.length).toBe(29);
   });
 
   test('l’accueil ne capte pas les autres pages', () => {

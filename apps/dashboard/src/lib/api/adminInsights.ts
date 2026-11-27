@@ -77,6 +77,43 @@ export interface FleetActivity {
 
 export const fetchFleetActivity = (days = 30) => read<FleetActivity>(`/api/admin/insights/activity?days=${days}`);
 
+// ── Recherche de messages ────────────────────────────────────────────────────
+
+export interface FoundGuild {
+  id: string;
+  name: string | null;
+  icon: string | null;
+  memberCount: number;
+}
+
+export interface FoundMessage {
+  id: string;
+  guildId: string;
+  guild: FoundGuild;
+  channelId: string;
+  channelName: string;
+  messageId: string;
+  authorId: string;
+  authorName: string;
+  authorAvatar: string | null;
+  isBot: boolean;
+  content: string;
+  attachments: { name: string; url: string }[] | null;
+  createdAt: string;
+  editedAt: string | null;
+  deletedAt: string | null;
+}
+
+export interface MessageSearchResult {
+  kind: 'link' | 'id' | 'text';
+  linkGuild: FoundGuild | null;
+  messages: FoundMessage[];
+  hasMore: boolean;
+}
+
+export const searchAdminMessages = (query: string, offset = 0) =>
+  read<MessageSearchResult>(`/api/admin/messages/search?q=${encodeURIComponent(query)}&offset=${offset}`);
+
 // ── Fiche d'un serveur ───────────────────────────────────────────────────────
 
 export interface GuildSheetDay {

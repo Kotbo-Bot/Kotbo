@@ -24,6 +24,7 @@ export const AUDIT_DOMAINS: Record<string, string> = {
   query_stats: 'Performances',
   staff_server: 'Serveur staff',
   dashboard: 'Dashboard',
+  message: 'Messages',
 };
 
 export const AUDIT_ACTIONS: Record<string, string> = {
@@ -31,6 +32,7 @@ export const AUDIT_ACTIONS: Record<string, string> = {
   'site.suspend': 'Site suspendu',
   'site.unsuspend': 'Site réactivé',
   'dashboard.global_admin_write': 'Modification faite en tant qu’admin global',
+  'message.search': 'Recherche de messages sur tous les serveurs',
   'query_stats.reset': 'Statistiques de requêtes remises à zéro',
   'shard.restart_all': 'Redémarrage complet du bot',
   'shard.restart': 'Redémarrage d’un shard',

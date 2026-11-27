@@ -834,6 +834,10 @@
               load={() => import("./pages/admin/Shards.svelte")}
             />
             <LazyRoute
+              path="/admin/messages"
+              load={() => import("./pages/admin/MessageSearch.svelte")}
+            />
+            <LazyRoute
               path="/admin/security"
               load={() => import("./pages/admin/Security.svelte")}
             />
