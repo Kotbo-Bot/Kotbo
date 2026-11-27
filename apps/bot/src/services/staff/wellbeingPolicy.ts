@@ -27,6 +27,7 @@ export interface WellbeingAccessLists {
   pulseEnabled?: boolean;
   pulseRoleIds?: string[];
   networkPool?: boolean;
+  profileRetentionMonths?: number;
 }
 
 /**
@@ -68,6 +69,8 @@ export interface AlertContext {
   /** Auteur du geste ; vide pour une tâche planifiée. */
   actorId: string;
   caseCount?: number;
+  /** Notes de fiche bientôt effacées (PURGE_SOON). */
+  noteCount?: number;
   reason?: string;
   expiresAt?: Date;
   /** Geste sur un dossier : « créé », « modifié », « annoté », « supprimé ». */
@@ -136,6 +139,9 @@ export function alertText(event: WellbeingAlertEvent, ctx: AlertContext): string
     case 'UNUSUAL_ACCESS':
       return `Cellule bien-être : ${actor} a ouvert ${ctx.caseCount ?? 0} dossiers en ${UNUSUAL_ACCESS_WINDOW_MS / 60_000} minutes. Vérifiez que c'est attendu.`;
     case 'PURGE_SOON':
+      if (ctx.noteCount !== undefined) {
+        return `Cellule bien-être : ${ctx.noteCount} note(s) de fiche seront effacées dans ${PURGE_NOTICE_DAYS} jours. Prolongez-les depuis le dashboard, avec un motif, pour les garder.`;
+      }
       return `Cellule bien-être : ${ctx.caseCount ?? 0} dossier(s) fermé(s) seront effacés dans ${PURGE_NOTICE_DAYS} jours. Prolongez-les depuis le dashboard pour les garder.`;
     case 'REMINDER':
       if (ctx.reminder === 'follow_up') {
@@ -254,6 +260,10 @@ export function describeConfigChange(
     listLine('Météo du staff', prev.pulseRoleIds ?? [], after.pulseRoleIds ?? [], nameOf),
     (prev.networkPool ?? false) !== (after.networkPool ?? false)
       ? `Référents du réseau : ${after.networkPool ? 'partagés' : 'plus partagés'}` : null,
+    // À la création de la cellule, la durée par défaut n'est pas un changement.
+    prev.profileRetentionMonths !== undefined && after.profileRetentionMonths !== undefined
+      && prev.profileRetentionMonths !== after.profileRetentionMonths
+      ? `Conservation des fiches : ${after.profileRetentionMonths} mois` : null,
   ].filter((line): line is string => line !== null);
   return lines.length > 0 ? lines.join(' · ') : 'Aucun changement';
 }

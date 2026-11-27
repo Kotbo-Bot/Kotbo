@@ -51,6 +51,8 @@ model WellbeingConfig {
   // Référents partagés avec les autres cellules du réseau de serveurs qui
   // partagent aussi : un dossier peut être confié à l'un de leurs membres.
   networkPool        Boolean  @default(false)
+  // Durée de vie d'une note de fiche, en mois (1 à 36) ; 3 mois après le départ du serveur.
+  profileRetentionMonths Int  @default(12)
 
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
 
@@ -121,6 +123,52 @@ model WellbeingCase {
   @@index([status, followUpAt])
   @@index([networkReferentId])
   @@map("wellbeing_cases")
+}
+
+// Fiche confidentielle : ce que la cellule sait d'une personne, sans rien à
+// traiter. Une par personne et par serveur ; elle disparaît avec sa dernière note.
+model WellbeingProfile {
+  id            String    @id @default(cuid())
+  guildId       String
+  subjectUserId String
+  // Nom de la personne, chiffré et lié au serveur (wellbeingCrypto).
+  subjectName   String
+  // Départ du serveur : les notes ne vivent plus que 3 mois.
+  subjectLeftAt DateTime?
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  notes WellbeingProfileNote[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([guildId, subjectUserId])
+  @@map("wellbeing_profiles")
+}
+
+// Note d'une fiche, chiffrée et liée à sa fiche, avec sa propre échéance.
+model WellbeingProfileNote {
+  id             String    @id @default(cuid())
+  profileId      String
+  authorId       String
+  authorName     String
+  content        String
+  expiresAt      DateTime
+  // Annonce de l'effacement, une semaine avant ; vidée par une prolongation.
+  purgeWarnedAt  DateTime?
+  // Dernière prolongation et son motif (chiffré comme la note).
+  extendedAt     DateTime?
+  extendedById   String?
+  extendedByName String?
+  extendedReason String?
+
+  profile WellbeingProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([profileId, createdAt])
+  @@index([expiresAt])
+  @@map("wellbeing_profile_notes")
 }
 
 // Échanges anonymes avec l'auteur d'un signalement, lus et écrits par lui avec

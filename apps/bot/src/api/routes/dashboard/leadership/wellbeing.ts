@@ -75,6 +75,7 @@ import { closeTicket } from '../../../../services/features/ticketService.js';
 import { wellbeingPanelMessage } from '../../../../commands/utility/wellbeing.js';
 import { resolveGuildLocale } from '../../../../utils/i18n.js';
 import { bodyText } from '../../../../utils/bodyText.js';
+import { PROFILE_RETENTION_DEFAULT_MONTHS, cleanProfileRetention } from '../../../../services/staff/wellbeingProfilePolicy.js';
 import {
   CASE_INCLUDE,
   CASE_LIST_SELECT,
@@ -181,6 +182,7 @@ export function createWellbeingRouter(client: Client) {
         pulseEnabled: false,
         pulseRoleIds: [],
         networkPool: false,
+        profileRetentionMonths: PROFILE_RETENTION_DEFAULT_MONTHS,
         resources: [],
       };
       return send(c, { config });
@@ -219,6 +221,7 @@ export function createWellbeingRouter(client: Client) {
         pulseEnabled?: boolean;
         pulseRoleIds?: string[];
         networkPool?: boolean;
+        profileRetentionMonths?: number;
       }>(c);
       const cleanIds = (arr: unknown) =>
         Array.isArray(arr) ? arr.filter((x): x is string => typeof x === 'string' && SNOWFLAKE_RE.test(x)) : [];
@@ -235,6 +238,7 @@ export function createWellbeingRouter(client: Client) {
       const followUpDays = typeof body?.followUpDays === 'number' && Number.isInteger(body.followUpDays)
         ? Math.min(Math.max(body.followUpDays, 0), MAX_FOLLOW_UP_DAYS)
         : undefined;
+      const profileRetentionMonths = cleanProfileRetention(body?.profileRetentionMonths);
       // Les rôles interrogés par la météo du staff doivent exister sur le serveur.
       const pulseRoleIds = body?.pulseRoleIds !== undefined
         ? cleanIds(body.pulseRoleIds).filter((id) => state.discordGuild?.roles.cache.has(id))
@@ -245,6 +249,7 @@ export function createWellbeingRouter(client: Client) {
         ...(typeof body?.distressWatch === 'boolean' ? { distressWatch: body.distressWatch } : {}),
         ...(typeof body?.pulseEnabled === 'boolean' ? { pulseEnabled: body.pulseEnabled } : {}),
         ...(typeof body?.networkPool === 'boolean' ? { networkPool: body.networkPool } : {}),
+        ...(profileRetentionMonths !== undefined ? { profileRetentionMonths } : {}),
         ...(followUpDays !== undefined ? { followUpDays } : {}),
         ...(pulseRoleIds !== undefined ? { pulseRoleIds } : {}),
       };

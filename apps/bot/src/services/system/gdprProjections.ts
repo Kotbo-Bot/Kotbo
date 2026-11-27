@@ -78,7 +78,7 @@ export const ACTOR_FIELDS: readonly string[] = [
   'approvedById', 'approvedByUserId', 'archivedById', 'archivedByUserId', 'authorUserId', 'authorizedBy', 'bannedBy', 'blockedById', 'cancelledBy',
   'claimedById', 'closedById', 'completedByUserId', 'createdBy', 'createdById', 'createdByUserId',
   'decidedBy', 'decidedByUserId', 'decisionByUserId', 'deletedBy', 'deletedById', 'deletedByUserId', 'deletionLockedById',
-  'dismissedByUserId', 'dissolutionById', 'doneById', 'endedById', 'endedByUserId', 'evaluatorId', 'executedById', 'executorId', 'grantedBy',
+  'dismissedByUserId', 'dissolutionById', 'doneById', 'endedById', 'endedByUserId', 'evaluatorId', 'executedById', 'executorId', 'extendedById', 'grantedBy',
   'grantedById', 'handledBy', 'handledById', 'ingestedBy', 'issuedByUserId', 'lastEditedById',
   'lastPostBy', 'linkedByUserId', 'lockedById', 'manualByUserId', 'mentorId', 'moderatorUserId',
   'processedByUserId', 'proposedByUserId', 'purgeRequestedById', 'recordedByUserId', 'reportedByUserId', 'requestedByUserId',

@@ -16,6 +16,7 @@
   import WellbeingSettings from '../lib/components/wellbeing/WellbeingSettings.svelte';
   import NetworkReferent from '../lib/components/wellbeing/NetworkReferent.svelte';
   import NetworkCases from '../lib/components/wellbeing/NetworkCases.svelte';
+  import ProfilesPanel from '../lib/components/wellbeing/ProfilesPanel.svelte';
   import { memberCaseModal } from '../lib/stores/memberCaseModal.svelte';
   import MemberName from '../lib/components/MemberName.svelte';
   import WellbeingMemberList from '../lib/components/WellbeingMemberList.svelte';
@@ -69,7 +70,7 @@
   const selectedHeader = $derived(cases.find((c) => c.id === selectedCaseId) ?? null);
   const selectedCase = $derived(detail && detail.id === selectedCaseId ? detail : null);
 
-  type Tab = 'cases' | 'stats' | 'resources' | 'access' | 'settings';
+  type Tab = 'cases' | 'profiles' | 'stats' | 'resources' | 'access' | 'settings';
   type DetailTab = 'timeline' | 'tasks' | 'documents';
   let detailTab = $state<DetailTab>('timeline');
   /** Petit écran : la fiche remplace la liste après un choix. */
@@ -408,6 +409,7 @@
     if (!status) return [];
     const on = status.enabled;
     return [
+      ...(on && status.isTeamMember ? [{ id: 'profiles', label: m.wb_tab_profiles(), icon: 'StickyNote' }] : []),
       { id: 'cases', label: m.wb_tab_cases(), icon: 'folder', badge: on && status.hasCaseAccess ? stats.active || undefined : undefined },
       ...(on && (status.isTeamMember || status.isDirector) ? [{ id: 'stats', label: m.wb_tab_stats(), icon: 'BarChart3' }] : []),
       ...(on && status.isTeamMember ? [{ id: 'resources', label: m.wb_tab_resources(), icon: 'heart', badge: resources.length || undefined }] : []),
@@ -1506,6 +1508,11 @@
           {/if}
         {/if}
       {/if}
+    {:else if activeTab === 'profiles'}
+      <ProfilesPanel {cases} hidden={contentHidden}
+        checkReauth={async (res) => { const stale = await needsReauth(res); if (stale) activeTab = 'cases'; return stale; }}
+        onopencase={(caseId) => { activeTab = 'cases'; openCaseById(caseId); mobileDetail = true; }}
+        onnewcase={(prefill) => { activeTab = 'cases'; void openNewCase(prefill); }} />
     {:else if activeTab === 'stats'}
       {#if cellStats}
         <WellbeingStats stats={cellStats} load={cellLoad} pulse={cellPulse} />

@@ -25,6 +25,7 @@ export interface WbConfigForm {
   pulseEnabled: boolean;
   pulseRoleIds: string[];
   networkPool: boolean;
+  profileRetentionMonths: number;
 }
 
 const ids = (value: unknown): string[] => (Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : []);
@@ -52,10 +53,14 @@ export function wbConfigFromApi(config: Record<string, unknown>): WbConfigForm {
     pulseEnabled: config.pulseEnabled === true,
     pulseRoleIds: ids(config.pulseRoleIds),
     networkPool: config.networkPool === true,
+    profileRetentionMonths: typeof config.profileRetentionMonths === 'number' ? config.profileRetentionMonths : WB_PROFILE_RETENTION.default,
   };
 }
 
 const clampDays = (value: number, max: number) => Math.max(0, Math.min(max, Math.round(Number(value) || 0)));
+
+/** Durée de vie d'une note de fiche, en mois : mêmes bornes que le bot (wellbeingProfilePolicy). */
+export const WB_PROFILE_RETENTION = { default: 12, min: 1, max: 36 } as const;
 
 /** Corps de `PUT /wellbeing/config`. Mêmes plafonds que le bot (MAX_STALE_DAYS, MAX_FOLLOW_UP_DAYS). */
 export function wbConfigToApi(form: WbConfigForm) {
@@ -64,6 +69,7 @@ export function wbConfigToApi(form: WbConfigForm) {
     alertChannelId: form.alertChannelId || null,
     staleCriticalDays: clampDays(form.staleCriticalDays, 90),
     followUpDays: clampDays(form.followUpDays, 180),
+    profileRetentionMonths: Math.max(WB_PROFILE_RETENTION.min, clampDays(form.profileRetentionMonths, WB_PROFILE_RETENTION.max)),
   };
 }
 

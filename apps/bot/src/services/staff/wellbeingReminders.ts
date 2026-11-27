@@ -25,6 +25,7 @@ import { logger } from '../../utils/logger.js';
 import { isModuleEnabled } from '../core/moduleGate.js';
 import { sendWellbeingAlert, sendWellbeingDirect } from './wellbeingAlerts.js';
 import { appendCaseEvents } from './wellbeingEvents.js';
+import { profilePurgeNoticeCutoff } from './wellbeingProfilePolicy.js';
 import {
   accessReviewMessage,
   cellMemberIds,
@@ -92,6 +93,7 @@ export async function runWellbeingReminders(client: Client, now: Date = new Date
     }
     await sendFollowUps(client, now);
     await announcePurges(client, now);
+    await announceProfilePurges(client, now);
     await sendAccessReviews(client, now);
     await sendWeeklyDigests(client, now);
     await sendWeeklyPulses(client, now);
@@ -146,6 +148,29 @@ async function announcePurges(client: Client, now: Date): Promise<void> {
     for (const item of items) {
       await prisma.wellbeingCase.update({ where: { id: item.id }, data: { purgeWarnedAt: now, updatedAt: item.updatedAt } });
     }
+  }
+}
+
+/**
+ * Notes de fiche effacées dans une semaine : une alerte par serveur, une
+ * seule fois par note. Une prolongation vide l'annonce : la note sera
+ * annoncée à nouveau avant sa nouvelle échéance.
+ */
+async function announceProfilePurges(client: Client, now: Date): Promise<void> {
+  const soon = await prisma.wellbeingProfileNote.findMany({
+    where: { expiresAt: { lte: profilePurgeNoticeCutoff(now) }, purgeWarnedAt: null },
+    select: { id: true, profile: { select: { guildId: true } } },
+    take: 500,
+  });
+  const byGuild = new Map<string, string[]>();
+  for (const note of soon) byGuild.set(note.profile.guildId, [...(byGuild.get(note.profile.guildId) ?? []), note.id]);
+  for (const [guildId, ids] of byGuild) {
+    const config = await prisma.wellbeingConfig.findUnique({ where: { guildId } });
+    if (config?.enabled && (await isModuleEnabled(guildId, 'wellbeing'))) {
+      await sendWellbeingAlert(client, guildId, config, 'PURGE_SOON', { actorId: '', noteCount: ids.length });
+    }
+    // Marquée même module coupé : le préavis compte, l'effacement ne doit pas attendre une alerte.
+    await prisma.wellbeingProfileNote.updateMany({ where: { id: { in: ids } }, data: { purgeWarnedAt: now } });
   }
 }
 

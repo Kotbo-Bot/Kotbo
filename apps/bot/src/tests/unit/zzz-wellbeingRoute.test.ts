@@ -88,6 +88,8 @@ let note: Record<string, unknown> | null = null;
 let signal: Record<string, unknown> | null = null;
 let ticket: Record<string, unknown> | null = null;
 let transferredCase: Record<string, unknown> | null = null;
+let profile: Record<string, unknown> | null = null;
+let profileNote: Record<string, unknown> | null = null;
 
 const mockDb = {
   dashboardAuditLog: {
@@ -139,6 +141,16 @@ const mockDb = {
   wellbeingPulseWeek: {
     findMany: mock(async (_args?: unknown) => []),
   },
+  wellbeingProfile: {
+    findMany: mock(async (_args?: unknown) => []),
+    findUnique: mock(async (_args?: unknown) => profile),
+    upsert: mock(async (args: { create: Record<string, unknown> }) => ({ id: 'profile-1', subjectLeftAt: null, ...args.create })),
+  },
+  wellbeingProfileNote: {
+    findFirst: mock(async (_args?: unknown) => profileNote),
+    create: mock(async (args: { data: Record<string, unknown> }) => ({ id: 'pnote-new', createdAt: new Date(), ...args.data })),
+    update: mock(async (args: { data: Record<string, unknown> }) => ({ ...profileNote, ...args.data })),
+  },
   ticket: {
     findFirst: mock(async (_args?: unknown) => ticket),
   },
@@ -187,6 +199,7 @@ const session = (userId: string, ageHours = 1) =>
 mockDashboardGate(DASHBOARD_ACCESS_ADMIN, session(ALICE));
 const { createWellbeingRouter } = await import('../../api/routes/dashboard/leadership/wellbeing.js');
 const { createWellbeingNetworkRouter } = await import('../../api/routes/dashboard/leadership/wellbeingNetwork.js');
+const { createWellbeingProfilesRouter } = await import('../../api/routes/dashboard/leadership/wellbeingProfiles.js');
 
 const discordGuild = {
   id: GUILD,
@@ -212,6 +225,8 @@ beforeEach(() => {
   signal = null;
   ticket = null;
   transferredCase = null;
+  profile = null;
+  profileNote = null;
   pool = { available: false, candidates: [] };
   networkRefs = [];
   appendCaseEvents.mockClear();
@@ -531,5 +546,66 @@ describe('référents du réseau', () => {
     networkRefs = [{ id: 'case-1', guildId: OTHER }];
     const { status } = await networkCall('GET', '/network/cases', undefined, session(EXT, 13));
     expect(status).toBe(403);
+  });
+});
+
+describe('fiches confidentielles', () => {
+  async function profileCall(method: string, suffix: string, body?: unknown, user: AuthClaims = session(ALICE)) {
+    setDashboardAccess(DASHBOARD_ACCESS_ADMIN, user);
+    const { status, body: json } = await dashboardCall(createWellbeingProfilesRouter(client), method, `/api/dashboard/guilds/${GUILD}/wellbeing${suffix}`, body);
+    return { status, json };
+  }
+
+  test('réservées à la cellule : la direction sans la cellule ne lit rien', async () => {
+    const { status } = await profileCall('GET', '/profiles', undefined, session(DIR));
+    expect(status).toBe(403);
+    expect(mockDb.wellbeingProfile.findMany).not.toHaveBeenCalled();
+  });
+
+  test('une connexion ancienne doit être renouvelée', async () => {
+    const { status, json } = await profileCall('GET', `/profiles/${SUBJECT}`, undefined, session(ALICE, 13));
+    expect(status).toBe(403);
+    expect(json.code).toBe('WELLBEING_REAUTH');
+  });
+
+  test('la liste écarte la fiche de la personne qui la consulte', async () => {
+    await profileCall('GET', '/profiles');
+    const args = mockDb.wellbeingProfile.findMany.mock.calls[0]?.[0] as { where: Record<string, unknown> };
+    expect(args.where).toMatchObject({ guildId: GUILD, subjectUserId: { not: ALICE } });
+  });
+
+  test('personne ne lit ni n annote sa propre fiche', async () => {
+    expect((await profileCall('GET', `/profiles/${ALICE}`)).status).toBe(404);
+    expect((await profileCall('POST', `/profiles/${ALICE}/notes`, { content: 'x', subjectName: 'alice' })).status).toBe(404);
+    expect(mockDb.wellbeingProfileNote.create).not.toHaveBeenCalled();
+  });
+
+  test('une note est chiffrée et reçoit sa date d effacement', async () => {
+    const { status } = await profileCall('POST', `/profiles/${SUBJECT}/notes`, { content: 'Se sent isolé', subjectName: 'Sujet' });
+    expect(status).toBe(201);
+    const args = mockDb.wellbeingProfileNote.create.mock.calls[0]?.[0] as { data: { content: string; expiresAt: Date } };
+    expect(args.data.content).not.toContain('isolé');
+    const months = (args.data.expiresAt.getTime() - Date.now()) / (30 * 24 * HOUR);
+    expect(months).toBeGreaterThan(11);
+    expect(months).toBeLessThan(13);
+  });
+
+  test('prolonger sans motif est refusé', async () => {
+    profile = { id: 'profile-1', guildId: GUILD, subjectUserId: SUBJECT, subjectName: 'Sujet', subjectLeftAt: null };
+    profileNote = { id: 'pnote-1', profileId: 'profile-1', content: 'x', expiresAt: new Date(Date.now() + 3 * 24 * HOUR), purgeWarnedAt: new Date() };
+    const { status } = await profileCall('POST', `/profiles/${SUBJECT}/notes/pnote-1/extend`, { reason: ' ' });
+    expect(status).toBe(400);
+    expect(mockDb.wellbeingProfileNote.update).not.toHaveBeenCalled();
+  });
+
+  test('une prolongation motivée repart pour la durée réglée et annule l annonce', async () => {
+    profile = { id: 'profile-1', guildId: GUILD, subjectUserId: SUBJECT, subjectName: 'Sujet', subjectLeftAt: null };
+    profileNote = { id: 'pnote-1', profileId: 'profile-1', content: 'x', expiresAt: new Date(Date.now() + 3 * 24 * HOUR), purgeWarnedAt: new Date() };
+    const { status } = await profileCall('POST', `/profiles/${SUBJECT}/notes/pnote-1/extend`, { reason: 'Suivi encore utile' });
+    expect(status).toBe(200);
+    const args = mockDb.wellbeingProfileNote.update.mock.calls[0]?.[0] as { data: { expiresAt: Date; purgeWarnedAt: null; extendedReason: string } };
+    expect(args.data.purgeWarnedAt).toBeNull();
+    expect(args.data.extendedReason).not.toContain('Suivi');
+    expect(args.data.expiresAt.getTime()).toBeGreaterThan(Date.now() + 300 * 24 * HOUR);
   });
 });

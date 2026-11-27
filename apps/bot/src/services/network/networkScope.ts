@@ -63,6 +63,8 @@ export const LOCAL_MODELS: ReadonlySet<string> = new Set([
   // Signaux de détresse (salons et messages du serveur) et météo du staff
   // (mesure de son équipe) : partagés, ils iraient à la cellule du principal.
   'WellbeingDistressSignal', 'WellbeingPulseWeek', 'WellbeingPulseVoter',
+  // Fiches confidentielles : comme les dossiers, leurs notes suivent par `profileId`.
+  'WellbeingProfile',
 ]);
 
 export function isSynced(model: string): boolean {

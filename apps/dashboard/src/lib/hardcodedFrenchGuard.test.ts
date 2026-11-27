@@ -91,6 +91,7 @@ const TRANSLATED = [
   'lib/components/wellbeing/DistressSignals.svelte',
   'lib/components/wellbeing/NetworkCases.svelte',
   'lib/components/wellbeing/NetworkReferent.svelte',
+  'lib/components/wellbeing/ProfilesPanel.svelte',
   'lib/components/wellbeing/ReportPanelPublisher.svelte',
   'lib/components/wellbeing/ReporterThread.svelte',
   'lib/components/workflows/WorkflowMessageModal.svelte',

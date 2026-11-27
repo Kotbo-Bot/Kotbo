@@ -111,3 +111,25 @@ export function openCase<T extends CaseTextFields & {
     ...(item.reporterMessages ? { reporterMessages: item.reporterMessages.map((message) => openReporterMessage(item.guildId, message)) } : {}),
   } as Omit<T, 'trackingCodeHash'> & { hasTrackingCode: boolean };
 }
+
+/**
+ * Note de fiche et motif de sa prolongation : liés à leur fiche, comme une
+ * note l'est à son dossier, pour que l'export RGPD les relise sans le serveur.
+ */
+export function sealProfileNote(profileId: string, content: string): string {
+  return box.seal(content, `profile:${profileId}`);
+}
+
+export function openProfileNote<T extends { profileId: string; content: string; extendedReason?: string | null }>(note: T): T {
+  const context = `profile:${note.profileId}`;
+  return {
+    ...note,
+    content: box.open(note.content, context) ?? UNREADABLE,
+    ...(note.extendedReason ? { extendedReason: box.open(note.extendedReason, context) ?? UNREADABLE } : {}),
+  };
+}
+
+/** Fiche : nom de la personne chiffré et lié au serveur, comme celui d'un dossier. */
+export function openProfileHeader<T extends { guildId: string; subjectName: string }>(profile: T): T {
+  return { ...profile, subjectName: readable(profile.guildId, profile.subjectName) };
+}

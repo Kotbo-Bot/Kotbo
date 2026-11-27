@@ -118,6 +118,13 @@ describe('accompagnement et repérage', () => {
     expect(wbConfigFromApi({ networkPool: true }).networkPool).toBe(true);
   });
 
+  test('les notes de fiche vivent 12 mois par défaut, entre 1 et 36 mois', () => {
+    expect(wbConfigFromApi({}).profileRetentionMonths).toBe(12);
+    expect(wbConfigFromApi({ profileRetentionMonths: 24 }).profileRetentionMonths).toBe(24);
+    expect(wbConfigToApi(form({ profileRetentionMonths: 99 })).profileRetentionMonths).toBe(36);
+    expect(wbConfigToApi(form({ profileRetentionMonths: 0 })).profileRetentionMonths).toBe(1);
+  });
+
   test('le délai de prise de nouvelles est borné comme côté bot', () => {
     expect(wbConfigToApi(form({ followUpDays: 999 })).followUpDays).toBe(180);
     expect(wbConfigToApi(form({ followUpDays: -3 })).followUpDays).toBe(0);
