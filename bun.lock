@@ -83,7 +83,7 @@
         "@getpapillon/papicons": "^0.2.3",
         "@kotbo/contracts": "workspace:*",
         "@kotbo/shared": "workspace:*",
-        "@kotbo/ui": "github:Kotbo-Bot/kotbo-ui",
+        "@kotbo/ui": "^0.1.0",
         "@sentry/browser": "^10.78.0",
         "@tiptap/core": "^3.35.0",
         "@tiptap/extension-bubble-menu": "^3.35.0",
@@ -370,7 +370,7 @@
 
     "@kotbo/shared": ["@kotbo/shared@workspace:packages/shared"],
 
-    "@kotbo/ui": ["@kotbo/ui@github:Kotbo-Bot/kotbo-ui#943da5a", { "dependencies": { "@getpapillon/papicons": "^0.2.3", "lucide-svelte": "^1.0.1", "react": "^19.3.1" }, "peerDependencies": { "chart.js": "^4.0.0", "svelte": "^5.0.0" }, "optionalPeers": ["chart.js"], "hasInstallScript": true }, "Kotbo-Bot-kotbo-ui-943da5a", "sha512-d8R3BeiaaRbadYymYb2RM4nPUt2FlN8V5mkKCNYsASgCLFnt8c0JLnGPZ0HuQS1aWUpSleJqN4dZTGBVgZDftg=="],
+    "@kotbo/ui": ["@kotbo/ui@0.1.0", "", { "dependencies": { "@getpapillon/papicons": "^0.2.3", "lucide-svelte": "^1.0.1", "react": "^19.3.1" }, "peerDependencies": { "chart.js": "^4.0.0", "svelte": "^5.0.0" }, "optionalPeers": ["chart.js"] }, "sha512-8ZaHrOzHa9G3PwCJrCFAacF2NF2cJBbmES8EJxBZn67v3kfQBK2cE1mDrK4MTT6KIRoktRfE+KLjQL4atFFkmQ=="],
 
     "@kurkle/color": ["@kurkle/color@0.3.4", "", {}, "sha512-M5UknZPHRu3DEDWoipU6sE8PdkZ6Z/S+v4dD+Ke8IaNlpdSQah50lz1KtcFBa2vsdOnwbbnxJwVM4wty6udA5w=="],
 

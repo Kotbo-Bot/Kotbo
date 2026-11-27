@@ -1,6 +1,6 @@
 # Kotbo-UI (`@kotbo/ui`) dans l'écosystème Kotbo
 
-**Kotbo-UI** (`@kotbo/ui`, dépôt GitHub [`Kotbo-Bot/kotbo-ui`](https://github.com/Kotbo-Bot/kotbo-ui)) regroupe l'ensemble des briques d'interface Svelte 5 et **Analytics v3** partagées entre :
+**Kotbo-UI** ([`@kotbo/ui`](https://www.npmjs.com/package/@kotbo/ui) sur npm, dépôt GitHub [`Kotbo-Bot/kotbo-ui`](https://github.com/Kotbo-Bot/kotbo-ui)) regroupe l'ensemble des briques d'interface Svelte 5 et **Analytics v3** partagées entre :
 - **Kotbo Dashboard** (`apps/dashboard`) ;
 - **AegisAI Frontend** (`../aegisai-api/frontend`), qui consomme exactement les mêmes briques tout en conservant sa touche visuelle plus moderne (rayon `1.25rem`, espacement `1.25rem`, palette bleu/slate) par de simples variables CSS.
 
