@@ -786,7 +786,7 @@ export async function registerCrons(client: Client): Promise<void> {
     }, 2000);
   });
 
-  // Cellule bien-être : relance des échéances de suivi et des dossiers critiques inactifs (toutes les heures, à 20).
+  // Cellule de suivi : relance des échéances de suivi et des dossiers critiques inactifs (toutes les heures, à 20).
   cron.schedule('20 * * * *', async () => {
     await runCronJob('wellbeing-reminders', async () => {
       const { runWellbeingReminders } = await import('../services/staff/wellbeingReminders.js');
@@ -794,7 +794,7 @@ export async function registerCrons(client: Client): Promise<void> {
     }, 2000);
   });
 
-  // Cellule bien-être : suppression des dossiers fermés au-delà de la durée de conservation (03:58).
+  // Cellule de suivi : suppression des dossiers fermés au-delà de la durée de conservation (03:58).
   cron.schedule('58 3 * * *', async () => {
     await runCronJob('wellbeing-cases-prune', async () => {
       const { pruneClosedWellbeingCases } = await import('../services/staff/wellbeingRetention.js');

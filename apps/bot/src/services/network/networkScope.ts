@@ -60,6 +60,11 @@ export const LOCAL_MODELS: ReadonlySet<string> = new Set([
   // Dossiers confidentiels : seule la cellule de leur serveur les lit. Leurs
   // notes suivent par `caseId`, sans `guildId` à rediriger.
   'WellbeingCase',
+  // Signaux de détresse (salons et messages du serveur) et météo du staff
+  // (mesure de son équipe) : partagés, ils iraient à la cellule du principal.
+  'WellbeingDistressSignal', 'WellbeingPulseWeek', 'WellbeingPulseVoter',
+  // Fiches confidentielles : comme les dossiers, leurs notes suivent par `profileId`.
+  'WellbeingProfile',
 ]);
 
 export function isSynced(model: string): boolean {

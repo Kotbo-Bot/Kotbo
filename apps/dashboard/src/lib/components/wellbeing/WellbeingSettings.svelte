@@ -1,5 +1,5 @@
 <!--
-  Réglages de la cellule bien-être (propriétaire du serveur).
+  Réglages de la cellule de suivi (propriétaire du serveur).
 
   Première configuration : un parcours en étapes (composition, direction,
   alertes, signalements, récapitulatif). Ensuite : le score de sécurité et le
@@ -24,6 +24,7 @@
     wbSecurityChecks,
     wbSecurityScore,
     wbStepComplete,
+    WB_PROFILE_RETENTION,
     type WbAccessLevel,
     type WbConfigForm,
     type WbSecurityCheckId,
@@ -287,6 +288,12 @@
   </SettingsRow>
   <SettingsRow label={m.wb_cfg_follow_up()} description={m.wb_cfg_follow_up_hint()} labelFor="wb-follow-up-days">
     <input id="wb-follow-up-days" type="number" min="0" max="180" step="1" bind:value={form.followUpDays} class="input w-24" />
+  </SettingsRow>
+  <SettingsRow label={m.wb_cfg_profile_retention()} description={m.wb_cfg_profile_retention_hint()} labelFor="wb-profile-retention">
+    <input id="wb-profile-retention" type="number" min={WB_PROFILE_RETENTION.min} max={WB_PROFILE_RETENTION.max} step="1" bind:value={form.profileRetentionMonths} class="input w-24" />
+  </SettingsRow>
+  <SettingsRow label={m.wb_cfg_network_pool()} description={m.wb_cfg_network_pool_hint()}>
+    <ToggleSwitch checked={form.networkPool} onToggle={(v) => (form.networkPool = v)} ariaLabel={m.wb_cfg_network_pool()} />
   </SettingsRow>
 {/snippet}
 

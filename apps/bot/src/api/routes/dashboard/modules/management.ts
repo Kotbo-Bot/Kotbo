@@ -9,7 +9,7 @@ import { auditUserOf, fail, guildRoute, readBody, send } from '../../../hono/das
 import { withoutManagedRoles } from '../../../../services/core/dashboardAccessRoles.js';
 import { isRestrictedModule } from '@kotbo/contracts';
 
-/** Un module confidentiel (cellule bien-être) décide seul de son accès : aucune règle ne s'y écrit. */
+/** Un module confidentiel (cellule de suivi) décide seul de son accès : aucune règle ne s'y écrit. */
 const RESTRICTED_ERROR = "Ce module gère son accès dans sa propre configuration : le Centre de gestion n'y donne aucun droit.";
 
 export function createManagementRouter(client: Client) {

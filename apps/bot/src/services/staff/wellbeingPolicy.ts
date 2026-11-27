@@ -1,5 +1,5 @@
 /**
- * Règles de la cellule bien-être, sans accès à la base ni à Discord.
+ * Règles de la cellule de suivi, sans accès à la base ni à Discord.
  *
  * La composition de la cellule décide qui lit les dossiers. Le journal
  * d'audit doit donc dire qui a été ajouté ou retiré, pas seulement combien :
@@ -26,6 +26,8 @@ export interface WellbeingAccessLists {
   distressWatch?: boolean;
   pulseEnabled?: boolean;
   pulseRoleIds?: string[];
+  networkPool?: boolean;
+  profileRetentionMonths?: number;
 }
 
 /**
@@ -67,6 +69,8 @@ export interface AlertContext {
   /** Auteur du geste ; vide pour une tâche planifiée. */
   actorId: string;
   caseCount?: number;
+  /** Notes de fiche bientôt effacées (PURGE_SOON). */
+  noteCount?: number;
   reason?: string;
   expiresAt?: Date;
   /** Geste sur un dossier : « créé », « modifié », « annoté », « supprimé ». */
@@ -96,57 +100,60 @@ export function alertText(event: WellbeingAlertEvent, ctx: AlertContext): string
     case 'BREAK_GLASS': {
       const until = ctx.expiresAt ? ` jusqu'à <t:${Math.floor(ctx.expiresAt.getTime() / 1000)}:R>` : '';
       if (ctx.stage === 'requested') {
-        return `Cellule bien-être : ${actor} demande un accès d'urgence, à valider par une autre personne de la direction ou de la cellule. Motif : ${ctx.reason ?? 'non précisé'}`;
+        return `Cellule de suivi : ${actor} demande un accès d'urgence, à valider par une autre personne de la direction ou de la cellule. Motif : ${ctx.reason ?? 'non précisé'}`;
       }
-      if (ctx.stage === 'rejected') return `Cellule bien-être : demande d'accès d'urgence refusée par ${actor}.`;
-      if (ctx.stage === 'ended') return `Cellule bien-être : accès d'urgence terminé par ${actor}.`;
-      if (ctx.stage === 'approved') return `Cellule bien-être : accès d'urgence validé par ${actor}${until}.`;
-      return `Cellule bien-être : accès d'urgence activé par ${actor}${until}. Motif : ${ctx.reason ?? 'non précisé'}`;
+      if (ctx.stage === 'rejected') return `Cellule de suivi : demande d'accès d'urgence refusée par ${actor}.`;
+      if (ctx.stage === 'ended') return `Cellule de suivi : accès d'urgence terminé par ${actor}.`;
+      if (ctx.stage === 'approved') return `Cellule de suivi : accès d'urgence validé par ${actor}${until}.`;
+      return `Cellule de suivi : accès d'urgence activé par ${actor}${until}. Motif : ${ctx.reason ?? 'non précisé'}`;
     }
     case 'EMERGENCY_READ':
-      return `Cellule bien-être : ${actor} consulte ${ctx.caseCount ?? 0} dossier(s) sous accès d'urgence.`;
+      return `Cellule de suivi : ${actor} consulte ${ctx.caseCount ?? 0} dossier(s) sous accès d'urgence.`;
     case 'TEAM_READ':
-      return `Cellule bien-être : ${actor} consulte ${ctx.caseCount ?? 0} dossier(s).`;
+      return `Cellule de suivi : ${actor} consulte ${ctx.caseCount ?? 0} dossier(s).`;
     case 'CASE_CHANGE':
-      return `Cellule bien-être : un dossier a été ${ctx.action ?? 'modifié'} par ${actor}.`;
+      return `Cellule de suivi : un dossier a été ${ctx.action ?? 'modifié'} par ${actor}.`;
     case 'CONFIG_CHANGE':
-      return `Cellule bien-être : configuration modifiée par ${actor}.`;
+      return `Cellule de suivi : configuration modifiée par ${actor}.`;
     case 'REPORT':
-      if (ctx.followUp) return 'Cellule bien-être : nouveau message reçu sur un signalement, avec son code de suivi.';
+      if (ctx.followUp) return 'Cellule de suivi : nouveau message reçu sur un signalement, avec son code de suivi.';
       return ctx.anonymous
-        ? 'Cellule bien-être : nouveau signalement anonyme reçu depuis Discord.'
-        : `Cellule bien-être : nouveau signalement de ${actor} reçu depuis Discord.`;
+        ? 'Cellule de suivi : nouveau signalement anonyme reçu depuis Discord.'
+        : `Cellule de suivi : nouveau signalement de ${actor} reçu depuis Discord.`;
     case 'MEMBERSHIP_CHANGE': {
       const target = `<@${ctx.targetId ?? ''}>`;
       // L'audit Discord ne nomme pas toujours l'auteur.
       const author = ctx.actorId ? actor : 'un auteur inconnu';
       const group = ctx.scope === 'direction' ? 'la direction' : 'la cellule';
-      if (ctx.change === 'removed') return `Cellule bien-être : ${author} a retiré ${target} de ${group} (rôle Discord).`;
+      if (ctx.change === 'removed') return `Cellule de suivi : ${author} a retiré ${target} de ${group} (rôle Discord).`;
       return ctx.reverted
-        ? `Cellule bien-être : ${author} a donné à ${target} un rôle de ${group} ; ajout annulé, seul le propriétaire du serveur peut le faire.`
-        : `Cellule bien-être : ${author} a ajouté ${target} à ${group} (rôle Discord).`;
+        ? `Cellule de suivi : ${author} a donné à ${target} un rôle de ${group} ; ajout annulé, seul le propriétaire du serveur peut le faire.`
+        : `Cellule de suivi : ${author} a ajouté ${target} à ${group} (rôle Discord).`;
     }
     case 'DISSOLUTION': {
-      if (ctx.stage === 'dissolution_cancelled') return `Cellule bien-être : la désactivation de la cellule a été annulée par ${actor}.`;
-      if (ctx.stage === 'dissolution_applied') return 'Cellule bien-être : la cellule est désactivée, comme demandé il y a 24 heures.';
+      if (ctx.stage === 'dissolution_cancelled') return `Cellule de suivi : la désactivation de la cellule a été annulée par ${actor}.`;
+      if (ctx.stage === 'dissolution_applied') return 'Cellule de suivi : la cellule est désactivée, comme demandé il y a 24 heures.';
       const until = ctx.expiresAt ? ` <t:${Math.floor(ctx.expiresAt.getTime() / 1000)}:R>` : '';
-      return `Cellule bien-être : ${actor} a demandé la désactivation de la cellule. Elle prendra effet${until} ; le propriétaire peut l'annuler d'ici là.`;
+      return `Cellule de suivi : ${actor} a demandé la désactivation de la cellule. Elle prendra effet${until} ; le propriétaire peut l'annuler d'ici là.`;
     }
     case 'UNUSUAL_ACCESS':
-      return `Cellule bien-être : ${actor} a ouvert ${ctx.caseCount ?? 0} dossiers en ${UNUSUAL_ACCESS_WINDOW_MS / 60_000} minutes. Vérifiez que c'est attendu.`;
+      return `Cellule de suivi : ${actor} a ouvert ${ctx.caseCount ?? 0} dossiers ou fiches en ${UNUSUAL_ACCESS_WINDOW_MS / 60_000} minutes. Vérifiez que c'est attendu.`;
     case 'PURGE_SOON':
-      return `Cellule bien-être : ${ctx.caseCount ?? 0} dossier(s) fermé(s) seront effacés dans ${PURGE_NOTICE_DAYS} jours. Prolongez-les depuis le dashboard pour les garder.`;
+      if (ctx.noteCount !== undefined) {
+        return `Cellule de suivi : ${ctx.noteCount} note(s) de fiche seront effacées dans ${PURGE_NOTICE_DAYS} jours. Prolongez-les depuis le dashboard, avec un motif, pour les garder.`;
+      }
+      return `Cellule de suivi : ${ctx.caseCount ?? 0} dossier(s) fermé(s) seront effacés dans ${PURGE_NOTICE_DAYS} jours. Prolongez-les depuis le dashboard pour les garder.`;
     case 'REMINDER':
       if (ctx.reminder === 'follow_up') {
-        return `Cellule bien-être : un dossier résolu il y a ${ctx.days ?? 0} jour(s) attend une prise de nouvelles.`;
+        return `Cellule de suivi : un dossier résolu il y a ${ctx.days ?? 0} jour(s) attend une prise de nouvelles.`;
       }
       return ctx.reminder === 'stale'
-        ? `Cellule bien-être : un dossier critique est sans activité depuis ${ctx.days ?? 0} jour(s).`
-        : 'Cellule bien-être : un dossier arrive à son échéance de suivi.';
+        ? `Cellule de suivi : un dossier critique est sans activité depuis ${ctx.days ?? 0} jour(s).`
+        : 'Cellule de suivi : un dossier arrive à son échéance de suivi.';
     case 'DISTRESS':
-      return 'Cellule bien-être : un message aux mots de détresse a été repéré. Il attend dans les signaux de la page Bien-être.';
+      return 'Cellule de suivi : un message aux mots de détresse a été repéré. Il attend dans les signaux de la page Suivi confidentiel.';
     case 'SANCTION_SIGNAL':
-      return `Cellule bien-être : ${actor} vient de sanctionner une personne suivie par la cellule. Le référent est prévenu.`;
+      return `Cellule de suivi : ${actor} vient de sanctionner une personne suivie par la cellule. Le référent est prévenu.`;
   }
 }
 
@@ -251,6 +258,12 @@ export function describeConfigChange(
     (prev.pulseEnabled ?? false) !== (after.pulseEnabled ?? false)
       ? `Météo du staff : ${after.pulseEnabled ? 'activée' : 'désactivée'}` : null,
     listLine('Météo du staff', prev.pulseRoleIds ?? [], after.pulseRoleIds ?? [], nameOf),
+    (prev.networkPool ?? false) !== (after.networkPool ?? false)
+      ? `Référents du réseau : ${after.networkPool ? 'partagés' : 'plus partagés'}` : null,
+    // À la création de la cellule, la durée par défaut n'est pas un changement.
+    prev.profileRetentionMonths !== undefined && after.profileRetentionMonths !== undefined
+      && prev.profileRetentionMonths !== after.profileRetentionMonths
+      ? `Conservation des fiches : ${after.profileRetentionMonths} mois` : null,
   ].filter((line): line is string => line !== null);
   return lines.length > 0 ? lines.join(' · ') : 'Aucun changement';
 }
@@ -490,7 +503,7 @@ export function resourcesMessage(guildName: string, resources: readonly Wellbein
     const details = [r.phone, r.url].filter(Boolean).join(' · ');
     return `- **${r.label}**${details ? ` : ${details}` : ''}${r.description ? `\n  ${r.description}` : ''}`;
   });
-  return [`La cellule bien-être de **${guildName}** te partage ces ressources d'aide :`, ...lines].join('\n');
+  return [`La cellule de suivi de **${guildName}** te partage ces ressources d'aide :`, ...lines].join('\n');
 }
 
 // ── Documents Google Drive ─────────────────────────────────────────────────
@@ -533,10 +546,10 @@ export function shouldAcceptReport(lastAt: number | undefined, now: number): boo
 }
 
 /** Module inscrit au journal d'audit pour les gestes de la cellule. */
-export const WELLBEING_AUDIT_MODULE = 'Cellule bien-être';
+export const WELLBEING_AUDIT_MODULE = 'Suivi confidentiel';
 
 /** Nom de base (anglais) de la commande Discord : ses usages ne sont pas comptés par membre. */
-export const WELLBEING_COMMAND = 'wellbeing';
+export const WELLBEING_COMMAND = 'confidential';
 
 // ── Appartenance par rôle Discord ──────────────────────────────────────────
 
@@ -616,13 +629,13 @@ export function accessReviewMessage(
 ): string {
   const line = (label: string, ids: readonly string[]) => `- ${label} : ${ids.length > 0 ? ids.map(nameOf).join(', ') : 'aucun'}`;
   return [
-    `Revue des accès de la cellule bien-être de ${guildName}.`,
+    `Revue des accès de la cellule de suivi de ${guildName}.`,
     'Ces personnes peuvent lire les dossiers confidentiels ou demander un accès d\'urgence :',
     line('Membres de la cellule', lists.teamUserIds),
     line('Rôles de la cellule', lists.teamRoleIds),
     line('Membres de la direction', lists.directorUserIds),
     line('Rôles de la direction', lists.directorRoleIds),
-    'Si c\'est toujours juste, confirmez-le dans l\'onglet Réglages de la page Bien-être du dashboard ; sinon, retirez qui n\'en a plus besoin.',
+    'Si c\'est toujours juste, confirmez-le dans l\'onglet Réglages de la page Suivi confidentiel du dashboard ; sinon, retirez qui n\'en a plus besoin.',
   ].join('\n');
 }
 
@@ -704,7 +717,7 @@ export function wellbeingCellStats(cases: readonly CellStatsCase[], now: Date) {
 
 // ── Consultation inhabituelle ──────────────────────────────────────────────
 
-/** Dossiers ouverts par une même personne dans la fenêtre au-delà desquels la cellule est prévenue. */
+/** Dossiers et fiches ouverts par une même personne dans la fenêtre au-delà desquels la cellule est prévenue. */
 export const UNUSUAL_ACCESS_THRESHOLD = 10;
 export const UNUSUAL_ACCESS_WINDOW_MS = 10 * 60 * 1000;
 /** Une même personne ne déclenche pas plus d'une alerte par heure. */
@@ -712,6 +725,11 @@ export const UNUSUAL_ACCESS_COOLDOWN_MS = 60 * 60 * 1000;
 
 export function isUnusualAccess(openedInWindow: number): boolean {
   return openedInWindow >= UNUSUAL_ACCESS_THRESHOLD;
+}
+
+/** Ouvertures (horodatages en ms) encore dans la fenêtre de consultation inhabituelle. */
+export function openingsInWindow(times: readonly number[], now: number): number[] {
+  return times.filter((at) => now - at <= UNUSUAL_ACCESS_WINDOW_MS);
 }
 
 // ── Session récente ────────────────────────────────────────────────────────
@@ -812,7 +830,7 @@ export function cleanMentionIds(input: unknown): string[] {
 
 /** Message privé à un collègue mentionné : qui l'appelle, rien du dossier. */
 export function mentionText(actorId: string): string {
-  return `Cellule bien-être : <@${actorId}> vous signale une note dans un dossier. Ouvrez la page Bien-être du dashboard pour la lire.`;
+  return `Cellule de suivi : <@${actorId}> vous signale une note dans un dossier. Ouvrez la page Suivi confidentiel du dashboard pour la lire.`;
 }
 
 // ── Mes échéances ──────────────────────────────────────────────────────────
@@ -910,7 +928,7 @@ export function weeklyDigestText(
 ): string | null {
   if (Object.values(counts).every((value) => value === 0)) return null;
   return [
-    `Cellule bien-être de ${guildName}, votre semaine :`,
+    `Cellule de suivi de ${guildName}, votre semaine :`,
     `- dossiers dont vous êtes référent : ${counts.assigned}`,
     `- échéances de suivi cette semaine : ${counts.reviewsThisWeek}`,
     `- signalements à trier : ${counts.triage}`,
@@ -918,7 +936,7 @@ export function weeklyDigestText(
     ...(counts.assigned >= REFERENT_OVERLOAD_ACTIVE
       ? [`Vous suivez ${counts.assigned} dossiers : pensez à en confier à un collègue moins chargé.`]
       : []),
-    'Le détail est sur la page Bien-être du dashboard.',
+    'Le détail est sur la page Suivi confidentiel du dashboard.',
   ].join('\n');
 }
 
@@ -1070,7 +1088,7 @@ export function followUpDate(closedAt: Date, days: number, closedReason: string 
 
 /** Messages qu'un signaleur peut envoyer sur un même dossier. */
 export const MAX_REPORTER_MESSAGES = 20;
-/** Échanges montrés par `/bienetre suivi`. */
+/** Échanges montrés par `/confidentiel suivi`. */
 export const TRACKING_THREAD_SIZE = 5;
 
 export function reporterCanWrite(item: { status: string; deletedAt: Date | null }, sentByReporter: number): boolean {
@@ -1240,5 +1258,5 @@ export function pulseSummary(weeks: readonly PulseWeekCounts[]): Array<{ week: s
  * ni le motif ni le contenu du dossier, seulement de passer par la cellule.
  */
 export function sanctionModeratorText(): string {
-  return 'Cellule bien-être : la personne que vous venez de sanctionner est suivie par la cellule. Prenez contact avec la cellule avant toute suite à donner.';
+  return 'Cellule de suivi : la personne que vous venez de sanctionner est suivie par la cellule. Prenez contact avec la cellule avant toute suite à donner.';
 }

@@ -1,5 +1,5 @@
 /**
- * Alertes de la cellule bien-être : un salon et des membres choisis par le
+ * Alertes de la cellule de suivi : un salon et des membres choisis par le
  * propriétaire sont prévenus des accès aux dossiers et des changements.
  *
  * L'envoi ne bloque jamais la requête et n'échoue jamais pour elle : une

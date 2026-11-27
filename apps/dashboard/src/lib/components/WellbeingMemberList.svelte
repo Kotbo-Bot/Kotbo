@@ -1,6 +1,6 @@
 <script lang="ts">
   /**
-   * Liste de membres désignés un par un dans la cellule bien-être : équipe,
+   * Liste de membres désignés un par un dans la cellule de suivi : équipe,
    * direction, destinataires des alertes. Contrairement à un rôle Discord,
    * personne d'autre que le propriétaire ne peut la modifier.
    */

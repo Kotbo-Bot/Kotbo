@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { WB_CLOSE_REASONS, wbCloseReasonLabel, WB_ALERT_EVENTS, WB_CASE_EVENTS, wbCaseEventLabel, wbSummaryTemplate, wbIsSummaryTemplate, WB_CATEGORIES, WB_SEVERITIES, WB_STATUSES, wbAlertEventLabel, wbCategoryLabel, wbSeverityLabel, wbStatusLabel } from './wellbeingLabels';
 
-describe('libellés de la cellule bien-être', () => {
+describe('libellés de la cellule de suivi', () => {
   test('chaque code connu a un libellé lisible, jamais le code brut', () => {
     for (const code of WB_STATUSES) expect(wbStatusLabel(code)).not.toBe(code);
     for (const code of WB_SEVERITIES) expect(wbSeverityLabel(code)).not.toBe(code);
@@ -36,6 +36,16 @@ describe("historique d'un dossier", () => {
     const cellule = wbCaseEventLabel({ type: 'VIEWED', fromValue: null, toValue: null }, date);
     const urgence = wbCaseEventLabel({ type: 'VIEWED', fromValue: null, toValue: 'EMERGENCY' }, date);
     expect(urgence).not.toBe(cellule);
+  });
+
+  test('les gestes du référent du réseau se distinguent de ceux de la cellule', () => {
+    const view = (toValue: string | null) => wbCaseEventLabel({ type: 'VIEWED', fromValue: null, toValue }, date);
+    const note = (toValue: string | null) => wbCaseEventLabel({ type: 'NOTE', fromValue: null, toValue }, date);
+    expect(view('NETWORK')).not.toBe(view(null));
+    expect(note('NETWORK')).not.toBe(note(null));
+    const set = wbCaseEventLabel({ type: 'NETWORK_REFERENT', fromValue: null, toValue: '1' }, date);
+    const cleared = wbCaseEventLabel({ type: 'NETWORK_REFERENT', fromValue: '1', toValue: null }, date);
+    expect(set).not.toBe(cleared);
   });
 
   test('un changement de statut nomme les deux statuts', () => {

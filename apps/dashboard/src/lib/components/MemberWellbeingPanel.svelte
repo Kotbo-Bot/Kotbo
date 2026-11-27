@@ -1,7 +1,8 @@
 <!--
-  Onglet « Bien-être » de la fiche membre : dossiers confidentiels de la
-  personne et note rapide. Monté seulement pour la cellule bien-être : l'API
-  refuse les autres (403), même admins, hors accès d'urgence.
+  Onglet « Suivi confidentiel » de la fiche membre : fiche confidentielle de la
+  personne (note rapide, notes affichées à la demande) et ses dossiers. Monté
+  seulement pour la cellule de suivi : l'API refuse les autres (403), même
+  admins, hors accès d'urgence, qui n'ouvre que les dossiers.
 -->
 <script lang="ts">
   import { onMount } from 'svelte';
@@ -11,6 +12,8 @@
   import { wbStatusLabel } from '../wellbeingLabels';
   import { Button } from './ui';
   import { authStore } from '../stores/auth.svelte';
+  import { memberCaseModal } from '../stores/memberCaseModal.svelte';
+  import { router } from 'tinro';
 
   let { userId, userName, canWrite = false }: { userId: string; userName: string; canWrite?: boolean } = $props();
 
@@ -18,6 +21,35 @@
   /** En-tête de la liste ; le contenu se lit dossier par dossier, ce qui trace chaque ouverture. */
   type Case = { id: string; title: string; status: string; severity: string; createdAt: string };
   type CaseContent = { summary: string; notes: Note[]; createdByName: string };
+
+  type ProfileNote = { id: string; authorName: string; content: string; sensitive: boolean; createdAt: string; expiresAt: string };
+  let sensitive = $state(false);
+  /** Notes sensibles affichées d'un clic. */
+  let shownSensitive = $state<string[]>([]);
+
+  /** Notes de la fiche, lues seulement à la demande : chaque lecture est tracée. */
+  let profileNotes = $state<ProfileNote[] | null>(null);
+  let profileLoading = $state(false);
+
+  async function revealProfile() {
+    if (profileLoading) return;
+    profileLoading = true;
+    try {
+      const res = await dashboardFetch(`/wellbeing/profiles/${userId}`);
+      if (await reauthAsked(res)) return;
+      if (!res.ok) throw new Error('profile');
+      profileNotes = (await res.json()).profile?.notes ?? [];
+    } catch {
+      toast.error(m.toast_wb_load_failed());
+    } finally {
+      profileLoading = false;
+    }
+  }
+
+  function openInCell() {
+    memberCaseModal.close();
+    router.goto(`/wellbeing?profile=${encodeURIComponent(userId)}`);
+  }
 
   let cases = $state<Case[]>([]);
   let contents = $state<Record<string, CaseContent>>({});
@@ -63,28 +95,22 @@
     }
   }
 
-  // Note rapide : un dossier « SUIVI » dont le titre est la première ligne.
+  // Note rapide : elle va sur la fiche de la personne, sans ouvrir de dossier.
   async function addQuickNote() {
-    const summary = text.trim();
-    if (!summary || busy) return;
+    const content = text.trim();
+    if (!content || busy) return;
     busy = true;
     try {
-      const res = await dashboardFetch('/wellbeing/cases', {
+      const res = await dashboardFetch(`/wellbeing/profiles/${userId}/notes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          subjectUserId: userId,
-          subjectName: userName,
-          title: summary.split('\n')[0].slice(0, 80),
-          category: 'SUIVI',
-          summary,
-        }),
+        body: JSON.stringify({ content, subjectName: userName, sensitive }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? '');
-      cases = [data.item, ...cases];
-      contents = { ...contents, [data.item.id]: { summary: data.item.summary, notes: data.item.notes ?? [], createdByName: data.item.createdByName } };
+      if (profileNotes) profileNotes = [...profileNotes, data.note];
       text = '';
+      sensitive = false;
       toast.success(m.toast_wb_note_saved());
     } catch (err: any) {
       toast.error(err?.message || m.toast_save_error());
@@ -106,12 +132,44 @@
   <div>
     <label for="wb-quick-note" class="sr-only">{m.wb_panel_note_label()}</label>
     <textarea id="wb-quick-note" class="input min-h-[120px] resize-y" bind:value={text} placeholder={m.wb_panel_note_ph()}></textarea>
+    <label class="mt-2 flex items-start gap-2 text-xs">
+      <input type="checkbox" class="mt-0.5" bind:checked={sensitive} />
+      <span>{m.wb_profiles_sensitive_label()} <span class="block text-2xs text-on-surface-variant">{m.wb_profiles_sensitive_hint()}</span></span>
+    </label>
     <div class="mt-2 flex justify-end">
       <button class="btn-primary" disabled={busy || !text.trim()} onclick={addQuickNote}>{m.wb_panel_save()}</button>
     </div>
   </div>
   {:else if !canWrite}
   <p class="text-xs text-on-surface-variant">{m.wb_read_only_emergency()}</p>
+  {/if}
+
+  {#if canWrite && userId !== authStore.user?.id && !reauth}
+    <div class="rounded-lg bg-surface-container px-4 py-3 space-y-2">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <p class="font-semibold text-sm">{m.wb_panel_profile_title()}</p>
+        <div class="flex gap-2">
+          {#if !profileNotes}
+            <Button size="sm" variant="secondary" icon="eye" loading={profileLoading} onclick={() => void revealProfile()}>{m.wb_panel_profile_reveal()}</Button>
+          {/if}
+          <Button size="sm" variant="ghost" icon="ExternalLink" onclick={openInCell}>{m.wb_panel_profile_open()}</Button>
+        </div>
+      </div>
+      {#if profileNotes}
+        {#each profileNotes as note (note.id)}
+          <p class="border-l-2 border-outline-variant pl-3 text-sm">
+            <span class="text-xs text-on-surface-variant">{note.sensitive ? `${m.wb_profiles_sensitive_badge()} · ` : ''}{note.authorName} · {fmt(note.createdAt)}</span><br />
+            {#if note.sensitive && !shownSensitive.includes(note.id)}
+              <button type="button" class="text-xs text-primary underline" onclick={() => (shownSensitive = [...shownSensitive, note.id])}>{m.wb_profiles_sensitive_reveal()}</button>
+            {:else}
+              <span class="whitespace-pre-wrap break-words">{note.content}</span>
+            {/if}
+          </p>
+        {:else}
+          <p class="text-sm text-on-surface-variant">{m.wb_profiles_no_note()}</p>
+        {/each}
+      {/if}
+    </div>
   {/if}
 
   {#if reauth}

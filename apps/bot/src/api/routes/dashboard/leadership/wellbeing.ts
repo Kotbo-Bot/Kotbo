@@ -1,5 +1,5 @@
 /**
- * Cellule bien-être : espace confidentiel cloisonné avec accès d'urgence
+ * Cellule de suivi : espace confidentiel cloisonné avec accès d'urgence
  * journalisé pour la direction en cas d'enquête interne.
  *
  * Les textes des dossiers sont chiffrés en base (wellbeingCrypto), chaque
@@ -7,12 +7,12 @@
  * exiger la validation d'une seconde personne et se limiter à un membre.
  */
 import { Hono, type Context } from 'hono';
-import type { Client, Guild } from 'discord.js';
+import type { Client } from 'discord.js';
 import type { Prisma } from '@prisma/client';
 import prisma from '../../../../utils/db.js';
 import { logger } from '../../../../utils/logger.js';
-import { getGuildName, pushAudit } from '../../../shared.js';
-import { auditUserOf, fail, guildRoute, readBody, send } from '../../../hono/dashboard/kit.js';
+import { getGuildName } from '../../../shared.js';
+import { fail, guildRoute, readBody, send } from '../../../hono/dashboard/kit.js';
 import {
   ATTACHMENT_LABEL_MAX,
   BREAK_GLASS_HOURS,
@@ -41,21 +41,16 @@ import {
   purgeApprovalError,
   purgeRequestPending,
   shouldRecordView,
-  UNUSUAL_ACCESS_COOLDOWN_MS,
-  UNUSUAL_ACCESS_WINDOW_MS,
   agendaItems,
   cleanMentionIds,
-  isUnusualAccess,
   mentionText,
   verifyCaseEventChain,
-  wellbeingSessionExpired,
   wellbeingCellStats,
   caseChangeEvents,
   cleanAlertEvents,
   cleanResources,
   decideBreakGlassError,
   describeConfigChange,
-  resolveWellbeingAccess,
   resourcesMessage,
   MAX_FOLLOW_UP_DAYS,
   PULSE_WEEKS_SHOWN,
@@ -69,7 +64,6 @@ import {
   type CaseTracked,
 } from '../../../../services/staff/wellbeingPolicy.js';
 import { sendWellbeingAlert, sendWellbeingDirect } from '../../../../services/staff/wellbeingAlerts.js';
-import { appendCaseEvents } from '../../../../services/staff/wellbeingEvents.js';
 import { currentAbsence } from '../../../../services/staff/wellbeingAbsence.js';
 import { cancelDissolution, requestDissolution } from '../../../../services/staff/wellbeingDissolution.js';
 import { openCase, openCaseHeader, openNote, sealCaseFields, sealNote, sealWellbeing } from '../../../../services/staff/wellbeingCrypto.js';
@@ -78,107 +72,28 @@ import { closeTicket } from '../../../../services/features/ticketService.js';
 import { wellbeingPanelMessage } from '../../../../commands/utility/wellbeing.js';
 import { resolveGuildLocale } from '../../../../utils/i18n.js';
 import { bodyText } from '../../../../utils/bodyText.js';
+import { PROFILE_RETENTION_DEFAULT_MONTHS, cleanProfileRetention } from '../../../../services/staff/wellbeingProfilePolicy.js';
+import { applyProfileRetention } from '../../../../services/staff/wellbeingProfiles.js';
+import {
+  CASE_INCLUDE,
+  CASE_LIST_SELECT,
+  SNOWFLAKE_RE,
+  actorName,
+  audit,
+  checkUnusualAccess,
+  findVisibleCase,
+  isTeamMemberId,
+  recordEvents,
+  resolveWellbeingRole,
+  staleSession,
+  type WellbeingState,
+} from './wellbeingShared.js';
 
 const CATEGORIES = ['SOUTIEN', 'MEDIATION', 'SIGNALEMENT', 'SUIVI'];
 const SEVERITIES = ['LOW', 'NORMAL', 'HIGH', 'CRITICAL'];
 const STATUSES = ['OPEN', 'MONITORING', 'CLOSED'];
-const SNOWFLAKE_RE = /^\d{17,20}$/;
 const HOUR_MS = 60 * 60 * 1000;
 const MAX_STALE_DAYS = 90;
-
-const CASE_INCLUDE = {
-  notes: { orderBy: { createdAt: 'asc' as const } },
-  events: { orderBy: { createdAt: 'asc' as const } },
-  attachments: { orderBy: { createdAt: 'asc' as const } },
-  tasks: { orderBy: { createdAt: 'asc' as const } },
-  reporterMessages: { orderBy: { createdAt: 'asc' as const } },
-};
-
-/**
- * La liste ne porte que l'en-tête des dossiers : le contenu se lit dossier par
- * dossier (GET /cases/:caseId), ce qui laisse une trace de qui a ouvert quoi.
- */
-const CASE_LIST_SELECT = {
-  id: true,
-  guildId: true,
-  subjectUserId: true,
-  subjectName: true,
-  title: true,
-  category: true,
-  severity: true,
-  status: true,
-  source: true,
-  assigneeId: true,
-  reviewAt: true,
-  lastActivityAt: true,
-  createdAt: true,
-  updatedAt: true,
-  deletedAt: true,
-  deletedByName: true,
-  purgeRequestedById: true,
-  purgeRequestedByName: true,
-  purgeRequestedAt: true,
-} as const;
-
-/**
- * Dossier de ce serveur que la personne peut voir : ni un dossier qui la
- * concerne (conflit d'intérêts), ni un dossier en corbeille sauf demande.
- */
-function findVisibleCase(guildId: string, caseId: string, viewerId: string, options: { trashed?: boolean } = {}) {
-  return prisma.wellbeingCase.findFirst({ where: { AND: [{ id: caseId }, caseVisibilityWhere(guildId, viewerId, options)] } });
-}
-
-/**
- * Lire le contenu des dossiers exige une connexion récente : un poste resté
- * connecté des jours ne donne pas accès à la cellule. Le dashboard reconnaît
- * le code et propose de se reconnecter.
- */
-function staleSession(c: Context): Response | null {
-  if (!wellbeingSessionExpired(c.var.dashboardUser.sessionCreatedAt, Date.now())) return null;
-  return c.json({ error: 'Reconnectez-vous pour ouvrir les dossiers de la cellule bien-être.', code: 'WELLBEING_REAUTH' }, 403);
-}
-
-/** Dernière alerte de consultation inhabituelle, par serveur et par personne. */
-const unusualAlertAt = new Map<string, number>();
-
-async function actorOf(discordGuild: Guild | null, userId: string) {
-  const member = discordGuild ? await discordGuild.members.fetch(userId).catch(() => null) : null;
-  return {
-    userId,
-    roleIds: new Set(member ? member.roles.cache.map((r) => r.id) : []),
-    isOwner: discordGuild?.ownerId === userId,
-  };
-}
-
-async function resolveWellbeingRole(client: Client, guildId: string, userId: string) {
-  const config = await prisma.wellbeingConfig.findUnique({ where: { guildId } });
-  const discordGuild = client.guilds.cache.get(guildId) ?? await client.guilds.fetch(guildId).catch(() => null);
-  const actor = await actorOf(discordGuild, userId);
-
-  const base = resolveWellbeingAccess(config, actor, false);
-  // Seul un accès validé et non échu compte : une demande en attente n'ouvre rien.
-  const activeBreakGlass = base.isDirector && !base.isTeamMember
-    ? await prisma.wellbeingBreakGlassLog.findFirst({
-        where: { guildId, actorId: userId, status: 'APPROVED', expiresAt: { gt: new Date() } },
-        orderBy: { expiresAt: 'desc' },
-      })
-    : null;
-
-  return {
-    ...resolveWellbeingAccess(config, actor, !!activeBreakGlass),
-    config,
-    discordGuild,
-    activeBreakGlass,
-  };
-}
-
-type WellbeingState = Awaited<ReturnType<typeof resolveWellbeingRole>>;
-
-/** Un référent doit appartenir à la cellule : il lit le dossier qu'on lui confie. */
-async function isTeamMemberId(state: WellbeingState, userId: string): Promise<boolean> {
-  if (!SNOWFLAKE_RE.test(userId)) return false;
-  return resolveWellbeingAccess(state.config, await actorOf(state.discordGuild, userId), false).isTeamMember;
-}
 
 /** Id d'un dossier de ce serveur, ou null : un id inconnu n'entre pas au journal. */
 async function caseIdOfGuild(guildId: string, caseId: unknown): Promise<string | null> {
@@ -188,39 +103,11 @@ async function caseIdOfGuild(guildId: string, caseId: unknown): Promise<string |
   return found?.id ?? null;
 }
 
-function actorName(c: Context): string {
-  const user = c.var.dashboardUser;
-  return user.username ?? user.userId;
-}
-
-async function recordEvents(caseId: string, c: Context, drafts: Array<CaseEventDraft | { type: string; fromValue?: string | null; toValue?: string | null }>) {
-  if (drafts.length === 0) return;
-  await appendCaseEvents(caseId, drafts.map((draft) => ({
-    type: draft.type,
-    actorId: c.var.dashboardUser.userId,
-    actorName: actorName(c),
-    fromValue: draft.fromValue ?? null,
-    toValue: draft.toValue ?? null,
-  })));
-}
-
 function parseReviewAt(value: unknown): Date | null | undefined {
   if (value === undefined) return undefined;
   if (value === null || value === '') return null;
   const date = new Date(bodyText(value, 40));
   return Number.isNaN(date.getTime()) ? undefined : date;
-}
-
-async function audit(client: Client, c: Context, guildId: string, action: string, details: string, eventType = 'Manuel') {
-  await pushAudit(guildId, {
-    user: auditUserOf(c),
-    action,
-    context: getGuildName(client, guildId),
-    module: WELLBEING_AUDIT_MODULE,
-    eventType,
-    details,
-    channelId: null,
-  });
 }
 
 export function createWellbeingRouter(client: Client) {
@@ -261,7 +148,7 @@ export function createWellbeingRouter(client: Client) {
       });
     } catch (err) {
       logger.error('WellbeingAPI', 'Error fetching status:', err);
-      return fail(c, err, 'Erreur lors du chargement de la cellule bien-être.', 'WellbeingAPI');
+      return fail(c, err, 'Erreur lors du chargement de la cellule de suivi.', 'WellbeingAPI');
     }
   });
 
@@ -290,6 +177,8 @@ export function createWellbeingRouter(client: Client) {
         distressWatch: false,
         pulseEnabled: false,
         pulseRoleIds: [],
+        networkPool: false,
+        profileRetentionMonths: PROFILE_RETENTION_DEFAULT_MONTHS,
         resources: [],
       };
       return send(c, { config });
@@ -305,7 +194,7 @@ export function createWellbeingRouter(client: Client) {
     try {
       const state = await resolveWellbeingRole(client, guildId, user.userId);
       if (!state.canConfigure) {
-        return send(c, { error: 'Seul le propriétaire du serveur peut modifier la cellule bien-être.' }, 403);
+        return send(c, { error: 'Seul le propriétaire du serveur peut modifier la cellule de suivi.' }, 403);
       }
       const body = await readBody<{
         enabled?: boolean;
@@ -327,6 +216,8 @@ export function createWellbeingRouter(client: Client) {
         distressWatch?: boolean;
         pulseEnabled?: boolean;
         pulseRoleIds?: string[];
+        networkPool?: boolean;
+        profileRetentionMonths?: number;
       }>(c);
       const cleanIds = (arr: unknown) =>
         Array.isArray(arr) ? arr.filter((x): x is string => typeof x === 'string' && SNOWFLAKE_RE.test(x)) : [];
@@ -343,6 +234,7 @@ export function createWellbeingRouter(client: Client) {
       const followUpDays = typeof body?.followUpDays === 'number' && Number.isInteger(body.followUpDays)
         ? Math.min(Math.max(body.followUpDays, 0), MAX_FOLLOW_UP_DAYS)
         : undefined;
+      const profileRetentionMonths = cleanProfileRetention(body?.profileRetentionMonths);
       // Les rôles interrogés par la météo du staff doivent exister sur le serveur.
       const pulseRoleIds = body?.pulseRoleIds !== undefined
         ? cleanIds(body.pulseRoleIds).filter((id) => state.discordGuild?.roles.cache.has(id))
@@ -352,6 +244,8 @@ export function createWellbeingRouter(client: Client) {
         ...(typeof body?.sanctionSignal === 'boolean' ? { sanctionSignal: body.sanctionSignal } : {}),
         ...(typeof body?.distressWatch === 'boolean' ? { distressWatch: body.distressWatch } : {}),
         ...(typeof body?.pulseEnabled === 'boolean' ? { pulseEnabled: body.pulseEnabled } : {}),
+        ...(typeof body?.networkPool === 'boolean' ? { networkPool: body.networkPool } : {}),
+        ...(profileRetentionMonths !== undefined ? { profileRetentionMonths } : {}),
         ...(followUpDays !== undefined ? { followUpDays } : {}),
         ...(pulseRoleIds !== undefined ? { pulseRoleIds } : {}),
       };
@@ -407,7 +301,16 @@ export function createWellbeingRouter(client: Client) {
         },
       });
 
-      await audit(client, c, guildId, 'Configuration Cellule bien-être', describeConfigChange(state.config, config, (id) => {
+      // Une durée baissée vaut aussi pour les notes déjà écrites ; une hausse ne rallonge rien.
+      if (state.config && config.profileRetentionMonths < state.config.profileRetentionMonths) {
+        const shortened = await applyProfileRetention(guildId, config.profileRetentionMonths);
+        if (shortened > 0) {
+          await audit(client, c, guildId, 'Configuration Cellule de suivi',
+            `${shortened} note(s) de fiche ramenée(s) à ${config.profileRetentionMonths} mois.`, 'Sécurité');
+        }
+      }
+
+      await audit(client, c, guildId, 'Configuration Cellule de suivi', describeConfigChange(state.config, config, (id) => {
         const role = state.discordGuild?.roles.cache.get(id);
         if (role) return `@${role.name}`;
         return state.discordGuild?.members.cache.get(id)?.user.username ?? id;
@@ -426,7 +329,7 @@ export function createWellbeingRouter(client: Client) {
         ? await requestDissolution(client, guildId, { id: user.userId, name: actorName(c) }, 'CONFIG')
         : config.dissolutionAt;
       if (disabling && dissolutionAt) {
-        await audit(client, c, guildId, 'Configuration Cellule bien-être',
+        await audit(client, c, guildId, 'Configuration Cellule de suivi',
           `Désactivation de la cellule demandée, effective le ${dissolutionAt.toISOString()} sauf annulation.`, 'Sécurité');
       }
 
@@ -470,7 +373,7 @@ export function createWellbeingRouter(client: Client) {
       });
 
       const scope = log.subjectUserId ? ` — limité au membre ${log.subjectUserId}` : '';
-      await audit(client, c, guildId, 'Break-glass Cellule bien-être', needsApproval
+      await audit(client, c, guildId, 'Break-glass Cellule de suivi', needsApproval
         ? `Accès exceptionnel demandé, en attente de validation${scope} — Motif : ${log.reason}`
         : `Accès exceptionnel activé jusqu'à ${expiresAt.toISOString()}${scope} — Motif : ${log.reason}`, 'Sécurité');
 
@@ -515,7 +418,7 @@ export function createWellbeingRouter(client: Client) {
         },
       });
 
-      await audit(client, c, guildId, 'Break-glass Cellule bien-être', approve
+      await audit(client, c, guildId, 'Break-glass Cellule de suivi', approve
         ? `Accès exceptionnel de ${log.actorName} validé jusqu'à ${expiresAt.toISOString()}`
         : `Accès exceptionnel de ${log.actorName} refusé`, 'Sécurité');
       void sendWellbeingAlert(client, guildId, state.config, 'BREAK_GLASS', {
@@ -550,7 +453,7 @@ export function createWellbeingRouter(client: Client) {
         data: { status: 'ENDED', endedById: user.userId, endedByName: actorName(c), endedAt: now, expiresAt: now },
       });
       const own = log.actorId === user.userId;
-      await audit(client, c, guildId, 'Break-glass Cellule bien-être', own
+      await audit(client, c, guildId, 'Break-glass Cellule de suivi', own
         ? `Accès exceptionnel de ${log.actorName} arrêté par son auteur`
         : `Accès exceptionnel de ${log.actorName} révoqué`, 'Sécurité');
       void sendWellbeingAlert(client, guildId, state.config, 'BREAK_GLASS', { actorId: user.userId, stage: 'ended' },
@@ -586,7 +489,7 @@ export function createWellbeingRouter(client: Client) {
     try {
       const state = await resolveWellbeingRole(client, guildId, user.userId);
       if (!state.canReadCases) {
-        return send(c, { error: 'Espace cloisonné : accès réservé à la cellule bien-être (ou break-glass direction).' }, 403);
+        return send(c, { error: 'Espace cloisonné : accès réservé à la cellule de suivi (ou break-glass direction).' }, 403);
       }
       const stale = staleSession(c);
       if (stale) return stale;
@@ -609,7 +512,7 @@ export function createWellbeingRouter(client: Client) {
       for (const id of subjects) if (await isTeamMemberId(state, id)) cellSubjects.add(id);
       // Sous accès d'urgence, chaque consultation laisse une trace, sans le contenu des dossiers.
       if (!state.isTeamMember) {
-        await audit(client, c, guildId, 'Consultation Cellule bien-être',
+        await audit(client, c, guildId, 'Consultation Cellule de suivi',
           `Accès d'urgence : ${cases.length} dossier(s) consulté(s)${subjectUserId ? ` pour le membre ${subjectUserId}` : ''}.`, 'Sécurité');
       }
       void sendWellbeingAlert(client, guildId, state.config, state.isTeamMember ? 'TEAM_READ' : 'EMERGENCY_READ', {
@@ -624,25 +527,6 @@ export function createWellbeingRouter(client: Client) {
       return fail(c, err, 'Erreur lors du chargement des dossiers.', 'WellbeingAPI');
     }
   });
-
-  /**
-   * Beaucoup de dossiers ouverts en peu de temps par une même personne :
-   * compte inhabituel ou curiosité, la cellule est prévenue (une fois par heure).
-   */
-  async function checkUnusualAccess(c: Context, guildId: string, state: WellbeingState, now: Date) {
-    const userId = c.var.dashboardUser.userId;
-    const opened = await prisma.wellbeingCaseEvent.count({
-      where: { type: 'VIEWED', actorId: userId, createdAt: { gte: new Date(now.getTime() - UNUSUAL_ACCESS_WINDOW_MS) }, wellbeingCase: { guildId } },
-    });
-    if (!isUnusualAccess(opened)) return;
-    const key = `${guildId}:${userId}`;
-    const last = unusualAlertAt.get(key);
-    if (last !== undefined && now.getTime() - last < UNUSUAL_ACCESS_COOLDOWN_MS) return;
-    unusualAlertAt.set(key, now.getTime());
-    await audit(client, c, guildId, 'Consultation Cellule bien-être',
-      `Consultation inhabituelle : ${opened} dossiers ouverts en ${UNUSUAL_ACCESS_WINDOW_MS / 60_000} minutes.`, 'Sécurité');
-    void sendWellbeingAlert(client, guildId, state.config, 'UNUSUAL_ACCESS', { actorId: userId, caseCount: opened });
-  }
 
   /** Référent absent en ce moment : jusqu'à quand, et qui reçoit ses relances. */
   async function assigneeAbsence(guildId: string, assigneeId: string | null, state: WellbeingState) {
@@ -663,7 +547,7 @@ export function createWellbeingRouter(client: Client) {
     try {
       const state = await resolveWellbeingRole(client, guildId, user.userId);
       if (!state.canReadCases) {
-        return send(c, { error: 'Espace cloisonné : accès réservé à la cellule bien-être (ou break-glass direction).' }, 403);
+        return send(c, { error: 'Espace cloisonné : accès réservé à la cellule de suivi (ou break-glass direction).' }, 403);
       }
       const stale = staleSession(c);
       if (stale) return stale;
@@ -684,9 +568,9 @@ export function createWellbeingRouter(client: Client) {
       if (shouldRecordView(lastView?.createdAt ?? null, now)) {
         await recordEvents(caseId, c, [{ type: 'VIEWED', toValue: state.isTeamMember ? null : 'EMERGENCY' }]);
         if (!state.isTeamMember) {
-          await audit(client, c, guildId, 'Consultation Cellule bien-être', `Accès d'urgence : dossier ${caseId} ouvert.`, 'Sécurité');
+          await audit(client, c, guildId, 'Consultation Cellule de suivi', `Accès d'urgence : dossier ${caseId} ouvert.`, 'Sécurité');
         }
-        await checkUnusualAccess(c, guildId, state, now);
+        await checkUnusualAccess(client, c, guildId, state.config, now);
       }
       const item = await prisma.wellbeingCase.findUniqueOrThrow({ where: { id: caseId }, include: CASE_INCLUDE });
       return send(c, { item: openCase(item), integrity: verifyCaseEventChain(item.events), assigneeAbsence: await assigneeAbsence(guildId, item.assigneeId, state) });
@@ -761,7 +645,7 @@ export function createWellbeingRouter(client: Client) {
     const user = c.var.dashboardUser;
     try {
       const state = await resolveWellbeingRole(client, guildId, user.userId);
-      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule bien-être.' }, 403);
+      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule de suivi.' }, 403);
       const body = await readBody<{
         subjectUserId?: string;
         subjectName?: string;
@@ -811,7 +695,7 @@ export function createWellbeingRouter(client: Client) {
     const user = c.var.dashboardUser;
     try {
       const state = await resolveWellbeingRole(client, guildId, user.userId);
-      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule bien-être.' }, 403);
+      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule de suivi.' }, 403);
       const body = await readBody<{ ticketId?: string; closeTicket?: boolean }>(c);
       const ticket = await prisma.ticket.findFirst({ where: { id: bodyText(body?.ticketId, 64), guildId } });
       if (!ticket) return send(c, { error: 'Ticket introuvable.' }, 404);
@@ -830,7 +714,7 @@ export function createWellbeingRouter(client: Client) {
         ticketId: ticket.id,
       });
       if ('error' in result) return send(c, { error: result.error }, 400);
-      await audit(client, c, guildId, 'Transfert Cellule bien-être', `Ticket ${ticket.id} transféré à la cellule (dossier ${result.id}).`);
+      await audit(client, c, guildId, 'Transfert Cellule de suivi', `Ticket ${ticket.id} transféré à la cellule (dossier ${result.id}).`);
       if (body?.closeTicket === true && ticket.status !== 'CLOSED') {
         await closeTicket(client, ticket.id, user.userId, actorName(c));
       }
@@ -846,7 +730,7 @@ export function createWellbeingRouter(client: Client) {
     const user = c.var.dashboardUser;
     try {
       const state = await resolveWellbeingRole(client, guildId, user.userId);
-      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule bien-être.' }, 403);
+      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule de suivi.' }, 403);
       const caseId = c.req.param('caseId');
       const existing = await findVisibleCase(guildId, caseId, user.userId);
       if (!existing) return send(c, { error: 'Dossier introuvable.' }, 404);
@@ -915,7 +799,7 @@ export function createWellbeingRouter(client: Client) {
     const user = c.var.dashboardUser;
     try {
       const state = await resolveWellbeingRole(client, guildId, user.userId);
-      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule bien-être.' }, 403);
+      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule de suivi.' }, 403);
       const caseId = c.req.param('caseId');
       // Corbeille plutôt qu'effacement : un dossier ne disparaît pas d'un clic, la purge vient 30 jours après.
       const existing = await findVisibleCase(guildId, caseId, user.userId);
@@ -925,7 +809,7 @@ export function createWellbeingRouter(client: Client) {
         data: { deletedAt: new Date(), deletedById: user.userId, deletedByName: actorName(c) },
       });
       await recordEvents(caseId, c, [{ type: 'TRASHED' }]);
-      await audit(client, c, guildId, 'Suppression Cellule bien-être', `Dossier ${caseId} mis à la corbeille (purge dans ${CASE_TRASH_DAYS} jours).`);
+      await audit(client, c, guildId, 'Suppression Cellule de suivi', `Dossier ${caseId} mis à la corbeille (purge dans ${CASE_TRASH_DAYS} jours).`);
       void sendWellbeingAlert(client, guildId, state.config, 'CASE_CHANGE', { actorId: user.userId, action: 'mis à la corbeille' });
       return send(c, { ok: true });
     } catch (err) {
@@ -939,7 +823,7 @@ export function createWellbeingRouter(client: Client) {
     const user = c.var.dashboardUser;
     try {
       const state = await resolveWellbeingRole(client, guildId, user.userId);
-      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule bien-être.' }, 403);
+      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule de suivi.' }, 403);
       const caseId = c.req.param('caseId');
       const existing = await findVisibleCase(guildId, caseId, user.userId, { trashed: true });
       if (!existing) return send(c, { error: 'Dossier introuvable dans la corbeille.' }, 404);
@@ -948,7 +832,7 @@ export function createWellbeingRouter(client: Client) {
         data: { deletedAt: null, deletedById: null, deletedByName: null, lastActivityAt: new Date() },
       });
       await recordEvents(caseId, c, [{ type: 'RESTORED' }]);
-      await audit(client, c, guildId, 'Restauration Cellule bien-être', `Dossier ${caseId} restauré depuis la corbeille.`);
+      await audit(client, c, guildId, 'Restauration Cellule de suivi', `Dossier ${caseId} restauré depuis la corbeille.`);
       void sendWellbeingAlert(client, guildId, state.config, 'CASE_CHANGE', { actorId: user.userId, action: 'restauré' });
       const item = await prisma.wellbeingCase.findUniqueOrThrow({ where: { id: caseId }, include: CASE_INCLUDE });
       return send(c, { item: openCase(item) });
@@ -963,7 +847,7 @@ export function createWellbeingRouter(client: Client) {
     const user = c.var.dashboardUser;
     try {
       const state = await resolveWellbeingRole(client, guildId, user.userId);
-      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule bien-être.' }, 403);
+      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule de suivi.' }, 403);
       const caseId = c.req.param('caseId');
       const existing = await findVisibleCase(guildId, caseId, user.userId);
       if (!existing) return send(c, { error: 'Dossier introuvable.' }, 404);
@@ -995,7 +879,7 @@ export function createWellbeingRouter(client: Client) {
     const user = c.var.dashboardUser;
     try {
       const state = await resolveWellbeingRole(client, guildId, user.userId);
-      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule bien-être.' }, 403);
+      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule de suivi.' }, 403);
       const caseId = c.req.param('caseId');
       const note = await prisma.wellbeingCaseNote.findFirst({
         where: { id: c.req.param('noteId'), caseId, wellbeingCase: caseVisibilityWhere(guildId, user.userId) },
@@ -1032,7 +916,7 @@ export function createWellbeingRouter(client: Client) {
     const user = c.var.dashboardUser;
     try {
       const state = await resolveWellbeingRole(client, guildId, user.userId);
-      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule bien-être.' }, 403);
+      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule de suivi.' }, 403);
       const caseId = c.req.param('caseId');
       const existing = await prisma.wellbeingCase.findFirst({
         where: { AND: [{ id: caseId }, caseVisibilityWhere(guildId, user.userId)] },
@@ -1073,7 +957,7 @@ export function createWellbeingRouter(client: Client) {
     const user = c.var.dashboardUser;
     try {
       const state = await resolveWellbeingRole(client, guildId, user.userId);
-      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule bien-être.' }, 403);
+      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule de suivi.' }, 403);
       const caseId = c.req.param('caseId');
       // Le dossier doit être de ce serveur : un id de document seul ne suffit pas.
       const { count } = await prisma.wellbeingCaseAttachment.deleteMany({
@@ -1098,14 +982,14 @@ export function createWellbeingRouter(client: Client) {
     const user = c.var.dashboardUser;
     try {
       const state = await resolveWellbeingRole(client, guildId, user.userId);
-      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule bien-être.' }, 403);
+      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule de suivi.' }, 403);
       const caseId = c.req.param('caseId');
       const existing = await findVisibleCase(guildId, caseId, user.userId);
       if (!existing) return send(c, { error: 'Dossier introuvable.' }, 404);
       if (existing.status !== 'CLOSED') return send(c, { error: 'Seul un dossier fermé a une date d\'effacement.' }, 400);
       await prisma.wellbeingCase.update({ where: { id: caseId }, data: { purgeWarnedAt: null } });
       await recordEvents(caseId, c, [{ type: 'EXTENDED' }]);
-      await audit(client, c, guildId, 'Conservation Cellule bien-être', `Dossier ${caseId} prolongé d'un an.`);
+      await audit(client, c, guildId, 'Conservation Cellule de suivi', `Dossier ${caseId} prolongé d'un an.`);
       return send(c, { item: await fullCase(caseId) });
     } catch (err) {
       logger.error('WellbeingAPI', 'Error extending case:', err);
@@ -1119,7 +1003,7 @@ export function createWellbeingRouter(client: Client) {
     const user = c.var.dashboardUser;
     try {
       const state = await resolveWellbeingRole(client, guildId, user.userId);
-      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule bien-être.' }, 403);
+      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule de suivi.' }, 403);
       const stale = staleSession(c);
       if (stale) return stale;
       const caseId = c.req.param('caseId');
@@ -1127,7 +1011,7 @@ export function createWellbeingRouter(client: Client) {
       if (!existing) return send(c, { error: 'Dossier introuvable.' }, 404);
       const exportedAt = new Date();
       await recordEvents(caseId, c, [{ type: 'EXPORTED' }]);
-      await audit(client, c, guildId, 'Export Cellule bien-être', `Dossier ${caseId} exporté.`, 'Sécurité');
+      await audit(client, c, guildId, 'Export Cellule de suivi', `Dossier ${caseId} exporté.`, 'Sécurité');
       void sendWellbeingAlert(client, guildId, state.config, 'CASE_CHANGE', { actorId: user.userId, action: 'exporté' });
       return send(c, { item: await fullCase(caseId), exportedBy: actorName(c), exportedById: user.userId, exportedAt: exportedAt.toISOString() });
     } catch (err) {
@@ -1142,7 +1026,7 @@ export function createWellbeingRouter(client: Client) {
     const user = c.var.dashboardUser;
     try {
       const state = await resolveWellbeingRole(client, guildId, user.userId);
-      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule bien-être.' }, 403);
+      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule de suivi.' }, 403);
       const caseId = c.req.param('caseId');
       const existing = await findVisibleCase(guildId, caseId, user.userId);
       if (!existing) return send(c, { error: 'Dossier introuvable.' }, 404);
@@ -1182,7 +1066,7 @@ export function createWellbeingRouter(client: Client) {
     const user = c.var.dashboardUser;
     try {
       const state = await resolveWellbeingRole(client, guildId, user.userId);
-      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule bien-être.' }, 403);
+      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule de suivi.' }, 403);
       const caseId = c.req.param('caseId');
       const task = await prisma.wellbeingCaseTask.findFirst({
         where: { id: c.req.param('taskId'), caseId, wellbeingCase: caseVisibilityWhere(guildId, user.userId) },
@@ -1210,7 +1094,7 @@ export function createWellbeingRouter(client: Client) {
     const user = c.var.dashboardUser;
     try {
       const state = await resolveWellbeingRole(client, guildId, user.userId);
-      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule bien-être.' }, 403);
+      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule de suivi.' }, 403);
       const caseId = c.req.param('caseId');
       const { count } = await prisma.wellbeingCaseTask.deleteMany({
         where: { id: c.req.param('taskId'), caseId, wellbeingCase: caseVisibilityWhere(guildId, user.userId) },
@@ -1230,7 +1114,7 @@ export function createWellbeingRouter(client: Client) {
     const user = c.var.dashboardUser;
     try {
       const state = await resolveWellbeingRole(client, guildId, user.userId);
-      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule bien-être.' }, 403);
+      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule de suivi.' }, 403);
       const caseId = c.req.param('caseId');
       const existing = await findVisibleCase(guildId, caseId, user.userId, { trashed: true });
       if (!existing) return send(c, { error: 'Dossier introuvable dans la corbeille.' }, 404);
@@ -1244,7 +1128,7 @@ export function createWellbeingRouter(client: Client) {
         data: { purgeRequestedById: user.userId, purgeRequestedByName: actorName(c), purgeRequestedAt: now },
       });
       await recordEvents(caseId, c, [{ type: 'PURGE_REQUESTED' }]);
-      await audit(client, c, guildId, 'Suppression Cellule bien-être', `Effacement définitif du dossier ${caseId} demandé, à valider par une autre personne.`, 'Sécurité');
+      await audit(client, c, guildId, 'Suppression Cellule de suivi', `Effacement définitif du dossier ${caseId} demandé, à valider par une autre personne.`, 'Sécurité');
       void sendWellbeingAlert(client, guildId, state.config, 'CASE_CHANGE', { actorId: user.userId, action: 'proposé à l\'effacement définitif' });
       return send(c, { ok: true });
     } catch (err) {
@@ -1258,7 +1142,7 @@ export function createWellbeingRouter(client: Client) {
     const user = c.var.dashboardUser;
     try {
       const state = await resolveWellbeingRole(client, guildId, user.userId);
-      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule bien-être.' }, 403);
+      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule de suivi.' }, 403);
       const caseId = c.req.param('caseId');
       const existing = await findVisibleCase(guildId, caseId, user.userId, { trashed: true });
       if (!existing) return send(c, { error: 'Dossier introuvable dans la corbeille.' }, 404);
@@ -1267,7 +1151,7 @@ export function createWellbeingRouter(client: Client) {
       if (error === 'expired') return send(c, { error: 'La demande a expiré : il faut la refaire.' }, 409);
       if (error) return send(c, { error: "Aucune demande d'effacement en cours pour ce dossier." }, 409);
       await prisma.wellbeingCase.delete({ where: { id: caseId } });
-      await audit(client, c, guildId, 'Suppression Cellule bien-être',
+      await audit(client, c, guildId, 'Suppression Cellule de suivi',
         `Dossier ${caseId} effacé définitivement (demande de ${existing.purgeRequestedByName ?? existing.purgeRequestedById}).`, 'Sécurité');
       void sendWellbeingAlert(client, guildId, state.config, 'CASE_CHANGE', { actorId: user.userId, action: 'effacé définitivement' });
       return send(c, { ok: true });
@@ -1287,7 +1171,7 @@ export function createWellbeingRouter(client: Client) {
       if (!state.config) return send(c, { error: 'Cellule non configurée.' }, 404);
       const now = new Date();
       await prisma.wellbeingConfig.update({ where: { guildId }, data: { accessReviewedAt: now, accessReviewSentAt: null } });
-      await audit(client, c, guildId, 'Revue des accès Cellule bien-être', 'Composition de la cellule et de la direction confirmée.');
+      await audit(client, c, guildId, 'Revue des accès Cellule de suivi', 'Composition de la cellule et de la direction confirmée.');
       return send(c, { accessReviewedAt: now.toISOString() });
     } catch (err) {
       logger.error('WellbeingAPI', 'Error confirming access review:', err);
@@ -1369,7 +1253,7 @@ export function createWellbeingRouter(client: Client) {
       if (!(await cancelDissolution(client, guildId, { id: user.userId }))) {
         return send(c, { error: 'Aucune désactivation en attente.' }, 409);
       }
-      await audit(client, c, guildId, 'Configuration Cellule bien-être', 'Désactivation de la cellule annulée.', 'Sécurité');
+      await audit(client, c, guildId, 'Configuration Cellule de suivi', 'Désactivation de la cellule annulée.', 'Sécurité');
       return send(c, { ok: true });
     } catch (err) {
       logger.error('WellbeingAPI', 'Error cancelling dissolution:', err);
@@ -1384,7 +1268,7 @@ export function createWellbeingRouter(client: Client) {
     const user = c.var.dashboardUser;
     try {
       const state = await resolveWellbeingRole(client, guildId, user.userId);
-      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule bien-être.' }, 403);
+      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule de suivi.' }, 403);
       const caseId = c.req.param('caseId');
       const existing = await findVisibleCase(guildId, caseId, user.userId);
       if (!existing) return send(c, { error: 'Dossier introuvable.' }, 404);
@@ -1441,7 +1325,7 @@ export function createWellbeingRouter(client: Client) {
           ].filter(Boolean).join(' · '),
         })),
       ].sort((a, b) => b.date.getTime() - a.date.getTime());
-      await audit(client, c, guildId, 'Journal Cellule bien-être', `Journal exporté (${rows.length} entrées).`, 'Sécurité');
+      await audit(client, c, guildId, 'Journal Cellule de suivi', `Journal exporté (${rows.length} entrées).`, 'Sécurité');
       return new Response(journalCsv(rows), {
         headers: {
           'Content-Type': 'text/csv; charset=utf-8',
@@ -1472,11 +1356,11 @@ export function createWellbeingRouter(client: Client) {
     const guildId = c.req.param('guildId');
     try {
       const state = await resolveWellbeingRole(client, guildId, c.var.dashboardUser.userId);
-      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule bien-être.' }, 403);
+      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule de suivi.' }, 403);
       const body = await readBody<{ resources?: unknown }>(c);
       const resources = cleanResources(body?.resources);
       await prisma.wellbeingConfig.update({ where: { guildId }, data: { resources: resources as unknown as Prisma.InputJsonValue } });
-      await audit(client, c, guildId, 'Ressources Cellule bien-être', `${resources.length} ressource(s) d'aide enregistrée(s).`);
+      await audit(client, c, guildId, 'Ressources Cellule de suivi', `${resources.length} ressource(s) d'aide enregistrée(s).`);
       return send(c, { resources });
     } catch (err) {
       logger.error('WellbeingAPI', 'Error saving resources:', err);
@@ -1489,7 +1373,7 @@ export function createWellbeingRouter(client: Client) {
     const user = c.var.dashboardUser;
     try {
       const state = await resolveWellbeingRole(client, guildId, user.userId);
-      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule bien-être.' }, 403);
+      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule de suivi.' }, 403);
       const caseId = c.req.param('caseId');
       const existing = await findVisibleCase(guildId, caseId, user.userId);
       if (!existing) return send(c, { error: 'Dossier introuvable.' }, 404);
@@ -1539,7 +1423,7 @@ export function createWellbeingRouter(client: Client) {
     const user = c.var.dashboardUser;
     try {
       const state = await resolveWellbeingRole(client, guildId, user.userId);
-      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule bien-être.' }, 403);
+      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule de suivi.' }, 403);
       // Un signal sur soi-même reste masqué, comme un dossier (conflit d'intérêts).
       const signals = await prisma.wellbeingDistressSignal.findMany({
         where: { guildId, handledAt: null, userId: { not: user.userId } },
@@ -1572,13 +1456,13 @@ export function createWellbeingRouter(client: Client) {
     const user = c.var.dashboardUser;
     try {
       const state = await resolveWellbeingRole(client, guildId, user.userId);
-      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule bien-être.' }, 403);
+      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule de suivi.' }, 403);
       const { count } = await prisma.wellbeingDistressSignal.updateMany({
         where: { id: c.req.param('signalId'), guildId, handledAt: null, userId: { not: user.userId } },
         data: { handledAt: new Date(), handledById: user.userId, handledByName: actorName(c), outcome: 'DISMISSED' },
       });
       if (count === 0) return send(c, { error: 'Signal introuvable ou déjà traité.' }, 404);
-      await audit(client, c, guildId, 'Signal Cellule bien-être', 'Signal de détresse écarté.');
+      await audit(client, c, guildId, 'Signal Cellule de suivi', 'Signal de détresse écarté.');
       return send(c, { ok: true });
     } catch (err) {
       logger.error('WellbeingAPI', 'Error dismissing signal:', err);
@@ -1592,7 +1476,7 @@ export function createWellbeingRouter(client: Client) {
     const user = c.var.dashboardUser;
     try {
       const state = await resolveWellbeingRole(client, guildId, user.userId);
-      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule bien-être.' }, 403);
+      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule de suivi.' }, 403);
       if (!state.config?.reportEnabled) {
         return send(c, { error: "Ouvrez d'abord les signalements Discord dans les réglages de la cellule." }, 400);
       }
@@ -1602,7 +1486,7 @@ export function createWellbeingRouter(client: Client) {
       if (!channel || !channel.isSendable()) return send(c, { error: 'Salon introuvable ou fermé au bot.' }, 400);
       const locale = await resolveGuildLocale(guildId, state.discordGuild?.preferredLocale);
       await channel.send(wellbeingPanelMessage(locale));
-      await audit(client, c, guildId, 'Message Cellule bien-être', `Message permanent publié dans #${channel.name}.`);
+      await audit(client, c, guildId, 'Message Cellule de suivi', `Message permanent publié dans #${channel.name}.`);
       return send(c, { ok: true });
     } catch (err) {
       logger.error('WellbeingAPI', 'Error posting panel:', err);

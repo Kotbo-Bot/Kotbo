@@ -170,7 +170,7 @@ export function wellbeingPanelMessage(locale: BotLocale) {
   };
 }
 
-/** Envoi du formulaire `/bienetre signaler`. */
+/** Envoi du formulaire `/confidentiel signaler`. */
 export async function handleWellbeingReportModal(interaction: ModalSubmitInteraction): Promise<void> {
   const guildId = interaction.guildId;
   if (!guildId) return;

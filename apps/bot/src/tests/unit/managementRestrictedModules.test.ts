@@ -1,5 +1,5 @@
 /**
- * Un module confidentiel (cellule bien-être) décide seul de son accès : le
+ * Un module confidentiel (cellule de suivi) décide seul de son accès : le
  * Centre de gestion ne doit ni le lister, ni lui écrire de règle, ni le
  * compter dans les droits d'un membre.
  */

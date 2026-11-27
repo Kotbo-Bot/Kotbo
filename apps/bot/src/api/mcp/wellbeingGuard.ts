@@ -1,5 +1,5 @@
 /**
- * Salon d'alerte de la cellule bien-être, fermé au MCP.
+ * Salon d'alerte de la cellule de suivi, fermé au MCP.
  *
  * Il garde la trace des accès aux dossiers (accès d'urgence, consultations).
  * Une clé capable de le lire, de vider ses messages ou de changer ses
@@ -42,7 +42,7 @@ export function withWellbeingChannelGuard(
     if (values.length > 0) {
       const alert = await loadAlertChannel();
       if (alert && values.some((value) => refersToChannel(value, alert))) {
-        return err("Ce salon est celui des alertes de la cellule bien-être : il n'est pas accessible par le MCP ni par l'API.");
+        return err("Ce salon est celui des alertes de la cellule de suivi : il n'est pas accessible par le MCP ni par l'API.");
       }
     }
     return handler(args);

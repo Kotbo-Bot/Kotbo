@@ -14,6 +14,9 @@
   import ReportPanelPublisher from '../lib/components/wellbeing/ReportPanelPublisher.svelte';
   import CaseBoard from '../lib/components/wellbeing/CaseBoard.svelte';
   import WellbeingSettings from '../lib/components/wellbeing/WellbeingSettings.svelte';
+  import NetworkReferent from '../lib/components/wellbeing/NetworkReferent.svelte';
+  import NetworkCases from '../lib/components/wellbeing/NetworkCases.svelte';
+  import ProfilesPanel from '../lib/components/wellbeing/ProfilesPanel.svelte';
   import { memberCaseModal } from '../lib/stores/memberCaseModal.svelte';
   import MemberName from '../lib/components/MemberName.svelte';
   import WellbeingMemberList from '../lib/components/WellbeingMemberList.svelte';
@@ -67,7 +70,7 @@
   const selectedHeader = $derived(cases.find((c) => c.id === selectedCaseId) ?? null);
   const selectedCase = $derived(detail && detail.id === selectedCaseId ? detail : null);
 
-  type Tab = 'cases' | 'stats' | 'resources' | 'access' | 'settings';
+  type Tab = 'cases' | 'profiles' | 'stats' | 'resources' | 'access' | 'settings';
   type DetailTab = 'timeline' | 'tasks' | 'documents';
   let detailTab = $state<DetailTab>('timeline');
   /** Petit écran : la fiche remplace la liste après un choix. */
@@ -80,6 +83,8 @@
   ] : []);
   type ListFilter = WbCaseFilter | 'trash';
   let activeTab = $state<Tab>('cases');
+  /** Fiche à ouvrir à l'arrivée sur l'onglet Fiches, depuis un lien. */
+  let profileSubjectId = $state<string | null>(null);
   let caseFilter = $state<ListFilter>('active');
   let caseSearch = $state('');
   let caseSort = $state<WbCaseSort>('recent');
@@ -406,6 +411,7 @@
     if (!status) return [];
     const on = status.enabled;
     return [
+      ...(on && status.isTeamMember ? [{ id: 'profiles', label: m.wb_tab_profiles(), icon: 'StickyNote' }] : []),
       { id: 'cases', label: m.wb_tab_cases(), icon: 'folder', badge: on && status.hasCaseAccess ? stats.active || undefined : undefined },
       ...(on && (status.isTeamMember || status.isDirector) ? [{ id: 'stats', label: m.wb_tab_stats(), icon: 'BarChart3' }] : []),
       ...(on && status.isTeamMember ? [{ id: 'resources', label: m.wb_tab_resources(), icon: 'heart', badge: resources.length || undefined }] : []),
@@ -450,6 +456,13 @@
       }
       if (!stRes.ok) throw new Error('status');
       status = await stRes.json();
+      // Lien direct (fiche membre) : `?profile=` ouvre la fiche de cette personne.
+      const linkedProfile = new URLSearchParams(window.location.search).get('profile');
+      if (linkedProfile) {
+        history.replaceState(history.state, '', window.location.pathname);
+        profileSubjectId = linkedProfile;
+        activeTab = 'profiles';
+      }
 
       if (status?.hasCaseAccess) {
         const casesRes = await dashboardFetch('/wellbeing/cases');
@@ -1229,6 +1242,10 @@
         </Field>
       </div>
 
+      <NetworkReferent caseId={selectedCase.id} subjectUserId={selectedCase.subjectUserId ?? null}
+        referentId={selectedCase.networkReferentId ?? null} referentGuildId={selectedCase.networkReferentGuildId ?? null}
+        canWrite={!!status?.canWriteCases} onchange={applyItem} />
+
       {#if selectedCase.hasTrackingCode}
         <ReporterThread caseId={selectedCase.id} messages={selectedCase.reporterMessages ?? []} canWrite={!!status?.canWriteCases} hidden={contentHidden} onchange={applyItem} />
       {/if}
@@ -1457,6 +1474,7 @@
       {:else}
         {#if status.canWriteCases}
           <DistressSignals bind:this={signalsPanel} onopen={(signal) => void openCaseFromSignal(signal)} />
+          <NetworkCases hidden={contentHidden} />
         {/if}
         <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <StatTile icon="folder" tone="bg-primary/10 text-primary" value={stats.active} label={m.wb_stat_active()} />
@@ -1499,6 +1517,11 @@
           {/if}
         {/if}
       {/if}
+    {:else if activeTab === 'profiles'}
+      <ProfilesPanel {cases} hidden={contentHidden} initialSubjectId={profileSubjectId}
+        checkReauth={async (res) => { const stale = await needsReauth(res); if (stale) activeTab = 'cases'; return stale; }}
+        onopencase={(caseId) => { activeTab = 'cases'; openCaseById(caseId); mobileDetail = true; }}
+        onnewcase={(prefill) => { activeTab = 'cases'; void openNewCase(prefill); }} />
     {:else if activeTab === 'stats'}
       {#if cellStats}
         <WellbeingStats stats={cellStats} load={cellLoad} pulse={cellPulse} />

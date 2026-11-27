@@ -1,5 +1,5 @@
 /**
- * Le salon d'alerte de la cellule bien-être porte les traces des accès aux
+ * Le salon d'alerte de la cellule de suivi porte les traces des accès aux
  * dossiers : aucun outil MCP ne doit le lire, l'effacer ou le modifier.
  */
 import { describe, expect, mock, test } from 'bun:test';

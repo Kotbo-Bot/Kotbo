@@ -593,6 +593,7 @@ model Guild {
   ticketStaffSignatures  TicketStaffSignature[]
   wellbeingConfig        WellbeingConfig?
   wellbeingCases         WellbeingCase[]
+  wellbeingProfiles      WellbeingProfile[]
   wellbeingBreakGlassLogs WellbeingBreakGlassLog[]
   wellbeingDistressSignals WellbeingDistressSignal[]
   wellbeingPulseWeeks    WellbeingPulseWeek[]

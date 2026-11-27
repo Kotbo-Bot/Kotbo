@@ -254,7 +254,7 @@ describe('signal aux modérateurs', () => {
 });
 
 describe('anonymat de la commande de la cellule', () => {
-  test("le journal des commandes n'inscrit pas /bienetre ni ses arguments", async () => {
+  test("le journal des commandes n'inscrit pas /confidentiel ni ses arguments", async () => {
     const { readFileSync } = await import('node:fs');
     const { join } = await import('node:path');
     const source = readFileSync(join(import.meta.dir, '../../index.ts'), 'utf-8');

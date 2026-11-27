@@ -132,7 +132,7 @@
     void staff.ensureLoaded(staffGuildId);
   });
 
-  // Onglet Bien-être : seulement pour la cellule, et sur le serveur sélectionné.
+  // Onglet Suivi confidentiel : seulement pour la cellule, et sur le serveur sélectionné.
   let wellbeingAccess = $state(false);
   // Sous accès d'urgence, l'onglet se lit sans permettre d'écrire.
   let wellbeingCanWrite = $state(false);

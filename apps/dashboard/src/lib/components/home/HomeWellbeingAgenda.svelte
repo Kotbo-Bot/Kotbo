@@ -1,8 +1,8 @@
 <!--
-  « Mes échéances » de la cellule bien-être, en tête de l'accueil : suivis et
+  « Mes échéances » de la cellule de suivi, en tête de l'accueil : suivis et
   tâches des 7 prochains jours de la personne connectée. Aucun titre ni
   contenu de dossier : seulement la date et un lien qui ouvre le dossier sur
-  la page Bien-être (avec ses propres contrôles d'accès). Rien ne s'affiche
+  la page Suivi confidentiel (avec ses propres contrôles d'accès). Rien ne s'affiche
   hors de la cellule, ni sans échéance.
 -->
 <script lang="ts">

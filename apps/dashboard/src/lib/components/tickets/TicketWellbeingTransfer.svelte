@@ -1,5 +1,5 @@
 <!--
-  Transfert d'un ticket sensible à la cellule bien-être : il devient un dossier
+  Transfert d'un ticket sensible à la cellule de suivi : il devient un dossier
   confidentiel (motif et description chiffrés), et le ticket peut être fermé.
   Le bouton n'apparaît qu'aux membres de la cellule.
 -->

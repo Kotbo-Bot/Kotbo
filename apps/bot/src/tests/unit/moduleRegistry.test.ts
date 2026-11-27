@@ -176,7 +176,7 @@ describe('graphe de dependances', () => {
 });
 
 describe('modules confidentiels', () => {
-  test("la cellule bien-être décide seule de son accès", () => {
+  test("la cellule de suivi décide seule de son accès", () => {
     expect(isRestrictedModule('wellbeing')).toBe(true);
     expect(isRestrictedModule('tickets')).toBe(false);
   });

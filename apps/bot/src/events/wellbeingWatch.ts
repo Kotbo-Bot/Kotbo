@@ -1,5 +1,5 @@
 /**
- * Écoutes de la cellule bien-être hors du dashboard, toutes à activer par le
+ * Écoutes de la cellule de suivi hors du dashboard, toutes à activer par le
  * propriétaire dans les réglages de la cellule :
  *
  * - Signal aux modérateurs (`sanctionSignal`) : quand une personne qui a un
@@ -8,8 +8,13 @@
  * - Mots de détresse (`distressWatch`) : un message qui en contient devient un
  *   signal à examiner (un lien, jamais le texte) ; la cellule décide d'ouvrir un
  *   dossier ou non. L'auteur reçoit en privé les ressources d'aide.
+ *
+ * Toujours actif avec le module : quand une personne qui a une fiche quitte
+ * le serveur, ses notes ne vivent plus que 3 mois ; si elle revient, les
+ * nouvelles notes retrouvent la durée réglée. Module éteint, le rattrapage
+ * horaire (wellbeingProfiles.ts) s'en charge.
  */
-import { Events, type Client, type Message } from 'discord.js';
+import { Events, type Client, type GuildMember, type Message, type PartialGuildMember } from 'discord.js';
 import prisma from '../utils/db.js';
 import { logger } from '../utils/logger.js';
 import { resolveGuildLocale } from '../utils/i18n.js';
@@ -26,6 +31,7 @@ import {
   sanctionModeratorText,
   shouldSignalDistress,
 } from '../services/staff/wellbeingPolicy.js';
+import { markProfileBack, markProfileLeft } from '../services/staff/wellbeingProfiles.js';
 
 /** Dernier signal par serveur et par membre : un par jour au plus. */
 const lastDistress = new Map<string, number>();
@@ -79,11 +85,28 @@ async function onMessage(client: Client, message: Message) {
   }
 }
 
-/** `client` est limité au module bien-être (`scopeClientToModule`). */
+/** Départ du serveur : la fiche le note et ses notes sont raccourcies, jamais rallongées. */
+async function onMemberLeave(member: GuildMember | PartialGuildMember) {
+  const profile = await prisma.wellbeingProfile.findUnique({
+    where: { guildId_subjectUserId: { guildId: member.guild.id, subjectUserId: member.id } },
+    select: { id: true },
+  });
+  if (profile) await markProfileLeft(profile.id, new Date());
+}
+
+/** `client` est limité au module Suivi confidentiel (`scopeClientToModule`). */
 export function registerWellbeingWatch(client: Client): void {
   subscribeForModule('wellbeing', 'sanction:applied', async (payload) => {
     await onSanctionApplied(client, payload).catch((error) => logger.error('Wellbeing', 'Signal de sanction en échec :', error));
   }, 'wellbeing-sanction-signal');
+
+  client.on(Events.GuildMemberRemove, (member) => {
+    void onMemberLeave(member).catch((error) => logger.error('Wellbeing', 'Départ d\'une personne suivie en échec :', error));
+  });
+
+  client.on(Events.GuildMemberAdd, (member) => {
+    void markProfileBack(member.guild.id, member.id).catch((error) => logger.error('Wellbeing', 'Retour d\'une personne suivie en échec :', error));
+  });
 
   client.on(Events.MessageCreate, (message) => {
     void onMessage(client, message).catch((error) => logger.error('Wellbeing', 'Repérage des mots de détresse en échec :', error));

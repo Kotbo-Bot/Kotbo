@@ -67,7 +67,7 @@ Kotbo est architecturé sous forme de monorepo moderne géré par **Bun** :
 - **Périodes d'Essai & Mentorat** : Attribution d'un tuteur (mentor), suivi de la progression et génération de bilans automatiques.
 - **Absences & Démissions** : Gestion des demandes d'absence avec `/absent` et de démission avec `/demission` directement intégrée dans le workflow du staff.
 - **Organigramme libre** : canvas libre, séparateurs de rôle et rôle Discord commun par pôle, synchronisé automatiquement.
-- **Fiche membre par rôle** : les onglets s'adaptent au rôle du staff, avec un onglet Bien-être confidentiel et accès exceptionnel journalisé.
+- **Fiche membre par rôle** : les onglets s'adaptent au rôle du staff, avec un onglet Suivi confidentiel confidentiel et accès exceptionnel journalisé.
 - **Tutorat** : la validation d'un tutorat peut débloquer des modules.
 - **Notes Managériales** : Carnet de notes privées `/note` réservé aux responsables du personnel pour un suivi individuel juste et documenté.
 

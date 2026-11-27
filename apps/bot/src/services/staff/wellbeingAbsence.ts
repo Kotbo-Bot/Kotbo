@@ -1,5 +1,5 @@
 /**
- * Absence en cours d'un membre du staff, lue pour la cellule bien-être : la
+ * Absence en cours d'un membre du staff, lue pour la cellule de suivi : la
  * fiche d'un dossier signale un référent absent, et ses relances vont au
  * suppléant de la cellule.
  */

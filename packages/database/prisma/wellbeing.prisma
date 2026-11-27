@@ -1,5 +1,5 @@
 // ============================================================================
-// CELLULE BIEN-ÊTRE (ESPACE CONFIDENTIEL CLOISONNÉ) & MULTI-SERVEURS PUBLICS
+// CELLULE DE SUIVI (ESPACE CONFIDENTIEL CLOISONNÉ) & MULTI-SERVEURS PUBLICS
 // ============================================================================
 
 model WellbeingConfig {
@@ -17,7 +17,7 @@ model WellbeingConfig {
   alertEvents      String[] @default(["BREAK_GLASS", "EMERGENCY_READ", "CONFIG_CHANGE", "REPORT", "REMINDER", "MEMBERSHIP_CHANGE", "PURGE_SOON", "UNUSUAL_ACCESS", "DISSOLUTION", "DISTRESS"])
   // Accès d'urgence validé par une seconde personne (direction ou cellule).
   breakGlassApproval Boolean @default(false)
-  // Signalements depuis Discord (/bienetre signaler).
+  // Signalements depuis Discord (/confidentiel signaler).
   reportEnabled    Boolean  @default(false)
   // Relance d'un dossier critique resté sans activité pendant ce nombre de jours.
   staleCriticalDays Int     @default(7)
@@ -48,6 +48,11 @@ model WellbeingConfig {
   pulseEnabled       Boolean  @default(false)
   pulseRoleIds       String[] @default([])
   pulseSentAt        DateTime?
+  // Référents partagés avec les autres cellules du réseau de serveurs qui
+  // partagent aussi : un dossier peut être confié à l'un de leurs membres.
+  networkPool        Boolean  @default(false)
+  // Durée de vie d'une note de fiche, en mois (1 à 36) ; 3 mois après le départ du serveur.
+  profileRetentionMonths Int  @default(12)
 
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
 
@@ -97,6 +102,10 @@ model WellbeingCase {
   // Dossier résolu : rappel de prendre des nouvelles, et sa date d'envoi.
   followUpAt           DateTime?
   followUpSentAt       DateTime?
+  // Référent du réseau : membre de la cellule d'un autre serveur du réseau,
+  // qui lit et annote ce dossier depuis la cellule de son serveur.
+  networkReferentId      String?
+  networkReferentGuildId String?
 
   guild  Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
   reporterMessages WellbeingReporterMessage[]
@@ -112,7 +121,56 @@ model WellbeingCase {
   @@index([status, reviewAt])
   @@index([guildId, deletedAt])
   @@index([status, followUpAt])
+  @@index([networkReferentId])
   @@map("wellbeing_cases")
+}
+
+// Fiche confidentielle : ce que la cellule sait d'une personne, sans rien à
+// traiter. Une par personne et par serveur ; elle disparaît avec sa dernière note.
+model WellbeingProfile {
+  id            String    @id @default(cuid())
+  guildId       String
+  subjectUserId String
+  // Nom de la personne, chiffré et lié au serveur (wellbeingCrypto).
+  subjectName   String
+  // Départ du serveur : les notes ne vivent plus que 3 mois.
+  subjectLeftAt DateTime?
+
+  guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  notes WellbeingProfileNote[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([guildId, subjectUserId])
+  @@map("wellbeing_profiles")
+}
+
+// Note d'une fiche, chiffrée et liée à sa fiche, avec sa propre échéance.
+model WellbeingProfileNote {
+  id             String    @id @default(cuid())
+  profileId      String
+  authorId       String
+  authorName     String
+  content        String
+  expiresAt      DateTime
+  // Santé, vie privée : la note ne vit que 3 mois et reste masquée jusqu'à un clic.
+  sensitive      Boolean   @default(false)
+  // Annonce de l'effacement, une semaine avant ; vidée par une prolongation.
+  purgeWarnedAt  DateTime?
+  // Dernière prolongation et son motif (chiffré comme la note).
+  extendedAt     DateTime?
+  extendedById   String?
+  extendedByName String?
+  extendedReason String?
+
+  profile WellbeingProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([profileId, createdAt])
+  @@index([expiresAt])
+  @@map("wellbeing_profile_notes")
 }
 
 // Échanges anonymes avec l'auteur d'un signalement, lus et écrits par lui avec
@@ -242,7 +300,7 @@ model WellbeingCaseEvent {
   caseId    String
   actorId   String?
   actorName String
-  type      String   // CREATED | STATUS | SEVERITY | ASSIGNEE | REVIEW | NOTE | RESOURCES_SENT | REMINDER | ATTACHMENT_ADDED | ATTACHMENT_REMOVED | VIEWED | TRASHED | RESTORED | EXTENDED | EXPORTED | TASK_ADDED | TASK_DONE | TASK_REOPENED | TASK_REMOVED | PURGE_REQUESTED | CLOSED_REASON | NOTE_EDITED | REPORTER_REPLY
+  type      String   // CREATED | STATUS | SEVERITY | ASSIGNEE | REVIEW | NOTE | RESOURCES_SENT | REMINDER | ATTACHMENT_ADDED | ATTACHMENT_REMOVED | VIEWED | TRASHED | RESTORED | EXTENDED | EXPORTED | TASK_ADDED | TASK_DONE | TASK_REOPENED | TASK_REMOVED | PURGE_REQUESTED | CLOSED_REASON | NOTE_EDITED | REPORTER_REPLY | NETWORK_REFERENT
   fromValue String?
   toValue   String?
   createdAt DateTime @default(now())

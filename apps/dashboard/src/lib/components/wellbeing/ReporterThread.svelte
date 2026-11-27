@@ -1,7 +1,7 @@
 <!--
   Échanges anonymes avec l'auteur d'un signalement. Il lit les messages de la
-  cellule avec son code de suivi (/bienetre suivi) et lui répond de même
-  (/bienetre repondre) : la cellule ne sait jamais qui il est.
+  cellule avec son code de suivi (/confidentiel suivi) et lui répond de même
+  (/confidentiel repondre) : la cellule ne sait jamais qui il est.
 -->
 <script lang="ts">
   import { dashboardFetch } from '../../api';

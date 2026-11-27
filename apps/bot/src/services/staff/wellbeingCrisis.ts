@@ -1,5 +1,5 @@
 /**
- * Protocole de crise de la cellule bien-être.
+ * Protocole de crise de la cellule de suivi.
  *
  * Un dossier qui devient critique reçoit, une seule fois, les étapes du
  * protocole dans son plan d'action, et une échéance de suivi à 48 heures s'il

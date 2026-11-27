@@ -5833,6 +5833,8 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "pulseEnabled": false,
     "pulseRoleIds": [],
     "pulseSentAt": null,
+    "networkPool": false,
+    "profileRetentionMonths": 12,
     "createdAt": "__NOW__",
     "updatedAt": "__NOW__"
   },
@@ -5866,6 +5868,8 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "closedReason": null,
     "followUpAt": null,
     "followUpSentAt": null,
+    "networkReferentId": null,
+    "networkReferentGuildId": null,
     "createdAt": "__NOW__",
     "updatedAt": "__NOW__"
   },
@@ -5903,6 +5907,30 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "guildId": "",
     "week": "",
     "voterHash": ""
+  },
+  "WellbeingProfile": {
+    "id": "",
+    "guildId": "",
+    "subjectUserId": "",
+    "subjectName": "",
+    "subjectLeftAt": null,
+    "createdAt": "__NOW__",
+    "updatedAt": "__NOW__"
+  },
+  "WellbeingProfileNote": {
+    "id": "",
+    "profileId": "",
+    "authorId": "",
+    "authorName": "",
+    "content": "",
+    "expiresAt": "__NOW__",
+    "sensitive": false,
+    "purgeWarnedAt": null,
+    "extendedAt": null,
+    "extendedById": null,
+    "extendedByName": null,
+    "extendedReason": null,
+    "createdAt": "__NOW__"
   },
   "WellbeingCaseNote": {
     "id": "",

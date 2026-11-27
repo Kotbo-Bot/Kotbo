@@ -1,5 +1,5 @@
 /**
- * Codes des dossiers de la cellule bien-être (ceux du bot) et leurs libellés
+ * Codes des dossiers de la cellule de suivi (ceux du bot) et leurs libellés
  * traduits : la page et l'onglet de la fiche membre affichent les mêmes.
  */
 import { m } from './i18n';
@@ -8,7 +8,7 @@ export const WB_STATUSES = ['OPEN', 'MONITORING', 'CLOSED'] as const;
 export const WB_SEVERITIES = ['LOW', 'NORMAL', 'HIGH', 'CRITICAL'] as const;
 export const WB_CATEGORIES = ['SOUTIEN', 'MEDIATION', 'SIGNALEMENT', 'SUIVI'] as const;
 export const WB_ALERT_EVENTS = ['BREAK_GLASS', 'EMERGENCY_READ', 'TEAM_READ', 'CASE_CHANGE', 'CONFIG_CHANGE', 'REPORT', 'REMINDER', 'MEMBERSHIP_CHANGE', 'PURGE_SOON', 'UNUSUAL_ACCESS', 'DISSOLUTION', 'DISTRESS', 'SANCTION_SIGNAL'] as const;
-export const WB_CASE_EVENTS = ['CREATED', 'STATUS', 'SEVERITY', 'ASSIGNEE', 'REVIEW', 'NOTE', 'RESOURCES_SENT', 'REMINDER', 'ATTACHMENT_ADDED', 'ATTACHMENT_REMOVED', 'VIEWED', 'TRASHED', 'RESTORED', 'EXTENDED', 'EXPORTED', 'TASK_ADDED', 'TASK_DONE', 'TASK_REOPENED', 'TASK_REMOVED', 'PURGE_REQUESTED', 'CLOSED_REASON', 'NOTE_EDITED', 'REPORTER_REPLY', 'REPORTER_MESSAGE', 'CRISIS_PROTOCOL', 'SANCTION'] as const;
+export const WB_CASE_EVENTS = ['CREATED', 'STATUS', 'SEVERITY', 'ASSIGNEE', 'REVIEW', 'NOTE', 'RESOURCES_SENT', 'REMINDER', 'ATTACHMENT_ADDED', 'ATTACHMENT_REMOVED', 'VIEWED', 'TRASHED', 'RESTORED', 'EXTENDED', 'EXPORTED', 'TASK_ADDED', 'TASK_DONE', 'TASK_REOPENED', 'TASK_REMOVED', 'PURGE_REQUESTED', 'CLOSED_REASON', 'NOTE_EDITED', 'REPORTER_REPLY', 'REPORTER_MESSAGE', 'CRISIS_PROTOCOL', 'SANCTION', 'NETWORK_REFERENT'] as const;
 export const WB_CLOSE_REASONS = ['RESOLVED', 'REFERRED', 'NO_FOLLOWUP', 'DUPLICATE'] as const;
 
 const STATUS_LABELS: Record<string, () => string> = {
@@ -100,7 +100,7 @@ export function wbCaseEventLabel(event: WbCaseEvent, formatDate: (iso: string) =
     case 'REVIEW':
       return to ? m.wb_ev_review({ date: formatDate(to) }) : m.wb_ev_review_cleared();
     case 'NOTE':
-      return m.wb_ev_note();
+      return to === 'NETWORK' ? m.wb_ev_note_network() : m.wb_ev_note();
     case 'RESOURCES_SENT':
       return m.wb_ev_resources_sent({ count: to ?? '0' });
     case 'REMINDER':
@@ -110,7 +110,8 @@ export function wbCaseEventLabel(event: WbCaseEvent, formatDate: (iso: string) =
     case 'ATTACHMENT_REMOVED':
       return m.wb_ev_attachment_removed();
     case 'VIEWED':
-      return to === 'EMERGENCY' ? m.wb_ev_viewed_emergency() : m.wb_ev_viewed();
+      if (to === 'EMERGENCY') return m.wb_ev_viewed_emergency();
+      return to === 'NETWORK' ? m.wb_ev_viewed_network() : m.wb_ev_viewed();
     case 'TRASHED':
       return m.wb_ev_trashed();
     case 'RESTORED':
@@ -141,6 +142,8 @@ export function wbCaseEventLabel(event: WbCaseEvent, formatDate: (iso: string) =
       return m.wb_ev_crisis_protocol({ count: to ?? '0' });
     case 'SANCTION':
       return m.wb_ev_sanction();
+    case 'NETWORK_REFERENT':
+      return to ? m.wb_ev_network_referent() : m.wb_ev_network_referent_cleared();
     default:
       return event.type;
   }
