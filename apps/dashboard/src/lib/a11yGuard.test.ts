@@ -114,7 +114,7 @@ describe("garde-fou d'accessibilite", () => {
   test('les graphiques donnent leurs donnees en tableau (RGAA 1.1, 1.10)', () => {
     // Un canvas Chart.js est muet pour un lecteur d'ecran : il est masque, et
     // le tableau des memes donnees prend le relais.
-    const chart = sources.find(({ file }) => file.endsWith('charts/Chart.svelte'))?.text ?? '';
+    const chart = kotboUiSource('analytics/Chart.svelte') || (sources.find(({ file }) => file.endsWith('charts/Chart.svelte'))?.text ?? '');
     expect(openingTags(chart, 'canvas').every((tag) => /aria-hidden="true"/.test(tag))).toBe(true);
     expect(chart).toContain('chartTable(');
     expect(chart).toContain('<table');
@@ -261,7 +261,7 @@ describe("garde-fou d'accessibilite", () => {
   });
 
   test('les tuiles de MetricTabs sont des boutons radio, pas des onglets sans panneau (RGAA 7.1)', () => {
-    const tabs = fileText('analytics/MetricTabs.svelte');
+    const tabs = kotboUiSource('analytics/MetricTabs.svelte') || fileText('analytics/MetricTabs.svelte');
     expect(tabs).not.toContain('role="tab"');
     expect(tabs).toContain('role="radiogroup"');
     expect(tabs).toContain('role="radio"');
