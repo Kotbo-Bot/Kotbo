@@ -21,7 +21,7 @@ import {
 import { sendWellbeingAlert, sendWellbeingDirect } from '../../../../services/staff/wellbeingAlerts.js';
 import { openCase, openNote, sealNote } from '../../../../services/staff/wellbeingCrypto.js';
 import { bodyText } from '../../../../utils/bodyText.js';
-import { planTaskDrafts } from '../../../../services/staff/wellbeingCustomPolicy.js';
+import { addPlanTasks } from '../../../../services/staff/wellbeingTaskPlans.js';
 import {
   actorName,
   CASE_INCLUDE,
@@ -227,21 +227,10 @@ export function createWellbeingCaseItemsRouter(client: Client) {
       const body = await readBody<{ planId?: string }>(c);
       const plan = customizationOf(state.config).taskPlans.find((item) => item.id === bodyText(body?.planId, 32));
       if (!plan) return send(c, { error: 'Plan introuvable.' }, 404);
-      const room = MAX_CASE_TASKS - (await prisma.wellbeingCaseTask.count({ where: { caseId } }));
-      const drafts = planTaskDrafts(plan, new Date(), room);
-      if (drafts.length === 0) return send(c, { error: `Un plan d'action compte au plus ${MAX_CASE_TASKS} tâches.` }, 400);
-      await prisma.wellbeingCaseTask.createMany({
-        data: drafts.map((draft) => ({
-          caseId,
-          label: sealNote(caseId, draft.label),
-          dueAt: draft.dueAt,
-          createdById: user.userId,
-          createdByName: actorName(c),
-        })),
-      });
+      const added = await addPlanTasks(caseId, plan, { id: user.userId, name: actorName(c) });
+      if (added === 0) return send(c, { error: `Un plan d'action compte au plus ${MAX_CASE_TASKS} tâches.` }, 400);
       await prisma.wellbeingCase.update({ where: { id: caseId }, data: { lastActivityAt: new Date() } });
-      await recordEvents(caseId, c, drafts.map(() => ({ type: 'TASK_ADDED' })));
-      return send(c, { item: await fullCase(caseId), added: drafts.length }, 201);
+      return send(c, { item: await fullCase(caseId), added }, 201);
     } catch (err) {
       logger.error('WellbeingAPI', 'Error applying task plan:', err);
       return fail(c, err, "Erreur lors de l'application du plan.", 'WellbeingAPI');

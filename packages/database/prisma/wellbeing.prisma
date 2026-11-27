@@ -57,11 +57,14 @@ model WellbeingConfig {
   boardColumns       Json     @default("[]")
   // Réglages de la cellule : catégories et trames [{ id, label, template }],
   // étapes du protocole de crise [{ label, dueHours }], plans d'action types
-  // [{ id, label, tasks: [{ label, dueDays }] }] et étiquettes [{ id, label }].
+  // [{ id, label, tasks: [{ label, dueDays }] }] et étiquettes [{ id, label }] ;
+  // une catégorie peut porter le plan appliqué à sa création (planId).
   caseCategories     Json     @default("[]")
   crisisTasks        Json     @default("[]")
   taskPlans          Json     @default("[]")
   caseTags           Json     @default("[]")
+  // Trames de notes de fiche [{ id, label, text }].
+  noteTemplates      Json     @default("[]")
 
   guild Guild @relation(fields: [guildId], references: [id], onDelete: Cascade)
 

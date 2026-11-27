@@ -29,6 +29,7 @@ import { openCase } from '../../../../services/staff/wellbeingCrypto.js';
 import {
   cleanCaseCategories,
   cleanCrisisTasks,
+  cleanNoteTemplates,
   cleanTags,
   cleanTaskPlans,
   crisisTasksOf,
@@ -215,7 +216,7 @@ export async function fullCase(caseId: string) {
   return openCase(await prisma.wellbeingCase.findUniqueOrThrow({ where: { id: caseId }, include: CASE_INCLUDE }));
 }
 
-type CustomizationSource = { caseCategories?: unknown; crisisTasks?: unknown; taskPlans?: unknown; caseTags?: unknown } | null | undefined;
+type CustomizationSource = { caseCategories?: unknown; crisisTasks?: unknown; taskPlans?: unknown; caseTags?: unknown; noteTemplates?: unknown } | null | undefined;
 
 /**
  * Réglages de la cellule lus en base, nettoyés. `crisisTasks` est le protocole
@@ -229,5 +230,6 @@ export function customizationOf(config: CustomizationSource) {
     crisisDefault: crisisTasks.length === 0,
     taskPlans: cleanTaskPlans(config?.taskPlans, newColumnId),
     tags: cleanTags(config?.caseTags, newColumnId),
+    noteTemplates: cleanNoteTemplates(config?.noteTemplates, newColumnId),
   };
 }

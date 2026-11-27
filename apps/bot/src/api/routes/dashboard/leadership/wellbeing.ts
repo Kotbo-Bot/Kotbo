@@ -33,13 +33,13 @@ import { applyProfileRetention } from '../../../../services/staff/wellbeingProfi
 import { cleanBoardColumns, describeBoardColumns } from '../../../../services/staff/wellbeingBoardPolicy.js';
 import { actorName, audit, customizationOf, HOUR_MS, newColumnId, resolveWellbeingRole, SNOWFLAKE_RE } from './wellbeingShared.js';
 import {
-  cleanCaseCategories,
-  cleanCrisisTasks,
-  cleanTags,
-  cleanTaskPlans,
+  CUSTOMIZATION_FIELDS,
+  copyableCustomization,
   describeCustomization,
   type CustomizationKind,
 } from '../../../../services/staff/wellbeingCustomPolicy.js';
+import { networkGuildIds } from '../../../../services/staff/wellbeingNetwork.js';
+import { sharesNetworkPool } from '../../../../services/staff/wellbeingNetworkPolicy.js';
 import { createWellbeingBreakGlassRouter } from './wellbeingBreakGlass.js';
 import { createWellbeingCasesRouter } from './wellbeingCases.js';
 import { createWellbeingCaseItemsRouter } from './wellbeingCaseItems.js';
@@ -320,20 +320,17 @@ export function createWellbeingRouter(client: Client) {
   });
 
   // Réglages de la cellule : catégories et trames, protocole de crise, plans
-  // d'action types, étiquettes. Seuls les réglages envoyés changent.
+  // d'action types, étiquettes, trames de notes. Seuls les réglages envoyés changent.
   router.put(`${base}/customization`, ...gate, async (c) => {
     const guildId = c.req.param('guildId');
     try {
       const state = await resolveWellbeingRole(client, guildId, c.var.dashboardUser.userId);
       if (!state.canWriteCases || !state.config) return send(c, { error: 'Réservé à la cellule de suivi.' }, 403);
       const body = await readBody<Partial<Record<CustomizationKind, unknown>>>(c);
-      const changes: Array<{ kind: CustomizationKind; column: string; value: Array<{ label: string }> }> = [];
-      if (body?.categories !== undefined) changes.push({ kind: 'categories', column: 'caseCategories', value: cleanCaseCategories(body.categories, newColumnId) });
-      if (body?.crisisTasks !== undefined) changes.push({ kind: 'crisisTasks', column: 'crisisTasks', value: cleanCrisisTasks(body.crisisTasks) });
-      if (body?.taskPlans !== undefined) changes.push({ kind: 'taskPlans', column: 'taskPlans', value: cleanTaskPlans(body.taskPlans, newColumnId) });
-      if (body?.tags !== undefined) changes.push({ kind: 'tags', column: 'caseTags', value: cleanTags(body.tags, newColumnId) });
-      if (changes.length === 0) return send(c, { error: 'Aucun réglage reçu.' }, 400);
-      const data = Object.fromEntries(changes.map((change) => [change.column, change.value as unknown as Prisma.InputJsonValue]));
+      const kinds = (Object.keys(CUSTOMIZATION_FIELDS) as CustomizationKind[]).filter((kind) => body?.[kind] !== undefined);
+      if (kinds.length === 0) return send(c, { error: 'Aucun réglage reçu.' }, 400);
+      const changes = kinds.map((kind) => ({ kind, value: CUSTOMIZATION_FIELDS[kind].clean(body?.[kind], newColumnId) }));
+      const data = Object.fromEntries(changes.map((change) => [CUSTOMIZATION_FIELDS[change.kind].column, change.value as unknown as Prisma.InputJsonValue]));
       await prisma.wellbeingConfig.update({ where: { guildId }, data });
       for (const change of changes) {
         await audit(client, c, guildId, 'Réglages Cellule de suivi', describeCustomization(change.kind, change.value));
@@ -342,6 +339,69 @@ export function createWellbeingRouter(client: Client) {
     } catch (err) {
       logger.error('WellbeingAPI', 'Error saving customization:', err);
       return fail(c, err, "Erreur lors de l'enregistrement des réglages.", 'WellbeingAPI');
+    }
+  });
+
+  /** Autres serveurs du réseau dont la cellule partage avec le réseau, et leur réglage. */
+  async function sharingSources(guildId: string) {
+    const ids = (await networkGuildIds(guildId)).filter((id) => id !== guildId);
+    if (ids.length === 0) return [];
+    const configs = await prisma.wellbeingConfig.findMany({ where: { guildId: { in: ids } } });
+    return configs.filter((config) => sharesNetworkPool(config));
+  }
+
+  // Cellules du réseau dont on peut reprendre les réglages : des libellés, jamais un dossier.
+  router.get(`${base}/customization/sources`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    try {
+      const state = await resolveWellbeingRole(client, guildId, c.var.dashboardUser.userId);
+      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule de suivi.' }, 403);
+      const sources = (await sharingSources(guildId)).map((config) => {
+        const custom = customizationOf(config);
+        return {
+          guildId: config.guildId,
+          guildName: client.guilds.cache.get(config.guildId)?.name ?? config.guildId,
+          counts: {
+            categories: custom.categories.length,
+            crisisTasks: custom.crisisDefault ? 0 : custom.crisisTasks.length,
+            taskPlans: custom.taskPlans.length,
+            tags: custom.tags.length,
+            noteTemplates: custom.noteTemplates.length,
+          },
+        };
+      });
+      return send(c, { sources });
+    } catch (err) {
+      logger.error('WellbeingAPI', 'Error listing customization sources:', err);
+      return fail(c, err, 'Erreur lors du chargement du réseau.', 'WellbeingAPI');
+    }
+  });
+
+  // Reprendre des réglages d'une cellule du réseau : ils remplacent ceux d'ici.
+  router.post(`${base}/customization/import`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    try {
+      const state = await resolveWellbeingRole(client, guildId, c.var.dashboardUser.userId);
+      if (!state.canWriteCases || !state.config) return send(c, { error: 'Réservé à la cellule de suivi.' }, 403);
+      const body = await readBody<{ guildId?: string; kinds?: unknown }>(c);
+      const sourceId = bodyText(body?.guildId, 20);
+      const inNetwork = sourceId !== guildId && (await networkGuildIds(guildId)).includes(sourceId);
+      const source = inNetwork ? await prisma.wellbeingConfig.findUnique({ where: { guildId: sourceId } }) : null;
+      if (!source) return send(c, { error: 'Serveur introuvable dans le réseau.' }, 404);
+      const copy = copyableCustomization(source as unknown as Parameters<typeof copyableCustomization>[0], Array.isArray(body?.kinds) ? body.kinds : []);
+      if (!copy) return send(c, { error: 'Cette cellule ne partage pas ses réglages avec le réseau.' }, 403);
+      if (Object.keys(copy).length === 0) return send(c, { error: 'Aucun réglage choisi.' }, 400);
+      const data = Object.fromEntries(Object.entries(copy).map(([column, value]) => [column, value as unknown as Prisma.InputJsonValue]));
+      await prisma.wellbeingConfig.update({ where: { guildId }, data });
+      const sourceName = client.guilds.cache.get(sourceId)?.name ?? sourceId;
+      for (const [kind, field] of Object.entries(CUSTOMIZATION_FIELDS) as Array<[CustomizationKind, (typeof CUSTOMIZATION_FIELDS)[CustomizationKind]]>) {
+        const value = copy[field.column];
+        if (value) await audit(client, c, guildId, 'Réglages Cellule de suivi', `${describeCustomization(kind, value)} (repris de ${sourceName})`);
+      }
+      return send(c, { customization: customizationOf({ ...state.config, ...data }) });
+    } catch (err) {
+      logger.error('WellbeingAPI', 'Error importing customization:', err);
+      return fail(c, err, 'Erreur lors de la reprise des réglages.', 'WellbeingAPI');
     }
   });
 

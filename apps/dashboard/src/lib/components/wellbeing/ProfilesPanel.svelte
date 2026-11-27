@@ -122,6 +122,12 @@
     void open(member.id, member.displayName || member.username);
   }
 
+  /** Trame de la cellule ajoutée à la note en cours, sans effacer ce qui est écrit. */
+  function insertTemplate(id: string) {
+    const picked = wbCustom.value.noteTemplates.find((item) => item.id === id);
+    if (picked) text = text.trim() ? `${text.trimEnd()}\n\n${picked.text}` : picked.text;
+  }
+
   let savingTags = $state(false);
   /** Étiquettes de la fiche ouverte : enregistrées aussitôt, la liste suit. */
   async function saveTags(tagIds: string[]) {
@@ -329,6 +335,13 @@
         {/if}
         <div class="space-y-1.5">
           <label for="wb-profile-note" class="text-xs font-medium text-on-surface-variant">{m.wb_profiles_note_label()}</label>
+          {#if wbCustom.value.noteTemplates.length > 0}
+            <select value="" onchange={(event) => { insertTemplate(event.currentTarget.value); event.currentTarget.value = ''; }}
+              class="input w-full text-sm" aria-label={m.wb_note_template_pick()}>
+              <option value="">{m.wb_note_template_pick()}</option>
+              {#each wbCustom.value.noteTemplates as item (item.id)}<option value={item.id}>{item.label}</option>{/each}
+            </select>
+          {/if}
           <textarea id="wb-profile-note" class="input w-full min-h-20" maxlength={NOTE_MAX} bind:value={text}></textarea>
           <label class="flex items-start gap-2 text-xs text-on-surface">
             <input type="checkbox" class="mt-0.5" bind:checked={sensitive} />

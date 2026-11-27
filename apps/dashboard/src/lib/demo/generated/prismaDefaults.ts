@@ -5840,6 +5840,7 @@ export const PRISMA_DEFAULTS: Record<string, Record<string, unknown>> = {
     "crisisTasks": [],
     "taskPlans": [],
     "caseTags": [],
+    "noteTemplates": [],
     "createdAt": "__NOW__",
     "updatedAt": "__NOW__"
   },

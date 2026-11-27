@@ -5,11 +5,14 @@
   import { toast } from '../lib/stores/toast.svelte';
   import { confirmDialog } from '../lib/stores/confirmDialog.svelte';
   import ModulePage from '../lib/components/ModulePage.svelte';
-  import { WB_CLOSE_REASONS, wbCloseReasonLabel, wbCaseEventLabel, WB_SEVERITIES, WB_STATUSES, wbSeverityLabel, wbStatusLabel } from '../lib/wellbeingLabels';
+  import { WB_CLOSE_REASONS, wbCloseReasonLabel, WB_SEVERITIES, WB_STATUSES, wbSeverityLabel, wbStatusLabel } from '../lib/wellbeingLabels';
   import { WB_EMPTY_CUSTOMIZATION, wbCaseTags, wbCategoryName, wbFilterByTag, type WbCustomization } from '../lib/wellbeingCustom';
   import { wbCustom } from '../lib/stores/wellbeingCustomization.svelte';
   import CustomizationPanel from '../lib/components/wellbeing/CustomizationPanel.svelte';
   import TagPicker from '../lib/components/wellbeing/TagPicker.svelte';
+  import CaseTimeline from '../lib/components/wellbeing/CaseTimeline.svelte';
+  import CaseAttachments from '../lib/components/wellbeing/CaseAttachments.svelte';
+  import CaseFollowUp from '../lib/components/wellbeing/CaseFollowUp.svelte';
   import WellbeingStats, { type WellbeingCellStats, type WellbeingProfileStats, type WellbeingPulseWeek, type WellbeingReferentLoad, type WellbeingStageCount } from '../lib/components/wellbeing/WellbeingStats.svelte';
   import CaseTasks from '../lib/components/wellbeing/CaseTasks.svelte';
   import ReporterThread from '../lib/components/wellbeing/ReporterThread.svelte';
@@ -26,11 +29,10 @@
   import ResourcesEditor, { type WellbeingResource } from '../lib/components/wellbeing/ResourcesEditor.svelte';
   import { memberCaseModal } from '../lib/stores/memberCaseModal.svelte';
   import MemberName from '../lib/components/MemberName.svelte';
-  import WellbeingMemberList from '../lib/components/WellbeingMemberList.svelte';
-  import { Button, Callout, EmptyState, Field, FilterPills, Menu, Modal, StatTile, Tabs, ToggleSwitch, type FilterOption, type MenuItem, type TabItem } from '../lib/components/ui';
+  import { Button, Callout, EmptyState, FilterPills, Menu, Modal, StatTile, Tabs, ToggleSwitch, type FilterOption, type MenuItem, type TabItem } from '../lib/components/ui';
   import Papicon from '../lib/components/Papicon.svelte';
   import Skeleton from '../lib/components/Skeleton.svelte';
-  import { WB_IDLE_LOCK_MS, WB_REVIEW_SHORTCUTS, wbNeighbourCaseId, wbShortcut, wbCaseExportHtml, wbPurgeInfo, wbTaskProgress, wbCaseStats, wbCaseTimeline, wbCompactTimeline, wbFilterCases, wbIsReviewDue, wbLinkedCases, wbMergeHeader, wbReviewShortcut, wbSearchCases, wbSeverityAccent, wbSeverityTone, wbSortCases, wbStatusTone, type WbBoardStage, type WbBoardTarget, type WbCaseFilter, type WbCaseSort } from '../lib/wellbeingView';
+  import { WB_IDLE_LOCK_MS, wbNeighbourCaseId, wbShortcut, wbCaseExportHtml, wbPurgeInfo, wbTaskProgress, wbCaseStats, wbFilterCases, wbIsReviewDue, wbLinkedCases, wbMergeHeader, wbSearchCases, wbSeverityAccent, wbSeverityTone, wbSortCases, wbStatusTone, type WbBoardStage, type WbBoardTarget, type WbCaseFilter, type WbCaseSort } from '../lib/wellbeingView';
   import { authStore } from '../lib/stores/auth.svelte';
   import { isMobile } from '../lib/stores/media.svelte';
 
@@ -105,16 +107,6 @@
     ? wbSearchCases(trashCases, caseSearch)
     : wbSortCases(wbFilterByTag(wbSearchCases(wbFilterCases(cases, caseFilter, viewerId), caseSearch), tagFilter), caseSort));
   const linkedCases = $derived(selectedHeader ? wbLinkedCases(cases, selectedHeader) : []);
-  const timeline = $derived(selectedCase ? wbCaseTimeline(selectedCase) : []);
-  /** Historique réduit : notes seules, ou actions à la suite repliées ; le choix est gardé. */
-  const NOTES_ONLY_KEY = 'kotbo:wellbeing:notes-only';
-  let timelineNotesOnly = $state(typeof localStorage !== 'undefined' && localStorage.getItem(NOTES_ONLY_KEY) === '1');
-  let expandedGroups = $state<string[]>([]);
-  const compactTimeline = $derived(wbCompactTimeline(timeline, { notesOnly: timelineNotesOnly, expanded: expandedGroups }));
-  function setNotesOnly(value: boolean) {
-    timelineNotesOnly = value;
-    try { localStorage.setItem(NOTES_ONLY_KEY, value ? '1' : '0'); } catch { /* stockage indisponible : réglage gardé pour la session */ }
-  }
   const filterOptions = $derived<FilterOption<ListFilter>[]>([
     ...(status?.reportEnabled || stats.triage > 0 ? [{ value: 'triage' as const, label: m.wb_filter_triage(), count: stats.triage }] : []),
     { value: 'active', label: m.wb_filter_active(), count: stats.active },
@@ -215,9 +207,7 @@
     detail = null;
     integrity = null;
     absence = null;
-    editingNoteId = null;
     revealed = false;
-    expandedGroups = [];
     detailTab = 'timeline';
     void loadDetail(caseId);
   }
@@ -306,22 +296,12 @@
   // Ressources d'aide (cellule)
   let resources = $state<WellbeingResource[]>([]);
   let sendingResources = $state(false);
-  let assigneeCandidate = $state('');
   /** Membres de la cellule : seuls choix possibles pour un référent ou un collègue à prévenir. */
   let team = $state<Array<{ id: string; name: string }>>([]);
   /** La cellule sans la personne concernée, ni soi-même si `withSelf` est faux. */
   const teamFor = (subjectUserId: string | null | undefined, withSelf = true) =>
     team.filter((member) => member.id !== subjectUserId && (withSelf || member.id !== viewerId));
 
-  // Documents Google Drive du dossier ouvert
-  let newAttachmentLabel = $state('');
-  let newAttachmentUrl = $state('');
-  let addingAttachment = $state(false);
-  let removingAttachmentId = $state<string | null>(null);
-  /** Même plafond que le bot (MAX_CASE_ATTACHMENTS). */
-  const MAX_CASE_ATTACHMENTS = 20;
-  /** Un lien illisible (clé changée) ne devient jamais un href. */
-  const isDriveLink = (url: string) => /^https:\/\/(drive|docs)\.google\.com\//.test(url);
   // Fenêtre de création d'un dossier
   let newCaseOpen = $state(false);
   let newCaseModal = $state<{ openWith: (prefill?: NewCasePrefill) => Promise<void> }>();
@@ -330,11 +310,8 @@
   const openCaseFromSignal = (signal: DistressSignal) =>
     openNewCase({ subjectUserId: signal.userId, subjectName: signal.userName, severity: 'HIGH', signalId: signal.id });
 
-  // Note on selected case
-  let newNote = $state('');
-  /** Collègues de la cellule prévenus en privé de la note. */
-  let noteNotify = $state<string[]>([]);
-  let noteInput = $state<HTMLTextAreaElement>();
+  /** Historique du dossier ouvert : le raccourci « n » y place le curseur. */
+  let timelinePanel = $state<{ focusNote: () => Promise<void> }>();
 
   // Vue des dossiers : liste et fiche, ou colonnes par statut. Retenue par navigateur.
   const VIEW_KEY = 'kotbo:wellbeing:view';
@@ -383,13 +360,13 @@
       if (!status?.canWriteCases || !selectedCase) return;
       // Le champ de note reste utilisable en mode discret : rien n'est dévoilé.
       detailTab = 'timeline';
-      void tick().then(() => noteInput?.focus());
+      // L'historique se monte au prochain rendu s'il n'était pas l'onglet ouvert.
+      void tick().then(() => timelinePanel?.focusNote());
     } else {
       setDiscreet(!discreet);
     }
     event.preventDefault();
   }
-  let addingNote = $state(false);
 
   const tabItems = $derived.by<TabItem[]>(() => {
     if (!status) return [];
@@ -420,6 +397,7 @@
   });
   let cellProfiles = $state<WellbeingProfileStats | null>(null);
   let cellStages = $state<WellbeingStageCount[]>([]);
+  let cellTags = $state<WellbeingStageCount[]>([]);
   async function loadStats() {
     const res = await dashboardFetch('/wellbeing/stats');
     if (res.ok) {
@@ -429,6 +407,7 @@
       cellPulse = data.pulse ?? null;
       cellProfiles = data.profiles ?? null;
       cellStages = data.stages ?? [];
+      cellTags = data.tags ?? [];
     } else {
       toast.error(m.toast_wb_load_failed());
     }
@@ -754,47 +733,6 @@
     }
   }
 
-  async function addAttachment(event: SubmitEvent) {
-    event.preventDefault();
-    const target = selectedCase;
-    if (!target || addingAttachment) return;
-    addingAttachment = true;
-    try {
-      const res = await dashboardFetch(`/wellbeing/cases/${target.id}/attachments`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ label: newAttachmentLabel.trim(), url: newAttachmentUrl.trim() }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error ?? '');
-      applyItem(data.item);
-      newAttachmentLabel = '';
-      newAttachmentUrl = '';
-      toast.success(m.toast_wb_attachment_added());
-    } catch (err: any) {
-      toast.error(err?.message || m.toast_wb_attachment_failed());
-    } finally {
-      addingAttachment = false;
-    }
-  }
-
-  async function removeAttachment(attachmentId: string) {
-    const target = selectedCase;
-    if (!target || removingAttachmentId) return;
-    if (!(await confirmDialog.danger(m.wb_attachment_remove_q(), m.wb_attachment_remove_warn()))) return;
-    removingAttachmentId = attachmentId;
-    try {
-      const res = await dashboardFetch(`/wellbeing/cases/${target.id}/attachments/${attachmentId}`, { method: 'DELETE' });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error ?? '');
-      applyItem(data.item);
-    } catch (err: any) {
-      toast.error(err?.message || m.toast_wb_attachment_failed());
-    } finally {
-      removingAttachmentId = null;
-    }
-  }
-
   let cancellingDissolution = $state(false);
   /** Le propriétaire annule la désactivation demandée. */
   async function cancelDissolution() {
@@ -813,57 +751,6 @@
     }
   }
 
-  // Correction d'une note par son auteur, dans le même délai que le bot (NOTE_EDIT_HOURS).
-  const NOTE_EDIT_MS = 48 * 60 * 60 * 1000;
-  let editingNoteId = $state<string | null>(null);
-  let editingText = $state('');
-  let savingNote = $state(false);
-  let originalShown = $state<Record<string, boolean>>({});
-  const canEditNote = (note: any) => !!status?.canWriteCases && note.authorId === viewerId && Date.now() - new Date(note.createdAt).getTime() < NOTE_EDIT_MS;
-
-  async function saveNoteEdit() {
-    const target = selectedCase;
-    const noteId = editingNoteId;
-    if (!target || !noteId || !editingText.trim() || savingNote) return;
-    savingNote = true;
-    try {
-      const res = await dashboardFetch(`/wellbeing/cases/${target.id}/notes/${noteId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: editingText.trim() }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error ?? '');
-      applyItem(data.item);
-      editingNoteId = null;
-      toast.success(m.toast_wb_note_edited());
-    } catch (err: any) {
-      toast.error(err?.message || m.toast_wb_note_failed());
-    } finally {
-      savingNote = false;
-    }
-  }
-
-  async function addNote(event: SubmitEvent) {
-    event.preventDefault();
-    if (!selectedCase || !newNote.trim() || addingNote) return;
-    addingNote = true;
-    try {
-      const res = await dashboardFetch(`/wellbeing/cases/${selectedCase.id}/notes`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: newNote.trim(), notifyUserIds: noteNotify }),
-      });
-      if (!res.ok) throw new Error('note');
-      newNote = '';
-      noteNotify = [];
-      await loadDetail(selectedCase.id);
-    } catch {
-      toast.error(m.toast_wb_note_failed());
-    } finally {
-      addingNote = false;
-    }
-  }
 </script>
 
 {#snippet pill(text: string, tone: string)}
@@ -1115,56 +1002,8 @@
         </Callout>
       {/if}
 
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 rounded-xl bg-surface-container-high/20 p-4">
-        <Field label={m.wb_assignee()} hint={m.wb_assignee_hint()}>
-          {#snippet children(id, describedBy)}
-            {#if selectedCase?.assigneeId}
-              <div class="flex items-center justify-between gap-2 text-sm min-h-9">
-                <MemberName userId={selectedCase.assigneeId} />
-                {#if status?.canWriteCases}
-                  <Button size="sm" variant="ghost" icon="X" disabled={updatingCase} aria-label={m.wb_assignee_clear()} onclick={() => void updateCase({ assigneeId: null })} />
-                {/if}
-              </div>
-            {:else if status?.canWriteCases}
-              <div class="space-y-1.5">
-                <select {id} aria-describedby={describedBy} class="input w-full" bind:value={assigneeCandidate} disabled={updatingCase}
-                  onchange={() => { const assigneeId = assigneeCandidate; assigneeCandidate = ''; if (assigneeId) void updateCase({ assigneeId }); }}>
-                  <option value="">{m.wb_member_pick()}</option>
-                  {#each teamFor(selectedCase?.subjectUserId) as member (member.id)}
-                    <option value={member.id}>{member.name}</option>
-                  {/each}
-                </select>
-                {#if viewerId && viewerId !== selectedCase?.subjectUserId}
-                  <Button size="sm" variant="ghost" icon="User" disabled={updatingCase} onclick={() => void updateCase({ assigneeId: viewerId })}>{m.wb_assign_me()}</Button>
-                {/if}
-              </div>
-            {:else}
-              <p class="text-sm text-on-surface-variant min-h-9 flex items-center">{m.wb_assignee_none()}</p>
-            {/if}
-          {/snippet}
-        </Field>
-        <Field label={m.wb_review_at()} hint={m.wb_review_hint()}>
-          {#snippet children(id, describedBy)}
-            <div class="space-y-1.5">
-              <div class="flex items-center gap-2">
-                <input {id} aria-describedby={describedBy} type="date" class="input w-full" disabled={updatingCase || !status?.canWriteCases}
-                  value={selectedCase?.reviewAt ? selectedCase.reviewAt.slice(0, 10) : ''}
-                  onchange={(e) => void updateCase({ reviewAt: e.currentTarget.value || null })} />
-                {#if selectedCase?.reviewAt && status?.canWriteCases}
-                  <Button size="sm" variant="ghost" icon="X" disabled={updatingCase} aria-label={m.wb_review_clear()} onclick={() => void updateCase({ reviewAt: null })} />
-                {/if}
-              </div>
-              {#if status?.canWriteCases}
-                <div role="group" aria-label={m.wb_review_shortcuts()} class="flex flex-wrap gap-1.5">
-                  {#each WB_REVIEW_SHORTCUTS as days (days)}
-                    <Button size="sm" variant="ghost" disabled={updatingCase} onclick={() => void updateCase({ reviewAt: wbReviewShortcut(new Date(), days) })}>{m.wb_review_in_days({ days })}</Button>
-                  {/each}
-                </div>
-              {/if}
-            </div>
-          {/snippet}
-        </Field>
-      </div>
+      <CaseFollowUp item={selectedCase} canWrite={!!status?.canWriteCases} busy={updatingCase} {viewerId}
+        candidates={teamFor(selectedCase.subjectUserId)} onpatch={(patch) => void updateCase(patch)} />
 
       <NetworkReferent caseId={selectedCase.id} subjectUserId={selectedCase.subjectUserId ?? null}
         referentId={selectedCase.networkReferentId ?? null} referentGuildId={selectedCase.networkReferentGuildId ?? null}
@@ -1200,133 +1039,15 @@
       <div class="space-y-4 border-t border-outline-variant/30 pt-4">
         <Tabs label={m.wb_detail_tabs_label()} tabs={detailTabs} active={detailTab} onchange={(id) => (detailTab = id as DetailTab)} />
         {#if detailTab === 'timeline'}
-        <div class="space-y-3">
-          {#if status?.canWriteCases}
-            <form onsubmit={addNote} class="space-y-2">
-              <textarea bind:this={noteInput} bind:value={newNote} aria-label={m.a11y_wellbeing_note()} required rows={2} placeholder={m.wb_note_ph()} class="input w-full text-sm"></textarea>
-              <div class="space-y-1">
-                <label for="wb-note-notify" class="text-xs font-medium text-on-surface-variant">{m.wb_note_notify()}</label>
-                <WellbeingMemberList id="wb-note-notify" bind:ids={noteNotify} max={5} candidates={teamFor(selectedCase?.subjectUserId, false)} />
-              </div>
-              <div class="flex justify-end">
-                <Button type="submit" size="sm" variant="primary" icon="Plus" loading={addingNote} disabled={!newNote.trim()}>{m.wb_note_add()}</Button>
-              </div>
-            </form>
-          {/if}
-          {#if timeline.length > 0}
-            <div class="flex flex-wrap items-center justify-between gap-2">
-              <div role="group" aria-label={m.wb_timeline_view_label()} class="inline-flex rounded-lg border border-outline-variant/40 bg-surface-container p-0.5 text-xs">
-                <button type="button" aria-pressed={!timelineNotesOnly} onclick={() => setNotesOnly(false)}
-                  class="rounded-md px-2.5 py-1 {!timelineNotesOnly ? 'bg-surface-container-highest font-semibold text-on-surface' : 'text-on-surface-variant'}">{m.wb_timeline_all()}</button>
-                <button type="button" aria-pressed={timelineNotesOnly} onclick={() => setNotesOnly(true)}
-                  class="rounded-md px-2.5 py-1 {timelineNotesOnly ? 'bg-surface-container-highest font-semibold text-on-surface' : 'text-on-surface-variant'}">{m.wb_timeline_notes_only()}</button>
-              </div>
-              {#if !timelineNotesOnly && expandedGroups.length > 0}
-                <Button size="sm" variant="ghost" icon="ChevronUp" onclick={() => (expandedGroups = [])}>{m.wb_timeline_collapse_all()}</Button>
-              {/if}
-            </div>
-          {/if}
-          {#if compactTimeline.length === 0}
-            <p class="text-xs text-on-surface-variant">{timeline.length === 0 ? m.wb_timeline_empty() : m.wb_timeline_no_note()}</p>
-          {:else}
-            <ol class="relative border-l border-outline-variant/50 ml-2 space-y-3">
-              {#each compactTimeline as entry (entry.id)}
-                <li class="ml-4">
-                  <span class="absolute -left-[5px] mt-1.5 h-2.5 w-2.5 rounded-full {entry.kind === 'note' ? 'bg-primary' : 'bg-outline-variant'}" aria-hidden="true"></span>
-                  {#if entry.kind === 'group'}
-                    <button type="button" aria-expanded="false" class="flex flex-wrap items-center gap-x-2 text-xs text-on-surface-variant hover:text-on-surface"
-                      onclick={() => (expandedGroups = [...expandedGroups, entry.id])}>
-                      <Papicon icon="ChevronDown" size={12} />
-                      <span class="font-medium">{m.wb_timeline_group({ count: entry.count })}</span>
-                      <span>· {formatDay(entry.entries[entry.entries.length - 1]!.at)} – {formatDay(entry.at)}</span>
-                    </button>
-                  {:else if entry.kind === 'note'}
-                    <div class="rounded-lg border border-outline-variant/40 bg-surface-container-lowest p-3 text-sm">
-                      <div class="flex flex-wrap justify-between gap-2 text-xs text-on-surface-variant mb-1">
-                        <span class="font-semibold text-on-surface">{entry.note.authorName}</span>
-                        <span>{formatDate(entry.at)}</span>
-                      </div>
-                      {#if contentHidden}
-                        <p class="text-xs italic text-on-surface-variant">{m.wb_discreet_note_hidden()}</p>
-                      {:else if editingNoteId === entry.note.id}
-                        <div class="space-y-2">
-                          <textarea bind:value={editingText} rows={3} class="input w-full text-sm" aria-label={m.wb_note_edit_label()}></textarea>
-                          <div class="flex justify-end gap-2">
-                            <Button size="sm" variant="ghost" onclick={() => (editingNoteId = null)}>{m.common_cancel()}</Button>
-                            <Button size="sm" variant="primary" loading={savingNote} disabled={!editingText.trim()} onclick={() => void saveNoteEdit()}>{m.common_save()}</Button>
-                          </div>
-                        </div>
-                      {:else}
-                        <p class="whitespace-pre-wrap text-on-surface">{entry.note.content}</p>
-                        <div class="flex flex-wrap items-center gap-2 mt-1.5 text-2xs text-on-surface-variant">
-                          {#if entry.note.editedAt}
-                            <span>{m.wb_note_edited({ date: formatDate(entry.note.editedAt) })}</span>
-                            {#if entry.note.originalContent}
-                              <button type="button" class="underline hover:text-on-surface" aria-expanded={!!originalShown[entry.note.id]}
-                                onclick={() => (originalShown = { ...originalShown, [entry.note.id]: !originalShown[entry.note.id] })}>
-                                {originalShown[entry.note.id] ? m.wb_note_hide_original() : m.wb_note_show_original()}
-                              </button>
-                            {/if}
-                          {/if}
-                          {#if canEditNote(entry.note)}
-                            <button type="button" class="underline hover:text-on-surface" onclick={() => { editingNoteId = entry.note.id; editingText = entry.note.content; }}>{m.wb_note_edit()}</button>
-                          {/if}
-                        </div>
-                        {#if entry.note.originalContent && originalShown[entry.note.id]}
-                          <p class="mt-2 whitespace-pre-wrap text-xs text-on-surface-variant border-l-2 border-outline-variant pl-2">{entry.note.originalContent}</p>
-                        {/if}
-                      {/if}
-                    </div>
-                  {:else}
-                    <p class="flex flex-wrap items-center gap-x-2 text-xs text-on-surface-variant">
-                      <span class="font-medium text-on-surface">{entry.event.actorName}</span>
-                      <span>{wbCaseEventLabel(entry.event, formatDay)}</span>
-                      {#if entry.event.type === 'ASSIGNEE' && entry.event.toValue}<MemberName userId={entry.event.toValue} />{/if}
-                      <span>· {formatDate(entry.at)}</span>
-                    </p>
-                  {/if}
-                </li>
-              {/each}
-            </ol>
-          {/if}
-        </div>
+          {#key selectedCase.id}
+            <CaseTimeline bind:this={timelinePanel} item={selectedCase} canWrite={!!status?.canWriteCases} hidden={contentHidden} {viewerId}
+              candidates={teamFor(selectedCase.subjectUserId, false)} onchange={applyItem}
+              onreload={() => (selectedCaseId ? loadDetail(selectedCaseId) : Promise.resolve())} />
+          {/key}
         {:else if detailTab === 'tasks'}
           <CaseTasks caseId={selectedCase.id} tasks={selectedCase.tasks ?? []} canWrite={!!status?.canWriteCases} hidden={contentHidden} onchange={applyItem} />
         {:else}
-        <div class="space-y-2">
-          <p class="text-xs text-on-surface-variant">{m.wb_attachments_desc()}</p>
-          {#if contentHidden && (selectedCase.attachments ?? []).length > 0}
-            <p class="text-xs italic text-on-surface-variant">{m.wb_discreet_attachments_hidden({ count: selectedCase.attachments.length })}</p>
-          {:else}
-            {#each selectedCase.attachments ?? [] as attachment (attachment.id)}
-              <div class="flex items-center justify-between gap-2 rounded-lg bg-surface-container-high/20 px-3 py-2 text-sm">
-                <span class="flex items-center gap-2 min-w-0">
-                  <Papicon icon="file-text" size={14} />
-                  {#if isDriveLink(attachment.url)}
-                    <a href={attachment.url} target="_blank" rel="noopener noreferrer" class="text-primary hover:underline truncate">{attachment.label}</a>
-                  {:else}
-                    <span class="truncate text-on-surface-variant">{attachment.label}</span>
-                  {/if}
-                </span>
-                <span class="flex items-center gap-1 shrink-0 text-xs text-on-surface-variant">
-                  {attachment.addedByName}
-                  {#if status?.canWriteCases}
-                    <Button size="sm" variant="ghost" icon="trash" loading={removingAttachmentId === attachment.id}
-                      aria-label={m.wb_attachment_remove({ name: attachment.label })}
-                      onclick={() => void removeAttachment(attachment.id)} />
-                  {/if}
-                </span>
-              </div>
-            {/each}
-          {/if}
-          {#if status?.canWriteCases && (selectedCase.attachments ?? []).length < MAX_CASE_ATTACHMENTS}
-            <form onsubmit={addAttachment} class="grid grid-cols-1 sm:grid-cols-[1fr_2fr_auto] gap-2">
-              <input bind:value={newAttachmentLabel} maxlength={120} class="input text-sm" aria-label={m.wb_attachment_label()} placeholder={m.wb_attachment_label()} />
-              <input bind:value={newAttachmentUrl} type="url" required maxlength={500} class="input text-sm" aria-label={m.wb_attachment_url()} placeholder={m.wb_attachment_url_ph()} />
-              <Button type="submit" size="sm" variant="secondary" icon="Plus" loading={addingAttachment}>{m.common_add()}</Button>
-            </form>
-          {/if}
-        </div>
+          <CaseAttachments caseId={selectedCase.id} attachments={selectedCase.attachments ?? []} canWrite={!!status?.canWriteCases} hidden={contentHidden} onchange={applyItem} />
         {/if}
       </div>
     </section>
@@ -1484,7 +1205,7 @@
         onnewcase={(prefill) => void openNewCase(prefill)} />
     {:else if activeTab === 'stats'}
       {#if cellStats}
-        <WellbeingStats stats={cellStats} load={cellLoad} pulse={cellPulse} profiles={cellProfiles} stages={cellStages} />
+        <WellbeingStats stats={cellStats} load={cellLoad} pulse={cellPulse} profiles={cellProfiles} stages={cellStages} tags={cellTags} />
       {:else}
         <Skeleton height="320px" />
       {/if}

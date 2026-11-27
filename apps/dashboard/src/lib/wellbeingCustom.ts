@@ -11,6 +11,8 @@ export interface WbCategory {
   id: string;
   label: string;
   template: string;
+  /** Plan type appliqué à un dossier créé dans cette catégorie. */
+  planId?: string | null;
 }
 
 export interface WbTag {
@@ -29,6 +31,12 @@ export interface WbTaskPlan {
   tasks: Array<{ label: string; dueDays: number | null }>;
 }
 
+export interface WbNoteTemplate {
+  id: string;
+  label: string;
+  text: string;
+}
+
 export interface WbCustomization {
   categories: WbCategory[];
   /** Protocole appliqué ; `crisisDefault` : la cellule n'a rien réglé. */
@@ -36,9 +44,10 @@ export interface WbCustomization {
   crisisDefault: boolean;
   taskPlans: WbTaskPlan[];
   tags: WbTag[];
+  noteTemplates: WbNoteTemplate[];
 }
 
-export const WB_EMPTY_CUSTOMIZATION: WbCustomization = { categories: [], crisisTasks: [], crisisDefault: true, taskPlans: [], tags: [] };
+export const WB_EMPTY_CUSTOMIZATION: WbCustomization = { categories: [], crisisTasks: [], crisisDefault: true, taskPlans: [], tags: [], noteTemplates: [] };
 
 /** Catégories proposées : celles de la cellule, sinon celles de départ. */
 export function wbCategories(custom: WbCustomization): WbCategory[] {
@@ -51,6 +60,12 @@ export function wbCategoryName(custom: WbCustomization, id: string): string {
   const found = wbCategories(custom).find((category) => category.id === id);
   if (found) return found.label;
   return (WB_CATEGORIES as readonly string[]).includes(id) ? wbCategoryLabel(id) : m.wb_cat_other();
+}
+
+/** Plan type relié à une catégorie, s'il existe encore. */
+export function wbCategoryPlan(custom: WbCustomization, id: string): WbTaskPlan | null {
+  const planId = wbCategories(custom).find((category) => category.id === id)?.planId;
+  return custom.taskPlans.find((plan) => plan.id === planId) ?? null;
 }
 
 /** Trame proposée comme résumé pour une catégorie. */

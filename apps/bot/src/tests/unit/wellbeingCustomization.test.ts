@@ -15,6 +15,11 @@ import {
   describeCustomization,
   planTaskDrafts,
   tagNames,
+  tagCounts,
+  cleanNoteTemplates,
+  NOTE_TEMPLATE_MAX,
+  NOTE_TEMPLATE_TEXT_MAX,
+  copyableCustomization,
 } from '../../services/staff/wellbeingCustomPolicy';
 import { CRISIS_PROTOCOL_TASKS, crisisTaskDrafts } from '../../services/staff/wellbeingCasePolicy';
 import { cleanBoardColumns } from '../../services/staff/wellbeingBoardPolicy';
@@ -46,6 +51,15 @@ describe('catégories de la cellule', () => {
     expect(categories[0]?.template.length).toBe(2000);
     expect(categories[1]?.id).toMatch(/^id-/);
     expect(categories[1]?.template).toBe('');
+  });
+
+  test('une catégorie peut appliquer un plan type à la création', () => {
+    const [withPlan, withoutPlan] = cleanCaseCategories([
+      { label: 'Médiation', template: '', planId: 'plan-1' },
+      { label: 'Soutien', template: '', planId: '../mauvais' },
+    ], newId);
+    expect(withPlan?.planId).toBe('plan-1');
+    expect(withoutPlan?.planId).toBeNull();
   });
 
   test('au plus CATEGORY_MAX catégories', () => {
@@ -155,3 +169,67 @@ describe('texte libre du message permanent', () => {
     expect(cleanPanelText('x'.repeat(PANEL_TEXT_MAX + 10))?.length).toBe(PANEL_TEXT_MAX);
   });
 });
+
+describe('étiquettes dans le bilan', () => {
+  test('dossiers actifs par étiquette, dans l’ordre de la cellule', () => {
+    const tags = [{ id: 'a', label: 'Mineur' }, { id: 'b', label: 'Hors serveur' }];
+    const cases = [
+      { status: 'OPEN', tagIds: ['a', 'b'] },
+      { status: 'MONITORING', tagIds: ['a'] },
+      { status: 'CLOSED', tagIds: ['a'] },
+      { status: 'OPEN', tagIds: [] },
+    ];
+    expect(tagCounts(cases, tags)).toEqual([{ label: 'Mineur', count: 2 }, { label: 'Hors serveur', count: 1 }]);
+  });
+});
+
+describe('trames de notes de fiche', () => {
+  test('nom et texte obligatoires, texte borné', () => {
+    const templates = cleanNoteTemplates([
+      { label: 'Échange privé', text: 'Échange du … avec …' },
+      { label: 'Sans texte', text: '  ' },
+      { label: 'Long', text: 'x'.repeat(NOTE_TEMPLATE_TEXT_MAX + 50) },
+    ], newId);
+    expect(templates.map((item) => item.label)).toEqual(['Échange privé', 'Long']);
+    expect(templates[1]?.text.length).toBe(NOTE_TEMPLATE_TEXT_MAX);
+  });
+
+  test('au plus NOTE_TEMPLATE_MAX trames', () => {
+    const many = Array.from({ length: NOTE_TEMPLATE_MAX + 3 }, (_, i) => ({ label: `T${i}`, text: 'texte' }));
+    expect(cleanNoteTemplates(many, newId)).toHaveLength(NOTE_TEMPLATE_MAX);
+  });
+
+  test('le journal les nomme', () => {
+    expect(describeCustomization('noteTemplates', [])).toBe('Trames de notes : aucune');
+  });
+});
+
+describe('réglages repris d’une autre cellule du réseau', () => {
+  const source = {
+    enabled: true,
+    networkPool: true,
+    caseCategories: [{ id: 'abc', label: 'Hors serveur', template: '', planId: null }],
+    crisisTasks: [{ label: 'Appeler', dueHours: 2 }],
+    taskPlans: [],
+    noteTemplates: [],
+    caseTags: [{ id: 't', label: 'Mineur' }],
+  };
+
+  test('seuls les réglages demandés sont repris, nettoyés', () => {
+    expect(copyableCustomization(source, ['categories', 'crisisTasks'])).toEqual({
+      caseCategories: [{ id: 'abc', label: 'Hors serveur', template: '', planId: null }],
+      crisisTasks: [{ label: 'Appeler', dueHours: 2 }],
+    });
+  });
+
+  test('une cellule qui ne partage pas avec le réseau ne se copie pas', () => {
+    expect(copyableCustomization({ ...source, networkPool: false }, ['categories'])).toBeNull();
+    expect(copyableCustomization({ ...source, enabled: false }, ['categories'])).toBeNull();
+  });
+
+  test('un réglage inconnu est ignoré', () => {
+    expect(copyableCustomization(source, ['inconnu', 'tags'])).toEqual({ caseTags: [{ id: 't', label: 'Mineur' }] });
+    expect(copyableCustomization(source, ['constructor', 'toString', '__proto__'])).toEqual({});
+  });
+});
+
