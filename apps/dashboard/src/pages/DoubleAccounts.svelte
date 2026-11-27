@@ -8,7 +8,7 @@ import DiscordAutomodEvents from '../lib/components/automod/DiscordAutomodEvents
   import { Tabs, FilterPills, Button } from '../lib/components/ui';
   import { unsavedChanges } from '../lib/stores/unsavedChanges.svelte';
   import { authStore } from '../lib/stores/auth.svelte';
-  import { fetchLinkedAccounts, updateLinkedAccountStatus, deleteLinkedAccount, fetchFeatureConfigurations, updateFeatureConfiguration, scanSuspectedDetections, fetchSuspectedDetections, linkDetectedAccount, dismissDetection, restoreDetection, fetchMessageLogStats, updateMessageLogConfig } from '../lib/api';
+  import { fetchLinkedAccounts, updateLinkedAccountStatus, deleteLinkedAccount, fetchFeatureConfigurations, updateFeatureConfiguration, scanSuspectedDetections, fetchSuspectedDetections, fetchDetectionEvidence, linkDetectedAccount, dismissDetection, restoreDetection, fetchMessageLogStats, updateMessageLogConfig } from '../lib/api';
   import { toast } from '../lib/stores/toast.svelte';
   import { confirmDialog } from '../lib/stores/confirmDialog.svelte';
   import { dashboardStore } from '../lib/stores/dashboard.svelte';
@@ -141,7 +141,26 @@ import DiscordAutomodEvents from '../lib/components/automod/DiscordAutomodEvents
 
   let detections = $state<DetectionItem[]>([]);
   let loadingDetections = $state(true);
+  let detectionsError = $state('');
   let reportModalDetection = $state<DetectionItem | null>(null);
+  let loadingReportEvidence = $state(false);
+
+  // La liste ne porte que les preuves légères : le rapport charge l'analyse
+  // complète (messages, vocal, technique) du seul membre ouvert.
+  async function openReport(detection: DetectionItem) {
+    reportModalDetection = detection;
+    loadingReportEvidence = true;
+    try {
+      const res = await fetchDetectionEvidence(detection.id);
+      if (res && reportModalDetection?.id === detection.id) {
+        reportModalDetection = { ...detection, evidence: res.evidence, suspectedAlts: res.suspectedAlts };
+      }
+    } catch {
+      // Le rapport garde les preuves légères de la liste.
+    } finally {
+      if (reportModalDetection?.id === detection.id) loadingReportEvidence = false;
+    }
+  }
 
   const detectionStats = $derived({
     total: detections.length,
@@ -202,10 +221,14 @@ import DiscordAutomodEvents from '../lib/components/automod/DiscordAutomodEvents
   async function loadDetections() {
     if (!authStore.selectedGuildId) return;
     loadingDetections = true;
+    detectionsError = '';
     try {
       const res = await fetchSuspectedDetections(authStore.selectedGuildId);
       detections = res?.detections ?? [];
-    } catch { detections = []; }
+    } catch (err) {
+      detections = [];
+      detectionsError = errorMessage(err) || m.da_error_load();
+    }
     finally { loadingDetections = false; }
   }
 
@@ -824,6 +847,11 @@ import DiscordAutomodEvents from '../lib/components/automod/DiscordAutomodEvents
           </div>
         {/each}
       </div>
+    {:else if detectionsError}
+      <div class="rounded-lg border border-error/20 bg-error/5 p-6 text-center">
+        <p class="text-error font-bold text-sm">{detectionsError}</p>
+        <button onclick={loadDetections} class="mt-3 text-xs font-semibold text-primary">{m.da_retry()}</button>
+      </div>
     {:else if detections.length === 0}
       <div class="flex flex-col items-center py-20 text-center rounded-lg border border-outline-variant/10 bg-surface-container-low/30">
         <div class="h-14 w-14 rounded-xl bg-success/10 flex items-center justify-center text-on-success-container">
@@ -982,7 +1010,7 @@ import DiscordAutomodEvents from '../lib/components/automod/DiscordAutomodEvents
                   <Papicon icon="Link2" size={12} /> {m.da_link()}
                 </button>
               {/if}
-              <button onclick={() => reportModalDetection = d}
+              <button onclick={() => openReport(d)}
                 class="flex-1 py-2 rounded-lg bg-primary/10 text-primary text-xs font-medium hover:bg-primary hover:text-white transition-all flex items-center justify-center gap-1.5 min-w-25">
                 <Papicon icon="FileSearch" size={12} /> {m.da_report()}
               </button>
@@ -1253,6 +1281,12 @@ import DiscordAutomodEvents from '../lib/components/automod/DiscordAutomodEvents
               <p class="text-2xs text-on-surface-variant">{det.evidence.totalScore >= 60 ? m.da_risk_high() : det.evidence.totalScore >= 30 ? m.da_risk_medium() : m.da_risk_low()} - {det.evidence.reasons.length > 1 ? m.da_signal_other({ count: det.evidence.reasons.length }) : m.da_signal_one({ count: det.evidence.reasons.length })}</p>
             </div>
           </div>
+        {/if}
+        {#if loadingReportEvidence}
+          <p class="flex items-center gap-2 text-2xs text-on-surface-variant" role="status">
+            <span class="h-3 w-3 animate-spin rounded-full border-2 border-primary border-t-transparent"></span>
+            {m.da_deep_analysis_loading()}
+          </p>
         {/if}
 
         <!-- Suspected alts -->

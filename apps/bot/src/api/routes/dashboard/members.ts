@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import pLimit from 'p-limit';
 import { createMiddleware } from 'hono/factory';
 import { DiscordAPIError, RESTJSONErrorCodes, type Guild, type GuildMember, Client } from 'discord.js';
 import prisma from '../../../utils/db.js';
@@ -6,12 +7,13 @@ import { notifyMany } from '../../../services/notifications/notifyService.js';
 import { logger } from '../../../utils/logger.js';
 import { resolveViewTimezone } from '../../../utils/timezone.js';
 import * as altAccountService from '../../../services/moderation/altAccountService.js';
-import { scanGuildMembersForYoungAccounts, getDetectionEvidence } from '../../../services/moderation/dcDetectionService.js';
+import { scanGuildMembersForYoungAccounts, getDetectionEvidence, type DetectionEvidence } from '../../../services/moderation/dcDetectionService.js';
 import { recordDecision, undoFalsePositive } from '../../../services/moderation/dc/learning.js';
 import { getMemberIdentities, memberProfileIdentity, resolveMemberAvatarUrl, resolveMissingMemberIdentities } from '../../../services/moderation/memberIdentityService.js';
 
 /** Assez pour une page de liste ; au-delà le dashboard découpe ses demandes. */
 const MAX_IDENTITY_LOOKUP = 100;
+const DETECTION_EVIDENCE_CONCURRENCY = 8;
 import { findPresenceOptOuts } from '../../../services/core/presencePrivacyService.js';
 import { LinkedAccountType, LinkedAccountStatus } from '@prisma/client';
 import { withInviterAvatars } from '../../../services/analytics/inviterAvatars.js';
@@ -266,8 +268,13 @@ export function createMembersRouter(client: Client) {
       // centaines d'allers-retours pour une seule ouverture de la page. On
       // collecte donc d'abord toutes les preuves, puis on charge les profils
       // cités en une seule requête.
+      //
+      // Preuves légères seulement : l'analyse profonde de chaque suspect faisait
+      // dépasser le délai du dashboard, qui affichait alors une liste vide.
+      // Elle se lit suspect par suspect, sur GET /detections/:userId.
+      const limit = pLimit(DETECTION_EVIDENCE_CONCURRENCY);
       const evidences = await Promise.all(
-        suspiciousMembers.map((member) => getDetectionEvidence(guildId, member.userId).catch(() => null)),
+        suspiciousMembers.map((member) => limit(() => getDetectionEvidence(guildId, member.userId, { deep: false }).catch(() => null))),
       );
 
       const altIds = new Set<string>();
@@ -293,19 +300,6 @@ export function createMembersRouter(client: Client) {
 
         const evidence = evidences[index];
 
-        const suspectedAlts: Array<{ userId: string; username: string | null; avatarUrl: string | null }> = [];
-        if (evidence?.suspectedAlts) {
-          for (const altId of evidence.suspectedAlts.slice(0, 5)) {
-            const altProfile = altProfileByUserId.get(altId) ?? null;
-            const altDiscord = discordMembers.get(altId);
-            suspectedAlts.push({
-              userId: altId,
-              username: altProfile?.username ?? altDiscord?.user?.username ?? null,
-              avatarUrl: altProfile?.avatarUrl ?? resolveMemberAvatarUrl(altDiscord, 64),
-            });
-          }
-        }
-
         return {
           id: member.userId,
           username: member.username ?? null,
@@ -322,11 +316,7 @@ export function createMembersRouter(client: Client) {
             : 'left',
           accountAgeMs,
           accountAgeLabel: accountAgeMs !== null ? formatDurationFr(accountAgeMs) : 'Inconnue',
-          suspectedAlts,
-          evidence: evidence ? {
-            reasons: evidence.reasons.map(r => ({ type: r.type, label: r.label, score: r.score, matchedUserId: r.matchedUserId, detail: r.detail })),
-            totalScore: evidence.totalScore,
-          } : null,
+          ...detectionEvidencePayload(evidence, altProfileByUserId, discordMembers),
         };
       });
 
@@ -334,6 +324,44 @@ export function createMembersRouter(client: Client) {
     } catch (err) {
       logger.error('MembersAPI', 'Error fetching suspected detections:', err);
       return fail(c, err, 'Erreur lors du chargement des détections', 'MembersAPI');
+    }
+  });
+
+  router.get(`${base}/detections/:userId`, ...gate, async (c) => {
+    const featureAccess = c.var.memberFeatureAccess;
+    const guildId = c.req.param('guildId');
+    const access = c.var.effectiveAccess;
+    const userId = c.req.param('userId');
+    try {
+      if (!access.canManageSettings && !featureAccess.double_accounts?.canView) {
+        return send(c, { error: "Accès refusé. Le module Détections n'est pas accessible." }, 403);
+      }
+
+      const evidence = await getDetectionEvidence(guildId, userId);
+      if (!evidence) return send(c, { error: 'Aucune détection pour ce membre.' }, 404);
+
+      const altIds = evidence.suspectedAlts.slice(0, 5);
+      const altProfiles = altIds.length > 0
+        ? await prisma.memberProfile.findMany({
+            where: { guildId, userId: { in: altIds } },
+            select: { userId: true, username: true, avatarUrl: true },
+          }).catch(() => [])
+        : [];
+      const discordGuild = client.guilds.cache.get(guildId);
+      const discordMembers = new Map<string, GuildMember>();
+      for (const altId of altIds) {
+        const member = discordGuild?.members.cache.get(altId);
+        if (member) discordMembers.set(altId, member);
+      }
+
+      return send(c, detectionEvidencePayload(
+        evidence,
+        new Map(altProfiles.map((profile) => [profile.userId, profile])),
+        discordMembers,
+      ));
+    } catch (err) {
+      logger.error('MembersAPI', 'Error fetching detection evidence:', err);
+      return fail(c, err, "Erreur lors de l'analyse du membre", 'MembersAPI');
     }
   });
 
@@ -1616,6 +1644,29 @@ async function kickJoinedMembers(
     await prisma.memberInvite.updateMany({ where: { id: { in: leftJoinIds } }, data: { leftAt: now } });
   }
   return { purgedCount, failedCount };
+}
+
+function detectionEvidencePayload(
+  evidence: DetectionEvidence | null,
+  altProfileByUserId: Map<string, { username: string | null; avatarUrl: string | null }>,
+  discordMembers: Map<string, GuildMember>,
+) {
+  const suspectedAlts = (evidence?.suspectedAlts ?? []).slice(0, 5).map((altId) => {
+    const altProfile = altProfileByUserId.get(altId) ?? null;
+    const altDiscord = discordMembers.get(altId);
+    return {
+      userId: altId,
+      username: altProfile?.username ?? altDiscord?.user?.username ?? null,
+      avatarUrl: altProfile?.avatarUrl ?? resolveMemberAvatarUrl(altDiscord, 64),
+    };
+  });
+  return {
+    suspectedAlts,
+    evidence: evidence ? {
+      reasons: evidence.reasons.map(r => ({ type: r.type, label: r.label, score: r.score, matchedUserId: r.matchedUserId, detail: r.detail })),
+      totalScore: evidence.totalScore,
+    } : null,
+  };
 }
 
 function isValidSnowflake(id: string): boolean {

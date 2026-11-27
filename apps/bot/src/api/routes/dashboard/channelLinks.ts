@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import pLimit from 'p-limit';
 import { createMiddleware } from 'hono/factory';
 import { ChannelType, Client, PermissionFlagsBits } from 'discord.js';
 import prisma from '../../../utils/db.js';
@@ -23,8 +24,11 @@ import {
 import { isLinkGuestGuild } from '../../../services/features/channelLinkGuestService.js';
 import { getLinkGroupStats } from '../../../services/features/channelLinkStatsService.js';
 import { INVITE_SOURCE, recordBotInvite } from '../../../services/analytics/inviteService.js';
+import { fetchOAuthGuilds } from '../user.js';
 
 import { fail, guildRoute, readBody, send } from '../../hono/dashboard/kit.js';
+
+const OTHER_GUILDS_FETCH_CONCURRENCY = 10;
 
 function readMode(value: unknown, fallback: LinkMemberMode = 'BOTH'): LinkMemberMode {
   return value === 'SEND_ONLY' || value === 'RECEIVE_ONLY' || value === 'BOTH' ? value : fallback;
@@ -119,13 +123,21 @@ export function createChannelLinksRouter(client: Client) {
   router.get(`${base}/channel-links/other-guilds`, ...gate, async (c) => {
     const user = c.var.dashboardUser;
     try {
-      // Le membre etait resolu serveur par serveur, en sequence : chaque
-      // absence du cache declenchait un aller-retour Discord, et la reponse
-      // coutait donc N fois cette latence. On lit d'abord le cache, et les
-      // fetchs restants partent en parallele (discord.js gere lui-meme la file
-      // de rate limit).
+      // Le membre etait cherche dans chaque serveur du bot, avec un appel Discord
+      // par serveur ou il n'etait pas en cache : la page ralentissait a mesure
+      // que le bot rejoignait des serveurs. La liste OAuth du compte borne la
+      // recherche a ceux qu'il a rejoints ; sans elle, on les parcourt tous.
+      const oauthGuildIds = user.discordToken
+        ? await fetchOAuthGuilds(user.discordToken)
+            .then((guilds) => new Set(guilds.map((guild) => guild.id)))
+            .catch(() => null)
+        : null;
+      const candidates = [...client.guilds.cache.values()]
+        .filter((guild) => !oauthGuildIds || oauthGuildIds.has(guild.id));
+
+      const limit = pLimit(OTHER_GUILDS_FETCH_CONCURRENCY);
       const resolved = await Promise.all(
-        [...client.guilds.cache.values()].map(async (guild) => {
+        candidates.map((guild) => limit(async () => {
           const member = guild.members.cache.get(user.userId)
             ?? await guild.members.fetch(user.userId).catch(() => null);
           if (!member) return null;
@@ -142,7 +154,7 @@ export function createChannelLinksRouter(client: Client) {
             icon: guild.iconURL({ size: 64 }) ?? null,
             channels,
           };
-        }),
+        })),
       );
 
       return send(c, resolved.filter((guild) => guild !== null));
