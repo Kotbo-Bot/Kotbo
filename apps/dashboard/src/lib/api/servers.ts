@@ -106,3 +106,13 @@ export function buildBotInviteUrl(clientId: string, permissions: string, guildId
   }
   return `https://discord.com/oauth2/authorize?${params.toString()}`;
 }
+
+/**
+ * Invitation depuis le dashboard : un clic, l'écran Discord, puis retour direct
+ * sur la prise en main (c'est le bot qui pose la `redirect_uri` déclarée).
+ */
+export function buildBotInstallUrl(guildId?: string, permissions: 'admin' | 'detailed' = 'admin'): string {
+  const params = new URLSearchParams({ return: '1', perms: permissions });
+  if (guildId) params.set('guild_id', guildId);
+  return `${API_BASE_URL}/api/public/invite?${params.toString()}`;
+}

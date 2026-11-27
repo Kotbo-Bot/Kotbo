@@ -10,7 +10,6 @@
    */
   import { authStore } from '../lib/stores/auth.svelte';
   import { API_BASE_URL, authorizedFetch } from '../lib/api/client';
-  import { fetchDiscordClientId } from '../lib/api';
   import { toast } from '../lib/stores/toast.svelte';
   import { m } from '../lib/i18n';
   import { Button, Callout, SectionCard, ToggleSwitch, ListGroup, ListRow } from '../lib/components/ui';
@@ -19,7 +18,6 @@
   import ServerSwitcherModal from '../lib/components/ServerSwitcherModal.svelte';
   import RankCardCustomizer from '../lib/components/RankCardCustomizer.svelte';
   import SiteEditorSpace from '../lib/components/site/SiteEditorSpace.svelte';
-  import BotInviteModal from '../lib/components/onboarding/BotInviteModal.svelte';
 
   const BIO_MAX = 500;
 
@@ -32,8 +30,6 @@
   let bio = $state('');
   let isPublic = $state(false);
   let saved = $state({ bio: '', isPublic: false });
-  let clientId = $state('');
-  let inviteModalOpen = $state(false);
 
   // Tickets du membre (Discord + hors Discord)
   let myTickets = $state<any[]>([]);
@@ -109,16 +105,6 @@
   }
 
   const dirty = $derived(bio.trim() !== saved.bio || isPublic !== saved.isPublic);
-
-  $effect(() => {
-    void fetchDiscordClientId().then((id) => {
-      clientId = id;
-    });
-  });
-
-  function openInviteModal() {
-    inviteModalOpen = true;
-  }
 
   $effect(() => {
     if (userId) {
@@ -206,6 +192,15 @@
         {/if}
       </div>
     </header>
+
+    {#if !hasDashboard}
+      <!-- Compte sans serveur Kotbo : c'est souvent quelqu'un qui vient l'installer. -->
+      <section class="section-card flex flex-col items-center gap-3 p-6 text-center">
+        <h2 class="text-lg font-bold text-on-surface font-headline">{m.me_manage_server()}</h2>
+        <p class="max-w-md text-sm text-on-surface-variant">{m.me_manage_server_desc()}</p>
+        <Button href="/servers" variant="primary" iconRight="arrow-right">{m.me_add_kotbo_cta()}</Button>
+      </section>
+    {/if}
 
     {#if loading}
       <div class="section-card p-5 space-y-4 animate-pulse" aria-busy="true">
@@ -305,14 +300,11 @@
 
     <SiteEditorSpace />
 
-    <ListGroup title={m.me_manage_server()}>
-      <ListRow icon="Plus" label={m.me_add_kotbo_cta()} description={m.me_manage_server_desc()} onclick={openInviteModal} />
-      <ListRow icon="Server" label={m.srv_title()} href="/servers" />
-    </ListGroup>
+    {#if hasDashboard}
+      <ListGroup>
+        <ListRow icon="Plus" label={m.me_add_kotbo_cta()} description={m.me_manage_server_desc()} href="/servers" />
+      </ListGroup>
+    {/if}
   </div>
 
-  <BotInviteModal
-    bind:open={inviteModalOpen}
-    {clientId}
-  />
 </main>

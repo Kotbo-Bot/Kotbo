@@ -8,8 +8,11 @@
     ADMIN_INVITE_PERMISSIONS,
     DETAILED_INVITE_PERMISSIONS,
     buildBotInviteUrl,
+    buildBotInstallUrl,
     type ManageableServer,
   } from '../../api';
+  import { brandingStore } from '../../stores/branding.svelte';
+  import { m } from '../../i18n';
 
   let {
     open = $bindable(false),
@@ -39,31 +42,26 @@
     onClose();
   }
 
-  function inviteWithAdmin() {
+  function invite(permissions: 'admin' | 'detailed') {
     if (DEMO_MODE) {
       onInviteStarted(guild?.id);
-      toast.success(guild ? `Kotbo ajouté sur ${guild.name}` : 'Kotbo ajouté en mode démonstration');
+      toast.success(guild ? m.bim_added_demo_server({ server: guild.name }) : m.bim_added_demo());
       handleClose();
       return;
     }
-    const url = buildBotInviteUrl(clientId, ADMIN_INVITE_PERMISSIONS, guild?.id);
     onInviteStarted(guild?.id);
-    window.open(url, '_blank', 'noopener,noreferrer');
-    handleClose();
+    // Domaine perso : autre application Discord, sans retour automatique.
+    if (brandingStore.isWhiteLabel) {
+      const raw = permissions === 'admin' ? ADMIN_INVITE_PERMISSIONS : DETAILED_INVITE_PERMISSIONS;
+      window.open(buildBotInviteUrl(clientId, raw, guild?.id), '_blank', 'noopener,noreferrer');
+      handleClose();
+      return;
+    }
+    window.location.href = buildBotInstallUrl(guild?.id, permissions);
   }
 
   function inviteWithDetailed() {
-    if (!acknowledgedRisks) return;
-    if (DEMO_MODE) {
-      onInviteStarted(guild?.id);
-      toast.success(guild ? `Kotbo ajouté sur ${guild.name}` : 'Kotbo ajouté en mode démonstration');
-      handleClose();
-      return;
-    }
-    const url = buildBotInviteUrl(clientId, DETAILED_INVITE_PERMISSIONS, guild?.id);
-    onInviteStarted(guild?.id);
-    window.open(url, '_blank', 'noopener,noreferrer');
-    handleClose();
+    if (acknowledgedRisks) invite('detailed');
   }
 </script>
 
@@ -97,7 +95,7 @@
         variant="primary"
         iconRight="ExternalLink"
         fullWidth
-        onclick={inviteWithAdmin}
+        onclick={() => invite('admin')}
       >
         Continuer sur Discord
       </Button>

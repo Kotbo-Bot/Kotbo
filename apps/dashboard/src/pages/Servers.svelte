@@ -16,21 +16,21 @@
   import {
     fetchManageableServers,
     buildBotInviteUrl,
+    buildBotInstallUrl,
+    ADMIN_INVITE_PERMISSIONS,
     type ManageableServer,
   } from '../lib/api';
   import { resolveGuildIconSrc } from '../lib/discordMedia';
-  import SectionCard from '../lib/components/SectionCard.svelte';
+  import { Button, ListGroup, ListRow } from '../lib/components/ui';
+  import { brandingStore } from '../lib/stores/branding.svelte';
   import EmptyState from '../lib/components/EmptyState.svelte';
-  import RefreshButton from '../lib/components/RefreshButton.svelte';
   import KotboMark from '../lib/components/onboarding/KotboMark.svelte';
   import BotInviteModal from '../lib/components/onboarding/BotInviteModal.svelte';
-  import Papicon from '../lib/components/Papicon.svelte';
 
   import { DEMO_MODE } from '../lib/demo/mode';
   import { errorMessage } from '@kotbo/shared';
   let servers = $state<ManageableServer[]>([]);
   let clientId = $state('');
-  let invitePermissions = $state('0');
   let oauthUnavailable = $state(false);
   let loading = $state(true);
   let query = $state('');
@@ -40,17 +40,41 @@
 
   async function installInDemo(server: ManageableServer) {
     await fetch(`/api/demo/guilds/${server.id}/install`, { method: 'POST' });
-    toast.success(`Kotbo ajouté sur ${server.name}`);
+    toast.success(m.bim_added_demo_server({ server: server.name }));
     enterServer(server.id);
   }
 
-  function openInviteModal(server: ManageableServer | null) {
-    if (DEMO_MODE && server) {
+  /** Serveur dont l'invitation part : le bouton tourne le temps de quitter la page. */
+  let leavingFor = $state<string | null>(null);
+
+  /**
+   * Un clic, l'écran d'autorisation Discord, puis retour direct sur la prise en
+   * main. Les permissions au détail restent un choix à part, sous la liste.
+   */
+  function install(server: ManageableServer) {
+    if (DEMO_MODE) {
       void installInDemo(server);
       return;
     }
+    // Domaine perso : autre application Discord, sans retour automatique.
+    // L'onglet courant attend donc l'arrivée du bot.
+    if (brandingStore.isWhiteLabel) {
+      watchForArrival(server.id);
+      window.open(buildBotInviteUrl(clientId, ADMIN_INVITE_PERMISSIONS, server.id), '_blank', 'noopener,noreferrer');
+      return;
+    }
+    leavingFor = server.id;
+    window.location.href = buildBotInstallUrl(server.id);
+  }
+
+  function openInviteModal(server: ManageableServer | null) {
     selectedServerForInvite = server;
     inviteModalOpen = true;
+  }
+
+  /** Retour arrière depuis Discord : la page restaurée ne doit pas rester bloquée. */
+  function resetLeaving() {
+    leavingFor = null;
   }
 
   const filtered = $derived.by(() => {
@@ -88,14 +112,12 @@
       }
       oauthUnavailable = true;
       clientId = result.clientId;
-      invitePermissions = result.invitePermissions;
       servers = [];
       return;
     }
 
     servers = result.guilds;
     clientId = result.clientId;
-    invitePermissions = result.invitePermissions;
     oauthUnavailable = false;
   }
 
@@ -121,25 +143,10 @@
     }
   }
 
-  function inviteUrl(guildId?: string): string {
-    return buildBotInviteUrl(clientId, invitePermissions, guildId);
-  }
-
   /**
-   * Ramener sur la prise en main une fois le bot arrive.
-   *
-   * L'ecran d'autorisation Discord s'ouvre dans un autre onglet et s'y termine
-   * sur une page de fin qui ne renvoie nulle part : sans cela, la personne
-   * ferme l'onglet et revient ici sans savoir que c'est fait.
-   *
-   * On surveille donc depuis cet onglet-ci plutot que par un `redirect_uri` :
-   * celui-ci devrait etre declare dans l'application Discord, et une valeur non
-   * declaree fait echouer l'autorisation entiere.
-   *
-   * L'arrivee elle-meme est desormais annoncee par l'API (`bot_guilds_changed`,
-   * voir l'abonnement plus bas) : l'entree se fait a la seconde ou le bot
-   * rejoint. Le sondage n'est plus que le filet - le WebSocket peut etre coupe,
-   * et seul le shard qui porte l'API sait diffuser.
+   * Domaine perso seulement : l'autorisation s'ouvre dans un autre onglet et ne
+   * renvoie nulle part. On attend donc ici l'arrivee du bot, annoncee par l'API
+   * (`bot_guilds_changed`) ; le sondage n'est que le filet.
    */
   let pendingGuildId = $state<string | null>(null);
   let pollTimer: ReturnType<typeof setInterval> | null = null;
@@ -196,46 +203,6 @@
   });
 
   /**
-   * Reprendre l'attente au retour de l'ecran d'autorisation Discord.
-   *
-   * Les liens d'invitation s'ouvrent dans cet onglet-ci : la page est donc
-   * detruite pendant l'autorisation, et avec elle la surveillance lancee au
-   * clic. Discord ramene ensuite sur le retour d'authentification, qui reconnait
-   * une invitation a son `guild_id` et renvoie ici avec `?installed=`.
-   *
-   * On repart alors sur la meme attente qu'au clic : le bot n'est pas toujours
-   * arrive dans notre base a la seconde ou Discord rend la main.
-   */
-  function resumePendingInstall() {
-    const params = new URLSearchParams(window.location.search);
-    const installed = params.get('installed');
-    if (!installed || !/^\d{17,20}$/.test(installed)) return;
-
-    // Nettoye tout de suite : un rafraichissement ne doit pas relancer
-    // l'attente d'une installation deja traitee.
-    params.delete('installed');
-    const rest = params.toString();
-    window.history.replaceState({}, '', `${window.location.pathname}${rest ? `?${rest}` : ''}`);
-
-    const target = servers.find((server) => server.id === installed);
-    if (target?.botPresent) {
-      enterServer(installed);
-      return;
-    }
-    watchForArrival(installed);
-  }
-
-  /**
-   * Ouvrir le tableau de bord d'un serveur equipe.
-   *
-   * `setGuild` seul ne suffit pas : la moitie des pages lit la guilde au
-   * montage. Le rechargement est ce que fait deja le selecteur de serveurs.
-   */
-  function openServer(guildId: string) {
-    enterServer(guildId);
-  }
-
-  /**
    * Ouvrir un serveur, quel que soit son etat.
    *
    * Toujours par un rechargement complet, et jamais par `router.goto` :
@@ -268,212 +235,112 @@
     });
 
     await load();
-    resumePendingInstall();
   });
 </script>
 
 <!--
   Cette page se rend sans MainLayout (voir App.svelte) : elle porte donc
-  elle-meme son cadre - fond, largeur, marges - que la coquille fournissait
-  jusqu'ici. Le lien de deconnexion est la pour la meme raison : sans barre
-  laterale ni en-tete, c'est la seule sortie de la page.
+  elle-meme son cadre. Le lien de deconnexion est la pour la meme raison : sans
+  barre laterale ni en-tete, c'est la seule sortie de la page.
 -->
+<svelte:window onpageshow={resetLeaving} />
+
+{#snippet serverIcon(server: ManageableServer)}
+  {@const icon = resolveGuildIconSrc(server.id, server.icon)}
+  {#if icon}
+    <img src={icon} alt="" referrerpolicy="no-referrer" class="w-10 h-10 rounded-full object-cover shrink-0" />
+  {:else}
+    <span class="icon-disc !w-10 !h-10 text-sm font-bold" aria-hidden="true">{server.name.charAt(0).toUpperCase()}</span>
+  {/if}
+{/snippet}
+
 <div class="min-h-screen bg-background text-on-background">
-  <div class="mx-auto w-full max-w-5xl px-6 py-10 sm:py-14">
-    <div class="mb-8 flex items-center justify-between gap-4">
+  <div class="mx-auto w-full max-w-2xl px-4 sm:px-6 py-8 space-y-6">
+    <div class="flex items-center justify-between gap-4">
       <div class="flex items-center gap-2.5">
         <img src="/favicon.svg" alt="" class="w-7 h-7 rounded-lg" />
         <span class="font-semibold tracking-tight text-on-surface">Kotbo</span>
       </div>
-      <button
-        type="button"
-        onclick={() => authStore.logout()}
-        class="text-body-sm font-medium text-on-surface-variant hover:text-on-surface transition-colors"
-      >
-        {m.cp_logout()}
-      </button>
+      <Button variant="ghost" size="sm" icon="log-out" onclick={() => authStore.logout()}>{m.cp_logout()}</Button>
     </div>
 
-    <div class="flex flex-col gap-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-  <header class="flex flex-col md:flex-row md:items-end justify-between gap-x-6 gap-y-3">
-    <div class="min-w-0">
-      <h1 class="text-2xl font-semibold tracking-tight text-on-surface font-headline leading-tight">{m.srv_title()}</h1>
-      <p class="mt-1 max-w-prose text-sm text-on-surface-variant">
-        {m.srv_desc()}
-      </p>
-    </div>
+    <header class="text-center">
+      <h1 class="text-2xl font-bold tracking-tight text-on-surface font-headline leading-tight">{m.srv_pick_title()}</h1>
+      <p class="mx-auto mt-1.5 max-w-md text-sm text-on-surface-variant">{m.srv_pick_desc()}</p>
+    </header>
 
-    <div class="flex items-center flex-wrap md:justify-end gap-2 shrink-0">
-      <RefreshButton onclick={() => void load(true)} {loading} />
-      {#if canInvite}
-        <button
-          type="button"
-          onclick={() => openInviteModal(null)}
-          class="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-primary text-on-primary text-sm font-medium hover:opacity-90 transition-opacity"
-        >
-          <Papicon icon="Plus" size={15} />
-          {m.srv_add_to_server()}
-        </button>
-      {/if}
-    </div>
-  </header>
-
-  {#if loading && servers.length === 0}
-    <!--
-      La liste vient de Discord, pas de Kotbo : l'aller-retour OAuth prend
-      parfois plusieurs secondes, et la page restait vide sous son en-tete tout
-      ce temps - assez pour croire qu'on n'administre aucun serveur. On montre
-      donc d'ou vient l'attente, et la forme de ce qui va la remplir.
-    -->
-    <div class="flex flex-col items-center gap-4 py-10">
-      <KotboMark size={44} halo />
-      <div class="text-center">
+    {#if loading && servers.length === 0}
+      <!-- La liste vient de Discord : l'attente se dit, la page vide ferait croire qu'on n'administre rien. -->
+      <div class="flex flex-col items-center gap-3 py-8 text-center" role="status">
+        <KotboMark size={44} halo />
         <p class="text-sm font-semibold text-on-surface">{m.srv_loading()}</p>
-        <p class="mt-1 text-body-sm text-on-surface-variant">{m.srv_loading_desc()}</p>
+        <p class="text-body-sm text-on-surface-variant">{m.srv_loading_desc()}</p>
       </div>
-    </div>
-
-    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2.5" aria-hidden="true">
-      {#each [0, 1, 2, 3, 4, 5] as slot (slot)}
-        <div class="rounded-xl border border-outline-variant/30 bg-surface-container-low/40 p-3 flex items-center gap-3">
-          <div class="w-9 h-9 shrink-0 rounded-lg bg-surface-container animate-pulse"></div>
-          <div class="min-w-0 flex-1 space-y-1.5">
-            <div class="h-3 rounded bg-surface-container animate-pulse" style="width: {55 + slot * 6}%"></div>
-            <div class="h-2.5 w-1/3 rounded bg-surface-container/70 animate-pulse"></div>
-          </div>
-        </div>
-      {/each}
-    </div>
-  {:else if oauthUnavailable}
-    <EmptyState
-      icon="alert-triangle"
-      title={m.srv_oauth_title()}
-      description={m.srv_oauth_desc()}
-    >
-      {#snippet action()}
-        <button
-          type="button"
-          onclick={() => void load(true)}
-          disabled={loading}
-          class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-on-primary text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
-        >
-          <Papicon icon="refresh-cw" size={14} class={loading ? 'animate-spin' : ''} />
-          {m.common_retry()}
-        </button>
-      {/snippet}
-    </EmptyState>
-  {:else}
-    <div class="space-y-4">
-      {#if servers.length > 3}
-        <div class="relative">
-          <Papicon icon="Search" size={15} class="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/40" />
-          <input aria-label={m.srv_search_ph()}
-            type="search"
-            bind:value={query}
-            placeholder={m.srv_search_ph()}
-            class="w-full h-10 pl-9 pr-3 rounded-lg bg-surface-container-low/40 border border-field-border text-sm text-on-surface placeholder-on-surface-variant/40 focus:outline-none focus:border-primary/50"
-          />
-        </div>
+    {:else if oauthUnavailable}
+      <EmptyState
+        icon="alert-triangle"
+        title={m.srv_oauth_title()}
+        description={m.srv_oauth_desc()}
+        actionLabel={m.common_retry()}
+        onAction={() => void load(true)}
+      />
+    {:else}
+      {#if servers.length > 5}
+        <input
+          aria-label={m.srv_search_ph()}
+          type="search"
+          bind:value={query}
+          placeholder={m.srv_search_ph()}
+          class="input w-full !rounded-full !px-4 h-11 text-sm"
+        />
       {/if}
 
-      <!-- ── Sans Kotbo : ce pour quoi on vient sur cette page ─────────────── -->
-      <SectionCard
-        title={m.srv_ready_title()}
-        description={m.srv_ready_desc()}
-        icon="Plus"
-      >
-        {#if missing.length === 0}
-          <p class="text-body-sm text-on-surface-variant">
-            {servers.length === 0
-              ? m.srv_ready_none()
-              : m.srv_ready_all()}
-          </p>
-        {:else}
-          <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2.5">
-            {#each missing as server (server.id)}
-              {@const icon = resolveGuildIconSrc(server.id, server.icon)}
-              <div class="rounded-xl border border-outline-variant/30 bg-surface-container-low/40 p-3 flex items-center gap-3">
-                {#if icon}
-                  <img src={icon} alt="" referrerpolicy="no-referrer" class="w-9 h-9 rounded-lg object-cover shrink-0" />
-                {:else}
-                  <div class="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center text-body-sm font-semibold text-primary shrink-0">
-                    {server.name.charAt(0)}
-                  </div>
-                {/if}
-
-                <div class="min-w-0 flex-1">
-                  <p class="text-body-sm font-medium text-on-surface truncate">{server.name}</p>
-                  <p class="text-2xs text-on-surface-variant">
-                    {server.owner ? m.srv_owner() : m.srv_admin()}
-                  </p>
-                </div>
-
-                {#if canInvite}
-                  <button
-                    type="button"
-                    onclick={() => openInviteModal(server)}
-                    class="shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-primary text-on-primary text-xs font-medium hover:opacity-90 transition-opacity"
-                  >
-                    <Papicon icon="Plus" size={13} />
-                    {pendingGuildId === server.id ? m.srv_pending() : m.srv_add()}
-                  </button>
-                {/if}
-              </div>
-            {/each}
-          </div>
-        {/if}
-      </SectionCard>
-
-      <!-- ── Deja equipes ─────────────────────────────────────────────────── -->
-      <SectionCard
-        title={m.srv_equipped_title()}
-        description={m.srv_equipped_desc()}
-        icon="Grid"
-      >
-        {#if equipped.length === 0}
-          <p class="text-body-sm text-on-surface-variant">
-            {m.srv_none()}
-          </p>
-        {:else}
-          <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2.5">
-            {#each equipped as server (server.id)}
-              {@const icon = resolveGuildIconSrc(server.id, server.icon)}
-              {@const isCurrent = server.id === authStore.selectedGuildId}
-              <button
-                type="button"
-                onclick={() => openServer(server.id)}
-                class="rounded-xl border bg-surface-container-low/40 p-3 flex items-center gap-3 text-left transition-colors hover:bg-surface-container
-                {isCurrent ? 'border-primary/40' : 'border-outline-variant/30'}"
+      <!-- Ce pour quoi on vient sur cette page. -->
+      <ListGroup title={m.srv_ready_title()}>
+        {#each missing as server (server.id)}
+          <ListRow label={server.name} description={server.owner ? m.srv_owner() : m.srv_admin()}>
+            {#snippet media()}{@render serverIcon(server)}{/snippet}
+            {#if canInvite}
+              <Button
+                variant="primary"
+                size="sm"
+                icon="Plus"
+                loading={leavingFor === server.id || pendingGuildId === server.id}
+                aria-label={m.srv_add_named({ server: server.name })}
+                onclick={() => install(server)}
               >
-                {#if icon}
-                  <img src={icon} alt="" referrerpolicy="no-referrer" class="w-9 h-9 rounded-lg object-cover shrink-0" />
-                {:else}
-                  <div class="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center text-body-sm font-semibold text-primary shrink-0">
-                    {server.name.charAt(0)}
-                  </div>
-                {/if}
+                {pendingGuildId === server.id ? m.srv_pending() : m.srv_add()}
+              </Button>
+            {/if}
+          </ListRow>
+        {:else}
+          <p class="p-4 text-sm text-on-surface-variant">
+            {servers.length === 0 ? m.srv_ready_none() : query ? m.d7_no_server_found() : m.srv_ready_all()}
+          </p>
+        {/each}
+      </ListGroup>
 
-                <div class="min-w-0 flex-1">
-                  <p class="text-body-sm font-medium text-on-surface truncate flex items-center gap-1.5">
-                    {server.name}
-                    {#if isCurrent}
-                      <span class="text-xs font-medium px-1 py-0.5 rounded bg-primary/10 text-primary">{m.srv_current()}</span>
-                    {/if}
-                  </p>
-                  <p class="text-2xs {server.activated ? 'text-on-surface-variant' : 'text-warning'}">
-                    {server.activated ? (server.owner ? m.srv_owner() : m.srv_admin()) : m.srv_awaiting_activation()}
-                  </p>
-                </div>
+      {#if equipped.length > 0}
+        <ListGroup title={m.srv_equipped_title()}>
+          {#each equipped as server (server.id)}
+            <ListRow
+              label={server.name}
+              description={server.activated ? (server.owner ? m.srv_owner() : m.srv_admin()) : m.srv_awaiting_activation()}
+              onclick={() => enterServer(server.id)}
+            >
+              {#snippet media()}{@render serverIcon(server)}{/snippet}
+            </ListRow>
+          {/each}
+        </ListGroup>
+      {/if}
 
-                <Papicon icon="ChevronRight" size={14} class="shrink-0 text-on-surface-variant/40" />
-              </button>
-            {/each}
-          </div>
+      <ListGroup footer={m.srv_help_footer()}>
+        <ListRow icon="refresh-cw" label={m.srv_refresh()} description={m.srv_refresh_desc()} onclick={() => void load(true)} />
+        {#if canInvite}
+          <ListRow icon="shield" label={m.srv_detailed()} description={m.srv_detailed_desc()} onclick={() => openInviteModal(null)} />
         {/if}
-      </SectionCard>
-      </div>
+      </ListGroup>
     {/if}
-    </div>
   </div>
 
   <BotInviteModal
@@ -481,7 +348,7 @@
     guild={selectedServerForInvite}
     {clientId}
     onInviteStarted={(guildId) => {
-      if (guildId) watchForArrival(guildId);
+      if (guildId && brandingStore.isWhiteLabel) watchForArrival(guildId);
     }}
   />
 </div>
