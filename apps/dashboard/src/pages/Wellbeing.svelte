@@ -7,7 +7,7 @@
   import ModulePage from '../lib/components/ModulePage.svelte';
   import MemberSearchSelect from '../lib/components/MemberSearchSelect.svelte';
   import { WB_CLOSE_REASONS, wbCloseReasonLabel, wbCaseEventLabel, WB_CATEGORIES, WB_SEVERITIES, WB_STATUSES, wbCategoryLabel, wbIsSummaryTemplate, wbSeverityLabel, wbStatusLabel, wbSummaryTemplate } from '../lib/wellbeingLabels';
-  import WellbeingStats, { type WellbeingCellStats, type WellbeingPulseWeek, type WellbeingReferentLoad } from '../lib/components/wellbeing/WellbeingStats.svelte';
+  import WellbeingStats, { type WellbeingCellStats, type WellbeingProfileStats, type WellbeingPulseWeek, type WellbeingReferentLoad, type WellbeingStageCount } from '../lib/components/wellbeing/WellbeingStats.svelte';
   import CaseTasks from '../lib/components/wellbeing/CaseTasks.svelte';
   import ReporterThread from '../lib/components/wellbeing/ReporterThread.svelte';
   import DistressSignals, { type DistressSignal } from '../lib/components/wellbeing/DistressSignals.svelte';
@@ -23,7 +23,7 @@
   import { Button, Callout, EmptyState, Field, FilterPills, Menu, Modal, StatTile, Tabs, ToggleSwitch, type FilterOption, type MenuItem, type TabItem } from '../lib/components/ui';
   import Papicon from '../lib/components/Papicon.svelte';
   import Skeleton from '../lib/components/Skeleton.svelte';
-  import { WB_IDLE_LOCK_MS, wbNeighbourCaseId, wbShortcut, wbCaseExportHtml, wbPurgeInfo, wbTaskProgress, wbCaseStats, wbCaseTimeline, wbFilterCases, wbIsReviewDue, wbLinkedCases, wbMergeHeader, wbReviewShortcut, wbSearchCases, wbSeverityAccent, wbSeverityTone, wbSortCases, wbStatusTone, type WbBoardStage, type WbBoardTarget, type WbCaseFilter, type WbCaseSort } from '../lib/wellbeingView';
+  import { WB_IDLE_LOCK_MS, wbNeighbourCaseId, wbShortcut, wbCaseExportHtml, wbPurgeInfo, wbTaskProgress, wbCaseStats, wbCaseTimeline, wbCompactTimeline, wbFilterCases, wbIsReviewDue, wbLinkedCases, wbMergeHeader, wbReviewShortcut, wbSearchCases, wbSeverityAccent, wbSeverityTone, wbSortCases, wbStatusTone, type WbBoardStage, type WbBoardTarget, type WbCaseFilter, type WbCaseSort } from '../lib/wellbeingView';
   import { authStore } from '../lib/stores/auth.svelte';
   import { isMobile } from '../lib/stores/media.svelte';
 
@@ -101,6 +101,15 @@
     : wbSortCases(wbSearchCases(wbFilterCases(cases, caseFilter, viewerId), caseSearch), caseSort));
   const linkedCases = $derived(selectedHeader ? wbLinkedCases(cases, selectedHeader) : []);
   const timeline = $derived(selectedCase ? wbCaseTimeline(selectedCase) : []);
+  /** Historique réduit : notes seules, ou actions à la suite repliées ; le choix est gardé. */
+  const NOTES_ONLY_KEY = 'kotbo:wellbeing:notes-only';
+  let timelineNotesOnly = $state(typeof localStorage !== 'undefined' && localStorage.getItem(NOTES_ONLY_KEY) === '1');
+  let expandedGroups = $state<string[]>([]);
+  const compactTimeline = $derived(wbCompactTimeline(timeline, { notesOnly: timelineNotesOnly, expanded: expandedGroups }));
+  function setNotesOnly(value: boolean) {
+    timelineNotesOnly = value;
+    try { localStorage.setItem(NOTES_ONLY_KEY, value ? '1' : '0'); } catch { /* stockage indisponible : réglage gardé pour la session */ }
+  }
   const filterOptions = $derived<FilterOption<ListFilter>[]>([
     ...(status?.reportEnabled || stats.triage > 0 ? [{ value: 'triage' as const, label: m.wb_filter_triage(), count: stats.triage }] : []),
     { value: 'active', label: m.wb_filter_active(), count: stats.active },
@@ -204,6 +213,7 @@
     absence = null;
     editingNoteId = null;
     revealed = false;
+    expandedGroups = [];
     detailTab = 'timeline';
     void loadDetail(caseId);
   }
@@ -464,6 +474,8 @@
   $effect(() => {
     if (activeTab === 'stats') void loadStats();
   });
+  let cellProfiles = $state<WellbeingProfileStats | null>(null);
+  let cellStages = $state<WellbeingStageCount[]>([]);
   async function loadStats() {
     const res = await dashboardFetch('/wellbeing/stats');
     if (res.ok) {
@@ -471,6 +483,8 @@
       cellStats = data.stats;
       cellLoad = data.load ?? [];
       cellPulse = data.pulse ?? null;
+      cellProfiles = data.profiles ?? null;
+      cellStages = data.stages ?? [];
     } else {
       toast.error(m.toast_wb_load_failed());
     }
@@ -1358,14 +1372,34 @@
               </div>
             </form>
           {/if}
-          {#if timeline.length === 0}
-            <p class="text-xs text-on-surface-variant">{m.wb_timeline_empty()}</p>
+          {#if timeline.length > 0}
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div role="group" aria-label={m.wb_timeline_view_label()} class="inline-flex rounded-lg border border-outline-variant/40 bg-surface-container p-0.5 text-xs">
+                <button type="button" aria-pressed={!timelineNotesOnly} onclick={() => setNotesOnly(false)}
+                  class="rounded-md px-2.5 py-1 {!timelineNotesOnly ? 'bg-surface-container-highest font-semibold text-on-surface' : 'text-on-surface-variant'}">{m.wb_timeline_all()}</button>
+                <button type="button" aria-pressed={timelineNotesOnly} onclick={() => setNotesOnly(true)}
+                  class="rounded-md px-2.5 py-1 {timelineNotesOnly ? 'bg-surface-container-highest font-semibold text-on-surface' : 'text-on-surface-variant'}">{m.wb_timeline_notes_only()}</button>
+              </div>
+              {#if !timelineNotesOnly && expandedGroups.length > 0}
+                <Button size="sm" variant="ghost" icon="ChevronUp" onclick={() => (expandedGroups = [])}>{m.wb_timeline_collapse_all()}</Button>
+              {/if}
+            </div>
+          {/if}
+          {#if compactTimeline.length === 0}
+            <p class="text-xs text-on-surface-variant">{timeline.length === 0 ? m.wb_timeline_empty() : m.wb_timeline_no_note()}</p>
           {:else}
             <ol class="relative border-l border-outline-variant/50 ml-2 space-y-3">
-              {#each timeline as entry (entry.id)}
+              {#each compactTimeline as entry (entry.id)}
                 <li class="ml-4">
                   <span class="absolute -left-[5px] mt-1.5 h-2.5 w-2.5 rounded-full {entry.kind === 'note' ? 'bg-primary' : 'bg-outline-variant'}" aria-hidden="true"></span>
-                  {#if entry.kind === 'note'}
+                  {#if entry.kind === 'group'}
+                    <button type="button" aria-expanded="false" class="flex flex-wrap items-center gap-x-2 text-xs text-on-surface-variant hover:text-on-surface"
+                      onclick={() => (expandedGroups = [...expandedGroups, entry.id])}>
+                      <Papicon icon="ChevronDown" size={12} />
+                      <span class="font-medium">{m.wb_timeline_group({ count: entry.count })}</span>
+                      <span>· {formatDay(entry.entries[entry.entries.length - 1]!.at)} – {formatDay(entry.at)}</span>
+                    </button>
+                  {:else if entry.kind === 'note'}
                     <div class="rounded-lg border border-outline-variant/40 bg-surface-container-lowest p-3 text-sm">
                       <div class="flex flex-wrap justify-between gap-2 text-xs text-on-surface-variant mb-1">
                         <span class="font-semibold text-on-surface">{entry.note.authorName}</span>
@@ -1603,7 +1637,7 @@
         onnewcase={(prefill) => void openNewCase(prefill)} />
     {:else if activeTab === 'stats'}
       {#if cellStats}
-        <WellbeingStats stats={cellStats} load={cellLoad} pulse={cellPulse} />
+        <WellbeingStats stats={cellStats} load={cellLoad} pulse={cellPulse} profiles={cellProfiles} stages={cellStages} />
       {:else}
         <Skeleton height="320px" />
       {/if}

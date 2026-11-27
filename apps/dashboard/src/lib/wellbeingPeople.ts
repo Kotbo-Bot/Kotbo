@@ -2,6 +2,9 @@
  * Personnes suivies par la cellule : celles qui ont une fiche, et celles qui
  * n'ont que des dossiers. Chacune a sa page, où ses notes et ses dossiers se
  * lisent ensemble. Un signalement anonyme, sans personne, reste aux dossiers.
+ *
+ * Un seul nom par personne : celui de sa fiche, tenu à jour par le bot, sinon
+ * celui de son dossier le plus récent.
  */
 
 export interface WbProfileHeader {
@@ -17,6 +20,7 @@ export interface WbPersonCase {
   subjectUserId?: string | null;
   subjectName?: string;
   status: string;
+  updatedAt?: string;
 }
 
 export interface WbPerson {
@@ -42,6 +46,9 @@ export function wbPeople(profiles: readonly WbProfileHeader[], cases: readonly W
       caseCount: 0,
     });
   }
+  const withProfile = new Set(profiles.map((profile) => profile.subjectUserId));
+  /** Date du dossier qui a donné son nom à la personne, quand elle n'a pas de fiche. */
+  const namedAt = new Map<string, string>();
   for (const item of cases) {
     if (!item.subjectUserId) continue;
     const person = people.get(item.subjectUserId) ?? {
@@ -55,6 +62,11 @@ export function wbPeople(profiles: readonly WbProfileHeader[], cases: readonly W
     };
     person.caseCount += 1;
     if (item.status !== 'CLOSED') person.activeCases += 1;
+    const at = item.updatedAt ?? '';
+    if (!withProfile.has(item.subjectUserId) && item.subjectName && at >= (namedAt.get(item.subjectUserId) ?? '')) {
+      person.name = item.subjectName;
+      namedAt.set(item.subjectUserId, at);
+    }
     people.set(item.subjectUserId, person);
   }
   return [...people.values()].sort((a, b) =>

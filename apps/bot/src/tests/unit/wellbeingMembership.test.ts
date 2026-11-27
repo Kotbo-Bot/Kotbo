@@ -9,6 +9,7 @@ import {
   cellMembershipChanges,
   roleDeltaFromChanges,
   shouldRevertCellRoleGrant,
+  shouldLoadAllMembers,
   type WellbeingAccessLists,
 } from '../../services/staff/wellbeingPolicy';
 
@@ -90,5 +91,24 @@ describe('outils MCP qui touchent aux rôles', () => {
       expect(guard).toBeGreaterThan(-1);
       expect(guard).toBeLessThan(body.indexOf(write));
     }
+  });
+});
+
+describe('membres de la cellule par rôle', () => {
+  const now = 1_000_000_000;
+  const base = { teamRoleIds: ['team'], cacheSize: 40, memberCount: 500, lastLoadedAt: undefined as number | undefined, now };
+
+  test('un cache incomplet est complété pour trouver les membres par rôle', () => {
+    expect(shouldLoadAllMembers(base)).toBe(true);
+  });
+
+  test('sans rôle de cellule, ou avec un cache complet, rien à charger', () => {
+    expect(shouldLoadAllMembers({ ...base, teamRoleIds: [] })).toBe(false);
+    expect(shouldLoadAllMembers({ ...base, cacheSize: 500 })).toBe(false);
+  });
+
+  test('au plus un chargement toutes les 10 minutes par serveur', () => {
+    expect(shouldLoadAllMembers({ ...base, lastLoadedAt: now - 5 * 60_000 })).toBe(false);
+    expect(shouldLoadAllMembers({ ...base, lastLoadedAt: now - 11 * 60_000 })).toBe(true);
   });
 });

@@ -119,3 +119,20 @@ export function profileNameChange(stored: string | null, current: string): strin
 export function profileNoteDeleteError(authorId: string, userId: string): string | null {
   return authorId === userId ? null : "Seule la personne qui a écrit cette note peut l'effacer.";
 }
+
+/** Une note qui expire avant ce nombre de jours compte, au bilan, parmi les effacements proches. */
+export const PROFILE_EXPIRING_SOON_DAYS = 30;
+
+/** Bilan des fiches, sans contenu : personnes, notes, notes sensibles, effacements proches. */
+export function profileStats(
+  notes: ReadonlyArray<{ profileId: string; expiresAt: Date; sensitive: boolean }>,
+  now: Date,
+): { people: number; notes: number; sensitive: number; expiringSoon: number } {
+  const soon = now.getTime() + PROFILE_EXPIRING_SOON_DAYS * DAY_MS;
+  return {
+    people: new Set(notes.map((note) => note.profileId)).size,
+    notes: notes.length,
+    sensitive: notes.filter((note) => note.sensitive).length,
+    expiringSoon: notes.filter((note) => note.expiresAt.getTime() <= soon).length,
+  };
+}
