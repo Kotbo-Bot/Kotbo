@@ -3,7 +3,7 @@
   import { router } from 'tinro';
   import { authStore } from '../lib/stores/auth.svelte';
   import { resolveTabFromUrl, gotoTab } from '../lib/tabRouting';
-  import { Tabs, Button, SectionCard, SettingsRow } from '../lib/components/ui';
+  import { Tabs, Button, ListGroup, ListRow, Segmented } from '../lib/components/ui';
   import ProfileWidgetPanel from '../lib/components/ProfileWidgetPanel.svelte';
   import { userPrefs } from '../lib/stores/userPreferences.svelte';
   import { timezoneStore } from '../lib/stores/timezone.svelte';
@@ -189,65 +189,40 @@
     { id: 'always-open',   get label() { return m.us_sidebar_open(); },   get desc() { return m.us_sidebar_open_desc(); } },
     { id: 'always-closed', get label() { return m.us_sidebar_closed(); }, get desc() { return m.us_sidebar_closed_desc(); } },
   ];
+
+  /** Sommaire des groupes : la page est longue, on saute au lieu de faire défiler. */
+  const sections = $derived([
+    { id: 'us-appearance', label: m.us_appearance(), icon: 'Palette' },
+    { id: 'us-region', label: m.us_language_region(), icon: 'Globe' },
+    { id: 'us-navigation', label: m.us_navigation(), icon: 'Menu' },
+    { id: 'us-notifications', label: m.us_notifications(), icon: 'Bell' },
+    { id: 'us-privacy', label: m.us_privacy(), icon: 'shield' },
+    { id: 'us-data', label: m.us_data(), icon: 'download' },
+  ]);
+
+  function goToSection(id: string) {
+    const smooth = userPrefs.prefs.animationsEnabled && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    document.getElementById(id)?.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'start' });
+  }
+
+  const activeSidebar = $derived(sidebarBehaviors.find((b) => b.id === userPrefs.prefs.sidebarBehavior));
+  const activeDateFormat = $derived(dateFormats.find((f) => f.id === userPrefs.prefs.dateFormat));
 </script>
 
-<div class="space-y-6 pb-12">
+<div class="mx-auto w-full max-w-5xl space-y-5 pb-12">
 
-  <header class="flex flex-col md:flex-row md:items-end justify-between gap-x-6 gap-y-3">
+  <header class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
     <div class="min-w-0">
-      <h1 class="text-2xl font-semibold tracking-tight text-on-surface font-headline leading-tight">{m.us_title()}</h1>
-      <p class="mt-1 max-w-prose text-sm text-on-surface-variant">
-        {m.us_subtitle()}
-        {#if authStore.user?.username}
-          · <span class="font-medium text-on-surface">{authStore.user.username}</span>
-        {/if}
-      </p>
+      <h1 class="text-2xl font-bold tracking-tight text-on-surface font-headline leading-tight">{m.us_title()}</h1>
+      <p class="mt-1 text-sm text-on-surface-variant">{m.us_subtitle()}</p>
     </div>
-
-    <!-- Les préférences s'enregistrent seules : une ligne discrète le dit,
-         et confirme chaque enregistrement, sans prendre la place d'un bouton. -->
-    {#if activeTab === 'preferences'}
-      <p class="flex shrink-0 items-center gap-1.5 text-xs {savedFeedback ? 'text-success font-medium' : 'text-on-surface-variant'}" aria-live="polite">
-        {#if savedFeedback}
-          <Papicon icon="check" size={14} />
-          {m.us_saved_auto()}
-        {:else}
-          {m.us_autosave()}
-        {/if}
-      </p>
-    {/if}
-  </header>
-
-  <div class="flex flex-wrap items-center justify-between gap-3">
     <Tabs
       label={m.nav_user_settings()}
       {tabs}
       active={activeTab}
       onchange={(id) => gotoTab(SETTINGS_BASE, id, 'preferences')}
     />
-
-    {#if activeTab === 'preferences'}
-      <div class="flex flex-wrap items-center gap-2">
-        <Button variant="secondary" size="sm" icon="upload" onclick={openImportDialog}>
-          {m.common_import()}
-        </Button>
-        <Button variant="secondary" size="sm" icon="download" onclick={exportPreferences}>
-          {m.common_export()}
-        </Button>
-        <Button variant="secondary" size="sm" icon="Bell" onclick={testNotifications}>
-          {m.us_test_notifications()}
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          icon="Keyboard"
-          onclick={() => window.dispatchEvent(new CustomEvent('open-keyboard-shortcuts'))}
-        >
-          {m.us_keyboard_shortcuts()}
-        </Button>
-      </div>
-    {/if}
-  </div>
+  </header>
 
   <input
     bind:this={importInput}
@@ -261,15 +236,31 @@
   <ProfileWidgetPanel />
 {:else}
 
-  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+  <div class="grid grid-cols-1 lg:grid-cols-[13rem_minmax(0,1fr)] gap-6 items-start">
 
-    <!-- ─── Colonne gauche : Apparence & Navigation ──────────── -->
-    <div class="space-y-6 min-w-0">
-      <SectionCard title={m.us_appearance()} icon="Palette">
-        <div class="space-y-6">
-          <!-- Thème -->
-          <div class="space-y-2.5">
-            <p class="text-xs font-semibold text-on-surface-variant">{m.us_theme()}</p>
+    <nav class="hidden lg:flex flex-col gap-0.5 sticky top-[calc(var(--app-navbar-height)+1rem)]" aria-label={m.us_sections()}>
+      {#each sections as section (section.id)}
+        <button type="button" class="pick-row" onclick={() => goToSection(section.id)}>
+          <span class="icon-disc" aria-hidden="true"><Papicon icon={section.icon} size={15} /></span>
+          <span class="pick-row__label min-w-0 truncate">{section.label}</span>
+        </button>
+      {/each}
+      <!-- Les préférences s'enregistrent seules : cette ligne le dit et confirme. -->
+      <p class="flex items-center gap-1.5 px-2.5 pt-3 text-xs {savedFeedback ? 'text-success font-medium' : 'text-on-surface-variant'}" aria-live="polite">
+        {#if savedFeedback}
+          <Papicon icon="check" size={14} />
+          {m.us_saved_auto()}
+        {:else}
+          {m.us_autosave()}
+        {/if}
+      </p>
+    </nav>
+
+    <div class="space-y-6 min-w-0 max-w-2xl">
+
+      <ListGroup id="us-appearance" title={m.us_appearance()}>
+        <div class="p-4 space-y-2.5">
+          <p class="list-row__label">{m.us_theme()}</p>
             <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
               {#each THEME_PRESETS as preset (preset.id)}
                 {@const selected = themeStore.themeId === preset.id}
@@ -306,16 +297,15 @@
                 <span>Custom</span>
               </button>
             </div>
-          </div>
+        </div>
 
-          <!-- Éditeur de thème personnalisé -->
           {#if themeStore.themeId === 'custom' || showCustomEditor}
-            <div class="space-y-4 p-4 rounded-xl border border-primary/30 bg-surface-container-low">
+            <div class="space-y-4 p-4">
               <div class="flex items-center justify-between gap-2">
                 <p class="text-xs font-semibold text-primary">{m.us_custom_theme()}</p>
                 <button
                   type="button"
-                  aria-label="Fermer"
+                  aria-label={m.common_close()}
                   onclick={() => showCustomEditor = false}
                   class="p-1.5 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-hover transition-colors focus-visible:outline-2 focus-visible:outline-primary"
                 >
@@ -385,9 +375,8 @@
             </div>
           {/if}
 
-          <!-- Couleur d'accentuation -->
-          <div class="space-y-2.5">
-            <p class="text-xs font-semibold text-on-surface-variant">{m.us_accent_color()}</p>
+        <div class="p-4 space-y-3">
+          <p class="list-row__label">{m.us_accent_color()}</p>
             <div class="flex flex-wrap gap-3">
               {#each accentColors as color (color.id)}
                 {@const active = userPrefs.prefs.accentColor === color.id}
@@ -409,247 +398,155 @@
                 </button>
               {/each}
             </div>
-          </div>
-
-          <!-- Interrupteurs d'interface -->
-          <div class="divide-y divide-outline-variant border-t border-outline-variant -mx-5 -mb-5">
-            <SettingsRow label={m.us_compact_mode()} description={m.us_compact_mode_desc()}>
-              <ToggleSwitch
-                checked={userPrefs.prefs.compactMode}
-                onToggle={(v: boolean) => handleToggle('compactMode', v)}
-              />
-            </SettingsRow>
-            <SettingsRow label={m.us_animations()} description={m.us_animations_desc()}>
-              <ToggleSwitch
-                checked={userPrefs.prefs.animationsEnabled}
-                onToggle={(v: boolean) => handleToggle('animationsEnabled', v)}
-              />
-            </SettingsRow>
-            <SettingsRow label={m.us_plan_crowns()} description={m.us_plan_crowns_desc()}>
-              <ToggleSwitch
-                checked={userPrefs.prefs.showPlanCrowns}
-                onToggle={(v: boolean) => handleToggle('showPlanCrowns', v)}
-              />
-            </SettingsRow>
-          </div>
         </div>
-      </SectionCard>
 
-      <!-- Navigation / Barre latérale -->
-      <SectionCard title={m.us_navigation()} description={m.us_sidebar_behavior()} icon="Menu" flush>
-        <div class="divide-y divide-outline-variant" role="radiogroup" aria-label={m.us_sidebar_behavior()}>
-          {#each sidebarBehaviors as behavior (behavior.id)}
-            {@const checked = userPrefs.prefs.sidebarBehavior === behavior.id}
-            <button
-              type="button"
-              role="radio"
-              aria-checked={checked}
-              onclick={() => handleToggle('sidebarBehavior', behavior.id)}
-              class="w-full flex items-center gap-3.5 px-4 py-3.5 text-left transition-colors hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-primary
-                {checked ? 'bg-surface-selection' : ''}"
-            >
-              <span
-                class="w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center
-                  {checked ? 'border-primary' : 'border-outline'}"
+        <ListRow icon="Layout" label={m.us_compact_mode()} description={m.us_compact_mode_desc()}>
+          <ToggleSwitch
+            checked={userPrefs.prefs.compactMode}
+            onToggle={(v: boolean) => handleToggle('compactMode', v)}
+            ariaLabel={m.us_compact_mode()}
+          />
+        </ListRow>
+        <ListRow icon="activity" label={m.us_animations()} description={m.us_animations_desc()}>
+          <ToggleSwitch
+            checked={userPrefs.prefs.animationsEnabled}
+            onToggle={(v: boolean) => handleToggle('animationsEnabled', v)}
+            ariaLabel={m.us_animations()}
+          />
+        </ListRow>
+        <ListRow icon="Crown" label={m.us_plan_crowns()} description={m.us_plan_crowns_desc()}>
+          <ToggleSwitch
+            checked={userPrefs.prefs.showPlanCrowns}
+            onToggle={(v: boolean) => handleToggle('showPlanCrowns', v)}
+            ariaLabel={m.us_plan_crowns()}
+          />
+        </ListRow>
+      </ListGroup>
+
+      <ListGroup id="us-region" title={m.us_language_region()}>
+        <ListRow icon="Globe" label={m.us_interface_language()}>
+          <Segmented
+            label={m.us_interface_language()}
+            options={languages.map((lang) => ({ value: lang.id, label: lang.code, title: lang.label }))}
+            value={userPrefs.prefs.language}
+            onchange={(id) => handleToggle('language', id)}
+          />
+        </ListRow>
+
+        <ListRow stacked icon="calendar" label={m.us_date_format()} description={activeDateFormat?.example ?? ''}>
+          <Segmented
+            stretch
+            label={m.us_date_format()}
+            options={dateFormats.map((fmt) => ({ value: fmt.id, label: fmt.label }))}
+            value={userPrefs.prefs.dateFormat}
+            onchange={(id) => handleToggle('dateFormat', id)}
+          />
+        </ListRow>
+
+        <ListRow stacked icon="clock" label={m.us_timezone()} description={m.us_timezone_desc({ zone: timezoneStore.displayTimezone })}>
+          <select
+            aria-label={m.us_timezone()}
+            value={timezoneChoice}
+            onchange={(e) => handleTimezone((e.currentTarget as HTMLSelectElement).value)}
+            class="input w-full text-sm"
+          >
+            <option value="auto">{m.us_timezone_auto({ zone: timezoneStore.browserTimezone })}</option>
+            {#each timezoneZones as zone (zone)}
+              <option value={zone}>{zone.replace(/_/g, ' ')}</option>
+            {/each}
+          </select>
+        </ListRow>
+      </ListGroup>
+
+      <ListGroup id="us-navigation" title={m.us_navigation()}>
+        <ListRow stacked icon="Menu" label={m.us_sidebar_behavior()} description={activeSidebar?.desc ?? ''}>
+          <Segmented
+            stretch
+            label={m.us_sidebar_behavior()}
+            options={sidebarBehaviors.map((b) => ({ value: b.id, label: b.label }))}
+            value={userPrefs.prefs.sidebarBehavior}
+            onchange={(id) => handleToggle('sidebarBehavior', id)}
+          />
+        </ListRow>
+        <ListRow
+          icon="Keyboard"
+          label={m.us_keyboard_shortcuts()}
+          onclick={() => window.dispatchEvent(new CustomEvent('open-keyboard-shortcuts'))}
+        />
+      </ListGroup>
+
+      <ListGroup id="us-notifications" title={m.us_notifications()}>
+        <ListRow icon="Bell" label={m.us_sound_notif()} description={m.us_sound_notif_desc()}>
+          <ToggleSwitch
+            checked={userPrefs.prefs.soundNotifications}
+            onToggle={(v: boolean) => handleNotificationToggle('soundNotifications', v)}
+            ariaLabel={m.us_sound_notif()}
+          />
+        </ListRow>
+        {#if userPrefs.prefs.soundNotifications}
+          <div class="flex flex-wrap items-center gap-1.5 px-4 py-3">
+            <span class="text-xs text-on-surface-variant mr-1">{m.us_sound_preview()}</span>
+            {#each soundPreviews as preview (preview.tone)}
+              <Button
+                variant="secondary"
+                size="sm"
+                icon="Play"
+                onclick={() => playNotificationSound(preview.tone, { force: true })}
               >
-                {#if checked}
-                  <span class="w-2 h-2 rounded-full bg-primary"></span>
-                {/if}
-              </span>
-              <span class="min-w-0">
-                <span class="block text-sm font-medium text-on-surface">{behavior.label}</span>
-                <span class="block text-xs text-on-surface-variant mt-0.5">{behavior.desc}</span>
-              </span>
-            </button>
-          {/each}
-        </div>
-      </SectionCard>
-    </div>
-
-    <!-- ─── Colonne droite : Langue & Notifications ─────────── -->
-    <div class="space-y-6 min-w-0">
-      <SectionCard title={m.us_language_region()} icon="Globe">
-        <div class="space-y-6">
-          <!-- Langue -->
-          <div class="space-y-2.5">
-            <p class="text-xs font-semibold text-on-surface-variant">{m.us_interface_language()}</p>
-            <div class="grid grid-cols-2 gap-2.5">
-              {#each languages as lang (lang.id)}
-                {@const selected = userPrefs.prefs.language === lang.id}
-                <button
-                  type="button"
-                  aria-pressed={selected}
-                  onclick={() => handleToggle('language', lang.id)}
-                  class="flex items-center gap-3 p-3.5 min-h-[44px] rounded-xl border transition-colors text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary
-                    {selected
-                      ? 'border-primary bg-primary/10 text-on-surface'
-                      : 'border-outline-variant bg-surface-container-low text-on-surface-variant hover:border-outline hover:text-on-surface'}"
-                >
-                  <span class="px-2 py-0.5 rounded-md text-xs font-mono font-bold {selected ? 'bg-primary text-on-primary' : 'bg-surface-container text-on-surface-variant'}">
-                    {lang.code}
-                  </span>
-                  <span class="truncate">{lang.label}</span>
-                </button>
-              {/each}
-            </div>
+                {preview.label}
+              </Button>
+            {/each}
           </div>
+        {/if}
 
-          <!-- Format des dates -->
-          <div class="space-y-2.5">
-            <p class="text-xs font-semibold text-on-surface-variant">{m.us_date_format()}</p>
-            <div
-              class="divide-y divide-outline-variant rounded-xl border border-outline-variant overflow-hidden bg-surface-container-low"
-              role="radiogroup"
-              aria-label={m.us_date_format()}
-            >
-              {#each dateFormats as fmt (fmt.id)}
-                {@const checked = userPrefs.prefs.dateFormat === fmt.id}
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={checked}
-                  onclick={() => handleToggle('dateFormat', fmt.id)}
-                  class="w-full flex items-center gap-3.5 px-4 py-3 text-left transition-colors hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-inset focus-visible:outline-primary
-                    {checked ? 'bg-surface-selection' : ''}"
-                >
-                  <span
-                    class="w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center
-                      {checked ? 'border-primary' : 'border-outline'}"
-                  >
-                    {#if checked}
-                      <span class="w-2 h-2 rounded-full bg-primary"></span>
-                    {/if}
-                  </span>
-                  <span class="min-w-0">
-                    <span class="block text-sm font-medium text-on-surface">{fmt.label}</span>
-                    <span class="block text-xs text-on-surface-variant mt-0.5">{fmt.example}</span>
-                  </span>
-                </button>
-              {/each}
-            </div>
-          </div>
+        <ListRow
+          icon="monitor"
+          label={m.us_desktop_notif()}
+          description={permissionState === 'denied' ? m.us_notif_blocked_hint() : m.us_desktop_notif_desc()}
+        >
+          <ToggleSwitch
+            checked={userPrefs.prefs.desktopNotifications && permissionState === 'granted'}
+            onToggle={(v: boolean) => handleNotificationToggle('desktopNotifications', v)}
+            ariaLabel={m.us_desktop_notif()}
+          />
+        </ListRow>
 
-          <!-- Fuseau horaire -->
-          <div class="space-y-2">
-            <label for="us-timezone-select" class="block text-xs font-semibold text-on-surface-variant">{m.us_timezone()}</label>
-            <select
-              id="us-timezone-select"
-              value={timezoneChoice}
-              onchange={(e) => handleTimezone((e.currentTarget as HTMLSelectElement).value)}
-              class="w-full bg-surface-container-lowest border border-field-border rounded-lg px-3.5 py-2.5 text-sm text-on-surface focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 transition-colors"
-            >
-              <option value="auto">{m.us_timezone_auto({ zone: timezoneStore.browserTimezone })}</option>
-              {#each timezoneZones as zone (zone)}
-                <option value={zone}>{zone.replace(/_/g, ' ')}</option>
-              {/each}
-            </select>
-            <p class="text-xs text-on-surface-variant">
-              {m.us_timezone_desc({ zone: timezoneStore.displayTimezone })}
-            </p>
-          </div>
-        </div>
-      </SectionCard>
+        <ListRow icon="send" label={m.us_test_notifications()} onclick={testNotifications} />
 
-      <!-- Notifications & Confidentialité -->
-      <SectionCard title={m.us_notif_privacy()} icon="Bell" flush>
-        <div class="divide-y divide-outline-variant">
-          <div class="px-4 py-3.5 space-y-3">
-            <div class="flex items-center justify-between gap-4">
-              <div class="min-w-0">
-                <p class="text-sm font-medium text-on-surface">{m.us_sound_notif()}</p>
-                <p class="text-xs text-on-surface-variant mt-0.5">{m.us_sound_notif_desc()}</p>
-              </div>
-              <ToggleSwitch
-                checked={userPrefs.prefs.soundNotifications}
-                onToggle={(v: boolean) => handleNotificationToggle('soundNotifications', v)}
-              />
-            </div>
-            {#if userPrefs.prefs.soundNotifications}
-              <div class="flex flex-wrap items-center gap-1.5 pt-1">
-                <span class="text-2xs text-on-surface-variant mr-1">{m.us_sound_preview()}</span>
-                {#each soundPreviews as preview (preview.tone)}
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    icon="Play"
-                    onclick={() => playNotificationSound(preview.tone, { force: true })}
-                  >
-                    {preview.label}
-                  </Button>
-                {/each}
-              </div>
-            {/if}
-          </div>
+        <div><NotificationPreferencesGrid /></div>
+      </ListGroup>
 
-          <div class="px-4 py-3.5 space-y-2">
-            <div class="flex items-center justify-between gap-4">
-              <div class="min-w-0">
-                <p class="text-sm font-medium text-on-surface">{m.us_desktop_notif()}</p>
-                <p class="text-xs text-on-surface-variant mt-0.5">{m.us_desktop_notif_desc()}</p>
-              </div>
-              <ToggleSwitch
-                checked={userPrefs.prefs.desktopNotifications && permissionState === 'granted'}
-                onToggle={(v: boolean) => handleNotificationToggle('desktopNotifications', v)}
-              />
-            </div>
-            {#if permissionState === 'denied'}
-              <p class="text-xs text-warning">{m.us_notif_blocked_hint()}</p>
-            {/if}
-          </div>
+      <ListGroup id="us-privacy" title={m.us_privacy()}>
+        <ListRow icon="user" label={m.us_online_status()} description={m.us_online_status_desc()}>
+          <ToggleSwitch
+            checked={userPrefs.prefs.showOnlineStatus}
+            onToggle={(v: boolean) => handleToggle('showOnlineStatus', v)}
+            ariaLabel={m.us_online_status()}
+          />
+        </ListRow>
+        <ListRow icon="file-text" label={m.us_privacy_policy()} description={m.us_privacy_policy_desc()} href="https://kotbo.fr/terms" external />
+        <ListRow icon="file-text" label={m.us_cookies()} description={m.us_cookies_desc()} href="https://kotbo.fr/cookies" external />
+        <ListRow icon="shield" label={m.us_gdpr_rights()} description={m.us_gdpr_rights_desc()} href="mailto:privacy@kotbo.fr?subject=Demande%20RGPD%20Kotbo" />
+      </ListGroup>
 
-          <NotificationPreferencesGrid />
+      <ListGroup id="us-data" title={m.us_data()}>
+        <ListRow icon="download" label={m.common_export()} description={m.us_export_desc()} onclick={exportPreferences} />
+        <ListRow icon="upload" label={m.common_import()} description={m.us_import_desc()} onclick={openImportDialog} />
+        <ListRow danger icon="refresh-cw" label={m.us_reset_zone()} description={m.us_reset_desc()}>
+          <Button
+            variant="danger"
+            size="sm"
+            onclick={() => { userPrefs.reset(); themeStore.themeId = userPrefs.prefs.theme; showSavedFeedback(); toast.success(m.us_reset_done()); }}
+          >
+            {m.us_reset_button()}
+          </Button>
+        </ListRow>
+      </ListGroup>
 
-          <SettingsRow label={m.us_online_status()} description={m.us_online_status_desc()}>
-            <ToggleSwitch
-              checked={userPrefs.prefs.showOnlineStatus}
-              onToggle={(v: boolean) => handleToggle('showOnlineStatus', v)}
-            />
-          </SettingsRow>
-
-          <div class="p-4 grid grid-cols-1 sm:grid-cols-2 gap-2.5 bg-surface-container-low/50">
-            <a
-              href="https://kotbo.fr/terms"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="p-3 rounded-lg border border-outline-variant bg-surface-container-lowest hover:border-outline transition-colors focus-visible:outline-2 focus-visible:outline-primary"
-            >
-              <p class="text-sm font-medium text-on-surface">{m.us_privacy_policy()}</p>
-              <p class="text-xs text-on-surface-variant mt-0.5">{m.us_privacy_policy_desc()}</p>
-            </a>
-            <a
-              href="https://kotbo.fr/cookies"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="p-3 rounded-lg border border-outline-variant bg-surface-container-lowest hover:border-outline transition-colors focus-visible:outline-2 focus-visible:outline-primary"
-            >
-              <p class="text-sm font-medium text-on-surface">{m.us_cookies()}</p>
-              <p class="text-xs text-on-surface-variant mt-0.5">{m.us_cookies_desc()}</p>
-            </a>
-            <a
-              href="mailto:privacy@kotbo.fr?subject=Demande%20RGPD%20Kotbo"
-              class="sm:col-span-2 p-3 rounded-lg border border-primary/25 bg-primary/8 hover:bg-primary/12 transition-colors focus-visible:outline-2 focus-visible:outline-primary"
-            >
-              <p class="text-sm font-medium text-primary">{m.us_gdpr_rights()}</p>
-              <p class="text-xs text-on-surface-variant mt-0.5">{m.us_gdpr_rights_desc()}</p>
-            </a>
-          </div>
-        </div>
-      </SectionCard>
+      <p class="lg:hidden px-1 text-xs text-on-surface-variant" aria-live="polite">
+        {savedFeedback ? m.us_saved_auto() : m.us_autosave()}
+      </p>
     </div>
   </div>
-
-  <!-- ─── Zone de réinitialisation ────────────────────────── -->
-  <SectionCard title={m.us_reset_zone()} description={m.us_reset_desc()} icon="AlertTriangle">
-    {#snippet actions()}
-      <Button
-        variant="danger"
-        size="sm"
-        icon="refresh-cw"
-        onclick={() => { userPrefs.reset(); themeStore.themeId = userPrefs.prefs.theme; showSavedFeedback(); toast.success(m.us_reset_done()); }}
-      >
-        {m.us_reset_button()}
-      </Button>
-    {/snippet}
-  </SectionCard>
 {/if}
 </div>
