@@ -27,8 +27,8 @@
   import DiscordEmbed from '../DiscordEmbed.svelte';
   import Papicon from '../../Papicon.svelte';
   import WizardShell from '../WizardShell.svelte';
+  import { saveInBackground } from '../../../onboarding/backgroundSave';
 
-  import { errorMessage } from '@kotbo/shared';
   const { onEditTracks, skip }: { onEditTracks: () => void; skip: () => void } = $props();
 
   const retention = $derived<RetentionKey>(wizard.retention ?? 'standard');
@@ -60,22 +60,18 @@
     RETENTIONS.find((entry) => entry.key === retention)?.days ?? 30
   );
 
-  async function apply() {
-    if (onboardingData.busy) return;
-    onboardingData.busy = true;
-    try {
-      // Deux ecritures, deux endroits : la conservation vit avec les journaux
-      // de messages, le salon de publication avec les reglages de la guilde.
-      await updateMessageLogConfig({ enabled: true, retentionDays: days });
-      await updateGlobalSettings({ logChannelId: channelId || null });
-      wizard.answer({ retention, logChannelId: channelId || null });
-      celebrateStep();
-      wizard.complete('logs');
-    } catch (err) {
-      toast.error(errorMessage(err) || m.onb_logs_save_failed());
-    } finally {
-      onboardingData.busy = false;
-    }
+  function apply() {
+    // Lus maintenant : l'ecran aura disparu quand l'ecriture partira.
+    const [retentionDays, logChannelId] = [days, channelId || null];
+    wizard.answer({ retention, logChannelId });
+    // Deux ecritures, deux endroits : la conservation vit avec les journaux
+    // de messages, le salon de publication avec les reglages de la guilde.
+    void saveInBackground('logs', async () => {
+      await updateMessageLogConfig({ enabled: true, retentionDays });
+      await updateGlobalSettings({ logChannelId });
+    }, m.onb_logs_save_failed());
+    celebrateStep();
+    wizard.next();
   }
 </script>
 

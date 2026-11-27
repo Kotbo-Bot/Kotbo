@@ -15,12 +15,13 @@
   import { wizard } from '../../../stores/onboardingWizard.svelte';
   import { onboardingData } from '../../../stores/onboardingData.svelte';
   import { celebrateStep } from '../../../onboarding';
-  import { fetchWelcomeConfig, updateWelcomeConfig } from '../../../api';
+  import { fetchWelcomeConfig } from '../../../api';
   import DiscordPreview from '../DiscordPreview.svelte';
   import Papicon from '../../Papicon.svelte';
   import WizardShell from '../WizardShell.svelte';
+  import { saveInBackground } from '../../../onboarding/backgroundSave';
+  import { saveGreeting } from '../../../onboarding/quickSetup';
 
-  import { errorMessage } from '@kotbo/shared';
   const { onEditTracks }: { onEditTracks: () => void } = $props();
 
   /** Variables Discord laissees telles quelles dans le texte. */
@@ -60,22 +61,13 @@
     })();
   });
 
-  async function apply() {
-    if (onboardingData.busy) return;
-    onboardingData.busy = true;
-    try {
-      await updateWelcomeConfig(
-        { welcomeEnabled: true, welcomeMessage: message },
-        undefined,
-        { silent: true },
-      );
-      celebrateStep();
-      wizard.complete('greeting');
-    } catch (err) {
-      toast.error(errorMessage(err) || m.onb_greeting_save_failed());
-    } finally {
-      onboardingData.busy = false;
-    }
+  function apply() {
+    // Pas encore chargé : ne pas écraser le message par du vide.
+    if (!message) return;
+    const text = message;
+    void saveInBackground('greeting', () => saveGreeting(text), m.onb_greeting_save_failed());
+    celebrateStep();
+    wizard.next();
   }
 </script>
 

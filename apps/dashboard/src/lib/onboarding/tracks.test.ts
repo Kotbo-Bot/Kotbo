@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { stepsFor, stepsOfTrack } from './steps';
+import { resumeStep, stepsFor, stepsOfTrack } from './steps';
 import { TRACKS, defaultTracks } from './tracks';
 
 describe('ce qui est coché d’office', () => {
@@ -17,16 +17,42 @@ describe('ce qui est coché d’office', () => {
     for (const paid of ['economy', 'animation', 'staff', 'mcp'] as const) expect(picked).not.toContain(paid);
   });
 
-  // Plafond à baisser quand on raccourcit le parcours, jamais à relever sans y penser.
-  test('le parcours par défaut d’un serveur neuf ne dépasse pas onze écrans', () => {
-    expect(stepsFor(defaultTracks('new'), 'new').length).toBeLessThanOrEqual(11);
+  // Plafonds à baisser quand on raccourcit le parcours, jamais à relever sans y penser.
+  test('le parcours par défaut d’un serveur neuf ne dépasse pas sept écrans', () => {
+    expect(stepsFor(defaultTracks('new'), 'new').length).toBeLessThanOrEqual(7);
+  });
+
+  test('un serveur déjà organisé ne dépasse pas neuf écrans', () => {
+    expect(stepsFor(defaultTracks('existing'), 'existing', { structured: true }).length).toBeLessThanOrEqual(9);
+  });
+});
+
+describe('installation express', () => {
+  const express = ['structure', 'moderation', 'greeting'] as const;
+
+  test('serveur neuf : démarrage, structure, mise en service', () => {
+    expect(stepsFor(express, 'new', { express: true })).toEqual(['tracks', 'structure', 'checkout']);
+  });
+
+  test('serveur habité : la reprise et le rattachement restent imposés', () => {
+    expect(stepsFor(express, 'existing', { structured: true, express: true })).toEqual([
+      'tracks', 'migration-bots', 'migration-findings', 'map-access', 'structure', 'checkout',
+    ]);
+  });
+});
+
+describe('reprise d’un parcours enregistré avant la fusion des écrans', () => {
+  test('un écran disparu renvoie à celui qui l’a absorbé', () => {
+    expect(['welcome', 'kind', 'identity', 'map-voice', 'recap', 'inconnu', null].map(resumeStep))
+      .toEqual(['tracks', 'tracks', 'theme', 'map-access', 'checkout', 'tracks', 'tracks']);
+    expect(resumeStep('rules')).toBe('rules');
   });
 });
 
 describe('nombre d’écrans annoncé', () => {
-  test('« La structure » : un écran sur un serveur vide, le mappage en plus sur un serveur habité', () => {
+  test('« La structure » : un écran sur un serveur vide, le rattachement en plus sur un serveur habité', () => {
     expect(stepsOfTrack('structure', 'new')).toEqual(['structure']);
-    expect(stepsOfTrack('structure', 'new', { structured: true })).toHaveLength(9);
+    expect(stepsOfTrack('structure', 'new', { structured: true })).toEqual(['map-access', 'structure']);
   });
 
   test('le total annoncé correspond au parcours réellement traversé', () => {

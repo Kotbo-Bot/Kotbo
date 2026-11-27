@@ -26,8 +26,8 @@
   import DiscordEmbed from '../DiscordEmbed.svelte';
   import Papicon from '../../Papicon.svelte';
   import WizardShell from '../WizardShell.svelte';
+  import { saveInBackground } from '../../../onboarding/backgroundSave';
 
-  import { errorMessage } from '@kotbo/shared';
   const { onEditTracks, skip }: { onEditTracks: () => void; skip: () => void } = $props();
 
   const channels = $derived(onboardingData.channels);
@@ -49,34 +49,25 @@
 
   const panelColor = $derived(wizard.panelColor ?? '#10B981');
 
-  async function apply() {
-    if (onboardingData.busy) return;
+  function apply() {
     if (!channelId) {
       toast.error(m.onb_drops_channel_required());
       return;
     }
-
-    onboardingData.busy = true;
-    try {
+    const [dropChannelId, intervalMinutes] = [channelId, interval];
+    wizard.answer({ dropRhythm: rhythm, dropChannelId });
+    void saveInBackground('animation-drops', async () => {
       await updateDropGlobalSettings({
         dropsEnabled: true,
-        dropChannelId: channelId,
+        dropChannelId,
         // Une heure pour reagir : assez pour qu'un drop de nuit trouve preneur
         // au reveil, assez court pour qu'il ne traine pas trois jours.
         dropLifetimeMinutes: 60,
       });
-      await updateDropTypeSettings('XP', {
-        enabled: true,
-        intervalMinutes: interval,
-      });
-      wizard.answer({ dropRhythm: rhythm, dropChannelId: channelId });
-      celebrateStep();
-      wizard.complete('animation-drops');
-    } catch (err) {
-      toast.error(errorMessage(err) || m.onb_drops_save_failed());
-    } finally {
-      onboardingData.busy = false;
-    }
+      await updateDropTypeSettings('XP', { enabled: true, intervalMinutes });
+    }, m.onb_drops_save_failed());
+    celebrateStep();
+    wizard.next();
   }
 </script>
 

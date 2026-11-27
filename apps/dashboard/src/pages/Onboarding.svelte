@@ -34,14 +34,11 @@
   import { onboardingData } from '../lib/stores/onboardingData.svelte';
   import { globalNotice } from '../lib/stores/globalNotice.svelte';
   import KotboMark from '../lib/components/onboarding/KotboMark.svelte';
-  import { MAPPING_STEPS, defaultMapping, type MappingState, type ThemeKey } from '../lib/onboarding';
+  import { defaultMapping, type MappingState, type ThemeKey } from '../lib/onboarding';
 
-  import WelcomeStep from '../lib/components/onboarding/steps/WelcomeStep.svelte';
-  import KindStep from '../lib/components/onboarding/steps/KindStep.svelte';
   import MigrationBotsStep from '../lib/components/onboarding/steps/MigrationBotsStep.svelte';
   import MigrationFindingsStep from '../lib/components/onboarding/steps/MigrationFindingsStep.svelte';
   import TracksStep from '../lib/components/onboarding/steps/TracksStep.svelte';
-  import IdentityStep from '../lib/components/onboarding/steps/IdentityStep.svelte';
   import ThemeStep from '../lib/components/onboarding/steps/ThemeStep.svelte';
   import TicketsStep from '../lib/components/onboarding/steps/TicketsStep.svelte';
   import MappingStep from '../lib/components/onboarding/steps/MappingStep.svelte';
@@ -57,7 +54,6 @@
   import QuestsStep from '../lib/components/onboarding/steps/QuestsStep.svelte';
   import DropsStep from '../lib/components/onboarding/steps/DropsStep.svelte';
   import McpStep from '../lib/components/onboarding/steps/McpStep.svelte';
-  import RecapStep from '../lib/components/onboarding/steps/RecapStep.svelte';
   import CheckoutStep from '../lib/components/onboarding/steps/CheckoutStep.svelte';
 
   import { errorMessage, errorStatus } from '@kotbo/shared';
@@ -196,25 +192,17 @@
     </button>
   </div>
 
-{:else if wizard.step === 'welcome'}
-  <WelcomeStep />
-{:else if wizard.step === 'kind'}
-  <KindStep />
+{:else if wizard.step === 'tracks'}
+  <TracksStep />
 {:else if wizard.step === 'migration-bots'}
   <MigrationBotsStep />
 {:else if wizard.step === 'migration-findings'}
   <MigrationFindingsStep {skip} />
-{:else if wizard.step === 'tracks'}
-  <TracksStep />
-{:else if wizard.step === 'identity'}
-  <IdentityStep onEditTracks={editTracks} />
 {:else if wizard.step === 'theme'}
   <ThemeStep onEditTracks={editTracks} />
 {:else if wizard.step === 'tickets'}
   <TicketsStep onEditTracks={editTracks} {skip} />
-{:else if MAPPING_STEPS.includes(wizard.step)}
-  <!-- Un composant pour tous : les ecrans de mappage ne different que par la
-       section qu'ils interrogent, et c'est `wizard.step` qui la designe. -->
+{:else if wizard.step === 'map-access'}
   <MappingStep onEditTracks={editTracks} {skip} />
 {:else if wizard.step === 'structure'}
   <StructureStep onEditTracks={editTracks} {skip} />
@@ -240,8 +228,6 @@
   <DropsStep onEditTracks={editTracks} {skip} />
 {:else if wizard.step === 'mcp'}
   <McpStep onEditTracks={editTracks} {skip} />
-{:else if wizard.step === 'recap'}
-  <RecapStep onEditTracks={editTracks} />
 {:else}
   <CheckoutStep onEditTracks={editTracks} />
 {/if}

@@ -48,7 +48,7 @@
     const last = lastActive();
     visible = last !== null
       && Date.now() - last > AWAY_MS
-      && wizard.step !== 'welcome'
+      && wizard.step !== 'tracks'
       && wizard.step !== 'checkout';
     touch();
   });

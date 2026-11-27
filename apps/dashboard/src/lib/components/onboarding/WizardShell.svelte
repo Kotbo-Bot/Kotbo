@@ -38,6 +38,7 @@
   import { completeOnboarding } from '../../api';
   import { dashboardStore } from '../../stores/dashboard.svelte';
   import { toast } from '../../stores/toast.svelte';
+  import { settleSaves } from '../../onboarding/backgroundSave';
 
   const {
     title,
@@ -110,18 +111,31 @@
 
   let soundOn = $state(sound.enabled);
 
+  let footerEl = $state<HTMLElement>();
+
+  /** Entrée = l'action principale, sauf quand le focus a déjà son propre usage. */
+  function onkeydown(event: KeyboardEvent) {
+    if (event.key !== 'Enter' || event.repeat || event.defaultPrevented) return;
+    if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
+    const target = event.target as HTMLElement | null;
+    if (target?.closest('a, button, input, textarea, select, summary, [contenteditable="true"], [role="dialog"]')) return;
+    footerEl?.querySelector<HTMLButtonElement>('.btn-primary:not(:disabled)')?.click();
+  }
+
   /**
    * Quitter sans perdre : ce qui est validé est déjà écrit, le tableau de bord
    * propose de finir le reste. Sans cette sortie, on ferme l'onglet.
-   * L'accueil a son propre bouton, la mise en service est déjà la fin.
+   * La mise en service est déjà la fin.
    */
-  const canDefer = $derived(wizard.step !== 'welcome' && wizard.step !== 'checkout');
+  const canDefer = $derived(wizard.step !== 'checkout');
   let deferring = $state(false);
 
   async function defer() {
     if (deferring) return;
     deferring = true;
     try {
+      // Au mieux : un échec ne doit pas retenir quelqu'un qui veut partir.
+      await settleSaves();
       await completeOnboarding(undefined, { deferred: true });
       await dashboardStore.refresh();
       router.goto('/');
@@ -139,10 +153,13 @@
   );
 </script>
 
+<svelte:window {onkeydown} />
+
 <div class="min-h-screen bg-background text-on-background flex flex-col">
   <!-- ── En-tête : identité, serveur, sortie ──────────────────────────────── -->
   <header class="shrink-0 border-b border-outline-variant bg-surface-container-lowest/70 backdrop-blur-md">
-    <div class="mx-auto w-full {frame} px-6 py-3.5 flex items-center justify-between gap-4 transition-[max-width] duration-300">
+    <!-- Largeur fixe : dans le cadre étroit, les boutons recouvraient le nom du serveur. -->
+    <div class="mx-auto w-full max-w-5xl px-4 sm:px-6 py-3.5 flex items-center justify-between gap-3">
       <div class="flex items-center gap-2.5 min-w-0">
         <KotboMark size={26} />
         <span class="hidden sm:inline font-semibold tracking-tight text-on-surface shrink-0">Kotbo</span>
@@ -317,7 +334,7 @@
 
   <!-- ── Pied : retour et action ──────────────────────────────────────────── -->
   <!-- Collé en bas : sur un écran long, « Continuer » ne doit pas se chercher. -->
-  <footer class="wizard-footer shrink-0 border-t border-outline-variant bg-surface-container-lowest/90 backdrop-blur-md">
+  <footer bind:this={footerEl} class="wizard-footer shrink-0 border-t border-outline-variant bg-surface-container-lowest/90 backdrop-blur-md">
     <div class="mx-auto w-full {frame} px-4 sm:px-6 py-3 sm:py-4 flex flex-wrap items-center justify-between gap-2 sm:gap-4 transition-[max-width] duration-300">
       {#if canGoBack && !wizard.isFirst}
         <button

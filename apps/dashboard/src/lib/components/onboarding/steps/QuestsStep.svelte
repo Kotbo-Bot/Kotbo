@@ -25,8 +25,8 @@
   import DiscordEmbed from '../DiscordEmbed.svelte';
   import Papicon from '../../Papicon.svelte';
   import WizardShell from '../WizardShell.svelte';
+  import { saveInBackground } from '../../../onboarding/backgroundSave';
 
-  import { errorMessage } from '@kotbo/shared';
   const { onEditTracks, skip }: { onEditTracks: () => void; skip: () => void } = $props();
 
   const selection = $derived(
@@ -45,18 +45,20 @@
     });
   }
 
-  async function apply() {
-    if (onboardingData.busy) return;
+  function apply() {
     if (chosen.length === 0) {
       wizard.complete('animation');
       return;
     }
-
-    onboardingData.busy = true;
-    try {
+    const quests = [...chosen];
+    wizard.answer({ questKeys: [...selection] });
+    // Ce qui est passe ne se recree pas quand on reessaie.
+    const created = new Set<string>();
+    void saveInBackground('animation', async () => {
       // En serie, comme le reglement : la route relit la liste a chaque
       // creation, et deux ecritures concurrentes se disputeraient l'ordre.
-      for (const quest of chosen) {
+      for (const quest of quests) {
+        if (created.has(quest.name)) continue;
         await saveQuest({
           name: quest.name,
           description: quest.description,
@@ -66,15 +68,11 @@
           rewardCoins: quest.rewardCoins,
           rewards: quest.rewardXp > 0 ? [{ type: 'LEVEL_XP', amount: quest.rewardXp }] : [],
         });
+        created.add(quest.name);
       }
-      wizard.answer({ questKeys: selection });
-      celebrateStep();
-      wizard.complete('animation');
-    } catch (err) {
-      toast.error(errorMessage(err) || m.onb_quests_save_failed());
-    } finally {
-      onboardingData.busy = false;
-    }
+    }, m.onb_quests_save_failed());
+    celebrateStep();
+    wizard.next();
   }
 </script>
 

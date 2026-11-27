@@ -301,9 +301,11 @@ export type AnalyticsDimension = (typeof ANALYTICS_DIMENSIONS)[number];
 export const ONBOARDING_STEPS = [
   'welcome',
   'kind',
+  // Premier écran depuis la fusion avec `welcome`, `kind` et `identity`. Les
+  // écrans fusionnés restent dans la liste : les données déjà mesurées les citent.
+  'tracks',
   'migration-bots',
   'migration-findings',
-  'tracks',
   'identity',
   'theme',
   'tickets',

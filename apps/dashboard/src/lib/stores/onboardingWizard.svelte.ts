@@ -24,6 +24,8 @@ import {
   WIZARD_STEPS,
   defaultTracks,
   stepsFor,
+  resumeStep,
+  stepDefinition,
   type DropRhythm,
   type EconomyRhythm,
   type LevelRhythm,
@@ -89,12 +91,14 @@ type WizardState = {
    * mesurer ce qu'on vient de faire.
    */
   startedAt: number | null;
+  /** Installation express : les ecrans que Kotbo regle seul sont retires. */
+  express: boolean;
   /** Etapes validees, pour ne pas redemander ce qui a deja ete ecrit. */
   done: WizardStep[];
 };
 
 const DEFAULT_STATE: WizardState = {
-  step: 'welcome',
+  step: 'tracks',
   kind: null,
   tracks: null,
   theme: null,
@@ -116,6 +120,7 @@ const DEFAULT_STATE: WizardState = {
   dropChannelId: null,
   mcpScope: null,
   startedAt: null,
+  express: false,
   done: [],
 };
 
@@ -148,11 +153,10 @@ function sanitize(parsed: unknown): WizardState {
     done: (stringArray(raw.done) ?? []).filter(
       (entry): entry is WizardStep => (WIZARD_STEPS as readonly string[]).includes(entry),
     ),
-    // Une etape inconnue - parcours renomme depuis - ramene au debut plutot
-    // que de laisser la page sur un ecran qui n'existe plus.
-    step: (WIZARD_STEPS as readonly string[]).includes(raw.step as string)
-      ? (raw.step as WizardStep)
-      : 'welcome',
+    express: raw.express === true,
+    // Un ecran disparu - parcours renomme ou fusionne depuis - ramene a celui
+    // qui l'a absorbe plutot que de laisser la page sur un ecran qui n'existe plus.
+    step: resumeStep(raw.step),
   };
 }
 
@@ -269,12 +273,16 @@ export const wizard = {
 
   /** Les ecrans reellement traverses, dans l'ordre. */
   get steps(): WizardStep[] {
-    return stepsFor(this.tracks, state.kind ?? 'new', { structured: state.structured === true });
+    return stepsFor(this.tracks, state.kind ?? 'new', {
+      structured: state.structured === true,
+      express: state.express,
+    });
   },
 
   get index() { return this.steps.indexOf(state.step); },
   get total() { return this.steps.length; },
   get isFirst() { return this.index <= 0; },
+  get express() { return state.express; },
 
   isDone(step: WizardStep): boolean {
     return state.done.includes(step);
@@ -320,8 +328,10 @@ export const wizard = {
   next(): void {
     const steps = this.steps;
     const at = steps.indexOf(state.step);
-    if (at < 0 || at >= steps.length - 1) return;
-    state.step = steps[at + 1];
+    if (at >= steps.length - 1) return;
+    // Ecran sorti du parcours (rattachement relu sur un serveur qui n'a plus
+    // rien a rapprocher) : repartir du debut plutot que de rester bloque.
+    state.step = at < 0 ? steps[0] : steps[at + 1];
     writeState(guildId, state);
   },
 
@@ -333,10 +343,15 @@ export const wizard = {
     writeState(guildId, state);
   },
 
-  /** Marque l'etape ecrite, puis passe a la suivante. */
-  complete(step: WizardStep): void {
+  /** Marque l'etape ecrite, sans bouger (enregistrement en arriere-plan). */
+  markDone(step: WizardStep): void {
     if (!state.done.includes(step)) state.done = [...state.done, step];
     writeState(guildId, state);
+  },
+
+  /** Marque l'etape ecrite, puis passe a la suivante. */
+  complete(step: WizardStep): void {
+    this.markDone(step);
     this.next();
   },
 
@@ -372,14 +387,16 @@ export const wizard = {
    * se passerait. En retirer une alors qu'on est dessus ramene a l'ecran de
    * selection, seul endroit dont on est sur qu'il existe encore.
    */
-  setTracks(tracks: TrackKey[], options: { gotoFirstOf?: TrackKey } = {}): void {
+  setTracks(tracks: TrackKey[], options: { gotoFirstOf?: TrackKey; express?: boolean } = {}): void {
     state.tracks = [...tracks];
+    state.express = options.express === true;
 
     if (options.gotoFirstOf) {
-      const target = stepsFor(tracks, state.kind ?? 'new', { structured: state.structured === true })
-        .find((step) => !state.done.includes(step) && step !== 'recap' && step !== 'checkout');
+      const target = this.steps.find(
+        (step) => !state.done.includes(step) && stepDefinition(step).track === options.gotoFirstOf,
+      );
       if (target) state.step = target;
-    } else if (!stepsFor(tracks, state.kind ?? 'new', { structured: state.structured === true }).includes(state.step)) {
+    } else if (!this.steps.includes(state.step)) {
       state.step = 'tracks';
     }
 

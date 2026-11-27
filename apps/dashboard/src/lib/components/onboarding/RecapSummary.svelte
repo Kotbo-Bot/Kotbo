@@ -1,6 +1,6 @@
 <script lang="ts">
   /**
-   * « Voila votre serveur. »
+   * « Voila votre serveur. » : le bilan, en tete de la mise en service.
    *
    * Le dernier ecran avant le paiement etait une liste de reglages effectues,
    * posee au-dessus d'une offre. C'est l'ordre inverse de ce qu'il faudrait :
@@ -19,27 +19,17 @@
    * que Kotbo faisait ; ici, il le sait.
    */
   import { onMount } from 'svelte';
-  import { m } from '../../../i18n';
-  import { authStore } from '../../../stores/auth.svelte';
-  import { wizard } from '../../../stores/onboardingWizard.svelte';
-  import { onboardingData } from '../../../stores/onboardingData.svelte';
+  import { m } from '../../i18n';
+  import { wizard } from '../../stores/onboardingWizard.svelte';
+  import { onboardingData } from '../../stores/onboardingData.svelte';
   import {
     TRACKS,
     celebrateFinale,
     dormantModules,
-    stepsOfTrack,
     type TrackKey,
-  } from '../../../onboarding';
-  import CountUp from '../CountUp.svelte';
-  import KotboMark from '../KotboMark.svelte';
-  import Papicon from '../../Papicon.svelte';
-  import WizardShell from '../WizardShell.svelte';
-
-  const { onEditTracks }: { onEditTracks: () => void } = $props();
-
-  const selectedGuild = $derived(
-    authStore.guilds.find((guild) => guild.id === authStore.selectedGuildId)
-  );
+  } from '../../onboarding';
+  import CountUp from './CountUp.svelte';
+  import Papicon from '../Papicon.svelte';
 
   const built = $derived(onboardingData.built);
 
@@ -130,21 +120,10 @@
   }
 </script>
 
-<WizardShell {onEditTracks}>
-  <div class="text-center">
-    <KotboMark size={54} halo class="mx-auto" />
-
-    <h1 class="mt-6 text-3xl sm:text-[38px] leading-tight font-semibold tracking-tight text-on-surface font-headline">
-      {m.onb_recap_title()}
-    </h1>
-    <p class="mt-3 text-[15.5px] text-on-surface-variant">
-      {m.onb_recap_lead({ server: selectedGuild?.name ?? m.obx_rc_your_server() })}
-    </p>
-  </div>
-
+<div class="mb-8">
   {#if built}
     <!-- Les chiffres, en grand : c'est ce qu'on vient de voir se poser. -->
-    <div class="mt-10 grid grid-cols-2 sm:grid-cols-4 gap-3">
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
       {#each [
         { value: built.roles, label: m.onb_recap_roles(), icon: 'shield' },
         { value: built.categories, label: m.onb_recap_categories(), icon: 'folder' },
@@ -212,51 +191,44 @@
   {/if}
 
   {#if missing.length}
-    <!-- La seconde chance. Quelqu'un qui a decoche « L'economie » a l'ecran 3
-         ne savait pas encore ce que Kotbo faisait ; ici, il le sait. -->
-    <section class="mt-10">
-      <h2 class="text-body-sm font-semibold text-on-surface">{m.onb_recap_missing_title()}</h2>
-      <p class="mt-1 text-xs text-on-surface-variant">{m.onb_recap_missing_hint()}</p>
+    <!-- La seconde chance, repliee : depliee, elle repoussait la mise en
+         service huit cartes plus bas. -->
+    <details class="section-card-flush mt-6">
+      <summary class="list-row list-row--pressable">
+        <span class="list-row__text">
+          <span class="icon-disc" aria-hidden="true"><Papicon icon="plus" size={15} /></span>
+          <span class="min-w-0">
+            <span class="list-row__label">{m.onb_recap_missing_title()} ({missing.length})</span>
+            <span class="list-row__desc">{m.onb_recap_missing_hint()}</span>
+          </span>
+        </span>
+        <Papicon icon="chevron-down" size={15} class="shrink-0 text-on-surface-variant" />
+      </summary>
 
-      <div class="mt-3 grid gap-2.5 sm:grid-cols-2">
+      <div class="list-rows border-t border-outline-variant">
         {#each missing as track (track.key)}
-          <div class="flex items-start gap-3 rounded-2xl border border-outline-variant/25 bg-surface-container-lowest/25 p-3.5">
-            <span class="w-8 h-8 shrink-0 rounded-lg bg-surface-container text-on-surface-variant/45 flex items-center justify-center">
-              <Papicon icon={track.icon} size={15} />
+          <div class="list-row">
+            <span class="list-row__text">
+              <span class="icon-disc" aria-hidden="true"><Papicon icon={track.icon} size={15} /></span>
+              <span class="min-w-0">
+                <span class="list-row__label">{track.label()}</span>
+                <span class="list-row__desc">{track.outcome()}</span>
+              </span>
             </span>
-            <div class="min-w-0 flex-1">
-              <p class="text-body-sm font-semibold text-on-surface-variant/75">{track.label()}</p>
-              <p class="mt-0.5 text-xs text-on-surface-variant leading-relaxed">{track.outcome()}</p>
-            </div>
             <button
               type="button"
               onclick={() => addTrack(track.key)}
-              class="shrink-0 self-center inline-flex items-center gap-1 rounded-lg border border-primary/35 px-2.5 py-1.5
-                     text-xs font-semibold text-primary hover:bg-primary/10 transition-colors"
+              class="btn btn-tonal btn-sm"
+              aria-label="{m.onb_recap_add()} : {track.label()}"
             >
-              <Papicon icon="plus" size={11} />
               {m.onb_recap_add()}
-              <span class="text-on-surface-variant/40 font-medium">
-                · {m.onb_tracks_screens({ count: stepsOfTrack(track.key, wizard.kind ?? 'new', { structured: wizard.structured }).length })}
-              </span>
             </button>
           </div>
         {/each}
       </div>
-    </section>
+    </details>
   {/if}
-
-  {#snippet footer()}
-    <button
-      type="button"
-      onclick={() => wizard.complete('recap')}
-      class="btn btn-primary"
-    >
-      {m.onb_recap_continue()}
-      <Papicon icon="ChevronRight" size={15} />
-    </button>
-  {/snippet}
-</WizardShell>
+</div>
 
 <style>
   .row {

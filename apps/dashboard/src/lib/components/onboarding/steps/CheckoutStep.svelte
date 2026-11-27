@@ -22,7 +22,10 @@
   import { activateGuildWithCode, completeOnboarding, startCheckout } from '../../../api';
   import type { BillingInterval } from '../../../api/billing';
   import { trackOf, type TrackKey } from '../../../onboarding';
-  import KotboMark from '../KotboMark.svelte';
+  import { onMount } from 'svelte';
+  import RecapSummary from '../RecapSummary.svelte';
+  import { applyExpress } from '../../../onboarding/quickSetup';
+  import { settleSaves } from '../../../onboarding/backgroundSave';
   import Papicon from '../../Papicon.svelte';
   import WizardShell from '../WizardShell.svelte';
 
@@ -68,18 +71,9 @@
   }
 
   const billing = $derived(onboardingData.billing);
-  const selectedGuild = $derived(
-    authStore.guilds.find((guild) => guild.id === authStore.selectedGuildId)
-  );
-  const guildIconUrl = $derived(
-    selectedGuild?.icon
-      ? `https://cdn.discordapp.com/icons/${selectedGuild.id}/${selectedGuild.icon}.png?size=128`
-      : null
-  );
-
   /** L'offre proposee, deduite de ce que l'instance sait vendre. */
   const offer = $derived(
-    billing?.plans.find((card) => card.purchasable && card.key !== 'FREE') ?? null
+    billing?.plans?.find((card) => card.purchasable && card.key !== 'FREE') ?? null
   );
 
   /**
@@ -95,7 +89,7 @@
   );
 
   // Essai gratuit de 15 jours offert à toute première souscription éligible.
-  const trialDays = $derived(billing?.trial.available ? billing.trial.days : 0);
+  const trialDays = $derived(billing?.trial?.available ? billing.trial.days : 0);
 
   const PRO_TRACK_KEYS: TrackKey[] = ['economy', 'animation', 'staff', 'mcp', 'logs'];
   const configuredProTracks = $derived(
@@ -130,9 +124,21 @@
     return (cents / 100).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' });
   }
 
+  onMount(() => {
+    if (wizard.express) applyExpress();
+  });
+
+  /** Rien ne doit se perdre en quittant le parcours (paiement compris). */
+  async function saved(): Promise<boolean> {
+    const ok = await settleSaves();
+    if (!ok) toast.error(m.onb_save_pending_failed());
+    return ok;
+  }
+
   async function goToCheckout() {
     if (onboardingData.busy || !offer) return;
     onboardingData.busy = true;
+    if (!(await saved())) { onboardingData.busy = false; return; }
     let url: string | null = null;
     try {
       url = await startCheckout(offer.key as 'PLUS' | 'PRO' | 'ULTIMATE', effectiveInterval, referralCode || undefined);
@@ -162,6 +168,7 @@
     if (onboardingData.busy) return;
     onboardingData.busy = true;
     try {
+      if (!(await saved())) return;
       await completeOnboarding();
       wizard.complete('checkout');
       // Le drapeau `onboardingRequired` vient du bot : sans relecture, la page
@@ -181,20 +188,7 @@
   lead={m.obx_co_lead()}
   {onEditTracks}
 >
-  <div class="flex items-center gap-3.5 rounded-2xl border border-primary/35 bg-primary/[0.04] px-5 py-4 mb-5">
-    {#if guildIconUrl}
-      <img src={guildIconUrl} alt="" class="w-12 h-12 rounded-2xl object-cover shrink-0" />
-    {:else}
-      <div class="w-12 h-12 rounded-2xl bg-surface-container flex items-center justify-center text-base font-bold text-on-surface-variant shrink-0">
-        {(selectedGuild?.name ?? '?').slice(0, 1).toUpperCase()}
-      </div>
-    {/if}
-    <div class="min-w-0">
-      <p class="text-[15px] font-semibold text-on-surface truncate">{selectedGuild?.name ?? m.obx_co_your_server()}</p>
-      <p class="text-xs text-on-surface-variant">{m.obx_co_configured()}</p>
-    </div>
-    <KotboMark size={28} class="ml-auto shrink-0" />
-  </div>
+  <RecapSummary />
 
   {#if billing && !billing.enabled}
     <div class="rounded-2xl border border-outline-variant/30 bg-surface-container-low/40 p-5">
@@ -353,7 +347,7 @@
         type="button"
         onclick={finishWithoutBilling}
         disabled={onboardingData.busy}
-        class="btn btn-secondary"
+        class="btn btn-tonal"
       >
         {m.obx_co_free()}
       </button>

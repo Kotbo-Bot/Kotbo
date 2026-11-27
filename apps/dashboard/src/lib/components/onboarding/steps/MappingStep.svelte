@@ -1,7 +1,12 @@
 <script lang="ts">
   import { m } from '../../../i18n';
   /**
-   * « Quel salon est quoi ? », section par section.
+   * « Quel salon est quoi ? », sur un seul ecran.
+   *
+   * Huit ecrans se suivaient, un par section, pour confirmer presque partout ce
+   * que Kotbo avait reconnu. Tout est maintenant pre-rempli et « Continuer »
+   * accepte l'ensemble ; une section ne s'ouvre d'office que si elle porte une
+   * ligne a creer, les seules qui meritent un regard.
    *
    * Le seul ecran du parcours ou c'est le serveur qui parle et Kotbo qui
    * ecoute. Avant lui, la reprise procedait par ressemblance de noms : ce
@@ -29,7 +34,7 @@
     dormantModules,
     isSkippable,
     linesOf,
-    mappingScreen,
+    screensFor,
     type MappingDecision,
     type ThemeKey,
   } from '../../../onboarding';
@@ -41,15 +46,22 @@
 
   const template = $derived(onboardingData.template);
   const theme = $derived<ThemeKey>(wizard.theme ?? 'communaute');
-  const screen = $derived(mappingScreen(wizard.step));
   const mapping = $derived(wizard.mapping);
   const matches = $derived(template?.matches ?? {});
 
-  const lines = $derived(
-    template && screen ? linesOf(template.plan, screen, theme) : []
+  const sections = $derived(
+    (template ? screensFor(template.plan, theme) : []).map((screen) => {
+      const lines = linesOf(template!.plan, screen, theme);
+      return {
+        screen,
+        category: lines.find((line) => line.kind === 'category') ?? null,
+        contents: lines.filter((line) => line.kind !== 'category'),
+      };
+    }),
   );
-  const category = $derived(lines.find((line) => line.kind === 'category') ?? null);
-  const contents = $derived(lines.filter((line) => line.kind !== 'category'));
+  const contents = $derived(sections.flatMap((section) => section.contents));
+
+  type Section = (typeof sections)[number];
 
   const decisionOf = (key: string): MappingDecision =>
     mapping[key] ?? { mode: 'create', id: null };
@@ -120,7 +132,7 @@
     return decision.mode === 'adopt' && decision.id ? `adopt:${decision.id}` : decision.mode;
   };
 
-  function choose(item: ServerTemplatePlanItem, raw: string): void {
+  function choose(section: Section, item: ServerTemplatePlanItem, raw: string): void {
     if (raw.startsWith('adopt:')) {
       wizard.decide(item.key, { mode: 'adopt', id: raw.slice(6) });
     } else if (raw === 'skip') {
@@ -128,7 +140,7 @@
     } else {
       wizard.decide(item.key, { mode: 'create', id: null });
     }
-    syncCategory();
+    syncCategory(section);
   }
 
   /**
@@ -139,7 +151,7 @@
    * decochee quand un salon y va serait un ecran qui raconte autre chose que ce
    * qui se passe. On la deduit donc, on ne la demande pas.
    */
-  function syncCategory(): void {
+  function syncCategory({ category, contents }: Section): void {
     if (!category) return;
     const anyKept = contents.some((line) => decisionOf(line.key).mode !== 'skip');
     const current = decisionOf(category.key);
@@ -152,8 +164,8 @@
     }
   }
 
-  /** Ou atterrira ce que cet ecran cree. */
-  const destination = $derived.by(() => {
+  /** Ou atterrira ce qu'une section cree. */
+  function destinationOf(category: ServerTemplatePlanItem | null): string {
     if (!category) return m.obx_mp_root();
     const decision = decisionOf(category.key);
     if (decision.mode === 'skip') return m.obx_mp_root();
@@ -162,6 +174,21 @@
       return found ? m.obx_mp_in({ name: found.name }) : m.obx_mp_in_chosen();
     }
     return m.obx_mp_in_new({ name: category.name });
+  }
+
+  const countOf = (lines: ServerTemplatePlanItem[], mode: MappingDecision['mode']) =>
+    lines.filter((line) => decisionOf(line.key).mode === mode).length;
+
+  /**
+   * Les sections ouvertes d'office, figees a la premiere lecture : une section
+   * qui se refermerait sous le doigt pendant qu'on la regle serait pire.
+   */
+  let initiallyOpen = $state<Set<string> | null>(null);
+  $effect(() => {
+    if (initiallyOpen || sections.length === 0) return;
+    initiallyOpen = new Set(
+      sections.filter((section) => countOf(section.contents, 'create') > 0).map((section) => section.screen.step),
+    );
   });
 
   /** Les modules que les lignes ecartees de cet ecran laisseront eteints. */
@@ -173,19 +200,37 @@
       : []
   );
 
-  const tally = $derived({
-    adopted: contents.filter((line) => decisionOf(line.key).mode === 'adopt').length,
-    created: contents.filter((line) => decisionOf(line.key).mode === 'create').length,
-    skipped: contents.filter((line) => decisionOf(line.key).mode === 'skip').length,
-  });
+  const summary = (lines: ServerTemplatePlanItem[]) =>
+    m.onb_map_tally({
+      adopted: countOf(lines, 'adopt'),
+      created: countOf(lines, 'create'),
+      skipped: countOf(lines, 'skip'),
+    });
 </script>
 
 <WizardShell
-  title={screen?.title}
-  lead={screen?.lead}
+  title={m.onb_map_title()}
+  lead={m.onb_map_lead()}
   {onEditTracks}
 >
-  <div class="space-y-5">
+  <div class="space-y-3">
+    <p class="text-sm font-semibold text-on-surface" aria-live="polite">{summary(contents)}</p>
+
+    {#each sections as section (section.screen.step)}
+      {@const category = section.category}
+      <details class="section-card-flush" open={initiallyOpen?.has(section.screen.step)}>
+        <summary class="list-row list-row--pressable">
+          <span class="list-row__text">
+            <span class="icon-disc" aria-hidden="true"><Papicon icon={section.screen.icon} size={15} /></span>
+            <span class="min-w-0">
+              <span class="list-row__label">{section.screen.title}</span>
+              <span class="list-row__desc">{summary(section.contents)}</span>
+            </span>
+          </span>
+          <Papicon icon="chevron-down" size={15} class="shrink-0 text-on-surface-variant" />
+        </summary>
+
+        <div class="space-y-3 border-t border-outline-variant p-3">
     <!-- ── La catégorie : où tout ça vit ─────────────────────────────────── -->
     {#if category}
       {@const locked = isLocked(category.key)}
@@ -209,7 +254,7 @@
           <select aria-label={m.obx_mp_category()}
             value={valueOf(category.key)}
             disabled={locked}
-            onchange={(event) => choose(category, event.currentTarget.value)}
+            onchange={(event) => choose(section, category, event.currentTarget.value)}
             class="w-full rounded-lg border border-field-border bg-surface-container-lowest/60 px-3 py-2 text-body-sm text-on-surface disabled:opacity-50"
           >
             <optgroup label={m.obx_mp_server_categories()}>
@@ -229,7 +274,7 @@
 
     <!-- ── Les lignes ────────────────────────────────────────────────────── -->
     <div class="space-y-2.5">
-      {#each contents as line (line.key)}
+      {#each section.contents as line (line.key)}
         {@const locked = isLocked(line.key)}
         {@const decision = decisionOf(line.key)}
         <div
@@ -260,7 +305,7 @@
                 </p>
               {:else if decision.mode === 'create'}
                 <p class="mt-1 text-2xs text-on-surface-variant/45">
-                  {m.obx_mp_will_create({ where: destination })}
+                  {m.obx_mp_will_create({ where: destinationOf(category) })}
                 </p>
               {/if}
             </div>
@@ -268,7 +313,7 @@
             <select aria-label={line.name}
               value={valueOf(line.key)}
               disabled={locked}
-              onchange={(event) => choose(line, event.currentTarget.value)}
+              onchange={(event) => choose(section, line, event.currentTarget.value)}
               class="shrink-0 w-[15.5rem] max-w-[52%] rounded-lg border border-field-border bg-surface-container-lowest/60 px-3 py-2 text-body-sm text-on-surface disabled:opacity-50"
             >
               <optgroup label={line.kind === 'role' ? m.obx_mp_server_roles() : m.obx_mp_server_channels()}>
@@ -290,6 +335,10 @@
       {/each}
     </div>
 
+        </div>
+      </details>
+    {/each}
+
     {#if dormant.length > 0}
       <!-- Ecarter une ligne est un choix legitime ; le faire sans savoir ce qui
            s'eteint avec elle ne l'est pas. -->
@@ -303,54 +352,6 @@
     {/if}
   </div>
 
-  {#snippet preview()}
-    <div class="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest/50 overflow-hidden">
-      <div class="px-4 py-2.5 border-b border-outline-variant/20 flex items-center gap-2">
-        <Papicon icon="list" size={12} class="text-on-surface-variant/40" />
-        <span class="text-xs font-semibold text-on-surface">{m.obx_mp_result()}</span>
-      </div>
-
-      <div class="p-3 space-y-1">
-        {#if category && decisionOf(category.key).mode !== 'skip'}
-          <p class="px-1 pb-1 text-xs font-semibold text-on-surface-variant/40 truncate">
-            {decisionOf(category.key).mode === 'adopt'
-              ? template?.inventory.channels.find((c) => c.id === decisionOf(category.key).id)?.name ?? category.name
-              : category.name}
-          </p>
-        {/if}
-
-        {#each contents as line (line.key)}
-          {@const decision = decisionOf(line.key)}
-          {@const adopted = decision.mode === 'adopt'
-            ? (line.kind === 'role'
-                ? template?.inventory.roles.find((r) => r.id === decision.id)?.name
-                : template?.inventory.channels.find((c) => c.id === decision.id)?.name)
-            : null}
-          <p class="flex items-center gap-2 px-1 text-body-sm">
-            {#if decision.mode === 'skip'}
-              <Papicon icon="minus" size={11} class="shrink-0 text-on-surface-variant/30" />
-              <span class="truncate text-on-surface-variant/35 line-through">{line.name}</span>
-            {:else if decision.mode === 'adopt'}
-              <Papicon icon="link" size={11} class="shrink-0 text-primary/70" />
-              <span class="truncate text-on-surface-variant/85">{adopted ?? line.name}</span>
-              <span class="shrink-0 text-2xs text-on-surface-variant/40">{m.obx_mp_linked()}</span>
-            {:else}
-              <Papicon icon="plus" size={11} class="shrink-0 text-success" />
-              <span class="truncate text-on-surface-variant/85">{line.name}</span>
-              <span class="shrink-0 text-2xs text-success/70">{m.obx_mp_new()}</span>
-            {/if}
-          </p>
-        {/each}
-      </div>
-
-      <div class="px-4 py-2.5 border-t border-outline-variant/20 text-2xs text-on-surface-variant/55">
-        {tally.adopted} relié{tally.adopted > 1 ? 's' : ''} ·
-        {tally.created} à créer ·
-        {tally.skipped} laissé{tally.skipped > 1 ? 's' : ''} de côté
-      </div>
-    </div>
-  {/snippet}
-
   {#snippet footer()}
     {#if skip}
       <button
@@ -363,10 +364,10 @@
     {/if}
     <button
       type="button"
-      onclick={() => wizard.complete(wizard.step)}
+      onclick={() => wizard.complete('map-access')}
       class="btn btn-primary"
     >
-      {m.obx_continue()}
+      {m.onb_map_accept()}
       <Papicon icon="ChevronRight" size={15} />
     </button>
   {/snippet}

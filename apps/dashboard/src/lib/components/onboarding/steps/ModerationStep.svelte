@@ -17,36 +17,22 @@
   import { wizard } from '../../../stores/onboardingWizard.svelte';
   import { onboardingData } from '../../../stores/onboardingData.svelte';
   import { MODERATION_LEVELS, celebrateStep, type ModerationLevel } from '../../../onboarding';
-  import { updateAutoModConfig, updateRaidProtection } from '../../../api';
-  import { AUTOMOD_PRESETS, errorMessage, type AutomodPreset } from '@kotbo/shared';
   import ChoiceCard from '../ChoiceCard.svelte';
   import ModerationSim from '../ModerationSim.svelte';
   import Papicon from '../../Papicon.svelte';
   import WizardShell from '../WizardShell.svelte';
+  import { saveInBackground } from '../../../onboarding/backgroundSave';
+  import { saveModeration } from '../../../onboarding/quickSetup';
 
   const { onEditTracks }: { onEditTracks: () => void } = $props();
 
   const level = $derived<ModerationLevel>(wizard.moderation ?? 'standard');
 
-  async function apply() {
-    if (onboardingData.busy) return;
-    const preset = AUTOMOD_PRESETS.find((entry: AutomodPreset) => entry.id === level);
-    if (!preset) {
-      toast.error(m.onb_moderation_unknown_level());
-      return;
-    }
-
-    onboardingData.busy = true;
-    try {
-      await updateAutoModConfig(preset.filters, undefined, { silent: true });
-      await updateRaidProtection(preset.raid, undefined, { silent: true });
-      celebrateStep();
-      wizard.complete('moderation');
-    } catch (err) {
-      toast.error(errorMessage(err) || m.onb_moderation_save_failed());
-    } finally {
-      onboardingData.busy = false;
-    }
+  function apply() {
+    const chosenLevel = level;
+    void saveInBackground('moderation', () => saveModeration(chosenLevel), m.onb_moderation_save_failed());
+    celebrateStep();
+    wizard.next();
   }
 </script>
 

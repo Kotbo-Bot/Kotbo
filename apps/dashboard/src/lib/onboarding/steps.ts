@@ -83,30 +83,20 @@ export type StepDefinition = {
 };
 
 export const STEPS: StepDefinition[] = [
-  { key: 'welcome', label: () => 'Bienvenue', icon: 'sparkles', phase: 'discovery', track: null, requires: null, optional: false, layout: 'centered' },
-  { key: 'kind', label: () => m.obs_server(), icon: 'search', phase: 'discovery', track: null, requires: null, optional: false, layout: 'centered' },
+  // Premier écran : type de serveur, langue, puis installation express ou choix.
+  { key: 'tracks', label: () => m.onb_step_start(), icon: 'sparkles', phase: 'discovery', track: null, requires: null, optional: false, layout: 'centered' },
   { key: 'migration-bots', label: () => m.onb_step_migration_bots(), icon: 'radar', phase: 'discovery', track: null, requires: 'existing', optional: false, layout: 'centered' },
   { key: 'migration-findings', label: () => m.onb_step_migration_findings(), icon: 'download', phase: 'discovery', track: null, requires: 'existing', optional: true, layout: 'centered' },
-  { key: 'tracks', label: () => m.onb_step_tracks(), icon: 'list-checks', phase: 'discovery', track: null, requires: null, optional: false, layout: 'centered' },
 
-  { key: 'identity', label: () => 'Sa langue', icon: 'globe', phase: 'setup', track: null, requires: null, optional: false, layout: 'split' },
   { key: 'theme', label: () => 'Sa vocation', icon: 'compass', phase: 'setup', track: null, requires: null, optional: false, layout: 'split' },
 
   { key: 'tickets', label: () => m.obs_support(), icon: 'inbox', phase: 'build', track: 'tickets', requires: null, optional: true, layout: 'split' },
 
-  // Le mappage d'un serveur habite, section par section. Il precede la pose
-  // parce que c'est lui qui decide ce qu'elle a a poser : sans lui, elle
-  // deduisait tout d'un rapprochement de noms et doublait ce qu'il ratait.
-  // Chaque ecran se retire de lui-meme quand sa vocation n'en retient pas les
-  // sections - on ne demande pas ou ranger les vocaux d'un serveur d'entraide.
-  { key: 'map-access', label: () => m.obs_access(), icon: 'door-open', phase: 'build', track: 'structure', requires: 'structured', optional: true, layout: 'split' },
-  { key: 'map-staff', label: () => m.obs_staff(), icon: 'users', phase: 'build', track: 'structure', requires: 'structured', optional: true, layout: 'split' },
-  { key: 'map-tickets', label: () => m.obs_support(), icon: 'inbox', phase: 'build', track: 'structure', requires: 'structured', optional: true, layout: 'split' },
-  { key: 'map-welcome', label: () => m.obs_welcome(), icon: 'book-open', phase: 'build', track: 'structure', requires: 'structured', optional: true, layout: 'split' },
-  { key: 'map-stats', label: () => m.obs_counters(), icon: 'chart', phase: 'build', track: 'structure', requires: 'structured', optional: true, layout: 'split' },
-  { key: 'map-text', label: () => m.obs_chat(), icon: 'message-circle', phase: 'build', track: 'structure', requires: 'structured', optional: true, layout: 'split' },
-  { key: 'map-fun', label: () => m.obs_fun(), icon: 'sparkles', phase: 'build', track: 'structure', requires: 'structured', optional: true, layout: 'split' },
-  { key: 'map-voice', label: () => m.obs_voice(), icon: 'mic', phase: 'build', track: 'structure', requires: 'structured', optional: true, layout: 'split' },
+  // Le mappage d'un serveur habite, toutes sections sur un seul ecran. Il
+  // precede la pose parce que c'est lui qui decide ce qu'elle a a poser : sans
+  // lui, elle deduisait tout d'un rapprochement de noms et doublait ce qu'il
+  // ratait.
+  { key: 'map-access', label: () => m.onb_step_map(), icon: 'link', phase: 'build', track: 'structure', requires: 'structured', optional: true, layout: 'centered' },
 
   { key: 'structure', label: () => m.obs_structure(), icon: 'layout-grid', phase: 'build', track: 'structure', requires: null, optional: true, layout: 'split' },
   { key: 'moderation', label: () => m.obs_moderation(), icon: 'shield', phase: 'build', track: 'moderation', requires: null, optional: false, layout: 'split' },
@@ -122,17 +112,29 @@ export const STEPS: StepDefinition[] = [
   { key: 'animation-drops', label: () => m.onb_step_animation_drops(), icon: 'gift', phase: 'polish', track: 'animation', requires: null, optional: true, layout: 'split' },
 
   { key: 'mcp', label: () => m.onb_step_mcp(), icon: 'command', phase: 'launch', track: 'mcp', requires: null, optional: true, layout: 'split' },
-  { key: 'recap', label: () => m.onb_step_recap(), icon: 'award', phase: 'launch', track: null, requires: null, optional: false, layout: 'stage' },
   { key: 'checkout', label: () => m.obs_golive(), icon: 'gem', phase: 'launch', track: null, requires: null, optional: false, layout: 'centered' },
 ];
 
 const BY_KEY = new Map(STEPS.map((step) => [step.key, step]));
 
 export function stepDefinition(step: WizardStep): StepDefinition {
-  // La carte couvre `WIZARD_STEPS` par construction ; le repli evite qu'une
-  // clef inconnue - parcours renomme, etat relu d'une version anterieure -
-  // fasse tomber la page plutot que de la ramener au debut.
+  // La carte couvre les ecrans traverses ; le repli evite qu'une clef inconnue
+  // - parcours renomme, etat relu d'une version anterieure - fasse tomber la
+  // page plutot que de la ramener au debut.
   return BY_KEY.get(step) ?? STEPS[0];
+}
+
+/**
+ * Ou reprendre un parcours enregistre : un ecran fusionne depuis renvoie a
+ * celui qui l'a absorbe.
+ */
+export function resumeStep(step: unknown): WizardStep {
+  if (typeof step !== 'string') return 'tracks';
+  if (BY_KEY.has(step as WizardStep)) return step as WizardStep;
+  if (step.startsWith('map-')) return 'map-access';
+  if (step === 'identity') return 'theme';
+  if (step === 'recap') return 'checkout';
+  return 'tracks';
 }
 
 /**
@@ -151,6 +153,9 @@ export const PHASES: { key: PhaseKey; label: () => string }[] = [
   { key: 'polish', label: () => 'Personnalisation' },
   { key: 'launch', label: () => 'Lancement' },
 ];
+
+/** Ce que l'installation express regle sans le demander (voir `quickSetup`). */
+const EXPRESS_SKIPPED: ReadonlySet<WizardStep> = new Set(['theme', 'moderation', 'greeting']);
 
 /**
  * Les ecrans reellement traverses, d'apres les pistes retenues.
@@ -171,7 +176,7 @@ export function stepsFor(
    * voir surgir une seconde apres le chargement que faire traverser six ecrans
    * vides a un serveur qui n'a rien a rapprocher.
    */
-  context: { structured?: boolean } = {},
+  context: { structured?: boolean; express?: boolean } = {},
 ): WizardStep[] {
   const kept = new Set(tracks);
   const applies = (step: StepDefinition): boolean => {
@@ -183,6 +188,7 @@ export function stepsFor(
   return STEPS
     .filter(applies)
     .filter((step) => step.track === null || kept.has(step.track))
+    .filter((step) => !(context.express && EXPRESS_SKIPPED.has(step.key)))
     .map((step) => step.key);
 }
 
