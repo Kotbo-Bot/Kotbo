@@ -728,7 +728,14 @@ export async function analyzeMemberJoin(member: GuildMember, joinInvite?: JoinIn
 }
 
 // ─── Recalcul de l'évidence depuis la DB (endpoint dashboard) ─────────────────
-export async function getDetectionEvidence(guildId: string, userId: string): Promise<DetectionEvidence | null> {
+// `deep: false` saute l'analyse profonde (messages, vocal, technique) : la liste
+// du dashboard calcule les preuves de tous les suspects d'un coup et dépassait
+// son délai avec elle.
+export async function getDetectionEvidence(
+  guildId: string,
+  userId: string,
+  { deep = true }: { deep?: boolean } = {},
+): Promise<DetectionEvidence | null> {
   const profile = await prisma.memberProfile.findUnique({
     where: { guildId_userId: { guildId, userId } },
     select: { userId: true, username: true, accountCreatedAt: true, guildJoinedAt: true, locale: true, avatarUrl: true, messageCount: true, isSuspectedDC: true }
@@ -835,7 +842,9 @@ export async function getDetectionEvidence(guildId: string, userId: string): Pro
   await dropBotAlts(guildId, reasons, suspectedAlts);
 
   // Analyse profonde (comportemental, technique, vocal, pattern quotidien) - tout en base.
-  const deepSignals = await runDeepAnalysis(guildId, userId, Array.from(suspectedAlts)).catch(() => [] as DcSignal[]);
+  const deepSignals = deep
+    ? await runDeepAnalysis(guildId, userId, Array.from(suspectedAlts)).catch(() => [] as DcSignal[])
+    : [];
   for (const s of deepSignals) {
     reasons.push({ type: s.type, label: s.label, score: s.score, matchedUserId: s.matchedUserId, detail: s.detail });
     if (s.matchedUserId) suspectedAlts.add(s.matchedUserId);

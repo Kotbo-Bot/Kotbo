@@ -5031,6 +5031,7 @@
   "da_default_warn_reason": "Warning threshold reached - security verification required.",
   "da_refresh": "Refresh",
   "da_visual_network": "Visual network",
+  "da_deep_analysis_loading": "Running in-depth analysis…",
   "da_loading": "Loading…",
   "da_retry": "Try again",
   "da_no_link": "No link",

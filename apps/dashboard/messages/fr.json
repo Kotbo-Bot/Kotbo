@@ -5031,6 +5031,7 @@
   "da_default_warn_reason": "Seuil d'avertissements atteint - vérification de sécurité requise.",
   "da_refresh": "Actualiser",
   "da_visual_network": "Réseau visuel",
+  "da_deep_analysis_loading": "Analyse approfondie en cours…",
   "da_loading": "Chargement…",
   "da_retry": "Réessayer",
   "da_no_link": "Aucune liaison",

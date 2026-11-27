@@ -18,6 +18,16 @@ export async function fetchSuspectedDetections(guildId = authStore.selectedGuild
   });
 }
 
+export async function fetchDetectionEvidence(userId: string, guildId = authStore.selectedGuildId) {
+  return dashboardRequest(`/detections/${userId}`, {
+    method: 'GET',
+    guildId,
+    // Analyse profonde du membre : messages, vocal, signaux techniques.
+    timeoutMs: 45_000,
+    errorContext: 'API Error (Fetch Detection Evidence):'
+  });
+}
+
 export async function scanSuspectedDetections(thresholdDays?: number, guildId = authStore.selectedGuildId) {
   return dashboardRequest('/detections/scan', {
     method: 'POST',
