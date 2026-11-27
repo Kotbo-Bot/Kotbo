@@ -1,6 +1,7 @@
 <script lang="ts">
   import { dialogFocus } from '../actions/dialogFocus';
   import { portal } from '../actions/portal';
+  import { tick } from 'svelte';
   import { fade, scale } from 'svelte/transition';
   import { m } from '../i18n';
   import { guardedNavigate } from '../navigationGuard';
@@ -328,6 +329,13 @@ import { getLocale } from '../i18n';
     return () => clearTimeout(timer);
   });
 
+  let listEl = $state<HTMLDivElement>();
+  /** Au clavier, la ligne choisie doit rester à l'écran. */
+  $effect(() => {
+    void selectedIndex;
+    void tick().then(() => listEl?.querySelector('[data-selected="true"]')?.scrollIntoView({ block: 'nearest' }));
+  });
+
   function close() {
     searchStore.close();
   }
@@ -411,25 +419,24 @@ import { getLocale } from '../i18n';
       role="document"
       transition:scale={{ start: 0.98, duration: 150 }}
     >
-      <!-- Search input -->
-      <div class="flex items-center gap-2.5 px-4 py-3 border-b border-outline-variant">
-        <Papicon icon="Search" size={16} class="text-on-surface-variant shrink-0" />
-        <input aria-label={m.cp_search_ph()}
-          bind:this={inputEl}
-          bind:value={query}
-          oninput={() => selectedIndex = 0}
-          onkeydown={handleKeydown}
-          type="text"
-          placeholder={m.cp_search_ph()}
-          class="flex-1 bg-transparent text-sm text-on-surface placeholder:text-on-surface-variant/65 focus:outline-none"
-        />
-        <kbd class="kbd-key hidden sm:inline-flex">
-          ESC
-        </kbd>
+      <div class="flex items-center gap-2 p-3">
+        <label class="flex flex-1 min-w-0 items-center gap-2.5 rounded-full bg-surface-container pl-4">
+          <Papicon icon="Search" size={16} class="text-on-surface-variant shrink-0" />
+          <input aria-label={m.cp_search_ph()}
+            bind:this={inputEl}
+            bind:value={query}
+            oninput={() => selectedIndex = 0}
+            onkeydown={handleKeydown}
+            type="text"
+            placeholder={m.cp_search_ph()}
+            class="min-h-11 flex-1 min-w-0 rounded-r-full bg-transparent pr-4 text-sm text-on-surface placeholder:text-on-surface-variant focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+          />
+        </label>
+        <button type="button" class="kbd-key hidden sm:inline-flex cursor-pointer" onclick={close} aria-label={m.common_close()}>Esc</button>
       </div>
 
       <!-- Results -->
-      <div class="max-h-[60vh] overflow-y-auto py-1.5">
+      <div bind:this={listEl} class="max-h-[55vh] overflow-y-auto pb-1.5">
         {#if noMatch}
           <p class="flex items-center gap-2 px-4 pt-2 pb-1 text-sm text-on-surface-variant">
             <Papicon icon="SearchX" size={15} class="shrink-0" />
@@ -443,23 +450,21 @@ import { getLocale } from '../i18n';
               {@const globalIdx = flatItems().indexOf(item)}
               {@const isSelected = globalIdx === selectedIndex}
               <button
+                type="button"
                 onclick={() => runItem(item)}
                 onmouseenter={() => selectedIndex = globalIdx}
-                class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-left transition-colors duration-100
- {isSelected ? 'bg-primary/10 text-primary' : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'}"
+                data-selected={isSelected}
+                class="pick-row"
               >
-                <div class="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-colors
- {isSelected ? 'bg-primary/15 text-primary' : 'bg-surface-container text-on-surface-variant'}">
-                  <Papicon icon={item.icon} size={14} />
-                </div>
-                <div class="flex-1 min-w-0">
-                  <p class="text-sm font-medium leading-none truncate {isSelected ? 'text-primary' : 'text-on-surface'}">{item.label}</p>
+                <span class="icon-disc" aria-hidden="true"><Papicon icon={item.icon} size={15} /></span>
+                <span class="flex-1 min-w-0">
+                  <span class="pick-row__label truncate">{item.label}</span>
                   {#if item.sublabel}
-                    <p class="text-2xs text-on-surface-variant mt-1 truncate">{item.sublabel}</p>
+                    <span class="pick-row__desc truncate">{item.sublabel}</span>
                   {/if}
-                </div>
+                </span>
                 {#if isSelected}
-                  <kbd class="kbd-key text-primary border-primary/25 bg-primary/10">↵</kbd>
+                  <kbd class="kbd-key hidden sm:inline-flex">↵</kbd>
                 {/if}
               </button>
             {/each}
@@ -469,7 +474,7 @@ import { getLocale } from '../i18n';
       </div>
 
       <!-- Footer hint -->
-      <div class="flex items-center gap-4 px-4 py-2.5 border-t border-outline-variant bg-surface-container-low">
+      <div class="hidden sm:flex items-center gap-4 px-4 py-2.5 border-t border-outline-variant bg-surface-container-low">
         <div class="flex items-center gap-1.5 text-2xs text-on-surface-variant">
           <kbd class="kbd-key">↑↓</kbd>
           {m.cp_hint_navigate()}
