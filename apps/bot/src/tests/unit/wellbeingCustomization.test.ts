@@ -35,7 +35,7 @@ describe('catégories de la cellule', () => {
   });
 
   test('les catégories réglées remplacent celles de départ', () => {
-    expect(caseCategoryIds([{ id: 'SOUTIEN', label: 'Écoute', template: '' }, { id: 'abc', label: 'Hors serveur', template: '' }]))
+    expect(caseCategoryIds([{ id: 'SOUTIEN', label: 'Écoute', template: '', planId: null }, { id: 'abc', label: 'Hors serveur', template: '', planId: null }]))
       .toEqual(['SOUTIEN', 'abc']);
   });
 
@@ -216,7 +216,7 @@ describe('réglages repris d’une autre cellule du réseau', () => {
   };
 
   test('seuls les réglages demandés sont repris, nettoyés', () => {
-    expect(copyableCustomization(source, ['categories', 'crisisTasks'])).toEqual({
+    expect(copyableCustomization(source, ['categories', 'crisisTasks'])).toEqual<unknown>({
       caseCategories: [{ id: 'abc', label: 'Hors serveur', template: '', planId: null }],
       crisisTasks: [{ label: 'Appeler', dueHours: 2 }],
     });
@@ -228,8 +228,8 @@ describe('réglages repris d’une autre cellule du réseau', () => {
   });
 
   test('un réglage inconnu est ignoré', () => {
-    expect(copyableCustomization(source, ['inconnu', 'tags'])).toEqual({ caseTags: [{ id: 't', label: 'Mineur' }] });
-    expect(copyableCustomization(source, ['constructor', 'toString', '__proto__'])).toEqual({});
+    expect(copyableCustomization(source, ['inconnu', 'tags'])).toEqual<unknown>({ caseTags: [{ id: 't', label: 'Mineur' }] });
+    expect(copyableCustomization(source, ['constructor', 'toString', '__proto__'])).toEqual<unknown>({});
   });
 });
 
