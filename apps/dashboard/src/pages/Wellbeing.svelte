@@ -23,7 +23,7 @@
   import { Button, Callout, EmptyState, Field, FilterPills, Menu, Modal, StatTile, Tabs, ToggleSwitch, type FilterOption, type MenuItem, type TabItem } from '../lib/components/ui';
   import Papicon from '../lib/components/Papicon.svelte';
   import Skeleton from '../lib/components/Skeleton.svelte';
-  import { WB_IDLE_LOCK_MS, wbNeighbourCaseId, wbShortcut, wbCaseExportHtml, wbPurgeInfo, wbTaskProgress, wbCaseStats, wbCaseTimeline, wbFilterCases, wbIsReviewDue, wbLinkedCases, wbMergeHeader, wbReviewShortcut, wbSearchCases, wbSeverityAccent, wbSeverityTone, wbSortCases, wbStatusTone, type WbCaseFilter, type WbCaseSort } from '../lib/wellbeingView';
+  import { WB_IDLE_LOCK_MS, wbNeighbourCaseId, wbShortcut, wbCaseExportHtml, wbPurgeInfo, wbTaskProgress, wbCaseStats, wbCaseTimeline, wbFilterCases, wbIsReviewDue, wbLinkedCases, wbMergeHeader, wbReviewShortcut, wbSearchCases, wbSeverityAccent, wbSeverityTone, wbSortCases, wbStatusTone, type WbBoardStage, type WbBoardTarget, type WbCaseFilter, type WbCaseSort } from '../lib/wellbeingView';
   import { authStore } from '../lib/stores/auth.svelte';
   import { isMobile } from '../lib/stores/media.svelte';
 
@@ -42,6 +42,8 @@
     breakGlassLogId: string | null;
     /** Propriétaire : la composition n'a pas été reconfirmée depuis 30 jours. */
     accessReviewDue: boolean;
+    /** Étapes ajoutées par la cellule à la vue en colonnes. */
+    boardColumns?: WbBoardStage[];
     /** Désactivation de la cellule demandée par le propriétaire, effective à cette date. */
     dissolutionAt: string | null;
     dissolutionByName: string | null;
@@ -83,6 +85,8 @@
   ] : []);
   type ListFilter = WbCaseFilter | 'trash';
   let activeTab = $state<Tab>('cases');
+  /** L'onglet d'arrivée n'est choisi qu'au premier chargement : un rechargement ne déplace personne. */
+  let initialTabChosen = false;
   /** Fiche à ouvrir à l'arrivée sur l'onglet Fiches, depuis un lien. */
   let profileSubjectId = $state<string | null>(null);
   let caseFilter = $state<ListFilter>('active');
@@ -309,6 +313,11 @@
   let savingResources = $state(false);
   let sendingResources = $state(false);
   let assigneeCandidate = $state('');
+  /** Membres de la cellule : seuls choix possibles pour un référent ou un collègue à prévenir. */
+  let team = $state<Array<{ id: string; name: string }>>([]);
+  /** La cellule sans la personne concernée, ni soi-même si `withSelf` est faux. */
+  const teamFor = (subjectUserId: string | null | undefined, withSelf = true) =>
+    team.filter((member) => member.id !== subjectUserId && (withSelf || member.id !== viewerId));
 
   // Documents Google Drive du dossier ouvert
   let newAttachmentLabel = $state('');
@@ -383,6 +392,28 @@
     try { localStorage.setItem(VIEW_KEY, view); } catch { /* stockage indisponible : réglage gardé pour la session */ }
   }
   const boardCases = $derived(wbSearchCases(cases, caseSearch));
+  /** Étapes de la vue en colonnes, propres à la cellule. */
+  let boardStages = $state<WbBoardStage[]>([]);
+
+  /** Enregistre les étapes ; les dossiers d'une étape supprimée reviennent à leur statut. */
+  async function saveStages(columns: Array<{ id?: string; label: string }>): Promise<boolean> {
+    try {
+      const res = await dashboardFetch('/wellbeing/board-columns', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ columns }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? '');
+      boardStages = data.columns ?? [];
+      void refreshCaseList();
+      toast.success(m.toast_wb_board_saved());
+      return true;
+    } catch (err: any) {
+      toast.error(err?.message || m.toast_wb_update_failed());
+      return false;
+    }
+  }
 
   /** Raccourcis : j/k dossier suivant ou précédent, n nouvelle note, d mode discret. */
   function onShortcut(event: KeyboardEvent) {
@@ -456,12 +487,23 @@
       }
       if (!stRes.ok) throw new Error('status');
       status = await stRes.json();
+      boardStages = status?.boardColumns ?? [];
+      // La cellule arrive sur ses personnes suivies ; un lien vers un dossier ramène aux dossiers.
+      if (status?.isTeamMember && !new URLSearchParams(window.location.search).has('case') && activeTab === 'cases' && !initialTabChosen) {
+        activeTab = 'profiles';
+      }
+      initialTabChosen = true;
       // Lien direct (fiche membre) : `?profile=` ouvre la fiche de cette personne.
       const linkedProfile = new URLSearchParams(window.location.search).get('profile');
       if (linkedProfile) {
         history.replaceState(history.state, '', window.location.pathname);
         profileSubjectId = linkedProfile;
         activeTab = 'profiles';
+      }
+
+      if (status?.canWriteCases) {
+        const teamRes = await dashboardFetch('/wellbeing/team').catch(() => null);
+        if (teamRes?.ok) team = (await teamRes.json()).members ?? [];
       }
 
       if (status?.hasCaseAccess) {
@@ -480,7 +522,8 @@
             openCaseById(linked);
           } else if (selectedCaseId && cases.some((c) => c.id === selectedCaseId)) {
             if (!detail && !locked) void loadDetail(selectedCaseId!);
-          } else if (cases.length > 0) {
+          } else if (cases.length > 0 && activeTab === 'cases') {
+            // Ouvrir un dossier est tracé : on ne le fait d'office que sur la liste des dossiers.
             openCaseById((wbFilterCases(cases, 'active')[0] ?? cases[0]).id);
           } else {
             selectedCaseId = null;
@@ -622,7 +665,7 @@
   let updatingCase = $state(false);
 
   /** Statut ou gravité du dossier ouvert. Fermer un dossier le rend purgeable après un an. */
-  type CasePatch = { status?: string; severity?: string; assigneeId?: string | null; reviewAt?: string | null; closedReason?: string };
+  type CasePatch = { status?: string; severity?: string; assigneeId?: string | null; reviewAt?: string | null; closedReason?: string; stage?: string | null };
 
   /** Modification du dossier ouvert. */
   function updateCase(patch: CasePatch) {
@@ -674,8 +717,17 @@
     if (reason) await patchCase(caseId, { status, closedReason: reason });
   }
 
-  /** Carte glissée dans une autre colonne : même parcours qu'avec les boutons de la fiche. */
-  const moveCase = (caseId: string, status: string) => changeStatus(caseId, status);
+  /**
+   * Carte glissée dans une autre colonne : même parcours qu'avec la fiche. Une
+   * étape garde le statut (un dossier clos est rouvert) ; une colonne de statut
+   * sort le dossier de son étape.
+   */
+  function moveCase(caseId: string, target: WbBoardTarget) {
+    const card = cases.find((c) => c.id === caseId);
+    if ('stage' in target) return patchCase(caseId, { stage: target.stage, ...(card?.status === 'CLOSED' ? { status: 'OPEN' } : {}) });
+    if (target.status === 'CLOSED') return changeStatus(caseId, 'CLOSED');
+    return patchCase(caseId, { ...(card?.status !== target.status ? { status: target.status } : {}), ...(card?.stage ? { stage: null } : {}) });
+  }
 
   /** Fermer rend le dossier purgeable après un an : on le confirme. */
   async function pickStatus(code: string) {
@@ -1185,6 +1237,18 @@
         {@render choiceGroup(m.wb_status_label(), WB_STATUSES, selectedCase.status, wbStatusLabel, wbStatusTone, (code) => void pickStatus(code))}
         {@render choiceGroup(m.wb_severity_label(), WB_SEVERITIES, selectedCase.severity, wbSeverityLabel, wbSeverityTone, pickSeverity)}
       </div>
+      {#if boardStages.length > 0 && status?.canWriteCases && selectedCase.status !== 'CLOSED'}
+        <div class="flex flex-wrap items-center gap-2">
+          <label for="wb-case-stage" class="text-xs font-medium text-on-surface-variant">{m.wb_stage_label()}</label>
+          <select id="wb-case-stage" class="input text-sm w-auto" value={selectedCase.stage ?? ''} disabled={updatingCase}
+            onchange={(event) => void updateCase({ stage: event.currentTarget.value || null })}>
+            <option value="">{m.wb_stage_none()}</option>
+            {#each boardStages as stage (stage.id)}
+              <option value={stage.id}>{stage.label}</option>
+            {/each}
+          </select>
+        </div>
+      {/if}
 
       {#if absence}
         <Callout variant="warning" title={absence.until ? m.wb_absent_until({ date: formatDay(absence.until) }) : m.wb_absent_open()}>
@@ -1208,8 +1272,13 @@
               </div>
             {:else if status?.canWriteCases}
               <div class="space-y-1.5">
-                <MemberSearchSelect {id} {describedBy} bind:value={assigneeCandidate} placeholder={m.wb_member_ph()}
-                  onselect={(member) => { assigneeCandidate = ''; void updateCase({ assigneeId: member.id }); }} />
+                <select {id} aria-describedby={describedBy} class="input w-full" bind:value={assigneeCandidate} disabled={updatingCase}
+                  onchange={() => { const assigneeId = assigneeCandidate; assigneeCandidate = ''; if (assigneeId) void updateCase({ assigneeId }); }}>
+                  <option value="">{m.wb_member_pick()}</option>
+                  {#each teamFor(selectedCase?.subjectUserId) as member (member.id)}
+                    <option value={member.id}>{member.name}</option>
+                  {/each}
+                </select>
                 {#if viewerId && viewerId !== selectedCase?.subjectUserId}
                   <Button size="sm" variant="ghost" icon="User" disabled={updatingCase} onclick={() => void updateCase({ assigneeId: viewerId })}>{m.wb_assign_me()}</Button>
                 {/if}
@@ -1282,7 +1351,7 @@
               <textarea bind:this={noteInput} bind:value={newNote} aria-label={m.a11y_wellbeing_note()} required rows={2} placeholder={m.wb_note_ph()} class="input w-full text-sm"></textarea>
               <div class="space-y-1">
                 <label for="wb-note-notify" class="text-xs font-medium text-on-surface-variant">{m.wb_note_notify()}</label>
-                <WellbeingMemberList id="wb-note-notify" bind:ids={noteNotify} max={5} />
+                <WellbeingMemberList id="wb-note-notify" bind:ids={noteNotify} max={5} candidates={teamFor(selectedCase?.subjectUserId, false)} />
               </div>
               <div class="flex justify-end">
                 <Button type="submit" size="sm" variant="primary" icon="Plus" loading={addingNote} disabled={!newNote.trim()}>{m.wb_note_add()}</Button>
@@ -1483,11 +1552,19 @@
           <StatTile icon="Check" tone="bg-success/10 text-on-success-container" value={stats.closed} label={m.wb_stat_closed()} />
         </div>
         <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
-          <p class="text-2xs text-on-surface-variant flex items-center gap-1.5"><Papicon icon="Keyboard" size={12} /> {m.wb_shortcuts_hint()}</p>
-          <div role="group" aria-label={m.wb_view_label()} class="flex gap-1.5">
-            <Button size="sm" variant={caseView === 'list' ? 'secondary' : 'ghost'} icon="List" aria-pressed={caseView === 'list'} onclick={() => setCaseView('list')}>{m.wb_view_list()}</Button>
-            <Button size="sm" variant={caseView === 'board' ? 'secondary' : 'ghost'} icon="Columns" aria-pressed={caseView === 'board'} onclick={() => setCaseView('board')}>{m.wb_view_board()}</Button>
+          <div role="group" aria-label={m.wb_view_label()} class="inline-flex rounded-xl border border-outline-variant/40 bg-surface-container p-1 gap-1">
+            {#each [{ id: 'list', icon: 'List', label: m.wb_view_list(), hint: m.wb_view_list_hint() }, { id: 'board', icon: 'Columns', label: m.wb_view_board(), hint: m.wb_view_board_hint() }] as view (view.id)}
+              <button type="button" aria-pressed={caseView === view.id} onclick={() => setCaseView(view.id as 'list' | 'board')}
+                class="flex items-center gap-2 rounded-lg px-4 py-2 text-sm text-left transition-colors {caseView === view.id ? 'bg-primary text-on-primary shadow-sm' : 'text-on-surface-variant hover:bg-surface-container-high'}">
+                <Papicon icon={view.icon} size={16} />
+                <span>
+                  <span class="block font-semibold leading-tight">{view.label}</span>
+                  <span class="block text-2xs opacity-80 leading-tight">{view.hint}</span>
+                </span>
+              </button>
+            {/each}
           </div>
+          <p class="text-2xs text-on-surface-variant flex items-center gap-1.5"><Papicon icon="Keyboard" size={12} /> {m.wb_shortcuts_hint()}</p>
         </div>
         {#if caseView === 'board'}
           <div class="space-y-6">
@@ -1495,7 +1572,8 @@
               <input type="search" bind:value={caseSearch} class="input text-sm flex-1 min-w-48 max-w-md" aria-label={m.wb_search_label()} placeholder={m.wb_search_ph()} />
               <p class="text-2xs text-on-surface-variant">{m.wb_board_hint()}</p>
             </div>
-            <CaseBoard cases={boardCases} selectedId={selectedCaseId} canWrite={!!status.canWriteCases} onopen={openCaseById} onmove={(id, next) => void moveCase(id, next)} />
+            <CaseBoard cases={boardCases} stages={boardStages} selectedId={selectedCaseId} canWrite={!!status.canWriteCases} onopen={openCaseById}
+              onmove={(id, target) => void moveCase(id, target)} onstages={saveStages} />
             {@render caseDetail()}
           </div>
         {:else}
@@ -1520,8 +1598,9 @@
     {:else if activeTab === 'profiles'}
       <ProfilesPanel {cases} hidden={contentHidden} initialSubjectId={profileSubjectId}
         checkReauth={async (res) => { const stale = await needsReauth(res); if (stale) activeTab = 'cases'; return stale; }}
-        onopencase={(caseId) => { activeTab = 'cases'; openCaseById(caseId); mobileDetail = true; }}
-        onnewcase={(prefill) => { activeTab = 'cases'; void openNewCase(prefill); }} />
+        {selectedCaseId} {caseDetail}
+        onselectcase={(caseId) => { if (caseId) openCaseById(caseId); else { selectedCaseId = null; detail = null; } }}
+        onnewcase={(prefill) => void openNewCase(prefill)} />
     {:else if activeTab === 'stats'}
       {#if cellStats}
         <WellbeingStats stats={cellStats} load={cellLoad} pulse={cellPulse} />
@@ -1721,7 +1800,12 @@
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
       <Field label={m.wb_assignee()} hint={suggestedAssigneeId && newAssigneeId === suggestedAssigneeId ? m.wb_assignee_suggested() : m.wb_assignee_hint()}>
         {#snippet children(id, describedBy)}
-          <MemberSearchSelect {id} {describedBy} bind:value={newAssigneeId} placeholder={m.wb_member_ph()} />
+          <select {id} aria-describedby={describedBy} class="input w-full" bind:value={newAssigneeId}>
+            <option value="">{m.wb_member_pick()}</option>
+            {#each teamFor(newSubjectUserId) as member (member.id)}
+              <option value={member.id}>{member.name}</option>
+            {/each}
+          </select>
         {/snippet}
       </Field>
       <Field label={m.wb_review_at()} hint={m.wb_review_hint()}>
