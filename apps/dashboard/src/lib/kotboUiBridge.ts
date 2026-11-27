@@ -3,7 +3,7 @@
  * Synchronise la locale BCP 47 et les libelles i18n a l'initialisation et
  * lors d'un changement de langue a chaud.
  */
-import { configureKotboUi } from '@kotbo/ui';
+import { configureKotboUi } from '@kotbo/ui/config';
 import { dateLocale, m } from './i18n';
 
 export function syncKotboUiConfig(): void {
