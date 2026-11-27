@@ -186,9 +186,13 @@ export function stepsFor(
     .map((step) => step.key);
 }
 
-/** Les ecrans d'une piste, pour dire sur l'ecran de selection ce qu'elle coute. */
-export function stepsOfTrack(track: TrackKey): WizardStep[] {
-  return STEPS.filter((step) => step.track === track).map((step) => step.key);
+/**
+ * Les ecrans d'une piste sur ce serveur, pour dire sur l'ecran de selection ce
+ * qu'elle coute : sans le contexte, « La structure » annoncait neuf ecrans a un
+ * serveur neuf qui n'en traverse qu'un.
+ */
+export function stepsOfTrack(track: TrackKey, kind: ServerKind, context: { structured?: boolean } = {}): WizardStep[] {
+  return stepsFor([track], kind, context).filter((step) => stepDefinition(step).track === track);
 }
 
 export function phaseOf(step: WizardStep): PhaseKey {

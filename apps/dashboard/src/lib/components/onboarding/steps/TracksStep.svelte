@@ -50,8 +50,12 @@
 
   const minutes = $derived(estimatedMinutes(selection));
   const screens = $derived(
-    selection.reduce((total, key) => total + stepsOfTrack(key).length, 0)
+    selection.reduce((total, key) => total + screensOf(key), 0)
   );
+
+  function screensOf(key: TrackKey): number {
+    return stepsOfTrack(key, kind, { structured: wizard.structured }).length;
+  }
 
   function confirm() {
     wizard.setTracks([...selection]);
@@ -74,7 +78,7 @@
 
         <div class="grid gap-2.5 sm:grid-cols-2">
           {#each tracks as track (track.key)}
-            {@const count = stepsOfTrack(track.key).length}
+            {@const count = screensOf(track.key)}
             <ToggleCard
               label={track.label()}
               pitch={track.pitch()}
@@ -100,14 +104,14 @@
     <button
       type="button"
       onclick={() => { picked = TRACKS.map((track) => track.key); celebrateStep(); }}
-      class="btn btn-ghost btn-sm"
+      class="btn btn-ghost btn-sm !hidden sm:!inline-flex"
     >
       {m.onb_tracks_all()}
     </button>
     <button
       type="button"
       onclick={() => { picked = defaultTracks(kind); celebrateStep(); }}
-      class="btn btn-ghost btn-sm"
+      class="btn btn-ghost btn-sm !hidden sm:!inline-flex"
     >
       {m.onb_tracks_essentials()}
     </button>
@@ -129,7 +133,7 @@
       onclick={confirm}
       class="btn btn-primary"
     >
-      Continuer
+      {m.obx_continue()}
       <Papicon icon="ChevronRight" size={15} />
     </button>
   {/snippet}

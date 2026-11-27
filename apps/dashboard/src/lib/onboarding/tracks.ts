@@ -99,7 +99,7 @@ export const TRACKS: Track[] = [
     pitch: () => m.onb_track_logs_pitch(),
     outcome: () => m.onb_track_logs_outcome(),
     minutes: 1,
-    byDefault: () => true,
+    byDefault: () => false,
   },
   {
     key: 'greeting',
@@ -132,7 +132,7 @@ export const TRACKS: Track[] = [
     pitch: () => m.onb_track_tickets_pitch(),
     outcome: () => m.onb_track_tickets_outcome(),
     minutes: 1,
-    byDefault: () => true,
+    byDefault: () => false,
   },
   {
     key: 'levels',
@@ -142,7 +142,7 @@ export const TRACKS: Track[] = [
     pitch: () => m.onb_track_levels_pitch(),
     outcome: () => m.onb_track_levels_outcome(),
     minutes: 2,
-    byDefault: () => true,
+    byDefault: () => false,
   },
   {
     key: 'economy',
@@ -174,9 +174,7 @@ export const TRACKS: Track[] = [
     pitch: () => m.onb_track_staff_pitch(),
     outcome: () => m.onb_track_staff_outcome(),
     minutes: 1,
-    // Un serveur neuf n'a pas encore d'equipe a declarer : la question ne se
-    // pose vraiment que la ou des roles de staff existent deja.
-    byDefault: (kind) => kind === 'existing',
+    byDefault: () => false,
   },
   {
     key: 'mcp',
@@ -186,7 +184,7 @@ export const TRACKS: Track[] = [
     pitch: () => m.onb_track_mcp_pitch(),
     outcome: () => m.onb_track_mcp_outcome(),
     minutes: 1,
-    byDefault: () => true,
+    byDefault: () => false,
   },
 ];
 

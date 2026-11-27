@@ -237,7 +237,7 @@
               <Papicon icon="plus" size={11} />
               {m.onb_recap_add()}
               <span class="text-on-surface-variant/40 font-medium">
-                · {m.onb_tracks_screens({ count: stepsOfTrack(track.key).length })}
+                · {m.onb_tracks_screens({ count: stepsOfTrack(track.key, wizard.kind ?? 'new', { structured: wizard.structured }).length })}
               </span>
             </button>
           </div>

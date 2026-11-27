@@ -34,6 +34,10 @@
   import { PHASES, phaseOf, stepDefinition, sound } from '../../onboarding';
   import Papicon from '../Papicon.svelte';
   import KotboMark from './KotboMark.svelte';
+  import { router } from 'tinro';
+  import { completeOnboarding } from '../../api';
+  import { dashboardStore } from '../../stores/dashboard.svelte';
+  import { toast } from '../../stores/toast.svelte';
 
   const {
     title,
@@ -106,6 +110,28 @@
 
   let soundOn = $state(sound.enabled);
 
+  /**
+   * Quitter sans perdre : ce qui est validé est déjà écrit, le tableau de bord
+   * propose de finir le reste. Sans cette sortie, on ferme l'onglet.
+   * L'accueil a son propre bouton, la mise en service est déjà la fin.
+   */
+  const canDefer = $derived(wizard.step !== 'welcome' && wizard.step !== 'checkout');
+  let deferring = $state(false);
+
+  async function defer() {
+    if (deferring) return;
+    deferring = true;
+    try {
+      await completeOnboarding(undefined, { deferred: true });
+      await dashboardStore.refresh();
+      router.goto('/');
+    } catch (err) {
+      toast.error(err instanceof Error && err.message ? err.message : m.obx_wc_defer_failed());
+    } finally {
+      deferring = false;
+    }
+  }
+
   // La largeur du cadre suit la disposition : deux colonnes ont besoin de
   // place, une question seule se lit mieux serree.
   const frame = $derived(
@@ -119,7 +145,7 @@
     <div class="mx-auto w-full {frame} px-6 py-3.5 flex items-center justify-between gap-4 transition-[max-width] duration-300">
       <div class="flex items-center gap-2.5 min-w-0">
         <KotboMark size={26} />
-        <span class="font-semibold tracking-tight text-on-surface shrink-0">Kotbo</span>
+        <span class="hidden sm:inline font-semibold tracking-tight text-on-surface shrink-0">Kotbo</span>
         {#if selectedGuild}
           <Papicon icon="plus" size={11} class="shrink-0 text-on-surface-variant" />
           <span class="flex items-center gap-1.5 min-w-0">
@@ -146,6 +172,13 @@
           >
             <Papicon icon="list-checks" size={13} />
             <span class="hidden md:inline">{m.onb_tracks_edit()}</span>
+          </button>
+        {/if}
+
+        {#if canDefer}
+          <button type="button" onclick={defer} disabled={deferring} class="btn btn-tonal btn-sm" title={m.onb_defer_hint()}>
+            <Papicon icon="clock" size={13} />
+            {m.obx_wc_defer()}
           </button>
         {/if}
 
@@ -246,7 +279,7 @@
                boutique, la colonne de gauche est plus longue que l'ecran, et un
                apercu reste en haut ne montre plus rien de ce qu'on modifie. -->
           <aside class="min-w-0 lg:sticky lg:top-6">
-            <p class="mb-2.5 flex items-center gap-1.5 text-xs font-semibold text-on-surface-variant/35">
+            <p class="mb-2.5 flex items-center gap-1.5 text-xs font-semibold text-on-surface-variant">
               <Papicon icon="eye" size={12} />
               {m.onb_shell_preview_hint()}
             </p>
@@ -283,8 +316,9 @@
   </main>
 
   <!-- ── Pied : retour et action ──────────────────────────────────────────── -->
-  <footer class="shrink-0 border-t border-outline-variant bg-surface-container-lowest/75 backdrop-blur-md">
-    <div class="mx-auto w-full {frame} px-6 py-4 flex items-center justify-between gap-4 transition-[max-width] duration-300">
+  <!-- Collé en bas : sur un écran long, « Continuer » ne doit pas se chercher. -->
+  <footer class="wizard-footer shrink-0 border-t border-outline-variant bg-surface-container-lowest/90 backdrop-blur-md">
+    <div class="mx-auto w-full {frame} px-4 sm:px-6 py-3 sm:py-4 flex flex-wrap items-center justify-between gap-2 sm:gap-4 transition-[max-width] duration-300">
       {#if canGoBack && !wizard.isFirst}
         <button
           type="button"
@@ -292,15 +326,24 @@
           class="btn btn-ghost btn-sm"
         >
           <Papicon icon="ChevronLeft" size={14} />
-          Retour
+          {m.ppf_back_short()}
         </button>
       {:else}
         <span></span>
       {/if}
 
-      <div class="flex items-center gap-3">
+      <div class="flex flex-1 flex-wrap items-center justify-end gap-2 sm:gap-3">
         {@render footer?.()}
       </div>
     </div>
   </footer>
 </div>
+
+<style>
+  .wizard-footer {
+    position: sticky;
+    bottom: 0;
+    z-index: 20;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+</style>
