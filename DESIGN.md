@@ -57,3 +57,16 @@ Construit à partir de la direction `tafac` (`Sand` / `Night`, squircles, `.glas
 - **Notifications (`/notifications`), Mise en place (`/setup`) & Onboarding (`/onboarding`)** :
   - Lignes denses en surface unique (pas de vide horizontal), dates relatives.
   - Parcours `/onboarding` entièrement testable en mode démo lors de l'ajout d'un serveur depuis `/servers`.
+
+---
+
+## 6. Bibliothèque partagée Kotbo-UI (`@kotbo/ui`)
+
+Les primitives d'interface, `Papicon` et **Analytics v3** de `apps/dashboard` s'appuient sur le paquet partagé `@kotbo/ui` (`../analytics-v3`, futur `../Kotbo-ui`), exposé en quatre modules principaux :
+
+- **`@kotbo/ui`** : primitives UI (`Button`, `Tabs`, `FilterPills`, `Callout`, `Field`, `Menu`, `StatTile`, `SectionCard`, `SettingsRow`, `SettingsGroup`, `ToggleSwitch`), modales/tiroirs (`Modal`, `ConfirmModal`, `DetailSheet`, `Toast`, `ToastContainer`), formulaires & sélecteurs (`FormInput`, `FormSelect`, `FormTextarea`, `FormColorPicker`, `AmountRangeSlider`, `SearchableSelect`, `MultiSelect`), `Calendar`, `DashboardShell`, `UnsavedChangesBar`, actions et stores (`toast`, `unsavedChanges`).
+- **`@kotbo/ui/analytics`** : `AnalyticsChartCard`, `MetricTabs`, `Sparkline`, `KpiTile`, `Chart`, `TimeSeriesChart`, `TrendChart`, `BarList`, `ShareBar`, `CohortTable`, `TopList`, `AnalyticsSkeleton`, et helpers purs (`timeSeries`, `analyticsFormat`, `chartTable`).
+- **`@kotbo/ui/icons`** : `Papicon` et registres statiques Papicons + Lucide.
+- **`@kotbo/ui/styles`** : jetons Sand / Night (`tokens.css`) et CSS autonome sans Tailwind (`components.css`), importés avant `app.css` pour que le thème Kotbo reste prioritaire, tout en permettant à **AegisAI** d'appliquer ses surcharges visuelles modernes (`--kotbo-chart-card-radius: 1.25rem`, palette bleu/slate).
+
+Les fichiers locaux de `apps/dashboard/src/lib/` conservent leurs points d'entrée en wrappers fins + pont Paraglide (`src/lib/kotboUiBridge.ts`), détaillés dans [`docs/kotbo-ui.md`](./docs/kotbo-ui.md).

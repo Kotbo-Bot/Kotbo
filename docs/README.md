@@ -22,6 +22,9 @@ Documentation technique et fonctionnelle du bot Kotbo.
 
 ## Dashboard, accès et intégrations
 
+- [`kotbo-ui.md`](./kotbo-ui.md) - Bibliothèque partagée **Kotbo-UI (`@kotbo/ui`)**
+  par module (`@kotbo/ui`, `/analytics`, `/icons`, `/styles`), pont i18n Paraglide,
+  sous-exports JS purs et intégration AegisAI.
 - [`centre-de-gestion-droits.md`](./centre-de-gestion-droits.md) - Droits du
   dashboard par rôle, copie des droits, rôles automatiques, fiche membre par rôle.
 - [`mcp-droits-et-outils.md`](./mcp-droits-et-outils.md) - Droits des clés MCP par
