@@ -4,6 +4,17 @@ import { trimmedText } from './wellbeingPolicyShared.js';
 
 // ── Signalements ───────────────────────────────────────────────────────────
 
+/**
+ * Modèles du message permanent publié dans un salon : le texte change, les
+ * trois boutons restent. Le premier est celui par défaut.
+ */
+export const REPORT_PANEL_TEMPLATES = ['listening', 'short', 'staff', 'anonymous'] as const;
+export type ReportPanelTemplate = (typeof REPORT_PANEL_TEMPLATES)[number];
+
+export function cleanPanelTemplate(input: unknown): ReportPanelTemplate {
+  return REPORT_PANEL_TEMPLATES.find((template) => template === input) ?? REPORT_PANEL_TEMPLATES[0];
+}
+
 /** Un même membre n'envoie qu'un signalement par période : la cellule n'est pas noyée. */
 export const REPORT_COOLDOWN_MS = 10 * 60 * 1000;
 

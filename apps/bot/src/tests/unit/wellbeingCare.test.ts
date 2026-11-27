@@ -10,6 +10,8 @@ import {
 } from '../../services/staff/wellbeingCasePolicy';
 import {
   MAX_REPORTER_MESSAGES,
+  REPORT_PANEL_TEMPLATES,
+  cleanPanelTemplate,
   cleanResources,
   reporterCanWrite,
   resourcesForLocale,
@@ -120,6 +122,22 @@ describe('fil anonyme avec le signaleur', () => {
     const text = alertText('REPORT', { actorId: '', followUp: true });
     expect(text).not.toContain('<@');
     expect(text).toContain('message');
+  });
+});
+
+describe('modèles du message permanent', () => {
+  test('un modèle connu est gardé', () => {
+    for (const template of REPORT_PANEL_TEMPLATES) expect(cleanPanelTemplate(template)).toBe(template);
+  });
+
+  test('un modèle inconnu ou absent devient le modèle par défaut', () => {
+    expect(cleanPanelTemplate('inconnu')).toBe('listening');
+    expect(cleanPanelTemplate(undefined)).toBe('listening');
+    expect(cleanPanelTemplate(3)).toBe('listening');
+  });
+
+  test('le modèle par défaut vient en premier', () => {
+    expect(REPORT_PANEL_TEMPLATES[0]).toBe('listening');
   });
 });
 

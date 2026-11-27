@@ -12,6 +12,7 @@ import { DASHBOARD_ACCESS_ADMIN, type AuthClaims } from '../../api/shared.js';
 import { completeModuleMock } from '../helpers/moduleMock.js';
 import { dashboardCall, mockDashboardGate, setDashboardAccess } from '../helpers/honoDashboard.js';
 import { caseVisibilityWhere } from '../../services/staff/wellbeingCasePolicy.js';
+import { REPORT_PANEL_TEMPLATES } from '../../services/staff/wellbeingReportPolicy.js';
 
 process.env.WELLBEING_ENCRYPTION_KEY = 'cle-de-test-bien-etre';
 
@@ -180,7 +181,9 @@ const applyCrisisProtocolIfDue = mock(async (..._args: unknown[]) => false);
 mockModule('../../services/staff/wellbeingCrisis', { applyCrisisProtocolIfDue, CRISIS_PROTOCOL_EVENT: 'CRISIS_PROTOCOL' });
 const closeTicket = mock(async (..._args: unknown[]) => null);
 mockModule('../../services/features/ticketService', { closeTicket });
-mockModule('../../commands/utility/wellbeing', { wellbeingPanelMessage: mock(() => ({ content: 'panel' })) });
+const wellbeingPanelMessage = mock((_locale: string, template?: string) => ({ content: `panel ${template}` }));
+const wellbeingPanelText = mock((template: string, _locale: string) => `texte ${template}`);
+mockModule('../../commands/utility/wellbeing', { wellbeingPanelMessage, wellbeingPanelText });
 type PoolEntry = { userId: string; guildId: string; name: string; guildName: string; active: number };
 let pool: { available: boolean; candidates: PoolEntry[] } = { available: false, candidates: [] };
 let networkRefs: Array<{ id: string; guildId: string }> = [];
@@ -236,6 +239,7 @@ beforeEach(() => {
   applyCrisisProtocolIfDue.mockClear();
   closeTicket.mockClear();
   requestDissolution.mockClear();
+  wellbeingPanelMessage.mockClear();
   for (const model of Object.values(mockDb)) {
     for (const fn of Object.values(model)) (fn as { mockClear: () => void }).mockClear();
   }
@@ -461,9 +465,53 @@ describe('transfert de ticket', () => {
 });
 
 describe('message permanent', () => {
+  const CHANNEL = '300000000000000001';
+  const send = mock(async (_message: unknown) => ({}));
+
+  /** Signalements Discord ouverts et un salon où le bot peut écrire. */
+  function withReportsOpen() {
+    mockDb.wellbeingConfig.findUnique.mockImplementation(async () => ({ ...CONFIG, reportEnabled: true }));
+    discordGuild.channels.cache.set(CHANNEL, { id: CHANNEL, name: 'aide', isSendable: () => true, send } as never);
+  }
+
+  function restore() {
+    mockDb.wellbeingConfig.findUnique.mockImplementation(async () => CONFIG);
+    discordGuild.channels.cache.delete(CHANNEL);
+    send.mockClear();
+  }
+
   test('refusé tant que les signalements Discord sont fermés', async () => {
-    const { status } = await call('POST', '/report-panel', { channelId: '300000000000000001' });
+    const { status } = await call('POST', '/report-panel', { channelId: CHANNEL });
     expect(status).toBe(400);
+  });
+
+  test('les modèles proposés montrent leur texte', async () => {
+    const { status, json } = await call('GET', '/report-panel/templates');
+    expect(status).toBe(200);
+    expect(json.templates.map((item: { id: string }) => item.id)).toEqual([...REPORT_PANEL_TEMPLATES]);
+    expect(json.templates[0].text).toBe(`texte ${REPORT_PANEL_TEMPLATES[0]}`);
+  });
+
+  test('le modèle choisi est publié', async () => {
+    withReportsOpen();
+    try {
+      const { status } = await call('POST', '/report-panel', { channelId: CHANNEL, template: 'short' });
+      expect(status).toBe(200);
+      expect(wellbeingPanelMessage.mock.calls[0]?.[1]).toBe('short');
+      expect(send).toHaveBeenCalledTimes(1);
+    } finally {
+      restore();
+    }
+  });
+
+  test('un modèle inconnu publie le message par défaut', async () => {
+    withReportsOpen();
+    try {
+      await call('POST', '/report-panel', { channelId: CHANNEL, template: 'inconnu' });
+      expect(wellbeingPanelMessage.mock.calls[0]?.[1]).toBe(REPORT_PANEL_TEMPLATES[0]);
+    } finally {
+      restore();
+    }
   });
 });
 

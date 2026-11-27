@@ -17,9 +17,11 @@ import { getEffectiveLocale, localized, type BotLocale } from '../../utils/i18n.
 import * as m from '../../lib/paraglide/messages.js';
 import {
   REPORTER_REPLY_MAX,
+  REPORT_PANEL_TEMPLATES,
   cleanResources,
   resourcesForLocale,
   resourcesMessage,
+  type ReportPanelTemplate,
 } from '../../services/staff/wellbeingReportPolicy.js';
 import {
   REPORT_MAX_LENGTH,
@@ -160,10 +162,22 @@ export async function handleWellbeingPanelButton(interaction: ButtonInteraction)
   await showReportModal(interaction, guildId, interaction.customId === `${REPORT_PANEL_PREFIX}1`, locale);
 }
 
+const PANEL_TEXTS: Record<ReportPanelTemplate, (locale: BotLocale) => string> = {
+  listening: (locale) => m.wbc_panel_text({}, { locale }),
+  short: (locale) => m.wbc_panel_text_short({}, { locale }),
+  staff: (locale) => m.wbc_panel_text_staff({}, { locale }),
+  anonymous: (locale) => m.wbc_panel_text_anonymous({}, { locale }),
+};
+
+/** Texte d'un modèle du message permanent, dans la langue du serveur. */
+export function wellbeingPanelText(template: ReportPanelTemplate, locale: BotLocale): string {
+  return PANEL_TEXTS[template](locale);
+}
+
 /** Message permanent posté dans un salon : écrire à la cellule sans taper de commande. */
-export function wellbeingPanelMessage(locale: BotLocale) {
+export function wellbeingPanelMessage(locale: BotLocale, template: ReportPanelTemplate = REPORT_PANEL_TEMPLATES[0]) {
   return {
-    content: m.wbc_panel_text({}, { locale }),
+    content: wellbeingPanelText(template, locale),
     components: [
       new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder().setCustomId(`${REPORT_PANEL_PREFIX}0`).setStyle(ButtonStyle.Primary).setLabel(m.wbc_panel_write({}, { locale })),

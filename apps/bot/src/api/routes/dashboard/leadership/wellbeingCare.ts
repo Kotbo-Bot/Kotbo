@@ -9,9 +9,15 @@ import prisma from '../../../../utils/db.js';
 import { logger } from '../../../../utils/logger.js';
 import { getGuildName } from '../../../shared.js';
 import { fail, guildRoute, readBody, send } from '../../../hono/dashboard/kit.js';
-import { REPORTER_REPLY_MAX, cleanResources, resourcesMessage } from '../../../../services/staff/wellbeingReportPolicy.js';
+import {
+  REPORTER_REPLY_MAX,
+  REPORT_PANEL_TEMPLATES,
+  cleanPanelTemplate,
+  cleanResources,
+  resourcesMessage,
+} from '../../../../services/staff/wellbeingReportPolicy.js';
 import { sealWellbeing } from '../../../../services/staff/wellbeingCrypto.js';
-import { wellbeingPanelMessage } from '../../../../commands/utility/wellbeing.js';
+import { wellbeingPanelMessage, wellbeingPanelText } from '../../../../commands/utility/wellbeing.js';
 import { resolveGuildLocale } from '../../../../utils/i18n.js';
 import { bodyText } from '../../../../utils/bodyText.js';
 import { actorName, audit, findVisibleCase, fullCase, recordEvents, resolveWellbeingRole, SNOWFLAKE_RE } from './wellbeingShared.js';
@@ -159,6 +165,20 @@ export function createWellbeingCareRouter(client: Client) {
     }
   });
 
+  // Modèles du message permanent, avec leur texte dans la langue du serveur.
+  router.get(`${base}/report-panel/templates`, ...gate, async (c) => {
+    const guildId = c.req.param('guildId');
+    try {
+      const state = await resolveWellbeingRole(client, guildId, c.var.dashboardUser.userId);
+      if (!state.canWriteCases) return send(c, { error: 'Réservé à la cellule de suivi.' }, 403);
+      const locale = await resolveGuildLocale(guildId, state.discordGuild?.preferredLocale);
+      return send(c, { templates: REPORT_PANEL_TEMPLATES.map((id) => ({ id, text: wellbeingPanelText(id, locale) })) });
+    } catch (err) {
+      logger.error('WellbeingAPI', 'Error loading panel templates:', err);
+      return fail(c, err, 'Erreur lors du chargement des modèles.', 'WellbeingAPI');
+    }
+  });
+
   // Message permanent dans un salon : écrire à la cellule d'un clic.
   router.post(`${base}/report-panel`, ...gate, async (c) => {
     const guildId = c.req.param('guildId');
@@ -169,12 +189,12 @@ export function createWellbeingCareRouter(client: Client) {
       if (!state.config?.reportEnabled) {
         return send(c, { error: "Ouvrez d'abord les signalements Discord dans les réglages de la cellule." }, 400);
       }
-      const body = await readBody<{ channelId?: string }>(c);
+      const body = await readBody<{ channelId?: string; template?: string }>(c);
       const channelId = bodyText(body?.channelId, 20);
       const channel = SNOWFLAKE_RE.test(channelId) ? state.discordGuild?.channels.cache.get(channelId) : undefined;
       if (!channel || !channel.isSendable()) return send(c, { error: 'Salon introuvable ou fermé au bot.' }, 400);
       const locale = await resolveGuildLocale(guildId, state.discordGuild?.preferredLocale);
-      await channel.send(wellbeingPanelMessage(locale));
+      await channel.send(wellbeingPanelMessage(locale, cleanPanelTemplate(body?.template)));
       await audit(client, c, guildId, 'Message Cellule de suivi', `Message permanent publié dans #${channel.name}.`);
       return send(c, { ok: true });
     } catch (err) {
