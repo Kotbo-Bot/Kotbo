@@ -93,11 +93,10 @@ export function registerOnboardingRoutes(): void {
       selection,
     });
     return {
-      applied: true,
-      roles: 3,
-      categories: 3,
-      channels: 5,
-      modules: 2,
+      items: selection.map((key) => ({ key, created: true })),
+      modules: ['logs'],
+      preparedModules: [],
+      warnings: [],
     };
   });
 
