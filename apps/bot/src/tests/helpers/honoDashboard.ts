@@ -28,7 +28,7 @@ export function mockDashboardGate(access: DashboardAccess, user: AuthClaims): vo
     mock.module(path.join(API, `auth/sessionStore.${ext}`), () =>
       completeModuleMock(path.join(API, 'auth/sessionStore.ts'), {
         sessionIdFromCookieHeader: () => 'sid',
-        getDashboardSession: async () => ({ ...currentUser }),
+        getDashboardSession: async () => ({ discordAccessToken: currentUser.discordToken, ...currentUser }),
       }));
   }
 }

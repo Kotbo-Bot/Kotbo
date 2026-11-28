@@ -1,4 +1,3 @@
-/// <reference path="./tinroLib.d.ts" />
 import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';

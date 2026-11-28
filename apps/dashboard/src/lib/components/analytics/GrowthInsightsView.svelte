@@ -65,7 +65,7 @@
         {#if stacks.length === 0}
           <p class="py-8 text-center text-body-sm text-on-surface-variant">{m.anx_funnel_empty()}</p>
         {:else}
-          <TimeSeriesChart labels={data.sources.dates.map(shortDate)} mode="stacked" {stacks} format={fmtNumber} height={260} />
+          <TimeSeriesChart labels={data.sources.dates.map((d) => shortDate(d))} mode="stacked" {stacks} format={fmtNumber} height={260} />
         {/if}
       </SectionCard>
       <SectionCard title={m.anx_growth_tenure_title()} description={m.anx_growth_tenure_desc()}>

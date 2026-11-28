@@ -167,7 +167,7 @@
       <select
         bind:value={guildId}
         aria-label={m.ntf_filter_server()}
-        class="px-3.5 py-1.5 rounded-full text-xs font-medium bg-surface-container-lowest border border-outline-variant text-on-surface cursor-pointer hover:border-outline transition-colors"
+        class="px-3.5 py-1.5 rounded-full text-xs font-medium bg-surface-container-lowest border border-field-border text-on-surface cursor-pointer hover:border-outline transition-colors"
       >
         <option value="">{m.ntf_all_servers()}</option>
         {#each guildOptions as option (option.id)}
@@ -177,7 +177,7 @@
       <select
         bind:value={category}
         aria-label={m.ntf_filter_category()}
-        class="px-3.5 py-1.5 rounded-full text-xs font-medium bg-surface-container-lowest border border-outline-variant text-on-surface cursor-pointer hover:border-outline transition-colors"
+        class="px-3.5 py-1.5 rounded-full text-xs font-medium bg-surface-container-lowest border border-field-border text-on-surface cursor-pointer hover:border-outline transition-colors"
       >
         <option value="">{m.ntf_all_categories()}</option>
         {#each CATEGORIES as key (key)}

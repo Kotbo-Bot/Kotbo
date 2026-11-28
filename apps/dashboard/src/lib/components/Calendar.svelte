@@ -1,7 +1,8 @@
 <script lang="ts" module>
   export { EVENT_TYPE_COLOR, CALENDAR_VIEWS, PHONE_VIEWS } from '@kotbo/ui';
   export type CalendarView = import('@kotbo/ui').CalendarView;
-  export type CalendarEvent = import('@kotbo/ui').CalendarEvent;
+  // `raw` porte l'objet API brut, différent selon le type d'élément : @kotbo/ui le laisse `unknown`.
+  export type CalendarEvent = Omit<import('@kotbo/ui').CalendarEvent, 'raw'> & { raw?: any };
 </script>
 
 <script lang="ts">

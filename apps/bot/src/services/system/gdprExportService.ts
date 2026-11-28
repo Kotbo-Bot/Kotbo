@@ -291,6 +291,11 @@ const STATIC_SOURCES: GdprSource[] = [
   { category: 'staff', key: 'wellbeingProfileNoteAuthored', label: 'Notes de fiche cellule de suivi écrites', model: 'wellbeingProfileNote', where: ({ discordId }) => ({ authorId: discordId }), project: (record) => ({ id: record.id, createdAt: record.createdAt, expiresAt: record.expiresAt }) },
   { category: 'staff', key: 'wellbeingCaseNote', label: 'Notes cellule de suivi', model: 'wellbeingCaseNote', where: ({ discordId }) => ({ authorId: discordId }), project: (record) => openNote(record as unknown as { caseId: string; content: string }) },
 
+  // Messages envoyés à un signaleur : leur texte concerne le dossier, seule la trace sort.
+  { category: 'staff', key: 'wellbeingReporterMessage', label: 'Messages écrits à un signaleur', model: 'wellbeingReporterMessage', where: ({ discordId }) => ({ authorId: discordId }), project: (record) => ({ id: record.id, createdAt: record.createdAt }) },
+  // Messages de la personne repérés par la veille : sans qui les a traités ni le dossier ouvert (article 15 § 4).
+  { category: 'staff', key: 'wellbeingDistressSignal', label: 'Messages signalés à la cellule de suivi', model: 'wellbeingDistressSignal', where: ({ discordId }) => ({ userId: discordId }), project: ({ id, guildId, channelId, messageId, createdAt, handledAt, outcome }) => ({ id, guildId, channelId, messageId, createdAt, handledAt, outcome }) },
+
   // ── Système ────────────────────────────────────────────────────
   { category: 'system', key: 'scheduledTask', label: 'Tâches planifiées', model: 'scheduledTask', where: ({ discordId }) => ({ targetId: discordId }) },
   { category: 'system', key: 'notificationTarget', label: 'Cibles de notification', model: 'notificationTarget', where: ({ discordId }) => ({ targetId: discordId }) },

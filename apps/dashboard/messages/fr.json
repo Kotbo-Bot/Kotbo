@@ -20640,5 +20640,14 @@
   "tk_wb_transfer_q": "Transférer ce ticket à la cellule de suivi ?",
   "tk_wb_transfer_desc": "Un dossier confidentiel est créé avec le motif et la description du ticket, et le ticket est fermé s'il est encore ouvert.",
   "tk_wb_transfer_confirm": "Transférer",
-  "toast_tk_wb_transferred": "Ticket transféré à la cellule de suivi"
+  "toast_tk_wb_transferred": "Ticket transféré à la cellule de suivi",
+  "planning_recap_copy": "Copier le récap Discord du jour",
+  "planning_recap_title": "Planning du {day}",
+  "planning_recap_agenda": "À l’agenda :",
+  "planning_recap_no_event": "Aucun événement prévu aujourd’hui.",
+  "planning_recap_tasks": "Tâches en cours ({count}) :",
+  "planning_recap_absents": "Absents ({count}) :",
+  "planning_recap_copied": "Récap du jour copié pour Discord",
+  "planning_recap_copy_failed": "Impossible de copier dans le presse-papiers",
+  "home_template_applied": "Modèle « {name} » appliqué"
 }

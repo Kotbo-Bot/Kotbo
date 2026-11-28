@@ -84,7 +84,7 @@
     const previous = stats.daily.previous[active];
     const isCount = active === 'created' || active === 'closed';
     return {
-      labels: stats.daily.dates.map(shortDate),
+      labels: stats.daily.dates.map((d) => shortDate(d)),
       mode: isCount ? 'bar' as const : 'line' as const,
       main: { label: tile?.label ?? '', values: current, color: tile?.color ?? SERIES[0] },
       previous: compare ? { label: m.th_previous_period(), values: previous } : null,

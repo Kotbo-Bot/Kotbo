@@ -82,7 +82,6 @@
   {#each columns as column (column.key)}
     {@const target = column.kind === 'status' ? { status: column.status } : { stage: column.stage }}
     {@const title = column.kind === 'status' ? wbStatusLabel(column.status) : column.label}
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
     <section
       aria-label={title}
       class="flex-none w-72 rounded-xl border p-3 space-y-2 min-h-40 transition-colors {over === column.key ? 'border-primary/50 bg-primary/5' : 'border-outline-variant/30 bg-surface-container-low/40'}"
