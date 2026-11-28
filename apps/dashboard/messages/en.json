@@ -20636,5 +20636,14 @@
   "tk_wb_transfer_q": "Transfer this ticket to the follow-up unit?",
   "tk_wb_transfer_desc": "A confidential case is created with the ticket's reason and description, and the ticket is closed if it is still open.",
   "tk_wb_transfer_confirm": "Transfer",
-  "toast_tk_wb_transferred": "Ticket transferred to the follow-up unit"
+  "toast_tk_wb_transferred": "Ticket transferred to the follow-up unit",
+  "planning_recap_copy": "Copy today's Discord recap",
+  "planning_recap_title": "Schedule for {day}",
+  "planning_recap_agenda": "On the agenda:",
+  "planning_recap_no_event": "Nothing scheduled today.",
+  "planning_recap_tasks": "Open tasks ({count}):",
+  "planning_recap_absents": "Away ({count}):",
+  "planning_recap_copied": "Today's recap copied for Discord",
+  "planning_recap_copy_failed": "Could not copy to the clipboard",
+  "home_template_applied": "Template “{name}” applied"
 }

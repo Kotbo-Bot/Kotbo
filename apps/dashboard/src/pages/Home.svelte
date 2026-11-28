@@ -813,7 +813,7 @@
     const allowed = template.layout.filter((item) => canUseWidget(item.id));
     userLayout = completeLayout(allowed);
     showPresetsModal = false;
-    toast.success(`Modèle « ${template.name} » appliqué`);
+    toast.success(m.home_template_applied({ name: template.name }));
   }
 
   async function applyPreset(presetId: string) {

@@ -1932,9 +1932,9 @@
         month: "long",
       }),
     );
-    const lines: string[] = [`**Planning du ${dayLabel}**`];
+    const lines: string[] = [`**${m.planning_recap_title({ day: dayLabel })}**`];
     if (todayAgenda.length > 0) {
-      lines.push("", "**À l’agenda :**");
+      lines.push("", `**${m.planning_recap_agenda()}**`);
       for (const ev of todayAgenda) {
         const span = `${formatTime(ev.start)}${ev.end && !INSTANT_TYPES.includes(ev.type) ? `–${formatTime(ev.end)}` : ""}`;
         lines.push(
@@ -1942,10 +1942,10 @@
         );
       }
     } else {
-      lines.push("", "• Aucun événement prévu aujourd’hui.");
+      lines.push("", `• ${m.planning_recap_no_event()}`);
     }
     if (pendingTasks.length > 0) {
-      lines.push("", `**Tâches en cours (${pendingTasks.length}) :**`);
+      lines.push("", `**${m.planning_recap_tasks({ count: pendingTasks.length })}**`);
       for (const t of pendingTasks.slice(0, 5)) {
         lines.push(`• ${t.title}`);
       }
@@ -1953,14 +1953,14 @@
     if (absentToday.length > 0) {
       lines.push(
         "",
-        `**Absents (${absentToday.length}) :** ${absentToday.map((a) => memberName(a.staffMember)).join(", ")}`,
+        `**${m.planning_recap_absents({ count: absentToday.length })}** ${absentToday.map((a) => memberName(a.staffMember)).join(", ")}`,
       );
     }
     try {
       await navigator.clipboard.writeText(lines.join("\n"));
-      toast.success("Récap du jour copié pour Discord");
+      toast.success(m.planning_recap_copied());
     } catch {
-      toast.error("Impossible de copier dans le presse-papiers");
+      toast.error(m.planning_recap_copy_failed());
     }
   }
 
@@ -2633,8 +2633,8 @@
                   variant="ghost"
                   size="sm"
                   icon="copy"
-                  aria-label="Copier le récap du jour"
-                  title="Copier le récap Discord du jour"
+                  aria-label={m.planning_recap_copy()}
+                  title={m.planning_recap_copy()}
                   onclick={copyDailyRecap}
                 />
                 <Button

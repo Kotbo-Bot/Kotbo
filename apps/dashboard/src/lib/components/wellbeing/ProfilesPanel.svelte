@@ -269,7 +269,7 @@
 
   <section class="rounded-xl border border-outline-variant/30 bg-surface-container-low/40 p-4 space-y-4 min-h-48" aria-live="polite">
     {#if !subject}
-      <EmptyState icon="StickyNote" title={m.wb_profiles_empty_title()} description={m.wb_profiles_empty_desc()} />
+      <EmptyState icon="StickyNote" title={m.wb_profiles_empty_title()} description={m.wb_profiles_empty_desc()} reason="instruction" />
     {:else}
       <div class="flex flex-wrap items-start justify-between gap-2">
         <div>

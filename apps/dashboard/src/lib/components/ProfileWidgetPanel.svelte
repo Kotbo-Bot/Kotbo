@@ -153,7 +153,7 @@
   <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
     <StatTile
       icon={isActive ? 'check-circle' : 'x-circle'}
-      tone={isActive ? 'bg-success/10 text-success' : 'bg-surface-container text-on-surface-variant'}
+      tone={isActive ? 'bg-success/10 text-on-success-container' : 'bg-surface-container text-on-surface-variant'}
       value={isActive ? m.pwp_active() : m.pwp_inactive()}
       label={m.pwp_your_widget()}
     />

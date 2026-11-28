@@ -228,7 +228,7 @@
     </div>
   {:else if updates.length === 0}
     <SectionCard>
-      <EmptyState icon="megaphone" title={m.upd_empty_title()} description={m.upd_empty_desc()} />
+      <EmptyState icon="megaphone" title={m.upd_empty_title()} description={m.upd_empty_desc()} reason="accumulating" />
     </SectionCard>
   {:else}
     <div class="space-y-4">

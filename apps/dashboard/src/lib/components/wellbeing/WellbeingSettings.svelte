@@ -121,7 +121,7 @@
 
   useUnsavedChanges({
     id: 'wellbeing-settings',
-    label: m.wb_cfg_label(),
+    get label() { return m.wb_cfg_label(); },
     getConfig: () => form,
     getSaved: () => saved,
     onSave: save,
