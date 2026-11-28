@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { renderSound, SOUND_NAMES } from '../../../scripts/generate-onboarding-sounds';
 
 const played: string[] = [];
 (globalThis as any).Audio = class {
@@ -17,11 +18,10 @@ const played: string[] = [];
 const { play, sound, celebrateStep } = await import('./celebrate');
 
 describe('sons du parcours', () => {
-  test('chaque son a son fichier, en WAV', () => {
-    for (const name of ['step', 'done', 'error']) {
+  test('chaque fichier est bien celui que le générateur produit', () => {
+    for (const name of SOUND_NAMES) {
       const file = join(import.meta.dir, '../../../public/sounds/onboarding', `${name}.wav`);
-      expect(existsSync(file)).toBe(true);
-      expect(readFileSync(file).subarray(0, 4).toString()).toBe('RIFF');
+      expect(readFileSync(file).equals(renderSound(name))).toBe(true);
     }
   });
 
