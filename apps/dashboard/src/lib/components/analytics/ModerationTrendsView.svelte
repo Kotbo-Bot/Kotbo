@@ -63,7 +63,7 @@
 
     {#if stacks.length > 0}
       <SectionCard title={m.anx_modt_by_type()}>
-        <TimeSeriesChart labels={data.byType.dates.map(shortDate)} mode="stacked" {stacks} format={fmtNumber} height={240} />
+        <TimeSeriesChart labels={data.byType.dates.map((d) => shortDate(d))} mode="stacked" {stacks} format={fmtNumber} height={240} />
       </SectionCard>
     {/if}
 
