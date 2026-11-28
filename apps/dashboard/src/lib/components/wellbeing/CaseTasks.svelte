@@ -37,7 +37,7 @@
   const formatDay = (iso: string) => new Date(iso).toLocaleDateString(dateLocale());
   const overdue = (task: Task) => !task.doneAt && !!task.dueAt && task.dueAt.slice(0, 10) < new Date().toISOString().slice(0, 10);
 
-  async function call(id: string, path: string, init: RequestInit) {
+  async function call(id: string, path: string, init: Parameters<typeof dashboardFetch>[1]) {
     if (busyId) return;
     busyId = id;
     try {

@@ -18,6 +18,6 @@
    * (qui vise precisement `src/**\/*.test.ts`) annulerait cet `include` et ce
    * fichier ne typerait plus rien.
    */
-  "include": ["src/**/*.test.ts"],
+  "include": ["src/**/*.test.ts", "src/lib/tinroLib.d.ts"],
   "exclude": []
 }
