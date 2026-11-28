@@ -15,8 +15,9 @@
  *    l'audio ou un canvas qui ne s'initialise pas ne doivent jamais empecher de
  *    passer a l'ecran suivant.
  * 2. Trois sons, pas un de plus : étape validée, serveur monté, échec. Ce sont
- *    des échantillons (Kenney, « Interface Sounds », CC0), servis depuis
- *    `public/sounds/onboarding/` : les bips synthétisés sonnaient génériques.
+ *    des fichiers composés pour Kotbo, servis depuis
+ *    `public/sounds/onboarding/` et regénérables par
+ *    `scripts/generate-onboarding-sounds.ts`.
  * 3. Tout s'arrete. `prefers-reduced-motion` coupe les confettis, et le son se
  *    coupe d'un clic - le reglage est retenu par navigateur.
  *
