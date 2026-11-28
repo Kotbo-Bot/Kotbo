@@ -96,7 +96,8 @@ const prismaMock = {
 
 let configServeur: Record<string, unknown> = {};
 /** Lectures de la configuration du serveur : une par cible jugée « staff ou non ». */
-let lecturesConfig = 0;
+/** Lectures de la config faites pour juger si un membre est protégé. */
+let jugements = 0;
 
 interface LigneJournal {
   type: string;
@@ -112,7 +113,7 @@ const journal: LigneJournal[] = [];
 const mocks: Array<[string, () => Record<string, unknown>]> = [
   ['../../utils/db', () => ({ default: prismaMock, prisma: prismaMock, prismaRead: prismaMock })],
   ['../../utils/cache', () => completeModuleMock(path.resolve(import.meta.dir, '../../utils/cache.ts'), {
-    getCachedGuild: mock(async () => { lecturesConfig += 1; if (monde) monde.horloge += 2; return { ...configServeur }; }),
+    getCachedGuild: mock(async () => { if (new Error().stack?.includes('isProtectedTarget')) jugements += 1; if (monde) monde.horloge += 2; return { ...configServeur }; }),
     cache: { invalidateGuild: mock(async () => undefined) },
   })],
   ['../../utils/logDispatch', () => completeModuleMock(path.resolve(import.meta.dir, '../../utils/logDispatch.ts'), {
@@ -794,12 +795,11 @@ describe('Réglages enregistrés — chaque cible à part, bloqués absents, mes
   });
 
   test('à la création, chaque bloqué n est jugé qu une fois', async () => {
-    lecturesConfig = 0;
-    await creerAvec({ bloques: [] });
-    const sans = lecturesConfig;
-    lecturesConfig = 0;
+    // Compter toutes les lectures rendait le test instable : le nombre de
+    // réécritures du panneau varie d'une scène à l'autre.
+    jugements = 0;
     await creerAvec({ bloques: [IDS.CIBLE, IDS.INCONNU] });
-    expect(lecturesConfig - sans).toBe(2);
+    expect(jugements).toBe(2);
   });
 
   test('« Enregistrer » garde un staff que le propriétaire a autorisé lui-même', async () => {
